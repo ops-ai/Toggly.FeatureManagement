@@ -1,0 +1,13 @@
+using Xunit;
+
+namespace Toggly.FeatureManagement.Tests
+{
+    public class UnitTest1
+    {
+        [Fact]
+        public void Test1()
+        {
+
+        }
+    }
+}
