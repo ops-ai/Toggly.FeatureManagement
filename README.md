@@ -66,16 +66,16 @@ public class Startup
 
 Add a section to your configuration provider, ex: appsettings.json (or environment variables, key vault, etc)
 
-```
+``` JavaScript
 "Toggly": {
-    "AppKey": "df5a1d72-cf4a-46f1-9430-21fdce7b2556",
-    "Environment": "Staging",
-    "BaseUrl": "https://staging-app.toggly.io/"
+    "AppKey": "[[toggly app key]]",
+    "Environment": "Production",
+    "BaseUrl": "https://app.toggly.io/"
   }
 ```
 
 In your Startup.cs, register the Toggly Feature Provider
-```
+``` C#
 builder.Services.AddOptions();
 builder.Services.Configure<TogglySettings>(builder.Configuration.GetSection("Toggly"));
 
