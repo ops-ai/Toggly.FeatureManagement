@@ -20,11 +20,14 @@ steps:
     versionSpec: 
     checkLatest: true
 
-- task: GitVersion@5
+- task: gitversion/setup@0
   inputs:
-    runtime: 'core'
+    versionSpec: '5.x'
+    
+- task: gitversion/execute@0
+  inputs:
     updateAssemblyInfo: true
-    updateAssemblyInfoFilename: 'AssemblyInfo.cs'
+    updateAssemblyInfoFilename: '$(Build.SourcesDirectory)\AssemblyInfo.cs'
     additionalArguments: '/output buildserver'
 
 - task: UseDotNet@2

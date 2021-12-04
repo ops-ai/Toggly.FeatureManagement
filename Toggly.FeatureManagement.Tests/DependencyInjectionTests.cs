@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Toggly.FeatureManagement.Tests
 {
-    public class UnitTest1
+    public class DependencyInjectionTests
     {
         [Fact]
         public void Test1()
