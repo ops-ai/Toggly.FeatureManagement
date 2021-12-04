@@ -65,11 +65,12 @@ steps:
     feedsToUse: 'select'
     vstsFeed: 'a176869a-9c3b-49c9-a033-c415e60df8aa'
 
-- task: DotNetCoreCLI@2
+- task: VSBuild@1
   inputs:
-    command: 'build'
-    projects: '$(solution)'
-    arguments: '-c $(buildConfiguration)'
+    solution: '$(solution)'
+    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
 
 - task: DotNetCoreCLI@2
   displayName: 'dotnet test'
