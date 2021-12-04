@@ -6,7 +6,7 @@
 	<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 	<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 	<PackageProjectUrl>https://toggly.io</PackageProjectUrl>
-	<PackageIcon>profile photo-01.jpg</PackageIcon>
+	<PackageIcon>packagephoto.jpg</PackageIcon>
 	<PackageReadmeFile>README.md</PackageReadmeFile>
 	<RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
 	<RepositoryType>git</RepositoryType>
@@ -38,6 +38,13 @@
 
   <ItemGroup>
     <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="packagephoto.jpg">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
