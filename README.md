@@ -1,5 +1,11 @@
 # ASP.NET Core Feature Flags with Toggly
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=ops-ai_toggly-feature-management&metric=alert_status)](https://sonarcloud.io/dashboard?id=ops-ai_toggly-feature-management)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=ops-ai_toggly-feature-management&metric=vulnerabilities)](https://sonarcloud.io/dashboard?id=ops-ai_toggly-feature-management)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=ops-ai_toggly-feature-management&metric=coverage)](https://sonarcloud.io/dashboard?id=ops-ai_toggly-feature-management)
+![CodeQL](https://github.com/ops-ai/Toggly.FeatureManagement/workflows/CodeQL/badge.svg)
+[![Nuget](https://badgen.net/nuget/v/Toggly.FeatureManagement/latest)](https://www.nuget.org/packages/Toggly.FeatureManagement/)
+
 Feature flags provide a way for ASP.NET Core applications to turn features on or off dynamically. Developers can use feature flags in simple use cases like conditional statements to more advanced scenarios like conditionally adding routes or MVC filters. Feature flags build on top of the .NET Core configuration system. Any .NET Core configuration provider is capable of acting as the back-bone for feature flags.
 
 Here are some of the benefits of using this library:
