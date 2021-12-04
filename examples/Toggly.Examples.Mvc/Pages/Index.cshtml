@@ -1,0 +1,17 @@
+﻿@page
+
+@addTagHelper *, Microsoft.FeatureManagement.AspNetCore
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Welcome</h1>
+    <p>Learn about <a href="https://docs.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+</div>
+
+<feature name="Feature1"><div>Feature 1</div></feature>
+<feature name="Feature2"><div>Feature 2</div></feature>
+<feature name="Feature3"><div>Feature 3</div></feature>
+<feature name="Feature4"><div>Feature 4</div></feature>

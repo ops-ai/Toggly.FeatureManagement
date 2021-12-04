@@ -20,8 +20,25 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.Examples.Mvc", "examples\Toggly.Examples.Mvc\Toggly.Examples.Mvc.csproj", "{A7B093E9-5F0C-4C31-8B5A-A1AE92556B35}"
 EndProject
 Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9FFEBA60-FECE-43D2-A564-1D4749E8DAB7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9FFEBA60-FECE-43D2-A564-1D4749E8DAB7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9FFEBA60-FECE-43D2-A564-1D4749E8DAB7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9FFEBA60-FECE-43D2-A564-1D4749E8DAB7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7B093E9-5F0C-4C31-8B5A-A1AE92556B35}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7B093E9-5F0C-4C31-8B5A-A1AE92556B35}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7B093E9-5F0C-4C31-8B5A-A1AE92556B35}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7B093E9-5F0C-4C31-8B5A-A1AE92556B35}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A7B093E9-5F0C-4C31-8B5A-A1AE92556B35} = {8C1BD1D5-6ED4-41D6-97A8-9EF4E5F4A4A4}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0B9B4F6A-FB19-4930-9351-45988B4D0FB5}
