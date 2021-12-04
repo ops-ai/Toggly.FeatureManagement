@@ -1,0 +1,94 @@
+# ASP.NET Core (.NET Framework)
+# Build and test ASP.NET Core projects targeting the full .NET Framework.
+# Add steps that publish symbols, save build artifacts, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
+
+trigger:
+- develop
+
+pool:
+  vmImage: 'windows-2022'
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+
+steps:
+- task: NuGetToolInstaller@1
+  inputs:
+    versionSpec: 
+    checkLatest: true
+
+- task: GitVersion@5
+  inputs:
+    runtime: 'core'
+    updateAssemblyInfo: true
+    updateAssemblyInfoFilename: 'AssemblyInfo.cs'
+    additionalArguments: '/output buildserver'
+
+- task: UseDotNet@2
+  inputs:
+    packageType: 'sdk'
+    version: '5.0.301'
+
+- task: SonarCloudPrepare@1
+  inputs:
+    SonarCloud: 'SonarCloud'
+    organization: 'ops-ai'
+    scannerMode: 'MSBuild'
+    projectKey: 'ops-ai_toggly-feature-management'
+    projectName: 'Toggly Feature Management'
+    projectVersion: '0.1'
+    extraProperties: |
+      sonar.dependencyCheck.reportPath=$(Agent.BuildDirectory)\dependency-check-report.xml
+      sonar.dependencyCheck.htmlReportPath=$(Agent.BuildDirectory)\dependency-check-report.html
+      sonar.coverageReportPaths=$(Agent.TempDirectory)\SonarQube.xml
+      sonar.coverage.exclusions="**Tests*.cs"
+
+- task: dependency-check-build-task@5
+  inputs:
+    projectName: '$(Build.DefinitionName)'
+    scanPath: '$(build.artifactstagingdirectory)'
+    format: 'ALL'
+    additionalArguments: '--disableBundleAudit --disableRubygems --disableNodeJS --disablePyPkg --disablePyDist --out "$(Agent.BuildDirectory)"'
+  continueOnError: true
+
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'custom'
+    custom: 'build-server'
+    arguments: 'shutdown'
+
+- task: NuGetCommand@2
+  inputs:
+    command: 'restore'
+    restoreSolution: '$(solution)'
+    feedsToUse: 'select'
+    vstsFeed: 'a176869a-9c3b-49c9-a033-c415e60df8aa'
+
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'build'
+    projects: '$(solution)'
+    arguments: '-c $(buildConfiguration)'
+
+- task: DotNetCoreCLI@2
+  displayName: 'dotnet test'
+  inputs:
+    command: test
+    projects: '$(solution)'
+    arguments: '--no-restore --no-build -c $(buildConfiguration) --collect:"XPlat Code Coverage"'
+    
+- task: reportgenerator@4
+  inputs:
+    reports: '$(Agent.TempDirectory)\**\coverage.cobertura.xml'
+    targetdir: '$(Agent.TempDirectory)\'
+    reporttypes: 'SonarQube'
+
+- task: SonarCloudAnalyze@1
+
+- task: SonarCloudPublish@1
+  inputs:
+    pollingTimeoutSec: '300'
+
