@@ -54,7 +54,7 @@ namespace Toggly.FeatureManagement
             {
                 using (var httpClient = _clientFactory.CreateClient("toggly"))
                 {
-                    httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"{Hashing.GetStringSha256Hash(_appKey)}:{_environment}")));
+                    httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"{_appKey}:{_environment}")));
                     if (lastETag != null) httpClient.DefaultRequestHeaders.Add("etag", lastETag);
                     var newDefinitionsRequest = await httpClient.GetAsync("definitions");
                     if (newDefinitionsRequest.StatusCode == System.Net.HttpStatusCode.NotModified)
@@ -66,7 +66,7 @@ namespace Toggly.FeatureManagement
                     if (newDefinitions == null)
                         return;
 
-                    lastETag = newDefinitionsRequest.Headers.ETag.Tag;
+                    //lastETag = newDefinitionsRequest.Headers.ETag.Tag;
 
                     foreach (var featureDefinition in newDefinitions)
                     {
