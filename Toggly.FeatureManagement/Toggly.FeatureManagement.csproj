@@ -15,10 +15,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="TogglyFeatureProvider.cs~RFf2dd679.TMP" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
   </ItemGroup>
 

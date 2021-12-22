@@ -8,9 +8,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.FeatureManagement.AspNetCore" Version="2.4.0" />
+    <PackageReference Include="RavenDB.Client" Version="5.3.1" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Toggly.FeatureManagement.Storage.RavenDB\Toggly.FeatureManagement.Storage.RavenDB.csproj" />
     <ProjectReference Include="..\..\Toggly.FeatureManagement\Toggly.FeatureManagement.csproj" />
   </ItemGroup>
 

@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net6.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<PackageProjectUrl>https://toggly.io</PackageProjectUrl>
+		<PackageIcon>packagephoto.jpg</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="RavenDB.Client" Version="5.3.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="Properties\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Toggly.FeatureManagement\Toggly.FeatureManagement.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="packagephoto.jpg">
+	    <PackagePath>\</PackagePath>
+	    <Pack>True</Pack>
+	  </None>
+	</ItemGroup>
+
+</Project>

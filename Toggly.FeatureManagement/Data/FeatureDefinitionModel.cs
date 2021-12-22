@@ -1,8 +1,8 @@
 ﻿using System.Collections.Generic;
 
-namespace Toggly.FeatureManagement
+namespace Toggly.FeatureManagement.Data
 {
-    internal class FeatureDefinitionModel
+    public class FeatureDefinitionModel
     {
         public string Name { get; set; }
 
@@ -13,7 +13,7 @@ namespace Toggly.FeatureManagement
         public List<FeatureFilter> Filters { get; set; }
     }
 
-    internal class FeatureFilter
+    public class FeatureFilter
     {
         /// <summary>
         /// Unique name of filter
@@ -29,12 +29,12 @@ namespace Toggly.FeatureManagement
         public override string ToString() => $"{Name}-{GetType()}";
     }
 
-    internal class AlwaysOnFilter : FeatureFilter
+    public class AlwaysOnFilter : FeatureFilter
     {
 
     }
 
-    internal class AlwaysOffFilter : FeatureFilter
+    public class AlwaysOffFilter : FeatureFilter
     {
 
     }

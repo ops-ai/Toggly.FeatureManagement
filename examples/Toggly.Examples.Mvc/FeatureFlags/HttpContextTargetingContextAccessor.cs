@@ -3,7 +3,6 @@ using System.Security.Claims;
 
 namespace Toggly.Examples.Mvc.FeatureFlags
 {
-
     /// <summary>
     /// Provides an implementation of <see cref="ITargetingContextAccessor"/> that creates a targeting context using info from the current HTTP request.
     /// </summary>
@@ -23,9 +22,9 @@ namespace Toggly.Examples.Mvc.FeatureFlags
 
             //
             // Try cache lookup
-            if (httpContext.Items.TryGetValue(TargetingContextLookup, out object value))
+            if (httpContext.Items.TryGetValue(TargetingContextLookup, out object? value))
             {
-                return new ValueTask<TargetingContext>((TargetingContext?)value);
+                return new ValueTask<TargetingContext>((TargetingContext)value!);
             }
 
             ClaimsPrincipal user = httpContext.User;
@@ -46,7 +45,7 @@ namespace Toggly.Examples.Mvc.FeatureFlags
             // Build targeting context based off user info
             TargetingContext targetingContext = new TargetingContext
             {
-                UserId = user.Identity.Name,
+                UserId = user.Identity!.Name,
                 Groups = groups
             };
 
