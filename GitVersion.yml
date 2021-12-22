@@ -1,16 +1,14 @@
 next-version: 1.0
-assembly-versioning-scheme: MajorMinorPatch
-assembly-informational-format: '{MajorMinorPatch}-{Sha}'
-increment: Major
-mode: ContinuousDelivery
-continuous-delivery-fallback-tag: ci
-tag-prefix: '[vV]'
-major-version-bump-message: '\+semver:\s?(breaking|major)'
-minor-version-bump-message: '\+semver:\s?(feature|minor)'
-patch-version-bump-message: '\+semver:\s?(fix|patch)'
-legacy-semver-padding: 4
-build-metadata-padding: 4
-commits-since-version-source-padding: 4
-commit-message-incrementing: Enabled
-ignore:
-    
+branches:
+  main:
+    regex: ^develop$|^main$
+    mode: ContinuousDelivery
+    tag: ''
+    increment: Minor
+    prevent-increment-of-merged-branch-version: true
+    track-merge-target: false
+    source-branches: [ 'develop', 'release' ]
+    tracks-release-branches: false
+    is-release-branch: false
+    is-mainline: true
+    pre-release-weight: 55000
