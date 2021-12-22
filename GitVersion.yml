@@ -1,4 +1,4 @@
-next-version: 1.0
+next-version: 1.1
 branches:
   main:
     regex: ^develop$|^main$
@@ -7,7 +7,7 @@ branches:
     increment: Minor
     prevent-increment-of-merged-branch-version: true
     track-merge-target: false
-    source-branches: [ 'develop', 'release' ]
+    source-branches: [  ]
     tracks-release-branches: false
     is-release-branch: false
     is-mainline: true
