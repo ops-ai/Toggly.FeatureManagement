@@ -30,14 +30,14 @@ namespace Toggly.FeatureManagement
 
         private BackgroundWorker _backgroundWorker = new BackgroundWorker();
 
-        private readonly IFeatureSnapshotProvider _snapshotProvider;
+        private readonly IFeatureSnapshotProvider? _snapshotProvider;
 
-        public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IFeatureSnapshotProvider snapshotProvider)
+        public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
             _clientFactory = clientFactory;
-            _snapshotProvider = snapshotProvider;
+            _snapshotProvider = (IFeatureSnapshotProvider?)serviceProvider.GetService(typeof(IFeatureSnapshotProvider));
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
             _backgroundWorker.DoWork += BackgroundWorker_DoWork;
