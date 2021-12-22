@@ -1,6 +1,7 @@
 next-version: 1.0
 assembly-versioning-scheme: MajorMinorPatch
 assembly-informational-format: '{MajorMinorPatch}-{Sha}'
+increment: Major
 mode: ContinuousDelivery
 continuous-delivery-fallback-tag: ci
 tag-prefix: '[vV]'
