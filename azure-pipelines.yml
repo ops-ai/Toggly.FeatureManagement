@@ -63,7 +63,7 @@ steps:
   inputs:
     command: test
     projects: '$(solution)'
-    arguments: '--no-restore --no-build -c $(buildConfiguration) --collect:"XPlat Code Coverage"'
+    arguments: '-c $(buildConfiguration) --collect:"XPlat Code Coverage"'
 
 - task: DotNetCoreCLI@2
   inputs:
