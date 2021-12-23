@@ -53,24 +53,10 @@ steps:
   continueOnError: true
 
 - task: DotNetCoreCLI@2
+  displayName: 'dotnet build'
   inputs:
-    command: 'custom'
-    custom: 'build-server'
-    arguments: 'shutdown'
-
-- task: NuGetCommand@2
-  inputs:
-    command: 'restore'
-    restoreSolution: '$(solution)'
-    feedsToUse: 'select'
-    vstsFeed: 'a176869a-9c3b-49c9-a033-c415e60df8aa'
-
-- task: VSBuild@1
-  inputs:
-    solution: '$(solution)'
-    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
+    command: 'build'
+    configuration: $(buildConfiguration)
 
 - task: DotNetCoreCLI@2
   displayName: 'dotnet test'
@@ -78,6 +64,15 @@ steps:
     command: test
     projects: '$(solution)'
     arguments: '--no-restore --no-build -c $(buildConfiguration) --collect:"XPlat Code Coverage"'
+
+- task: DotNetCoreCLI@2
+  inputs:
+    command: publish
+    arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+    projects: StrikesRepository/StrikesRepository.csproj
+    publishWebProjects: false
+    modifyOutputPath: true
+    zipAfterPublish: true
 
 - task: reportgenerator@4
   inputs:
