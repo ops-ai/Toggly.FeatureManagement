@@ -99,9 +99,8 @@ namespace Toggly.FeatureManagement
                 {
                     if (timeout.HasValue)
                         httpClient.Timeout = new TimeSpan(timeout.Value);
-                    httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"{_appKey}:{_environment}")));
                     if (lastETag != null) httpClient.DefaultRequestHeaders.Add("etag", lastETag);
-                    var newDefinitionsRequest = await httpClient.GetAsync("definitions").ConfigureAwait(false);
+                    var newDefinitionsRequest = await httpClient.GetAsync($"definitions/{_appKey}/{_environment}").ConfigureAwait(false);
                     if (newDefinitionsRequest.StatusCode == System.Net.HttpStatusCode.NotModified)
                         return;
 
