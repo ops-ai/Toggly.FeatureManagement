@@ -74,7 +74,7 @@ namespace Toggly.FeatureManagement
                                             Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
                                         })
                                 };
-                                _definitions.AddOrUpdate(featureDefinition.Name, newDefinition, (name, def) => def = newDefinition);
+                                _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                             }
                     }
                 }
@@ -124,7 +124,7 @@ namespace Toggly.FeatureManagement
                                     Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
                                 })
                         };
-                        _definitions.AddOrUpdate(featureDefinition.Name, newDefinition, (name, def) => def = newDefinition);
+                        _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                     }
 
                     if (_snapshotProvider != null)

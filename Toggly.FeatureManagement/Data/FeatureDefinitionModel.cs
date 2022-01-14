@@ -4,11 +4,7 @@ namespace Toggly.FeatureManagement.Data
 {
     public class FeatureDefinitionModel
     {
-        public string Name { get; set; }
-
         public string FeatureKey { get; set; }
-
-        public string? Description { get; set; }
 
         public List<FeatureFilter> Filters { get; set; }
     }
