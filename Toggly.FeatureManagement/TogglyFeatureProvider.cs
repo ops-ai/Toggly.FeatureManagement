@@ -50,7 +50,7 @@ namespace Toggly.FeatureManagement
         {
             try
             {
-                await RefreshFeatures(1000).ConfigureAwait(false);
+                await RefreshFeatures(new TimeSpan(0, 0, 2).Ticks).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
