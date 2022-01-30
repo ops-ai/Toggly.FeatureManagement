@@ -22,13 +22,13 @@ namespace Toggly.FeatureManagement
 
         private string? lastETag = null;
 
-        private ConcurrentDictionary<string, FeatureDefinition> _definitions = new ConcurrentDictionary<string, FeatureDefinition>();
+        private readonly ConcurrentDictionary<string, FeatureDefinition> _definitions = new ConcurrentDictionary<string, FeatureDefinition>();
 
         private readonly ILogger _logger;
 
         private readonly IHttpClientFactory _clientFactory;
 
-        private BackgroundWorker _backgroundWorker = new BackgroundWorker();
+        private readonly BackgroundWorker _backgroundWorker = new BackgroundWorker();
 
         private readonly IFeatureSnapshotProvider? _snapshotProvider;
 
@@ -124,6 +124,7 @@ namespace Toggly.FeatureManagement
                                     Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
                                 })
                         };
+                        
                         _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                     }
 
