@@ -28,9 +28,18 @@ namespace Toggly.FeatureManagement.Storage.RavenDB
         {
             using (var session = _store.OpenAsyncSession())
             {
-                var snapshot = new FeatureSnapshot { Id = _snapshotSettings.Value.DocumentName ?? "FeatureSnapshots/Toggly", Features = features };
-                await session.StoreAsync(snapshot, ct);
-                await session.SaveChangesAsync(ct);
+                var snapshot = await session.LoadAsync<FeatureSnapshot>(_snapshotSettings.Value.DocumentName ?? "FeatureSnapshots/Toggly", ct);
+                if (snapshot == null)
+                {
+                    snapshot = new FeatureSnapshot { Id = _snapshotSettings.Value.DocumentName ?? "FeatureSnapshots/Toggly", Features = features };
+                    await session.StoreAsync(snapshot, ct);
+                    await session.SaveChangesAsync(ct);
+                }
+                else if (snapshot.Features.Count != features.Count || !snapshot.Features.SequenceEqual(features))
+                {
+                    snapshot.Features = features;
+                    await session.SaveChangesAsync(ct);
+                }
             }
         }
     }
