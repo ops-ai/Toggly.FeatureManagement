@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.FeatureManagement;
 using System;
 using System.Linq;
 
@@ -44,6 +45,54 @@ namespace Toggly.FeatureManagement.Helpers
                 return descriptor.ImplementationFactory(services);
 
             return ActivatorUtilities.GetServiceOrCreateInstance(services, descriptor.ImplementationType!);
+        }
+
+        public static void AddTransientForFeature<TInterface, TImplementation>(this IServiceCollection services, string featureName)
+             where TInterface : class
+             where TImplementation : class, TInterface
+        {
+            // grab the existing registration if it exists
+            var oldDescriptor = services.FirstOrDefault(s => s.ServiceType == typeof(TInterface));
+            if (oldDescriptor == null)
+                services.Add(ServiceDescriptor.Describe(
+                  typeof(TInterface),
+                  serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
+                        ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
+                        throw new NotImplementedException("Feature {featureName} is not enabled, and no other instance of the service is registered"),
+                  ServiceLifetime.Transient)
+                );
+            else
+                services.Replace(ServiceDescriptor.Describe(
+                  typeof(TInterface),
+                  serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
+                        ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
+                        ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType!),
+                  ServiceLifetime.Transient)
+                );
+        }
+
+        public static void AddScopedForFeature<TInterface, TImplementation>(this IServiceCollection services, string featureName)
+             where TInterface : class
+             where TImplementation : class, TInterface
+        {
+            // grab the existing registration if it exists
+            var oldDescriptor = services.FirstOrDefault(s => s.ServiceType == typeof(TInterface));
+            if (oldDescriptor == null)
+                services.Add(ServiceDescriptor.Describe(
+                  typeof(TInterface),
+                  serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
+                        ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
+                        throw new NotImplementedException("Feature {featureName} is not enabled, and no other instance of the service is registered"),
+                  ServiceLifetime.Scoped)
+                );
+            else
+                services.Replace(ServiceDescriptor.Describe(
+                  typeof(TInterface),
+                  serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
+                        ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
+                        ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType!),
+                  ServiceLifetime.Scoped)
+                );
         }
     }
 }
