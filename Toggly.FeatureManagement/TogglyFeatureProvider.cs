@@ -5,10 +5,10 @@ using Microsoft.FeatureManagement;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Toggly.FeatureManagement.Data;
 
@@ -28,9 +28,9 @@ namespace Toggly.FeatureManagement
 
         private readonly IHttpClientFactory _clientFactory;
 
-        private readonly BackgroundWorker _backgroundWorker = new BackgroundWorker();
-
         private readonly IFeatureSnapshotProvider? _snapshotProvider;
+
+        private bool _loaded = false;
 
         public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
         {
@@ -40,54 +40,38 @@ namespace Toggly.FeatureManagement
             _snapshotProvider = (IFeatureSnapshotProvider?)serviceProvider.GetService(typeof(IFeatureSnapshotProvider));
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
-            _backgroundWorker.DoWork += BackgroundWorker_DoWork;
-            _backgroundWorker.RunWorkerAsync();
+            
+            var timer = new Timer((s) => RefreshFeatures().ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 0, 10));
         }
 
-#pragma warning disable VSTHRD100 // Avoid async void methods
-        private async void BackgroundWorker_DoWork(object sender, DoWorkEventArgs e)
-#pragma warning restore VSTHRD100 // Avoid async void methods
+        private async Task LoadSnapshot()
         {
             try
             {
-                await RefreshFeatures(new TimeSpan(0, 0, 2).Ticks).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error loading initial features");
-                try
+                if (_snapshotProvider != null)
                 {
-                    if (_snapshotProvider != null)
-                    {
-                        var snapshot = await _snapshotProvider.GetFeaturesSnapshotAsync().ConfigureAwait(false);
+                    var snapshot = await _snapshotProvider.GetFeaturesSnapshotAsync().ConfigureAwait(false);
 
-                        if (snapshot != null)
-                            foreach (var featureDefinition in snapshot)
+                    if (snapshot != null)
+                        foreach (var featureDefinition in snapshot)
+                        {
+                            var newDefinition = new FeatureDefinition
                             {
-                                var newDefinition = new FeatureDefinition
-                                {
-                                    Name = featureDefinition.FeatureKey,
-                                    EnabledFor = featureDefinition.Filters.Select(featureFilter =>
-                                        new FeatureFilterConfiguration
-                                        {
-                                            Name = featureFilter.Name,
-                                            Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
-                                        })
-                                };
-                                _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
-                            }
-                    }
-                }
-                catch (Exception ex2)
-                {
-                    _logger.LogError(ex2, "Error loading from snapshot");
+                                Name = featureDefinition.FeatureKey,
+                                EnabledFor = featureDefinition.Filters.Select(featureFilter =>
+                                    new FeatureFilterConfiguration
+                                    {
+                                        Name = featureFilter.Name,
+                                        Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
+                                    })
+                            };
+                            _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
+                        }
                 }
             }
-
-            while (true)
+            catch (Exception ex2)
             {
-                await Task.Delay(new TimeSpan(0, 0, 10)).ConfigureAwait(false);
-                await RefreshFeatures().ConfigureAwait(false);
+                _logger.LogError(ex2, "Error loading from snapshot");
             }
         }
 
@@ -127,6 +111,7 @@ namespace Toggly.FeatureManagement
                         
                         _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                     }
+                    _loaded = true;
 
                     if (_snapshotProvider != null)
                         await _snapshotProvider.SaveSnapshotAsync(newDefinitions).ConfigureAwait(false);
@@ -135,13 +120,25 @@ namespace Toggly.FeatureManagement
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error refreshing features list");
+                if (!_loaded)
+                {
+                    await LoadSnapshot();
+                    _loaded = true;
+                }
             }
         }
 
         public async IAsyncEnumerable<FeatureDefinition> GetAllFeatureDefinitionsAsync()
         {
-            if (_definitions.IsEmpty)
-                await RefreshFeatures().ConfigureAwait(false);
+            if (!_loaded)
+            {
+                var i = 0;
+                while (!_loaded && i < 5)
+                {
+                    await Task.Delay(500).ConfigureAwait(false);
+                    i++;
+                }
+            }
 
             foreach (var feature in _definitions.Values)
                 yield return feature;
@@ -149,10 +146,15 @@ namespace Toggly.FeatureManagement
 
         public async Task<FeatureDefinition?> GetFeatureDefinitionAsync(string featureName)
         {
-            if (_definitions.TryGetValue(featureName, out var feature))
-                return feature;
-
-            await RefreshFeatures().ConfigureAwait(false);
+            if (!_loaded)
+            {
+                var i = 0;
+                while (!_loaded && i < 5)
+                {
+                    await Task.Delay(500).ConfigureAwait(false);
+                    i++;
+                }
+            }
 
             if (_definitions.TryGetValue(featureName, out var updatedFeature))
                 return updatedFeature;
