@@ -1,0 +1,35 @@
+syntax = "proto3";
+import "google/protobuf/empty.proto";
+import "google/protobuf/Timestamp.proto";
+
+option csharp_namespace = "Toggly.FeatureManagement.Proto";
+
+package usage;
+
+// The greeting service definition.
+service Usage {
+    // Sends a greeting
+    rpc SendStats(FeatureStat) returns (StatResult);
+}
+
+// The request message containing the user's name.
+message FeatureStat {
+    string appKey = 1;
+    string environment = 2;
+    google.protobuf.Timestamp time = 3;
+    repeated StatMessage stats = 4;
+}
+
+message StatMessage {
+	string feature = 1;
+	int32 enabledCount = 2;
+	int32 disabledCount = 3;
+	int32 uniqueContextIdentifierEnabledCount = 4; //Ex: unique username, IP address
+	int32 uniqueContextIdentifierDisabledCount = 5;
+	int32 uniqueRequestEnabledCount = 6;
+	int32 uniqueRequestDisabledCount = 7;
+}
+
+message StatResult {
+	int32 featureCount = 1;
+}

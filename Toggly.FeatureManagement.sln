@@ -22,7 +22,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.Examples.Mvc", "exam
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Tests", "Toggly.FeatureManagement.Tests\Toggly.FeatureManagement.Tests.csproj", "{073EC4A5-2D67-419F-A990-1A66E15F4FB4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Toggly.FeatureManagement.Storage.RavenDB", "Toggly.FeatureManagement.Storage.RavenDB\Toggly.FeatureManagement.Storage.RavenDB.csproj", "{D51E272C-58A8-40B4-A0F2-41ABCBC2FFB7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Storage.RavenDB", "Toggly.FeatureManagement.Storage.RavenDB\Toggly.FeatureManagement.Storage.RavenDB.csproj", "{D51E272C-58A8-40B4-A0F2-41ABCBC2FFB7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
