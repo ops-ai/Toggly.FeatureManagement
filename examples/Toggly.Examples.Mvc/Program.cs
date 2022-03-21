@@ -6,6 +6,7 @@ using Toggly.Examples.Mvc.FeatureFlags;
 using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.Storage.RavenDB;
 using Azure.Identity;
+using Toggly.FeatureManagement.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,12 +28,14 @@ builder.Services.AddHttpClient("toggly", config =>
     .ConfigurePrimaryHttpMessageHandler(() => { return new SocketsHttpHandler { UseCookies = false }; });
 
 builder.Services.AddSingleton<IFeatureDefinitionProvider, TogglyFeatureProvider>();
+builder.Services.AddSingleton<IFeatureUsageStatsProvider, TogglyUsageStatsProvider>();
 
 builder.Services.AddSingleton<ITargetingContextAccessor, HttpContextTargetingContextAccessor>();
 builder.Services.AddFeatureManagement()
         .AddFeatureFilter<PercentageFilter>()
         .AddFeatureFilter<TimeWindowFilter>()
         .AddFeatureFilter<TargetingFilter>();
+builder.Services.Decorate<IFeatureManager, TogglyFeatureManager>();
 
 builder.Services.Configure<FeatureManagementOptions>(options =>
 {
