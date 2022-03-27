@@ -1,19 +1,13 @@
 ﻿using Grpc.Net.Client;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.FeatureManagement;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using System.Net.Http;
-using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Toggly.FeatureManagement.Data;
-using Toggly.FeatureManagement.Proto;
 
 namespace Toggly.FeatureManagement
 {
@@ -31,7 +25,7 @@ namespace Toggly.FeatureManagement
 
         private readonly ConcurrentDictionary<string, int> _stats = new ConcurrentDictionary<string, int>();
 
-        public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory)
+        public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
@@ -40,7 +34,8 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
-            var timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
+            var timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 5, 0), new TimeSpan(0, 5, 0));
+            applicationLifetime.ApplicationStopping.Register(() => SendStats().ConfigureAwait(false).GetAwaiter().GetResult());
         }
 
         private async Task SendStats()

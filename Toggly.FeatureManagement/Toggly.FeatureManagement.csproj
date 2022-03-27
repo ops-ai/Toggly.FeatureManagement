@@ -29,6 +29,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="6.0.0" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="6.0.0" />
     <PackageReference Include="Microsoft.FeatureManagement" Version="2.4.0" />
     <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.1.46">
@@ -50,7 +51,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="Proto\usage.proto" GrpcServices="Client" />
+    <Protobuf Include="Proto\Usage.proto" GrpcServices="Client" />
   </ItemGroup>
 
   <ItemGroup>

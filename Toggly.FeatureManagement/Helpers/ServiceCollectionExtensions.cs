@@ -47,6 +47,34 @@ namespace Toggly.FeatureManagement.Helpers
             return ActivatorUtilities.GetServiceOrCreateInstance(services, descriptor.ImplementationType!);
         }
 
+        public static void DecorateForFeature<TInterface, TDecorator>(this IServiceCollection services, string featureName)
+          where TInterface : class
+          where TDecorator : class, TInterface
+        {
+            // grab the existing registration
+            var wrappedDescriptor = services.FirstOrDefault(
+              s => s.ServiceType == typeof(TInterface));
+
+            // check it's valid
+            if (wrappedDescriptor == null)
+                throw new InvalidOperationException($"{typeof(TInterface).Name} is not registered");
+
+            var objectFactory = ActivatorUtilities.CreateFactory(
+              typeof(TDecorator),
+              new[] { typeof(TInterface) });
+
+            // replace the existing registration with one
+            // that passes an instance of the existing registration
+            // to the object factory for the decorator
+            services.Replace(ServiceDescriptor.Describe(
+              typeof(TInterface),
+              s => s.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
+                        (TInterface)objectFactory(s, new[] { s.CreateInstance(wrappedDescriptor) }) :
+                        ActivatorUtilities.CreateInstance(s, wrappedDescriptor.ImplementationType!),
+              wrappedDescriptor.Lifetime)
+            );
+        }
+
         public static void AddTransientForFeature<TInterface, TImplementation>(this IServiceCollection services, string featureName)
              where TInterface : class
              where TImplementation : class, TInterface
