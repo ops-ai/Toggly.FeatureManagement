@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,7 +21,7 @@ namespace Toggly.FeatureManagement
 
         private readonly string _environment;
 
-        private string? lastETag = null;
+        private EntityTagHeaderValue? lastETag = null;
 
         private readonly ConcurrentDictionary<string, FeatureDefinition> _definitions = new ConcurrentDictionary<string, FeatureDefinition>();
 
@@ -40,8 +41,8 @@ namespace Toggly.FeatureManagement
             _snapshotProvider = (IFeatureSnapshotProvider?)serviceProvider.GetService(typeof(IFeatureSnapshotProvider));
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
-            
-            var timer = new Timer((s) => RefreshFeatures().ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 0, 10));
+
+            var timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 0, 5).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 0, 10));
         }
 
         private async Task LoadSnapshot()
@@ -79,43 +80,41 @@ namespace Toggly.FeatureManagement
         {
             try
             {
-                using (var httpClient = _clientFactory.CreateClient("toggly"))
+                using var httpClient = _clientFactory.CreateClient("toggly");
+                if (timeout.HasValue)
+                    httpClient.Timeout = new TimeSpan(timeout.Value);
+                if (lastETag != null) httpClient.DefaultRequestHeaders.IfNoneMatch.Add(lastETag);
+                var newDefinitionsRequest = await httpClient.GetAsync($"definitions/{_appKey}/{_environment}").ConfigureAwait(false);
+                if (newDefinitionsRequest.StatusCode == System.Net.HttpStatusCode.NotModified)
+                    return;
+
+                newDefinitionsRequest.EnsureSuccessStatusCode();
+
+                var newDefinitions = await newDefinitionsRequest.Content.ReadFromJsonAsync<List<FeatureDefinitionModel>>().ConfigureAwait(false);
+                if (newDefinitions == null)
+                    return;
+
+                lastETag = newDefinitionsRequest.Headers.ETag;
+
+                foreach (var featureDefinition in newDefinitions)
                 {
-                    if (timeout.HasValue)
-                        httpClient.Timeout = new TimeSpan(timeout.Value);
-                    if (lastETag != null) httpClient.DefaultRequestHeaders.Add("etag", lastETag);
-                    var newDefinitionsRequest = await httpClient.GetAsync($"definitions/{_appKey}/{_environment}").ConfigureAwait(false);
-                    if (newDefinitionsRequest.StatusCode == System.Net.HttpStatusCode.NotModified)
-                        return;
-
-                    newDefinitionsRequest.EnsureSuccessStatusCode();
-
-                    var newDefinitions = await newDefinitionsRequest.Content.ReadFromJsonAsync<List<FeatureDefinitionModel>>().ConfigureAwait(false);
-                    if (newDefinitions == null)
-                        return;
-
-                    //lastETag = newDefinitionsRequest.Headers.ETag.Tag;
-
-                    foreach (var featureDefinition in newDefinitions)
+                    var newDefinition = new FeatureDefinition
                     {
-                        var newDefinition = new FeatureDefinition
-                        {
-                            Name = featureDefinition.FeatureKey,
-                            EnabledFor = featureDefinition.Filters.Select(featureFilter =>
-                                new FeatureFilterConfiguration
-                                {
-                                    Name = featureFilter.Name,
-                                    Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
-                                })
-                        };
-                        
-                        _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
-                    }
-                    _loaded = true;
+                        Name = featureDefinition.FeatureKey,
+                        EnabledFor = featureDefinition.Filters.Select(featureFilter =>
+                            new FeatureFilterConfiguration
+                            {
+                                Name = featureFilter.Name,
+                                Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
+                            })
+                    };
 
-                    if (_snapshotProvider != null)
-                        await _snapshotProvider.SaveSnapshotAsync(newDefinitions).ConfigureAwait(false);
+                    _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                 }
+                _loaded = true;
+
+                if (_snapshotProvider != null)
+                    await _snapshotProvider.SaveSnapshotAsync(newDefinitions).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

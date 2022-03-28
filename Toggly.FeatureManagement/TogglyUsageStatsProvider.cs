@@ -8,6 +8,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Toggly.Web;
 
 namespace Toggly.FeatureManagement
 {
@@ -47,7 +48,8 @@ namespace Toggly.FeatureManagement
 
                 var currentTime = DateTime.UtcNow;
 
-                using var channel = GrpcChannel.ForAddress(_baseUrl);
+                using var httpClient = _clientFactory.CreateClient("toggly");
+                using var channel = GrpcChannel.ForAddress(_baseUrl, new GrpcChannelOptions { HttpClient = httpClient });
                 var client = new Usage.UsageClient(channel);
                 var dataPacket = new FeatureStat
                 {
@@ -73,6 +75,7 @@ namespace Toggly.FeatureManagement
                 _stats.Clear();
 
                 var result = await client.SendStatsAsync(dataPacket);
+
                 if (result.FeatureCount != dataPacket.Stats.Count)
                     _logger.LogWarning("Feature count did not match. Possible data integrity issues");
             }
