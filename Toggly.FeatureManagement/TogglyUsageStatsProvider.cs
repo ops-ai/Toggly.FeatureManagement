@@ -74,7 +74,7 @@ namespace Toggly.FeatureManagement
 
                 _stats.Clear();
 
-                var result = await client.SendStatsAsync(dataPacket);
+                var result = await client.SendStatsAsync(dataPacket).ConfigureAwait(false);
 
                 if (result.FeatureCount != dataPacket.Stats.Count)
                     _logger.LogWarning("Feature count did not match. Possible data integrity issues");
