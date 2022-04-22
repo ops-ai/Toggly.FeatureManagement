@@ -7,7 +7,7 @@
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<PackageProjectUrl>https://toggly.io</PackageProjectUrl>
-		<PackageIcon>packagephoto.jpg</PackageIcon>
+		<PackageIcon>packagephoto.png</PackageIcon>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
@@ -39,10 +39,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Update="packagephoto.jpg">
-	    <PackagePath>\</PackagePath>
-	    <Pack>True</Pack>
-	  </None>
+		<None Update="packagephoto.png">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
 	</ItemGroup>
 
 </Project>
