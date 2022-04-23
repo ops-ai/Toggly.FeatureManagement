@@ -26,6 +26,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.St
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Toggly.FeatureManagement.Storage.EntityFramework", "Toggly.FeatureManagement.Storage.EntityFramework\Toggly.FeatureManagement.Storage.EntityFramework.csproj", "{F58FB034-21DC-44D3-B1BB-D55EC6D4F797}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Toggly.FeatureManagement.Web", "Toggly.FeatureManagement.Web\Toggly.FeatureManagement.Web.csproj", "{7CAE6E11-09F5-49D8-9BE9-743B56AF084A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -52,6 +54,10 @@ Global
 		{F58FB034-21DC-44D3-B1BB-D55EC6D4F797}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F58FB034-21DC-44D3-B1BB-D55EC6D4F797}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F58FB034-21DC-44D3-B1BB-D55EC6D4F797}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7CAE6E11-09F5-49D8-9BE9-743B56AF084A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7CAE6E11-09F5-49D8-9BE9-743B56AF084A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7CAE6E11-09F5-49D8-9BE9-743B56AF084A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7CAE6E11-09F5-49D8-9BE9-743B56AF084A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

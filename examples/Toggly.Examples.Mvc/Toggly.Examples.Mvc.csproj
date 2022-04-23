@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Toggly.FeatureManagement.Storage.RavenDB\Toggly.FeatureManagement.Storage.RavenDB.csproj" />
+    <ProjectReference Include="..\..\Toggly.FeatureManagement.Web\Toggly.FeatureManagement.Web.csproj" />
     <ProjectReference Include="..\..\Toggly.FeatureManagement\Toggly.FeatureManagement.csproj" />
   </ItemGroup>
 

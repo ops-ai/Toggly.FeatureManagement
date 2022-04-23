@@ -55,6 +55,9 @@ namespace Toggly.FeatureManagement
 
         private async Task ResetUsageMap()
         {
+            if (!_uniqueUsageMap.Any())
+                return;
+
             await SendStats().ConfigureAwait(false);
             _uniqueUsageMap.Clear();
         }
