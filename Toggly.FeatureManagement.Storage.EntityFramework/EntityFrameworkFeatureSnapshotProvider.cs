@@ -1,43 +1,87 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Toggly.FeatureManagement.Data;
+using Toggly.FeatureManagement.Storage.EntityFramework;
 
 namespace Toggly.FeatureManagement.Storage.RavenDB
 {
     public class EntityFrameworkFeatureSnapshotProvider : IFeatureSnapshotProvider
     {
         private readonly IOptions<TogglySnapshotSettings> _snapshotSettings;
+        private readonly TogglyEntities _entities;
 
-        public EntityFrameworkFeatureSnapshotProvider(IDocumentStore store, IOptions<TogglySnapshotSettings> snapshotSettings)
+        public EntityFrameworkFeatureSnapshotProvider(TogglyEntities entities, IOptions<TogglySnapshotSettings> snapshotSettings)
         {
-            _store = store;
+            _entities = entities;
             _snapshotSettings = snapshotSettings;
         }
 
         public async Task<List<FeatureDefinitionModel>?> GetFeaturesSnapshotAsync(CancellationToken ct = default)
         {
-            using (var session = _store.OpenAsyncSession())
+            var existingFeatures = await _entities.TogglyFeatures.Include(t => t.Filters).ThenInclude(t => t.Parameters).ToListAsync(ct);
+
+            return existingFeatures.Select(t => new FeatureDefinitionModel
             {
-                var snapshot = await session.LoadAsync<FeatureSnapshot>(_snapshotSettings.Value.DocumentName ?? "FeatureSnapshots/Toggly", ct);
-                return snapshot?.Features;
-            }
+                FeatureKey = t.FeatureKey,
+                Filters = t.Filters.Select(f => new Data.FeatureFilter { Name = f.Name, Parameters = f.Parameters.ToDictionary(p => p.Name, p => p.Value) }).ToList()
+            }).ToList();
         }
-        
+
         public async Task SaveSnapshotAsync(List<FeatureDefinitionModel> features, CancellationToken ct = default)
         {
-            using (var session = _store.OpenAsyncSession())
+            var existingFeatures = await _entities.TogglyFeatures.Include(t => t.Filters).ThenInclude(t => t.Parameters).ToListAsync(ct);
+
+            if (!existingFeatures.Any())
             {
-                var snapshot = await session.LoadAsync<FeatureSnapshot>(_snapshotSettings.Value.DocumentName ?? "FeatureSnapshots/Toggly", ct);
-                if (snapshot == null)
+                foreach (var feature in features)
                 {
-                    snapshot = new FeatureSnapshot { Id = _snapshotSettings.Value.DocumentName ?? "FeatureSnapshots/Toggly", Features = features };
-                    await session.StoreAsync(snapshot, ct);
-                    await session.SaveChangesAsync(ct);
+                    await _entities.TogglyFeatures.AddAsync(new Feature { 
+                        FeatureKey = feature.FeatureKey, 
+                        Filters = feature.Filters.Select(f => new EntityFramework.FeatureFilter { 
+                            Name = f.Name, 
+                            Parameters = f.Parameters.Select(p => new FeatureFilterParameter { Name = p.Key, Value = p.Value }).ToList()
+                        }).ToList()
+                    }, ct);
                 }
-                else if (snapshot.Features.Count != features.Count || !snapshot.Features.SequenceEqual(features))
+
+                await _entities.SaveChangesAsync(ct);
+            }
+            else
+            {
+                foreach (var feature in features)
                 {
-                    snapshot.Features = features;
-                    await session.SaveChangesAsync(ct);
+                    var existingFeatureEnt = existingFeatures.FirstOrDefault(t => t.FeatureKey == feature.FeatureKey);
+                    if (existingFeatureEnt != null)
+                    {
+                        foreach (var filter in feature.Filters)
+                        {
+                            var existingFilter = existingFeatureEnt.Filters.FirstOrDefault(f => f.Name == filter.Name);
+                            if (existingFilter != null)
+                                foreach (var param in filter.Parameters)
+                                {
+                                    var existingParam = existingFilter.Parameters.FirstOrDefault(t => t.Name == param.Key);
+                                    if (existingParam != null)
+                                        existingParam.Value = param.Value;
+                                    else
+                                        existingFilter.Parameters.Add(new FeatureFilterParameter {  Name = param.Key, Value = param.Value });
+                                }
+                            else
+                                existingFeatureEnt.Filters.Add(new EntityFramework.FeatureFilter { Name = filter.Name, Parameters = filter.Parameters.Select(p => new FeatureFilterParameter { Name = p.Key, Value = p.Value }).ToList() });
+                        }
+                        //TODO: Remove old values
+                    }
+                    else
+                        await _entities.TogglyFeatures.AddAsync(new Feature
+                        {
+                            FeatureKey = feature.FeatureKey,
+                            Filters = feature.Filters.Select(f => new EntityFramework.FeatureFilter
+                            {
+                                Name = f.Name,
+                                Parameters = f.Parameters.Select(p => new FeatureFilterParameter { Name = p.Key, Value = p.Value }).ToList()
+                            }).ToList()
+                        }, ct);
                 }
+                await _entities.SaveChangesAsync(ct);
             }
         }
     }

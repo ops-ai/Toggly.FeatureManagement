@@ -20,6 +20,11 @@ namespace Toggly.FeatureManagement.Storage.EntityFramework
                 .HasMany(e => e.Filters)
                 .WithOne(e => e.Feature)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<FeatureFilter>()
+                .HasMany(e => e.Parameters)
+                .WithOne(e => e.Filter)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 
@@ -33,17 +38,30 @@ namespace Toggly.FeatureManagement.Storage.EntityFramework
         public virtual ICollection<FeatureFilter> Filters { get; set; }
     }
 
-
-    [Table("ToggleFeatureFilters")]
+    [Table("TogglyFeatureFilters")]
     public partial class FeatureFilter
     {
         [Key]
         [StringLength(100)]
         public string Name { get; set; }
 
-        [StringLength(8000)]
-        public string Parameters { get; set; }
-
         public virtual Feature Feature { get; set; }
+
+        public virtual ICollection<FeatureFilterParameter> Parameters { get; set; }
+    }
+
+    [Table("TogglyFeatureFilterParameters")]
+    public partial class FeatureFilterParameter
+    {
+        [Key]
+        public long Id { get; set; }
+
+        [StringLength(100)]
+        public string Name { get; set; }
+
+        [StringLength(1000)]
+        public string Value { get; set; }
+
+        public virtual FeatureFilter Filter { get; set; }
     }
 }
