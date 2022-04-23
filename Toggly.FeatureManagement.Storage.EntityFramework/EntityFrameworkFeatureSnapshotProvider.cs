@@ -1,0 +1,44 @@
+﻿using Microsoft.Extensions.Options;
+using Toggly.FeatureManagement.Data;
+
+namespace Toggly.FeatureManagement.Storage.RavenDB
+{
+    public class EntityFrameworkFeatureSnapshotProvider : IFeatureSnapshotProvider
+    {
+        private readonly IOptions<TogglySnapshotSettings> _snapshotSettings;
+
+        public EntityFrameworkFeatureSnapshotProvider(IDocumentStore store, IOptions<TogglySnapshotSettings> snapshotSettings)
+        {
+            _store = store;
+            _snapshotSettings = snapshotSettings;
+        }
+
+        public async Task<List<FeatureDefinitionModel>?> GetFeaturesSnapshotAsync(CancellationToken ct = default)
+        {
+            using (var session = _store.OpenAsyncSession())
+            {
+                var snapshot = await session.LoadAsync<FeatureSnapshot>(_snapshotSettings.Value.DocumentName ?? "FeatureSnapshots/Toggly", ct);
+                return snapshot?.Features;
+            }
+        }
+        
+        public async Task SaveSnapshotAsync(List<FeatureDefinitionModel> features, CancellationToken ct = default)
+        {
+            using (var session = _store.OpenAsyncSession())
+            {
+                var snapshot = await session.LoadAsync<FeatureSnapshot>(_snapshotSettings.Value.DocumentName ?? "FeatureSnapshots/Toggly", ct);
+                if (snapshot == null)
+                {
+                    snapshot = new FeatureSnapshot { Id = _snapshotSettings.Value.DocumentName ?? "FeatureSnapshots/Toggly", Features = features };
+                    await session.StoreAsync(snapshot, ct);
+                    await session.SaveChangesAsync(ct);
+                }
+                else if (snapshot.Features.Count != features.Count || !snapshot.Features.SequenceEqual(features))
+                {
+                    snapshot.Features = features;
+                    await session.SaveChangesAsync(ct);
+                }
+            }
+        }
+    }
+}
