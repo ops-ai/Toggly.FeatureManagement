@@ -27,6 +27,7 @@ message StatMessage {
 	int32 uniqueContextIdentifierDisabledCount = 5;
 	int32 uniqueRequestEnabledCount = 6;
 	int32 uniqueRequestDisabledCount = 7;
+	int32 valueDeliveredCount = 8;
 }
 
 message StatResult {

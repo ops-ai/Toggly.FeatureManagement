@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -27,18 +28,35 @@ namespace Toggly.FeatureManagement
         private readonly ConcurrentDictionary<string, int> _stats = new ConcurrentDictionary<string, int>();
 
         private readonly Timer _timer;
+        private readonly Timer _longTimer;
 
-        public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime)
+        private readonly IFeatureContextProvider? _contextProvider;
+
+        /// <summary>
+        /// keyed by feature name
+        /// values are list of unique users with status: d-email vs e-email
+        /// </summary>
+        private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _uniqueUsageMap = new ConcurrentDictionary<string, ConcurrentBag<string>>();
+
+        public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
             _baseUrl = togglySettings.Value.BaseUrl;
             _clientFactory = clientFactory;
+            _contextProvider = (IFeatureContextProvider?)serviceProvider.GetService(typeof(IFeatureContextProvider));
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
             _timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 5, 0), new TimeSpan(0, 5, 0));
+            _longTimer = new Timer((s) => ResetUsageMap().ConfigureAwait(false), null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
             applicationLifetime.ApplicationStopping.Register(() => SendStats().ConfigureAwait(false).GetAwaiter().GetResult());
+        }
+
+        private async Task ResetUsageMap()
+        {
+            await SendStats().ConfigureAwait(false);
+            _uniqueUsageMap.Clear();
         }
 
         private async Task SendStats()
@@ -67,10 +85,11 @@ namespace Toggly.FeatureManagement
                         EnabledCount = stat.Any(s => s.Key.StartsWith('a')) ? stat.First(s => s.Key.StartsWith('a')).Value : 0,
                         DisabledCount = stat.Any(s => s.Key.StartsWith('d')) ? stat.First(s => s.Key.StartsWith('d')).Value : 0,
                         Feature = stat.Key,
-                        UniqueContextIdentifierDisabledCount = 0,
-                        UniqueContextIdentifierEnabledCount = 0,
-                        UniqueRequestDisabledCount = 0,
-                        UniqueRequestEnabledCount = 0,
+                        UniqueContextIdentifierDisabledCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("e")) : 0,
+                        UniqueContextIdentifierEnabledCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("d")) : 0,
+                        UniqueRequestDisabledCount = stat.Any(s => s.Key.StartsWith('u')) ? stat.First(s => s.Key.StartsWith('u')).Value : 0,
+                        UniqueRequestEnabledCount = stat.Any(s => s.Key.StartsWith('x')) ? stat.First(s => s.Key.StartsWith('x')).Value : 0,
+                        ValueDeliveredCount = stat.Any(s => s.Key.StartsWith('v')) ? stat.First(s => s.Key.StartsWith('v')).Value : 0,
                     });
                 }
 
@@ -87,31 +106,76 @@ namespace Toggly.FeatureManagement
             }
         }
 
-        public Task RecordUsageAsync(string feature, bool allowed)
+        public Task RecordValueDeliveredAsync(string feature)
         {
-            //record stats keyed by feature status
-
             int currentValue;
             do {
-                currentValue = _stats.GetOrAdd(allowed ? $"a-{feature}" : $"d-{feature}", 0);
-            } while (!_stats.TryUpdate(allowed ? $"a-{feature}" : $"d-{feature}", currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd($"v-{feature}", 0);
+            } while (!_stats.TryUpdate($"v-{feature}", currentValue + 1, currentValue));
 
             return Task.CompletedTask;
         }
 
-        public Task RecordUsageAsync<TContext>(string feature, TContext context, bool allowed)
+        public async Task RecordUsageAsync(string feature, bool allowed)
+        {
+            //record stats keyed by feature status
+            int currentValue;
+            do {
+                currentValue = _stats.GetOrAdd(allowed ? $"a{feature}" : $"d{feature}", 0);
+            } while (!_stats.TryUpdate(allowed ? $"a{feature}" : $"d{feature}", currentValue + 1, currentValue));
+
+            if (_contextProvider != null)
+            {
+                var usedInRequest = await _contextProvider.AccessedInRequestAsync(feature);
+                if (!usedInRequest)
+                {
+                    int currentRequestValue;
+                    do
+                    {
+                        currentRequestValue = _stats.GetOrAdd(allowed ? $"c{feature}" : $"b{feature}", 0);
+                    } while (!_stats.TryUpdate(allowed ? $"c{feature}" : $"b{feature}", currentRequestValue + 1, currentRequestValue));
+                }
+
+                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync();
+                if (uniqueIdentifier != null)
+                {
+                    ConcurrentBag<string> currentUniqueValue;
+                    currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new ConcurrentBag<string>());
+                    currentUniqueValue.Add(allowed ? $"a{uniqueIdentifier}" : $"d{uniqueIdentifier}");
+                }
+            }
+        }
+
+        public async Task RecordUsageAsync<TContext>(string feature, TContext context, bool allowed)
         {
             //record stats keyed by feature status
 
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd(allowed ? $"a-{feature}" : $"d-{feature}", 0);
-            } while (!_stats.TryUpdate(allowed ? $"a-{feature}" : $"d-{feature}", currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd(allowed ? $"a{feature}" : $"d{feature}", 0);
+            } while (!_stats.TryUpdate(allowed ? $"a{feature}" : $"d{feature}", currentValue + 1, currentValue));
 
-            //TODO: record stats keyed by feature status and context property (ex: username, group, ip address)
+            if (_contextProvider != null)
+            {
+                var usedInRequest = await _contextProvider.AccessedInRequestAsync(feature, context);
+                if (!usedInRequest)
+                {
+                    int currentRequestValue;
+                    do
+                    {
+                        currentRequestValue = _stats.GetOrAdd(allowed ? $"c{feature}" : $"b{feature}", 0);
+                    } while (!_stats.TryUpdate(allowed ? $"c{feature}" : $"b{feature}", currentRequestValue + 1, currentRequestValue));
+                }
 
-            return Task.CompletedTask;
+                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context);
+                if (uniqueIdentifier != null)
+                {
+                    ConcurrentBag<string> currentUniqueValue;
+                    currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new ConcurrentBag<string>());
+                    currentUniqueValue.Add(allowed ? $"a{uniqueIdentifier}" : $"d{uniqueIdentifier}");
+                }
+            }
         }
     }
 }
