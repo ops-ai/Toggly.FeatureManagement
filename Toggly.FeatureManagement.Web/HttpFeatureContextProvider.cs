@@ -13,6 +13,9 @@ namespace Toggly.FeatureManagement.Web
 
         public Task<bool> AccessedInRequestAsync(string featureName)
         {
+            if (_httpContextAccessor.HttpContext == null)
+                return Task.FromResult(true);
+
             if (_httpContextAccessor.HttpContext.Items.ContainsKey($"feature-{featureName}"))
                 return Task.FromResult(true);
             else
@@ -22,6 +25,9 @@ namespace Toggly.FeatureManagement.Web
 
         public Task<bool> AccessedInRequestAsync<TContext>(string featureName, TContext context)
         {
+            if (_httpContextAccessor.HttpContext == null)
+                return Task.FromResult(true);
+
             if (_httpContextAccessor.HttpContext.Items.ContainsKey($"feature-{featureName}"))
                 return Task.FromResult(true);
             else
@@ -31,6 +37,9 @@ namespace Toggly.FeatureManagement.Web
         
         public Task<string> GetContextIdentifierAsync()
         {
+            if (_httpContextAccessor.HttpContext == null)
+                return Task.FromResult("");
+
             if (_httpContextAccessor.HttpContext.User != null && _httpContextAccessor.HttpContext.User.Identity?.Name != null)
                 return Task.FromResult(_httpContextAccessor.HttpContext.User.Identity.Name!);
 
@@ -39,6 +48,9 @@ namespace Toggly.FeatureManagement.Web
      
         public Task<string> GetContextIdentifierAsync<TContext>(TContext context)
         {
+            if (_httpContextAccessor.HttpContext == null)
+                return Task.FromResult("");
+
             if (_httpContextAccessor.HttpContext.User != null && _httpContextAccessor.HttpContext.User.Identity?.Name != null)
                 return Task.FromResult(_httpContextAccessor.HttpContext.User.Identity.Name!);
 
