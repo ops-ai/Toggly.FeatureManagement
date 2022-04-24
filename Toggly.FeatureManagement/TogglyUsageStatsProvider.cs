@@ -28,6 +28,7 @@ namespace Toggly.FeatureManagement
         private readonly ConcurrentDictionary<string, int> _stats = new ConcurrentDictionary<string, int>();
 
         private readonly Timer _timer;
+
         private readonly Timer _longTimer;
 
         private readonly IFeatureContextProvider? _contextProvider;
@@ -36,7 +37,7 @@ namespace Toggly.FeatureManagement
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
         /// </summary>
-        private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _uniqueUsageMap = new ConcurrentDictionary<string, ConcurrentBag<string>>();
+        private readonly ConcurrentDictionary<string, HashSet<string>> _uniqueUsageMap = new ConcurrentDictionary<string, HashSet<string>>();
 
         public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider)
         {
@@ -81,7 +82,7 @@ namespace Toggly.FeatureManagement
                     Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime),
                 };
 
-                foreach (var stat in _stats.GroupBy(t => t.Key[2..]))
+                foreach (var stat in _stats.GroupBy(t => t.Key[1..]))
                 {
                     dataPacket.Stats.Add(new StatMessage
                     {
@@ -93,6 +94,7 @@ namespace Toggly.FeatureManagement
                         UniqueRequestDisabledCount = stat.Any(s => s.Key.StartsWith('u')) ? stat.First(s => s.Key.StartsWith('u')).Value : 0,
                         UniqueRequestEnabledCount = stat.Any(s => s.Key.StartsWith('x')) ? stat.First(s => s.Key.StartsWith('x')).Value : 0,
                         ValueDeliveredCount = stat.Any(s => s.Key.StartsWith('v')) ? stat.First(s => s.Key.StartsWith('v')).Value : 0,
+                        UniqueUsersValueDeliveredCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("v")) : 0
                     });
                 }
 
@@ -109,14 +111,22 @@ namespace Toggly.FeatureManagement
             }
         }
 
-        public Task RecordValueDeliveredAsync(string feature)
+        public async Task RecordValueDeliveredAsync(string feature)
         {
             int currentValue;
             do {
                 currentValue = _stats.GetOrAdd($"v-{feature}", 0);
             } while (!_stats.TryUpdate($"v-{feature}", currentValue + 1, currentValue));
 
-            return Task.CompletedTask;
+            if (_contextProvider != null)
+            {
+                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync();
+                if (uniqueIdentifier != null)
+                {
+                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new HashSet<string>());
+                    currentUniqueValue.Add($"v{uniqueIdentifier}");
+                }
+            }
         }
 
         public async Task RecordUsageAsync(string feature, bool allowed)
@@ -142,8 +152,7 @@ namespace Toggly.FeatureManagement
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync();
                 if (uniqueIdentifier != null)
                 {
-                    ConcurrentBag<string> currentUniqueValue;
-                    currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new ConcurrentBag<string>());
+                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new HashSet<string>());
                     currentUniqueValue.Add(allowed ? $"a{uniqueIdentifier}" : $"d{uniqueIdentifier}");
                 }
             }
@@ -174,8 +183,7 @@ namespace Toggly.FeatureManagement
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context);
                 if (uniqueIdentifier != null)
                 {
-                    ConcurrentBag<string> currentUniqueValue;
-                    currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new ConcurrentBag<string>());
+                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new HashSet<string>());
                     currentUniqueValue.Add(allowed ? $"a{uniqueIdentifier}" : $"d{uniqueIdentifier}");
                 }
             }
