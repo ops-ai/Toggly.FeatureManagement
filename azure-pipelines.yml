@@ -30,27 +30,27 @@ steps:
     updateAssemblyInfoFilename: '$(Build.SourcesDirectory)\AssemblyInfo.cs'
     additionalArguments: '/output buildserver'
 
-#- task: SonarCloudPrepare@1
-#  inputs:
-#    SonarCloud: 'SonarCloud'
-#    organization: 'ops-ai'
-#    scannerMode: 'MSBuild'
-#    projectKey: 'ops-ai_toggly-feature-management'
-#    projectName: 'Toggly Feature Management'
-#    projectVersion: '0.1'
-#    extraProperties: |
-#      sonar.dependencyCheck.reportPath=$(Agent.BuildDirectory)\dependency-check-report.xml
-#      sonar.dependencyCheck.htmlReportPath=$(Agent.BuildDirectory)\dependency-check-report.html
-#      sonar.coverageReportPaths=$(Agent.TempDirectory)\SonarQube.xml
-#      sonar.coverage.exclusions="**Tests*.cs"
+- task: SonarCloudPrepare@1
+  inputs:
+    SonarCloud: 'SonarCloud'
+    organization: 'ops-ai'
+    scannerMode: 'MSBuild'
+    projectKey: 'ops-ai_toggly-feature-management'
+    projectName: 'Toggly Feature Management'
+    projectVersion: '0.1'
+    extraProperties: |
+      sonar.dependencyCheck.reportPath=$(Agent.BuildDirectory)\dependency-check-report.xml
+      sonar.dependencyCheck.htmlReportPath=$(Agent.BuildDirectory)\dependency-check-report.html
+      sonar.coverageReportPaths=$(Agent.TempDirectory)\SonarQube.xml
+      sonar.coverage.exclusions="**Tests*.cs"
 
-#- task: dependency-check-build-task@5
-#  inputs:
-#    projectName: '$(Build.DefinitionName)'
-#    scanPath: '$(build.artifactstagingdirectory)'
-#    format: 'ALL'
-#    additionalArguments: '--disableBundleAudit --disableRubygems --disableNodeJS --disablePyPkg --disablePyDist --out "$(Agent.BuildDirectory)"'
-#  continueOnError: true
+- task: dependency-check-build-task@5
+  inputs:
+    projectName: '$(Build.DefinitionName)'
+    scanPath: '$(build.artifactstagingdirectory)'
+    format: 'ALL'
+    additionalArguments: '--disableBundleAudit --disableRubygems --disableNodeJS --disablePyPkg --disablePyDist --out "$(Agent.BuildDirectory)"'
+  continueOnError: true
 
 - task: DotNetCoreCLI@2
   displayName: 'dotnet build'
@@ -74,11 +74,11 @@ steps:
     modifyOutputPath: true
     zipAfterPublish: true
 
-#- task: reportgenerator@4
-#  inputs:
-#    reports: '$(Agent.TempDirectory)\**\coverage.cobertura.xml'
-#    targetdir: '$(Agent.TempDirectory)\'
-#    reporttypes: 'SonarQube'
+- task: reportgenerator@4
+  inputs:
+    reports: '$(Agent.TempDirectory)\**\coverage.cobertura.xml'
+    targetdir: '$(Agent.TempDirectory)\'
+    reporttypes: 'SonarQube'
 
 - task: DotNetCoreCLI@2
   inputs:
@@ -86,11 +86,11 @@ steps:
     packagesToPack: '$(solution)'
     versioningScheme: 'byBuildNumber'
 
-#- task: SonarCloudAnalyze@1
+- task: SonarCloudAnalyze@1
 
-#- task: SonarCloudPublish@1
-#  inputs:
-#    pollingTimeoutSec: '300'
+- task: SonarCloudPublish@1
+  inputs:
+    pollingTimeoutSec: '300'
 
 - task: PublishBuildArtifacts@1
   inputs:
