@@ -83,7 +83,7 @@ steps:
 - task: DotNetCoreCLI@2
   inputs:
     command: 'pack'
-    packagesToPack: '**/*.csproj'
+    packagesToPack: '$(solution)'
     versioningScheme: 'byBuildNumber'
 
 - task: SonarCloudAnalyze@1
