@@ -145,7 +145,7 @@ namespace Toggly.FeatureManagement
                 yield return feature;
         }
 
-        public async Task<FeatureDefinition?> GetFeatureDefinitionAsync(string featureName)
+        public async Task<FeatureDefinition> GetFeatureDefinitionAsync(string featureName)
         {
             if (!_loaded)
             {
@@ -160,7 +160,7 @@ namespace Toggly.FeatureManagement
             if (_definitions.TryGetValue(featureName, out var updatedFeature))
                 return updatedFeature;
 
-            return null;
+            return new FeatureDefinition {  Name = featureName, EnabledFor = new List<FeatureFilterConfiguration>() };
         }
     }
 }
