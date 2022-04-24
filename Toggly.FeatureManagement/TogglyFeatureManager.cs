@@ -20,20 +20,20 @@ namespace Toggly.FeatureManagement
 
         public async Task<bool> IsEnabledAsync(string feature)
         {
-            bool allowed = await _featureManager.IsEnabledAsync(feature);
+            bool allowed = await _featureManager.IsEnabledAsync(feature).ConfigureAwait(false);
 
             //Notify usage stats service that it was checked
-            await _featureUsageStatsProvider.RecordUsageAsync(feature, allowed);
+            await _featureUsageStatsProvider.RecordUsageAsync(feature, allowed).ConfigureAwait(false);
 
             return allowed;
         }
 
         public async Task<bool> IsEnabledAsync<TContext>(string feature, TContext context)
         {
-            bool allowed = await _featureManager.IsEnabledAsync(feature, context);
+            bool allowed = await _featureManager.IsEnabledAsync(feature, context).ConfigureAwait(false);
 
             //Notify usage stats service that it was checked
-            await _featureUsageStatsProvider.RecordUsageAsync(feature, context, allowed);
+            await _featureUsageStatsProvider.RecordUsageAsync(feature, context, allowed).ConfigureAwait(false);
 
             return allowed;
         }

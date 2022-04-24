@@ -123,7 +123,7 @@ namespace Toggly.FeatureManagement
                 _logger.LogError(ex, "Error refreshing features list");
                 if (!_loaded)
                 {
-                    await LoadSnapshot();
+                    await LoadSnapshot().ConfigureAwait(false);
                     _loaded = true;
                 }
             }

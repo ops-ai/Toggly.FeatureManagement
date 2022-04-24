@@ -120,7 +120,7 @@ namespace Toggly.FeatureManagement
 
             if (_contextProvider != null)
             {
-                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync();
+                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
                     var currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new HashSet<string>());
@@ -139,7 +139,7 @@ namespace Toggly.FeatureManagement
 
             if (_contextProvider != null)
             {
-                var usedInRequest = await _contextProvider.AccessedInRequestAsync(feature);
+                var usedInRequest = await _contextProvider.AccessedInRequestAsync(feature).ConfigureAwait(false);
                 if (!usedInRequest)
                 {
                     int currentRequestValue;
@@ -149,7 +149,7 @@ namespace Toggly.FeatureManagement
                     } while (!_stats.TryUpdate(allowed ? $"c{feature}" : $"b{feature}", currentRequestValue + 1, currentRequestValue));
                 }
 
-                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync();
+                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
                     var currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new HashSet<string>());
@@ -170,7 +170,7 @@ namespace Toggly.FeatureManagement
 
             if (_contextProvider != null)
             {
-                var usedInRequest = await _contextProvider.AccessedInRequestAsync(feature, context);
+                var usedInRequest = await _contextProvider.AccessedInRequestAsync(feature, context).ConfigureAwait(false);
                 if (!usedInRequest)
                 {
                     int currentRequestValue;
@@ -180,7 +180,7 @@ namespace Toggly.FeatureManagement
                     } while (!_stats.TryUpdate(allowed ? $"c{feature}" : $"b{feature}", currentRequestValue + 1, currentRequestValue));
                 }
 
-                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context);
+                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context).ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
                     var currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new HashSet<string>());
