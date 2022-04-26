@@ -23,7 +23,7 @@ namespace Toggly.FeatureManagement
             bool allowed = await _featureManager.IsEnabledAsync(feature).ConfigureAwait(false);
 
             //Notify usage stats service that it was checked
-            await _featureUsageStatsProvider.RecordUsageAsync(feature, allowed).ConfigureAwait(false);
+            await _featureUsageStatsProvider.RecordCheckAsync(feature, allowed).ConfigureAwait(false);
 
             return allowed;
         }

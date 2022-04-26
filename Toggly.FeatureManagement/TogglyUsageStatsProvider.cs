@@ -89,12 +89,12 @@ namespace Toggly.FeatureManagement
                         EnabledCount = stat.Any(s => s.Key.StartsWith('a')) ? stat.First(s => s.Key.StartsWith('a')).Value : 0,
                         DisabledCount = stat.Any(s => s.Key.StartsWith('d')) ? stat.First(s => s.Key.StartsWith('d')).Value : 0,
                         Feature = stat.Key,
-                        UniqueContextIdentifierDisabledCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("e")) : 0,
+                        UniqueContextIdentifierDisabledCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("a")) : 0,
                         UniqueContextIdentifierEnabledCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("d")) : 0,
                         UniqueRequestDisabledCount = stat.Any(s => s.Key.StartsWith('u')) ? stat.First(s => s.Key.StartsWith('u')).Value : 0,
                         UniqueRequestEnabledCount = stat.Any(s => s.Key.StartsWith('x')) ? stat.First(s => s.Key.StartsWith('x')).Value : 0,
-                        ValueDeliveredCount = stat.Any(s => s.Key.StartsWith('v')) ? stat.First(s => s.Key.StartsWith('v')).Value : 0,
-                        UniqueUsersValueDeliveredCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("v")) : 0
+                        UsedCount = stat.Any(s => s.Key.StartsWith('v')) ? stat.First(s => s.Key.StartsWith('v')).Value : 0,
+                        UniqueUsersUsedCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("v")) : 0,
                     });
                 }
 
@@ -111,79 +111,97 @@ namespace Toggly.FeatureManagement
             }
         }
 
-        public async Task RecordValueDeliveredAsync(string feature)
+        public async Task RecordUsageAsync(string featureKey)
         {
             int currentValue;
             do {
-                currentValue = _stats.GetOrAdd($"v-{feature}", 0);
-            } while (!_stats.TryUpdate($"v-{feature}", currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd($"v{featureKey}", 0);
+            } while (!_stats.TryUpdate($"v{featureKey}", currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
-                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new HashSet<string>());
+                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
                     currentUniqueValue.Add($"v{uniqueIdentifier}");
                 }
             }
         }
 
-        public async Task RecordUsageAsync(string feature, bool allowed)
+        public async Task RecordUsageAsync<TContext>(string featureKey, TContext context)
+        {
+            int currentValue;
+            do {
+                currentValue = _stats.GetOrAdd($"v{featureKey}", 0);
+            } while (!_stats.TryUpdate($"v{featureKey}", currentValue + 1, currentValue));
+
+            if (_contextProvider != null)
+            {
+                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context).ConfigureAwait(false);
+                if (uniqueIdentifier != null)
+                {
+                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
+                    currentUniqueValue.Add($"v{uniqueIdentifier}");
+                }
+            }
+        }
+
+        public async Task RecordCheckAsync(string featureKey, bool allowed)
         {
             //record stats keyed by feature status
             int currentValue;
             do {
-                currentValue = _stats.GetOrAdd(allowed ? $"a{feature}" : $"d{feature}", 0);
-            } while (!_stats.TryUpdate(allowed ? $"a{feature}" : $"d{feature}", currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd(allowed ? $"a{featureKey}" : $"d{featureKey}", 0);
+            } while (!_stats.TryUpdate(allowed ? $"a{featureKey}" : $"d{featureKey}", currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
-                var usedInRequest = await _contextProvider.AccessedInRequestAsync(feature).ConfigureAwait(false);
+                var usedInRequest = await _contextProvider.AccessedInRequestAsync(featureKey).ConfigureAwait(false);
                 if (!usedInRequest)
                 {
                     int currentRequestValue;
                     do
                     {
-                        currentRequestValue = _stats.GetOrAdd(allowed ? $"c{feature}" : $"b{feature}", 0);
-                    } while (!_stats.TryUpdate(allowed ? $"c{feature}" : $"b{feature}", currentRequestValue + 1, currentRequestValue));
+                        currentRequestValue = _stats.GetOrAdd(allowed ? $"x{featureKey}" : $"u{featureKey}", 0);
+                    } while (!_stats.TryUpdate(allowed ? $"x{featureKey}" : $"u{featureKey}", currentRequestValue + 1, currentRequestValue));
                 }
 
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
-                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new HashSet<string>());
+                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
                     currentUniqueValue.Add(allowed ? $"a{uniqueIdentifier}" : $"d{uniqueIdentifier}");
                 }
             }
         }
 
-        public async Task RecordUsageAsync<TContext>(string feature, TContext context, bool allowed)
+        public async Task RecordUsageAsync<TContext>(string featureKey, TContext context, bool allowed)
         {
             //record stats keyed by feature status
 
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd(allowed ? $"a{feature}" : $"d{feature}", 0);
-            } while (!_stats.TryUpdate(allowed ? $"a{feature}" : $"d{feature}", currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd(allowed ? $"a{featureKey}" : $"d{featureKey}", 0);
+            } while (!_stats.TryUpdate(allowed ? $"a{featureKey}" : $"d{featureKey}", currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
-                var usedInRequest = await _contextProvider.AccessedInRequestAsync(feature, context).ConfigureAwait(false);
+                var usedInRequest = await _contextProvider.AccessedInRequestAsync(featureKey, context).ConfigureAwait(false);
                 if (!usedInRequest)
                 {
                     int currentRequestValue;
                     do
                     {
-                        currentRequestValue = _stats.GetOrAdd(allowed ? $"c{feature}" : $"b{feature}", 0);
-                    } while (!_stats.TryUpdate(allowed ? $"c{feature}" : $"b{feature}", currentRequestValue + 1, currentRequestValue));
+                        currentRequestValue = _stats.GetOrAdd(allowed ? $"x{featureKey}" : $"u{featureKey}", 0);
+                    } while (!_stats.TryUpdate(allowed ? $"x{featureKey}" : $"u{featureKey}", currentRequestValue + 1, currentRequestValue));
                 }
 
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context).ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
-                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(feature, new HashSet<string>());
+                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
                     currentUniqueValue.Add(allowed ? $"a{uniqueIdentifier}" : $"d{uniqueIdentifier}");
                 }
             }
