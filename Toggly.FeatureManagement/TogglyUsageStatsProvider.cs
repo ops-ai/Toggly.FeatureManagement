@@ -57,8 +57,8 @@ namespace Toggly.FeatureManagement
             _longTimer = new Timer((s) => ResetUsageMap().ConfigureAwait(false), null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
             applicationLifetime.ApplicationStopping.Register(() => SendStats().ConfigureAwait(false).GetAwaiter().GetResult());
 
-            var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}";
-            userAgent = $"Toggly-FeatureManagement-{version}";
+            var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
+            userAgent = $"Toggly.FeatureManagement-{version}";
         }
 
         private async Task ResetUsageMap()

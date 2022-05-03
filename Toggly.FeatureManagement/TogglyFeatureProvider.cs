@@ -16,7 +16,7 @@ using Toggly.FeatureManagement.Data;
 
 namespace Toggly.FeatureManagement
 {
-    public class TogglyFeatureProvider : IFeatureDefinitionProvider
+    public class TogglyFeatureProvider : IFeatureDefinitionProvider, IDisposable
     {
         private readonly string _appKey;
 
@@ -48,7 +48,7 @@ namespace Toggly.FeatureManagement
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
             _timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 0, 5).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 0, 10));
-            Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}";
+            Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
         }
 
         private async Task LoadSnapshot()
@@ -169,6 +169,11 @@ namespace Toggly.FeatureManagement
                 return updatedFeature;
 
             return new FeatureDefinition {  Name = featureName, EnabledFor = new List<FeatureFilterConfiguration>() };
+        }
+
+        public void Dispose()
+        {
+            _timer.Dispose();
         }
     }
 }
