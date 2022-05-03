@@ -7,5 +7,6 @@
         public static string Feature3 = "Feature3";
         public static string Feature4 = "Feature4";
         public static string FeatureU = "FeatureU";
+        public static string FlagPage = "FlagPage";
     }
 }
