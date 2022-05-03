@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Toggly.FeatureManagement.Data;
@@ -35,6 +36,8 @@ namespace Toggly.FeatureManagement
 
         private readonly Timer _timer;
 
+        private readonly string Version;
+
         public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
         {
             _appKey = togglySettings.Value.AppKey;
@@ -45,6 +48,7 @@ namespace Toggly.FeatureManagement
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
             _timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 0, 5).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 0, 10));
+            Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}";
         }
 
         private async Task LoadSnapshot()
@@ -83,6 +87,7 @@ namespace Toggly.FeatureManagement
             try
             {
                 using var httpClient = _clientFactory.CreateClient("toggly");
+                httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Toggly.FeatureManagement", Version));
                 if (timeout.HasValue)
                     httpClient.Timeout = new TimeSpan(timeout.Value);
                 if (lastETag != null) httpClient.DefaultRequestHeaders.IfNoneMatch.Add(lastETag);
@@ -94,7 +99,10 @@ namespace Toggly.FeatureManagement
 
                 var newDefinitions = await newDefinitionsRequest.Content.ReadFromJsonAsync<List<FeatureDefinitionModel>>().ConfigureAwait(false);
                 if (newDefinitions == null)
+                {
+                    _logger.LogWarning("Received empty response from toggly");
                     return;
+                }
 
                 lastETag = newDefinitionsRequest.Headers.ETag;
 

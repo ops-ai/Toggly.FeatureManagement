@@ -7,6 +7,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Toggly.Web;
@@ -33,6 +35,8 @@ namespace Toggly.FeatureManagement
 
         private readonly IFeatureContextProvider? _contextProvider;
 
+        private readonly string userAgent;
+
         /// <summary>
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
@@ -49,9 +53,12 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
-            _timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 5, 0), new TimeSpan(0, 5, 0));
+            _timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
             _longTimer = new Timer((s) => ResetUsageMap().ConfigureAwait(false), null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
             applicationLifetime.ApplicationStopping.Register(() => SendStats().ConfigureAwait(false).GetAwaiter().GetResult());
+
+            var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}";
+            userAgent = $"Toggly-FeatureManagement-{version}";
         }
 
         private async Task ResetUsageMap()
@@ -59,6 +66,7 @@ namespace Toggly.FeatureManagement
             if (!_uniqueUsageMap.Any())
                 return;
 
+            _logger.LogTrace("Send remaining stats and clear unique usage map");
             await SendStats().ConfigureAwait(false);
             _uniqueUsageMap.Clear();
         }
@@ -68,8 +76,12 @@ namespace Toggly.FeatureManagement
             try
             {
                 if (_stats.IsEmpty)
+                {
+                    _logger.LogTrace("Send stats - nothing to send");
                     return;
+                }
 
+                _logger.LogTrace("Sending stats");
                 var currentTime = DateTime.UtcNow;
 
                 using var httpClient = _clientFactory.CreateClient("toggly");
@@ -100,7 +112,10 @@ namespace Toggly.FeatureManagement
 
                 _stats.Clear();
 
-                var result = await client.SendStatsAsync(dataPacket).ConfigureAwait(false);
+                var grpcMetadata = new Grpc.Core.Metadata();
+                grpcMetadata.Add("UA", userAgent);
+
+                var result = await client.SendStatsAsync(dataPacket, grpcMetadata).ConfigureAwait(false);
 
                 if (result.FeatureCount != dataPacket.Stats.Count)
                     _logger.LogWarning("Feature count did not match. Possible data integrity issues");
@@ -113,6 +128,8 @@ namespace Toggly.FeatureManagement
 
         public async Task RecordUsageAsync(string featureKey)
         {
+            _logger.LogTrace("Record feature usage: {featureKey}", featureKey);
+
             int currentValue;
             do {
                 currentValue = _stats.GetOrAdd($"v{featureKey}", 0);
@@ -131,6 +148,8 @@ namespace Toggly.FeatureManagement
 
         public async Task RecordUsageAsync<TContext>(string featureKey, TContext context)
         {
+            _logger.LogTrace("Record feature usage: {featureKey}", featureKey);
+
             int currentValue;
             do {
                 currentValue = _stats.GetOrAdd($"v{featureKey}", 0);
@@ -149,6 +168,8 @@ namespace Toggly.FeatureManagement
 
         public async Task RecordCheckAsync(string featureKey, bool allowed)
         {
+            _logger.LogTrace("Record feature check: {featureKey}", featureKey);
+
             //record stats keyed by feature status
             int currentValue;
             do {
@@ -178,6 +199,8 @@ namespace Toggly.FeatureManagement
 
         public async Task RecordUsageAsync<TContext>(string featureKey, TContext context, bool allowed)
         {
+            _logger.LogTrace("Record feature check: {featureKey}", featureKey);
+
             //record stats keyed by feature status
 
             int currentValue;
