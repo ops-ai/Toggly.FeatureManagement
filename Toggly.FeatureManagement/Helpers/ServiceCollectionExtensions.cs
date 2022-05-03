@@ -44,7 +44,7 @@ namespace Toggly.FeatureManagement.Helpers
             if (descriptor.ImplementationFactory != null)
                 return descriptor.ImplementationFactory(services);
 
-            return ActivatorUtilities.GetServiceOrCreateInstance(services, descriptor.ImplementationType!);
+            return ActivatorUtilities.GetServiceOrCreateInstance(services, descriptor.ImplementationType);
         }
 
         public static void DecorateForFeature<TInterface, TDecorator>(this IServiceCollection services, string featureName)
@@ -70,7 +70,7 @@ namespace Toggly.FeatureManagement.Helpers
               typeof(TInterface),
               s => s.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         (TInterface)objectFactory(s, new[] { s.CreateInstance(wrappedDescriptor) }) :
-                        ActivatorUtilities.CreateInstance(s, wrappedDescriptor.ImplementationType!),
+                        ActivatorUtilities.CreateInstance(s, wrappedDescriptor.ImplementationType),
               wrappedDescriptor.Lifetime)
             );
         }
@@ -94,7 +94,7 @@ namespace Toggly.FeatureManagement.Helpers
                   typeof(TInterface),
                   serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
-                        ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType!),
+                        ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType),
                   ServiceLifetime.Transient)
                 );
         }
@@ -118,7 +118,7 @@ namespace Toggly.FeatureManagement.Helpers
                   typeof(TInterface),
                   serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
-                        ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType!),
+                        ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType),
                   ServiceLifetime.Scoped)
                 );
         }
