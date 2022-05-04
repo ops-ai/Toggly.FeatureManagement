@@ -53,7 +53,7 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
-            _timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
+            _timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 5, 0), new TimeSpan(0, 5, 0));
             _longTimer = new Timer((s) => ResetUsageMap().ConfigureAwait(false), null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
             applicationLifetime.ApplicationStopping.Register(() => SendStats().ConfigureAwait(false).GetAwaiter().GetResult());
 
@@ -91,7 +91,7 @@ namespace Toggly.FeatureManagement
                 {
                     AppKey = _appKey,
                     Environment = _environment,
-                    Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime),
+                    Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime)
                 };
 
                 foreach (var stat in _stats.GroupBy(t => t.Key[1..]))
@@ -101,19 +101,21 @@ namespace Toggly.FeatureManagement
                         EnabledCount = stat.Any(s => s.Key.StartsWith('a')) ? stat.First(s => s.Key.StartsWith('a')).Value : 0,
                         DisabledCount = stat.Any(s => s.Key.StartsWith('d')) ? stat.First(s => s.Key.StartsWith('d')).Value : 0,
                         Feature = stat.Key,
-                        UniqueContextIdentifierDisabledCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("a")) : 0,
-                        UniqueContextIdentifierEnabledCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("d")) : 0,
+                        UniqueContextIdentifierDisabledCount = _uniqueUsageMap.TryGetValue(stat.Key, out var uniqueDisabled) ? uniqueDisabled.Count(s => s?.StartsWith("a") ?? false) : 0,
+                        UniqueContextIdentifierEnabledCount = _uniqueUsageMap.TryGetValue(stat.Key, out var uniqueEnabled) ? uniqueEnabled.Count(s => s?.StartsWith("d") ?? false) : 0,
                         UniqueRequestDisabledCount = stat.Any(s => s.Key.StartsWith('u')) ? stat.First(s => s.Key.StartsWith('u')).Value : 0,
                         UniqueRequestEnabledCount = stat.Any(s => s.Key.StartsWith('x')) ? stat.First(s => s.Key.StartsWith('x')).Value : 0,
                         UsedCount = stat.Any(s => s.Key.StartsWith('v')) ? stat.First(s => s.Key.StartsWith('v')).Value : 0,
-                        UniqueUsersUsedCount = _uniqueUsageMap.ContainsKey(stat.Key) ? _uniqueUsageMap[stat.Key].Count(s => s.StartsWith("v")) : 0,
+                        UniqueUsersUsedCount = _uniqueUsageMap.TryGetValue(stat.Key, out var uniqueUsers) ? uniqueUsers.Count(s => s?.StartsWith("v") ?? false) : 0,
                     });
                 }
 
                 _stats.Clear();
 
-                var grpcMetadata = new Grpc.Core.Metadata();
-                grpcMetadata.Add("UA", userAgent);
+                var grpcMetadata = new Grpc.Core.Metadata
+                {
+                    { "UA", userAgent }
+                };
 
                 var result = await client.SendStatsAsync(dataPacket, grpcMetadata).ConfigureAwait(false);
 
@@ -131,7 +133,8 @@ namespace Toggly.FeatureManagement
             _logger.LogTrace("Record feature usage: {featureKey}", featureKey);
 
             int currentValue;
-            do {
+            do
+            {
                 currentValue = _stats.GetOrAdd($"v{featureKey}", 0);
             } while (!_stats.TryUpdate($"v{featureKey}", currentValue + 1, currentValue));
 
@@ -151,7 +154,8 @@ namespace Toggly.FeatureManagement
             _logger.LogTrace("Record feature usage: {featureKey}", featureKey);
 
             int currentValue;
-            do {
+            do
+            {
                 currentValue = _stats.GetOrAdd($"v{featureKey}", 0);
             } while (!_stats.TryUpdate($"v{featureKey}", currentValue + 1, currentValue));
 
@@ -172,7 +176,8 @@ namespace Toggly.FeatureManagement
 
             //record stats keyed by feature status
             int currentValue;
-            do {
+            do
+            {
                 currentValue = _stats.GetOrAdd(allowed ? $"a{featureKey}" : $"d{featureKey}", 0);
             } while (!_stats.TryUpdate(allowed ? $"a{featureKey}" : $"d{featureKey}", currentValue + 1, currentValue));
 
