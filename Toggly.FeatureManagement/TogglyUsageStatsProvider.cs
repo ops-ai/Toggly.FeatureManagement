@@ -58,7 +58,7 @@ namespace Toggly.FeatureManagement
             applicationLifetime.ApplicationStopping.Register(() => SendStats().ConfigureAwait(false).GetAwaiter().GetResult());
 
             var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
-            userAgent = $"Toggly.FeatureManagement-{version}";
+            userAgent = $"Toggly.FeatureManagement/{version}";
         }
 
         private async Task ResetUsageMap()
