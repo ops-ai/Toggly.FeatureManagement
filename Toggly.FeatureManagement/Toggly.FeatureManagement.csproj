@@ -15,7 +15,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<None Remove="Proto\usage.proto" />
+		<None Remove="Metrics.proto" />
 		<None Remove="toggly_favicon.png" />
 	</ItemGroup>
 
@@ -31,6 +31,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Azure.Messaging.WebPubSub" Version="1.0.0" />
 		<PackageReference Include="Google.Protobuf" Version="3.19.4" />
 		<PackageReference Include="Grpc.Net.Client" Version="2.44.0" />
 		<PackageReference Include="Grpc.Tools" Version="2.45.0">
@@ -45,6 +46,7 @@
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="System.Net.Http.Json" Version="6.0.0" />
+		<PackageReference Include="Websocket.Client" Version="4.4.43" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -59,7 +61,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Protobuf Include="Proto\Usage.proto" GrpcServices="Client" />
+		<Protobuf Include="Metrics.proto" GrpcServices="Client" />
+		<Protobuf Include="Usage.proto" GrpcServices="Client" />
 	</ItemGroup>
 
 </Project>
