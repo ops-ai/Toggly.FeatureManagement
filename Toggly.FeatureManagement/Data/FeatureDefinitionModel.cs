@@ -10,6 +10,8 @@ namespace Toggly.FeatureManagement.Data
 
         public List<FeatureFilter> Filters { get; set; }
 
+        public List<string>? Metrics { get; set; }
+
         public bool Equals(FeatureDefinitionModel x, FeatureDefinitionModel y)
         {
             return x.FeatureKey == y.FeatureKey && x.Filters.SequenceEqual(y.Filters);

@@ -53,6 +53,7 @@ namespace Toggly.FeatureManagement.Configuration
 
             services.AddSingleton<IFeatureDefinitionProvider, TogglyFeatureProvider>();
             services.AddSingleton<IFeatureUsageStatsProvider, TogglyUsageStatsProvider>();
+            services.AddSingleton<IMetricsService, TogglyMetricsService>();
         }
 
         public static IServiceCollection AddTogglyFeatureManagement(this IServiceCollection services)

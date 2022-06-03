@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.FeatureManagement;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -27,13 +28,15 @@ namespace Toggly.FeatureManagement
 
         private readonly IHttpClientFactory _clientFactory;
 
-        private readonly ConcurrentDictionary<string, int> _stats = new ConcurrentDictionary<string, int>();
+        private readonly ConcurrentDictionary<(string, string?, bool), int> _stats = new ConcurrentDictionary<(string, string?, bool), int>();
 
         private readonly Timer _timer;
 
-        private readonly IFeatureContextProvider? _contextProvider;
-
         private readonly string userAgent;
+
+        private readonly IFeatureExperimentProvider _featureExperimentProvider;
+
+        private readonly IFeatureManager _featureManager;
 
         /// <summary>
         /// keyed by feature name
@@ -41,13 +44,14 @@ namespace Toggly.FeatureManagement
         /// </summary>
         private readonly ConcurrentDictionary<string, HashSet<string>> _uniqueUsageMap = new ConcurrentDictionary<string, HashSet<string>>();
 
-        public TogglyMetricsService(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider)
+        public TogglyMetricsService(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, IFeatureDefinitionProvider featureDefinitionProvider, IFeatureManager featureManager)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
-            _baseUrl = togglySettings.Value.BaseUrl;
+            _baseUrl = togglySettings.Value.BaseUrl!;
             _clientFactory = clientFactory;
-            _contextProvider = (IFeatureContextProvider?)serviceProvider.GetService(typeof(IFeatureContextProvider));
+            _featureExperimentProvider = (IFeatureExperimentProvider)featureDefinitionProvider;
+            _featureManager = featureManager;
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
@@ -81,14 +85,14 @@ namespace Toggly.FeatureManagement
                     Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime)
                 };
 
-                foreach (var stat in _stats.ToList().GroupBy(t => t.Key[1..]))
+                foreach (var stat in _stats.ToList().GroupBy(t => t.Key))
                 {
                     dataPacket.Stats.Add(new MetricStatMessage
                     {
-                        EnabledCount = stat.Any(s => s.Key.StartsWith('a')) ? stat.First(s => s.Key.StartsWith('a')).Value : 0,
-                        DisabledCount = stat.Any(s => s.Key.StartsWith('d')) ? stat.First(s => s.Key.StartsWith('d')).Value : 0,
-                        Feature = stat.Key,
-                        Metric = "" 
+                        EnabledCount = stat.Any(s => s.Key.Item3) ? stat.First(s => s.Key.Item3).Value : 0,
+                        DisabledCount = stat.Any(s => !s.Key.Item3) ? stat.First(s => !s.Key.Item3).Value : 0,
+                        Feature = stat.Key.Item2,
+                        Metric = stat.Key.Item1
                     });
                 }
 
@@ -110,46 +114,36 @@ namespace Toggly.FeatureManagement
             }
         }
 
-        public async Task AddMetricAsync(string metricKey, int value)
+        private void AddMetricValue(string metricKey, string? featureKey, int value, bool enabled)
         {
-            _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
-
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd($"v{metricKey}", 0);
-            } while (!_stats.TryUpdate($"v{metricKey}", currentValue + value, currentValue));
+                currentValue = _stats.GetOrAdd((metricKey, featureKey, enabled), 0);
+            } while (!_stats.TryUpdate((metricKey, featureKey, enabled), currentValue + value, currentValue));
 
-            if (_contextProvider != null)
-            {
-                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
-                if (uniqueIdentifier != null)
-                {
-                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(metricKey, new HashSet<string>());
-                    currentUniqueValue.Add($"v{uniqueIdentifier}");
-                }
-            }
+        }
+
+        public async Task AddMetricAsync(string metricKey, int value)
+        {
+            _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
+            AddMetricValue(metricKey, null, value, true);
+
+            var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
+            if (features != null)
+                foreach (var feature in features)
+                    AddMetricValue(metricKey, feature, value, await _featureManager.IsEnabledAsync(feature));
         }
 
         public async Task AddMetricAsync<TContext>(string metricKey, TContext context, int value)
         {
             _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
+            AddMetricValue(metricKey, null, value, true);
 
-            int currentValue;
-            do
-            {
-                currentValue = _stats.GetOrAdd($"v{metricKey}", 0);
-            } while (!_stats.TryUpdate($"v{metricKey}", currentValue + value, currentValue));
-
-            if (_contextProvider != null)
-            {
-                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context).ConfigureAwait(false);
-                if (uniqueIdentifier != null)
-                {
-                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(metricKey, new HashSet<string>());
-                    currentUniqueValue.Add($"v{uniqueIdentifier}");
-                }
-            }
+            var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
+            if (features != null)
+                foreach (var feature in features)
+                    AddMetricValue(metricKey, feature, value, await _featureManager.IsEnabledAsync(feature, context));
         }
     }
 }

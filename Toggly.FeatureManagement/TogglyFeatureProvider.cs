@@ -16,7 +16,7 @@ using Toggly.FeatureManagement.Data;
 
 namespace Toggly.FeatureManagement
 {
-    public class TogglyFeatureProvider : IFeatureDefinitionProvider, IDisposable
+    public class TogglyFeatureProvider : IFeatureDefinitionProvider, IDisposable, IFeatureExperimentProvider
     {
         private readonly string _appKey;
 
@@ -37,6 +37,8 @@ namespace Toggly.FeatureManagement
         private readonly Timer _timer;
 
         private readonly string Version;
+
+        private readonly ConcurrentDictionary<string, HashSet<string>> _experiments = new ConcurrentDictionary<string, HashSet<string>>();
 
         public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
         {
@@ -121,6 +123,11 @@ namespace Toggly.FeatureManagement
 
                     _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                 }
+                var activeExperiments = newDefinitions.Where(t => t.Metrics != null).SelectMany(t => t.Metrics).GroupBy(t => t).Select(t => t.Key).ToList();
+                _experiments.Clear();
+                foreach (var activeExperiment in activeExperiments)
+                    _experiments.TryAdd(activeExperiment, new HashSet<string>(newDefinitions.Where(t => t.Metrics != null && t.Metrics.Contains(activeExperiment)).Select(t => t.FeatureKey)));
+
                 _loaded = true;
 
                 if (_snapshotProvider != null)
@@ -174,6 +181,13 @@ namespace Toggly.FeatureManagement
         public void Dispose()
         {
             _timer.Dispose();
+        }
+
+        public List<string>? GetFeaturesForMetric(string metricKey)
+        {
+            if (_experiments.TryGetValue(metricKey, out var features))
+                return features.ToList();
+            return null;
         }
     }
 }
