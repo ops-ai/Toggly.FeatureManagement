@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using Azure.Messaging.WebPubSub;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
@@ -13,6 +14,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Toggly.FeatureManagement.Data;
+using Websocket.Client;
 
 namespace Toggly.FeatureManagement
 {
@@ -40,6 +42,8 @@ namespace Toggly.FeatureManagement
 
         private readonly ConcurrentDictionary<string, HashSet<string>> _experiments = new ConcurrentDictionary<string, HashSet<string>>();
 
+        private WebsocketClient? _webSocketClient = null;
+
         public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
         {
             _appKey = togglySettings.Value.AppKey;
@@ -49,8 +53,11 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
-            _timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 0, 5).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 0, 10));
+            _timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 0, 5).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 5, 0));
             Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
+
+            //var serviceClient = new WebPubSubServiceClient(togglySettings.Value.LiveUpdatesConnectionString, "FeatureUpdates");
+            //var url = serviceClient.GetClientAccessUri(userId: $"{_appKey}/{_environment}");
         }
 
         private async Task LoadSnapshot()
@@ -129,6 +136,19 @@ namespace Toggly.FeatureManagement
                     _experiments.TryAdd(activeExperiment, new HashSet<string>(newDefinitions.Where(t => t.Metrics != null && t.Metrics.Contains(activeExperiment)).Select(t => t.FeatureKey)));
 
                 _loaded = true;
+                if (_webSocketClient == null || !_webSocketClient.IsRunning)
+                {
+                    var liveUpdateConnectionString = await httpClient.GetStringAsync($"definitions/live-updates/{_appKey}/{_environment}").ConfigureAwait(false);
+                    if (liveUpdateConnectionString != null)
+                    {
+                        _webSocketClient = new WebsocketClient(new Uri(liveUpdateConnectionString)) { ReconnectTimeout = null };
+                        _webSocketClient.MessageReceived.Subscribe(msg => 
+                        { 
+                            if (msg.Text == "update") _ = RefreshFeatures().ConfigureAwait(false); 
+                        });
+                        await _webSocketClient.StartOrFail().ConfigureAwait(false);
+                    }
+                }
 
                 if (_snapshotProvider != null)
                     await _snapshotProvider.SaveSnapshotAsync(newDefinitions).ConfigureAwait(false);
