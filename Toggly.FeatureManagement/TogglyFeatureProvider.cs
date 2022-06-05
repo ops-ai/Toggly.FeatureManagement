@@ -55,9 +55,6 @@ namespace Toggly.FeatureManagement
 
             _timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 0, 5).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 5, 0));
             Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
-
-            //var serviceClient = new WebPubSubServiceClient(togglySettings.Value.LiveUpdatesConnectionString, "FeatureUpdates");
-            //var url = serviceClient.GetClientAccessUri(userId: $"{_appKey}/{_environment}");
         }
 
         private async Task LoadSnapshot()
