@@ -4,6 +4,7 @@ using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Toggly.FeatureManagement.Helpers;
 
@@ -58,10 +59,13 @@ namespace Toggly.FeatureManagement.Configuration
 
         public static IServiceCollection AddTogglyFeatureManagement(this IServiceCollection services)
         {
-            services.AddFeatureManagement()
+            var featureManagement = services.AddFeatureManagement()
                 .AddFeatureFilter<PercentageFilter>()
-                .AddFeatureFilter<TimeWindowFilter>()
-                .AddFeatureFilter<TargetingFilter>();
+                .AddFeatureFilter<TimeWindowFilter>();
+
+            if (services.Any(t => t.ImplementationType?.IsAssignableFrom(typeof(ITargetingContextAccessor)) ?? false))
+                featureManagement.AddFeatureFilter<TargetingFilter>();
+
             services.Decorate<IFeatureManager, TogglyFeatureManager>();
             services.Configure<FeatureManagementOptions>(options =>
             {

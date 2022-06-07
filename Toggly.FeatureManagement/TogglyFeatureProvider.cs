@@ -135,15 +135,19 @@ namespace Toggly.FeatureManagement
                 _loaded = true;
                 if (_webSocketClient == null || !_webSocketClient.IsRunning)
                 {
-                    var liveUpdateConnectionString = await httpClient.GetStringAsync($"definitions/live-updates/{_appKey}/{_environment}").ConfigureAwait(false);
-                    if (liveUpdateConnectionString != null)
+                    var liveUpdateResponse = await httpClient.GetAsync($"definitions/live-updates/{_appKey}/{_environment}").ConfigureAwait(false);
+                    if (liveUpdateResponse.IsSuccessStatusCode)
                     {
-                        _webSocketClient = new WebsocketClient(new Uri(liveUpdateConnectionString)) { ReconnectTimeout = null };
-                        _webSocketClient.MessageReceived.Subscribe(msg => 
-                        { 
-                            if (msg.Text == "update") _ = RefreshFeatures().ConfigureAwait(false); 
-                        });
-                        await _webSocketClient.StartOrFail().ConfigureAwait(false);
+                        var liveUpdateConnectionString = await liveUpdateResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        if (Uri.TryCreate(liveUpdateConnectionString, UriKind.Absolute, out var liveConnectionUri))
+                        {
+                            _webSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
+                            _webSocketClient.MessageReceived.Subscribe(msg =>
+                            {
+                                if (msg.Text == "update") _ = RefreshFeatures().ConfigureAwait(false);
+                            });
+                            await _webSocketClient.StartOrFail().ConfigureAwait(false);
+                        }
                     }
                 }
 
