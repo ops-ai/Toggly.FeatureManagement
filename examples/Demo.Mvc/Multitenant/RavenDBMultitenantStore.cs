@@ -6,7 +6,7 @@ namespace Demo.Mvc.Multitenant
 {/// <summary>
  /// RavenDB store for multitenant settings
  /// </summary>
-    public class RavenDBMultitenantStore : IMultiTenantStore<DemoApplication>
+    public class RavenDBMultitenantStore : IMultiTenantStore<Application>
     {
         private IDocumentStore _store;
         private IMemoryCache _cache;
@@ -21,21 +21,21 @@ namespace Demo.Mvc.Multitenant
             _store = store;
             _cache = memoryCache;
 
-            _store.Changes().ForDocumentsInCollection<DemoApplication>().Subscribe(change =>
+            _store.Changes().ForDocumentsInCollection<Application>().Subscribe(change =>
             {
-                _cache.Remove($"DemoApplicationId-{change.Id.Split('/').Last()}");
-                _cache.Remove($"DemoApplication-{change.Id.Split('/').Last()}");
+                _cache.Remove($"ApplicationId-{change.Id.Split('/').Last()}");
+                _cache.Remove($"Application-{change.Id.Split('/').Last()}");
             });
         }
 
-        public async Task<IEnumerable<DemoApplication>> GetAllAsync()
+        public async Task<IEnumerable<Application>> GetAllAsync()
         {
             using (var session = _store.OpenAsyncSession())
             {
-                var tenants = await session.Query<DemoApplication>().ToListAsync();
+                var tenants = await session.Query<Application>().ToListAsync();
                 tenants.ForEach(t =>
                 {
-                    t.Id = t.Id.Split('/').Last();
+                    t.Id = t.Id!.Split('/').Last();
                 });
                 return tenants;
             }
@@ -46,15 +46,15 @@ namespace Demo.Mvc.Multitenant
         /// </summary>
         /// <param name="tenantInfo"></param>
         /// <returns></returns>
-        public async Task<bool> TryAddAsync(DemoApplication tenantInfo)
+        public async Task<bool> TryAddAsync(Application tenantInfo)
         {
             using (var session = _store.OpenAsyncSession())
             {
-                if (await session.Advanced.ExistsAsync($"DemoApplications/{tenantInfo.Id}"))
+                if (await session.Advanced.ExistsAsync($"Applications/{tenantInfo.Id}"))
                     return false;
 
                 //TODO: unique constraint on identifier, property validation?
-                tenantInfo.Id = $"DemoApplications/{tenantInfo.Id}";
+                tenantInfo.Id = $"Applications/{tenantInfo.Id}";
 
                 await session.StoreAsync(tenantInfo);
                 await session.SaveChangesAsync();
@@ -68,17 +68,20 @@ namespace Demo.Mvc.Multitenant
         /// </summary>
         /// <param name="id"></param>
         /// <returns></returns>
-        public async Task<DemoApplication?> TryGetAsync(string id)
+        public async Task<Application?> TryGetAsync(string id)
         {
-            if (!_cache.TryGetValue($"DemoApplicationId-{id}", out DemoApplication cachedTenant))
+            if (!_cache.TryGetValue($"ApplicationId-{id}", out Application cachedTenant))
             {
                 using (var session = _store.OpenAsyncSession())
                 {
-                    cachedTenant = await session.LoadAsync<DemoApplication>($"DemoApplications/{id}");
-                    cachedTenant.Id = cachedTenant.Id.Split('/').Last();
+                    cachedTenant = await session.LoadAsync<Application>($"Applications/{id}");
+                    if (cachedTenant == null)
+                        return null;
+
+                    cachedTenant.Id = cachedTenant.Id!.Split('/').Last();
                 }
 
-                _cache.Set($"DemoApplicationId-{id}", cachedTenant, new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromMinutes(1)));
+                _cache.Set($"ApplicationId-{id}", cachedTenant, new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromMinutes(1)));
             }
             return cachedTenant;
         }
@@ -88,20 +91,20 @@ namespace Demo.Mvc.Multitenant
         /// </summary>
         /// <param name="identifier"></param>
         /// <returns></returns>
-        public async Task<DemoApplication?> TryGetByIdentifierAsync(string identifier)
+        public async Task<Application?> TryGetByIdentifierAsync(string identifier)
         {
-            if (!_cache.TryGetValue($"DemoApplication-{identifier}", out DemoApplication cachedTenant))
+            if (!_cache.TryGetValue($"Application-{identifier}", out Application cachedTenant))
             {
                 using (var session = _store.OpenAsyncSession())
                 {
-                    cachedTenant = await session.Query<DemoApplication>().FirstOrDefaultAsync(t => t.Identifier.Equals(identifier));
+                    cachedTenant = await session.Query<Application>().FirstOrDefaultAsync(t => t.Identifier!.Equals(identifier));
                     if (cachedTenant == null)
                         return null;
 
-                    cachedTenant.Id = cachedTenant.Id.Split('/').Last();
+                    cachedTenant.Id = cachedTenant.Id!.Split('/').Last();
                 }
 
-                _cache.Set($"DemoApplication-{identifier}", cachedTenant, new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromMinutes(1)));
+                _cache.Set($"Application-{identifier}", cachedTenant, new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromMinutes(1)));
             }
             return cachedTenant;
         }
@@ -115,14 +118,14 @@ namespace Demo.Mvc.Multitenant
         {
             using (var session = _store.OpenAsyncSession())
             {
-                var tenant = await session.LoadAsync<DemoApplication>($"DemoApplications/{id}");
+                var tenant = await session.LoadAsync<Application>($"Applications/{id}");
                 if (tenant != null)
                 {
                     session.Delete(tenant);
                     await session.SaveChangesAsync();
 
-                    _cache.Remove($"DemoApplication-{tenant.Identifier}");
-                    _cache.Remove($"DemoApplicationId-{tenant.Id.Split('/').Last()}");
+                    _cache.Remove($"Application-{tenant.Identifier}");
+                    _cache.Remove($"ApplicationId-{tenant.Id!.Split('/').Last()}");
 
                     return true;
                 }
@@ -135,15 +138,15 @@ namespace Demo.Mvc.Multitenant
         /// </summary>
         /// <param name="tenantInfo"></param>
         /// <returns></returns>
-        public async Task<bool> TryUpdateAsync(DemoApplication tenantInfo)
+        public async Task<bool> TryUpdateAsync(Application tenantInfo)
         {
             using (var session = _store.OpenAsyncSession())
             {
                 await session.StoreAsync(tenantInfo);
                 await session.SaveChangesAsync();
 
-                _cache.Remove($"DemoApplication-{tenantInfo.Identifier}");
-                _cache.Remove($"DemoApplicationId-{tenantInfo.Id.Split('/').Last()}");
+                _cache.Remove($"Application-{tenantInfo.Identifier}");
+                _cache.Remove($"ApplicationId-{tenantInfo.Id!.Split('/').Last()}");
 
                 return true;
             }

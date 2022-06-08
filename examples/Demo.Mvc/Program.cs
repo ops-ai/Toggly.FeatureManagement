@@ -1,6 +1,7 @@
 using Azure.Core;
 using Azure.Identity;
 using Demo.Mvc.Multitenant;
+using Finbuckle.MultiTenant;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
@@ -32,13 +33,14 @@ namespace Demo.Mvc
             });
 
             builder.Services.AddSingleton<IDisabledFeaturesHandler, FeatureNotEnabledHandler>();
+            builder.Services.AddSingleton<IFeatureDefinitionProvider, MultitenantFeatureDefinitionProvider>();
 
             // Add services to the container.
             builder.Services.AddControllersWithViews();
 
             builder.Services.AddMemoryCache();
             builder.Services.AddRavenDb(builder.Configuration.GetSection("Raven"));
-            builder.Services.AddMultiTenant<DemoApplication>()
+            builder.Services.AddMultiTenant<Application>()
                 .WithStore(new ServiceLifetime(), (sp) => new RavenDBMultitenantStore(sp.GetRequiredService<IDocumentStore>(), sp.GetRequiredService<IMemoryCache>()))
                 .WithBasePathStrategy(opt => opt.RebaseAspNetCorePathBase = false);
             builder.Services.AddRouting(options => options.LowercaseUrls = true);
@@ -64,9 +66,10 @@ namespace Demo.Mvc
 
             app.UseForFeature(nameof(FeatureFlags.ComingSoon), appBuilder =>
             {
-                appBuilder.MapWhen(t => !t.Request.Path.StartsWithSegments("/coming-soon"), req => req.Run(async context =>
+                appBuilder.MapWhen(t => !t.Request.Path.StartsWithSegments($"/{t.GetMultiTenantContext<Application>()?.TenantInfo?.Identifier}/comingsoon"), req => req.Run(async context =>
                 {
-                    context.Response.Redirect("/coming-soon");
+                    var tenantId = context.GetMultiTenantContext<Application>()?.TenantInfo?.Identifier;
+                    context.Response.Redirect($"/{tenantId}/comingsoon");
                     await Task.CompletedTask;
                 }));
             });
