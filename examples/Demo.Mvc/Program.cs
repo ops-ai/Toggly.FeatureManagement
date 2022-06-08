@@ -1,6 +1,11 @@
+using Azure.Core;
+using Azure.Identity;
+using Demo.Mvc.Multitenant;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
 using Microsoft.FeatureManagement.Mvc;
+using Raven.Client.Documents;
 using Toggly.FeatureManagement.Web.Configuration;
 
 namespace Demo.Mvc
@@ -10,6 +15,14 @@ namespace Demo.Mvc
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            if (Environment.GetEnvironmentVariable("VaultUri") != null)
+            {
+                var keyVaultEndpoint = new Uri(Environment.GetEnvironmentVariable("VaultUri")!);
+                TokenCredential? clientCredential = Environment.GetEnvironmentVariable("ClientId") != null ? new ClientSecretCredential(Environment.GetEnvironmentVariable("TenantId"), Environment.GetEnvironmentVariable("ClientId"), Environment.GetEnvironmentVariable("ClientSecret")) : null;
+
+                builder.Configuration.AddAzureKeyVault(new Uri(Environment.GetEnvironmentVariable("VaultUri")!), clientCredential ?? new DefaultAzureCredential());
+            }
 
             builder.Services.AddTogglyWeb(options =>
             {
@@ -23,6 +36,11 @@ namespace Demo.Mvc
             // Add services to the container.
             builder.Services.AddControllersWithViews();
 
+            builder.Services.AddMemoryCache();
+            builder.Services.AddRavenDb(builder.Configuration.GetSection("Raven"));
+            builder.Services.AddMultiTenant<DemoApplication>()
+                .WithStore(new ServiceLifetime(), (sp) => new RavenDBMultitenantStore(sp.GetRequiredService<IDocumentStore>(), sp.GetRequiredService<IMemoryCache>()))
+                .WithBasePathStrategy(opt => opt.RebaseAspNetCorePathBase = false);
             builder.Services.AddRouting(options => options.LowercaseUrls = true);
 
             var app = builder.Build();
@@ -39,6 +57,7 @@ namespace Demo.Mvc
             app.UseHttpsRedirection();
 
             app.UseRouting();
+            app.UseMultiTenant();
 
             app.UseStaticFiles();
             app.UseAuthorization();
@@ -54,9 +73,9 @@ namespace Demo.Mvc
 
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapControllerRoute("default", "{action=Index}", new { controller = "Home" });
-                endpoints.MapControllerRoute("default", "{controller=Home}/{action=Index}", new { controller = "Home" });
-                endpoints.MapFallbackToController("404", "NotFound", "Home");
+                endpoints.MapControllerRoute("default", "{__tenant__}/{action=Index}", new { controller = "Home" });
+                endpoints.MapControllerRoute("default", "{__tenant__}/{controller=Home}/{action=Index}", new { controller = "Home" });
+                endpoints.MapFallbackToController("{__tenant__}/404", "NotFound", "Home");
             });
 
             app.Run();
