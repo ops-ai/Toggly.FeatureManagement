@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: togglydemo
+  labels:
+    app: togglydemo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: togglydemo
+  strategy:
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  minReadySeconds: 5 
+  template:
+    metadata:
+      labels:
+        app: togglydemo
+    spec:
+      containers:
+      - name: togglydemo
+        image: opsairegistry.azurecr.io/togglydemo:latest 
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Production"
+        - name: Toggly--Environment
+          value: "Production"
+        - name: VaultUri
+          valueFrom:
+           secretKeyRef:
+             name: "togglysecrets"
+             key: "DemoVaultUri"
+        - name: TenantId
+          valueFrom:
+           secretKeyRef:
+             name: "togglysecrets"
+             key: "DemoTenantId"
+        - name: ClientId
+          valueFrom:
+           secretKeyRef:
+             name: "togglysecrets"
+             key: "DemoClientId"
+        - name: ClientSecret
+          valueFrom:
+           secretKeyRef:
+             name: "togglysecrets"
+             key: "DemoClientSecret"
+        ports:
+        - containerPort: 443
+          name: demosecure
+        - containerPort: 80
+          name: demoinsecure
+        #livenessProbe:
+        #  httpGet:
+        #    path: /hz
+        #    port: demoinsecure
+        #    httpHeaders:
+        #      - name: Accept
+        #        value: text/html
+        #      - name: Host
+        #        value: demo.toggly.io
+        #  failureThreshold: 1
+        #  periodSeconds: 20
+        #startupProbe:
+        #  httpGet:
+        #    path: /hz
+        #    port: demoinsecure
+        #    httpHeaders:
+        #      - name: Accept
+        #        value: text/html
+        #      - name: Host
+        #        value: demo.toggly.io
+        #  failureThreshold: 1
+        #  periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: togglydemo
+spec:
+  type: ClusterIP
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 443
+    name: demohttps
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+    name: demohttp
+  selector:
+    app: togglydemo
