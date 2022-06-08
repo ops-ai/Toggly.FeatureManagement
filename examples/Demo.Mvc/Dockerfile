@@ -12,7 +12,7 @@ ARG VERSION=0
 COPY ["examples/Demo.Mvc/Demo.Mvc.csproj", "examples/Demo.Mvc/"]
 RUN dotnet restore "examples/Demo.Mvc/Demo.Mvc.csproj"
 COPY . .
-WORKDIR "/src/examples/Demo.Mvc"
+WORKDIR "/examples/Demo.Mvc"
 RUN dotnet build "Demo.Mvc.csproj" -c Release /p:Version=${VERSION} -o /app/build
 
 FROM build AS publish
