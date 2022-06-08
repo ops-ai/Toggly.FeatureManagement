@@ -30,7 +30,7 @@ stages:
     steps:
     - task: CmdLine@2
       inputs:
-        script: 'sed -e ''s/latest/$(tag)/g'' demo-prod.yaml > $(Build.ArtifactStagingDirectory)/demo-prod.yml'
+        script: 'sed -e ''s/latest/$(tag)/g'' demo-prod.yml > $(Build.ArtifactStagingDirectory)/demo-prod.yml'
         workingDirectory: '$(Build.SourcesDirectory)/charts/'
     - task: PublishBuildArtifacts@1
       inputs:
