@@ -18,7 +18,7 @@
   <meta name="generator" content="Themefisher Small Apps Template v1.0">
 
   <!-- Favicon -->
-  <link rel="shortcut icon" type="image/x-icon" href="images/favicon.png" />
+  <link rel="shortcut icon" type="image/x-icon" href="~/images/favicon.png" />
   
   <!-- PLUGINS CSS STYLE -->
   <link rel="stylesheet" href="~/plugins/bootstrap/bootstrap.min.css">
@@ -41,12 +41,12 @@
 			<div class="col-12">
 				<div class="block">
 					<!-- Image -->
-					<div class="image align-self-center"><img class="img-fluid" src="images/Login/front-desk-sign-in.jpg"
+					<div class="image align-self-center"><img class="img-fluid" src="~/images/Login/front-desk-sign-in.jpg"
 							alt="desk-image"></div>
 					<!-- Content -->
 					<div class="content text-center">
 						<div class="logo">
-							<a href="~/"><img src="images/logo.png" alt=""></a>
+							<a href="~/"><img src="~/images/logo.png" alt=""></a>
 						</div>
 						<div class="title-text">
 							<h3>Sign in to To Your Account</h3>
@@ -60,8 +60,8 @@
 							<button class="btn btn-main-sm">sign in</button>
 						</form>
 						<div class="new-acount">
-							<a href="~/contact">Forget your password?</a>
-							<p>Don't Have an account? <a href="~/sign-up"> SIGN UP</a></p>
+							<a asp-action="Contact" asp-controller="Home">Forget your password?</a>
+							<p>Don't Have an account? <a asp-action="Signup" asp-controller="Account"> SIGN UP</a></p>
 						</div>
 					</div>
 				</div>
@@ -77,17 +77,17 @@
   </div>
   
   <!-- JAVASCRIPTS -->
-  <script src="/plugins/jquery/jquery.min.js"></script>
-  <script src="/plugins/bootstrap/bootstrap.min.js"></script>
-  <script src="/plugins/slick/slick.min.js"></script>
-  <script src="/plugins/fancybox/jquery.fancybox.min.js"></script>
-  <script src="/plugins/syotimer/jquery.syotimer.min.js"></script>
-  <script src="/plugins/aos/aos.js"></script>
+  <script src="~/plugins/jquery/jquery.min.js"></script>
+  <script src="~/plugins/bootstrap/bootstrap.min.js"></script>
+  <script src="~/plugins/slick/slick.min.js"></script>
+  <script src="~/plugins/fancybox/jquery.fancybox.min.js"></script>
+  <script src="~/plugins/syotimer/jquery.syotimer.min.js"></script>
+  <script src="~/plugins/aos/aos.js"></script>
   <!-- google map -->
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAgeuuDfRlweIs7D6uo4wdIHVvJ0LonQ6g"></script>
-  <script src="/plugins/google-map/gmap.js"></script>
+  <script src="~/plugins/google-map/gmap.js"></script>
   
-  <script src="/js/script.js"></script>
+  <script src="~/js/script.js"></script>
 </body>
 
 </html>

@@ -8,7 +8,6 @@ namespace Demo.Mvc.Controllers
     [FeatureUsage(FeatureFlags.ComingSoon)]
     public class ComingSoonController : Controller
     {
-        [Route("coming-soon")]
         public IActionResult Index()
         {
             return View();

@@ -19,9 +19,11 @@ namespace Demo.Mvc
             });
 
             builder.Services.AddSingleton<IDisabledFeaturesHandler, FeatureNotEnabledHandler>();
-            
+
             // Add services to the container.
             builder.Services.AddControllersWithViews();
+
+            builder.Services.AddRouting(options => options.LowercaseUrls = true);
 
             var app = builder.Build();
 
@@ -35,10 +37,10 @@ namespace Demo.Mvc
             }
 
             app.UseHttpsRedirection();
-            app.UseStaticFiles();
 
             app.UseRouting();
 
+            app.UseStaticFiles();
             app.UseAuthorization();
 
             app.UseForFeature(nameof(FeatureFlags.ComingSoon), appBuilder =>
@@ -50,10 +52,12 @@ namespace Demo.Mvc
                 }));
             });
 
-            app.MapControllerRoute(
-                name: "default",
-                pattern: "{controller=Home}/{action=Index}/{id?}");
-            app.MapFallbackToController("NotFound", "Home");
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapControllerRoute("default", "{action=Index}", new { controller = "Home" });
+                endpoints.MapControllerRoute("default", "{controller=Home}/{action=Index}", new { controller = "Home" });
+                endpoints.MapFallbackToController("404", "NotFound", "Home");
+            });
 
             app.Run();
         }

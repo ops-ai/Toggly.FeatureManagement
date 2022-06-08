@@ -15,19 +15,16 @@ namespace Demo.Mvc.Controllers
             _logger = logger;
         }
 
-        [Route("")]
         public IActionResult Index()
         {
             return View();
         }
 
-        [Route("privacy")]
         public IActionResult Privacy()
         {
             return View();
         }
 
-        [Route("error")]
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {
@@ -41,7 +38,6 @@ namespace Demo.Mvc.Controllers
             return View();
         }
 
-        [Route("team")]
         [FeatureGate(FeatureFlags.Team)]
         [FeatureUsage(FeatureFlags.Team)]
         public IActionResult Team()
@@ -49,13 +45,11 @@ namespace Demo.Mvc.Controllers
             return View();
         }
 
-        [Route("career")]
         public IActionResult Career()
         {
             return View();
         }
 
-        [Route("faq")]
         [FeatureGate(FeatureFlags.Faqs)]
         [FeatureUsage(FeatureFlags.Faqs)]
         public IActionResult Faq()
@@ -63,13 +57,11 @@ namespace Demo.Mvc.Controllers
             return View();
         }
 
-        [Route("about")]
         public IActionResult About()
         {
             return View();
         }
 
-        [Route("contact")]
         [FeatureGate(Microsoft.FeatureManagement.RequirementType.Any, FeatureFlags.ContactAddress,FeatureFlags.ContactForm)]
         public IActionResult Contact()
         {
