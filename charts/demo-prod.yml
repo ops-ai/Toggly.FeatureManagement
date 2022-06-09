@@ -31,22 +31,22 @@ spec:
           valueFrom:
            secretKeyRef:
              name: "toggly-demo-secrets"
-             key: "DemoVaultUri"
+             key: "VaultUri"
         - name: TenantId
           valueFrom:
            secretKeyRef:
              name: "toggly-demo-secrets"
-             key: "DemoTenantId"
+             key: "TenantId"
         - name: ClientId
           valueFrom:
            secretKeyRef:
              name: "toggly-demo-secrets"
-             key: "DemoClientId"
+             key: "ClientId"
         - name: ClientSecret
           valueFrom:
            secretKeyRef:
              name: "toggly-demo-secrets"
-             key: "DemoClientSecret"
+             key: "ClientSecret"
         ports:
         - containerPort: 443
           name: demosecure
