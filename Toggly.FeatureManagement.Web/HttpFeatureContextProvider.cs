@@ -41,8 +41,11 @@ namespace Toggly.FeatureManagement.Web
             if (_httpContextAccessor.HttpContext == null)
                 return Task.FromResult("");
 
-            if (_httpContextAccessor.HttpContext.User != null && _httpContextAccessor.HttpContext.User.Identity?.Name != null)
+            if (_httpContextAccessor.HttpContext.User?.Identity?.Name != null)
                 return Task.FromResult(_httpContextAccessor.HttpContext.User.Identity.Name!);
+
+            if (_httpContextAccessor.HttpContext.Session != null)
+                return Task.FromResult(_httpContextAccessor.HttpContext.Session.Id);
 
             return Task.FromResult(_httpContextAccessor.HttpContext.Connection.RemoteIpAddress.ToString());
         }
@@ -52,8 +55,11 @@ namespace Toggly.FeatureManagement.Web
             if (_httpContextAccessor.HttpContext == null)
                 return Task.FromResult("");
 
-            if (_httpContextAccessor.HttpContext.User != null && _httpContextAccessor.HttpContext.User.Identity?.Name != null)
+            if (_httpContextAccessor.HttpContext.User?.Identity?.Name != null)
                 return Task.FromResult(_httpContextAccessor.HttpContext.User.Identity.Name!);
+
+            if (_httpContextAccessor.HttpContext.Session != null)
+                return Task.FromResult(_httpContextAccessor.HttpContext.Session.Id);
 
             return Task.FromResult(_httpContextAccessor.HttpContext.Connection.RemoteIpAddress.ToString());
         }

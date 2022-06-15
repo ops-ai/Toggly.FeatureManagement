@@ -7,6 +7,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -93,6 +94,9 @@ namespace Toggly.FeatureManagement
             try
             {
                 using var httpClient = _clientFactory.CreateClient("toggly");
+#if NETCOREAPP3_1_OR_GREATER
+                httpClient.DefaultRequestVersion = HttpVersion.Version20;
+#endif
                 httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Toggly.FeatureManagement", Version));
                 if (timeout.HasValue)
                     httpClient.Timeout = new TimeSpan(timeout.Value);

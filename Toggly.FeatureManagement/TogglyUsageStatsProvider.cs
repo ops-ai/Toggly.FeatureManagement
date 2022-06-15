@@ -46,7 +46,7 @@ namespace Toggly.FeatureManagement
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
-            _baseUrl = togglySettings.Value.BaseUrl;
+            _baseUrl = togglySettings.Value.BaseUrl!;
             _clientFactory = clientFactory;
             _contextProvider = (IFeatureContextProvider?)serviceProvider.GetService(typeof(IFeatureContextProvider));
 
@@ -90,7 +90,8 @@ namespace Toggly.FeatureManagement
                 {
                     AppKey = _appKey,
                     Environment = _environment,
-                    Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime)
+                    Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime),
+                    TotalUniqueUsers = _uniqueUsageMap.SelectMany(t => t.Value).GroupBy(t => t[1..]).Count()
                 };
 
                 foreach (var stat in _stats.ToList().GroupBy(t => t.Key[1..]))
