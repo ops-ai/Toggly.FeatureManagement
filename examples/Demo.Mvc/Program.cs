@@ -16,7 +16,7 @@ namespace Demo.Mvc
             {
                 options.AppKey = builder.Configuration["Toggly:AppKey"];
                 options.Environment = builder.Configuration["Toggly:Environment"];
-                options.BaseUrl = "https://staging-app.toggly.io";
+                //options.BaseUrl = "https://staging-app.toggly.io";
             });
 
             builder.Services.AddSingleton<IDisabledFeaturesHandler, FeatureNotEnabledHandler>();

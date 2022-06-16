@@ -27,7 +27,7 @@ namespace Toggly.FeatureManagement.Configuration
                 .Configure(options =>
                 {
                     if (!string.IsNullOrEmpty(togglyOptions.AppKey)) options.AppKey = togglyOptions.AppKey;
-                    if (!string.IsNullOrEmpty(togglyOptions.BaseUrl)) options.BaseUrl = togglyOptions.BaseUrl;
+                    options.BaseUrl = !string.IsNullOrEmpty(togglyOptions.BaseUrl) ? togglyOptions.BaseUrl : "https://app.toggly.io/";
                     if (!string.IsNullOrEmpty(togglyOptions.Environment)) options.Environment = togglyOptions.Environment;
                 });
 

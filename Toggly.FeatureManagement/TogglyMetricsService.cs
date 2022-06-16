@@ -48,7 +48,7 @@ namespace Toggly.FeatureManagement
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
-            _baseUrl = togglySettings.Value.BaseUrl!;
+            _baseUrl = togglySettings.Value.BaseUrl ?? "https://app.toggly.io/";
             _clientFactory = clientFactory;
             _featureExperimentProvider = (IFeatureExperimentProvider)featureDefinitionProvider;
             _featureManager = featureManager;
