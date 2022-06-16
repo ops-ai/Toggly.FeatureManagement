@@ -8,8 +8,16 @@ namespace Demo.Mvc.Controllers
     [FeatureUsage(FeatureFlags.ComingSoon)]
     public class ComingSoonController : Controller
     {
-        public IActionResult Index()
+        private readonly IMetricsService _metricsService;
+
+        public ComingSoonController(IMetricsService metricsService)
         {
+            _metricsService = metricsService;
+        }
+
+        public async Task<IActionResult> Index()
+        {
+            await _metricsService.AddMetricAsync("Coming Soon", 1);
             return View();
         }
     }

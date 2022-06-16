@@ -11,7 +11,7 @@ namespace Toggly.FeatureManagement.Web.Configuration
         public static IServiceCollection AddTogglyHttpContext(this IServiceCollection services)
         {
             services.AddHttpContextAccessor();
-            services.TryAddSingleton<IFeatureContextProvider, HttpFeatureContextProvider>();
+            services.TryAddTransient<IFeatureContextProvider, HttpFeatureContextProvider>();
             services.TryAddSingleton<ITargetingContextAccessor, HttpContextTargetingContextAccessor>();
 
             return services;

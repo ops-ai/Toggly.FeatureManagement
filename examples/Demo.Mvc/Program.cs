@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Session;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
 using Microsoft.FeatureManagement.Mvc;
@@ -24,6 +25,8 @@ namespace Demo.Mvc
             builder.Services.AddControllersWithViews();
 
             builder.Services.AddRouting(options => options.LowercaseUrls = true);
+            builder.Services.AddDistributedMemoryCache();
+            builder.Services.AddSession();
 
             var app = builder.Build();
 
@@ -37,6 +40,7 @@ namespace Demo.Mvc
             }
 
             app.UseHttpsRedirection();
+            app.UseSession();
 
             app.UseRouting();
 

@@ -43,8 +43,8 @@ namespace Toggly.FeatureManagement.Web
 
             if (_httpContextAccessor.HttpContext.User?.Identity?.Name != null)
                 return Task.FromResult(_httpContextAccessor.HttpContext.User.Identity.Name!);
-
-            if (_httpContextAccessor.HttpContext.Session != null)
+            
+            if (_httpContextAccessor.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.ISessionFeature>() != null)
                 return Task.FromResult(_httpContextAccessor.HttpContext.Session.Id);
 
             return Task.FromResult(_httpContextAccessor.HttpContext.Connection.RemoteIpAddress.ToString());
@@ -58,7 +58,7 @@ namespace Toggly.FeatureManagement.Web
             if (_httpContextAccessor.HttpContext.User?.Identity?.Name != null)
                 return Task.FromResult(_httpContextAccessor.HttpContext.User.Identity.Name!);
 
-            if (_httpContextAccessor.HttpContext.Session != null)
+            if (_httpContextAccessor.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.ISessionFeature>() != null)
                 return Task.FromResult(_httpContextAccessor.HttpContext.Session.Id);
 
             return Task.FromResult(_httpContextAccessor.HttpContext.Connection.RemoteIpAddress.ToString());
