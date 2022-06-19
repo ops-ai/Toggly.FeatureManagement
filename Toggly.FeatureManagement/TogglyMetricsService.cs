@@ -85,7 +85,8 @@ namespace Toggly.FeatureManagement
                     Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime)
                 };
 
-                foreach (var stat in _stats.ToList().GroupBy(t => t.Key))
+                var keys = _stats.GroupBy(t => t.Key).ToList();
+                foreach (var stat in keys)
                 {
                     dataPacket.Stats.Add(new MetricStatMessage
                     {

@@ -94,7 +94,8 @@ namespace Toggly.FeatureManagement
                     TotalUniqueUsers = _uniqueUsageMap.SelectMany(t => t.Value).GroupBy(t => t[1..]).Count()
                 };
 
-                foreach (var stat in _stats.ToList().GroupBy(t => t.Key[1..]))
+                var keys = _stats.GroupBy(t => t.Key[1..]).ToList();
+                foreach (var stat in keys)
                 {
                     dataPacket.Stats.Add(new StatMessage
                     {
