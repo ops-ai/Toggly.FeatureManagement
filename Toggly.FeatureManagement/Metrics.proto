@@ -20,9 +20,9 @@ message MetricStat {
 
 message MetricStatMessage {
 	string metric = 1;
-	optional string feature = 2; //optional feature referenced for subcount
-	int32 enabledCount = 3; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
-	int32 disabledCount = 4; //optional metric count when feature is disabled
+	int32 enabledCount = 2; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
+	int32 disabledCount = 3; //optional metric count when feature is disabled
+	optional string feature = 4; //optional feature referenced for subcount
 }
 
 message MetricResult {

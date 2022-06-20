@@ -88,13 +88,14 @@ namespace Toggly.FeatureManagement
                 var keys = _stats.GroupBy(t => t.Key).ToList();
                 for (int i = 0; i < keys.Count; i++)
                 {
-                    dataPacket.Stats.Add(new MetricStatMessage
+                    var stat = new MetricStatMessage
                     {
                         EnabledCount = keys[i].Any(s => s.Key.Item3) ? keys[i].First(s => s.Key.Item3).Value : 0,
                         DisabledCount = keys[i].Any(s => !s.Key.Item3) ? keys[i].First(s => !s.Key.Item3).Value : 0,
-                        Feature = keys[i].Key.Item2,
                         Metric = keys[i].Key.Item1
-                    });
+                    };
+                    if (keys[i].Key.Item2 != null) stat.Feature = keys[i].Key.Item2;
+                    dataPacket.Stats.Add(stat);
                 }
 
                 _stats.Clear();
