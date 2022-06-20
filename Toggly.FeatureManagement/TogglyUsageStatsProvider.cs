@@ -95,19 +95,19 @@ namespace Toggly.FeatureManagement
                 };
 
                 var keys = _stats.GroupBy(t => t.Key[1..]).ToList();
-                foreach (var stat in keys)
+                for (int i = 0; i < keys.Count; i++)
                 {
                     dataPacket.Stats.Add(new StatMessage
                     {
-                        EnabledCount = stat.Any(s => s.Key.StartsWith('a')) ? stat.First(s => s.Key.StartsWith('a')).Value : 0,
-                        DisabledCount = stat.Any(s => s.Key.StartsWith('d')) ? stat.First(s => s.Key.StartsWith('d')).Value : 0,
-                        Feature = stat.Key,
-                        UniqueContextIdentifierDisabledCount = _uniqueUsageMap.TryGetValue(stat.Key, out var uniqueDisabled) ? uniqueDisabled.Count(s => s?.StartsWith("a") ?? false) : 0,
-                        UniqueContextIdentifierEnabledCount = _uniqueUsageMap.TryGetValue(stat.Key, out var uniqueEnabled) ? uniqueEnabled.Count(s => s?.StartsWith("d") ?? false) : 0,
-                        UniqueRequestDisabledCount = stat.Any(s => s.Key.StartsWith('u')) ? stat.First(s => s.Key.StartsWith('u')).Value : 0,
-                        UniqueRequestEnabledCount = stat.Any(s => s.Key.StartsWith('x')) ? stat.First(s => s.Key.StartsWith('x')).Value : 0,
-                        UsedCount = stat.Any(s => s.Key.StartsWith('v')) ? stat.First(s => s.Key.StartsWith('v')).Value : 0,
-                        UniqueUsersUsedCount = _uniqueUsageMap.TryGetValue(stat.Key, out var uniqueUsers) ? uniqueUsers.Count(s => s?.StartsWith("v") ?? false) : 0,
+                        EnabledCount = keys[i].Any(s => s.Key.StartsWith('a')) ? keys[i].First(s => s.Key.StartsWith('a')).Value : 0,
+                        DisabledCount = keys[i].Any(s => s.Key.StartsWith('d')) ? keys[i].First(s => s.Key.StartsWith('d')).Value : 0,
+                        Feature = keys[i].Key,
+                        UniqueContextIdentifierDisabledCount = _uniqueUsageMap.TryGetValue(keys[i].Key, out var uniqueDisabled) ? uniqueDisabled.Count(s => s?.StartsWith("a") ?? false) : 0,
+                        UniqueContextIdentifierEnabledCount = _uniqueUsageMap.TryGetValue(keys[i].Key, out var uniqueEnabled) ? uniqueEnabled.Count(s => s?.StartsWith("d") ?? false) : 0,
+                        UniqueRequestDisabledCount = keys[i].Any(s => s.Key.StartsWith('u')) ? keys[i].First(s => s.Key.StartsWith('u')).Value : 0,
+                        UniqueRequestEnabledCount = keys[i].Any(s => s.Key.StartsWith('x')) ? keys[i].First(s => s.Key.StartsWith('x')).Value : 0,
+                        UsedCount = keys[i].Any(s => s.Key.StartsWith('v')) ? keys[i].First(s => s.Key.StartsWith('v')).Value : 0,
+                        UniqueUsersUsedCount = _uniqueUsageMap.TryGetValue(keys[i].Key, out var uniqueUsers) ? uniqueUsers.Count(s => s?.StartsWith("v") ?? false) : 0,
                     });
                 }
 

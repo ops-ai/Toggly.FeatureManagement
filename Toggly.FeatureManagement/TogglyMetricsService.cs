@@ -86,14 +86,14 @@ namespace Toggly.FeatureManagement
                 };
 
                 var keys = _stats.GroupBy(t => t.Key).ToList();
-                foreach (var stat in keys)
+                for (int i = 0; i < keys.Count; i++)
                 {
                     dataPacket.Stats.Add(new MetricStatMessage
                     {
-                        EnabledCount = stat.Any(s => s.Key.Item3) ? stat.First(s => s.Key.Item3).Value : 0,
-                        DisabledCount = stat.Any(s => !s.Key.Item3) ? stat.First(s => !s.Key.Item3).Value : 0,
-                        Feature = stat.Key.Item2,
-                        Metric = stat.Key.Item1
+                        EnabledCount = keys[i].Any(s => s.Key.Item3) ? keys[i].First(s => s.Key.Item3).Value : 0,
+                        DisabledCount = keys[i].Any(s => !s.Key.Item3) ? keys[i].First(s => !s.Key.Item3).Value : 0,
+                        Feature = keys[i].Key.Item2,
+                        Metric = keys[i].Key.Item1
                     });
                 }
 
@@ -111,7 +111,7 @@ namespace Toggly.FeatureManagement
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending stats to toggly");
+                _logger.LogError(ex, "Error sending metrics to toggly");
             }
         }
 
