@@ -86,12 +86,15 @@ namespace Toggly.FeatureManagement
                 using var httpClient = _clientFactory.CreateClient("toggly");
                 using var channel = GrpcChannel.ForAddress(_baseUrl, new GrpcChannelOptions { HttpClient = httpClient });
                 var client = new Usage.UsageClient(channel);
+
+                var totalUniqueCount = 0;
+                lock (_uniqueUsageMap) { totalUniqueCount = _uniqueUsageMap.SelectMany(t => t.Value).GroupBy(t => t[1..]).Count(); }
                 var dataPacket = new FeatureStat
                 {
                     AppKey = _appKey,
                     Environment = _environment,
                     Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime),
-                    TotalUniqueUsers = _uniqueUsageMap.SelectMany(t => t.Value).GroupBy(t => t[1..]).Count()
+                    TotalUniqueUsers = totalUniqueCount
                 };
 
                 var keys = _stats.GroupBy(t => t.Key[1..]).ToList();

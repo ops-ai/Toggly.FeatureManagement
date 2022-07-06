@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Azure;
 using Microsoft.FeatureManagement.FeatureFilters;
 using System;
 using System.Collections.Generic;
@@ -28,7 +29,7 @@ namespace Toggly.FeatureManagement.Web
             // Try cache lookup
             if (httpContext.Items.TryGetValue(TargetingContextLookup, out object value))
                 return new ValueTask<TargetingContext>((TargetingContext)value!);
-
+            
             ClaimsPrincipal user = httpContext.User;
 
             var groups = new List<string>();
