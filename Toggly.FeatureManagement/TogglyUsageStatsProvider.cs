@@ -87,8 +87,15 @@ namespace Toggly.FeatureManagement
                 using var channel = GrpcChannel.ForAddress(_baseUrl, new GrpcChannelOptions { HttpClient = httpClient });
                 var client = new Usage.UsageClient(channel);
 
-                var totalUniqueCount = 0;
-                lock (_uniqueUsageMap) { totalUniqueCount = _uniqueUsageMap.SelectMany(t => t.Value).GroupBy(t => t[1..]).Count(); }
+                var tempUniqueUsers = new HashSet<string>();
+                var uniqueKeys = _uniqueUsageMap.Keys.ToList();
+                for (var i = 0; i < uniqueKeys.Count; i++)
+                {
+                    foreach (var user in _uniqueUsageMap[uniqueKeys[i]].ToList())
+                        tempUniqueUsers.Add(user[1..]);
+                }
+                var totalUniqueCount = tempUniqueUsers.Count;
+
                 var dataPacket = new FeatureStat
                 {
                     AppKey = _appKey,
