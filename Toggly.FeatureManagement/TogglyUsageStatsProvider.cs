@@ -41,6 +41,7 @@ namespace Toggly.FeatureManagement
         /// values are list of unique users with status: d-email vs e-email
         /// </summary>
         private readonly ConcurrentDictionary<string, HashSet<string>> _uniqueUsageMap = new ConcurrentDictionary<string, HashSet<string>>();
+        private readonly HashSet<string> _uniqueUserMap = new HashSet<string>();
 
         public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider)
         {
@@ -68,6 +69,7 @@ namespace Toggly.FeatureManagement
             _logger.LogTrace("Send remaining stats and clear unique usage map");
             await SendStats().ConfigureAwait(false);
             _uniqueUsageMap.Clear();
+            _uniqueUserMap.Clear();
         }
 
         private async Task SendStats()
@@ -87,21 +89,12 @@ namespace Toggly.FeatureManagement
                 using var channel = GrpcChannel.ForAddress(_baseUrl, new GrpcChannelOptions { HttpClient = httpClient });
                 var client = new Usage.UsageClient(channel);
 
-                var tempUniqueUsers = new HashSet<string>();
-                var uniqueKeys = _uniqueUsageMap.Keys.ToList();
-                for (var i = 0; i < uniqueKeys.Count; i++)
-                {
-                    foreach (var user in _uniqueUsageMap[uniqueKeys[i]].ToList())
-                        tempUniqueUsers.Add(user[1..]);
-                }
-                var totalUniqueCount = tempUniqueUsers.Count;
-
                 var dataPacket = new FeatureStat
                 {
                     AppKey = _appKey,
                     Environment = _environment,
                     Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime),
-                    TotalUniqueUsers = totalUniqueCount
+                    TotalUniqueUsers = _uniqueUserMap.Count
                 };
 
                 var keys = _stats.GroupBy(t => t.Key[1..]).ToList();
@@ -156,6 +149,7 @@ namespace Toggly.FeatureManagement
                 {
                     var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
                     currentUniqueValue.Add($"v{uniqueIdentifier}");
+                    _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }
         }
@@ -177,6 +171,7 @@ namespace Toggly.FeatureManagement
                 {
                     var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
                     currentUniqueValue.Add($"v{uniqueIdentifier}");
+                    _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }
         }
@@ -209,6 +204,7 @@ namespace Toggly.FeatureManagement
                 {
                     var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
                     currentUniqueValue.Add(allowed ? $"a{uniqueIdentifier}" : $"d{uniqueIdentifier}");
+                    _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }
         }
@@ -242,6 +238,7 @@ namespace Toggly.FeatureManagement
                 {
                     var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
                     currentUniqueValue.Add(allowed ? $"a{uniqueIdentifier}" : $"d{uniqueIdentifier}");
+                    _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }
         }
