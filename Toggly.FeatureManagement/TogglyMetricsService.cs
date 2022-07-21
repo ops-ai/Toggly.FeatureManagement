@@ -28,7 +28,7 @@ namespace Toggly.FeatureManagement
 
         private readonly IHttpClientFactory _clientFactory;
 
-        private readonly ConcurrentDictionary<(string, string?, bool), int> _stats = new ConcurrentDictionary<(string, string?, bool), int>();
+        private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), int> _stats = new ConcurrentDictionary<(string, string?, bool), int>();
 
         private readonly Timer _timer;
 
@@ -85,16 +85,16 @@ namespace Toggly.FeatureManagement
                     Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime)
                 };
 
-                var keys = _stats.GroupBy(t => t.Key).ToList();
-                for (int i = 0; i < keys.Count; i++)
+                var keys = _stats.Keys.Select(t => (t.MetricKey, t.FeatureKey)).ToHashSet().ToArray();
+                for (int i = 0; i < keys.Length; i++)
                 {
                     var stat = new MetricStatMessage
                     {
-                        EnabledCount = keys[i].Any(s => s.Key.Item3) ? keys[i].First(s => s.Key.Item3).Value : 0,
-                        DisabledCount = keys[i].Any(s => !s.Key.Item3) ? keys[i].First(s => !s.Key.Item3).Value : 0,
-                        Metric = keys[i].Key.Item1
+                        EnabledCount = _stats.TryGetValue((keys[i].MetricKey, keys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
+                        DisabledCount = _stats.TryGetValue((keys[i].MetricKey, keys[i].FeatureKey, false), out var disabledCount) ? disabledCount : 0,
+                        Metric = keys[i].MetricKey
                     };
-                    if (keys[i].Key.Item2 != null) stat.Feature = keys[i].Key.Item2;
+                    if (keys[i].FeatureKey != null) stat.Feature = keys[i].FeatureKey;
                     dataPacket.Stats.Add(stat);
                 }
 
