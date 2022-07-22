@@ -1,4 +1,5 @@
-﻿using Grpc.Net.Client;
+﻿using ConcurrentCollections;
+using Grpc.Net.Client;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -49,9 +50,9 @@ namespace Toggly.FeatureManagement
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
         /// </summary>
-        private readonly ConcurrentDictionary<string, HashSet<int>> _uniqueUsageEnabledMap = new ConcurrentDictionary<string, HashSet<int>>();
-        private readonly ConcurrentDictionary<string, HashSet<int>> _uniqueUsageDisabledMap = new ConcurrentDictionary<string, HashSet<int>>();
-        private readonly ConcurrentDictionary<string, HashSet<int>> _uniqueUsageUsedMap = new ConcurrentDictionary<string, HashSet<int>>();
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageEnabledMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageDisabledMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageUsedMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
         private readonly HashSet<string> _uniqueUserMap = new HashSet<string>();
 
         public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider)
@@ -110,7 +111,7 @@ namespace Toggly.FeatureManagement
                     TotalUniqueUsers = _uniqueUserMap.Count
                 };
 
-                var keys = _stats.Keys.Select(t => t.FeatureKey).ToHashSet().ToArray();
+                var keys = _stats.Keys.Select(t => t.FeatureKey).ToArray().Distinct().ToArray();
                 for (int i = 0; i < keys.Length; i++)
                 {
                     dataPacket.Stats.Add(new StatMessage
@@ -160,7 +161,7 @@ namespace Toggly.FeatureManagement
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
-                    var currentUniqueValue = _uniqueUsageUsedMap.GetOrAdd(featureKey, new HashSet<int>());
+                    var currentUniqueValue = _uniqueUsageUsedMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>());
                     currentUniqueValue.Add(GetDeterministicHashCode(uniqueIdentifier));
                     _uniqueUserMap.Add(uniqueIdentifier);
                 }
@@ -182,7 +183,7 @@ namespace Toggly.FeatureManagement
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context).ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
-                    var currentUniqueValue = _uniqueUsageUsedMap.GetOrAdd(featureKey, new HashSet<int>());
+                    var currentUniqueValue = _uniqueUsageUsedMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>());
                     currentUniqueValue.Add(GetDeterministicHashCode(uniqueIdentifier));
                     _uniqueUserMap.Add(uniqueIdentifier);
                 }
@@ -216,9 +217,9 @@ namespace Toggly.FeatureManagement
                 if (uniqueIdentifier != null)
                 {
                     if (allowed)
-                        _uniqueUsageEnabledMap.GetOrAdd(featureKey, new HashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                        _uniqueUsageEnabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
                     else
-                        _uniqueUsageDisabledMap.GetOrAdd(featureKey, new HashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                        _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
                     _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }
@@ -252,9 +253,9 @@ namespace Toggly.FeatureManagement
                 if (uniqueIdentifier != null)
                 {
                     if (allowed)
-                        _uniqueUsageEnabledMap.GetOrAdd(featureKey, new HashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                        _uniqueUsageEnabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
                     else
-                        _uniqueUsageDisabledMap.GetOrAdd(featureKey, new HashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                        _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
                     _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }

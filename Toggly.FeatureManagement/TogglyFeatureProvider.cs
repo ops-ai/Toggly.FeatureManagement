@@ -1,4 +1,5 @@
 ﻿using Azure.Messaging.WebPubSub;
+using ConcurrentCollections;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -41,7 +42,7 @@ namespace Toggly.FeatureManagement
 
         private readonly string Version;
 
-        private readonly ConcurrentDictionary<string, HashSet<string>> _experiments = new ConcurrentDictionary<string, HashSet<string>>();
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<string>> _experiments = new ConcurrentDictionary<string, ConcurrentHashSet<string>>();
 
         private WebsocketClient? _webSocketClient = null;
 
@@ -134,7 +135,7 @@ namespace Toggly.FeatureManagement
                 var activeExperiments = newDefinitions.Where(t => t.Metrics != null).SelectMany(t => t.Metrics).GroupBy(t => t).Select(t => t.Key).ToList();
                 _experiments.Clear();
                 foreach (var activeExperiment in activeExperiments)
-                    _experiments.TryAdd(activeExperiment, new HashSet<string>(newDefinitions.Where(t => t.Metrics != null && t.Metrics.Contains(activeExperiment)).Select(t => t.FeatureKey)));
+                    _experiments.TryAdd(activeExperiment, new ConcurrentHashSet<string>(newDefinitions.Where(t => t.Metrics != null && t.Metrics.Contains(activeExperiment)).Select(t => t.FeatureKey)));
 
                 _loaded = true;
                 if (_webSocketClient == null || !_webSocketClient.IsRunning)

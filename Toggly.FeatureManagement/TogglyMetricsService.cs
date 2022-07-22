@@ -1,4 +1,5 @@
-﻿using Grpc.Net.Client;
+﻿using ConcurrentCollections;
+using Grpc.Net.Client;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -42,7 +43,7 @@ namespace Toggly.FeatureManagement
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
         /// </summary>
-        private readonly ConcurrentDictionary<string, HashSet<string>> _uniqueUsageMap = new ConcurrentDictionary<string, HashSet<string>>();
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<string>> _uniqueUsageMap = new ConcurrentDictionary<string, ConcurrentHashSet<string>>();
 
         public TogglyMetricsService(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, IFeatureDefinitionProvider featureDefinitionProvider, IFeatureManager featureManager)
         {
@@ -85,7 +86,7 @@ namespace Toggly.FeatureManagement
                     Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime)
                 };
 
-                var keys = _stats.Keys.Select(t => (t.MetricKey, t.FeatureKey)).ToHashSet().ToArray();
+                var keys = _stats.Keys.Select(t => (t.MetricKey, t.FeatureKey)).ToArray().Distinct().ToArray();
                 for (int i = 0; i < keys.Length; i++)
                 {
                     var stat = new MetricStatMessage
