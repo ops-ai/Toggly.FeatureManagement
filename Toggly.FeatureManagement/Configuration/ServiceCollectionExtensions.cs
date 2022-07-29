@@ -5,6 +5,8 @@ using Microsoft.FeatureManagement.FeatureFilters;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Text;
 using Toggly.FeatureManagement.Helpers;
 
@@ -27,7 +29,7 @@ namespace Toggly.FeatureManagement.Configuration
                 .Configure(options =>
                 {
                     if (!string.IsNullOrEmpty(togglyOptions.AppKey)) options.AppKey = togglyOptions.AppKey;
-                    if (!string.IsNullOrEmpty(togglyOptions.BaseUrl)) options.BaseUrl = togglyOptions.BaseUrl;
+                    options.BaseUrl = !string.IsNullOrEmpty(togglyOptions.BaseUrl) ? togglyOptions.BaseUrl : "https://app.toggly.io/";
                     if (!string.IsNullOrEmpty(togglyOptions.Environment)) options.Environment = togglyOptions.Environment;
                 });
 
@@ -50,6 +52,14 @@ namespace Toggly.FeatureManagement.Configuration
                 var baseUrl = sp.GetRequiredService<IOptions<TogglySettings>>().Value.BaseUrl;
 
                 config.BaseAddress = new Uri(baseUrl ?? "https://app.toggly.io/");
+            }).ConfigurePrimaryHttpMessageHandler(messageHandler =>
+            {
+                var handler = new HttpClientHandler();
+
+                if (handler.SupportsAutomaticDecompression)
+                    handler.AutomaticDecompression = DecompressionMethods.Deflate | DecompressionMethods.GZip;
+
+                return handler;
             });
 
             services.AddSingleton<IFeatureDefinitionProvider, TogglyFeatureProvider>();

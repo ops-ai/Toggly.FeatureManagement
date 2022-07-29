@@ -17,6 +17,7 @@ message FeatureStat {
     string environment = 2;
     google.protobuf.Timestamp time = 3;
     repeated StatMessage stats = 4;
+	int32 totalUniqueUsers = 5;
 }
 
 message StatMessage {

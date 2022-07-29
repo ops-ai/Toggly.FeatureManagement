@@ -1,4 +1,5 @@
-﻿using Grpc.Net.Client;
+﻿using ConcurrentCollections;
+using Grpc.Net.Client;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -26,7 +27,16 @@ namespace Toggly.FeatureManagement
 
         private readonly IHttpClientFactory _clientFactory;
 
-        private readonly ConcurrentDictionary<string, int> _stats = new ConcurrentDictionary<string, int>();
+        private readonly ConcurrentDictionary<(string FeatureKey, StatType Type), int> _stats = new ConcurrentDictionary<(string, StatType), int>();
+
+        private enum StatType : byte
+        {
+            Enabled,
+            Disabled,
+            UniqueRequestEnabled,
+            UniqueRequestDisabled,
+            Used
+        }
 
         private readonly Timer _timer;
 
@@ -40,13 +50,16 @@ namespace Toggly.FeatureManagement
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
         /// </summary>
-        private readonly ConcurrentDictionary<string, HashSet<string>> _uniqueUsageMap = new ConcurrentDictionary<string, HashSet<string>>();
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageEnabledMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageDisabledMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageUsedMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
+        private readonly HashSet<string> _uniqueUserMap = new HashSet<string>();
 
         public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
-            _baseUrl = togglySettings.Value.BaseUrl;
+            _baseUrl = togglySettings.Value.BaseUrl ?? "https://app.toggly.io/";
             _clientFactory = clientFactory;
             _contextProvider = (IFeatureContextProvider?)serviceProvider.GetService(typeof(IFeatureContextProvider));
 
@@ -62,12 +75,15 @@ namespace Toggly.FeatureManagement
 
         private async Task ResetUsageMap()
         {
-            if (!_uniqueUsageMap.Any())
+            if (!_uniqueUsageEnabledMap.Any() && !_uniqueUsageDisabledMap.Any() && !_uniqueUsageUsedMap.Any())
                 return;
 
             _logger.LogTrace("Send remaining stats and clear unique usage map");
             await SendStats().ConfigureAwait(false);
-            _uniqueUsageMap.Clear();
+            _uniqueUsageEnabledMap.Clear();
+            _uniqueUsageDisabledMap.Clear();
+            _uniqueUsageUsedMap.Clear();
+            _uniqueUserMap.Clear();
         }
 
         private async Task SendStats()
@@ -86,26 +102,29 @@ namespace Toggly.FeatureManagement
                 using var httpClient = _clientFactory.CreateClient("toggly");
                 using var channel = GrpcChannel.ForAddress(_baseUrl, new GrpcChannelOptions { HttpClient = httpClient });
                 var client = new Usage.UsageClient(channel);
+
                 var dataPacket = new FeatureStat
                 {
                     AppKey = _appKey,
                     Environment = _environment,
-                    Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime)
+                    Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime),
+                    TotalUniqueUsers = _uniqueUserMap.Count
                 };
 
-                foreach (var stat in _stats.ToList().GroupBy(t => t.Key[1..]))
+                var keys = _stats.Keys.Select(t => t.FeatureKey).ToArray().Distinct().ToArray();
+                for (int i = 0; i < keys.Length; i++)
                 {
                     dataPacket.Stats.Add(new StatMessage
                     {
-                        EnabledCount = stat.Any(s => s.Key.StartsWith('a')) ? stat.First(s => s.Key.StartsWith('a')).Value : 0,
-                        DisabledCount = stat.Any(s => s.Key.StartsWith('d')) ? stat.First(s => s.Key.StartsWith('d')).Value : 0,
-                        Feature = stat.Key,
-                        UniqueContextIdentifierDisabledCount = _uniqueUsageMap.TryGetValue(stat.Key, out var uniqueDisabled) ? uniqueDisabled.Count(s => s?.StartsWith("a") ?? false) : 0,
-                        UniqueContextIdentifierEnabledCount = _uniqueUsageMap.TryGetValue(stat.Key, out var uniqueEnabled) ? uniqueEnabled.Count(s => s?.StartsWith("d") ?? false) : 0,
-                        UniqueRequestDisabledCount = stat.Any(s => s.Key.StartsWith('u')) ? stat.First(s => s.Key.StartsWith('u')).Value : 0,
-                        UniqueRequestEnabledCount = stat.Any(s => s.Key.StartsWith('x')) ? stat.First(s => s.Key.StartsWith('x')).Value : 0,
-                        UsedCount = stat.Any(s => s.Key.StartsWith('v')) ? stat.First(s => s.Key.StartsWith('v')).Value : 0,
-                        UniqueUsersUsedCount = _uniqueUsageMap.TryGetValue(stat.Key, out var uniqueUsers) ? uniqueUsers.Count(s => s?.StartsWith("v") ?? false) : 0,
+                        EnabledCount = _stats.TryGetValue((keys[i], StatType.Enabled), out var enabledCount) ? enabledCount : 0,
+                        DisabledCount = _stats.TryGetValue((keys[i], StatType.Disabled), out var disabledCount) ? disabledCount : 0,
+                        Feature = keys[i],
+                        UniqueContextIdentifierDisabledCount = _uniqueUsageEnabledMap.TryGetValue(keys[i], out var uniqueIdDisabledCount) ? uniqueIdDisabledCount.Count : 0,
+                        UniqueContextIdentifierEnabledCount = _uniqueUsageEnabledMap.TryGetValue(keys[i], out var uniqueIdEnabledCount) ? uniqueIdEnabledCount.Count : 0,
+                        UniqueRequestDisabledCount = _stats.TryGetValue((keys[i], StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0,
+                        UniqueRequestEnabledCount = _stats.TryGetValue((keys[i], StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0,
+                        UsedCount = _stats.TryGetValue((keys[i], StatType.Used), out var usedCount) ? usedCount : 0,
+                        UniqueUsersUsedCount = _uniqueUsageUsedMap.TryGetValue(keys[i], out var uniqueIdUsedCount) ? uniqueIdUsedCount.Count : 0,
                     });
                 }
 
@@ -134,16 +153,17 @@ namespace Toggly.FeatureManagement
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd($"v{featureKey}", 0);
-            } while (!_stats.TryUpdate($"v{featureKey}", currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd((featureKey, StatType.Used), 0);
+            } while (!_stats.TryUpdate((featureKey, StatType.Used), currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
-                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
-                    currentUniqueValue.Add($"v{uniqueIdentifier}");
+                    var currentUniqueValue = _uniqueUsageUsedMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>());
+                    currentUniqueValue.Add(GetDeterministicHashCode(uniqueIdentifier));
+                    _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }
         }
@@ -155,16 +175,17 @@ namespace Toggly.FeatureManagement
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd($"v{featureKey}", 0);
-            } while (!_stats.TryUpdate($"v{featureKey}", currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd((featureKey, StatType.Used), 0);
+            } while (!_stats.TryUpdate((featureKey, StatType.Used), currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context).ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
-                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
-                    currentUniqueValue.Add($"v{uniqueIdentifier}");
+                    var currentUniqueValue = _uniqueUsageUsedMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>());
+                    currentUniqueValue.Add(GetDeterministicHashCode(uniqueIdentifier));
+                    _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }
         }
@@ -177,8 +198,8 @@ namespace Toggly.FeatureManagement
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd(allowed ? $"a{featureKey}" : $"d{featureKey}", 0);
-            } while (!_stats.TryUpdate(allowed ? $"a{featureKey}" : $"d{featureKey}", currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd(allowed ? (featureKey, StatType.Enabled) : (featureKey, StatType.Disabled), 0);
+            } while (!_stats.TryUpdate(allowed ? (featureKey, StatType.Enabled) : (featureKey, StatType.Disabled), currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
@@ -188,15 +209,18 @@ namespace Toggly.FeatureManagement
                     int currentRequestValue;
                     do
                     {
-                        currentRequestValue = _stats.GetOrAdd(allowed ? $"x{featureKey}" : $"u{featureKey}", 0);
-                    } while (!_stats.TryUpdate(allowed ? $"x{featureKey}" : $"u{featureKey}", currentRequestValue + 1, currentRequestValue));
+                        currentRequestValue = _stats.GetOrAdd(allowed ? (featureKey, StatType.UniqueRequestEnabled) : (featureKey, StatType.UniqueRequestDisabled), 0);
+                    } while (!_stats.TryUpdate(allowed ? (featureKey, StatType.UniqueRequestEnabled) : (featureKey, StatType.UniqueRequestDisabled), currentRequestValue + 1, currentRequestValue));
                 }
 
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
-                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
-                    currentUniqueValue.Add(allowed ? $"a{uniqueIdentifier}" : $"d{uniqueIdentifier}");
+                    if (allowed)
+                        _uniqueUsageEnabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                    else
+                        _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                    _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }
         }
@@ -210,8 +234,8 @@ namespace Toggly.FeatureManagement
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd(allowed ? $"a{featureKey}" : $"d{featureKey}", 0);
-            } while (!_stats.TryUpdate(allowed ? $"a{featureKey}" : $"d{featureKey}", currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd(allowed ? (featureKey, StatType.Enabled) : (featureKey, StatType.Disabled), 0);
+            } while (!_stats.TryUpdate(allowed ? (featureKey, StatType.Enabled) : (featureKey, StatType.Disabled), currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
@@ -221,16 +245,38 @@ namespace Toggly.FeatureManagement
                     int currentRequestValue;
                     do
                     {
-                        currentRequestValue = _stats.GetOrAdd(allowed ? $"x{featureKey}" : $"u{featureKey}", 0);
-                    } while (!_stats.TryUpdate(allowed ? $"x{featureKey}" : $"u{featureKey}", currentRequestValue + 1, currentRequestValue));
+                        currentRequestValue = _stats.GetOrAdd(allowed ? (featureKey, StatType.UniqueRequestEnabled) : (featureKey, StatType.UniqueRequestDisabled), 0);
+                    } while (!_stats.TryUpdate(allowed ? (featureKey, StatType.UniqueRequestEnabled) : (featureKey, StatType.UniqueRequestDisabled), currentRequestValue + 1, currentRequestValue));
                 }
 
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context).ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
-                    var currentUniqueValue = _uniqueUsageMap.GetOrAdd(featureKey, new HashSet<string>());
-                    currentUniqueValue.Add(allowed ? $"a{uniqueIdentifier}" : $"d{uniqueIdentifier}");
+                    if (allowed)
+                        _uniqueUsageEnabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                    else
+                        _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                    _uniqueUserMap.Add(uniqueIdentifier);
                 }
+            }
+        }
+
+        static int GetDeterministicHashCode(string str)
+        {
+            unchecked
+            {
+                int hash1 = (5381 << 16) + 5381;
+                int hash2 = hash1;
+
+                for (int i = 0; i < str.Length; i += 2)
+                {
+                    hash1 = ((hash1 << 5) + hash1) ^ str[i];
+                    if (i == str.Length - 1)
+                        break;
+                    hash2 = ((hash2 << 5) + hash2) ^ str[i + 1];
+                }
+
+                return hash1 + (hash2 * 1566083941);
             }
         }
     }

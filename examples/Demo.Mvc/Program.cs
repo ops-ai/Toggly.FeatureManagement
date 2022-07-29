@@ -29,7 +29,7 @@ namespace Demo.Mvc
             {
                 options.AppKey = builder.Configuration["Toggly:AppKey"];
                 options.Environment = builder.Configuration["Toggly:Environment"];
-                options.BaseUrl = "https://staging-app.toggly.io";
+                //options.BaseUrl = "https://staging-app.toggly.io";
             });
 
             builder.Services.AddSingleton<IDisabledFeaturesHandler, FeatureNotEnabledHandler>();
@@ -44,6 +44,8 @@ namespace Demo.Mvc
                 .WithStore(new ServiceLifetime(), (sp) => new RavenDBMultitenantStore(sp.GetRequiredService<IDocumentStore>(), sp.GetRequiredService<IMemoryCache>()))
                 .WithBasePathStrategy(opt => opt.RebaseAspNetCorePathBase = false);
             builder.Services.AddRouting(options => options.LowercaseUrls = true);
+            builder.Services.AddDistributedMemoryCache();
+            builder.Services.AddSession();
 
             var app = builder.Build();
 
@@ -57,6 +59,7 @@ namespace Demo.Mvc
             }
 
             app.UseHttpsRedirection();
+            app.UseSession();
 
             app.UseRouting();
             app.UseMultiTenant();

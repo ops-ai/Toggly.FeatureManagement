@@ -1,4 +1,5 @@
-﻿using Grpc.Net.Client;
+﻿using ConcurrentCollections;
+using Grpc.Net.Client;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -28,7 +29,7 @@ namespace Toggly.FeatureManagement
 
         private readonly IHttpClientFactory _clientFactory;
 
-        private readonly ConcurrentDictionary<(string, string?, bool), int> _stats = new ConcurrentDictionary<(string, string?, bool), int>();
+        private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), int> _stats = new ConcurrentDictionary<(string, string?, bool), int>();
 
         private readonly Timer _timer;
 
@@ -42,13 +43,13 @@ namespace Toggly.FeatureManagement
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
         /// </summary>
-        private readonly ConcurrentDictionary<string, HashSet<string>> _uniqueUsageMap = new ConcurrentDictionary<string, HashSet<string>>();
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<string>> _uniqueUsageMap = new ConcurrentDictionary<string, ConcurrentHashSet<string>>();
 
         public TogglyMetricsService(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, IFeatureDefinitionProvider featureDefinitionProvider, IFeatureManager featureManager)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
-            _baseUrl = togglySettings.Value.BaseUrl!;
+            _baseUrl = togglySettings.Value.BaseUrl ?? "https://app.toggly.io/";
             _clientFactory = clientFactory;
             _featureExperimentProvider = (IFeatureExperimentProvider)featureDefinitionProvider;
             _featureManager = featureManager;
@@ -85,15 +86,17 @@ namespace Toggly.FeatureManagement
                     Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime)
                 };
 
-                foreach (var stat in _stats.ToList().GroupBy(t => t.Key))
+                var keys = _stats.Keys.Select(t => (t.MetricKey, t.FeatureKey)).ToArray().Distinct().ToArray();
+                for (int i = 0; i < keys.Length; i++)
                 {
-                    dataPacket.Stats.Add(new MetricStatMessage
+                    var stat = new MetricStatMessage
                     {
-                        EnabledCount = stat.Any(s => s.Key.Item3) ? stat.First(s => s.Key.Item3).Value : 0,
-                        DisabledCount = stat.Any(s => !s.Key.Item3) ? stat.First(s => !s.Key.Item3).Value : 0,
-                        Feature = stat.Key.Item2,
-                        Metric = stat.Key.Item1
-                    });
+                        EnabledCount = _stats.TryGetValue((keys[i].MetricKey, keys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
+                        DisabledCount = _stats.TryGetValue((keys[i].MetricKey, keys[i].FeatureKey, false), out var disabledCount) ? disabledCount : 0,
+                        Metric = keys[i].MetricKey
+                    };
+                    if (keys[i].FeatureKey != null) stat.Feature = keys[i].FeatureKey;
+                    dataPacket.Stats.Add(stat);
                 }
 
                 _stats.Clear();
@@ -110,7 +113,7 @@ namespace Toggly.FeatureManagement
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending stats to toggly");
+                _logger.LogError(ex, "Error sending metrics to toggly");
             }
         }
 
