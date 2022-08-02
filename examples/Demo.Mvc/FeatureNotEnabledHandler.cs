@@ -18,7 +18,10 @@ namespace Demo.Mvc
 
             result.ViewData["FeatureName"] = string.Join(", ", features);
 
-            context.Result = result;
+            if (features.Contains(FeatureFlags.ComingSoon.ToString()))
+                context.Result = new RedirectToActionResult("Index", "Home", null);
+            else
+                context.Result = result;
 
             return Task.CompletedTask;
         }
