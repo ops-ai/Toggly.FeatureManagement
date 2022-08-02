@@ -2,10 +2,11 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.FeatureManagement;
 using Raven.Client.Documents;
+using Toggly.FeatureManagement;
 
 namespace Demo.Mvc.Multitenant
 {
-    public class MultitenantFeatureDefinitionProvider : IFeatureDefinitionProvider
+    public class MultitenantFeatureDefinitionProvider : IFeatureDefinitionProvider, IFeatureExperimentProvider
     {
         private readonly IDocumentStore _store;
         private readonly IMemoryCache _cache;
@@ -69,6 +70,11 @@ namespace Demo.Mvc.Multitenant
                 return updatedFeature;
 
             return new FeatureDefinition { Name = featureName, EnabledFor = new List<FeatureFilterConfiguration>() };
+        }
+
+        public List<string>? GetFeaturesForMetric(string metricKey)
+        {
+            return new List<string>();
         }
     }
 }
