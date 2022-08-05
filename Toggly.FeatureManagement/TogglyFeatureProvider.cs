@@ -55,7 +55,7 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
-            _timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 0, 5).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 5, 0));
+            _timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 5, 0));
             Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
         }
 
@@ -103,7 +103,7 @@ namespace Toggly.FeatureManagement
                     httpClient.Timeout = new TimeSpan(timeout.Value);
                 if (lastETag != null) httpClient.DefaultRequestHeaders.IfNoneMatch.Add(lastETag);
                 var newDefinitionsRequest = await httpClient.GetAsync($"definitions/{_appKey}/{_environment}").ConfigureAwait(false);
-                if (newDefinitionsRequest.StatusCode == System.Net.HttpStatusCode.NotModified)
+                if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
                     return;
 
                 newDefinitionsRequest.EnsureSuccessStatusCode();
@@ -149,7 +149,7 @@ namespace Toggly.FeatureManagement
                             _webSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
                             _webSocketClient.MessageReceived.Subscribe(msg =>
                             {
-                                if (msg.Text == "update") _ = RefreshFeatures().ConfigureAwait(false);
+                                if (msg.Text == "update") _ = RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
                             });
                             await _webSocketClient.StartOrFail().ConfigureAwait(false);
                         }

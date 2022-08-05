@@ -11,6 +11,7 @@
         ContactForm,
         HomepagePromoVideo,
         AppDownloadLinks,
-        Testimonials
+        Testimonials,
+        HomepagePhoto
     }
 }
