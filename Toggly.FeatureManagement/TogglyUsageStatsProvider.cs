@@ -1,5 +1,7 @@
 ﻿using ConcurrentCollections;
+using Grpc.Core;
 using Grpc.Net.Client;
+using Grpc.Net.Client.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -99,8 +101,21 @@ namespace Toggly.FeatureManagement
                 _logger.LogTrace("Sending stats");
                 var currentTime = DateTime.UtcNow;
 
+                var defaultMethodConfig = new MethodConfig
+                {
+                    Names = { MethodName.Default },
+                    RetryPolicy = new RetryPolicy
+                    {
+                        MaxAttempts = 5,
+                        InitialBackoff = TimeSpan.FromSeconds(1),
+                        MaxBackoff = TimeSpan.FromSeconds(5),
+                        BackoffMultiplier = 1.5,
+                        RetryableStatusCodes = { StatusCode.Unavailable, StatusCode.DataLoss, StatusCode.Aborted, StatusCode.OutOfRange, StatusCode.Cancelled, StatusCode.DeadlineExceeded }
+                    }
+                };
+
                 using var httpClient = _clientFactory.CreateClient("toggly");
-                using var channel = GrpcChannel.ForAddress(_baseUrl, new GrpcChannelOptions { HttpClient = httpClient });
+                using var channel = GrpcChannel.ForAddress(_baseUrl, new GrpcChannelOptions { HttpClient = httpClient, ServiceConfig = new ServiceConfig { MethodConfigs = { defaultMethodConfig } } });
                 var client = new Usage.UsageClient(channel);
 
                 var dataPacket = new FeatureStat
