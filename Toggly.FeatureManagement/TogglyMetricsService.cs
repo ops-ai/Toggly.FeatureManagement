@@ -106,7 +106,7 @@ namespace Toggly.FeatureManagement
                     { "UA", userAgent }
                 };
 
-                var result = await client.SendMetricsAsync(dataPacket, grpcMetadata).ConfigureAwait(false);
+                var result = await client.SendMetricsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(30)).ConfigureAwait(false);
 
                 if (result.Count != dataPacket.Stats.Count)
                     _logger.LogWarning("Metric count did not match. Possible data integrity issues");

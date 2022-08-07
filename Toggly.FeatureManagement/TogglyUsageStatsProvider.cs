@@ -135,7 +135,7 @@ namespace Toggly.FeatureManagement
                     { "UA", userAgent }
                 };
 
-                var result = await client.SendStatsAsync(dataPacket, grpcMetadata).ConfigureAwait(false);
+                var result = await client.SendStatsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(30)).ConfigureAwait(false);
 
                 if (result.FeatureCount != dataPacket.Stats.Count)
                     _logger.LogWarning("Feature count did not match. Possible data integrity issues");
