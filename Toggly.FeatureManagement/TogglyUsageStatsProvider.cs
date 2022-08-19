@@ -14,10 +14,11 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Toggly.Web;
+using static Toggly.FeatureManagement.TogglyUsageStatsProvider;
 
 namespace Toggly.FeatureManagement
 {
-    public class TogglyUsageStatsProvider : IFeatureUsageStatsProvider
+    public class TogglyUsageStatsProvider : IFeatureUsageStatsProvider, IUsageStatsDebug
     {
         private readonly string _appKey;
 
@@ -29,9 +30,9 @@ namespace Toggly.FeatureManagement
 
         private readonly IHttpClientFactory _clientFactory;
 
-        private readonly ConcurrentDictionary<(string FeatureKey, StatType Type), int> _stats = new ConcurrentDictionary<(string, StatType), int>();
+        private readonly ConcurrentDictionary<(string FeatureKey, byte Type), int> _stats = new ConcurrentDictionary<(string, byte), int>();
 
-        private enum StatType : byte
+        public enum StatType : byte
         {
             Enabled,
             Disabled,
@@ -88,6 +89,10 @@ namespace Toggly.FeatureManagement
             _uniqueUserMap.Clear();
         }
 
+        private string _lastError = string.Empty;
+        private DateTime? _lastErrorTime = null;
+        private DateTime? _lastSend = null;
+
         private async Task SendStats()
         {
             try
@@ -131,14 +136,14 @@ namespace Toggly.FeatureManagement
                 {
                     dataPacket.Stats.Add(new StatMessage
                     {
-                        EnabledCount = _stats.TryGetValue((keys[i], StatType.Enabled), out var enabledCount) ? enabledCount : 0,
-                        DisabledCount = _stats.TryGetValue((keys[i], StatType.Disabled), out var disabledCount) ? disabledCount : 0,
+                        EnabledCount = _stats.TryGetValue((keys[i], (byte)StatType.Enabled), out var enabledCount) ? enabledCount : 0,
+                        DisabledCount = _stats.TryGetValue((keys[i], (byte)StatType.Disabled), out var disabledCount) ? disabledCount : 0,
                         Feature = keys[i],
                         UniqueContextIdentifierDisabledCount = _uniqueUsageEnabledMap.TryGetValue(keys[i], out var uniqueIdDisabledCount) ? uniqueIdDisabledCount.Count : 0,
                         UniqueContextIdentifierEnabledCount = _uniqueUsageEnabledMap.TryGetValue(keys[i], out var uniqueIdEnabledCount) ? uniqueIdEnabledCount.Count : 0,
-                        UniqueRequestDisabledCount = _stats.TryGetValue((keys[i], StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0,
-                        UniqueRequestEnabledCount = _stats.TryGetValue((keys[i], StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0,
-                        UsedCount = _stats.TryGetValue((keys[i], StatType.Used), out var usedCount) ? usedCount : 0,
+                        UniqueRequestDisabledCount = _stats.TryGetValue((keys[i], (byte)StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0,
+                        UniqueRequestEnabledCount = _stats.TryGetValue((keys[i], (byte)StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0,
+                        UsedCount = _stats.TryGetValue((keys[i], (byte)StatType.Used), out var usedCount) ? usedCount : 0,
                         UniqueUsersUsedCount = _uniqueUsageUsedMap.TryGetValue(keys[i], out var uniqueIdUsedCount) ? uniqueIdUsedCount.Count : 0,
                     });
                 }
@@ -154,10 +159,15 @@ namespace Toggly.FeatureManagement
 
                 if (result.FeatureCount != dataPacket.Stats.Count)
                     _logger.LogWarning("Feature count did not match. Possible data integrity issues");
+                
+                _lastSend = DateTime.UtcNow;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sending stats to toggly");
+                
+                _lastError = ex.Message;
+                _lastErrorTime = DateTime.UtcNow;
             }
         }
 
@@ -168,8 +178,8 @@ namespace Toggly.FeatureManagement
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd((featureKey, StatType.Used), 0);
-            } while (!_stats.TryUpdate((featureKey, StatType.Used), currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd((featureKey, (byte)StatType.Used), 0);
+            } while (!_stats.TryUpdate((featureKey, (byte)StatType.Used), currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
@@ -190,8 +200,8 @@ namespace Toggly.FeatureManagement
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd((featureKey, StatType.Used), 0);
-            } while (!_stats.TryUpdate((featureKey, StatType.Used), currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd((featureKey, (byte)StatType.Used), 0);
+            } while (!_stats.TryUpdate((featureKey, (byte)StatType.Used), currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
@@ -213,8 +223,8 @@ namespace Toggly.FeatureManagement
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd(allowed ? (featureKey, StatType.Enabled) : (featureKey, StatType.Disabled), 0);
-            } while (!_stats.TryUpdate(allowed ? (featureKey, StatType.Enabled) : (featureKey, StatType.Disabled), currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd(allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled), 0);
+            } while (!_stats.TryUpdate(allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled), currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
@@ -224,8 +234,8 @@ namespace Toggly.FeatureManagement
                     int currentRequestValue;
                     do
                     {
-                        currentRequestValue = _stats.GetOrAdd(allowed ? (featureKey, StatType.UniqueRequestEnabled) : (featureKey, StatType.UniqueRequestDisabled), 0);
-                    } while (!_stats.TryUpdate(allowed ? (featureKey, StatType.UniqueRequestEnabled) : (featureKey, StatType.UniqueRequestDisabled), currentRequestValue + 1, currentRequestValue));
+                        currentRequestValue = _stats.GetOrAdd(allowed ? (featureKey, (byte)StatType.UniqueRequestEnabled) : (featureKey, (byte)StatType.UniqueRequestDisabled), 0);
+                    } while (!_stats.TryUpdate(allowed ? (featureKey, (byte)StatType.UniqueRequestEnabled) : (featureKey, (byte)StatType.UniqueRequestDisabled), currentRequestValue + 1, currentRequestValue));
                 }
 
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
@@ -249,8 +259,8 @@ namespace Toggly.FeatureManagement
             int currentValue;
             do
             {
-                currentValue = _stats.GetOrAdd(allowed ? (featureKey, StatType.Enabled) : (featureKey, StatType.Disabled), 0);
-            } while (!_stats.TryUpdate(allowed ? (featureKey, StatType.Enabled) : (featureKey, StatType.Disabled), currentValue + 1, currentValue));
+                currentValue = _stats.GetOrAdd(allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled), 0);
+            } while (!_stats.TryUpdate(allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled), currentValue + 1, currentValue));
 
             if (_contextProvider != null)
             {
@@ -260,8 +270,8 @@ namespace Toggly.FeatureManagement
                     int currentRequestValue;
                     do
                     {
-                        currentRequestValue = _stats.GetOrAdd(allowed ? (featureKey, StatType.UniqueRequestEnabled) : (featureKey, StatType.UniqueRequestDisabled), 0);
-                    } while (!_stats.TryUpdate(allowed ? (featureKey, StatType.UniqueRequestEnabled) : (featureKey, StatType.UniqueRequestDisabled), currentRequestValue + 1, currentRequestValue));
+                        currentRequestValue = _stats.GetOrAdd(allowed ? (featureKey, (byte)StatType.UniqueRequestEnabled) : (featureKey, (byte)StatType.UniqueRequestDisabled), 0);
+                    } while (!_stats.TryUpdate(allowed ? (featureKey, (byte)StatType.UniqueRequestEnabled) : (featureKey, (byte)StatType.UniqueRequestDisabled), currentRequestValue + 1, currentRequestValue));
                 }
 
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context).ConfigureAwait(false);
@@ -294,5 +304,51 @@ namespace Toggly.FeatureManagement
                 return hash1 + (hash2 * 1566083941);
             }
         }
+
+        public UsageStatsDebugInfo GetDebugInfo()
+        {
+            return new UsageStatsDebugInfo
+            {
+                AppKey = _appKey,
+                BaseUrl = _baseUrl,
+                Environment = _environment,
+                //Stats = _stats,
+                UniqueUsageEnabledMap = _uniqueUsageEnabledMap,
+                UniqueUsageDisabledMap = _uniqueUsageDisabledMap,
+                UniqueUsageUsedMap = _uniqueUsageUsedMap,
+                UniqueUserMap = _uniqueUserMap,
+                UserAgent = userAgent,
+                LastError = _lastError,
+                LastErrorTime = _lastErrorTime,
+                LastSend = _lastSend
+            };
+        }
+    }
+
+    public class UsageStatsDebugInfo
+    {
+        public string? AppKey { get; set; }
+
+        public string? Environment { get; set; }
+
+        public string? BaseUrl { get; set; }
+
+        //public ConcurrentDictionary<(string FeatureKey, byte Type), int>? Stats { get; set; }
+
+        public ConcurrentDictionary<string, ConcurrentHashSet<int>>? UniqueUsageEnabledMap { get; set; }
+
+        public ConcurrentDictionary<string, ConcurrentHashSet<int>>? UniqueUsageDisabledMap { get; set; }
+
+        public ConcurrentDictionary<string, ConcurrentHashSet<int>>? UniqueUsageUsedMap { get; set; }
+
+        public HashSet<string>? UniqueUserMap { get; set; }
+
+        public string? UserAgent { get; set; }
+
+        public string? LastError { get; set; }
+
+        public DateTime? LastErrorTime { get; set; }
+
+        public DateTime? LastSend { get; set; }
     }
 }

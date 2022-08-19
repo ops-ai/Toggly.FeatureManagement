@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Session;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
 using Microsoft.FeatureManagement.Mvc;
+using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.Web.Configuration;
 
 namespace Demo.Mvc
@@ -60,6 +61,12 @@ namespace Demo.Mvc
             {
                 endpoints.MapControllerRoute("default", "{action=Index}", new { controller = "Home" });
                 endpoints.MapControllerRoute("default", "{controller=Home}/{action=Index}", new { controller = "Home" });
+                endpoints.MapGet("/feature-debug", async ctx => await ctx.Response.WriteAsJsonAsync(new
+                {
+                    Metrics = ctx.RequestServices.GetRequiredService<IMetricsDebug>().GetDebugInfo(),
+                    UsageStats = ctx.RequestServices.GetRequiredService<IUsageStatsDebug>().GetDebugInfo(),
+                    FeatureProvider = ctx.RequestServices.GetRequiredService<IFeatureProviderDebug>().GetDebugInfo(),
+                }));
                 endpoints.MapFallbackToController("404", "NotFound", "Home");
             });
 

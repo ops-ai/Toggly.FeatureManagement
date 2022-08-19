@@ -20,7 +20,7 @@ using Websocket.Client;
 
 namespace Toggly.FeatureManagement
 {
-    public class TogglyFeatureProvider : IFeatureDefinitionProvider, IDisposable, IFeatureExperimentProvider
+    public class TogglyFeatureProvider : IFeatureDefinitionProvider, IDisposable, IFeatureExperimentProvider, IFeatureProviderDebug
     {
         private readonly string _appKey;
 
@@ -90,6 +90,10 @@ namespace Toggly.FeatureManagement
             }
         }
 
+        private string _lastError = string.Empty;
+        private DateTime? _lastErrorTime = null;
+        private DateTime? _lastRefresh = null;
+
         private async Task RefreshFeatures(long? timeout = null)
         {
             try
@@ -154,14 +158,23 @@ namespace Toggly.FeatureManagement
                             await _webSocketClient.StartOrFail().ConfigureAwait(false);
                         }
                     }
+                    else
+                    {
+                        _lastErrorTime = DateTime.UtcNow;
+                        _lastError = await liveUpdateResponse.Content.ReadAsStringAsync();
+                    }
                 }
 
                 if (_snapshotProvider != null)
                     await _snapshotProvider.SaveSnapshotAsync(newDefinitions).ConfigureAwait(false);
+
+                _lastRefresh = DateTime.UtcNow;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error refreshing features list");
+                _lastError = ex.Message;
+                _lastErrorTime = DateTime.UtcNow;
                 if (!_loaded)
                 {
                     await LoadSnapshot().ConfigureAwait(false);
@@ -215,5 +228,45 @@ namespace Toggly.FeatureManagement
                 return features.ToList();
             return null;
         }
+
+        public FeatureProviderDebugInfo GetDebugInfo()
+        {
+            return new FeatureProviderDebugInfo
+            {
+                AppKey = _appKey,
+                Environment = _environment,
+                Definitions = _definitions,
+                Experiments = _experiments,
+                UserAgent = new ProductInfoHeaderValue("Toggly.FeatureManagement", Version).ToString(),
+                LastError = _lastError,
+                LastErrorTime = _lastErrorTime,
+                LastRefresh = _lastRefresh,
+                WebsocketClientRunning = _webSocketClient?.IsRunning ?? false,
+                Loaded = _loaded
+            };
+        }
+    }
+
+    public class FeatureProviderDebugInfo
+    {
+        public string? AppKey { get; set; }
+
+        public string? Environment { get; set; }
+
+        public ConcurrentDictionary<string, FeatureDefinition>? Definitions { get; set; }
+
+        public ConcurrentDictionary<string, ConcurrentHashSet<string>>? Experiments { get; set; }
+
+        public string? UserAgent { get; set; }
+
+        public string? LastError { get; set; }
+
+        public DateTime? LastErrorTime { get; set; }
+
+        public DateTime? LastRefresh { get; set; }
+
+        public bool WebsocketClientRunning { get; set; }
+
+        public bool Loaded { get; set; }
     }
 }

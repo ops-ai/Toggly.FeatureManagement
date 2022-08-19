@@ -62,9 +62,17 @@ namespace Toggly.FeatureManagement.Configuration
                 return handler;
             });
 
-            services.AddSingleton<IFeatureDefinitionProvider, TogglyFeatureProvider>();
-            services.AddSingleton<IFeatureUsageStatsProvider, TogglyUsageStatsProvider>();
-            services.AddSingleton<IMetricsService, TogglyMetricsService>();
+            services.AddSingleton<TogglyFeatureProvider>();
+            services.AddSingleton<IFeatureDefinitionProvider>(x => x.GetRequiredService<TogglyFeatureProvider>());
+            services.AddSingleton<IFeatureProviderDebug>(x => x.GetRequiredService<TogglyFeatureProvider>());
+
+            services.AddSingleton<TogglyUsageStatsProvider>();
+            services.AddSingleton<IFeatureUsageStatsProvider>(x => x.GetRequiredService<TogglyUsageStatsProvider>());
+            services.AddSingleton<IUsageStatsDebug>(x => x.GetRequiredService<TogglyUsageStatsProvider>());
+
+            services.AddSingleton<TogglyMetricsService>();
+            services.AddSingleton<IMetricsService>(x => x.GetRequiredService<TogglyMetricsService>());
+            services.AddSingleton<IMetricsDebug>(x => x.GetRequiredService<TogglyMetricsService>());
         }
 
         public static IServiceCollection AddTogglyFeatureManagement(this IServiceCollection services)

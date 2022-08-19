@@ -19,7 +19,7 @@ using Toggly.Web;
 
 namespace Toggly.FeatureManagement
 {
-    public class TogglyMetricsService : IMetricsService
+    public class TogglyMetricsService : IMetricsService, IMetricsDebug
     {
         private readonly string _appKey;
 
@@ -64,6 +64,10 @@ namespace Toggly.FeatureManagement
             var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
             userAgent = $"Toggly.FeatureManagement/{version}";
         }
+
+        private string _lastError = string.Empty;
+        private DateTime? _lastErrorTime = null;
+        private DateTime? _lastSend = null;
 
         private async Task SendMetrics()
         {
@@ -125,10 +129,14 @@ namespace Toggly.FeatureManagement
 
                 if (result.Count != dataPacket.Stats.Count)
                     _logger.LogWarning("Metric count did not match. Possible data integrity issues");
+
+                _lastSend = DateTime.UtcNow;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sending metrics to toggly");
+                _lastError = ex.Message;
+                _lastErrorTime = DateTime.UtcNow;
             }
         }
 
@@ -139,7 +147,6 @@ namespace Toggly.FeatureManagement
             {
                 currentValue = _stats.GetOrAdd((metricKey, featureKey, enabled), 0);
             } while (!_stats.TryUpdate((metricKey, featureKey, enabled), currentValue + value, currentValue));
-
         }
 
         public async Task AddMetricAsync(string metricKey, int value)
@@ -163,5 +170,39 @@ namespace Toggly.FeatureManagement
                 foreach (var feature in features)
                     AddMetricValue(metricKey, feature, value, await _featureManager.IsEnabledAsync(feature, context));
         }
+
+        public MetricsDebugInfo GetDebugInfo()
+        {
+            return new MetricsDebugInfo
+            {
+                AppKey = _appKey,
+                BaseUrl = _baseUrl,
+                Environment = _environment,
+                //Stats = _stats,
+                UserAgent = userAgent,
+                LastError = _lastError,
+                LastErrorTime = _lastErrorTime,
+                LastSend = _lastSend
+            };
+        }
+    }
+
+    public class MetricsDebugInfo
+    {
+        public string? AppKey { get; set; }
+
+        public string? Environment { get; set; }
+
+        public string? BaseUrl { get; set; }
+
+        public ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), int>? Stats { get; set; }
+
+        public string? UserAgent { get; set; }
+
+        public string? LastError { get; set; }
+
+        public DateTime? LastErrorTime { get; set; }
+
+        public DateTime? LastSend { get; set; }
     }
 }
