@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="https://localhost:44301/9ff6fcc9-fd83-4dd9-8495-9f6fa980c386/defs.css" />
 </head>
 <body>
+    <h2>Currently enabled features</h2>
     <div feature-key="Test1">Test 1 is enabled</div>
     <div feature-key="Test2">Test 2 is enabled</div>
     <div feature-key="Test3">Test 3 is enabled</div>
@@ -14,6 +15,7 @@
     <div feature-key="off1">off1 is enabled</div>
     <div feature-key="off2">off2 is enabled</div><br />
 
+    <h2>Currently disabled features (negate flag)</h2>
     <div feature-key="Test1" negate="true">Test 1 is not enabled</div>
     <div feature-key="Test2" negate="true">Test 2 is not enabled</div>
     <div feature-key="Test3" negate="true">Test 3 is not enabled</div>
@@ -22,18 +24,23 @@
     <div feature-key="off1" negate="true">off1 is not enabled</div>
     <div feature-key="off2" negate="true">off2 is not enabled</div>
 
-    <br /><br /><br />
-    <h2>Advanced</h2>
+    <h2>Feature combinations <small>(default condition is visible if any flags listed are on)</small></h2>
 
-    <div feature-key="on on2">Both on is on</div>
-    <div feature-key="off1 off2">Both off is off</div>
-    <div feature-key="on off1">One off is off</div>
-    <div feature-key="off1 off2" negate="true">This should be visible</div>
+    <div feature-key="on on2">Both on and on2 are on -> visible</div>
+    <div feature-key="off1 off2">Both off and off2 are off -> hidden</div>
+    <div feature-key="on off1">Either on or off1 is on -> visible</div>
 
+    <h2>Feature combinations negate<small>(default condition is hidden if any flags listed are on)</small></h2>
+    <div feature-key="off1 off2" negate="true">Either off1 or off2 is off (negate) -> visible</div>
+    <div feature-key="on on2" negate="true">Either on or on2 is on (negate) -> hidden</div>
+
+    <h2>Feature-condition</h2>
     <div feature-key="on on2 Test1" feature-condition="any">Any of on on2 or Test1 are enabled</div>
     <div feature-key="on on2 Test1" feature-condition="all">All of on on2 and Test1 are enabled</div>
 
     <h2>Negate advanced</h2>
-    <div feature-key="on on2 Test1" feature-condition="any" negate="true">All of on on2 and Test1 are enabled</div>
+    <div feature-key="on on2 Test1" feature-condition="any" negate="true">All of on on2 and Test1 are enabled (negate) -> visible</div>
+    <div feature-key="off1 off2 Test1" feature-condition="any" negate="true">If any of off1, off2 or Test1 are off -> hide. If all 3 are off -> visible</div>
+    <div feature-key="undefined">Undefined feature is hidden</div>
 </body>
 </html>
