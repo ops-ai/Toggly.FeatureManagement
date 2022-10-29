@@ -3,15 +3,37 @@
 <head>
     <meta charset="utf-8" />
     <title>Toggly Feature Demo</title>
-    <link rel="stylesheet" href="https://client.toggly.io/9ff6fcc9-fd83-4dd9-8495-9f6fa980c386/defs.css" />
+    <link rel="stylesheet" href="https://localhost:44301/9ff6fcc9-fd83-4dd9-8495-9f6fa980c386/defs.css" />
 </head>
 <body>
     <div feature-key="Test1">Test 1 is enabled</div>
     <div feature-key="Test2">Test 2 is enabled</div>
     <div feature-key="Test3">Test 3 is enabled</div>
+    <div feature-key="on">on is enabled</div>
+    <div feature-key="on2">on2 is enabled</div>
+    <div feature-key="off1">off1 is enabled</div>
+    <div feature-key="off2">off2 is enabled</div><br />
 
-    <div feature-key-not="Test1">Test 1 is not enabled</div>
-    <div feature-key-not="Test2">Test 2 is not enabled</div>
-    <div feature-key-not="Test3">Test 3 is not enabled</div>
+    <div feature-key="Test1" negate="true">Test 1 is not enabled</div>
+    <div feature-key="Test2" negate="true">Test 2 is not enabled</div>
+    <div feature-key="Test3" negate="true">Test 3 is not enabled</div>
+    <div feature-key="on" negate="true">on is not enabled</div>
+    <div feature-key="on2" negate="true">on2 is not enabled</div>
+    <div feature-key="off1" negate="true">off1 is not enabled</div>
+    <div feature-key="off2" negate="true">off2 is not enabled</div>
+
+    <br /><br /><br />
+    <h2>Advanced</h2>
+
+    <div feature-key="on on2">Both on is on</div>
+    <div feature-key="off1 off2">Both off is off</div>
+    <div feature-key="on off1">One off is off</div>
+    <div feature-key="off1 off2" negate="true">This should be visible</div>
+
+    <div feature-key="on on2 Test1" feature-condition="any">Any of on on2 or Test1 are enabled</div>
+    <div feature-key="on on2 Test1" feature-condition="all">All of on on2 and Test1 are enabled</div>
+
+    <h2>Negate advanced</h2>
+    <div feature-key="on on2 Test1" feature-condition="any" negate="true">All of on on2 and Test1 are enabled</div>
 </body>
 </html>
