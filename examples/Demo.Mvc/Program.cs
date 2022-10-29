@@ -1,6 +1,4 @@
-using Microsoft.AspNetCore.Session;
 using Microsoft.FeatureManagement;
-using Microsoft.FeatureManagement.FeatureFilters;
 using Microsoft.FeatureManagement.Mvc;
 using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.Web.Configuration;
