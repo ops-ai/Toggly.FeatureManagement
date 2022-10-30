@@ -1,0 +1,17 @@
+name: toggly
+description: Toggly dart client package.
+publish_to: none
+
+environment:
+  sdk: ">=2.12.0-0 <3.0.0"
+
+dependencies:
+  equatable: ^2.0.0
+  uuid: ^3.0.0
+  rxdart: ^0.27.5
+  http_service:
+    path: packages/http_service
+  secure_storage_repository:
+    path: packages/secure_storage_repository
+  sync_repository:
+    path: packages/sync_repository
