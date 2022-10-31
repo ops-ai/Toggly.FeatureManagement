@@ -142,13 +142,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  http:
-    dependency: transitive
-    description:
-      name: http
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "0.13.5"
   http_parser:
     dependency: transitive
     description:
@@ -156,13 +149,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "4.0.2"
-  http_service:
-    dependency: transitive
-    description:
-      path: "packages/toggly/packages/http_service"
-      relative: true
-    source: path
-    version: "0.0.0"
   js:
     dependency: transitive
     description:
@@ -219,13 +205,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.27.5"
-  secure_storage_repository:
-    dependency: transitive
-    description:
-      path: "packages/toggly/packages/secure_storage_repository"
-      relative: true
-    source: path
-    version: "0.0.0"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -259,13 +238,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.1.1"
-  sync_repository:
-    dependency: transitive
-    description:
-      path: "packages/toggly/packages/sync_repository"
-      relative: true
-    source: path
-    version: "0.0.0"
   term_glyph:
     dependency: transitive
     description:

@@ -49,6 +49,10 @@ class _MyHomePageState extends State<MyHomePage> {
       apiKey: '9ff6fcc9-fd83-4dd9-8495-9f6fa980c386',
       environment: 'Production',
       identity: '2',
+      config: const TogglyConfig(
+        featureFlagsRefreshInterval: 10 * 1000,
+        isDebug: true,
+      ),
     );
   }
 
@@ -64,7 +68,7 @@ class _MyHomePageState extends State<MyHomePage> {
           children: <Widget>[
             const Feature(
               featureKeys: ['Test1', 'Test3', 'on'],
-              requirement: FeatureRequirement.all,
+              requirement: FeatureRequirement.any,
               child: Text(
                 'You have pushed the button this many times:',
               ),
@@ -84,7 +88,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
       ),
       floatingActionButton: Feature(
-        featureKeys: const ['Test1'],
+        featureKeys: const ['on'],
         child: FloatingActionButton(
           onPressed: _incrementCounter,
           tooltip: 'Increment',

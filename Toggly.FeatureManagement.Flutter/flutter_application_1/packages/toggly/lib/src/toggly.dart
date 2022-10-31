@@ -1,21 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:http_service/http_service.dart';
-import 'package:secure_storage_repository/secure_storage_repository.dart';
 import 'package:toggly/toggly.dart';
 import 'package:uuid/uuid.dart';
 import 'package:rxdart/rxdart.dart';
 
 class Toggly {
   static Uuid uuid = Uuid();
-  static late String apiKey;
-  static late String environment = 'Production';
-  static late String identity;
-  static late TogglyConfig config;
-  static late Map<String, bool> flagDefaults = {};
-  static final http = HttpService.getInstance.http;
-  static final storage = SecureStorageRepository.getInstance;
+  static late String _apiKey;
+  static late String _environment = 'Production';
+  static late String _identity;
+  static late TogglyConfig _config;
+  static late Map<String, bool> _flagDefaults = {};
+  static final _http = HttpService.getInstance.http;
+  static final _storage = SecureStorageService.getInstance;
+  static final _sync = SyncService.getInstance;
   static final _featureFlagsSubject = BehaviorSubject<Map<String, bool>>();
 
   static final Toggly _instance = Toggly._internal();
@@ -31,21 +30,29 @@ class Toggly {
     TogglyConfig config = const TogglyConfig(),
     Map<String, bool>? flagDefaults,
   }) async {
-    Toggly.apiKey = apiKey;
-    Toggly.environment = environment ?? 'Production';
-    Toggly.identity = identity ?? uuid.v4();
-    Toggly.config = config;
-    Toggly.flagDefaults = flagDefaults ?? {};
+    Toggly._apiKey = apiKey;
+    Toggly._environment = environment ?? 'Production';
+    Toggly._identity = identity ?? uuid.v4();
+    Toggly._config = config;
+    Toggly._flagDefaults = flagDefaults ?? {};
+
+    if (Toggly._config.isDebug) {
+      print('Toggly.init');
+    }
+
+    Toggly.startTimers();
 
     return await Toggly.refresh();
   }
 
   static Future<TogglyInitResponse> refresh() async {
-    print('Toggly.init');
+    if (Toggly._config.isDebug) {
+      print('Toggly.refresh');
+    }
 
     try {
       // Try to fetch flags from the API
-      var flags = await Toggly.fetchFeatureFlags();
+      await Toggly.fetchFeatureFlags();
 
       return TogglyInitResponse(
         status: TogglyLoadFeatureFlagsResponse.fetched,
@@ -57,11 +64,13 @@ class Toggly {
 
       if (flags == null) {
         // Otherwise use provided default flags
-        flags = Toggly.flagDefaults;
+        flags = Toggly._flagDefaults;
         status = TogglyLoadFeatureFlagsResponse.defaults;
       }
 
-      print('Toggly.loadedFromCache - ' + jsonEncode(flags));
+      if (Toggly._config.isDebug) {
+        print('Toggly.loadedFromCache - ' + jsonEncode(flags));
+      }
 
       Toggly._featureFlagsSubject.add(flags);
 
@@ -71,32 +80,29 @@ class Toggly {
     }
   }
 
+  static Future<TogglyInitResponse> setIdentity(String? identity) async {
+    Toggly._identity = identity ?? uuid.v4();
+    return await Toggly.refresh();
+  }
+
   static Future<Map<String, bool>> get featureFlags async {
     try {
       return await Toggly.cachedFeatureFlags ?? await fetchFeatureFlags();
     } catch (_) {
-      return Toggly.flagDefaults;
+      return Toggly._flagDefaults;
     }
-    // try {
-    //   String? cachedFlagsJson = await storage.get(
-    //       key: '${SecureStorageKeys.featureFlagsCache}/${Toggly.identity}');
-
-    //   return cachedFlagsJson != null
-    //       ? Map<String, bool>.from(jsonDecode(cachedFlagsJson))
-    //       : await fetchFeatureFlags();
-    // } catch (_) {
-    //   return Toggly.flagDefaults;
-    // }
   }
 
   static Future<Map<String, bool>?> get cachedFeatureFlags async {
     try {
-      String? cachedFlagsJson = await storage.get(
-          key: '${SecureStorageKeys.featureFlagsCache}/${Toggly.identity}');
+      String? cache = await _storage.get(
+          key: SecureStorageKeys.featureFlagsCache.toString());
 
-      return cachedFlagsJson != null
-          ? Map<String, bool>.from(jsonDecode(cachedFlagsJson))
-          : null;
+      TogglyFeatureFlagsCache flagsCache = TogglyFeatureFlagsCache.fromJson(
+        jsonDecode(cache!),
+      );
+
+      return flagsCache.identity == Toggly._identity ? flagsCache.flags : null;
     } catch (_) {
       return null;
     }
@@ -105,22 +111,25 @@ class Toggly {
   static void cacheFeatureFlags({
     required Map<String, bool> featureFlags,
   }) async {
-    await storage.set(
-      key: '${SecureStorageKeys.featureFlagsCache}/${Toggly.identity}',
-      value: jsonEncode(featureFlags),
+    await _storage.set(
+      key: SecureStorageKeys.featureFlagsCache.toString(),
+      value: jsonEncode(TogglyFeatureFlagsCache(
+        identity: Toggly._identity,
+        flags: featureFlags,
+      )),
     );
   }
 
   static void clearFeatureFlagsCache() async {
-    await storage.delete(
-      key: '${SecureStorageKeys.featureFlagsCache}/${Toggly.identity}',
+    await _storage.delete(
+      key: SecureStorageKeys.featureFlagsCache.toString(),
     );
   }
 
   static Future<Map<String, bool>> fetchFeatureFlags() async {
     try {
-      final response = await http.get(
-        '${Toggly.config.baseURI}/${Toggly.apiKey}-${Toggly.environment}/defs?u=${Toggly.identity}',
+      final response = await _http.get(
+        '${Toggly._config.baseURI}/${Toggly._apiKey}-${Toggly._environment}/defs?u=${Toggly._identity}',
         queryParameters: {},
       );
 
@@ -135,7 +144,9 @@ class Toggly {
 
       Toggly._featureFlagsSubject.add(flags);
 
-      print('Toggly.fetchFeatureFlags - ' + jsonEncode(flags));
+      if (Toggly._config.isDebug) {
+        print('Toggly.fetchFeatureFlags - ' + jsonEncode(flags));
+      }
 
       return flags;
     } catch (_) {
@@ -163,7 +174,9 @@ class Toggly {
       });
     }
 
-    print('Toggly.featureGateFuture - ' + jsonEncode(gate));
+    if (Toggly._config.isDebug) {
+      print('Toggly.featureGateFuture - ' + jsonEncode(gate));
+    }
 
     return negate ? !isEnabled : isEnabled;
   }
@@ -182,6 +195,27 @@ class Toggly {
   }
 
   void dispose() {
+    cancelTimers();
     Toggly._featureFlagsSubject.close();
+  }
+
+  static void startTimers() {
+    cancelTimers();
+
+    Toggly._sync.refreshFeatureFlagsTimer = Timer.periodic(
+      Duration(milliseconds: Toggly._config.featureFlagsRefreshInterval),
+      (timer) async {
+        if (Toggly._config.isDebug) {
+          print(
+              'Toggly.syncFeatureFlags - every ${Toggly._config.featureFlagsRefreshInterval / 1000}s');
+        }
+
+        await Toggly.refresh();
+      },
+    );
+  }
+
+  static void cancelTimers() {
+    Toggly._sync.refreshFeatureFlagsTimer?.cancel();
   }
 }
