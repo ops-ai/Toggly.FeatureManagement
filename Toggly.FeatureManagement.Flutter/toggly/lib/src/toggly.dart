@@ -6,12 +6,12 @@ import 'package:uuid/uuid.dart';
 import 'package:rxdart/rxdart.dart';
 
 class Toggly {
-  static Uuid uuid = Uuid();
-  static late String _apiKey;
-  static late String _environment = 'Production';
+  static Uuid uuid = const Uuid();
+  static late String? _apiKey;
+  static String _environment = 'Production';
   static late String _identity;
   static late TogglyConfig _config;
-  static late Map<String, bool> _flagDefaults = {};
+  static Map<String, bool> _flagDefaults = {};
   static final _http = HttpService.getInstance.http;
   static final _storage = SecureStorageService.getInstance;
   static final _sync = SyncService.getInstance;
@@ -24,7 +24,7 @@ class Toggly {
   factory Toggly() => _instance;
 
   static Future<TogglyInitResponse> init({
-    required String apiKey,
+    String? apiKey,
     String? environment,
     String? identity,
     TogglyConfig config = const TogglyConfig(),
@@ -50,6 +50,15 @@ class Toggly {
       print('Toggly.refresh');
     }
 
+    // In case there is no API key provided, only the flag defaults shall be used
+    if (Toggly._apiKey == null) {
+      Toggly._featureFlagsSubject.add(Toggly._flagDefaults);
+
+      return TogglyInitResponse(
+        status: TogglyLoadFeatureFlagsResponse.defaults,
+      );
+    }
+
     try {
       // Try to fetch flags from the API
       await Toggly.fetchFeatureFlags();
@@ -69,7 +78,7 @@ class Toggly {
       }
 
       if (Toggly._config.isDebug) {
-        print('Toggly.loadedFromCache - ' + jsonEncode(flags));
+        print('Toggly.loadedFromCache - ${jsonEncode(flags)}');
       }
 
       Toggly._featureFlagsSubject.add(flags);
@@ -87,6 +96,10 @@ class Toggly {
 
   static Future<Map<String, bool>> get featureFlags async {
     try {
+      if (Toggly._apiKey == null) {
+        throw TogglyMissingApiKeyException();
+      }
+
       return await Toggly.cachedFeatureFlags ?? await fetchFeatureFlags();
     } catch (_) {
       return Toggly._flagDefaults;
@@ -126,6 +139,10 @@ class Toggly {
     );
   }
 
+  static Map<String, bool> get featureFlagDefaults {
+    return Toggly._flagDefaults;
+  }
+
   static Future<Map<String, bool>> fetchFeatureFlags() async {
     try {
       final response = await _http.get(
@@ -134,10 +151,6 @@ class Toggly {
       );
 
       Map<String, bool> flags = Map<String, bool>.from(response.data);
-      // Map<String, bool> flags = Map<String, bool>.from(
-      //   jsonDecode(
-      //       '{"Test1": true, "Test2": true, "Test3": false, "On": false}'),
-      // );
 
       // Cache flags on successful response
       Toggly.cacheFeatureFlags(featureFlags: flags);
@@ -145,7 +158,7 @@ class Toggly {
       Toggly._featureFlagsSubject.add(flags);
 
       if (Toggly._config.isDebug) {
-        print('Toggly.fetchFeatureFlags - ' + jsonEncode(flags));
+        print('Toggly.fetchFeatureFlags - ${jsonEncode(flags)}');
       }
 
       return flags;
@@ -154,12 +167,12 @@ class Toggly {
     }
   }
 
-  static Future<bool> evaluateFeatureGate(
+  static bool evaluateFeatureGate(
     Map<String, bool> flags, {
     required List<String> gate,
     FeatureRequirement requirement = FeatureRequirement.all,
     bool negate = false,
-  }) async {
+  }) {
     late bool isEnabled;
 
     if (requirement == FeatureRequirement.any) {
@@ -175,7 +188,7 @@ class Toggly {
     }
 
     if (Toggly._config.isDebug) {
-      print('Toggly.featureGateFuture - ' + jsonEncode(gate));
+      print('Toggly.featureGateFuture - ${jsonEncode(gate)}');
     }
 
     return negate ? !isEnabled : isEnabled;
@@ -188,7 +201,7 @@ class Toggly {
   }) async {
     return Toggly._featureFlagsSubject.whereNotNull().switchMap(
       (flags) async* {
-        yield await Toggly.evaluateFeatureGate(flags,
+        yield Toggly.evaluateFeatureGate(flags,
             gate: gate, requirement: requirement, negate: negate);
       },
     ).first;
@@ -202,17 +215,20 @@ class Toggly {
   static void startTimers() {
     cancelTimers();
 
-    Toggly._sync.refreshFeatureFlagsTimer = Timer.periodic(
-      Duration(milliseconds: Toggly._config.featureFlagsRefreshInterval),
-      (timer) async {
-        if (Toggly._config.isDebug) {
-          print(
-              'Toggly.syncFeatureFlags - every ${Toggly._config.featureFlagsRefreshInterval / 1000}s');
-        }
+    // Automatic refresh only runs if there is an API key provided
+    if (Toggly._apiKey != null) {
+      Toggly._sync.refreshFeatureFlagsTimer = Timer.periodic(
+        Duration(milliseconds: Toggly._config.featureFlagsRefreshInterval),
+        (timer) async {
+          if (Toggly._config.isDebug) {
+            print(
+                'Toggly.syncFeatureFlags - every ${Toggly._config.featureFlagsRefreshInterval / 1000}s');
+          }
 
-        await Toggly.refresh();
-      },
-    );
+          await Toggly.refresh();
+        },
+      );
+    }
   }
 
   static void cancelTimers() {

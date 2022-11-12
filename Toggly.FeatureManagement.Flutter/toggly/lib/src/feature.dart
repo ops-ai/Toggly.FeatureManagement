@@ -4,7 +4,7 @@ import '../toggly.dart';
 enum FeatureRequirement { any, all }
 
 class Feature extends StatefulWidget {
-  const Feature({
+  Feature({
     Key? key,
     required this.child,
     required this.featureKeys,
@@ -24,6 +24,8 @@ class Feature extends StatefulWidget {
 class _FeatureState extends State<Feature> {
   _FeatureState();
 
+  bool? previousResult;
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
@@ -34,10 +36,11 @@ class _FeatureState extends State<Feature> {
       ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {
+          previousResult = snapshot.data;
           return snapshot.data == true ? widget.child : const SizedBox();
         }
 
-        return SizedBox();
+        return previousResult == true ? widget.child : const SizedBox();
       },
     );
   }

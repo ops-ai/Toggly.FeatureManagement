@@ -52,7 +52,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void initToggly() async {
     await Toggly.init(
-      apiKey: '9ff6fcc9-fd83-4dd9-8495-9f6fa980c386',
+      flagDefaults: {
+        "ExampleDescription": true,
+        "ResetCounterButton": true,
+      },
       environment: 'Production',
       identity: 'random-user-identifier',
       config: const TogglyConfig(
@@ -65,27 +68,14 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Feature(
-              featureKeys: ['Test1', 'Test2'],
+            Feature(
+              featureKeys: const ['ExampleDescription'],
               requirement: FeatureRequirement.any,
-              child: Padding(
-                padding: EdgeInsets.only(bottom: 60.0),
-                child: Text(
-                  'Take Control of Your App',
-                  style: TextStyle(
-                    color: Color(0xFF556ee6),
-                    fontSize: 25,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              child: const AppDescription(),
             ),
             const Text(
               'You have pushed the button this many times:',
@@ -101,7 +91,7 @@ class _MyHomePageState extends State<MyHomePage> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Feature(
-            featureKeys: const ['Test1'],
+            featureKeys: const ['ResetCounterButton'],
             child: FloatingActionButton(
               onPressed: _resetCounter,
               tooltip: 'Reset',
@@ -110,13 +100,41 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
           const SizedBox(width: 8),
-          Feature(
-            featureKeys: const ['Test2'],
-            child: FloatingActionButton(
-              onPressed: _incrementCounter,
-              tooltip: 'Increment',
-              backgroundColor: const Color(0xFF556ee6),
-              child: const Icon(Icons.add),
+          FloatingActionButton(
+            onPressed: _incrementCounter,
+            tooltip: 'Increment',
+            backgroundColor: const Color(0xFF556ee6),
+            child: const Icon(Icons.add),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AppDescription extends StatelessWidget {
+  const AppDescription({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 100.0, left: 38.0, right: 38.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          Text(
+            'See feature flags in action',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF556ee6),
+            ),
+          ),
+          SizedBox(height: 20.0),
+          Text(
+            'Provide different values to the "flagDefault" property when initializing Toggly to enable/disable features.',
+            style: TextStyle(
+              color: Color(0xFF556ee6),
             ),
           ),
         ],
