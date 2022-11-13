@@ -56,10 +56,7 @@ class _MyHomePageState extends State<MyHomePage> {
         "ExampleDescription": true,
         "ResetCounterButton": true,
       },
-      environment: 'Production',
-      identity: 'random-user-identifier',
       config: const TogglyConfig(
-        featureFlagsRefreshInterval: 10 * 1000,
         isDebug: true,
       ),
     );
