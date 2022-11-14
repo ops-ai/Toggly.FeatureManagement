@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../toggly.dart';
+import '../feature_flags_toggly.dart';
 
 enum FeatureRequirement { any, all }
 
