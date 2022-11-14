@@ -1,4 +1,4 @@
-library toggly;
+library feature_flags_toggly;
 
 export 'src/models/models.dart';
 export 'src/services/services.dart';

@@ -1,6 +1,6 @@
 Dart package that provides feature flags support for flutter applications allowing you to enable and disable features easily.
 
-Can be used **WITH** or **WITHOUT** an active subscription to [Toggly.io](https://toggly.io).*
+Can be used **WITH** or **WITHOUT** [Toggly.io](https://toggly.io).*
 
 ## What is a Feature Flag
 
@@ -11,14 +11,14 @@ In agile settings the feature flag is used in production, to switch on the featu
 ## Installation
 
 ```
-$ flutter pub add feature_flags
+$ flutter pub add feature_flags_toggly
 ```
 
 This will add a line like this to your package's pubspec.yaml (and run an implicit flutter pub get):
 
 ```yaml
 dependencies:
-  toggly: ^0.0.1
+  feature_flags_toggly: ^0.0.1
 ```
 
 Alternatively, your editor might support flutter pub get. Check the docs for your editor to learn more.
@@ -26,13 +26,13 @@ Alternatively, your editor might support flutter pub get. Check the docs for you
 Now in your Dart code, you can use:
 
 ```dart
-import 'package:feature_flags/feature_flags.dart';
+import 'package:feature_flags_toggly/feature_flags_toggly.dart';
 ```
 
 ## Basic Usage
-###### Without an active Toggly.io subscription
+###### With Toggly.io
 
-Initialize Toggly by running the Toggly.init method
+Initialize Toggly by running the Toggly.init method and by providing your API Key from your [Toggly application page](https://app.toggly.io)
 
 ```dart
 @override
@@ -43,6 +43,8 @@ void initState() {
 
 void initToggly() async {
   await Toggly.init(
+    apiKey: '<your_api_key>',
+    environment: '<your_api_environment>',
     flagDefaults: {
       "ExampleFeatureKey1": true,
       "ExampleFeatureKey2": false,
@@ -50,7 +52,6 @@ void initToggly() async {
     },
   );
 }
-```
 
 Now simply wrap your widgets in **Feature** widgets and provide them with the **featureKeys** that best describe them.
 
@@ -88,9 +89,9 @@ Feature(
 ```
 
 ## Basic Usage
-###### With an active Toggly.io subscription
+###### Without Toggly.io
 
-Initialize Toggly by running the Toggly.init method and by providing your API Key from your [Toggly application page](https://app.toggly.io)
+Initialize Toggly by running the Toggly.init method
 
 ```dart
 @override
@@ -101,8 +102,6 @@ void initState() {
 
 void initToggly() async {
   await Toggly.init(
-    apiKey: '<your_api_key>',
-    environment: '<your_api_environment>',
     flagDefaults: {
       "ExampleFeatureKey1": true,
       "ExampleFeatureKey2": false,
@@ -110,6 +109,7 @@ void initToggly() async {
     },
   );
 }
+```
 
 Now simply wrap your widgets in **Feature** widgets and provide them with the **featureKeys** that best describe them.
 

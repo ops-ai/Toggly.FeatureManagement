@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:toggly/toggly.dart';
+import 'package:feature_flags_toggly/feature_flags_toggly.dart';
 
 void main() {
   runApp(const MyApp());

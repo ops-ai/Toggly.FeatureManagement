@@ -32,7 +32,7 @@ dependencies:
   flutter:
     sdk: flutter
   
-  toggly:
+  feature_flags_toggly:
     path: ../
 
 

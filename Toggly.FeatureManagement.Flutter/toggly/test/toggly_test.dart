@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:toggly/toggly.dart';
+import 'package:feature_flags_toggly/feature_flags_toggly.dart';
 
 void main() {
   setUp(() async {
