@@ -1,6 +1,6 @@
 Dart package that provides feature flags support for flutter applications allowing you to enable and disable features easily.
 
-Can be used **WITH** or **WITHOUT** [Toggly.io](https://toggly.io).*
+Can be used *WITH* or *WITHOUT* [Toggly.io](https://toggly.io).
 
 ## What is a Feature Flag
 
@@ -29,8 +29,7 @@ Now in your Dart code, you can use:
 import 'package:feature_flags_toggly/feature_flags_toggly.dart';
 ```
 
-## Basic Usage
-###### With Toggly.io
+## Basic Usage (with Toggly.io)
 
 Initialize Toggly by running the Toggly.init method and by providing your App Key from your [Toggly application page](https://app.toggly.io)
 
@@ -52,8 +51,9 @@ void initToggly() async {
     },
   );
 }
+```
 
-Now simply wrap your widgets in **Feature** widgets and provide them with the **featureKeys** that best describe them.
+Now simply wrap your widgets in *Feature* widgets and provide them with the *featureKeys* that best describe them.
 
 ```dart
 Feature(
@@ -62,7 +62,7 @@ Feature(
 ),
 ```
 
-You can also use multiple feature keys for one Feature widget and make use of the **requirement** (FeatureRequirement.all, FeatureRequirement.any) and **negate** (bool) options.
+You can also use multiple feature keys for one Feature widget and make use of the *requirement* (FeatureRequirement.all, FeatureRequirement.any) and *negate* (bool) options.
 
 ```dart
 Feature(
@@ -88,7 +88,7 @@ Feature(
 ),
 ```
 
-Lastly, you can also evaluate the value of a Feature gate by calling **evaluateFeatureGate** directly, using the same arguments as for the Feature widget.
+Lastly, you can also evaluate the value of a Feature gate by calling *evaluateFeatureGate* directly, using the same arguments as for the Feature widget.
 
 ```dart
 await Toggly.evaluateFeatureGate(
@@ -98,8 +98,7 @@ await Toggly.evaluateFeatureGate(
 );
 ```
 
-## Basic Usage
-###### Without Toggly.io
+## Basic Usage (without Toggly.io)
 
 Initialize Toggly by running the Toggly.init method
 
@@ -121,7 +120,7 @@ void initToggly() async {
 }
 ```
 
-Now simply wrap your widgets in **Feature** widgets and provide them with the **featureKeys** that best describe them.
+Now simply wrap your widgets in *Feature* widgets and provide them with the *featureKeys* that best describe them.
 
 ```dart
 Feature(
@@ -130,7 +129,7 @@ Feature(
 ),
 ```
 
-You can also use multiple feature keys for one Feature widget and make use of the **requirement** (FeatureRequirement.all, FeatureRequirement.any) and **negate** (bool) options.
+You can also use multiple feature keys for one Feature widget and make use of the *requirement* (FeatureRequirement.all, FeatureRequirement.any) and *negate* (bool) options.
 
 ```dart
 Feature(
@@ -156,7 +155,7 @@ Feature(
 ),
 ```
 
-Lastly, you can also evaluate the value of a Feature gate by calling **evaluateFeatureGate** directly, using the same arguments as for the Feature widget.
+Lastly, you can also evaluate the value of a Feature gate by calling *evaluateFeatureGate* directly, using the same arguments as for the Feature widget.
 
 ```dart
 await Toggly.evaluateFeatureGate(
