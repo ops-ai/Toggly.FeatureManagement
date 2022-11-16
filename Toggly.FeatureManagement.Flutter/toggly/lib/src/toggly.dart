@@ -167,7 +167,7 @@ class Toggly {
     }
   }
 
-  static bool evaluateFeatureGate(
+  static bool _evaluateFeatureGate(
     Map<String, bool> flags, {
     required List<String> gate,
     FeatureRequirement requirement = FeatureRequirement.all,
@@ -188,7 +188,7 @@ class Toggly {
     }
 
     if (Toggly._config.isDebug) {
-      print('Toggly.featureGateFuture - ${jsonEncode(gate)}');
+      print('Toggly._evaluateFeatureGate - ${jsonEncode(gate)}');
     }
 
     return negate ? !isEnabled : isEnabled;
@@ -201,7 +201,20 @@ class Toggly {
   }) async {
     return Toggly._featureFlagsSubject.whereNotNull().switchMap(
       (flags) async* {
-        yield Toggly.evaluateFeatureGate(flags,
+        yield Toggly._evaluateFeatureGate(flags,
+            gate: gate, requirement: requirement, negate: negate);
+      },
+    ).first;
+  }
+
+  static Future<bool> evaluateFeatureGate(
+    List<String> gate, {
+    FeatureRequirement requirement = FeatureRequirement.all,
+    bool negate = false,
+  }) async {
+    return Toggly._featureFlagsSubject.whereNotNull().switchMap(
+      (flags) async* {
+        yield Toggly._evaluateFeatureGate(flags,
             gate: gate, requirement: requirement, negate: negate);
       },
     ).first;

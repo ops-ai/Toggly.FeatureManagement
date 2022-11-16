@@ -88,6 +88,16 @@ Feature(
 ),
 ```
 
+Lastly, you can also evaluate the value of a Feature gate by calling **evaluateFeatureGate** directly, using the same arguments as for the Feature widget.
+
+```dart
+await Toggly.evaluateFeatureGate(
+  ["ExampleFeatureKey1", "ExampleFeatureKey2"],
+  requirement: FeatureRequirement.all,
+  negate: true,
+);
+```
+
 ## Basic Usage
 ###### Without Toggly.io
 
@@ -144,6 +154,16 @@ Feature(
   negate: true,
   child: const Text('This text will show if ExampleFeatureKey1 is FALSE'),
 ),
+```
+
+Lastly, you can also evaluate the value of a Feature gate by calling **evaluateFeatureGate** directly, using the same arguments as for the Feature widget.
+
+```dart
+await Toggly.evaluateFeatureGate(
+  ["ExampleFeatureKey1", "ExampleFeatureKey2"],
+  requirement: FeatureRequirement.all,
+  negate: true,
+);
 ```
 
 ## Find out more about Toggly.io
