@@ -32,7 +32,7 @@ import 'package:feature_flags_toggly/feature_flags_toggly.dart';
 ## Basic Usage
 ###### With Toggly.io
 
-Initialize Toggly by running the Toggly.init method and by providing your API Key from your [Toggly application page](https://app.toggly.io)
+Initialize Toggly by running the Toggly.init method and by providing your App Key from your [Toggly application page](https://app.toggly.io)
 
 ```dart
 @override
@@ -43,8 +43,8 @@ void initState() {
 
 void initToggly() async {
   await Toggly.init(
-    apiKey: '<your_api_key>',
-    environment: '<your_api_environment>',
+    appKey: '<your_app_key>',
+    environment: '<your_app_environment>',
     flagDefaults: {
       "ExampleFeatureKey1": true,
       "ExampleFeatureKey2": false,

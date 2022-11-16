@@ -7,7 +7,7 @@ import 'package:rxdart/rxdart.dart';
 
 class Toggly {
   static Uuid uuid = const Uuid();
-  static late String? _apiKey;
+  static late String? _appKey;
   static String _environment = 'Production';
   static late String _identity;
   static late TogglyConfig _config;
@@ -24,13 +24,13 @@ class Toggly {
   factory Toggly() => _instance;
 
   static Future<TogglyInitResponse> init({
-    String? apiKey,
+    String? appKey,
     String? environment,
     String? identity,
     TogglyConfig config = const TogglyConfig(),
     Map<String, bool>? flagDefaults,
   }) async {
-    Toggly._apiKey = apiKey;
+    Toggly._appKey = appKey;
     Toggly._environment = environment ?? 'Production';
     Toggly._identity = identity ?? uuid.v4();
     Toggly._config = config;
@@ -51,7 +51,7 @@ class Toggly {
     }
 
     // In case there is no API key provided, only the flag defaults shall be used
-    if (Toggly._apiKey == null) {
+    if (Toggly._appKey == null) {
       Toggly._featureFlagsSubject.add(Toggly._flagDefaults);
 
       return TogglyInitResponse(
@@ -96,8 +96,8 @@ class Toggly {
 
   static Future<Map<String, bool>> get featureFlags async {
     try {
-      if (Toggly._apiKey == null) {
-        throw TogglyMissingApiKeyException();
+      if (Toggly._appKey == null) {
+        throw TogglyMissingAppKeyException();
       }
 
       return await Toggly.cachedFeatureFlags ?? await fetchFeatureFlags();
@@ -146,7 +146,7 @@ class Toggly {
   static Future<Map<String, bool>> fetchFeatureFlags() async {
     try {
       final response = await _http.get(
-        '${Toggly._config.baseURI}/${Toggly._apiKey}-${Toggly._environment}/defs?u=${Toggly._identity}',
+        '${Toggly._config.baseURI}/${Toggly._appKey}-${Toggly._environment}/defs?u=${Toggly._identity}',
         queryParameters: {},
       );
 
@@ -216,7 +216,7 @@ class Toggly {
     cancelTimers();
 
     // Automatic refresh only runs if there is an API key provided
-    if (Toggly._apiKey != null) {
+    if (Toggly._appKey != null) {
       Toggly._sync.refreshFeatureFlagsTimer = Timer.periodic(
         Duration(milliseconds: Toggly._config.featureFlagsRefreshInterval),
         (timer) async {

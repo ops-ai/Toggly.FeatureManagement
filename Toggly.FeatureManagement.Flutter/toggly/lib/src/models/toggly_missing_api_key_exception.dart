@@ -1,1 +1,0 @@
-class TogglyMissingApiKeyException implements Exception {}
