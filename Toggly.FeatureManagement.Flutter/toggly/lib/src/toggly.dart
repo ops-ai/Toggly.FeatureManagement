@@ -75,10 +75,14 @@ class Toggly {
         // Otherwise use provided default flags
         flags = Toggly._flagDefaults;
         status = TogglyLoadFeatureFlagsResponse.defaults;
-      }
 
-      if (Toggly._config.isDebug) {
-        print('Toggly.loadedFromCache - ${jsonEncode(flags)}');
+        if (Toggly._config.isDebug) {
+          print('Toggly.usedFlagDefaults - ${jsonEncode(flags)}');
+        }
+      } else {
+        if (Toggly._config.isDebug) {
+          print('Toggly.loadedFromCache - ${jsonEncode(flags)}');
+        }
       }
 
       Toggly._featureFlagsSubject.add(flags);
