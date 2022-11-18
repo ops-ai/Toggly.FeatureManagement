@@ -4,8 +4,7 @@ import { FeatureRequirement, StorageKeys, TogglyConfig } from './models/index';
 export class Toggly {
   private static _config: TogglyConfig;
   private static _flagDefaults: { [key: string]: boolean } = {};
-  private static _featureFlagsValue?: { [key: string]: boolean };
-  private static _featureFlagsPromise: Promise<{ [key: string]: boolean }> = new Promise((resolve, reject) => resolve(Toggly._featureFlagsValue));
+  private static _featureFlagsPromise: Promise<{ [key: string]: boolean }> = new Promise((resolve, reject) => resolve(Toggly.featureFlagsValue));
   private static _refreshInterval: number | undefined;
 
   static init(config: TogglyConfig = {} as TogglyConfig): Promise<{ [key: string]: boolean }> {
@@ -18,7 +17,6 @@ export class Toggly {
       environment: 'Production'
     }, config);
 
-    // TODO:
     // check if identity already in cache
     // -- generate one if not found
     // clear feature flags from cache (keep identity)
@@ -36,12 +34,15 @@ export class Toggly {
     return Toggly.refresh();
   }
 
+  static get featureFlagsValue(): { [key: string]: boolean } {
+    return JSON.parse(localStorage.getItem(StorageKeys.togglyFeatureFlagsKey.toString()) ?? null) ?? Toggly._flagDefaults;
+  }
 
   private static get _identity(): string {
     return localStorage.getItem(StorageKeys.togglyIdentityKey.toString());
   }
-  
-  static set identity(v : string) {
+
+  static set identity(v: string) {
     localStorage.setItem(StorageKeys.togglyIdentityKey.toString(), v);
   }
 
@@ -49,10 +50,9 @@ export class Toggly {
     localStorage.removeItem(StorageKeys.togglyIdentityKey.toString());
   }
 
-  private static get _cachedFeatureFlags(): { identity: string, flags: { [key: string]: boolean } } {
+  private static get _cachedFeatureFlags(): { [key: string]: boolean } {
     return JSON.parse(localStorage.getItem(StorageKeys.togglyFeatureFlagsKey.toString()) ?? null);
   }
-
 
   static cacheFeatureFlags(flags: { [key: string]: boolean }) {
     localStorage.setItem(StorageKeys.togglyFeatureFlagsKey.toString(), JSON.stringify(flags));
@@ -75,8 +75,6 @@ export class Toggly {
         .then((flags) => {
           // Cache flags on successful response
           Toggly.cacheFeatureFlags(flags);
-
-          Toggly._featureFlagsValue = flags;
           resolve(flags);
 
           if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`); }
@@ -84,11 +82,9 @@ export class Toggly {
         .catch((error) => {
           // Try to use flags from cache, otherwise use provided default flags
           var flags = Toggly._cachedFeatureFlags ?? Toggly._flagDefaults;
+          resolve(flags);
 
           if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }
-
-          Toggly._featureFlagsValue = flags;
-          resolve(flags);
         });
     });
   }
@@ -98,11 +94,10 @@ export class Toggly {
 
     // In case there is no API key provided, only the flag defaults shall be used
     if (!Toggly._config.appKey) {
-      Toggly._featureFlagsValue = Toggly._flagDefaults;
       if (Toggly._config.isDebug) { console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(Toggly._flagDefaults)}`); }
 
       return new Promise((resolve, reject) => {
-        resolve(Toggly._featureFlagsValue);
+        resolve(Toggly._flagDefaults);
       });
     }
 
@@ -111,19 +106,14 @@ export class Toggly {
   }
 
   static evaluateFeatureGate(featureGate: string[], requirement: FeatureRequirement, negate: boolean): Promise<boolean> {
-    // return Toggly._featureFlagsSubject
-    //   .pipe(
-    //     switchMap((flags: { [key: string]: boolean }) => of(Toggly._evaluateFeatureGate(flags, featureGate, requirement, negate)))
-    //   );
     return new Promise((resolve, reject) => {
       Toggly._featureFlagsPromise.then((flags) => {
         resolve(Toggly._evaluateFeatureGate(flags, featureGate, requirement, negate));
       });
     });
-
   }
 
-  private static _evaluateFeatureGate(flags: { [key: string]: boolean } = {}, featureGate: string[], requirement: FeatureRequirement, negate: boolean) {
+  private static _evaluateFeatureGate(flags: { [key: string]: boolean } = {}, featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false) {
     var isEnabled: boolean;
 
     if (requirement === FeatureRequirement.any) {
@@ -140,7 +130,17 @@ export class Toggly {
 
     if (Toggly._config.isDebug) { console.log(`Toggly._evaluateFeatureGate - ${JSON.stringify(featureGate)}`); }
 
-    return negate ? !isEnabled : isEnabled;
+    isEnabled = negate ? !isEnabled : isEnabled;
+
+    return isEnabled;
+  }
+
+  static isFeatureOn(featureKey: string): boolean {
+    return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey]);
+  }
+
+  static isFeatureOff(featureKey: string): boolean {
+    return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey], FeatureRequirement.all, true);
   }
 
   static cancelRefreshInterval() {
