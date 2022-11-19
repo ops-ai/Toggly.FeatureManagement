@@ -1,3 +1,12 @@
+<p align="center">
+  <img src="assets/Github-banner.png">
+</p>
+
+
+Enables teams to release software faster and safer, and with better results. Focus on what's most important, release at a time of your choosing. Toggly is a feature flags service that lets you quickly turn features on/off or rollout to a subset of users without having to redeploy your app, view metrics on feature usage, and run experiments to see how a feature affects your business metrics.
+
+Get started in 5 minutes with our Always Free, Forever! Plan
+
 # ASP.NET Core Feature Flags with Toggly
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=ops-ai_toggly-feature-management&metric=alert_status)](https://sonarcloud.io/dashboard?id=ops-ai_toggly-feature-management)
@@ -96,9 +105,8 @@ The simplest use case for feature flags is to do a conditional check for whether
 The basic form of feature management is checking if a feature is enabled and then performing actions based on the result. This is done through the `IFeatureManager`'s `IsEnabledAsync` method.
 
 ``` C#
-…
 IFeatureManager featureManager;
-…
+
 if (await featureManager.IsEnabledAsync(nameof(MyFeatureFlags.FeatureU)))
 {
     // Do something
@@ -129,7 +137,7 @@ MVC controller and actions can require that a given feature, or one of any list 
 [FeatureGate(MyFeatureFlags.FeatureX)]
 public class HomeController : Controller
 {
-    …
+    ...
 }
 ```
 
@@ -237,9 +245,9 @@ The `IHttpContextAccessor` must be added to the dependency injection container o
 ``` C#
 public void ConfigureServices(IServiceCollection services)
 {
-    …
+    ...
     services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
-    …
+    ...
 }
 ```
 
@@ -255,6 +263,6 @@ MyAppContext context = new MyAppContext
 
 if (await featureManager.IsEnabledAsync(feature, context))
 {
-…
+    ...
 }
 ```
