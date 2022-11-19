@@ -29,27 +29,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.We
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Demo.Mvc", "examples\Demo.Mvc\Demo.Mvc.csproj", "{1DEFD61A-9696-445C-BF84-9D015CA6D4FE}"
 EndProject
-Project("{E24C65DC-7377-472B-9ABA-BC803B73C61A}") = "Demo.Css", "examples\Demo.Css\", "{61F2AFAE-37D1-410B-9F1D-D5DEC1F18357}"
-	ProjectSection(WebsiteProperties) = preProject
-		TargetFrameworkMoniker = ".NETFramework,Version%3Dv4.0"
-		Debug.AspNetCompiler.VirtualPath = "/localhost_53748"
-		Debug.AspNetCompiler.PhysicalPath = "examples\Demo.Css\"
-		Debug.AspNetCompiler.TargetPath = "PrecompiledWeb\localhost_53748\"
-		Debug.AspNetCompiler.Updateable = "true"
-		Debug.AspNetCompiler.ForceOverwrite = "true"
-		Debug.AspNetCompiler.FixedNames = "false"
-		Debug.AspNetCompiler.Debug = "True"
-		Release.AspNetCompiler.VirtualPath = "/localhost_53748"
-		Release.AspNetCompiler.PhysicalPath = "examples\Demo.Css\"
-		Release.AspNetCompiler.TargetPath = "PrecompiledWeb\localhost_53748\"
-		Release.AspNetCompiler.Updateable = "true"
-		Release.AspNetCompiler.ForceOverwrite = "true"
-		Release.AspNetCompiler.FixedNames = "false"
-		Release.AspNetCompiler.Debug = "False"
-		VWDPort = "53748"
-		SlnRelativePath = "examples\Demo.Css\"
-	EndProjectSection
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -80,8 +59,6 @@ Global
 		{1DEFD61A-9696-445C-BF84-9D015CA6D4FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1DEFD61A-9696-445C-BF84-9D015CA6D4FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1DEFD61A-9696-445C-BF84-9D015CA6D4FE}.Release|Any CPU.Build.0 = Release|Any CPU
-		{61F2AFAE-37D1-410B-9F1D-D5DEC1F18357}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{61F2AFAE-37D1-410B-9F1D-D5DEC1F18357}.Release|Any CPU.ActiveCfg = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -89,7 +66,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{A7B093E9-5F0C-4C31-8B5A-A1AE92556B35} = {8C1BD1D5-6ED4-41D6-97A8-9EF4E5F4A4A4}
 		{1DEFD61A-9696-445C-BF84-9D015CA6D4FE} = {8C1BD1D5-6ED4-41D6-97A8-9EF4E5F4A4A4}
-		{61F2AFAE-37D1-410B-9F1D-D5DEC1F18357} = {8C1BD1D5-6ED4-41D6-97A8-9EF4E5F4A4A4}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0B9B4F6A-FB19-4930-9351-45988B4D0FB5}
