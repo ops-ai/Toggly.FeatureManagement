@@ -15,10 +15,13 @@ Get started in 5 minutes with our Always Free, Forever! Plan at https://toggly.i
 
 # Choose Your Environment
 
-[.NET](tree/develop/Toggly.FeatureManagement.NET)
-[Flutter](tree/develop/Toggly.FeatureManagement.Flutter/toggly)
-[Javascript](tree/develop/Toggly.FeatureManagement.Javascript/feature_flags_toggly)
-[HTML/CSS](tree/develop/Toggly.FeatureManagement.Css)
+[.NET](Toggly.FeatureManagement.NET)
+
+[Flutter](Toggly.FeatureManagement.Flutter/toggly)
+
+[Javascript](Toggly.FeatureManagement.Javascript/feature_flags_toggly)
+
+[HTML/CSS](Toggly.FeatureManagement.Css)
 
 ## Find out more about Toggly.io
 
