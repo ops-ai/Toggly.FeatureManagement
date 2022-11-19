@@ -17,14 +17,7 @@ export class Toggly {
       environment: 'Production'
     }, config);
 
-    // check if identity already in cache
-    // -- generate one if not found
-    // clear feature flags from cache (keep identity)
-    // try to fetchFeatureFlags and update cache (if appKey provided)
-    // -- set one of the following to cache: fetch/cache/defaults
-
-    var cache = Toggly._cachedFeatureFlags;
-    if (!cache || !cache.identity) {
+    if (!Toggly.identity) {
       Toggly.identity = uuidv4();
     }
 
@@ -35,10 +28,11 @@ export class Toggly {
   }
 
   static get featureFlagsValue(): { [key: string]: boolean } {
-    return JSON.parse(localStorage.getItem(StorageKeys.togglyFeatureFlagsKey.toString()) ?? null) ?? Toggly._flagDefaults;
+    var cachedFlags = JSON.parse(localStorage.getItem(StorageKeys.togglyFeatureFlagsKey.toString()) ?? null);
+    return Toggly._config.appKey && cachedFlags ? cachedFlags : Toggly._flagDefaults;
   }
 
-  private static get _identity(): string {
+  static get identity(): string {
     return localStorage.getItem(StorageKeys.togglyIdentityKey.toString());
   }
 
@@ -66,8 +60,8 @@ export class Toggly {
     return new Promise((resolve, reject) => {
       var url = `${Toggly._config.baseURI}/${Toggly._config.appKey}-${Toggly._config.environment}/defs`;
 
-      if (Toggly._identity) {
-        url += `?u=${Toggly._identity}`;
+      if (Toggly.identity) {
+        url += `?u=${Toggly.identity}`;
       }
 
       fetch(url)

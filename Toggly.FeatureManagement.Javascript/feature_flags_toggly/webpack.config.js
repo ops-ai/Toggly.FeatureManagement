@@ -7,7 +7,7 @@ module.exports = {
   },
   output: {
     path: path.resolve(__dirname, './dist'),
-    filename: "[name]-bundle.js"
+    filename: "feature-flags-toggly.bundle.js"
   },
   resolve: {
     extensions: [".ts", ".tsx", ".js"],
