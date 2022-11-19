@@ -9,10 +9,6 @@ Toggly is a feature flags service that lets you quickly turn features on/off or 
 
 Get started in 5 minutes with our Always Free, Forever! Plan at https://toggly.io
 
-<p align="center">
-  <img src="assets/screenshot.png">
-</p>
-
 # Choose Your Environment
 
 [.NET](Toggly.FeatureManagement.NET)
@@ -26,3 +22,7 @@ Get started in 5 minutes with our Always Free, Forever! Plan at https://toggly.i
 ## Find out more about Toggly.io
 
 Visit [our official website](https://toggly.io) or [check out a video overview and our docs](https://docs.toggly.io/).
+
+<p align="center">
+  <img src="assets/screenshot.png">
+</p>
