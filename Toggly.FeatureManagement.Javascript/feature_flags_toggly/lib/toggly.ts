@@ -140,7 +140,7 @@ export class Toggly {
   static startRefreshInterval() {
     Toggly.cancelRefreshInterval();
 
-    if (Toggly._config.appKey) {
+    if (Toggly._config.appKey && Toggly._config.featureFlagsRefreshInterval > 0) {
       Toggly._refreshInterval = window.setInterval(() => Toggly.refresh(), Toggly._config.featureFlagsRefreshInterval);
     }
   }

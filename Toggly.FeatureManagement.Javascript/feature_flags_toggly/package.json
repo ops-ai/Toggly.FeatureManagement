@@ -1,5 +1,5 @@
 {
-  "name": "@toggly/feature_flags",
+  "name": "@ops-ai/feature-flags-toggly",
   "version": "1.0.0",
   "description": "Provides feature flags support for Javascript applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "main": "index.js",
@@ -14,13 +14,16 @@
   },
   "author": {
     "name": "Cosmin Atomei",
-    "email": "cosmin@ops.ai"
+    "email": "cosmin.atomei@gmail.com"
   },
   "license": "BSD-3-Clause",
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
   "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop#readme",
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "rxjs": "^7.5.7",
     "uuid": "^9.0.0"

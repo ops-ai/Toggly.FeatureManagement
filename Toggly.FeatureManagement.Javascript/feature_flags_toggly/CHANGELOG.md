@@ -1,11 +1,11 @@
 ## 0.0.1
 
-2022-11-13 (Date of Last Commit)
+2022-11-21 (Date of Last Commit)
 
-* Toggly & Feature classes
+* Toggly classe & models
 * Allow usage without Toggly service (by providing flagDefaults)
 * Allow usage with Toggly service (by providing your App Key & Environment name)
-* Feature Gate unit tests
+* Feature evaluation methods unit tests
 * Documentation
 * License
 
