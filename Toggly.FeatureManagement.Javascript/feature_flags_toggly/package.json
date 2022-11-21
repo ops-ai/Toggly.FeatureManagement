@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/feature-flags-toggly",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Provides feature flags support for Javascript applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "main": "index.js",
   "scripts": {
