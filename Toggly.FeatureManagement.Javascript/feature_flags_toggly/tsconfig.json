@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es5",
     "lib": ["es2016", "DOM"],
-    "rootDir": "lib",
+    "rootDir": "./",
     "sourceMap": true
   }
 }

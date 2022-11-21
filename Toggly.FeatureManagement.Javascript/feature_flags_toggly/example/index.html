@@ -16,7 +16,6 @@
 
 <body>
   <div class="px-4 pt-5 my-5 text-center border-bottom">
-    <!-- <img class="d-block mx-auto mb-4" src="./toggly-logo.png" alt="Toggly Logo" height="42"> -->
     <h1 class="display-5 fw-bold mb-5">What is a Feature Flag?</h1>
     <div class="col-lg-6 mx-auto">
       <p class="lead mb-4">A feature flag (or toggle) in software development provides an alternative to maintaining
@@ -26,8 +25,9 @@
         for some or all the users. Thus, feature flags make it easier to release often. Advanced roll out strategies
         such as canary roll out and A/B testing are easier to handle.</p>
       <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
-        <a href="https://app.toggly.io/register" id="signUpButton" type="button" class="d-none btn btn-primary btn-lg px-4 gap-3"
-          style="background: #556ee6; border: #556ee6;">Sign up for FREE</a>
+        <a href="https://app.toggly.io/register" id="signUpButton" type="button"
+          class="d-none btn btn-primary btn-lg px-4 gap-3" style="background: #556ee6; border: #556ee6;">Sign up for
+          FREE</a>
         <a href="https://toggly.io" type="button" class="btn btn-outline-secondary btn-lg px-4">Find out more on
           Toggly.io</a>
       </div>
@@ -44,13 +44,19 @@
 
   <script src="../dist/feature-flags-toggly.bundle.js"></script>
   <script>
-    var featureFlagsDefaults = { "SignUpButton": true, "DemoScreenshot": true };
+    var featureFlagsDefaults = {
+      "SignUpButton": true,
+      "DemoScreenshot": true
+    };
 
     Toggly.init({ flagDefaults: featureFlagsDefaults }).then(function () {
 
       // Now you can check if a feature (or more) is Enabled/Disabled
       if (Toggly.isFeatureOn('SignUpButton')) {
         document.querySelector('#signUpButton').classList.remove('d-none');
+      }
+      if (Toggly.isFeatureOff('DemoScreenshot')) {
+        document.querySelector('#demoScreenshot').classList.add('d-none');
       }
     });
   </script>

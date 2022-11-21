@@ -1,10 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
-import { FeatureRequirement, StorageKeys, TogglyConfig } from './models/index';
+import { FeatureRequirement, StorageKeys, TogglyConfig } from './models';
 
 export class Toggly {
   private static _config: TogglyConfig;
-  private static _flagDefaults: { [key: string]: boolean } = {};
-  private static _featureFlagsPromise: Promise<{ [key: string]: boolean }> = new Promise((resolve, reject) => resolve(Toggly.featureFlagsValue));
   private static _refreshInterval: number | undefined;
 
   static init(config: TogglyConfig = {} as TogglyConfig): Promise<{ [key: string]: boolean }> {
@@ -14,7 +12,8 @@ export class Toggly {
       connectTimeout: 5 * 1000,
       featureFlagsRefreshInterval: 3 * 60 * 1000,
       isDebug: false,
-      environment: 'Production'
+      environment: 'Production',
+      flagDefaults: {}
     }, config);
 
     if (!Toggly.identity) {
@@ -29,7 +28,7 @@ export class Toggly {
 
   static get featureFlagsValue(): { [key: string]: boolean } {
     var cachedFlags = JSON.parse(localStorage.getItem(StorageKeys.togglyFeatureFlagsKey.toString()) ?? null);
-    return Toggly._config.appKey && cachedFlags ? cachedFlags : Toggly._flagDefaults;
+    return Toggly._config?.appKey && cachedFlags ? cachedFlags : Toggly._config?.flagDefaults ?? {};
   }
 
   static get identity(): string {
@@ -75,7 +74,7 @@ export class Toggly {
         })
         .catch((error) => {
           // Try to use flags from cache, otherwise use provided default flags
-          var flags = Toggly._cachedFeatureFlags ?? Toggly._flagDefaults;
+          var flags = Toggly._cachedFeatureFlags ?? Toggly._config.flagDefaults;
           resolve(flags);
 
           if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }
@@ -88,23 +87,15 @@ export class Toggly {
 
     // In case there is no API key provided, only the flag defaults shall be used
     if (!Toggly._config.appKey) {
-      if (Toggly._config.isDebug) { console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(Toggly._flagDefaults)}`); }
+      if (Toggly._config.isDebug) { console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(Toggly._config.flagDefaults)}`); }
 
       return new Promise((resolve, reject) => {
-        resolve(Toggly._flagDefaults);
+        resolve(Toggly._config.flagDefaults);
       });
     }
 
     // Try to fetch flags from the API
     return Toggly.fetchFeatureFlags();
-  }
-
-  static evaluateFeatureGate(featureGate: string[], requirement: FeatureRequirement, negate: boolean): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      Toggly._featureFlagsPromise.then((flags) => {
-        resolve(Toggly._evaluateFeatureGate(flags, featureGate, requirement, negate));
-      });
-    });
   }
 
   private static _evaluateFeatureGate(flags: { [key: string]: boolean } = {}, featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false) {
@@ -129,6 +120,10 @@ export class Toggly {
     return isEnabled;
   }
 
+  static evaluateFeatureGate(featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false): boolean {
+    return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate);
+  }
+
   static isFeatureOn(featureKey: string): boolean {
     return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey]);
   }
@@ -150,3 +145,6 @@ export class Toggly {
     }
   }
 }
+
+(window as any).Toggly = Toggly;
+

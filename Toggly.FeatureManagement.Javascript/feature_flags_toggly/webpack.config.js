@@ -3,7 +3,7 @@ const path = require('path');
 module.exports = {
   mode: "production",
   entry: {
-    main: "./lib/index.ts",
+    main: "./lib/toggly.ts",
   },
   output: {
     path: path.resolve(__dirname, './dist'),
