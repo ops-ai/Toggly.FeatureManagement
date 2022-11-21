@@ -13,7 +13,7 @@ In agile settings the feature flag is used in production, to switch on the featu
 Simply embed our latest bundle from the following CDN.
 
 ```html
-<script src="..."></script>
+<script src="https://cdn.jsdelivr.net/npm/@ops-ai/feature-flags-toggly@1.0.2/dist/feature-flags-toggly.bundle.js"></script>
 ```
 
 Alternatively, you can use NPM to manually build the bundled *.js file.
@@ -23,7 +23,7 @@ $ npm install @ops-ai/feature-flags-toggly
 $ cd node_modules/@ops-ai/feature-flags-toggly && npm run build
 ```
 
-And then grab the generated bundled file from the */dist directory.
+And then grab the generated bundled file from the ./dist directory.
 
 ## Basic Usage (with Toggly.io)
 
