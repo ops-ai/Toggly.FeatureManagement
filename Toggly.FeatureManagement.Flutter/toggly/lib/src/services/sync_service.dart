@@ -5,7 +5,7 @@ class SyncService {
 
   Timer? refreshFeatureFlagsTimer;
 
-  SyncService._internal() {}
+  SyncService._internal();
 
   static SyncService get getInstance => _instance;
 }

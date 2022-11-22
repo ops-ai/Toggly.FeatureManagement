@@ -12,12 +12,12 @@ void main() {
     );
   });
 
-  group('*.featureGateFuture', () {
+  group('*.evaluateFeatureGate', () {
     test('Check result based on provided *.flagDefaults', () async {
-      bool trueGateValue = await Toggly.featureGateFuture(
+      bool trueGateValue = await Toggly.evaluateFeatureGate(
         ["TrueFeatureKey"],
       );
-      bool falseGateValue = await Toggly.featureGateFuture(
+      bool falseGateValue = await Toggly.evaluateFeatureGate(
         ["FalseFeatureKey"],
       );
 
@@ -27,7 +27,7 @@ void main() {
 
     test('Check (requirement: All) result based on provided *.flagDefaults',
         () async {
-      bool allGateValue = await Toggly.featureGateFuture(
+      bool allGateValue = await Toggly.evaluateFeatureGate(
         ["TrueFeatureKey", "FalseFeatureKey"],
         requirement: FeatureRequirement.all,
       );
@@ -37,7 +37,7 @@ void main() {
 
     test('Check (requirement: Any) result based on provided *.flagDefaults',
         () async {
-      bool anyGateValue = await Toggly.featureGateFuture(
+      bool anyGateValue = await Toggly.evaluateFeatureGate(
         ["TrueFeatureKey", "FalseFeatureKey"],
         requirement: FeatureRequirement.any,
       );
@@ -46,7 +46,7 @@ void main() {
     });
 
     test('Check (negate) result based on provided *.flagDefaults', () async {
-      bool negateGateValue = await Toggly.featureGateFuture(
+      bool negateGateValue = await Toggly.evaluateFeatureGate(
         ["TrueFeatureKey"],
         negate: true,
       );

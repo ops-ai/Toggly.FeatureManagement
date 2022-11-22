@@ -56,9 +56,6 @@ class _MyHomePageState extends State<MyHomePage> {
         "ExampleDescription": true,
         "ResetCounterButton": true,
       },
-      config: const TogglyConfig(
-        isDebug: true,
-      ),
     );
   }
 
@@ -69,10 +66,10 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Feature(
-              featureKeys: const ['ExampleDescription'],
+            const Feature(
+              featureKeys: ['ExampleDescription'],
               requirement: FeatureRequirement.any,
-              child: const AppDescription(),
+              child: AppDescription(),
             ),
             const Text(
               'You have pushed the button this many times:',

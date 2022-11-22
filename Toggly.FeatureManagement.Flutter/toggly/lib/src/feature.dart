@@ -4,7 +4,7 @@ import '../feature_flags_toggly.dart';
 enum FeatureRequirement { any, all }
 
 class Feature extends StatefulWidget {
-  Feature({
+  const Feature({
     Key? key,
     required this.child,
     required this.featureKeys,
@@ -18,18 +18,18 @@ class Feature extends StatefulWidget {
   final bool negate;
 
   @override
-  _FeatureState createState() => _FeatureState();
+  FeatureState createState() => FeatureState();
 }
 
-class _FeatureState extends State<Feature> {
-  _FeatureState();
+class FeatureState extends State<Feature> {
+  FeatureState();
 
   bool? previousResult;
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
-      future: Toggly.featureGateFuture(
+      future: Toggly.evaluateFeatureGate(
         widget.featureKeys,
         requirement: widget.requirement,
         negate: widget.negate,

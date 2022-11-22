@@ -2,11 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:feature_flags_toggly/feature_flags_toggly.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:rxdart/rxdart.dart';
 
 class Toggly {
-  static Uuid uuid = const Uuid();
+  static const Uuid _uuid = Uuid();
   static late String? _appKey;
   static String _environment = 'Production';
   static late String _identity;
@@ -23,6 +24,12 @@ class Toggly {
 
   factory Toggly() => _instance;
 
+  /// Initialize Toggly either by providing [flagDefaults] (to allow usage
+  /// without Toggly.io) or by providing your [appKey] and [environment] from
+  /// your Toggly.io application.
+  ///
+  /// You can also set various configuration settings through [config], such as
+  /// baseUri, connectTimeout or featureFlagsRefreshInterval
   static Future<TogglyInitResponse> init({
     String? appKey,
     String? environment,
@@ -32,11 +39,11 @@ class Toggly {
   }) async {
     Toggly._appKey = appKey;
     Toggly._environment = environment ?? 'Production';
-    Toggly._identity = identity ?? uuid.v4();
+    Toggly._identity = identity ?? Toggly._uuid.v4();
     Toggly._config = config;
     Toggly._flagDefaults = flagDefaults ?? {};
 
-    if (Toggly._config.isDebug) {
+    if (kDebugMode) {
       print('Toggly.init');
     }
 
@@ -45,8 +52,16 @@ class Toggly {
     return await Toggly.refresh();
   }
 
+  /// Refreshes the feature flag values.
+  ///
+  /// In case there is no API key provided, only the flag defaults shall be
+  /// used.
+  ///
+  /// Otherwise fetch feature flags values from the Toggly Client API. If
+  /// that fails it loads feature flags from cache and defaults to the
+  /// previously provided [flagDefaults] during [init]
   static Future<TogglyInitResponse> refresh() async {
-    if (Toggly._config.isDebug) {
+    if (kDebugMode) {
       print('Toggly.refresh');
     }
 
@@ -76,11 +91,11 @@ class Toggly {
         flags = Toggly._flagDefaults;
         status = TogglyLoadFeatureFlagsResponse.defaults;
 
-        if (Toggly._config.isDebug) {
+        if (kDebugMode) {
           print('Toggly.usedFlagDefaults - ${jsonEncode(flags)}');
         }
       } else {
-        if (Toggly._config.isDebug) {
+        if (kDebugMode) {
           print('Toggly.loadedFromCache - ${jsonEncode(flags)}');
         }
       }
@@ -93,11 +108,14 @@ class Toggly {
     }
   }
 
+  /// Sets an unique identifier to the current session. Useful in case of custom
+  /// feature rollouts.
   static Future<TogglyInitResponse> setIdentity(String? identity) async {
-    Toggly._identity = identity ?? uuid.v4();
+    Toggly._identity = identity ?? Toggly._uuid.v4();
     return await Toggly.refresh();
   }
 
+  /// Returns a [Future] with the current feature flags values.
   static Future<Map<String, bool>> get featureFlags async {
     try {
       if (Toggly._appKey == null) {
@@ -110,6 +128,7 @@ class Toggly {
     }
   }
 
+  /// Returns a [Future] with the cached feature flags values.
   static Future<Map<String, bool>?> get cachedFeatureFlags async {
     try {
       String? cache = await _storage.get(
@@ -125,6 +144,7 @@ class Toggly {
     }
   }
 
+  /// Stores the provided [featureFlags] into cache.
   static void cacheFeatureFlags({
     required Map<String, bool> featureFlags,
   }) async {
@@ -137,16 +157,19 @@ class Toggly {
     );
   }
 
+  /// Clears the feature flags cache.
   static void clearFeatureFlagsCache() async {
     await _storage.delete(
       key: SecureStorageKeys.featureFlagsCache.toString(),
     );
   }
 
+  /// Returns the feature flags default values provided during [init]
   static Map<String, bool> get featureFlagDefaults {
     return Toggly._flagDefaults;
   }
 
+  /// Retrieves feature flags values from the Toggly.io Client API.
   static Future<Map<String, bool>> fetchFeatureFlags() async {
     try {
       final response = await _http.get(
@@ -161,7 +184,7 @@ class Toggly {
 
       Toggly._featureFlagsSubject.add(flags);
 
-      if (Toggly._config.isDebug) {
+      if (kDebugMode) {
         print('Toggly.fetchFeatureFlags - ${jsonEncode(flags)}');
       }
 
@@ -191,26 +214,20 @@ class Toggly {
       });
     }
 
-    if (Toggly._config.isDebug) {
+    if (kDebugMode) {
       print('Toggly._evaluateFeatureGate - ${jsonEncode(gate)}');
     }
 
     return negate ? !isEnabled : isEnabled;
   }
 
-  static Future<bool> featureGateFuture(
-    List<String> gate, {
-    FeatureRequirement requirement = FeatureRequirement.all,
-    bool negate = false,
-  }) async {
-    return Toggly._featureFlagsSubject.whereNotNull().switchMap(
-      (flags) async* {
-        yield Toggly._evaluateFeatureGate(flags,
-            gate: gate, requirement: requirement, negate: negate);
-      },
-    ).first;
-  }
-
+  /// Evaluates the value of a feature [gate] for the current feature flags
+  /// values.
+  ///
+  /// Allows testing for ALL or ANY of the features to be true by using the
+  /// [requirement] argument.
+  ///
+  /// Allows negation through the [negate] argument.
   static Future<bool> evaluateFeatureGate(
     List<String> gate, {
     FeatureRequirement requirement = FeatureRequirement.all,
@@ -229,6 +246,11 @@ class Toggly {
     Toggly._featureFlagsSubject.close();
   }
 
+  /// Starts a [Timer] to periodically retrieve the feature flags values from
+  /// the Toggly.io Client API.
+  ///
+  /// It only registers the timer if an [appKey] is provided during the [init]
+  /// call.
   static void startTimers() {
     cancelTimers();
 
@@ -237,7 +259,7 @@ class Toggly {
       Toggly._sync.refreshFeatureFlagsTimer = Timer.periodic(
         Duration(milliseconds: Toggly._config.featureFlagsRefreshInterval),
         (timer) async {
-          if (Toggly._config.isDebug) {
+          if (kDebugMode) {
             print(
                 'Toggly.syncFeatureFlags - every ${Toggly._config.featureFlagsRefreshInterval / 1000}s');
           }
@@ -248,6 +270,7 @@ class Toggly {
     }
   }
 
+  /// Cancels the registered timers.
   static void cancelTimers() {
     Toggly._sync.refreshFeatureFlagsTimer?.cancel();
   }

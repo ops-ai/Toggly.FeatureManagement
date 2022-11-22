@@ -12,11 +12,13 @@ class HttpService {
     http.interceptors.add(RetryInterceptor(
       dio: http,
       logPrint: print,
-      retries: 3,
+      retries: 1,
       retryDelays: const [
         Duration(milliseconds: 300),
         Duration(milliseconds: 600),
         Duration(milliseconds: 900),
+        Duration(milliseconds: 1200),
+        Duration(milliseconds: 1500),
       ],
     ));
   }
