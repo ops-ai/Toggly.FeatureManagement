@@ -1,6 +1,6 @@
 name: feature_flags_toggly
 description: Dart package that provides feature flags support for Flutter applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.
-version: 1.0.1
+version: 1.0.2
 homepage: https://docs.toggly.io/
 
 environment:

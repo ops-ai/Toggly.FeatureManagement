@@ -1,3 +1,9 @@
+## 1.0.2
+
+2022-11-22 (Date of Last Commit)
+
+* More doc comments
+
 ## 1.0.1
 
 2022-11-22 (Date of Last Commit)
