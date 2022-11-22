@@ -6,6 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:rxdart/rxdart.dart';
 
+/// Static class providing feature flags support.
+///
+/// Allows enabling and disabling of features easily. Can be used with or without Toggly.io.
 class Toggly {
   static const Uuid _uuid = Uuid();
   static late String? _appKey;

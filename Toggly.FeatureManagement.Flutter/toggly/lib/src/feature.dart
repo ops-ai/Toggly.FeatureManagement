@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import '../feature_flags_toggly.dart';
 
+/// Feature requirement types allowing "ANY" or "ALL" operations when evaluating
+/// feature gates.
 enum FeatureRequirement { any, all }
 
+/// Creates a feature Widget that can be enabled, disabled or partially enabled,
+/// described by the provided [featureKeys] and following the [requirement] and
+/// [negate] parameters.
 class Feature extends StatefulWidget {
   const Feature({
     Key? key,

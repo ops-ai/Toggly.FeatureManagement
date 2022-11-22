@@ -1,9 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:dio_smart_retry/dio_smart_retry.dart';
 
+/// Simple [Dio] wrapper to simplify http requests across the package.
 class HttpService {
   static final HttpService _instance = HttpService._internal();
 
+  /// Actual [Dio] instance.
   late Dio http;
 
   HttpService._internal() {
@@ -23,5 +25,6 @@ class HttpService {
     ));
   }
 
+  /// Returns the singleton [HttpService] instance
   static HttpService get getInstance => _instance;
 }
