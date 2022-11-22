@@ -1,3 +1,9 @@
+## 1.0.3
+
+2022-11-22 (Date of Last Commit)
+
+* Added static "dispose" method to clear timers & cancel streams.
+
 ## 1.0.2
 
 2022-11-22 (Date of Last Commit)

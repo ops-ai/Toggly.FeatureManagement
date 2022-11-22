@@ -244,7 +244,8 @@ class Toggly {
     ).first;
   }
 
-  void dispose() {
+  /// Cancels registered timers and closes the feature flags stream.
+  static void dispose() {
     cancelTimers();
     Toggly._featureFlagsSubject.close();
   }
