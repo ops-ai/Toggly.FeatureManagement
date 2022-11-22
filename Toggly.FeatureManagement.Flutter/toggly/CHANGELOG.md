@@ -1,4 +1,12 @@
-## 0.0.1
+## 1.0.1
+
+2022-11-22 (Date of Last Commit)
+
+* Doc comments
+* Fixed Lint issues
+* Cleaned unused methods *.featureGateFuture and replaced with *.evaluateFeatureGate
+
+## 1.0.0
 
 2022-11-13 (Date of Last Commit)
 
