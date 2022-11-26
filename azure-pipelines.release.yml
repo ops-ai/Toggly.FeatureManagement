@@ -44,7 +44,7 @@ stages:
         repository: '$(imageRepository)'
         command: 'build'
         Dockerfile: 'Toggly.FeatureManagement.NET/examples/Demo.Mvc/Dockerfile'
-        buildContext: 'examples'
+        buildContext: 'Toggly.FeatureManagement.NET/examples'
         tags: '$(tag)'
         arguments: '--build-arg VERSION=$(tag)'
     - task: Docker@2
