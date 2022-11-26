@@ -13,7 +13,7 @@ variables:
   dockerRegistryServiceConnection: '86986db6-cabf-436b-a436-2cf8c1337c1b'
   imageRepository: 'togglydemo'
   containerRegistry: 'opsairegistry.azurecr.io'
-  dockerfilePath: '$(Build.SourcesDirectory)/examples/Demo.Mvc/Dockerfile'
+  dockerfilePath: '$(Build.SourcesDirectory)/Toggly.FeatureManagement.NET/examples/Demo.Mvc/Dockerfile'
   tag: '$(Build.BuildId)'
 
   # Agent VM image name
