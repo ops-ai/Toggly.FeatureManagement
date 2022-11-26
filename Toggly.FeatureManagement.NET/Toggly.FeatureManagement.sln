@@ -7,13 +7,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement", 
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".Solution Items", ".Solution Items", "{D203F01E-2852-4900-9BD2-9FC4D00FE36F}"
 	ProjectSection(SolutionItems) = preProject
-		.editorconfig = .editorconfig
-		.gitignore = .gitignore
+		..\.editorconfig = ..\.editorconfig
+		..\.gitignore = ..\.gitignore
 		AssemblyInfo.cs = AssemblyInfo.cs
-		azure-pipelines.yml = azure-pipelines.yml
-		.github\workflows\codeql-analysis.yml = .github\workflows\codeql-analysis.yml
-		GitVersion.yml = GitVersion.yml
-		LICENSE = LICENSE
+		..\azure-pipelines.yml = ..\azure-pipelines.yml
+		..\LICENSE = ..\LICENSE
 		README.md = README.md
 	EndProjectSection
 EndProject
