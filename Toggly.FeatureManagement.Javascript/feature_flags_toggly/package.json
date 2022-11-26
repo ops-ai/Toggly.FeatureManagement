@@ -1,0 +1,42 @@
+{
+  "name": "@ops-ai/feature-flags-toggly",
+  "version": "1.0.3",
+  "description": "Provides feature flags support for Javascript applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack",
+    "dev": "npx webpack -w",
+    "test": "npx jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git#develop"
+  },
+  "author": {
+    "name": "Cosmin Atomei",
+    "email": "cosmin.atomei@gmail.com"
+  },
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop#readme",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "rxjs": "^7.5.7",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.2.3",
+    "@types/uuid": "^8.3.4",
+    "jest": "^29.3.1",
+    "jest-environment-jsdom": "^29.3.1",
+    "ts-jest": "^29.0.3",
+    "ts-loader": "^9.4.1",
+    "typescript": "^4.9.3",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.0"
+  }
+}
