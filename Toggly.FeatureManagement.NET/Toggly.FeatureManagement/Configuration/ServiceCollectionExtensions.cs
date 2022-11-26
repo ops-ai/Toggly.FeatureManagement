@@ -75,7 +75,7 @@ namespace Toggly.FeatureManagement.Configuration
             services.AddSingleton<IMetricsDebug>(x => x.GetRequiredService<TogglyMetricsService>());
         }
 
-        public static IServiceCollection AddTogglyFeatureManagement(this IServiceCollection services)
+        public static IFeatureManagementBuilder AddTogglyFeatureManagement(this IServiceCollection services)
         {
             var featureManagement = services.AddFeatureManagement()
                 .AddFeatureFilter<PercentageFilter>()
@@ -90,7 +90,7 @@ namespace Toggly.FeatureManagement.Configuration
                 options.IgnoreMissingFeatureFilters = true;
             });
 
-            return services;
+            return featureManagement;
         }
     }
 }

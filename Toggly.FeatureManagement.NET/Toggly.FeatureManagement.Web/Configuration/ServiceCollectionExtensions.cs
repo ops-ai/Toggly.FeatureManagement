@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.FeatureManagement.FeatureFilters;
 using System;
 using Toggly.FeatureManagement.Configuration;
+using Toggly.FeatureManagement.Web.Filters;
 
 namespace Toggly.FeatureManagement.Web.Configuration
 {
@@ -30,7 +31,13 @@ namespace Toggly.FeatureManagement.Web.Configuration
         {
             services.AddToggly(togglyOptions);
             services.AddTogglyHttpContext();
-            services.AddTogglyFeatureManagement();
+            services.AddTogglyFeatureManagement()
+                .AddFeatureFilter<BrowserFamilyFilter>()
+                .AddFeatureFilter<BrowserLanguageFilter>()
+                .AddFeatureFilter<CountryFilter>()
+                .AddFeatureFilter<DeviceTypeFilter>()
+                .AddFeatureFilter<OSFilter>()
+                .AddFeatureFilter<UserClaimsFilter>();
 
             return services;
         }
