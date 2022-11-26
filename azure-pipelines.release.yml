@@ -43,7 +43,7 @@ stages:
         containerRegistry: '$(dockerRegistryServiceConnection)'
         repository: '$(imageRepository)'
         command: 'build'
-        Dockerfile: 'examples/Demo.Mvc/Dockerfile'
+        Dockerfile: 'Toggly.FeatureManagement.NET/examples/Demo.Mvc/Dockerfile'
         buildContext: 'examples'
         tags: '$(tag)'
         arguments: '--build-arg VERSION=$(tag)'
