@@ -7,12 +7,12 @@ EXPOSE 443
 ARG VERSION=0
 
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
-WORKDIR /examples
+WORKDIR /Toggly.FeatureManagement.NET/examples
 ARG VERSION=0
 COPY ["Demo.Mvc/Demo.Mvc.csproj", "Demo.Mvc/"]
 RUN dotnet restore "Demo.Mvc/Demo.Mvc.csproj"
 COPY . .
-WORKDIR "/examples/Demo.Mvc"
+WORKDIR "/Toggly.FeatureManagement.NET/examples/Demo.Mvc"
 RUN dotnet build "Demo.Mvc.csproj" -c Release /p:Version=${VERSION} -o /app/build
 
 FROM build AS publish
