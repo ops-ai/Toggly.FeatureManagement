@@ -2,6 +2,7 @@ using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.Mvc;
 using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.Web.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Demo.Mvc
 {
@@ -13,8 +14,8 @@ namespace Demo.Mvc
 
             builder.Services.AddTogglyWeb(options =>
             {
-                options.AppKey = builder.Configuration["Toggly:AppKey"];
-                options.Environment = builder.Configuration["Toggly:Environment"];
+                options.AppKey = builder.Configuration["Toggly:AppKey"]!;
+                options.Environment = builder.Configuration["Toggly:Environment"]!;
                 options.BaseUrl = "https://localhost:44381";
             });
 
@@ -26,6 +27,7 @@ namespace Demo.Mvc
             builder.Services.AddRouting(options => options.LowercaseUrls = true);
             builder.Services.AddDistributedMemoryCache();
             builder.Services.AddSession();
+            builder.Services.AddRazorPages().AddRazorRuntimeCompilation();
 
             var app = builder.Build();
 
