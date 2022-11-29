@@ -22,7 +22,13 @@ namespace Toggly.FeatureManagement.Web.Configuration
         {
             services.AddToggly(togglyOptions);
             services.AddTogglyHttpContext();
-            services.AddTogglyFeatureManagement();
+            services.AddTogglyFeatureManagement()
+                .AddFeatureFilter<BrowserFamilyFilter>()
+                .AddFeatureFilter<BrowserLanguageFilter>()
+                .AddFeatureFilter<CountryFilter>()
+                .AddFeatureFilter<DeviceTypeFilter>()
+                .AddFeatureFilter<OSFilter>()
+                .AddFeatureFilter<UserClaimsFilter>();
 
             return services;
         }
