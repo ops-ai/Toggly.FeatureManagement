@@ -16,9 +16,25 @@ message MetricStat {
     string environment = 2;
     google.protobuf.Timestamp time = 3;
     repeated MetricStatMessage stats = 4;
+    repeated MetricCounterMessage counters = 5;
+    repeated MetricObservationMessage observations = 6;
 }
 
 message MetricStatMessage {
+	string metric = 1;
+	int32 enabledCount = 2; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
+	int32 disabledCount = 3; //optional metric count when feature is disabled
+	optional string feature = 4; //optional feature referenced for subcount
+}
+
+message MetricCounterMessage {
+	string metric = 1;
+	int32 enabledCount = 2; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
+	int32 disabledCount = 3; //optional metric count when feature is disabled
+	optional string feature = 4; //optional feature referenced for subcount
+}
+
+message MetricObservationMessage {
 	string metric = 1;
 	int32 enabledCount = 2; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
 	int32 disabledCount = 3; //optional metric count when feature is disabled
