@@ -1,4 +1,5 @@
-﻿using Toggly.FeatureManagement.Data;
+﻿using System.Collections.Generic;
+using Toggly.FeatureManagement.Data;
 
 namespace Toggly.FeatureManagement.Storage.RavenDB
 {

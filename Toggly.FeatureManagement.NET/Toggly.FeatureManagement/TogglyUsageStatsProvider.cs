@@ -14,7 +14,6 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Toggly.Web;
-using static Toggly.FeatureManagement.TogglyUsageStatsProvider;
 
 namespace Toggly.FeatureManagement
 {
@@ -68,7 +67,7 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
-            _timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 5, 0), new TimeSpan(0, 5, 0));
+            _timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
             _longTimer = new Timer((s) => ResetUsageMap().ConfigureAwait(false), null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
             applicationLifetime.ApplicationStopping.Register(() => SendStats().ConfigureAwait(false).GetAwaiter().GetResult());
 
@@ -86,7 +85,6 @@ namespace Toggly.FeatureManagement
             _uniqueUsageEnabledMap.Clear();
             _uniqueUsageDisabledMap.Clear();
             _uniqueUsageUsedMap.Clear();
-            _uniqueUserMap.Clear();
         }
 
         private string _lastError = string.Empty;
@@ -113,7 +111,7 @@ namespace Toggly.FeatureManagement
                     {
                         MaxAttempts = 5,
                         InitialBackoff = TimeSpan.FromSeconds(1),
-                        MaxBackoff = TimeSpan.FromSeconds(5),
+                        MaxBackoff = TimeSpan.FromSeconds(10),
                         BackoffMultiplier = 1.5,
                         RetryableStatusCodes = { StatusCode.Unavailable, StatusCode.DataLoss, StatusCode.Aborted, StatusCode.OutOfRange, StatusCode.Cancelled, StatusCode.DeadlineExceeded }
                     }
@@ -128,7 +126,7 @@ namespace Toggly.FeatureManagement
                     AppKey = _appKey,
                     Environment = _environment,
                     Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime),
-                    TotalUniqueUsers = _uniqueUserMap.Count
+                    TotalUniqueUsers = 0
                 };
 
                 var keys = _stats.Keys.Select(t => t.FeatureKey).ToArray().Distinct().ToArray();
@@ -136,21 +134,19 @@ namespace Toggly.FeatureManagement
                 {
                     dataPacket.Stats.Add(new StatMessage
                     {
-                        EnabledCount = _stats.TryGetValue((keys[i], (byte)StatType.Enabled), out var enabledCount) ? enabledCount : 0,
-                        DisabledCount = _stats.TryGetValue((keys[i], (byte)StatType.Disabled), out var disabledCount) ? disabledCount : 0,
+                        EnabledCount = _stats.TryRemove((keys[i], (byte)StatType.Enabled), out var enabledCount) ? enabledCount : 0,
+                        DisabledCount = _stats.TryRemove((keys[i], (byte)StatType.Disabled), out var disabledCount) ? disabledCount : 0,
                         Feature = keys[i],
-                        UniqueContextIdentifierDisabledCount = _uniqueUsageEnabledMap.TryGetValue(keys[i], out var uniqueIdDisabledCount) ? uniqueIdDisabledCount.Count : 0,
-                        UniqueContextIdentifierEnabledCount = _uniqueUsageEnabledMap.TryGetValue(keys[i], out var uniqueIdEnabledCount) ? uniqueIdEnabledCount.Count : 0,
-                        UniqueRequestDisabledCount = _stats.TryGetValue((keys[i], (byte)StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0,
-                        UniqueRequestEnabledCount = _stats.TryGetValue((keys[i], (byte)StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0,
-                        UsedCount = _stats.TryGetValue((keys[i], (byte)StatType.Used), out var usedCount) ? usedCount : 0,
-                        UniqueUsersUsedCount = _uniqueUsageUsedMap.TryGetValue(keys[i], out var uniqueIdUsedCount) ? uniqueIdUsedCount.Count : 0,
+                        UniqueContextIdentifierDisabledCount = _uniqueUsageEnabledMap.TryRemove(keys[i], out var uniqueIdDisabledCount) ? uniqueIdDisabledCount.Count : 0,
+                        UniqueContextIdentifierEnabledCount = _uniqueUsageEnabledMap.TryRemove(keys[i], out var uniqueIdEnabledCount) ? uniqueIdEnabledCount.Count : 0,
+                        UniqueRequestDisabledCount = _stats.TryRemove((keys[i], (byte)StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0,
+                        UniqueRequestEnabledCount = _stats.TryRemove((keys[i], (byte)StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0,
+                        UsedCount = _stats.TryRemove((keys[i], (byte)StatType.Used), out var usedCount) ? usedCount : 0,
+                        UniqueUsersUsedCount = 0
                     });
                 }
 
-                _stats.Clear();
-
-                var grpcMetadata = new Grpc.Core.Metadata
+                var grpcMetadata = new Metadata
                 {
                     { "UA", userAgent }
                 };
@@ -245,7 +241,6 @@ namespace Toggly.FeatureManagement
                         _uniqueUsageEnabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
                     else
                         _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
-                    _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }
         }
@@ -281,7 +276,6 @@ namespace Toggly.FeatureManagement
                         _uniqueUsageEnabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
                     else
                         _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
-                    _uniqueUserMap.Add(uniqueIdentifier);
                 }
             }
         }
@@ -316,7 +310,6 @@ namespace Toggly.FeatureManagement
                 UniqueUsageEnabledMap = _uniqueUsageEnabledMap,
                 UniqueUsageDisabledMap = _uniqueUsageDisabledMap,
                 UniqueUsageUsedMap = _uniqueUsageUsedMap,
-                UniqueUserMap = _uniqueUserMap,
                 UserAgent = userAgent,
                 LastError = _lastError,
                 LastErrorTime = _lastErrorTime,
@@ -340,8 +333,6 @@ namespace Toggly.FeatureManagement
         public ConcurrentDictionary<string, ConcurrentHashSet<int>>? UniqueUsageDisabledMap { get; set; }
 
         public ConcurrentDictionary<string, ConcurrentHashSet<int>>? UniqueUsageUsedMap { get; set; }
-
-        public HashSet<string>? UniqueUserMap { get; set; }
 
         public string? UserAgent { get; set; }
 

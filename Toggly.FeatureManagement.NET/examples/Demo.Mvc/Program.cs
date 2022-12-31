@@ -30,7 +30,6 @@ namespace Demo.Mvc
             {
                 options.AppKey = builder.Configuration["Toggly:AppKey"]!;
                 options.Environment = builder.Configuration["Toggly:Environment"]!;
-                options.BaseUrl = "https://localhost:44381";
             });
 
             builder.Services.AddSingleton<IDisabledFeaturesHandler, FeatureNotEnabledHandler>();

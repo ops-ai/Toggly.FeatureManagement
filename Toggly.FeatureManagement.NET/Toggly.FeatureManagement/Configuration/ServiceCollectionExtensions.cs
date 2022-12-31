@@ -2,12 +2,12 @@
 using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
+using Polly.Extensions.Http;
+using Polly;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Text;
 using Toggly.FeatureManagement.Helpers;
 
 namespace Toggly.FeatureManagement.Configuration
@@ -45,6 +45,14 @@ namespace Toggly.FeatureManagement.Configuration
             return services;
         }
 
+        private static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+        {
+            return HttpPolicyExtensions
+                .HandleTransientHttpError()
+                .OrResult(msg => msg.StatusCode == HttpStatusCode.NotFound)
+                .WaitAndRetryAsync(8, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+        }
+
         private static void AddCoreServices(IServiceCollection services)
         {
             services.AddHttpClient("toggly", (sp, config) =>
@@ -52,7 +60,10 @@ namespace Toggly.FeatureManagement.Configuration
                 var baseUrl = sp.GetRequiredService<IOptions<TogglySettings>>().Value.BaseUrl;
 
                 config.BaseAddress = new Uri(baseUrl ?? "https://app.toggly.io/");
-            }).ConfigurePrimaryHttpMessageHandler(messageHandler =>
+            })
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+            .AddPolicyHandler(GetRetryPolicy())
+            .ConfigurePrimaryHttpMessageHandler(messageHandler =>
             {
                 var handler = new HttpClientHandler();
 

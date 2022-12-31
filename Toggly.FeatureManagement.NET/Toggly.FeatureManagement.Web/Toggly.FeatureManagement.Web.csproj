@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>netstandard2.1;netcoreapp3.1;net5.0</TargetFrameworks>
+	  <TargetFrameworks>netstandard2.1;netcoreapp3.1;net5.0;net6.0;net7.0</TargetFrameworks>
 	  <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 	  <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 	  <PackageProjectUrl>https://toggly.io</PackageProjectUrl>
@@ -11,6 +11,7 @@
 	  <RepositoryType>git</RepositoryType>
 	  <PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
 	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	  <GenerateDocumentationFile>True</GenerateDocumentationFile>
   </PropertyGroup>
 
 	<PropertyGroup Condition=" '$(TargetFramework)' == 'netstandard2_1' ">
@@ -50,7 +51,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="UAParser" Version="3.1.47" />
+	  <PackageReference Include="UAParser" Version="3.*" />
 	</ItemGroup>
 	
 	<ItemGroup>
