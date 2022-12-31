@@ -60,7 +60,7 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
-            _timer = new Timer((s) => SendMetrics().ConfigureAwait(false), null, new TimeSpan(0, 5, 0), new TimeSpan(0, 5, 0));
+            _timer = new Timer((s) => SendMetrics().ConfigureAwait(false), null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
             applicationLifetime.ApplicationStopping.Register(() => SendMetrics().ConfigureAwait(false).GetAwaiter().GetResult());
 
             var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
@@ -91,7 +91,7 @@ namespace Toggly.FeatureManagement
                     {
                         MaxAttempts = 5,
                         InitialBackoff = TimeSpan.FromSeconds(1),
-                        MaxBackoff = TimeSpan.FromSeconds(5),
+                        MaxBackoff = TimeSpan.FromSeconds(10),
                         BackoffMultiplier = 1.5,
                         RetryableStatusCodes = { StatusCode.Unavailable, StatusCode.DataLoss, StatusCode.Aborted, StatusCode.OutOfRange, StatusCode.Cancelled, StatusCode.DeadlineExceeded }
                     }

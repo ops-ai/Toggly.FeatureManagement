@@ -67,7 +67,7 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
-            _timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 5, 0), new TimeSpan(0, 5, 0));
+            _timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
             _longTimer = new Timer((s) => ResetUsageMap().ConfigureAwait(false), null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
             applicationLifetime.ApplicationStopping.Register(() => SendStats().ConfigureAwait(false).GetAwaiter().GetResult());
 
@@ -111,7 +111,7 @@ namespace Toggly.FeatureManagement
                     {
                         MaxAttempts = 5,
                         InitialBackoff = TimeSpan.FromSeconds(1),
-                        MaxBackoff = TimeSpan.FromSeconds(5),
+                        MaxBackoff = TimeSpan.FromSeconds(10),
                         BackoffMultiplier = 1.5,
                         RetryableStatusCodes = { StatusCode.Unavailable, StatusCode.DataLoss, StatusCode.Aborted, StatusCode.OutOfRange, StatusCode.Cancelled, StatusCode.DeadlineExceeded }
                     }
@@ -146,7 +146,7 @@ namespace Toggly.FeatureManagement
                     });
                 }
 
-                var grpcMetadata = new Grpc.Core.Metadata
+                var grpcMetadata = new Metadata
                 {
                     { "UA", userAgent }
                 };

@@ -1,4 +1,4 @@
-next-version: 2.2.3
+next-version: 2.2.4
 branches:
   main:
     regex: ^develop$|^main$
