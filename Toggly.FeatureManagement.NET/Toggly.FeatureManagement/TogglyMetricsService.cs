@@ -75,7 +75,7 @@ namespace Toggly.FeatureManagement
         {
             try
             {
-                if (_stats.IsEmpty)
+                if (_stats.IsEmpty && _counters.IsEmpty && _observations.IsEmpty)
                 {
                     _logger.LogTrace("Send metrics - nothing to send");
                     return;
