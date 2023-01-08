@@ -68,14 +68,14 @@ namespace Demo.Mvc
                 }));
             });
 
-            var featrueStateService = app.Services.GetRequiredService<IFeatureStateService>();
-            featrueStateService.WhenFeatureTurnsOn(FeatureFlags.HourlyJob, () =>
+            var featureStateService = app.Services.GetRequiredService<IFeatureStateService>();
+            featureStateService.WhenFeatureTurnsOn(FeatureFlags.HourlyJob, () =>
             {
                 //start a service or job
                 RecurringJob.AddOrUpdate<ITestRecurringJob>("Hourly job", s => s.RunAsync(), Cron.Hourly());
             });
 
-            featrueStateService.WhenFeatureTurnsOff(FeatureFlags.HourlyJob, () =>
+            featureStateService.WhenFeatureTurnsOff(FeatureFlags.HourlyJob, () =>
             {
                 //stop a service or job
                 RecurringJob.RemoveIfExists("Hourly job");
