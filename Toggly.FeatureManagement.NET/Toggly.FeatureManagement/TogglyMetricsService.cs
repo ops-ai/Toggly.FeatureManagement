@@ -112,17 +112,11 @@ namespace Toggly.FeatureManagement
                 {
                     var stat = new MetricStatMessage
                     {
-                        EnabledCount = 0,
-                        DisabledCount = 0,
+                        EnabledCount = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
+                        DisabledCount = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var disabledCount) ? disabledCount : 0,
                         Metric = statKeys[i].MetricKey
                     };
-
-                    if (_stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var enabledCount))
-                        stat.EnabledCount = enabledCount;
-
-                    if (_stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var disabledCount))
-                        stat.DisabledCount = disabledCount;
-
+                    
                     if (statKeys[i].FeatureKey != null) stat.Feature = statKeys[i].FeatureKey;
                     dataPacket.Stats.Add(stat);
                 }
@@ -132,16 +126,10 @@ namespace Toggly.FeatureManagement
                 {
                     var counter = new MetricCounterMessage
                     {
-                        EnabledCount = 0,
-                        DisabledCount = 0,
+                        EnabledCount = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
+                        DisabledCount = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var disabledCount) ? disabledCount : 0,
                         Metric = counterKeys[i].MetricKey
                     };
-
-                    if (_counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var enabledCount))
-                        counter.EnabledCount = enabledCount;
-
-                    if (_counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var disabledCount))
-                        counter.DisabledCount = disabledCount;
 
                     if (counterKeys[i].FeatureKey != null) counter.Feature = counterKeys[i].FeatureKey;
                     dataPacket.Counters.Add(counter);
@@ -151,8 +139,8 @@ namespace Toggly.FeatureManagement
                 {
                     var observationMessage = new MetricObservationMessage
                     {
-                        EnabledCount = _counters.TryGetValue((observation.MetricKey, observation.FeatureKey, true), out var enabledCount) ? enabledCount : 0,
-                        DisabledCount = _counters.TryGetValue((observation.MetricKey, observation.FeatureKey, false), out var disabledCount) ? disabledCount : 0,
+                        EnabledCount = _counters.TryRemove((observation.MetricKey, observation.FeatureKey, true), out var enabledCount) ? enabledCount : 0,
+                        DisabledCount = _counters.TryRemove((observation.MetricKey, observation.FeatureKey, false), out var disabledCount) ? disabledCount : 0,
                         Metric = observation.MetricKey
                     };
                     if (observation.FeatureKey != null) observationMessage.Feature = observation.FeatureKey;
