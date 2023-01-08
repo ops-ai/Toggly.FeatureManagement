@@ -68,31 +68,29 @@ namespace Demo.Mvc
                 }));
             });
 
-            app.Services.GetRequiredService<IFeatureStateService>().WhenFeatureTurnsOn(FeatureFlags.HourlyJob, () =>
+            var featrueStateService = app.Services.GetRequiredService<IFeatureStateService>();
+            featrueStateService.WhenFeatureTurnsOn(FeatureFlags.HourlyJob, () =>
             {
                 //start a service or job
                 RecurringJob.AddOrUpdate<ITestRecurringJob>("Hourly job", s => s.RunAsync(), Cron.Hourly());
             });
 
-            app.Services.GetRequiredService<IFeatureStateService>().WhenFeatureTurnsOff(FeatureFlags.HourlyJob, () =>
+            featrueStateService.WhenFeatureTurnsOff(FeatureFlags.HourlyJob, () =>
             {
                 //stop a service or job
                 RecurringJob.RemoveIfExists("Hourly job");
             });
 
-            app.UseEndpoints(endpoints =>
+            app.MapControllerRoute("default", "{action=Index}", new { controller = "Home" });
+            app.MapControllerRoute("default", "{controller=Home}/{action=Index}", new { controller = "Home" });
+            app.MapGet("/feature-debug", async ctx => await ctx.Response.WriteAsJsonAsync(new
             {
-                endpoints.MapControllerRoute("default", "{action=Index}", new { controller = "Home" });
-                endpoints.MapControllerRoute("default", "{controller=Home}/{action=Index}", new { controller = "Home" });
-                endpoints.MapGet("/feature-debug", async ctx => await ctx.Response.WriteAsJsonAsync(new
-                {
-                    Metrics = ctx.RequestServices.GetRequiredService<IMetricsDebug>().GetDebugInfo(),
-                    UsageStats = ctx.RequestServices.GetRequiredService<IUsageStatsDebug>().GetDebugInfo(),
-                    FeatureProvider = ctx.RequestServices.GetRequiredService<IFeatureProviderDebug>().GetDebugInfo(),
-                }));
-                endpoints.MapHangfireDashboard();
-                endpoints.MapFallbackToController("404", "NotFound", "Home");
-            });
+                Metrics = ctx.RequestServices.GetRequiredService<IMetricsDebug>().GetDebugInfo(),
+                UsageStats = ctx.RequestServices.GetRequiredService<IUsageStatsDebug>().GetDebugInfo(),
+                FeatureProvider = ctx.RequestServices.GetRequiredService<IFeatureProviderDebug>().GetDebugInfo(),
+            }));
+            app.MapHangfireDashboard();
+            app.MapFallbackToController("404", "NotFound", "Home");
 
             app.Run();
         }
