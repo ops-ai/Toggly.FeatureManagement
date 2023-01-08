@@ -3,6 +3,8 @@ using Microsoft.FeatureManagement.Mvc;
 using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.Web.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Hangfire;
+using Demo.Mvc.Jobs;
 
 namespace Demo.Mvc
 {
@@ -27,6 +29,16 @@ namespace Demo.Mvc
             builder.Services.AddDistributedMemoryCache();
             builder.Services.AddSession();
             builder.Services.AddRazorPages().AddRazorRuntimeCompilation();
+            builder.Services.AddTransient<ITestRecurringJob, TestRecurringJob>();
+
+            builder.Services.AddHangfire(config =>
+            {
+                config.UseSimpleAssemblyNameTypeSerializer().UseRecommendedSerializerSettings();
+
+                config.UseInMemoryStorage();
+            });
+
+            builder.Services.AddHangfireServer();
 
             var app = builder.Build();
 
@@ -78,6 +90,7 @@ namespace Demo.Mvc
                     UsageStats = ctx.RequestServices.GetRequiredService<IUsageStatsDebug>().GetDebugInfo(),
                     FeatureProvider = ctx.RequestServices.GetRequiredService<IFeatureProviderDebug>().GetDebugInfo(),
                 }));
+                endpoints.MapHangfireDashboard();
                 endpoints.MapFallbackToController("404", "NotFound", "Home");
             });
 
