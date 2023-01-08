@@ -1,6 +1,7 @@
 ﻿using Azure.Messaging.WebPubSub;
 using ConcurrentCollections;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
@@ -46,12 +47,15 @@ namespace Toggly.FeatureManagement
 
         private WebsocketClient? _webSocketClient = null;
 
+        private readonly IFeatureStateInternalService _featureStateService;
+
         public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
             _clientFactory = clientFactory;
             _snapshotProvider = (IFeatureSnapshotProvider?)serviceProvider.GetService(typeof(IFeatureSnapshotProvider));
+            _featureStateService = (IFeatureStateInternalService)serviceProvider.GetRequiredService(typeof(IFeatureStateInternalService));
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
@@ -81,6 +85,7 @@ namespace Toggly.FeatureManagement
                                     })
                             };
                             _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
+                            _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
                         }
                 }
             }
@@ -135,6 +140,7 @@ namespace Toggly.FeatureManagement
                     };
 
                     _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
+                    _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
                 }
                 var activeExperiments = newDefinitions.Where(t => t.Metrics != null).SelectMany(t => t.Metrics).GroupBy(t => t).Select(t => t.Key).ToList();
                 _experiments.Clear();
@@ -155,6 +161,12 @@ namespace Toggly.FeatureManagement
                             {
                                 if (msg.Text == "update") _ = RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
                             });
+                            _webSocketClient.DisconnectionHappened.Subscribe(info =>
+                            {
+                                _logger.LogWarning("Websocket disconnected");
+                            });
+                            _webSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
+                            
                             await _webSocketClient.StartOrFail().ConfigureAwait(false);
                         }
                     }

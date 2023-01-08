@@ -56,6 +56,18 @@ namespace Demo.Mvc
                 }));
             });
 
+            app.Services.GetRequiredService<IFeatureStateService>().WhenFeatureTurnsOn(FeatureFlags.HourlyJob, () =>
+            {
+                //start a service or job
+                RecurringJob.AddOrUpdate<ITestRecurringJob>("Hourly job", s => s.RunAsync(), Cron.Hourly());
+            });
+
+            app.Services.GetRequiredService<IFeatureStateService>().WhenFeatureTurnsOff(FeatureFlags.HourlyJob, () =>
+            {
+                //stop a service or job
+                RecurringJob.RemoveIfExists("Hourly job");
+            });
+
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllerRoute("default", "{action=Index}", new { controller = "Home" });
