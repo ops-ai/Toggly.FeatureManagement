@@ -73,6 +73,8 @@ namespace Toggly.FeatureManagement.Configuration
                 return handler;
             });
 
+            services.AddSingleton<IMetricsRegistryService, TogglyMetricsRegistryService>();
+            
             services.AddSingleton<TogglyFeatureStateService>();
             services.AddSingleton<IFeatureStateInternalService>(x => x.GetRequiredService<TogglyFeatureStateService>());
             services.AddSingleton<IFeatureStateService>(x => x.GetRequiredService<TogglyFeatureStateService>());

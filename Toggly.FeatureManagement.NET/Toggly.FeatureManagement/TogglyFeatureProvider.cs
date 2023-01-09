@@ -49,11 +49,14 @@ namespace Toggly.FeatureManagement
 
         private readonly IFeatureStateInternalService _featureStateService;
 
+        private readonly IServiceProvider _serviceProvider;
+
         public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
             _clientFactory = clientFactory;
+            _serviceProvider = serviceProvider;
             _snapshotProvider = (IFeatureSnapshotProvider?)serviceProvider.GetService(typeof(IFeatureSnapshotProvider));
             _featureStateService = (IFeatureStateInternalService)serviceProvider.GetRequiredService(typeof(IFeatureStateInternalService));
 
@@ -98,11 +101,15 @@ namespace Toggly.FeatureManagement
         private string _lastError = string.Empty;
         private DateTime? _lastErrorTime = null;
         private DateTime? _lastRefresh = null;
-
+        private IMetricsService? _metricsService = null;
+        
         private async Task RefreshFeatures(long? timeout = null)
         {
             try
             {
+                if (_metricsService == null)
+                    _metricsService = _serviceProvider.GetRequiredService<IMetricsService>();
+                
                 using var httpClient = _clientFactory.CreateClient("toggly");
 #if NETCOREAPP3_1_OR_GREATER
                 httpClient.DefaultRequestVersion = HttpVersion.Version20;

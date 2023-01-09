@@ -2,6 +2,7 @@
 using Grpc.Core;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -43,6 +44,8 @@ namespace Toggly.FeatureManagement
 
         private readonly IFeatureManager _featureManager;
 
+        private readonly IMetricsRegistryService _metricsRegistryService;
+
         /// <summary>
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
@@ -57,8 +60,9 @@ namespace Toggly.FeatureManagement
             _clientFactory = clientFactory;
             _featureExperimentProvider = (IFeatureExperimentProvider)featureDefinitionProvider;
             _featureManager = featureManager;
+            _metricsRegistryService = serviceProvider.GetRequiredService<IMetricsRegistryService>();
 
-            _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
+            _logger = loggerFactory.CreateLogger<TogglyMetricsService>();
 
             _timer = new Timer((s) => SendMetrics().ConfigureAwait(false), null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
             applicationLifetime.ApplicationStopping.Register(() => SendMetrics().ConfigureAwait(false).GetAwaiter().GetResult());
@@ -71,10 +75,24 @@ namespace Toggly.FeatureManagement
         private DateTime? _lastErrorTime = null;
         private DateTime? _lastSend = null;
 
+        private async Task BeforeSendMetrics()
+        {
+            var measurements = await _metricsRegistryService.GetMeasurementValuesAsync().ConfigureAwait(false);
+            measurements.ToList().ForEach(m => IncrementMeasurement(m.Key, null, (int)m.Value, true));
+
+            var counters = await _metricsRegistryService.GetCounterValuesAsync().ConfigureAwait(false);
+            counters.ToList().ForEach(m => IncrementMetricCounter(m.Key, null, (int)m.Value, true));
+
+            var observations = await _metricsRegistryService.GetObservationValuesAsync().ConfigureAwait(false);
+            observations.ToList().ForEach(m => StoreObservationInstance(m.Value.Item1, m.Key, null, (int)m.Value.Item2, true));
+        }
+
         private async Task SendMetrics()
         {
             try
             {
+                await BeforeSendMetrics().ConfigureAwait(false);
+
                 if (_stats.IsEmpty && _counters.IsEmpty && _observations.IsEmpty)
                 {
                     _logger.LogTrace("Send metrics - nothing to send");
@@ -185,12 +203,14 @@ namespace Toggly.FeatureManagement
 
         #region Measure
 
+        /// <inheritdoc/>
         [Obsolete]
         public Task AddMetricAsync(string metricKey, int value)
         {
             return MeasureAsync(metricKey, value);
         }
 
+        /// <inheritdoc/>
         [Obsolete]
         public Task AddMetricAsync<TContext>(string metricKey, TContext context, int value)
         {
@@ -206,6 +226,7 @@ namespace Toggly.FeatureManagement
             } while (!_stats.TryUpdate((metricKey, featureKey, enabled), currentValue + value, currentValue));
         }
 
+        /// <inheritdoc/>
         public async Task MeasureAsync(string metricKey, int value)
         {
             _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
@@ -217,6 +238,7 @@ namespace Toggly.FeatureManagement
                     IncrementMeasurement(metricKey, feature, value, await _featureManager.IsEnabledAsync(feature));
         }
 
+        /// <inheritdoc/>
         public async Task MeasureAsync<TContext>(string metricKey, TContext context, int value)
         {
             _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
@@ -233,31 +255,35 @@ namespace Toggly.FeatureManagement
 
         #region Observe
 
-        private void StoreObservationInstance(string metricKey, string? featureKey, int value, bool enabled)
+        private void StoreObservationInstance(DateTime date, string metricKey, string? featureKey, int value, bool enabled)
         {
-            _observations.Add((DateTime.UtcNow, metricKey, featureKey, enabled, value));
+            _observations.Add((date, metricKey, featureKey, enabled, value));
         }
 
+        /// <inheritdoc/>
         public async Task ObserveAsync(string metricKey, int value)
         {
+            var date = DateTime.UtcNow;
             _logger.LogTrace("Record ovserved value: {metricKey}", metricKey);
-            StoreObservationInstance(metricKey, null, value, true);
+            StoreObservationInstance(date, metricKey, null, value, true);
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
             if (features != null)
                 foreach (var feature in features)
-                    StoreObservationInstance(metricKey, feature, value, await _featureManager.IsEnabledAsync(feature));
+                    StoreObservationInstance(date, metricKey, feature, value, await _featureManager.IsEnabledAsync(feature));
         }
 
+        /// <inheritdoc/>
         public async Task ObserveAsync<TContext>(string metricKey, TContext context, int value)
         {
+            var date = DateTime.UtcNow;
             _logger.LogTrace("Record ovserved value: {metricKey}", metricKey);
-            StoreObservationInstance(metricKey, null, value, true);
+            StoreObservationInstance(date, metricKey, null, value, true);
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
             if (features != null)
                 foreach (var feature in features)
-                    StoreObservationInstance(metricKey, feature, value, await _featureManager.IsEnabledAsync(feature, context));
+                    StoreObservationInstance(date, metricKey, feature, value, await _featureManager.IsEnabledAsync(feature, context));
         }
 
         #endregion
@@ -274,6 +300,7 @@ namespace Toggly.FeatureManagement
             } while (!_counters.TryUpdate((metricKey, featureKey, enabled), currentValue + value, currentValue));
         }
 
+        /// <inheritdoc/>
         public async Task IncrementCounterAsync(string metricKey, int value)
         {
             _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
@@ -285,6 +312,7 @@ namespace Toggly.FeatureManagement
                     IncrementMetricCounter(metricKey, feature, value, await _featureManager.IsEnabledAsync(feature));
         }
 
+        /// <inheritdoc/>
         public async Task IncrementCounterAsync<TContext>(string metricKey, TContext context, int value)
         {
             _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
@@ -299,22 +327,49 @@ namespace Toggly.FeatureManagement
         #endregion
     }
 
+    /// <summary>
+    /// A class that holds debug information about the metrics client
+    /// </summary>
     public class MetricsDebugInfo
     {
+        /// <summary>
+        /// The app key
+        /// </summary>
         public string? AppKey { get; set; }
 
+        /// <summary>
+        /// The registered environment
+        /// </summary>
         public string? Environment { get; set; }
 
+        /// <summary>
+        /// The base url of the toggly instance
+        /// </summary>
         public string? BaseUrl { get; set; }
 
+        /// <summary>
+        /// Currently collected stats
+        /// </summary>
         public ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), int>? Stats { get; set; }
 
+        /// <summary>
+        /// The user agent
+        /// </summary>
         public string? UserAgent { get; set; }
 
+        /// <summary>
+        /// The last error encountered
+        /// </summary>
         public string? LastError { get; set; }
 
+        /// <summary>
+        /// The time of the last error
+        /// </summary>
         public DateTime? LastErrorTime { get; set; }
 
+        /// <summary>
+        /// The last time metrics were sent successfully
+        /// </summary>
         public DateTime? LastSend { get; set; }
     }
 }
