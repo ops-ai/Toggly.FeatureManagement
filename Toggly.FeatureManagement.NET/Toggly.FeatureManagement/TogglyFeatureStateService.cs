@@ -9,6 +9,7 @@ namespace Toggly.FeatureManagement
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, Action>> _offSubscribers = new ConcurrentDictionary<string, ConcurrentDictionary<Guid, Action>>();
         private readonly ConcurrentDictionary<string, bool> _featureStates = new ConcurrentDictionary<string, bool>();
 
+        /// <inheritdoc/>
         public Guid WhenFeatureTurnsOn(object featureKey, Action action)
         {
             var type = featureKey.GetType();
@@ -19,6 +20,7 @@ namespace Toggly.FeatureManagement
             return WhenFeatureTurnsOn(Enum.GetName(featureKey.GetType(), featureKey), action);
         }
 
+        /// <inheritdoc/>
         public Guid WhenFeatureTurnsOn(string featureKey, Action action)
         {
             if (!_onSubscribers.ContainsKey(featureKey))
@@ -29,6 +31,7 @@ namespace Toggly.FeatureManagement
             return id;
         }
 
+        /// <inheritdoc/>
         public Guid WhenFeatureTurnsOff(object featureKey, Action action)
         {
             var type = featureKey.GetType();
@@ -39,6 +42,7 @@ namespace Toggly.FeatureManagement
             return WhenFeatureTurnsOff(Enum.GetName(featureKey.GetType(), featureKey), action);
         }
 
+        /// <inheritdoc/>
         public Guid WhenFeatureTurnsOff(string featureKey, Action action)
         {
             if (!_offSubscribers.ContainsKey(featureKey))
@@ -49,14 +53,18 @@ namespace Toggly.FeatureManagement
             return id;
         }
 
+        /// <inheritdoc/>
         public bool UnregisterFeatureStateChange(string featureKey, Guid id)
         {
-            if (!_offSubscribers.ContainsKey(featureKey))
-                return false;
-
-            return _offSubscribers[featureKey].TryRemove(id, out _);
+            if (_offSubscribers.ContainsKey(featureKey))
+                return _offSubscribers[featureKey].TryRemove(id, out _);
+            else if (_onSubscribers.ContainsKey(featureKey))
+                return _onSubscribers[featureKey].TryRemove(id, out _);
+            
+            return false;
         }
 
+        /// <inheritdoc/>
         public void UpdateFeatureState(string featureKey, bool state)
         {
             if (!_featureStates.ContainsKey(featureKey))
