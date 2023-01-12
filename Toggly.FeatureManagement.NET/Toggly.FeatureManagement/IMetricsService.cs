@@ -32,7 +32,7 @@ namespace Toggly.FeatureManagement
         /// <param name="metricKey">Name/key of the metric</param>
         /// <param name="value">Value to add (sum) to the metric</param>
         /// <returns></returns>
-        Task MeasureAsync(string metricKey, int value);
+        Task MeasureAsync(string metricKey, double value);
 
         /// <summary>
         /// Increment a value for a defined metric with a specified context
@@ -43,7 +43,7 @@ namespace Toggly.FeatureManagement
         /// <param name="context">A custom context</param>
         /// <param name="value">Value to add (sum) to the metric</param>
         /// <returns></returns>
-        Task MeasureAsync<TContext>(string metricKey, TContext context, int value);
+        Task MeasureAsync<TContext>(string metricKey, TContext context, double value);
 
         /// <summary>
         /// Record a value at an instant in time
@@ -52,7 +52,7 @@ namespace Toggly.FeatureManagement
         /// <param name="metricKey">Name/key of the metric</param>
         /// <param name="value">Value to add to the metric</param>
         /// <returns></returns>
-        Task ObserveAsync(string metricKey, int value);
+        Task ObserveAsync(string metricKey, double value);
 
         /// <summary>
         /// Record a value at an instant in time with a specified context
@@ -63,7 +63,7 @@ namespace Toggly.FeatureManagement
         /// <param name="context">A custom context</param>
         /// <param name="value">Value to add to the metric</param>
         /// <returns></returns>
-        Task ObserveAsync<TContext>(string metricKey, TContext context, int value);
+        Task ObserveAsync<TContext>(string metricKey, TContext context, double value);
 
         /// <summary>
         /// Increment a named counter
@@ -72,7 +72,7 @@ namespace Toggly.FeatureManagement
         /// <param name="metricKey">Name/key of the metric</param>
         /// <param name="value">Value to add to the metric</param>
         /// <returns></returns>
-        Task IncrementCounterAsync(string metricKey, int value);
+        Task IncrementCounterAsync(string metricKey, double value);
 
         /// <summary>
         /// Increment a named counter with a specified context
@@ -83,6 +83,6 @@ namespace Toggly.FeatureManagement
         /// <param name="context">A custom context</param>
         /// <param name="value">Value to add to the metric</param>
         /// <returns></returns>
-        Task IncrementCounterAsync<TContext>(string metricKey, TContext context, int value);
+        Task IncrementCounterAsync<TContext>(string metricKey, TContext context, double value);
     }
 }

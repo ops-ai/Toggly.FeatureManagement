@@ -1,4 +1,5 @@
 ﻿using ConcurrentCollections;
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Configuration;
@@ -30,11 +31,11 @@ namespace Toggly.FeatureManagement
 
         private readonly IHttpClientFactory _clientFactory;
 
-        private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), int> _stats = new ConcurrentDictionary<(string, string?, bool), int>();
+        private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), double> _stats = new ConcurrentDictionary<(string, string?, bool), double>();
         
-        private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), int> _counters = new ConcurrentDictionary<(string, string?, bool), int>();
+        private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), double> _counters = new ConcurrentDictionary<(string, string?, bool), double>();
         
-        private readonly ConcurrentBag<(DateTime date, string MetricKey, string? FeatureKey, bool Enabled, int)> _observations = new ConcurrentBag<(DateTime, string, string?, bool, int)>();
+        private readonly ConcurrentBag<(DateTime Date, string MetricKey, string? FeatureKey, bool Enabled, double Value)> _observations = new ConcurrentBag<(DateTime, string, string?, bool, double)>();
 
         private readonly Timer _timer;
 
@@ -78,13 +79,13 @@ namespace Toggly.FeatureManagement
         private async Task BeforeSendMetrics()
         {
             var measurements = await _metricsRegistryService.GetMeasurementValuesAsync().ConfigureAwait(false);
-            measurements.ToList().ForEach(m => IncrementMeasurement(m.Key, null, (int)m.Value, true));
+            measurements.ToList().ForEach(m => IncrementMeasurement(m.Key, null, m.Value, true));
 
             var counters = await _metricsRegistryService.GetCounterValuesAsync().ConfigureAwait(false);
-            counters.ToList().ForEach(m => IncrementMetricCounter(m.Key, null, (int)m.Value, true));
+            counters.ToList().ForEach(m => IncrementMetricCounter(m.Key, null, m.Value, true));
 
             var observations = await _metricsRegistryService.GetObservationValuesAsync().ConfigureAwait(false);
-            observations.ToList().ForEach(m => StoreObservationInstance(m.Value.Item1, m.Key, null, (int)m.Value.Item2, true));
+            observations.ToList().ForEach(m => StoreObservationInstance(m.Value.Item1, m.Key, null, m.Value.Item2, true));
         }
 
         private async Task SendMetrics()
@@ -130,8 +131,8 @@ namespace Toggly.FeatureManagement
                 {
                     var stat = new MetricStatMessage
                     {
-                        EnabledCount = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
-                        DisabledCount = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var disabledCount) ? disabledCount : 0,
+                        Value = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
+                        ValueDisabled = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var disabledCount) ? disabledCount : 0,
                         Metric = statKeys[i].MetricKey
                     };
                     
@@ -144,8 +145,8 @@ namespace Toggly.FeatureManagement
                 {
                     var counter = new MetricCounterMessage
                     {
-                        EnabledCount = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
-                        DisabledCount = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var disabledCount) ? disabledCount : 0,
+                        Value = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
+                        ValueDisabled = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var disabledCount) ? disabledCount : 0,
                         Metric = counterKeys[i].MetricKey
                     };
 
@@ -157,10 +158,12 @@ namespace Toggly.FeatureManagement
                 {
                     var observationMessage = new MetricObservationMessage
                     {
-                        EnabledCount = _counters.TryRemove((observation.MetricKey, observation.FeatureKey, true), out var enabledCount) ? enabledCount : 0,
-                        DisabledCount = _counters.TryRemove((observation.MetricKey, observation.FeatureKey, false), out var disabledCount) ? disabledCount : 0,
+                        Time = observation.Date.ToTimestamp(),
+                        Value = observation.Enabled ? observation.Value : 0,
+                        ValueDisabled = !observation.Enabled ? observation.Value : 0,
                         Metric = observation.MetricKey
                     };
+                    
                     if (observation.FeatureKey != null) observationMessage.Feature = observation.FeatureKey;
                     dataPacket.Observations.Add(observationMessage);
                 }
@@ -217,9 +220,9 @@ namespace Toggly.FeatureManagement
             return MeasureAsync(metricKey, context, value);
         }
 
-        private void IncrementMeasurement(string metricKey, string? featureKey, int value, bool enabled)
+        private void IncrementMeasurement(string metricKey, string? featureKey, double value, bool enabled)
         {
-            int currentValue;
+            double currentValue;
             do
             {
                 currentValue = _stats.GetOrAdd((metricKey, featureKey, enabled), 0);
@@ -227,7 +230,7 @@ namespace Toggly.FeatureManagement
         }
 
         /// <inheritdoc/>
-        public async Task MeasureAsync(string metricKey, int value)
+        public async Task MeasureAsync(string metricKey, double value)
         {
             _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
             IncrementMeasurement(metricKey, null, value, true);
@@ -239,7 +242,7 @@ namespace Toggly.FeatureManagement
         }
 
         /// <inheritdoc/>
-        public async Task MeasureAsync<TContext>(string metricKey, TContext context, int value)
+        public async Task MeasureAsync<TContext>(string metricKey, TContext context, double value)
         {
             _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
             IncrementMeasurement(metricKey, null, value, true);
@@ -255,13 +258,13 @@ namespace Toggly.FeatureManagement
 
         #region Observe
 
-        private void StoreObservationInstance(DateTime date, string metricKey, string? featureKey, int value, bool enabled)
+        private void StoreObservationInstance(DateTime date, string metricKey, string? featureKey, double value, bool enabled)
         {
             _observations.Add((date, metricKey, featureKey, enabled, value));
         }
 
         /// <inheritdoc/>
-        public async Task ObserveAsync(string metricKey, int value)
+        public async Task ObserveAsync(string metricKey, double value)
         {
             var date = DateTime.UtcNow;
             _logger.LogTrace("Record ovserved value: {metricKey}", metricKey);
@@ -274,7 +277,7 @@ namespace Toggly.FeatureManagement
         }
 
         /// <inheritdoc/>
-        public async Task ObserveAsync<TContext>(string metricKey, TContext context, int value)
+        public async Task ObserveAsync<TContext>(string metricKey, TContext context, double value)
         {
             var date = DateTime.UtcNow;
             _logger.LogTrace("Record ovserved value: {metricKey}", metricKey);
@@ -291,9 +294,9 @@ namespace Toggly.FeatureManagement
 
         #region Counters
 
-        private void IncrementMetricCounter(string metricKey, string? featureKey, int value, bool enabled)
+        private void IncrementMetricCounter(string metricKey, string? featureKey, double value, bool enabled)
         {
-            int currentValue;
+            double currentValue;
             do
             {
                 currentValue = _counters.GetOrAdd((metricKey, featureKey, enabled), 0);
@@ -301,7 +304,7 @@ namespace Toggly.FeatureManagement
         }
 
         /// <inheritdoc/>
-        public async Task IncrementCounterAsync(string metricKey, int value)
+        public async Task IncrementCounterAsync(string metricKey, double value)
         {
             _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
             IncrementMetricCounter(metricKey, null, value, true);
@@ -313,7 +316,7 @@ namespace Toggly.FeatureManagement
         }
 
         /// <inheritdoc/>
-        public async Task IncrementCounterAsync<TContext>(string metricKey, TContext context, int value)
+        public async Task IncrementCounterAsync<TContext>(string metricKey, TContext context, double value)
         {
             _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
             IncrementMetricCounter(metricKey, null, value, true);
@@ -350,7 +353,7 @@ namespace Toggly.FeatureManagement
         /// <summary>
         /// Currently collected stats
         /// </summary>
-        public ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), int>? Stats { get; set; }
+        public ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), double>? Stats { get; set; }
 
         /// <summary>
         /// The user agent
