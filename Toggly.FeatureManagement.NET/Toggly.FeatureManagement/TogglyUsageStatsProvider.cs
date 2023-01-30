@@ -76,7 +76,7 @@ namespace Toggly.FeatureManagement
             try
             {
                 var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
-                processStartTime = currentProcess.StartTime;
+                processStartTime = currentProcess.StartTime.ToUniversalTime();
             }
             catch { }
 

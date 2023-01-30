@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using Toggly.FeatureManagement.Helpers;
+using System.Collections.Generic;
 
 namespace Toggly.FeatureManagement.Configuration
 {

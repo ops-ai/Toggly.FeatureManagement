@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Toggly.FeatureManagement.Web\Toggly.FeatureManagement.Web.csproj" />
+    <ProjectReference Include="..\..\Toggly.Metrics.SystemMetrics\Toggly.Metrics.SystemMetrics.csproj" />
   </ItemGroup>
 
 </Project>

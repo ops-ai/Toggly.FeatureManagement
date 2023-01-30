@@ -39,6 +39,24 @@ namespace Demo.Mvc
             });
 
             builder.Services.AddHangfireServer();
+            builder.Services.AddPerformanceMetrics(new Dictionary<string, Dictionary<string, string>>
+            {
+                {  "System.Runtime", new Dictionary<string, string>
+                    {
+                        {"time-in-gc", "TimeInGC"},
+                        {"alloc-rate", "AllocationRate"},
+                        {"cpu-usage", "CpuUsage"},
+                        {"exception-count", "ExceptionCount"},
+                        {"gc-heap-size", "GCHeapSize"},
+                        {"working-set", "MemoryWorkingSet"},
+                    }
+                },
+                { "Microsoft.AspNetCore.Hosting", new Dictionary<string, string>
+                    {
+                        { "requests-per-second", "RequestsPerSecond" },
+                    }
+                }
+            });
 
             var app = builder.Build();
 
