@@ -82,7 +82,7 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
                     if (_eventSources.ContainsKey(eventData.EventSource.Name) && _eventSources[eventData.EventSource.Name].ContainsKey(counterName))
                     {
                         if (currentValues.ContainsKey(_eventSources[eventData.EventSource.Name][counterName]))
-                            currentValues[counterName] = counterValue;
+                            currentValues[_eventSources[eventData.EventSource.Name][counterName]] = counterValue;
                         else
                             currentValues.Add(_eventSources[eventData.EventSource.Name][counterName], counterValue);
                     }
