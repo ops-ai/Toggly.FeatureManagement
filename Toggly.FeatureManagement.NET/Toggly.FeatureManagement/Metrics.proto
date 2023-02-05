@@ -18,6 +18,7 @@ message MetricStat {
     repeated MetricStatMessage stats = 4;
     repeated MetricCounterMessage counters = 5;
     repeated MetricObservationMessage observations = 6;
+	optional string instanceName = 7;
 }
 
 message MetricStatMessage {

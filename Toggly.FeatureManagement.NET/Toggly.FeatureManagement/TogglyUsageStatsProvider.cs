@@ -48,11 +48,11 @@ namespace Toggly.FeatureManagement
 
         private readonly string userAgent;
 
-        public readonly string? appVersion;
+        private readonly string? appVersion;
 
-        public readonly DateTime? processStartTime;
+        private readonly DateTime? processStartTime;
 
-        public readonly string? appInstanceName;
+        private readonly string? appInstanceName;
 
         /// <summary>
         /// keyed by feature name

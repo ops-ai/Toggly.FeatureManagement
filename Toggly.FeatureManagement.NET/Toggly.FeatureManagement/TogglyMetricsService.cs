@@ -47,6 +47,8 @@ namespace Toggly.FeatureManagement
 
         private readonly IMetricsRegistryService _metricsRegistryService;
 
+        private readonly string? appInstanceName;
+
         /// <summary>
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
@@ -62,6 +64,7 @@ namespace Toggly.FeatureManagement
             _featureExperimentProvider = (IFeatureExperimentProvider)featureDefinitionProvider;
             _featureManager = featureManager;
             _metricsRegistryService = serviceProvider.GetRequiredService<IMetricsRegistryService>();
+            appInstanceName = togglySettings.Value.InstanceName ?? Environment.MachineName;
 
             _logger = loggerFactory.CreateLogger<TogglyMetricsService>();
 
@@ -123,7 +126,8 @@ namespace Toggly.FeatureManagement
                 {
                     AppKey = _appKey,
                     Environment = _environment,
-                    Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime)
+                    Time = Timestamp.FromDateTime(currentTime),
+                    InstanceName = appInstanceName
                 };
 
                 var statKeys = _stats.Keys.Select(t => (t.MetricKey, t.FeatureKey)).ToArray().Distinct().ToArray();

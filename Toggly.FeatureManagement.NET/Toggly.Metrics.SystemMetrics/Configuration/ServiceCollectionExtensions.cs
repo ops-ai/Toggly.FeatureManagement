@@ -8,9 +8,7 @@ namespace Toggly.FeatureManagement.Web.Configuration
     {
         public static void AddPerformanceMetrics(this IServiceCollection services, Dictionary<string, Dictionary<string, string>> eventSources)
         {
-
-            services.AddHostedService<TogglyPerformanceCollectorService>(t => new TogglyPerformanceCollectorService(eventSources, t.GetRequiredService<IMetricsRegistryService>()));
-
+            services.AddHostedService(t => new TogglyPerformanceCollectorService(eventSources, t.GetRequiredService<IMetricsRegistryService>()));
         }
     }
 }
