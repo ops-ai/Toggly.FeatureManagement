@@ -12,6 +12,8 @@
 	  <PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
 	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
 	  <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <Description>Adds filters for Browser Family, Browser Language, Country, OS and User Claims and a default implementation for HTTP context targeting that support users and groups</Description>
+    <AssemblyTitle>Toggly Feature Management Web</AssemblyTitle>
   </PropertyGroup>
 
 	<PropertyGroup Condition=" '$(TargetFramework)' == 'netstandard2_1' ">

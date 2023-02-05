@@ -14,6 +14,8 @@
 		<PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <Description>Toggly.Metrics.SystemMetrics extends the Toggly feature management library by adding support for capturing performance metrics. Capture performance counters, giving you valuable insights into the performance of your application.</Description>
+    <AssemblyTitle>Toggly System Metrics</AssemblyTitle>
   </PropertyGroup>
 
   <ItemGroup>
