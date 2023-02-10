@@ -44,7 +44,7 @@ namespace Toggly.FeatureManagement.Helpers
             if (descriptor.ImplementationFactory != null)
                 return descriptor.ImplementationFactory(services);
 
-            return ActivatorUtilities.GetServiceOrCreateInstance(services, descriptor.ImplementationType);
+            return descriptor.ImplementationType != null ? ActivatorUtilities.GetServiceOrCreateInstance(services, descriptor.ImplementationType) : descriptor.ImplementationFactory != null ? descriptor.ImplementationFactory(services) : throw new InvalidOperationException("Unable to create instance");
         }
 
         public static void DecorateForFeature<TInterface, TDecorator>(this IServiceCollection services, object featureName)
@@ -82,7 +82,7 @@ namespace Toggly.FeatureManagement.Helpers
               typeof(TInterface),
               s => s.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         (TInterface)objectFactory(s, new[] { s.CreateInstance(wrappedDescriptor) }) :
-                        ActivatorUtilities.CreateInstance(s, wrappedDescriptor.ImplementationType),
+                        wrappedDescriptor.ImplementationFactory != null ? wrappedDescriptor.ImplementationFactory(s) : wrappedDescriptor.ImplementationType != null ? ActivatorUtilities.CreateInstance(s, wrappedDescriptor.ImplementationType) : throw new InvalidOperationException("Unable to create instance"),
               wrappedDescriptor.Lifetime)
             );
         }
@@ -118,7 +118,7 @@ namespace Toggly.FeatureManagement.Helpers
                   typeof(TInterface),
                   serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
-                        ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType),
+                        oldDescriptor.ImplementationFactory != null ? oldDescriptor.ImplementationFactory(serviceProvider) : oldDescriptor.ImplementationType != null ? ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType) : throw new InvalidOperationException("Unable to create instance"),
                   ServiceLifetime.Transient)
                 );
         }
@@ -154,7 +154,7 @@ namespace Toggly.FeatureManagement.Helpers
                   typeof(TInterface),
                   serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
-                        ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType),
+                        oldDescriptor.ImplementationFactory != null ? oldDescriptor.ImplementationFactory(serviceProvider) : oldDescriptor.ImplementationType != null ? ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType) : throw new InvalidOperationException("Unable to create instance"),
                   ServiceLifetime.Scoped)
                 );
         }
