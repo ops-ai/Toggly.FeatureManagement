@@ -18,6 +18,7 @@ namespace Demo.Mvc
             {
                 options.AppKey = builder.Configuration["Toggly:AppKey"]!;
                 options.Environment = builder.Configuration["Toggly:Environment"]!;
+                options.UndefinedEnabledOnDevelopment = true;
             });
 
             builder.Services.AddSingleton<IDisabledFeaturesHandler, FeatureNotEnabledHandler>();

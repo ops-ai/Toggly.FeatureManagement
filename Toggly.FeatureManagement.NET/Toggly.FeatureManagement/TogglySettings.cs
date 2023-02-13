@@ -28,5 +28,11 @@
         /// Hostname is used if not specified
         /// </summary>
         public string? InstanceName { get; set; }
+
+        /// <summary>
+        /// Undefined features should be treated as AlwaysOn on development
+        /// (when app.Environment.IsDevelopment() is true)
+        /// </summary>
+        public bool UndefinedEnabledOnDevelopment { get; set; } = false;
     }
 }

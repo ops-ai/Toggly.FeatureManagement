@@ -2,6 +2,7 @@
 using ConcurrentCollections;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
@@ -51,10 +52,13 @@ namespace Toggly.FeatureManagement
 
         private readonly IServiceProvider _serviceProvider;
 
-        public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
+        private readonly bool _enabledByDefault;
+
+        public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, IHostEnvironment environment, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
+            _enabledByDefault = togglySettings.Value.UndefinedEnabledOnDevelopment && environment.IsDevelopment();
             _clientFactory = clientFactory;
             _serviceProvider = serviceProvider;
             _snapshotProvider = (IFeatureSnapshotProvider?)serviceProvider.GetService(typeof(IFeatureSnapshotProvider));
@@ -232,8 +236,8 @@ namespace Toggly.FeatureManagement
 
             if (_definitions.TryGetValue(featureName, out var updatedFeature))
                 return updatedFeature;
-
-            return new FeatureDefinition {  Name = featureName, EnabledFor = new List<FeatureFilterConfiguration>() };
+            
+            return new FeatureDefinition {  Name = featureName, EnabledFor = _enabledByDefault ? new List<FeatureFilterConfiguration> { new FeatureFilterConfiguration { Name = "AlwaysOn" } } : new List<FeatureFilterConfiguration>() };
         }
 
         public void Dispose()
