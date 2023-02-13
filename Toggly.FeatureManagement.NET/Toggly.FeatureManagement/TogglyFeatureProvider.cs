@@ -67,7 +67,7 @@ namespace Toggly.FeatureManagement
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
             _timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 5, 0));
-            Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
+            Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyVersionAttribute>()?.Version}";
         }
 
         private async Task LoadSnapshot()
