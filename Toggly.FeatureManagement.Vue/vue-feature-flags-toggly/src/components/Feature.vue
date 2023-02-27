@@ -6,6 +6,7 @@
 
 <script lang="ts">
 export default {
+  inject: ['$toggly'],
   props: {
     featureKey: {
       type: String
@@ -38,6 +39,9 @@ export default {
     async checkIfShouldShow() {
       this.isLoading = true
 
+      // Check if we should show the feature during the evaluation of a feature flag
+      this.shouldShow = this.$toggly.shouldShowFeatureDuringEvaluation
+
       var gate: string[] = []
 
       if (this.featureKey) {
@@ -48,7 +52,7 @@ export default {
         gate = gate.concat(this.featureKeys as string[])
       }
 
-      this.shouldShow = gate.length > 0 ? await (this as any).$toggly.evaluateFeatureGate(gate, this.requirement, this.negate) : true
+      this.shouldShow = gate.length > 0 ? await this.$toggly.evaluateFeatureGate(gate, this.requirement, this.negate) : true
 
       this.isLoading = false
     }

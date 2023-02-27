@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Feature } from '@ops-ai/vue-feature-flags-toggly';
 
 defineProps<{
   msg: string;

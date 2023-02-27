@@ -1,23 +1,45 @@
-export class Toggly {
-  private _config: any = {
+export interface TogglyOptions {
+  baseURI?: string
+  appKey?: string
+  environment?: string
+  identity?: string
+  featureDefaults?: { [key: string]: boolean }
+  showFeatureDuringEvaluation?: boolean
+}
+
+export interface TogglyService {
+  shouldShowFeatureDuringEvaluation: boolean
+  init: (options: TogglyOptions) => this
+  _loadFeatures: () => Promise<{ [key: string]: boolean } | null>
+  _featuresLoaded: () => Promise<{ [key: string]: boolean } | null>
+  _evaluateFeatureGate: (
+    gate: string[],
+    requirement: string,
+    negate: boolean,
+  ) => Promise<boolean>
+  evaluateFeatureGate: (
+    featureKeys: string[],
+    requirement: string,
+    negate: boolean,
+  ) => Promise<boolean>
+  isFeatureOn: (featureKey: string) => Promise<boolean>
+  isFeatureOff: (featureKey: string) => Promise<boolean>
+}
+
+export class Toggly implements TogglyService {
+  private _config: TogglyOptions = {
     baseURI: 'https://client.toggly.io',
-    appKey: null,
-    environment: null,
+    showFeatureDuringEvaluation: false,
   }
-  private _featureDefaults: { [key: string]: boolean } | null = null
   private _features: { [key: string]: boolean } | null = null
   private _loadingFeatures: boolean = false
-  private _identity: String | null = null
 
-  init = async (
-    appKey: string,
-    environment: string,
-    identity: string,
-    featureDefaults: { [key: string]: boolean } | null = null,
-  ) => {
-    if (!appKey) {
-      if (featureDefaults) {
-        this._features = featureDefaults
+  shouldShowFeatureDuringEvaluation: boolean
+
+  init = (options: TogglyOptions) => {
+    if (!options.appKey) {
+      if (options.featureDefaults) {
+        this._features = options.featureDefaults ?? {}
 
         console.warn(
           'Toggly --- Using feature defaults as no application key provided when initializing the Toggly',
@@ -28,8 +50,8 @@ export class Toggly {
         )
       }
     } else {
-      if (!environment) {
-        environment = 'Production'
+      if (!options.environment) {
+        options.environment = 'Production'
 
         console.warn(
           'Toggly --- Using Production environment as no environment provided when initializing the Toggly',
@@ -37,16 +59,9 @@ export class Toggly {
       }
     }
 
-    this._config = Object.assign({}, this._config, {
-      appKey,
-      environment,
-    })
+    this._config = Object.assign({}, this._config, options)
 
-    this._featureDefaults = featureDefaults
-
-    if (!this._features) {
-      await this._loadFeatures()
-    }
+    this.shouldShowFeatureDuringEvaluation = this._config.showFeatureDuringEvaluation!
 
     return this
   }
@@ -76,14 +91,14 @@ export class Toggly {
     try {
       var url = `${this._config.baseURI}/${this._config.appKey}-${this._config.environment}/defs`
 
-      if (this._identity) {
-        url += `?u=${this._identity}`
+      if (this._config.identity) {
+        url += `?u=${this._config.identity}`
       }
 
       const response = await fetch(url)
       this._features = await response.json()
     } catch (error) {
-      this._features = this._featureDefaults ?? {}
+      this._features = this._config.featureDefaults ?? {}
       console.warn(
         'Toggly --- Using feature defaults as features could not be loaded from the Toggly API',
       )
@@ -109,7 +124,7 @@ export class Toggly {
       return true
     }
 
-    var isEnabled
+    var isEnabled: boolean
 
     if (requirement === 'any') {
       isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {

@@ -8,19 +8,18 @@ import "./assets/main.css";
 
 const app = createApp(App);
 
-const defaultFeatureFlags = {
-  mainDescription: false,
-  documentationItem: false,
+const featureDefaults = {
+  mainDescription: true,
+  documentationItem: true,
   toolingItem: true,
 };
 
-app.config.globalProperties.$toggly = toggly;
-app.config.globalProperties.$toggly.init(
-  "<your-application-key>",
-  "Production",
-  "<unique-user-identifier>",
-  defaultFeatureFlags
-);
+app.use(toggly, {
+  appKey: "your-app-key", // You can find this in Toggly.io
+  environment: "your-environment-name", // You can find this in Toggly.io
+  identity: "unique-user-identifier", // Use this in case you want to support custom feature rollouts
+  featureDefaults: featureDefaults,
+});
 
 app.use(router);
 

@@ -6,7 +6,6 @@ import EcosystemIcon from "./icons/IconEcosystem.vue";
 import CommunityIcon from "./icons/IconCommunity.vue";
 import SupportIcon from "./icons/IconSupport.vue";
 
-import { Feature } from "@ops-ai/vue-feature-flags-toggly";
 </script>
 
 <template>

@@ -18,24 +18,36 @@ $ npm i -s @ops-ai/vue-feature-flags-toggly
 
 ## Basic Usage (with Toggly.io)
 
-Import the Toggly service inside your main.js file.
+Import the Toggly plugin in your main file.
 
 ```js
-import toggly from './toggly'
+import { toggly } from "@ops-ai/vue-feature-flags-toggly";
 ```
 
-Declare $toggly as a global property & initialize it by running the $toggly.init method and by providing your App Key from your [Toggly application page](https://app.toggly.io)
+Install the toggly plugin while providing your App Key & Environment name from your [Toggly application page](https://app.toggly.io). This will register the Feature component & $toggly service globally.
 
 ```js
-app.config.globalProperties.$toggly = toggly
-app.config.globalProperties.$toggly.init(
-  'your-app-key', // You can find this in Toggly.io
-  'your-environment-name', // You can find this in Toggly.io
-  'unique-user-identifier' // Use this in case you want to support custom feature rollouts
-)
+app.use(toggly, {
+  appKey: "your-app-key", // You can find this in app.toggly.io
+  environment: "your-environment-name", // You can find this in app.toggly.io
+});
 ```
 
-Now you can start using the Feature component.
+Using this package with [Toggly](https://toggly.io) allows you to define custom feature rollouts.
+
+Custom rollouts offers the ability to show features only to certain groups of users based on various custom rules which you can define in [Toggly](https://app.toggly.io).
+
+In case you want to support custom feature rollouts, remember to provide an unique identity string for each user to make sure they get the same feature values on future visits.
+
+```js
+app.use(toggly, {
+  appKey: "your-app-key", // You can find this in app.toggly.io
+  environment: "your-environment-name", // You can find this in app.toggly.io
+  identity: "unique-user-identifier", // Use this in case you want to support custom feature rollouts
+});
+```
+
+Now you can start using the Feature component anywhere in your application.
 
 ```html
 <Feature feature-key="firstFeature">
@@ -63,7 +75,14 @@ You can also check multiple feature keys and make use of the *requirement* (all/
 </Feature>
 ```
 
-Lastly, you can use *$toggly* to check if a feature is ON or OFF programmatically.
+Lastly, you can use the *$toggly* service to check if a feature is ON or OFF programmatically, by simply injecting it in any component.
+
+```js
+export default {
+  inject: ['$toggly'],
+  ...
+}
+```
 
 ```js
 await this.$toggly.isFeatureOn('firstFeature')
@@ -76,36 +95,31 @@ await this.$toggly.isFeatureOff('secondFeature')
 And even evaluate a feature gate (with requirement & negate support).
 
 ```js
-await this.$toggly.evaluateFeatureGate('firstFeature', 'secondFeature'], 'any', true)
+await this.$toggly.evaluateFeatureGate(['firstFeature', 'secondFeature'], 'any', true)
 ```
 
 ## Basic Usage (without Toggly.io)
 
-Import the Toggly service inside your main.js file.
+Import the Toggly plugin in your main file.
 
 ```js
-import toggly from './toggly'
+import { toggly } from "@ops-ai/vue-feature-flags-toggly";
 ```
 
-Declare $toggly as a global property & initialize it by running the $toggly.init method and by providing your App Key from your [Toggly application page](https://app.toggly.io)
+Install the toggly plugin while providing your default feature flags. This will register the Feature component & $toggly service globally.
 
 ```js
-
-var featureFlagDefaults = {
+var featureDefaults = {
   firstFeature: true,
   secondFeature: false,
 }
 
-app.config.globalProperties.$toggly = toggly
-app.config.globalProperties.$toggly.init(
-  null, // No need for an application key
-  null, // No need for an evironment name
-  null, // Custom rollouts are not supported without Toggly.io
-  featureFlagDefaults
-)
+app.use(toggly, {
+  featureDefaults: featureDefaults,
+});
 ```
 
-Now you can start using the Feature component.
+Now you can start using the Feature component anywhere in your application.
 
 ```html
 <Feature feature-key="firstFeature">
@@ -133,7 +147,14 @@ You can also check multiple feature keys and make use of the *requirement* (all/
 </Feature>
 ```
 
-Lastly, you can use *$toggly* to check if a feature is ON or OFF programmatically.
+Lastly, you can use the *$toggly* service to check if a feature is ON or OFF programmatically, by simply injecting it in any component.
+
+```js
+export default {
+  inject: ['$toggly'],
+  ...
+}
+```
 
 ```js
 await this.$toggly.isFeatureOn('firstFeature')

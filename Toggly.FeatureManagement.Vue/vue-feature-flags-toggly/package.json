@@ -34,7 +34,7 @@
     "test": "exit 0"
   },
   "name": "@ops-ai/vue-feature-flags-toggly",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Provides feature flags support for Vue.js applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "type": "module",
   "dependencies": {
