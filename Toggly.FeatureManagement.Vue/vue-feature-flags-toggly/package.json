@@ -1,0 +1,50 @@
+{
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/vue-feature-flags-toggly.umd.js",
+  "module": "./dist/vue-feature-flags-toggly.es.js",
+  "exports": {
+    ".": {
+      "import": "./dist/vue-feature-flags-toggly.es.js",
+      "require": "./dist/vue-feature-flags-toggly.umd.js"
+    }
+  },
+  "types": "./dist/types/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git#develop"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop#readme",
+  "author": {
+    "name": "Cosmin Atomei",
+    "email": "cosmin.atomei@gmail.com"
+  },
+  "license": "BSD-3-Clause",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && vue-tsc --emitDeclarationOnly && mv dist/src dist/types",
+    "preserve": "vite build",
+    "serve": "vite preview --port 5050",
+    "typecheck": "vue-tsc --noEmit",
+    "preview": "vite preview",
+    "test": "exit 0"
+  },
+  "name": "@ops-ai/vue-feature-flags-toggly",
+  "version": "1.0.0",
+  "description": "Provides feature flags support for Vue.js applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
+  "type": "module",
+  "dependencies": {
+    "vue": "^3.2.45"
+  },
+  "devDependencies": {
+    "@types/node": "^18.14.0",
+    "@vitejs/plugin-vue": "^4.0.0",
+    "typescript": "^4.9.3",
+    "vite": "^4.1.0",
+    "vue-tsc": "^1.0.24"
+  }
+}
