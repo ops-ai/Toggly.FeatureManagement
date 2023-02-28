@@ -17,7 +17,7 @@ namespace Demo.Mvc.Controllers
 
         public async Task<IActionResult> Index()
         {
-            await _metricsService.AddMetricAsync("Coming Soon", 1);
+            await _metricsService.MeasureAsync("Coming Soon", 1);
             return View();
         }
     }
