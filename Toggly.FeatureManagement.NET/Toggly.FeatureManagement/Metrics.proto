@@ -18,27 +18,32 @@ message MetricStat {
     repeated MetricStatMessage stats = 4;
     repeated MetricCounterMessage counters = 5;
     repeated MetricObservationMessage observations = 6;
+	optional string instanceName = 7;
 }
 
 message MetricStatMessage {
 	string metric = 1;
-	int32 enabledCount = 2; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
-	int32 disabledCount = 3; //optional metric count when feature is disabled
+	reserved 2,3;
 	optional string feature = 4; //optional feature referenced for subcount
+	double value = 5; //value for metric if feature is not specified, otherwise value when feature is enabled
+	optional double valueDisabled = 6; //value when feature is disabled
 }
 
 message MetricCounterMessage {
 	string metric = 1;
-	int32 enabledCount = 2; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
-	int32 disabledCount = 3; //optional metric count when feature is disabled
+	reserved 2,3;
 	optional string feature = 4; //optional feature referenced for subcount
+	double value = 5; //value for metric if feature is not specified, otherwise value when feature is enabled
+	optional double valueDisabled = 6; //value when feature is disabled
 }
 
 message MetricObservationMessage {
-	string metric = 1;
-	int32 enabledCount = 2; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
-	int32 disabledCount = 3; //optional metric count when feature is disabled
-	optional string feature = 4; //optional feature referenced for subcount
+	google.protobuf.Timestamp time = 1;
+	string metric = 2;
+	reserved 3,4;
+	optional string feature = 5; //optional feature referenced for subcount
+	double value = 6; //value for metric if feature is not specified, otherwise value when feature is enabled
+	optional double valueDisabled = 7; //value when feature is disabled
 }
 
 message MetricResult {

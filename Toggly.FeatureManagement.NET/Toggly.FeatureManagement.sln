@@ -34,6 +34,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "charts", "charts", "{1FED28
 		..\charts\demo-prod.yml = ..\charts\demo-prod.yml
 	EndProjectSection
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.Metrics.SystemMetrics", "Toggly.Metrics.SystemMetrics\Toggly.Metrics.SystemMetrics.csproj", "{CD25B466-F67E-41E1-89F2-70BC005F92EE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -64,6 +66,10 @@ Global
 		{1DEFD61A-9696-445C-BF84-9D015CA6D4FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1DEFD61A-9696-445C-BF84-9D015CA6D4FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1DEFD61A-9696-445C-BF84-9D015CA6D4FE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CD25B466-F67E-41E1-89F2-70BC005F92EE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CD25B466-F67E-41E1-89F2-70BC005F92EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CD25B466-F67E-41E1-89F2-70BC005F92EE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CD25B466-F67E-41E1-89F2-70BC005F92EE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

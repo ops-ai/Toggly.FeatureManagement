@@ -13,7 +13,9 @@
 		<PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
-	</PropertyGroup>
+    <Description>Toggly.FeatureManagement extends Microsoft.FeatureManagement with extensions to handle feature state changes, Decorate and register services that are injected when a feature is on, feature usage tracking, and integration with toggly.io</Description>
+    <AssemblyTitle>Toggly Feature Management</AssemblyTitle>
+  </PropertyGroup>
 
 	<ItemGroup>
 		<None Remove="Metrics.proto" />
@@ -23,6 +25,16 @@
 	<ItemGroup>
 		<Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
 	</ItemGroup>
+
+	<PropertyGroup>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(TF_BUILD)' == 'true'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+	</PropertyGroup>
 
 	<ItemGroup>
 	  <Content Include="toggly_favicon.png">
@@ -34,21 +46,25 @@
 	<ItemGroup>
 		<PackageReference Include="Azure.Messaging.WebPubSub" Version="1.*" />
 		<PackageReference Include="ConcurrentHashSet" Version="1.*" />
-		<PackageReference Include="Google.Protobuf" Version="3.20.0" />
-		<PackageReference Include="Grpc.Net.Client" Version="2.45.0" />
-		<PackageReference Include="Grpc.Tools" Version="2.45.0">
+		<PackageReference Include="Google.Protobuf" Version="3.22.0" />
+		<PackageReference Include="Grpc.Net.Client" Version="2.51.0" />
+		<PackageReference Include="Grpc.Tools" Version="2.51.0">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="3.1.0" />
-		<PackageReference Include="Microsoft.Extensions.Http" Version="6.0.0" />
-		<PackageReference Include="Microsoft.Extensions.Http.Polly" Version="6.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="7.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="7.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Http.Polly" Version="7.0.3" />
 		<PackageReference Include="Microsoft.FeatureManagement" Version="*" />
+		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1">
+		  <PrivateAssets>all</PrivateAssets>
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
 		<PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="*">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="System.Net.Http.Json" Version="5.0.0" />
+		<PackageReference Include="System.Net.Http.Json" Version="7.0.0" />
 		<PackageReference Include="Websocket.Client" Version="*" />
 	</ItemGroup>
 

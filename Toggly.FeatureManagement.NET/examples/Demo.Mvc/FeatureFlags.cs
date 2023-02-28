@@ -12,6 +12,7 @@
         HomepagePromoVideo,
         AppDownloadLinks,
         Testimonials,
-        HomepagePhoto
+        HomepagePhoto,
+        HourlyJob
     }
 }

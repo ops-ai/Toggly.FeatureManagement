@@ -18,6 +18,9 @@ message FeatureStat {
     google.protobuf.Timestamp time = 3;
     repeated StatMessage stats = 4;
 	int32 totalUniqueUsers = 5;
+	optional string instanceName = 6;
+	optional google.protobuf.Timestamp processStartTime = 7;
+	optional string appVersion = 8;
 }
 
 message StatMessage {

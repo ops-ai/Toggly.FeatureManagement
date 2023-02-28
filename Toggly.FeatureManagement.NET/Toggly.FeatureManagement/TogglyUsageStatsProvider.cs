@@ -48,6 +48,12 @@ namespace Toggly.FeatureManagement
 
         private readonly string userAgent;
 
+        private readonly string? appVersion;
+
+        private readonly DateTime? processStartTime;
+
+        private readonly string? appInstanceName;
+
         /// <summary>
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
@@ -64,6 +70,15 @@ namespace Toggly.FeatureManagement
             _baseUrl = togglySettings.Value.BaseUrl ?? "https://app.toggly.io/";
             _clientFactory = clientFactory;
             _contextProvider = (IFeatureContextProvider?)serviceProvider.GetService(typeof(IFeatureContextProvider));
+
+            appVersion = togglySettings.Value.AppVersion ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString();
+            appInstanceName = togglySettings.Value.InstanceName ?? Environment.MachineName;
+            try
+            {
+                var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+                processStartTime = currentProcess.StartTime.ToUniversalTime();
+            }
+            catch { }
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
@@ -111,7 +126,7 @@ namespace Toggly.FeatureManagement
                     {
                         MaxAttempts = 5,
                         InitialBackoff = TimeSpan.FromSeconds(1),
-                        MaxBackoff = TimeSpan.FromSeconds(10),
+                        MaxBackoff = TimeSpan.FromSeconds(20),
                         BackoffMultiplier = 1.5,
                         RetryableStatusCodes = { StatusCode.Unavailable, StatusCode.DataLoss, StatusCode.Aborted, StatusCode.OutOfRange, StatusCode.Cancelled, StatusCode.DeadlineExceeded }
                     }
@@ -126,8 +141,12 @@ namespace Toggly.FeatureManagement
                     AppKey = _appKey,
                     Environment = _environment,
                     Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime),
-                    TotalUniqueUsers = 0
+                    TotalUniqueUsers = 0,
+                    AppVersion = appVersion,
+                    InstanceName = appInstanceName
                 };
+                if (processStartTime.HasValue)
+                    dataPacket.ProcessStartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(processStartTime.Value);
 
                 var keys = _stats.Keys.Select(t => t.FeatureKey).ToArray().Distinct().ToArray();
                 for (int i = 0; i < keys.Length; i++)
@@ -151,7 +170,7 @@ namespace Toggly.FeatureManagement
                     { "UA", userAgent }
                 };
 
-                var result = await client.SendStatsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(30)).ConfigureAwait(false);
+                var result = await client.SendStatsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(60)).ConfigureAwait(false);
 
                 if (result.FeatureCount != dataPacket.Stats.Count)
                     _logger.LogWarning("Feature count did not match. Possible data integrity issues");

@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using Toggly.FeatureManagement.Helpers;
+using System.Collections.Generic;
 
 namespace Toggly.FeatureManagement.Configuration
 {
@@ -31,6 +32,8 @@ namespace Toggly.FeatureManagement.Configuration
                     if (!string.IsNullOrEmpty(togglyOptions.AppKey)) options.AppKey = togglyOptions.AppKey;
                     options.BaseUrl = !string.IsNullOrEmpty(togglyOptions.BaseUrl) ? togglyOptions.BaseUrl : "https://app.toggly.io/";
                     if (!string.IsNullOrEmpty(togglyOptions.Environment)) options.Environment = togglyOptions.Environment;
+                    if (!string.IsNullOrEmpty(togglyOptions.AppVersion)) options.AppVersion = togglyOptions.AppVersion;
+                    if (!string.IsNullOrEmpty(togglyOptions.InstanceName)) options.InstanceName = togglyOptions.InstanceName;
                 });
 
             AddCoreServices(services);
@@ -61,7 +64,7 @@ namespace Toggly.FeatureManagement.Configuration
 
                 config.BaseAddress = new Uri(baseUrl ?? "https://app.toggly.io/");
             })
-            .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+            .SetHandlerLifetime(TimeSpan.FromMinutes(60))
             .AddPolicyHandler(GetRetryPolicy())
             .ConfigurePrimaryHttpMessageHandler(messageHandler =>
             {
@@ -72,6 +75,12 @@ namespace Toggly.FeatureManagement.Configuration
 
                 return handler;
             });
+
+            services.AddSingleton<IMetricsRegistryService, TogglyMetricsRegistryService>();
+            
+            services.AddSingleton<TogglyFeatureStateService>();
+            services.AddSingleton<IFeatureStateInternalService>(x => x.GetRequiredService<TogglyFeatureStateService>());
+            services.AddSingleton<IFeatureStateService>(x => x.GetRequiredService<TogglyFeatureStateService>());
 
             services.AddSingleton<TogglyFeatureProvider>();
             services.AddSingleton<IFeatureDefinitionProvider>(x => x.GetRequiredService<TogglyFeatureProvider>());

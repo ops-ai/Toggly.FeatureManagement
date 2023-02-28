@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
 	  <TargetFrameworks>netstandard2.1;netcoreapp3.1;net5.0;net6.0;net7.0</TargetFrameworks>
@@ -12,6 +12,8 @@
 	  <PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
 	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
 	  <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <Description>Adds filters for Browser Family, Browser Language, Country, OS and User Claims and a default implementation for HTTP context targeting that support users and groups</Description>
+    <AssemblyTitle>Toggly Feature Management Web</AssemblyTitle>
   </PropertyGroup>
 
 	<PropertyGroup Condition=" '$(TargetFramework)' == 'netstandard2_1' ">
@@ -32,7 +34,17 @@
 	    <PackagePath>\</PackagePath>
 	  </Content>
 	</ItemGroup>
+	
+	<PropertyGroup>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+	</PropertyGroup>
 
+	<PropertyGroup Condition="'$(TF_BUILD)' == 'true'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+	</PropertyGroup>
+	
 	<ItemGroup>
 		<None Include="..\README.md">
 			<Pack>True</Pack>
@@ -51,6 +63,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1">
+	    <PrivateAssets>all</PrivateAssets>
+	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+	  </PackageReference>
 	  <PackageReference Include="UAParser" Version="3.*" />
 	</ItemGroup>
 	

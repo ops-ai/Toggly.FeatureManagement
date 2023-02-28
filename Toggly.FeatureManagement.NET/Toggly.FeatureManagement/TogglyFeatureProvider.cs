@@ -1,6 +1,8 @@
 ﻿using Azure.Messaging.WebPubSub;
 using ConcurrentCollections;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
@@ -46,17 +48,26 @@ namespace Toggly.FeatureManagement
 
         private WebsocketClient? _webSocketClient = null;
 
-        public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
+        private readonly IFeatureStateInternalService _featureStateService;
+
+        private readonly IServiceProvider _serviceProvider;
+
+        private readonly bool _enabledByDefault;
+
+        public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, IHostEnvironment environment, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
+            _enabledByDefault = togglySettings.Value.UndefinedEnabledOnDevelopment && environment.IsDevelopment();
             _clientFactory = clientFactory;
+            _serviceProvider = serviceProvider;
             _snapshotProvider = (IFeatureSnapshotProvider?)serviceProvider.GetService(typeof(IFeatureSnapshotProvider));
+            _featureStateService = (IFeatureStateInternalService)serviceProvider.GetRequiredService(typeof(IFeatureStateInternalService));
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
             _timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 5, 0));
-            Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
+            Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyVersionAttribute>()?.Version}";
         }
 
         private async Task LoadSnapshot()
@@ -81,6 +92,7 @@ namespace Toggly.FeatureManagement
                                     })
                             };
                             _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
+                            _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
                         }
                 }
             }
@@ -93,11 +105,15 @@ namespace Toggly.FeatureManagement
         private string _lastError = string.Empty;
         private DateTime? _lastErrorTime = null;
         private DateTime? _lastRefresh = null;
-
+        private IMetricsService? _metricsService = null;
+        
         private async Task RefreshFeatures(long? timeout = null)
         {
             try
             {
+                if (_metricsService == null)
+                    _metricsService = _serviceProvider.GetRequiredService<IMetricsService>();
+                
                 using var httpClient = _clientFactory.CreateClient("toggly");
 #if NETCOREAPP3_1_OR_GREATER
                 httpClient.DefaultRequestVersion = HttpVersion.Version20;
@@ -135,6 +151,7 @@ namespace Toggly.FeatureManagement
                     };
 
                     _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
+                    _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
                 }
                 var activeExperiments = newDefinitions.Where(t => t.Metrics != null).SelectMany(t => t.Metrics).GroupBy(t => t).Select(t => t.Key).ToList();
                 _experiments.Clear();
@@ -155,6 +172,12 @@ namespace Toggly.FeatureManagement
                             {
                                 if (msg.Text == "update") _ = RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
                             });
+                            _webSocketClient.DisconnectionHappened.Subscribe(info =>
+                            {
+                                _logger.LogWarning("Websocket disconnected");
+                            });
+                            _webSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
+                            
                             await _webSocketClient.StartOrFail().ConfigureAwait(false);
                         }
                     }
@@ -213,8 +236,8 @@ namespace Toggly.FeatureManagement
 
             if (_definitions.TryGetValue(featureName, out var updatedFeature))
                 return updatedFeature;
-
-            return new FeatureDefinition {  Name = featureName, EnabledFor = new List<FeatureFilterConfiguration>() };
+            
+            return new FeatureDefinition {  Name = featureName, EnabledFor = _enabledByDefault ? new List<FeatureFilterConfiguration> { new FeatureFilterConfiguration { Name = "AlwaysOn" } } : new List<FeatureFilterConfiguration>() };
         }
 
         public void Dispose()

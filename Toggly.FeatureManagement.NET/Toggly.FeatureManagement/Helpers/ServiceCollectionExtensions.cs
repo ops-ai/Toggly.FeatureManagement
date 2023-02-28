@@ -44,7 +44,19 @@ namespace Toggly.FeatureManagement.Helpers
             if (descriptor.ImplementationFactory != null)
                 return descriptor.ImplementationFactory(services);
 
-            return ActivatorUtilities.GetServiceOrCreateInstance(services, descriptor.ImplementationType!);
+            return descriptor.ImplementationType != null ? ActivatorUtilities.GetServiceOrCreateInstance(services, descriptor.ImplementationType) : descriptor.ImplementationFactory != null ? descriptor.ImplementationFactory(services) : throw new InvalidOperationException("Unable to create instance");
+        }
+
+        public static void DecorateForFeature<TInterface, TDecorator>(this IServiceCollection services, object featureName)
+          where TInterface : class
+          where TDecorator : class, TInterface
+        {
+            var type = featureName.GetType();
+
+            if (!type.IsEnum)
+                throw new ArgumentException("The provided feature name must be an enum.", nameof(featureName));
+            
+            DecorateForFeature<TInterface, TDecorator>(services, Enum.GetName(featureName.GetType(), featureName));
         }
 
         public static void DecorateForFeature<TInterface, TDecorator>(this IServiceCollection services, string featureName)
@@ -70,11 +82,23 @@ namespace Toggly.FeatureManagement.Helpers
               typeof(TInterface),
               s => s.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         (TInterface)objectFactory(s, new[] { s.CreateInstance(wrappedDescriptor) }) :
-                        ActivatorUtilities.CreateInstance(s, wrappedDescriptor.ImplementationType!),
+                        wrappedDescriptor.ImplementationFactory != null ? wrappedDescriptor.ImplementationFactory(s) : wrappedDescriptor.ImplementationType != null ? ActivatorUtilities.CreateInstance(s, wrappedDescriptor.ImplementationType) : throw new InvalidOperationException("Unable to create instance"),
               wrappedDescriptor.Lifetime)
             );
         }
 
+        public static void AddTransientForFeature<TInterface, TImplementation>(this IServiceCollection services, object featureName)
+             where TInterface : class
+             where TImplementation : class, TInterface
+        {
+            var type = featureName.GetType();
+
+            if (!type.IsEnum)
+                throw new ArgumentException("The provided feature name must be an enum.", nameof(featureName));
+
+            AddTransientForFeature<TInterface, TImplementation>(services, Enum.GetName(featureName.GetType(), featureName));
+        }
+        
         public static void AddTransientForFeature<TInterface, TImplementation>(this IServiceCollection services, string featureName)
              where TInterface : class
              where TImplementation : class, TInterface
@@ -94,9 +118,21 @@ namespace Toggly.FeatureManagement.Helpers
                   typeof(TInterface),
                   serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
-                        ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType!),
+                        oldDescriptor.ImplementationFactory != null ? oldDescriptor.ImplementationFactory(serviceProvider) : oldDescriptor.ImplementationType != null ? ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType) : throw new InvalidOperationException("Unable to create instance"),
                   ServiceLifetime.Transient)
                 );
+        }
+
+        public static void AddScopedForFeature<TInterface, TImplementation>(this IServiceCollection services, object featureName)
+             where TInterface : class
+             where TImplementation : class, TInterface
+        {
+            var type = featureName.GetType();
+
+            if (!type.IsEnum)
+                throw new ArgumentException("The provided feature name must be an enum.", nameof(featureName));
+
+            AddScopedForFeature<TInterface, TImplementation>(services, Enum.GetName(featureName.GetType(), featureName));
         }
 
         public static void AddScopedForFeature<TInterface, TImplementation>(this IServiceCollection services, string featureName)
@@ -118,7 +154,7 @@ namespace Toggly.FeatureManagement.Helpers
                   typeof(TInterface),
                   serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
-                        ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType!),
+                        oldDescriptor.ImplementationFactory != null ? oldDescriptor.ImplementationFactory(serviceProvider) : oldDescriptor.ImplementationType != null ? ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType) : throw new InvalidOperationException("Unable to create instance"),
                   ServiceLifetime.Scoped)
                 );
         }
