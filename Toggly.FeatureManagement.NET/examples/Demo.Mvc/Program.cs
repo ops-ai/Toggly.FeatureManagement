@@ -44,7 +44,7 @@ namespace Demo.Mvc
             builder.Services.AddMemoryCache();
             builder.Services.AddRavenDb(builder.Configuration.GetSection("Raven"));
             builder.Services.AddMultiTenant<Application>()
-                .WithStore(new ServiceLifetime(), (sp) => new RavenDBMultitenantStore(sp.GetRequiredService<IDocumentStore>(), sp.GetRequiredService<IMemoryCache>()))
+                .WithStore(new ServiceLifetime(), (sp) => new RavenDBMultitenantStore(sp.GetRequiredService<IDocumentStore>()))
                 .WithBasePathStrategy(opt => opt.RebaseAspNetCorePathBase = false);
             builder.Services.AddRouting(options => options.LowercaseUrls = true);
             builder.Services.AddDistributedMemoryCache();
@@ -122,9 +122,9 @@ namespace Demo.Mvc
                 RecurringJob.RemoveIfExists("Hourly job");
             });
 
-            app.MapControllerRoute("default", "{action=Index}", new { controller = "Home" });
-            app.MapControllerRoute("default", "{controller=Home}/{action=Index}", new { controller = "Home" });
-            app.MapGet("/feature-debug", async ctx => await ctx.Response.WriteAsJsonAsync(new
+            app.MapControllerRoute("default", "{__tenant__}/{action=Index}", new { controller = "Home" });
+            app.MapControllerRoute("default", "{__tenant__}/{controller=Home}/{action=Index}", new { controller = "Home" });
+            app.MapGet("/{__tenant__}/feature-debug", async ctx => await ctx.Response.WriteAsJsonAsync(new
             {
                 Metrics = ctx.RequestServices.GetRequiredService<IMetricsDebug>().GetDebugInfo(),
                 UsageStats = ctx.RequestServices.GetRequiredService<IUsageStatsDebug>().GetDebugInfo(),

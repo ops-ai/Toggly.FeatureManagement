@@ -3,6 +3,7 @@ using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Secrets;
 using Raven.Client.Documents;
+using Raven.Client.Http;
 using System.Security.Cryptography.X509Certificates;
 
 namespace Demo.Mvc.Multitenant
@@ -33,7 +34,16 @@ namespace Demo.Mvc.Multitenant
             {
                 Urls = ravenConfiguration.GetSection("Urls").Get<string[]>(),
                 Database = ravenConfiguration["DatabaseName"],
-                Certificate = ravenCert
+                Certificate = ravenCert,
+                Conventions =
+                {
+                    ReadBalanceBehavior = ReadBalanceBehavior.RoundRobin,
+                    AggressiveCache =
+                    {
+                        Duration = TimeSpan.FromMinutes(5),
+                        Mode = AggressiveCacheMode.TrackChanges
+                    }
+                }
             };
             store.Initialize();
             services.AddSingleton(store);
