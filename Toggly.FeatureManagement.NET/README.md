@@ -54,7 +54,7 @@ public enum MyFeatureFlags
 
 Feature flags rely on .NET Core dependency injection. We can register the feature management services using standard conventions.
 
-``` C#
+``` csharp
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
 
