@@ -19,10 +19,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="README.md" />
     <None Remove="toggly_favicon.png" />
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="README.md">
+      <PackagePath>\</PackagePath>
+      <Pack>True</Pack>
+    </Content>
     <Content Include="toggly_favicon.png">
       <PackagePath>\</PackagePath>
       <Pack>True</Pack>
