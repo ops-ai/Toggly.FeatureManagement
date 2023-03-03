@@ -1,0 +1,12 @@
+{
+  "name": "@ops-ai/ngx-feature-flags-toggly",
+  "description": "Lightweight package that provides feature flags support for Angular applications allowing you to check feature status and enable/disable them easily.",
+  "version": "1.0.0",
+  "peerDependencies": {
+    "@angular/common": "^13.3.0",
+    "@angular/core": "^13.3.0"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  }
+}
