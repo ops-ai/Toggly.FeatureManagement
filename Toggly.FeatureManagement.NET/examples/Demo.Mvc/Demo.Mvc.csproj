@@ -22,4 +22,8 @@
     <ProjectReference Include="..\..\Toggly.Metrics.SystemMetrics\Toggly.Metrics.SystemMetrics.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\Toggly.FeatureManagement.Hangfire\Toggly.FeatureManagement.Hangfire.csproj" />
+  </ItemGroup>
+
 </Project>

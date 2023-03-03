@@ -5,6 +5,7 @@ using Toggly.FeatureManagement.Web.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Hangfire;
 using Demo.Mvc.Jobs;
+using Toggly.FeatureManagement.HangfireExtensions;
 
 namespace Demo.Mvc
 {
@@ -86,8 +87,10 @@ namespace Demo.Mvc
                     await Task.CompletedTask;
                 }));
             });
-
+            //HangfireExtensions
             var featureStateService = app.Services.GetRequiredService<IFeatureStateService>();
+            featureStateService.AddOrUpdateJob<ITestRecurringJob>(FeatureFlags.HourlyJob2, "Hourly job 2", s => s.RunAsync(), Cron.Hourly());
+            
             featureStateService.WhenFeatureTurnsOn(FeatureFlags.HourlyJob, () =>
             {
                 //start a service or job

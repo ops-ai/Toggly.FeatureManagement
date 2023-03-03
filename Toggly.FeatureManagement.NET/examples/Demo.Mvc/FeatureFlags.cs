@@ -13,6 +13,7 @@
         AppDownloadLinks,
         Testimonials,
         HomepagePhoto,
-        HourlyJob
+        HourlyJob,
+        HourlyJob2,
     }
 }
