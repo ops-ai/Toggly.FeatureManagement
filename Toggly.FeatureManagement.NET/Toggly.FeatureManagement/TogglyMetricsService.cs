@@ -3,6 +3,7 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Configuration;
+using Grpc.Net.Client.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -49,13 +50,15 @@ namespace Toggly.FeatureManagement
 
         private readonly string? appInstanceName;
 
+        private readonly Metrics.MetricsClient _metricsClient;
+
         /// <summary>
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
         /// </summary>
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<string>> _uniqueUsageMap = new ConcurrentDictionary<string, ConcurrentHashSet<string>>();
 
-        public TogglyMetricsService(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, IFeatureDefinitionProvider featureDefinitionProvider, IFeatureManager featureManager)
+        public TogglyMetricsService(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, IFeatureDefinitionProvider featureDefinitionProvider, IFeatureManager featureManager, Metrics.MetricsClient metricsClient)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
@@ -65,6 +68,7 @@ namespace Toggly.FeatureManagement
             _featureManager = featureManager;
             _metricsRegistryService = serviceProvider.GetRequiredService<IMetricsRegistryService>();
             appInstanceName = togglySettings.Value.InstanceName ?? Environment.MachineName;
+            _metricsClient = metricsClient;
 
             _logger = loggerFactory.CreateLogger<TogglyMetricsService>();
 
@@ -106,22 +110,7 @@ namespace Toggly.FeatureManagement
                 _logger.LogTrace("Sending metrics");
                 var currentTime = DateTime.UtcNow;
 
-                var defaultMethodConfig = new MethodConfig
-                {
-                    Names = { MethodName.Default },
-                    RetryPolicy = new RetryPolicy
-                    {
-                        MaxAttempts = 5,
-                        InitialBackoff = TimeSpan.FromSeconds(1),
-                        MaxBackoff = TimeSpan.FromSeconds(10),
-                        BackoffMultiplier = 1.5,
-                        RetryableStatusCodes = { StatusCode.Unavailable, StatusCode.DataLoss, StatusCode.Aborted, StatusCode.OutOfRange, StatusCode.Cancelled, StatusCode.DeadlineExceeded }
-                    }
-                };
-
-                using var httpClient = _clientFactory.CreateClient("toggly");
-                using var channel = GrpcChannel.ForAddress(_baseUrl, new GrpcChannelOptions { HttpClient = httpClient, ServiceConfig = new ServiceConfig { MethodConfigs = { defaultMethodConfig } } });
-                var client = new Metrics.MetricsClient(channel);
+                
                 var dataPacket = new MetricStat
                 {
                     AppKey = _appKey,
@@ -177,7 +166,7 @@ namespace Toggly.FeatureManagement
                     { "UA", userAgent }
                 };
 
-                var result = await client.SendMetricsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(30)).ConfigureAwait(false);
+                var result = await _metricsClient.SendMetricsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(180)).ConfigureAwait(false);
 
                 if (result.Count != dataPacket.Stats.Count)
                     _logger.LogWarning("Metric count did not match. Possible data integrity issues");

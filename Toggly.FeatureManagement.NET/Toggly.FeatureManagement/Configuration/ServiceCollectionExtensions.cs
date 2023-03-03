@@ -10,6 +10,10 @@ using System.Net;
 using System.Net.Http;
 using Toggly.FeatureManagement.Helpers;
 using System.Collections.Generic;
+using Grpc.Net.Client.Web;
+using Toggly.Web;
+using Grpc.Net.Client.Configuration;
+using Grpc.Core;
 
 namespace Toggly.FeatureManagement.Configuration
 {
@@ -75,9 +79,35 @@ namespace Toggly.FeatureManagement.Configuration
 
                 return handler;
             });
+            
+            var defaultMethodConfig = new MethodConfig
+            {
+                Names = { MethodName.Default },
+                RetryPolicy = new RetryPolicy
+                {
+                    MaxAttempts = 10,
+                    InitialBackoff = TimeSpan.FromSeconds(1),
+                    MaxBackoff = TimeSpan.FromSeconds(10),
+                    BackoffMultiplier = 1.5,
+                    RetryableStatusCodes = { StatusCode.Unavailable, StatusCode.DataLoss, StatusCode.Aborted, StatusCode.OutOfRange, StatusCode.Cancelled, StatusCode.DeadlineExceeded, StatusCode.AlreadyExists, StatusCode.Internal, StatusCode.OutOfRange, StatusCode.Unavailable, StatusCode.Unknown }
+                }
+            };
+            services.AddGrpcClient<Metrics.MetricsClient>((sp, options) =>
+            {
+                var baseUrl = sp.GetRequiredService<IOptions<TogglySettings>>().Value.BaseUrl;
+                options.Address = new Uri(baseUrl ?? "https://app.toggly.io");
+                options.ChannelOptionsActions.Add(opt => opt.ServiceConfig = new ServiceConfig { MethodConfigs = { defaultMethodConfig } });
+            }).ConfigurePrimaryHttpMessageHandler(() => new GrpcWebHandler(new HttpClientHandler()));
+            services.AddGrpcClient<Usage.UsageClient>((sp, options) =>
+            {
+                var baseUrl = sp.GetRequiredService<IOptions<TogglySettings>>().Value.BaseUrl;
+                options.Address = new Uri(baseUrl ?? "https://app.toggly.io");
+                options.ChannelOptionsActions.Add(opt => opt.ServiceConfig = new ServiceConfig { MethodConfigs = { defaultMethodConfig } });
+
+            }).ConfigurePrimaryHttpMessageHandler(() => new GrpcWebHandler(new HttpClientHandler()));
 
             services.AddSingleton<IMetricsRegistryService, TogglyMetricsRegistryService>();
-            
+
             services.AddSingleton<TogglyFeatureStateService>();
             services.AddSingleton<IFeatureStateInternalService>(x => x.GetRequiredService<TogglyFeatureStateService>());
             services.AddSingleton<IFeatureStateService>(x => x.GetRequiredService<TogglyFeatureStateService>());

@@ -2,6 +2,7 @@
 using Grpc.Core;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Configuration;
+using Grpc.Net.Client.Web;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -54,6 +55,8 @@ namespace Toggly.FeatureManagement
 
         private readonly string? appInstanceName;
 
+        private readonly Usage.UsageClient _usageClient;
+
         /// <summary>
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
@@ -63,13 +66,14 @@ namespace Toggly.FeatureManagement
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageUsedMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
         private readonly HashSet<string> _uniqueUserMap = new HashSet<string>();
 
-        public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider)
+        public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, Usage.UsageClient usageClient)
         {
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
             _baseUrl = togglySettings.Value.BaseUrl ?? "https://app.toggly.io/";
             _clientFactory = clientFactory;
             _contextProvider = (IFeatureContextProvider?)serviceProvider.GetService(typeof(IFeatureContextProvider));
+            _usageClient = usageClient;
 
             appVersion = togglySettings.Value.AppVersion ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString();
             appInstanceName = togglySettings.Value.InstanceName ?? Environment.MachineName;
@@ -118,24 +122,7 @@ namespace Toggly.FeatureManagement
 
                 _logger.LogTrace("Sending stats");
                 var currentTime = DateTime.UtcNow;
-
-                var defaultMethodConfig = new MethodConfig
-                {
-                    Names = { MethodName.Default },
-                    RetryPolicy = new RetryPolicy
-                    {
-                        MaxAttempts = 5,
-                        InitialBackoff = TimeSpan.FromSeconds(1),
-                        MaxBackoff = TimeSpan.FromSeconds(20),
-                        BackoffMultiplier = 1.5,
-                        RetryableStatusCodes = { StatusCode.Unavailable, StatusCode.DataLoss, StatusCode.Aborted, StatusCode.OutOfRange, StatusCode.Cancelled, StatusCode.DeadlineExceeded }
-                    }
-                };
-
-                using var httpClient = _clientFactory.CreateClient("toggly");
-                using var channel = GrpcChannel.ForAddress(_baseUrl, new GrpcChannelOptions { HttpClient = httpClient, ServiceConfig = new ServiceConfig { MethodConfigs = { defaultMethodConfig } } });
-                var client = new Usage.UsageClient(channel);
-
+                
                 var dataPacket = new FeatureStat
                 {
                     AppKey = _appKey,
@@ -170,7 +157,7 @@ namespace Toggly.FeatureManagement
                     { "UA", userAgent }
                 };
 
-                var result = await client.SendStatsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(60)).ConfigureAwait(false);
+                var result = await _usageClient.SendStatsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(180)).ConfigureAwait(false);
 
                 if (result.FeatureCount != dataPacket.Stats.Count)
                     _logger.LogWarning("Feature count did not match. Possible data integrity issues");

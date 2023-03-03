@@ -2,6 +2,12 @@
 
 To simplify the use of Hangfire with feature flags, we created a set of extensions for ASP.NET Core. The extensions allow you to easily configure Hangfire to use feature flags to enable or disable background jobs.
 
+## Installation
+
+```bash
+dotnet add package Toggly.FeatureManagement.Hangfire
+```
+
 ## Before
 
 ``` C#
