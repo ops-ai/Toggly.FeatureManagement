@@ -1,0 +1,28 @@
+{
+  "name": "@ops-ai/react-feature-flags-toggly",
+  "version": "1.0.0",
+  "description": "Provides feature flags support for React applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
+  "scripts": {
+    "build": "rollup -c"
+  },
+  "author": "Cosmin Atomei <cosmin.atomei@gmail.com>",
+  "license": "ISC",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^24.0.1",
+    "@rollup/plugin-node-resolve": "^15.0.1",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "@types/react": "^18.0.28",
+    "react": "^18.2.0",
+    "rollup": "^3.18.0",
+    "rollup-plugin-dts": "^5.2.0",
+    "tslib": "^2.5.0",
+    "typescript": "^4.9.5"
+  },
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "files": [
+    "dist"
+  ],
+  "types": "dist/index.d.ts",
+  "type": "module"
+}
