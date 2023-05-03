@@ -110,7 +110,7 @@ namespace Toggly.FeatureManagement.Helpers
                   typeof(TInterface),
                   serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
-                        throw new NotImplementedException("Feature {featureName} is not enabled, and no other instance of the service is registered"),
+                        throw new NotImplementedException($"Feature {featureName} is not enabled, and no other instance of the service is registered"),
                   ServiceLifetime.Transient)
                 );
             else
@@ -146,7 +146,7 @@ namespace Toggly.FeatureManagement.Helpers
                   typeof(TInterface),
                   serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
-                        throw new NotImplementedException("Feature {featureName} is not enabled, and no other instance of the service is registered"),
+                        throw new NotImplementedException($"Feature {featureName} is not enabled, and no other instance of the service is registered"),
                   ServiceLifetime.Scoped)
                 );
             else

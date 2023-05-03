@@ -14,10 +14,10 @@ namespace Toggly.FeatureManagement
         {
             var type = featureKey.GetType();
 
-            if (!type.IsEnum)
-                throw new ArgumentException("The provided features must be enums.", nameof(featureKey));
+            if (!type.IsEnum && type != typeof(string))
+                throw new ArgumentException("The provided feature name must be an enum or string.", nameof(featureKey));
 
-            return WhenFeatureTurnsOn(Enum.GetName(featureKey.GetType(), featureKey), action);
+            return WhenFeatureTurnsOn(type.IsEnum ? Enum.GetName(featureKey.GetType(), featureKey)! : featureKey.ToString()!, action);
         }
 
         /// <inheritdoc/>
@@ -36,10 +36,10 @@ namespace Toggly.FeatureManagement
         {
             var type = featureKey.GetType();
 
-            if (!type.IsEnum)
-                throw new ArgumentException("The provided features must be enums.", nameof(featureKey));
+            if (!type.IsEnum && type != typeof(string))
+                throw new ArgumentException("The provided feature name must be an enum or string.", nameof(featureKey));
 
-            return WhenFeatureTurnsOff(Enum.GetName(featureKey.GetType(), featureKey), action);
+            return WhenFeatureTurnsOff(type.IsEnum ? Enum.GetName(featureKey.GetType(), featureKey)! : featureKey.ToString()!, action);
         }
 
         /// <inheritdoc/>
