@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.1;netcoreapp3.1;net5.0;net6.0;net7.0</TargetFrameworks>
@@ -47,7 +47,7 @@
 		<PackageReference Include="Azure.Messaging.WebPubSub" Version="1.*" />
 		<PackageReference Include="ConcurrentHashSet" Version="1.*" />
 		<PackageReference Include="Google.Protobuf" Version="3.20.0" />
-		<PackageReference Include="Grpc.Net.Client" Version="2.45.0" />
+		<PackageReference Include="Grpc.Net.Client" Version="2.52.0" />
 		<PackageReference Include="Grpc.Net.ClientFactory" Version="2.45.0" />
 		<PackageReference Include="Grpc.Net.Client.Web" Version="2.45.0" />
 		<PackageReference Include="Grpc.Tools" Version="2.45.0">
