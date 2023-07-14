@@ -3,7 +3,6 @@ import {
   ContentChild,
   Input,
   OnChanges,
-  OnInit,
   SimpleChanges,
 } from '@angular/core'
 import { FeatureTemplateDirective } from './feature-template.directive'

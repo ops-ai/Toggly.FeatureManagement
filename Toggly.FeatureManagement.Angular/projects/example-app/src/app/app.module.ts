@@ -3,9 +3,10 @@ import { BrowserModule } from '@angular/platform-browser'
 
 import { AppRoutingModule } from './app-routing.module'
 import { AppComponent } from './app.component'
-// import { NgxFeatureFlagsTogglyModule } from 'projects/ngx-feature-flags-toggly/src/public-api'
 
 import { TestProjectionInitComponent } from './test.component'
+
+// import { NgxFeatureFlagsTogglyModule } from 'projects/ngx-feature-flags-toggly/src/public-api'
 import { NgxFeatureFlagsTogglyModule } from 'dist/ngx-feature-flags-toggly'
 
 @NgModule({

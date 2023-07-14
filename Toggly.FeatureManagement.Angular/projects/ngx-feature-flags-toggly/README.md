@@ -10,7 +10,7 @@ In agile settings the feature flag is used in production, to switch on the featu
 
 ## Installation
 
-Simply install use NPM to install this package.
+Simply use NPM to install this package.
 
 ```shell
 $ npm i -s @ops-ai/ngx-feature-flags-toggly
@@ -56,7 +56,37 @@ NgxFeatureFlagsTogglyModule.forRoot({
 }),
 ```
 
-Now you can start using the Feature component anywhere in your application.
+Now you can start using the Feature Flag directive, Feature component & Feature Flag Guard anywhere in your application.
+
+*Feature Flag Directive*
+
+```html
+<div *featureFlag="'firstFeature'">
+  <p>This feature can be turned on or off.</p>
+</div>
+```
+
+You can also check multiple feature keys and make use of the **requirement** (all/any) and **negate** (bool) parameters (requirement is set to "all" by default).
+
+```html
+<div *featureFlag="['firstFeature', 'secondFeature']">
+  <p>ALL the provided feature keys are TRUE.</p>
+</div>
+```
+
+```html
+<div *featureFlag="['firstFeature', 'secondFeature']" featureFlagRequirement="any">
+  <p>AT LEAST ONE the provided feature keys is TRUE.</p>
+</div>
+```
+
+```html
+<div *featureFlag="['firstFeature', 'secondFeature']" featureFlagRequirement="all" [featureFlagNegate]="true">
+  <p>NONE of the provided feature keys is TRUE.</p>
+</div>
+```
+
+*Feature Component*
 
 ```html
 <feature featureKey="firstFeature">
@@ -90,6 +120,48 @@ You can also check multiple feature keys and make use of the **requirement** (al
     <p>NONE of the provided feature keys is TRUE.</p>
   </ng-template>
 </feature>
+```
+
+*Feature Flag Guard*
+
+```js
+@NgModule({
+  imports: [
+    RouterModule.forRoot([
+      {
+        path: 'experimental-route',
+        loadChildren: () => import('/path/to/module').then((module) => module.ExperimentalModuleName),
+        canActivate: [FeatureFlagGuard],
+        data: {
+          featureFlag: 'firstFeature',
+          featureFlagRedirect: '/path/for/redirect', // URL Path to redirect in case feature flag should not be displayed
+        },
+      }
+    ])
+  ]
+})
+```
+
+You can also check multiple feature keys and make use of the **featureFlagRequirement** (all/any) and **featureFlagNegate** (bool) options (requirement is set to "all" by default).
+
+```js
+@NgModule({
+  imports: [
+    RouterModule.forRoot([
+      {
+        path: 'experimental-route',
+        loadChildren: () => import('/path/to/module').then((module) => module.ExperimentalModuleName),
+        canActivate: [FeatureFlagGuard],
+        data: {
+          featureFlag: 'firstFeature',
+          featureFlagRequirement: 'any',
+          featureFlagNegate: true,
+          featureFlagRedirect: '/path/for/redirect',
+        },
+      }
+    ])
+  ]
+})
 ```
 
 Lastly, you can use the **TogglyService** to check if a feature is ON or OFF programmatically, by simply injecting it in any component.
@@ -153,7 +225,37 @@ Import the Toggly library while providing your default feature flags.
 export class AppModule {}
 ```
 
-Now you can start using the Feature component anywhere in your application.
+Now you can start using the Feature Flag directive, Feature component & Feature Flag Guard anywhere in your application.
+
+*Feature Flag Directive*
+
+```html
+<div *featureFlag="'firstFeature'">
+  <p>This feature can be turned on or off.</p>
+</div>
+```
+
+You can also check multiple feature keys and make use of the **requirement** (all/any) and **negate** (bool) parameters (requirement is set to "all" by default).
+
+```html
+<div *featureFlag="['firstFeature', 'secondFeature']">
+  <p>ALL the provided feature keys are TRUE.</p>
+</div>
+```
+
+```html
+<div *featureFlag="['firstFeature', 'secondFeature']" featureFlagRequirement="any">
+  <p>AT LEAST ONE the provided feature keys is TRUE.</p>
+</div>
+```
+
+```html
+<div *featureFlag="['firstFeature', 'secondFeature']" featureFlagRequirement="all" [featureFlagNegate]="true">
+  <p>NONE of the provided feature keys is TRUE.</p>
+</div>
+```
+
+*Feature Component*
 
 ```html
 <feature featureKey="firstFeature">
@@ -187,6 +289,48 @@ You can also check multiple feature keys and make use of the **requirement** (al
     <p>NONE of the provided feature keys is TRUE.</p>
   </ng-template>
 </feature>
+```
+
+*Feature Flag Guard*
+
+```js
+@NgModule({
+  imports: [
+    RouterModule.forRoot([
+      {
+        path: 'experimental-route',
+        loadChildren: () => import('/path/to/module').then((module) => module.ExperimentalModuleName),
+        canActivate: [FeatureFlagGuard],
+        data: {
+          featureFlag: 'firstFeature',
+          featureFlagRedirect: '/path/for/redirect', // URL Path to redirect in case feature flag should not be displayed
+        },
+      }
+    ])
+  ]
+})
+```
+
+You can also check multiple feature keys and make use of the **featureFlagRequirement** (all/any) and **featureFlagNegate** (bool) options (requirement is set to "all" by default).
+
+```js
+@NgModule({
+  imports: [
+    RouterModule.forRoot([
+      {
+        path: 'experimental-route',
+        loadChildren: () => import('/path/to/module').then((module) => module.ExperimentalModuleName),
+        canActivate: [FeatureFlagGuard],
+        data: {
+          featureFlag: 'firstFeature',
+          featureFlagRequirement: 'any',
+          featureFlagNegate: true,
+          featureFlagRedirect: '/path/for/redirect',
+        },
+      }
+    ])
+  ]
+})
 ```
 
 Lastly, you can use the **TogglyService** to check if a feature is ON or OFF programmatically, by simply injecting it in any component.

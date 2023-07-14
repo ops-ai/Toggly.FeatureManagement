@@ -364,7 +364,10 @@
 
 <div class="content" role="main">
   <!-- Highlight Card -->
-  <div class="card highlight-card card-small">
+  <div
+    *featureFlag="['header']"
+    class="card highlight-card card-small"
+  >
     <svg
       id="rocket"
       xmlns="http://www.w3.org/2000/svg"
@@ -730,7 +733,11 @@
       </div>
 
       <!-- Terminal -->
-      <div class="terminal" [ngSwitch]="selection.value" style="margin: 8px auto 0px">
+      <div
+        class="terminal"
+        [ngSwitch]="selection.value"
+        style="margin: 8px auto 0px;"
+      >
         <pre *ngSwitchDefault>ng generate component xyz</pre>
         <pre *ngSwitchCase="'material'">ng add @angular/material</pre>
         <pre *ngSwitchCase="'pwa'">ng add @angular/pwa</pre>

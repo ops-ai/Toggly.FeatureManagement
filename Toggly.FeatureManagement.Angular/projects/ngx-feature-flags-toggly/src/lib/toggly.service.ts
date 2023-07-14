@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core'
-import { ITogglyOptions, ITogglyService } from './models'
+import { ITogglyService } from './models'
 import { TogglyOptions } from './toggly-options'
 
 @Injectable({
@@ -12,23 +12,25 @@ export class TogglyService implements ITogglyService {
   shouldShowFeatureDuringEvaluation: boolean = false
 
   constructor(private readonly _config: TogglyOptions) {
-    if (!this._config.appKey) {
-      if (this._config.featureDefaults) {
-        this._features = this._config.featureDefaults ?? {}
+    if (!this._config.customDefinitionsUrl) {
+      if (!this._config.appKey) {
+        if (this._config.featureDefaults) {
+          this._features = this._config.featureDefaults ?? {}
 
-        console.warn(
-          'Toggly --- Using feature defaults as no application key provided when initializing the Toggly',
-        )
+          console.warn(
+            'Toggly --- Using feature defaults as no application key provided when initializing the Toggly',
+          )
+        } else {
+          console.warn(
+            'Toggly --- A valid application key is required to connect to your Toggly.io application for evaluating your features.',
+          )
+        }
       } else {
-        console.warn(
-          'Toggly --- A valid application key is required to connect to your Toggly.io application for evaluating your features.',
-        )
-      }
-    } else {
-      if (!this._config.environment) {
-        console.warn(
-          'Toggly --- Using Production environment as no environment provided when initializing the Toggly',
-        )
+        if (!this._config.environment) {
+          console.warn(
+            'Toggly --- Using Production environment as no environment provided when initializing the Toggly',
+          )
+        }
       }
     }
 
@@ -59,7 +61,9 @@ export class TogglyService implements ITogglyService {
     this._loadingFeatures = true
 
     try {
-      var url = `${this._config.baseURI ?? 'https://client.toggly.io'}/${this._config.appKey}-${this._config.environment ?? 'Production'}/defs`
+      var url = this._config.customDefinitionsUrl
+        ? this._config.customDefinitionsUrl
+        : `${this._config.baseURI ?? 'https://client.toggly.io'}/${this._config.appKey}-${this._config.environment ?? 'Production'}/defs`
 
       if (this._config.identity) {
         url += `?u=${this._config.identity}`
