@@ -1,3 +1,15 @@
+## 1.0.5
+
+2023-06-01 (Date of Last Commit)
+
+* Better dependencies support.
+
+## 1.0.4
+
+2023-06-01 (Date of Last Commit)
+
+* Better dependencies support.
+
 ## 1.0.3
 
 2022-11-22 (Date of Last Commit)
