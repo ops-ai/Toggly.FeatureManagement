@@ -3,10 +3,10 @@
     "Demo.Mvc": {
       "commandName": "Project",
       "launchBrowser": true,
+      "applicationUrl": "https://localhost:62326;http://localhost:62327",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
-      },
-      "applicationUrl": "https://localhost:62326;http://localhost:62327"
+      }
     }
   }
 }
