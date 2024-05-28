@@ -3,6 +3,9 @@ using System.Collections.Concurrent;
 
 namespace Toggly.FeatureManagement
 {
+    /// <summary>
+    /// Service to manage feature state
+    /// </summary>
     public class TogglyFeatureStateService : IFeatureStateInternalService
     {
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, Action>> _onSubscribers = new ConcurrentDictionary<string, ConcurrentDictionary<Guid, Action>>();
@@ -28,6 +31,8 @@ namespace Toggly.FeatureManagement
 
             var id = Guid.NewGuid();
             _onSubscribers[featureKey].TryAdd(id, action);
+            if (_featureStates.ContainsKey(featureKey) && _featureStates[featureKey])
+                action();
             return id;
         }
 
@@ -50,6 +55,8 @@ namespace Toggly.FeatureManagement
 
             var id = Guid.NewGuid();
             _offSubscribers[featureKey].TryAdd(id, action);
+            if (_featureStates.ContainsKey(featureKey) && !_featureStates[featureKey])
+                action();
             return id;
         }
 

@@ -22,6 +22,9 @@ using Websocket.Client;
 
 namespace Toggly.FeatureManagement
 {
+    /// <summary>
+    /// Toggly feature provider
+    /// </summary>
     public class TogglyFeatureProvider : IFeatureDefinitionProvider, IDisposable, IFeatureExperimentProvider, IFeatureProviderDebug
     {
         private readonly string _appKey;
@@ -54,6 +57,14 @@ namespace Toggly.FeatureManagement
 
         private readonly bool _enabledByDefault;
 
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="togglySettings"></param>
+        /// <param name="environment"></param>
+        /// <param name="loggerFactory"></param>
+        /// <param name="clientFactory"></param>
+        /// <param name="serviceProvider"></param>
         public TogglyFeatureProvider(IOptions<TogglySettings> togglySettings, IHostEnvironment environment, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IServiceProvider serviceProvider)
         {
             _appKey = togglySettings.Value.AppKey;
@@ -153,7 +164,7 @@ namespace Toggly.FeatureManagement
                     _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                     _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
                 }
-                var activeExperiments = newDefinitions.Where(t => t.Metrics != null).SelectMany(t => t.Metrics).GroupBy(t => t).Select(t => t.Key).ToList();
+                var activeExperiments = newDefinitions.Where(t => t.Metrics != null).SelectMany(t => t.Metrics!).GroupBy(t => t).Select(t => t.Key).ToList();
                 _experiments.Clear();
                 foreach (var activeExperiment in activeExperiments)
                     _experiments.TryAdd(activeExperiment, new ConcurrentHashSet<string>(newDefinitions.Where(t => t.Metrics != null && t.Metrics.Contains(activeExperiment)).Select(t => t.FeatureKey)));
@@ -206,6 +217,10 @@ namespace Toggly.FeatureManagement
             }
         }
 
+        /// <summary>
+        /// Get all feature definitions
+        /// </summary>
+        /// <returns></returns>
         public async IAsyncEnumerable<FeatureDefinition> GetAllFeatureDefinitionsAsync()
         {
             if (!_loaded)
@@ -222,6 +237,11 @@ namespace Toggly.FeatureManagement
                 yield return feature;
         }
 
+        /// <summary>
+        /// Get a feature definition by name
+        /// </summary>
+        /// <param name="featureName"></param>
+        /// <returns></returns>
         public async Task<FeatureDefinition> GetFeatureDefinitionAsync(string featureName)
         {
             if (!_loaded)
@@ -240,11 +260,19 @@ namespace Toggly.FeatureManagement
             return new FeatureDefinition {  Name = featureName, EnabledFor = _enabledByDefault ? new List<FeatureFilterConfiguration> { new FeatureFilterConfiguration { Name = "AlwaysOn" } } : new List<FeatureFilterConfiguration>() };
         }
 
+        /// <summary>
+        /// Dispose the feature provider
+        /// </summary>
         public void Dispose()
         {
             _timer.Dispose();
         }
 
+        /// <summary>
+        /// Get features related to a metric for an experiment
+        /// </summary>
+        /// <param name="metricKey"></param>
+        /// <returns></returns>
         public List<string>? GetFeaturesForMetric(string metricKey)
         {
             if (_experiments.TryGetValue(metricKey, out var features))
@@ -252,6 +280,10 @@ namespace Toggly.FeatureManagement
             return null;
         }
 
+        /// <summary>
+        /// Get debug information
+        /// </summary>
+        /// <returns></returns>
         public FeatureProviderDebugInfo GetDebugInfo()
         {
             return new FeatureProviderDebugInfo
@@ -270,26 +302,59 @@ namespace Toggly.FeatureManagement
         }
     }
 
+    /// <summary>
+    /// Debug information for the feature provider
+    /// </summary>
     public class FeatureProviderDebugInfo
     {
+        /// <summary>
+        /// Running App key
+        /// </summary>
         public string? AppKey { get; set; }
 
+        /// <summary>
+        /// Running Environment
+        /// </summary>
         public string? Environment { get; set; }
 
+        /// <summary>
+        /// Feature definitions
+        /// </summary>
         public ConcurrentDictionary<string, FeatureDefinition>? Definitions { get; set; }
 
+        /// <summary>
+        /// Experiments
+        /// </summary>
         public ConcurrentDictionary<string, ConcurrentHashSet<string>>? Experiments { get; set; }
 
+        /// <summary>
+        /// User agent
+        /// </summary>
         public string? UserAgent { get; set; }
 
+        /// <summary>
+        /// Last error
+        /// </summary>
         public string? LastError { get; set; }
 
+        /// <summary>
+        /// Last error time
+        /// </summary>
         public DateTime? LastErrorTime { get; set; }
 
+        /// <summary>
+        /// Last refresh time
+        /// </summary>
         public DateTime? LastRefresh { get; set; }
-
+        
+        /// <summary>
+        /// Websocket client running
+        /// </summary>
         public bool WebsocketClientRunning { get; set; }
 
+        /// <summary>
+        /// Loaded
+        /// </summary>
         public bool Loaded { get; set; }
     }
 }

@@ -2,6 +2,9 @@
 
 namespace Toggly.FeatureManagement
 {
+    /// <summary>
+    /// Service to manage feature state
+    /// </summary>
     public interface IFeatureStateService
     {
         /// <summary>
