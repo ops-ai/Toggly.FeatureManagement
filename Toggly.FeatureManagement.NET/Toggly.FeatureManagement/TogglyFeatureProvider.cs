@@ -25,7 +25,7 @@ namespace Toggly.FeatureManagement
     /// <summary>
     /// Toggly feature provider
     /// </summary>
-    public class TogglyFeatureProvider : IFeatureDefinitionProvider, IDisposable, IFeatureExperimentProvider, IFeatureProviderDebug
+    public class TogglyFeatureProvider : IFeatureDefinitionProvider, IDisposable, IFeatureExperimentProvider, IFeatureProviderDebug, ISecureFeatureProvider
     {
         private readonly string _appKey;
 
@@ -56,6 +56,8 @@ namespace Toggly.FeatureManagement
         private readonly IServiceProvider _serviceProvider;
 
         private readonly bool _enabledByDefault;
+
+        private ConcurrentHashSet<string> _secureFeatures = new ConcurrentHashSet<string>();
 
         /// <summary>
         /// Constructor
@@ -100,16 +102,19 @@ namespace Toggly.FeatureManagement
                                     {
                                         Name = featureFilter.Name,
                                         Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
-                                    })
+                                    }),
+                                RequirementType = featureDefinition.RequirementType
                             };
+                            if (featureDefinition.SecuredFeature) _secureFeatures.Add(featureDefinition.FeatureKey);
+                            else _secureFeatures.TryRemove(featureDefinition.FeatureKey);
                             _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                             _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
                         }
                 }
             }
-            catch (Exception ex2)
+            catch (Exception ex)
             {
-                _logger.LogError(ex2, "Error loading from snapshot");
+                _logger.LogError(ex, "Error loading from snapshot");
             }
         }
 
@@ -160,7 +165,8 @@ namespace Toggly.FeatureManagement
                                 Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
                             })
                     };
-
+                    if (featureDefinition.SecuredFeature) _secureFeatures.Add(featureDefinition.FeatureKey);
+                    else _secureFeatures.TryRemove(featureDefinition.FeatureKey);
                     _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                     _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
                 }
@@ -257,7 +263,7 @@ namespace Toggly.FeatureManagement
             if (_definitions.TryGetValue(featureName, out var updatedFeature))
                 return updatedFeature;
             
-            return new FeatureDefinition {  Name = featureName, EnabledFor = _enabledByDefault ? new List<FeatureFilterConfiguration> { new FeatureFilterConfiguration { Name = "AlwaysOn" } } : new List<FeatureFilterConfiguration>() };
+            return new FeatureDefinition { Name = featureName, EnabledFor = _enabledByDefault ? new List<FeatureFilterConfiguration> { new FeatureFilterConfiguration { Name = "AlwaysOn" } } : new List<FeatureFilterConfiguration>() };
         }
 
         /// <summary>
@@ -300,6 +306,13 @@ namespace Toggly.FeatureManagement
                 Loaded = _loaded
             };
         }
+        
+        /// <summary>
+        /// Check if a feature requires a security check
+        /// </summary>
+        /// <param name="featureKey">Feature key</param>
+        /// <returns>True if the feature requires a security check</returns>
+        public bool IsFeatureSecured(string featureKey) => _secureFeatures.Contains(featureKey);
     }
 
     /// <summary>

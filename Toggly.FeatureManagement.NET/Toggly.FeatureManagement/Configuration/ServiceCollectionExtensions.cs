@@ -115,6 +115,7 @@ namespace Toggly.FeatureManagement.Configuration
             services.AddSingleton<TogglyFeatureProvider>();
             services.AddSingleton<IFeatureDefinitionProvider>(x => x.GetRequiredService<TogglyFeatureProvider>());
             services.AddSingleton<IFeatureProviderDebug>(x => x.GetRequiredService<TogglyFeatureProvider>());
+            services.AddSingleton<ISecureFeatureProvider>(x => x.GetRequiredService<TogglyFeatureProvider>());
 
             services.AddSingleton<TogglyUsageStatsProvider>();
             services.AddSingleton<IFeatureUsageStatsProvider>(x => x.GetRequiredService<TogglyUsageStatsProvider>());
