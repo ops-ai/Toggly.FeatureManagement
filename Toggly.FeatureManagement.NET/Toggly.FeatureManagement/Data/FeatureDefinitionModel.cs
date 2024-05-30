@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace Toggly.FeatureManagement.Data
 {
@@ -33,6 +34,7 @@ namespace Toggly.FeatureManagement.Data
         /// <summary>
         /// Require all the filters to be true or at least one
         /// </summary>
+        [JsonConverter(typeof(JsonStringEnumConverter))]
         public RequirementType RequirementType { get; set; } = RequirementType.Any;
 
         /// <summary>
