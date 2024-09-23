@@ -110,19 +110,35 @@ namespace Toggly.FeatureManagement
         private DateTime? _lastErrorTime = null;
         private DateTime? _lastSend = null;
 
+        private bool _isSendingStats;
+        
         private async Task SendStats()
         {
+            if (_isSendingStats)
+                return;
+
+            _isSendingStats = true;
+            if (_stats.IsEmpty)
+            {
+                _logger.LogTrace("Send stats - nothing to send");
+                return;
+            }
+
+            // clone stats and uniqueUsageEnabledMap
+            var stats = new Dictionary<(string FeatureKey, byte Type), int>(_stats);
+            _stats.Clear();
+            var uniqueUsageEnabledMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageEnabledMap);
+            _uniqueUsageEnabledMap.Clear();
+            var uniqueUsageDisabledMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageDisabledMap);
+            _uniqueUsageDisabledMap.Clear();
+            var uniqueUsageUsedMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageUsedMap);
+            _uniqueUsageUsedMap.Clear();
+
+            _logger.LogTrace("Sending stats");
+            var currentTime = DateTime.UtcNow;
+
             try
             {
-                if (_stats.IsEmpty)
-                {
-                    _logger.LogTrace("Send stats - nothing to send");
-                    return;
-                }
-
-                _logger.LogTrace("Sending stats");
-                var currentTime = DateTime.UtcNow;
-                
                 var dataPacket = new FeatureStat
                 {
                     AppKey = _appKey,
@@ -140,14 +156,14 @@ namespace Toggly.FeatureManagement
                 {
                     dataPacket.Stats.Add(new StatMessage
                     {
-                        EnabledCount = _stats.TryRemove((keys[i], (byte)StatType.Enabled), out var enabledCount) ? enabledCount : 0,
-                        DisabledCount = _stats.TryRemove((keys[i], (byte)StatType.Disabled), out var disabledCount) ? disabledCount : 0,
+                        EnabledCount = stats.TryGetValue((keys[i], (byte)StatType.Enabled), out var enabledCount) ? enabledCount : 0,
+                        DisabledCount = stats.TryGetValue((keys[i], (byte)StatType.Disabled), out var disabledCount) ? disabledCount : 0,
                         Feature = keys[i],
-                        UniqueContextIdentifierDisabledCount = _uniqueUsageEnabledMap.TryRemove(keys[i], out var uniqueIdDisabledCount) ? uniqueIdDisabledCount.Count : 0,
-                        UniqueContextIdentifierEnabledCount = _uniqueUsageEnabledMap.TryRemove(keys[i], out var uniqueIdEnabledCount) ? uniqueIdEnabledCount.Count : 0,
-                        UniqueRequestDisabledCount = _stats.TryRemove((keys[i], (byte)StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0,
-                        UniqueRequestEnabledCount = _stats.TryRemove((keys[i], (byte)StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0,
-                        UsedCount = _stats.TryRemove((keys[i], (byte)StatType.Used), out var usedCount) ? usedCount : 0,
+                        UniqueContextIdentifierDisabledCount = uniqueUsageEnabledMap.TryGetValue(keys[i], out var uniqueIdDisabledCount) ? uniqueIdDisabledCount.Count : 0,
+                        UniqueContextIdentifierEnabledCount = uniqueUsageEnabledMap.TryGetValue(keys[i], out var uniqueIdEnabledCount) ? uniqueIdEnabledCount.Count : 0,
+                        UniqueRequestDisabledCount = stats.TryGetValue((keys[i], (byte)StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0,
+                        UniqueRequestEnabledCount = stats.TryGetValue((keys[i], (byte)StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0,
+                        UsedCount = stats.TryGetValue((keys[i], (byte)StatType.Used), out var usedCount) ? usedCount : 0,
                         UniqueUsersUsedCount = 0
                     });
                 }
@@ -161,18 +177,27 @@ namespace Toggly.FeatureManagement
 
                 if (result.FeatureCount != dataPacket.Stats.Count)
                     _logger.LogWarning("Feature count did not match. Possible data integrity issues");
-                
+
                 _lastSend = DateTime.UtcNow;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sending stats to toggly");
-                
+
+                foreach (var stat in stats)
+                    _stats.AddOrUpdate(stat.Key, stat.Value, (_, oldValue) => oldValue + stat.Value);
+
+                foreach (var u in uniqueUsageEnabledMap)
+                    _uniqueUsageEnabledMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
+
                 _lastError = ex.Message;
+
                 _lastErrorTime = DateTime.UtcNow;
             }
+            _isSendingStats = false;
         }
 
+        /// <inheritdoc/>
         public async Task RecordUsageAsync(string featureKey)
         {
             _logger.LogTrace("Record feature usage: {featureKey}", featureKey);
@@ -195,6 +220,7 @@ namespace Toggly.FeatureManagement
             }
         }
 
+        /// <inheritdoc/>
         public async Task RecordUsageAsync<TContext>(string featureKey, TContext context)
         {
             _logger.LogTrace("Record feature usage: {featureKey}", featureKey);
@@ -217,6 +243,7 @@ namespace Toggly.FeatureManagement
             }
         }
 
+        /// <inheritdoc/>
         public async Task RecordCheckAsync(string featureKey, bool allowed)
         {
             _logger.LogTrace("Record feature check: {featureKey}", featureKey);
@@ -251,6 +278,7 @@ namespace Toggly.FeatureManagement
             }
         }
 
+        /// <inheritdoc/>
         public async Task RecordUsageAsync<TContext>(string featureKey, TContext context, bool allowed)
         {
             _logger.LogTrace("Record feature check: {featureKey}", featureKey);
@@ -305,6 +333,7 @@ namespace Toggly.FeatureManagement
             }
         }
 
+        /// <inheritdoc/>
         public UsageStatsDebugInfo GetDebugInfo()
         {
             return new UsageStatsDebugInfo
@@ -326,26 +355,59 @@ namespace Toggly.FeatureManagement
 
     public class UsageStatsDebugInfo
     {
+        /// <summary>
+        /// App key
+        /// </summary>
         public string? AppKey { get; set; }
 
+        /// <summary>
+        /// Environment name
+        /// </summary>
         public string? Environment { get; set; }
 
+        /// <summary>
+        /// Base URL for the Toggly API
+        /// </summary>
         public string? BaseUrl { get; set; }
 
         //public ConcurrentDictionary<(string FeatureKey, byte Type), int>? Stats { get; set; }
 
+        /// <summary>
+        /// keyed by feature name
+        /// values are list of unique users with status: d-email vs e-email
+        /// </summary>
         public ConcurrentDictionary<string, ConcurrentHashSet<int>>? UniqueUsageEnabledMap { get; set; }
 
+        /// <summary>
+        /// keyed by feature name
+        /// values are list of unique users with status: d-email vs e-email
+        /// </summary>
         public ConcurrentDictionary<string, ConcurrentHashSet<int>>? UniqueUsageDisabledMap { get; set; }
 
+        /// <summary>
+        /// keyed by feature name
+        /// values are list of unique users with status: d-email vs e-email
+        /// </summary>
         public ConcurrentDictionary<string, ConcurrentHashSet<int>>? UniqueUsageUsedMap { get; set; }
 
+        /// <summary>
+        /// User agent
+        /// </summary>
         public string? UserAgent { get; set; }
 
+        /// <summary>
+        /// Last error
+        /// </summary>
         public string? LastError { get; set; }
 
+        /// <summary>
+        /// Last error time
+        /// </summary>
         public DateTime? LastErrorTime { get; set; }
 
+        /// <summary>
+        /// Last send
+        /// </summary>
         public DateTime? LastSend { get; set; }
     }
 }
