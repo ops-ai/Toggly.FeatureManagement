@@ -9,7 +9,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using Toggly.FeatureManagement.Helpers;
-using System.Collections.Generic;
 using Grpc.Net.Client.Web;
 using Toggly.Web;
 using Grpc.Net.Client.Configuration;

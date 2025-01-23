@@ -11,14 +11,20 @@ enum FeatureRequirement { any, all }
 class Feature extends StatefulWidget {
   const Feature({
     Key? key,
-    required this.child,
+    this.child,
+    this.children,
     required this.featureKeys,
     this.requirement = FeatureRequirement.all,
     this.negate = false,
-  }) : super(key: key);
+  })  : assert(child != null || children != null,
+            'Either child or children must be provided'),
+        assert(child == null || children == null,
+            'Cannot provide both child and children'),
+        super(key: key);
 
+  final Widget? child;
+  final List<Widget>? children;
   final List<String> featureKeys;
-  final Widget child;
   final FeatureRequirement requirement;
   final bool negate;
 
@@ -42,10 +48,13 @@ class FeatureState extends State<Feature> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {
           previousResult = snapshot.data;
-          return snapshot.data == true ? widget.child : const SizedBox();
+          if (snapshot.data != true) return const SizedBox();
+
+          return widget.child ?? Column(children: widget.children!);
         }
 
-        return previousResult == true ? widget.child : const SizedBox();
+        if (previousResult != true) return const SizedBox();
+        return widget.child ?? Column(children: widget.children!);
       },
     );
   }

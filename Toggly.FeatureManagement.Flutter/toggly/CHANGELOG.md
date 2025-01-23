@@ -1,3 +1,9 @@
+## 1.0.8
+
+2025-01-23 (Date of Last Commit)
+
+* Added support for multiple children in Feature widget.
+
 ## 1.0.5
 
 2023-06-01 (Date of Last Commit)
