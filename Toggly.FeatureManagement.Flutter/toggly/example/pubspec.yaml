@@ -32,6 +32,9 @@ dependencies:
   flutter:
     sdk: flutter
   
+  elliptic: ^0.3.11
+  ecdsa: ^0.1.2
+  crypto: ^3.0.6
   feature_flags_toggly:
     path: ../
 

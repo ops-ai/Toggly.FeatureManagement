@@ -1,5 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:ecdsa/ecdsa.dart';
+import 'package:elliptic/elliptic.dart';
+import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 
 import 'package:feature_flags_toggly/feature_flags_toggly.dart';
 import 'package:flutter/foundation.dart';
@@ -13,6 +17,7 @@ class Toggly {
   static const Uuid _uuid = Uuid();
   static late String? _appKey;
   static String _environment = 'Production';
+  static bool _useSignedDefinitions = false;
   static late String _identity;
   static late TogglyConfig _config;
   static Map<String, bool> _flagDefaults = {};
@@ -37,6 +42,7 @@ class Toggly {
     String? appKey,
     String? environment,
     String? identity,
+    bool useSignedDefinitions = false,
     TogglyConfig config = const TogglyConfig(),
     Map<String, bool>? flagDefaults,
   }) async {
@@ -45,7 +51,7 @@ class Toggly {
     Toggly._identity = identity ?? Toggly._uuid.v4();
     Toggly._config = config;
     Toggly._flagDefaults = flagDefaults ?? {};
-
+    Toggly._useSignedDefinitions = useSignedDefinitions;
     if (kDebugMode) {
       print('Toggly.init');
     }
@@ -176,15 +182,143 @@ class Toggly {
   static Future<Map<String, bool>> fetchFeatureFlags() async {
     try {
       final response = await _http.get(
-        '${Toggly._config.baseURI}/${Toggly._appKey}-${Toggly._environment}/defs?u=${Toggly._identity}',
+        '${Toggly._config.baseURI}/${Toggly._appKey}-${Toggly._environment}/${Toggly._useSignedDefinitions ? 'signed-defs' : 'defs'}?u=${Toggly._identity}',
         queryParameters: {},
       );
 
-      Map<String, bool> flags = Map<String, bool>.from(response.data);
+      if (kDebugMode) {
+        print('Raw response: ${response.data}');
+      }
+
+      Map<String, bool> flags;
+
+      if (Toggly._useSignedDefinitions) {
+        // Parse the response
+        final signedResponse = Map<String, dynamic>.from(response.data);
+        flags = Map<String, bool>.from(signedResponse['data']);
+        String signature = signedResponse['signature'];
+        int timestamp = signedResponse['timestamp'];
+
+        // Fetch JWKs
+        final jwksResponse = await _http.get(
+          '${Toggly._config.baseURI}/.well-known/jwks',
+          queryParameters: {},
+        );
+
+        final jwksData = Map<String, dynamic>.from(jwksResponse.data);
+        final jwksList = List<Map<String, dynamic>>.from(jwksData['keys']);
+        final jwk = jwksList.first;
+
+        // Create data string to verify and hash it with SHA-256
+        final jsonData = jsonEncode(signedResponse['data']);
+        final dataToVerify = '$jsonData|$timestamp';
+        final messageHash = sha256.convert(utf8.encode(dataToVerify)).bytes;
+
+        try {
+          if (jwk['x'] == null || jwk['y'] == null) {
+            throw Exception('Invalid JWK: missing x or y coordinates');
+          }
+
+          if (kDebugMode) {
+            print('Data to verify: $dataToVerify');
+            print('Timestamp: $timestamp');
+            print('Signature (base64): $signature');
+          }
+          if (kDebugMode) {
+            print(
+                'Message hash (hex): ${messageHash.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join()}');
+          }
+
+          // Create EC public key from JWK components
+          final ec = getP256();
+
+          // Pad base64url strings and decode
+          String padBase64(String value) {
+            var output = value.replaceAll('-', '+').replaceAll('_', '/');
+            switch (output.length % 4) {
+              case 0:
+                break;
+              case 2:
+                output += '==';
+                break;
+              case 3:
+                output += '=';
+                break;
+              default:
+                throw Exception('Illegal base64url string');
+            }
+            return output;
+          }
+
+          final publicKey = PublicKey(
+              ec,
+              BigInt.parse(
+                  base64Url
+                      .decode(padBase64(jwk['x']))
+                      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+                      .join(),
+                  radix: 16),
+              BigInt.parse(
+                  base64Url
+                      .decode(padBase64(jwk['y']))
+                      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+                      .join(),
+                  radix: 16));
+
+          // Decode signature from base64
+          final sigBytes = base64.decode(signature);
+
+          if (kDebugMode) {
+            print('Signature bytes length: ${sigBytes.length}');
+            print(
+                'R bytes: ${sigBytes.sublist(0, 32).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join()}');
+            print(
+                'S bytes: ${sigBytes.sublist(32).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join()}');
+          }
+
+          // ES256 signature is 64 bytes: first 32 bytes are R, last 32 bytes are S
+          final r = BigInt.parse(
+              sigBytes
+                  .sublist(0, 32)
+                  .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+                  .join(),
+              radix: 16);
+          final s = BigInt.parse(
+              sigBytes
+                  .sublist(32)
+                  .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+                  .join(),
+              radix: 16);
+
+          if (kDebugMode) {
+            print('R: $r');
+            print('S: $s');
+          }
+
+          // Verify signature
+          final sig = Signature.fromRS(r, s);
+          final isValid = verify(publicKey, messageHash, sig);
+
+          if (!isValid) {
+            throw Exception('Invalid signature');
+          } else {
+            if (kDebugMode) {
+              print('Signature verification successful');
+            }
+          }
+        } catch (e, stack) {
+          if (kDebugMode) {
+            print('Signature verification failed: $e');
+            print('Stack trace: $stack');
+          }
+          throw Exception('Signature verification failed');
+        }
+      } else {
+        flags = Map<String, bool>.from(response.data);
+      }
 
       // Cache flags on successful response
       Toggly.cacheFeatureFlags(featureFlags: flags);
-
       Toggly._featureFlagsSubject.add(flags);
 
       if (kDebugMode) {
@@ -192,8 +326,8 @@ class Toggly {
       }
 
       return flags;
-    } catch (_) {
-      throw Exception('Failed to fetch feature flags from the API.');
+    } catch (e) {
+      throw Exception('Failed to fetch feature flags from the API: $e');
     }
   }
 

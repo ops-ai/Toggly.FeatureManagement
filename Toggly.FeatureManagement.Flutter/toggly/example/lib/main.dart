@@ -52,6 +52,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void initToggly() async {
     await Toggly.init(
+      appKey: 'YOUR_APP_KEY',
+      environment: 'Development',
+      useSignedDefinitions: false,
       flagDefaults: {
         "ExampleDescription": true,
         "ResetCounterButton": true,

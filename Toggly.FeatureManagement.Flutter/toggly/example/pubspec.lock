@@ -42,13 +42,13 @@ packages:
     source: hosted
     version: "1.18.0"
   crypto:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: crypto
-      sha256: ff625774173754681d66daaf4a448684fb04b78f902da9cb3d308c19cc5e8bab
+      sha256: "1e445881f28f22d6140f181e07737b22f1e099a5e1ff94b0af2f9e4a463f4855"
       url: "https://pub.dev"
     source: hosted
-    version: "3.0.3"
+    version: "3.0.6"
   cupertino_icons:
     dependency: "direct main"
     description:
@@ -73,6 +73,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.0"
+  ecdsa:
+    dependency: "direct main"
+    description:
+      name: ecdsa
+      sha256: "13b4e01ac140575cf88ef5e5268f92b8dd0a67a26c60a1b74e67d146068dc246"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.2"
+  elliptic:
+    dependency: "direct main"
+    description:
+      name: elliptic
+      sha256: "0c303d810603953a65dc39c4c542fb7538defd9e212403c54c266140819523b6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.11"
   equatable:
     dependency: transitive
     description:
@@ -95,7 +111,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "1.0.5"
+    version: "1.0.8"
   flutter:
     dependency: "direct main"
     description: flutter
@@ -239,6 +255,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.15.0"
+  ninja_asn1:
+    dependency: transitive
+    description:
+      name: ninja_asn1
+      sha256: b0f04877243fda51c475ec2bcaadb55a92759baee9f02888124c60775760ccf7
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.0"
   path:
     dependency: transitive
     description:
@@ -349,5 +373,5 @@ packages:
     source: hosted
     version: "14.2.5"
 sdks:
-  dart: ">=3.3.0 <4.0.0"
+  dart: ">=3.4.0 <4.0.0"
   flutter: ">=3.18.0-18.0.pre.54"
