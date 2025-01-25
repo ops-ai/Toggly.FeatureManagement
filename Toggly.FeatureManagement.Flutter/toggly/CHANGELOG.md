@@ -1,3 +1,9 @@
+## 1.0.9
+
+2025-01-25 (Date of Last Commit)
+
+* Added support for signed definitions.
+
 ## 1.0.8
 
 2025-01-23 (Date of Last Commit)

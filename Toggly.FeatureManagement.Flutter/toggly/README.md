@@ -44,6 +44,7 @@ void initToggly() async {
   await Toggly.init(
     appKey: '<your_app_key>',
     environment: '<your_app_environment>',
+    useSignedDefinitions: true,
     flagDefaults: {
       "ExampleFeatureKey1": true,
       "ExampleFeatureKey2": false,
@@ -163,6 +164,72 @@ await Toggly.evaluateFeatureGate(
   requirement: FeatureRequirement.all,
   negate: true,
 );
+```
+
+## Security
+
+### Signed Definitions
+
+When using Toggly.io, feature flag definitions can be cryptographically signed using ECDSA (ES256) to ensure their authenticity and integrity. This prevents tampering with feature flag values during transmission.
+
+To enable signature verification, set `useSignedDefinitions` to `true` during initialization:
+
+```dart
+await Toggly.init(
+  appKey: '<your_app_key>',
+  environment: '<your_app_environment>',
+  useSignedDefinitions: true,
+  flagDefaults: {
+    "ExampleFeatureKey1": true,
+    "ExampleFeatureKey2": false,
+  },
+);
+```
+
+The signing process uses:
+- Curve: P-256 (secp256r1)
+- Hash: SHA-256
+- Algorithm: ES256 (ECDSA with P-256 and SHA-256)
+
+Each response from the feature flags API includes:
+- `data`: The feature flag definitions
+- `signature`: A base64-encoded ECDSA signature
+- `timestamp`: Unix timestamp when the definitions were signed
+
+The signature is verified using public keys available at the JWKS endpoint (`/.well-known/jwks`). The verification process:
+1. Concatenates the JSON data and timestamp with a pipe separator (`data|timestamp`)
+2. Hashes the result with SHA-256
+3. Verifies the ECDSA signature using the public key
+
+If signature verification fails, an exception is thrown and the feature flags are not updated.
+
+Example response:
+```json
+{
+    "data": {
+        "FeatureA": true,
+        "FeatureB": false
+    },
+    "signature": "base64_encoded_signature",
+    "timestamp": 1234567890
+}
+```
+
+JWKS endpoint response:
+```json
+{
+    "keys": [
+        {
+            "kty": "EC",
+            "use": "sig",
+            "kid": "key_id",
+            "crv": "P-256",
+            "x": "base64url_encoded_x_coordinate",
+            "y": "base64url_encoded_y_coordinate",
+            "alg": "ES256"
+        }
+    ]
+}
 ```
 
 ## Find out more about Toggly.io
