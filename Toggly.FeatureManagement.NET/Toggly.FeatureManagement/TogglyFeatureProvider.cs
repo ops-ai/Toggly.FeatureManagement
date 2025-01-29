@@ -1,5 +1,4 @@
-﻿using Azure.Messaging.WebPubSub;
-using ConcurrentCollections;
+﻿using ConcurrentCollections;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,12 +8,16 @@ using Microsoft.FeatureManagement;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Toggly.FeatureManagement.Data;
@@ -57,6 +60,8 @@ namespace Toggly.FeatureManagement
 
         private readonly bool _enabledByDefault;
 
+        private readonly bool _useSignedDefinitions;
+
         private ConcurrentHashSet<string> _secureFeatures = new ConcurrentHashSet<string>();
 
         /// <summary>
@@ -72,6 +77,7 @@ namespace Toggly.FeatureManagement
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
             _enabledByDefault = togglySettings.Value.UndefinedEnabledOnDevelopment && environment.IsDevelopment();
+            _useSignedDefinitions = togglySettings.Value.UseSignedDefinitions;
             _clientFactory = clientFactory;
             _serviceProvider = serviceProvider;
             _snapshotProvider = (IFeatureSnapshotProvider?)serviceProvider.GetService(typeof(IFeatureSnapshotProvider));
@@ -127,8 +133,7 @@ namespace Toggly.FeatureManagement
         {
             try
             {
-                if (_metricsService == null)
-                    _metricsService = _serviceProvider.GetRequiredService<IMetricsService>();
+                _metricsService ??= _serviceProvider.GetRequiredService<IMetricsService>();
                 
                 using var httpClient = _clientFactory.CreateClient("toggly");
 #if NETCOREAPP3_1_OR_GREATER
@@ -138,20 +143,77 @@ namespace Toggly.FeatureManagement
                 if (timeout.HasValue)
                     httpClient.Timeout = new TimeSpan(timeout.Value);
                 if (lastETag != null) httpClient.DefaultRequestHeaders.IfNoneMatch.Add(lastETag);
-                var newDefinitionsRequest = await httpClient.GetAsync($"definitions/{_appKey}/{_environment}").ConfigureAwait(false);
-                if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
-                    return;
 
-                newDefinitionsRequest.EnsureSuccessStatusCode();
-
-                var newDefinitions = await newDefinitionsRequest.Content.ReadFromJsonAsync<List<FeatureDefinitionModel>>().ConfigureAwait(false);
-                if (newDefinitions == null)
+                List<FeatureDefinitionModel>? newDefinitions;
+                if (_useSignedDefinitions)
                 {
-                    _logger.LogWarning("Received empty response from toggly");
-                    return;
-                }
+                    var newDefinitionsRequest = await httpClient.GetAsync($"definitions/v2/{_appKey}/{_environment}").ConfigureAwait(false);
+                    if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
+                        return;
 
-                lastETag = newDefinitionsRequest.Headers.ETag;
+                    newDefinitionsRequest.EnsureSuccessStatusCode();
+
+                    // Get the raw JSON string first
+                    var rawJson = await newDefinitionsRequest.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    var signedDefinitionsResponse = JsonSerializer.Deserialize<SignedDefinitionsResponse>(rawJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    
+                    if (signedDefinitionsResponse == null)
+                    {
+                        _logger.LogWarning("Received empty response from toggly");
+                        return;
+                    }                    
+
+                    // Extract the raw data portion from the JSON
+                    var jsonDoc = JsonDocument.Parse(rawJson);
+                    var dataElement = jsonDoc.RootElement.GetProperty("defs");
+                    var rawData = dataElement.GetRawText();
+
+                    // Create data string to verify using the raw JSON
+                    var dataToVerify = $"{rawData}|{signedDefinitionsResponse.Timestamp}";
+                    _logger.LogDebug("Data to verify: {DataToVerify}", dataToVerify);
+                    
+                    var dataBytes = Encoding.UTF8.GetBytes(dataToVerify);
+                    var hash = SHA256.Create().ComputeHash(dataBytes);
+                    _logger.LogDebug("Hash (hex): {Hash}", BitConverter.ToString(hash).Replace("-", ""));
+
+                    // Verify signature
+                    var signature = Convert.FromBase64String(signedDefinitionsResponse.Signature);
+                    _logger.LogDebug("Signature length: {Length}", signature.Length);
+                    _logger.LogDebug("Signature (hex): {Signature}", BitConverter.ToString(signature).Replace("-", ""));
+
+                    var ecdsa = await GetEcdsaKey(httpClient).ConfigureAwait(false);
+                    if (ecdsa == null)
+                    {
+                        _logger.LogError("No ES256 key found in JWKS");
+                        return;
+                    }
+
+                    if (!ecdsa.VerifyHash(hash, signature))
+                    {
+                        _logger.LogError("Invalid signature");
+                        return;
+                    }
+
+                    newDefinitions = signedDefinitionsResponse.Defs;
+                    lastETag = newDefinitionsRequest.Headers.ETag;
+                }
+                else
+                {
+                    var newDefinitionsRequest = await httpClient.GetAsync($"definitions/{_appKey}/{_environment}").ConfigureAwait(false);
+                    if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
+                        return;
+
+                    newDefinitionsRequest.EnsureSuccessStatusCode();
+
+                    newDefinitions = await newDefinitionsRequest.Content.ReadFromJsonAsync<List<FeatureDefinitionModel>>().ConfigureAwait(false);
+                    if (newDefinitions == null)
+                    {
+                        _logger.LogWarning("Received empty response from toggly");
+                        return;
+                    }
+
+                    lastETag = newDefinitionsRequest.Headers.ETag;
+                }
 
                 foreach (var featureDefinition in newDefinitions)
                 {
@@ -221,6 +283,51 @@ namespace Toggly.FeatureManagement
                     _loaded = true;
                 }
             }
+        }
+
+        private ECDsa? _ecDsaKey = null;
+        
+        private async Task<ECDsa?> GetEcdsaKey(HttpClient httpClient)
+        {
+            if (_ecDsaKey != null) return _ecDsaKey;
+
+            // Fetch JWKS
+            var jwksResponse = await httpClient.GetAsync(".well-known/jwks").ConfigureAwait(false);
+            jwksResponse.EnsureSuccessStatusCode();
+            var jwks = await jwksResponse.Content.ReadFromJsonAsync<JsonWebKeySet>().ConfigureAwait(false);
+            
+            // Get the ES256 key
+            var key = jwks!.Keys.FirstOrDefault(k => k.Alg == "ES256");
+            if (key == null)
+            {
+                _logger.LogError("No ES256 key found in JWKS");
+                return null;
+            }
+
+            _logger.LogDebug("Using JWK: {@Key}", key);
+
+            _ecDsaKey = ECDsa.Create();
+
+            // Convert base64url to bytes
+            byte[] xCoord = Convert.FromBase64String(key.X.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.X.Length % 4) % 4));
+            byte[] yCoord = Convert.FromBase64String(key.Y.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.Y.Length % 4) % 4));
+
+            _logger.LogDebug("X coordinate (hex): {X}", BitConverter.ToString(xCoord).Replace("-", ""));
+            _logger.LogDebug("Y coordinate (hex): {Y}", BitConverter.ToString(yCoord).Replace("-", ""));
+
+            // Create ECParameters
+            var ecParameters = new ECParameters
+            {
+                Curve = ECCurve.NamedCurves.nistP256,
+                Q = new ECPoint
+                {
+                    X = xCoord,
+                    Y = yCoord
+                }
+            };
+
+            _ecDsaKey.ImportParameters(ecParameters);
+            return _ecDsaKey;
         }
 
         /// <summary>
@@ -369,5 +476,40 @@ namespace Toggly.FeatureManagement
         /// Loaded
         /// </summary>
         public bool Loaded { get; set; }
+    }
+
+    public class EcdsaSignature
+    {
+        public byte[] R { get; }
+        public byte[] S { get; }
+
+        public EcdsaSignature(byte[] r, byte[] s)
+        {
+            R = r;
+            S = s;
+        }
+
+        public byte[] ToByteArray()
+        {
+            var ms = new MemoryStream();
+            var writer = new BinaryWriter(ms);
+
+            // Write sequence tag and length
+            writer.Write((byte)0x30);
+            var totalLen = R.Length + S.Length + 4;
+            writer.Write((byte)totalLen);
+
+            // Write R
+            writer.Write((byte)0x02);
+            writer.Write((byte)R.Length);
+            writer.Write(R);
+
+            // Write S
+            writer.Write((byte)0x02);
+            writer.Write((byte)S.Length);
+            writer.Write(S);
+
+            return ms.ToArray();
+        }
     }
 }

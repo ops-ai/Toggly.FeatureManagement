@@ -257,3 +257,72 @@ if (await featureManager.IsEnabledAsync(feature, context))
     ...
 }
 ```
+
+### Using Signed Definitions
+
+For enhanced security, you can enable signed feature definitions. When enabled, all feature definitions are cryptographically signed by the Toggly server using ES256 (ECDSA with P-256 curve and SHA-256). The client verifies this signature before accepting any feature updates.
+
+#### Configuration
+
+To enable signed definitions, add the following to your configuration:
+
+``` JavaScript
+"Toggly": {
+    "AppKey": "[[toggly app key]]",
+    "Environment": "Production",
+    "BaseUrl": "https://app.toggly.io/",
+    "UseSignedDefinitions": true
+  }
+```
+
+And in your Startup.cs:
+``` C#
+builder.Services.AddTogglyWeb(options =>
+{
+    options.AppKey = builder.Configuration["Toggly:AppKey"]!;
+    options.Environment = builder.Configuration["Toggly:Environment"]!;
+    options.UseSignedDefinitions = true;
+});
+```
+
+#### How It Works
+
+When signed definitions are enabled:
+1. Feature definitions are fetched from a secure endpoint (`/definitions/v2/`)
+2. Each response includes:
+   - The feature definitions (`defs`)
+   - A timestamp (`timestamp`)
+   - A cryptographic signature (`signature`)
+3. The client verifies the signature using:
+   - The public key from Toggly's JWKS endpoint (`/.well-known/jwks`)
+   - The ES256 algorithm (ECDSA with P-256 curve and SHA-256)
+4. Feature updates are only applied if the signature is valid
+
+#### Security Benefits
+
+- **Integrity Protection**: Ensures feature definitions haven't been tampered with during transmission
+- **Authentication**: Verifies that feature updates come from the genuine Toggly server
+- **Replay Protection**: Includes timestamps to prevent replay attacks
+- **Standards-Based**: Uses industry-standard JWKS for key distribution and ES256 for signatures
+
+#### Troubleshooting
+
+If you encounter issues with signed definitions:
+
+1. Ensure your application can access both:
+   - The feature definitions endpoint (`https://app.toggly.io/definitions/v2/`)
+   - The JWKS endpoint (`https://app.toggly.io/.well-known/jwks`)
+2. Check that your network allows HTTPS connections to these endpoints
+3. Enable debug logging to see detailed verification information:
+   ```csharp
+   builder.Logging.AddFilter("Toggly.FeatureManagement", LogLevel.Debug);
+   ```
+
+#### Best Practices
+
+1. Always use HTTPS in production environments
+2. Keep your Toggly app key secure
+3. Consider using environment-specific settings
+4. Monitor logs for signature verification failures
+
+This ensures that your feature flags are securely managed and protected against tampering.

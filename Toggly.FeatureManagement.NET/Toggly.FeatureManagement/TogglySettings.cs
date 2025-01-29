@@ -13,6 +13,11 @@
         public string Environment { get; set; }
 
         /// <summary>
+        /// Use signed definitions to get feature updates
+        /// </summary>
+        public bool UseSignedDefinitions { get; set; } = false;
+
+        /// <summary>
         /// Base URL of the toggly instance. Leave blank unless you have a reason to change
         /// </summary>
         public string? BaseUrl { get; set; }

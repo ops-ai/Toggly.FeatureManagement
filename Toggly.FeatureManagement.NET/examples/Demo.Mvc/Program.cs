@@ -15,11 +15,24 @@ namespace Demo.Mvc
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            // Configure detailed console logging
+            builder.Logging.ClearProviders();
+            builder.Logging.AddConsole(options =>
+            {
+                options.IncludeScopes = true;
+            });
+
+            // Set debug level for all categories, especially Toggly
+            builder.Logging.AddFilter("Toggly.FeatureManagement", LogLevel.Debug);
+            builder.Logging.AddFilter("Microsoft", LogLevel.Warning);  // Reduce ASP.NET noise
+            builder.Logging.SetMinimumLevel(LogLevel.Debug);
+
             builder.Services.AddTogglyWeb(options =>
             {
                 options.AppKey = builder.Configuration["Toggly:AppKey"]!;
                 options.Environment = builder.Configuration["Toggly:Environment"]!;
                 options.UndefinedEnabledOnDevelopment = true;
+                options.UseSignedDefinitions = true;
             });
 
             builder.Services.AddSingleton<IDisabledFeaturesHandler, FeatureNotEnabledHandler>();
