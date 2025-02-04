@@ -52,13 +52,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void initToggly() async {
     await Toggly.init(
-      appKey: 'YOUR_APP_KEY',
-      environment: 'Development',
+      appKey: 'bb10bbba-31c6-4f6e-b431-7d7eb44de915',
+      environment: 'Production',
       useSignedDefinitions: false,
       flagDefaults: {
-        "ExampleDescription": true,
-        "ResetCounterButton": true,
+        "flowDescription": true,
+        "refreshCounter": true,
       },
+      identity: '1234567890',
     );
   }
 
@@ -76,7 +77,7 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             const Feature(
-              featureKeys: ['ExampleDescription'],
+              featureKeys: ['flowDescription'],
               requirement: FeatureRequirement.any,
               child: AppDescription(),
             ),
@@ -94,7 +95,7 @@ class _MyHomePageState extends State<MyHomePage> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Feature(
-            featureKeys: const ['ResetCounterButton'],
+            featureKeys: const ['refreshCounter'],
             child: FloatingActionButton(
               onPressed: _resetCounter,
               tooltip: 'Reset',

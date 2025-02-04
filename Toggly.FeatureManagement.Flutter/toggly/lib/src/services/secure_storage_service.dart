@@ -17,7 +17,7 @@ class TogglyFeatureFlagsCache {
   /// Creates an instance from [json].
   TogglyFeatureFlagsCache.fromJson(Map<String, dynamic> json)
       : identity = json['identity'],
-        flags = json['flags'];
+        flags = Map<String, bool>.from(json['flags']);
 
   /// Returns a serializable object.
   Map<String, dynamic> toJson() => {
