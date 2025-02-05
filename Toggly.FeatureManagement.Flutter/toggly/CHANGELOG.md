@@ -1,3 +1,9 @@
+## 1.0.10
+
+2025-02-05 (Date of Last Commit)
+
+* Added support for offline validation of signed definitions.
+
 ## 1.0.9
 
 2025-01-25 (Date of Last Commit)
