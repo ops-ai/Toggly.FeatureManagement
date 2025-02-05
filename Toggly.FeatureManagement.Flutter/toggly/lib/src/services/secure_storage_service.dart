@@ -2,27 +2,40 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum SecureStorageKeys {
   featureFlagsCache,
+  deviceId,
+  jwks,
 }
 
 /// Data representation to be stored in/retrieved from cache.
 class TogglyFeatureFlagsCache {
   String identity;
-  Map<String, bool> flags = {};
-
+  String flags;
+  int? timestamp;
+  String? signature;
+  String? keyId;
   TogglyFeatureFlagsCache({
     required this.identity,
     required this.flags,
+    required this.timestamp,
+    required this.signature,
+    required this.keyId,
   });
 
   /// Creates an instance from [json].
   TogglyFeatureFlagsCache.fromJson(Map<String, dynamic> json)
       : identity = json['identity'],
-        flags = Map<String, bool>.from(json['flags']);
+        flags = json['flags'],
+        timestamp = json['timestamp'],
+        signature = json['signature'],
+        keyId = json['keyId'];
 
   /// Returns a serializable object.
   Map<String, dynamic> toJson() => {
         'identity': identity,
         'flags': flags,
+        'timestamp': timestamp,
+        'signature': signature,
+        'keyId': keyId,
       };
 }
 

@@ -54,7 +54,7 @@ class _MyHomePageState extends State<MyHomePage> {
     await Toggly.init(
       appKey: 'bb10bbba-31c6-4f6e-b431-7d7eb44de915',
       environment: 'Production',
-      useSignedDefinitions: false,
+      useSignedDefinitions: true,
       flagDefaults: {
         "flowDescription": true,
         "refreshCounter": true,
