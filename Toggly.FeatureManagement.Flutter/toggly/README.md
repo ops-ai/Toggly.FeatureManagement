@@ -186,6 +186,8 @@ await Toggly.init(
 );
 ```
 
+#### How It Works
+
 The signing process uses:
 - Curve: P-256 (secp256r1)
 - Hash: SHA-256
@@ -195,13 +197,13 @@ Each response from the feature flags API includes:
 - `data`: The feature flag definitions
 - `signature`: A base64-encoded ECDSA signature
 - `timestamp`: Unix timestamp when the definitions were signed
+- `kid`: Key ID identifying which key was used for signing
 
 The signature is verified using public keys available at the JWKS endpoint (`/.well-known/jwks`). The verification process:
-1. Concatenates the JSON data and timestamp with a pipe separator (`data|timestamp`)
-2. Hashes the result with SHA-256
-3. Verifies the ECDSA signature using the public key
-
-If signature verification fails, an exception is thrown and the feature flags are not updated.
+1. Matches the `kid` from the response with the corresponding key in the JWKS
+2. Concatenates the JSON data and timestamp with a pipe separator (`data|timestamp`)
+3. Hashes the result with SHA-256
+4. Verifies the ECDSA signature using the matched public key
 
 Example response:
 ```json
@@ -211,7 +213,8 @@ Example response:
         "FeatureB": false
     },
     "signature": "base64_encoded_signature",
-    "timestamp": 1234567890
+    "timestamp": 1234567890,
+    "kid": "key1"
 }
 ```
 
@@ -222,7 +225,7 @@ JWKS endpoint response:
         {
             "kty": "EC",
             "use": "sig",
-            "kid": "key_id",
+            "kid": "key1",
             "crv": "P-256",
             "x": "base64url_encoded_x_coordinate",
             "y": "base64url_encoded_y_coordinate",
@@ -231,6 +234,30 @@ JWKS endpoint response:
     ]
 }
 ```
+
+#### Key Rotation
+
+The JWKS endpoint may contain multiple keys to support key rotation. The client:
+1. Caches the JWKS response for up to 30 days
+2. Uses the `kid` to select the correct key for verification
+3. Refreshes the JWKS cache if a signature uses an unknown key ID
+
+This ensures seamless key rotation without service interruption.
+
+#### Offline Support
+
+When offline, the client:
+1. Uses cached JWKS if available
+2. Verifies signatures using cached keys
+3. Accepts cached feature definitions if verification succeeds
+4. Falls back to default values if verification fails
+
+#### Security Considerations
+
+1. Always use HTTPS in production
+2. Monitor logs for signature verification failures
+3. Keep your app key secure
+4. Consider environment-specific settings
 
 ## Find out more about Toggly.io
 

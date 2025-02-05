@@ -225,7 +225,7 @@ class Toggly {
     if (Toggly._useSignedDefinitions) {
       if (timestamp == null || signature == null || keyId == null) {
         throw Exception(
-            'Timestamp and signature are required for signed definitions');
+            'Timestamp, signature and keyId are required for signed definitions');
       }
     }
 
