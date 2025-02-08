@@ -1,0 +1,17 @@
+name: toggly_benchmarks
+description: Benchmarks for the Toggly feature flags library
+publish_to: none  # Prevents accidental publishing
+
+environment:
+  sdk: '>=2.12.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+    
+  feature_flags_toggly:
+    path: ../
+  benchmark_harness: ^2.0.0
+
+dev_dependencies:
+  lints: ^2.0.0

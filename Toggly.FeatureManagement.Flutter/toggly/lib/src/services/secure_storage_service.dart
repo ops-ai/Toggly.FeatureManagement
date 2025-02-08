@@ -4,6 +4,7 @@ enum SecureStorageKeys {
   featureFlagsCache,
   deviceId,
   jwks,
+  etag,
 }
 
 /// Data representation to be stored in/retrieved from cache.

@@ -12,9 +12,13 @@ class TogglyConfig {
   /// latest feature flags values from the Toggly.io Client API.
   final int featureFlagsRefreshInterval;
 
+  /// Whitelist of trusted key IDs
+  final List<String>? trustedKeyIds;
+
   const TogglyConfig({
     this.baseURI = 'https://client.toggly.io',
     this.connectTimeout = 5 * 1000,
     this.featureFlagsRefreshInterval = 3 * 60 * 1000,
+    this.trustedKeyIds,
   });
 }

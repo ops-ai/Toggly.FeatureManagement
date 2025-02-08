@@ -1,8 +1,17 @@
+## 1.1.2
+
+2025-02-07 (Date of Last Commit)
+
+* Added timestamp verification for signed definitions.
+* Added certificate whitelist for signed definitions.
+* Added benchmarks for API evaluation.
+* Performance improvements.
+
 ## 1.1.1
 
 2025-02-05 (Date of Last Commit)
 
-* 
+* Updated documentation to include key rotation information.
 
 ## 1.1.0
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:ecdsa/ecdsa.dart';
 import 'package:elliptic/elliptic.dart';
 import 'package:crypto/crypto.dart';
@@ -23,7 +24,13 @@ class Toggly {
   static final _http = HttpService.getInstance.http;
   static final _storage = SecureStorageService.getInstance;
   static final _sync = SyncService.getInstance;
-  static final _featureFlagsSubject = BehaviorSubject<Map<String, bool>>();
+  static BehaviorSubject<Map<String, bool>>? _featureFlagsSubject;
+
+  // Add new static field for in-memory cache
+  static Map<String, bool>? _inMemoryFlags;
+
+  // Add new static field for in-memory JWKs cache
+  static Map<String, dynamic>? _inMemoryJwks;
 
   static final Toggly _instance = Toggly._internal();
 
@@ -45,6 +52,10 @@ class Toggly {
     TogglyConfig config = const TogglyConfig(),
     Map<String, bool>? flagDefaults,
   }) async {
+    // Create new subject if needed
+    _featureFlagsSubject?.close();
+    _featureFlagsSubject = BehaviorSubject<Map<String, bool>>();
+
     Toggly._appKey = appKey;
     Toggly._environment = environment ?? 'Production';
 
@@ -93,7 +104,7 @@ class Toggly {
 
     // In case there is no API key provided, only the flag defaults shall be used
     if (Toggly._appKey == null) {
-      Toggly._featureFlagsSubject.add(Toggly._flagDefaults);
+      Toggly._featureFlagsSubject?.add(Toggly._flagDefaults);
 
       return TogglyInitResponse(
         status: TogglyLoadFeatureFlagsResponse.defaults,
@@ -107,30 +118,24 @@ class Toggly {
       return TogglyInitResponse(
         status: TogglyLoadFeatureFlagsResponse.fetched,
       );
-    } catch (_) {
-      // Try to load flags from Cache
-      var flags = await Toggly.cachedFeatureFlags;
-      var status = TogglyLoadFeatureFlagsResponse.cached;
-
-      if (flags == null) {
-        // Otherwise use provided default flags
-        flags = Toggly._flagDefaults;
-        status = TogglyLoadFeatureFlagsResponse.defaults;
-
-        if (kDebugMode) {
-          print('Toggly.usedFlagDefaults - ${jsonEncode(flags)}');
+    } catch (e) {
+      if (e is DioError && e.response?.statusCode == 304) {
+        // Not modified, use cached version
+        var cached = await cachedFeatureFlags;
+        if (cached != null) {
+          Toggly._featureFlagsSubject?.add(cached);
+          return TogglyInitResponse(
+            status: TogglyLoadFeatureFlagsResponse.cached,
+          );
         }
-      } else {
-        if (kDebugMode) {
-          print('Toggly.loadedFromCache - ${jsonEncode(flags)}');
-        }
+      } else if (e is DioError && e.response?.statusCode == 403) {
+        // Clear cached data on 403 responses
+        await _storage.delete(key: SecureStorageKeys.etag.toString());
+        await _storage.delete(
+            key: SecureStorageKeys.featureFlagsCache.toString());
+        await _storage.delete(key: SecureStorageKeys.jwks.toString());
       }
-
-      Toggly._featureFlagsSubject.add(flags);
-
-      return TogglyInitResponse(
-        status: status,
-      );
+      throw Exception('Failed to fetch feature flags from the API: $e');
     }
   }
 
@@ -172,6 +177,11 @@ class Toggly {
   /// Returns a [Future] with the cached feature flags values.
   static Future<Map<String, bool>?> get cachedFeatureFlags async {
     try {
+      // Return in-memory flags if available
+      if (_inMemoryFlags != null) {
+        return _inMemoryFlags;
+      }
+
       String? cache = await _storage.get(
           key: SecureStorageKeys.featureFlagsCache.toString());
 
@@ -202,14 +212,18 @@ class Toggly {
           throw Exception('Invalid signature');
         }
 
-        return flagsCache.identity == Toggly._identity
-            ? Map<String, bool>.from(jsonDecode(flagsCache.flags))
-            : null;
+        if (flagsCache.identity == Toggly._identity) {
+          _inMemoryFlags = Map<String, bool>.from(jsonDecode(flagsCache.flags));
+          return _inMemoryFlags;
+        }
+        return null;
       }
 
-      return flagsCache.identity == Toggly._identity
-          ? Map<String, bool>.from(jsonDecode(flagsCache.flags))
-          : null;
+      if (flagsCache.identity == Toggly._identity) {
+        _inMemoryFlags = Map<String, bool>.from(jsonDecode(flagsCache.flags));
+        return _inMemoryFlags;
+      }
+      return null;
     } catch (_) {
       return null;
     }
@@ -222,6 +236,9 @@ class Toggly {
     String? signature,
     String? keyId,
   }) async {
+    // Update in-memory cache
+    _inMemoryFlags = Map<String, bool>.from(jsonDecode(featureFlags));
+
     if (Toggly._useSignedDefinitions) {
       if (timestamp == null || signature == null || keyId == null) {
         throw Exception(
@@ -243,6 +260,7 @@ class Toggly {
 
   /// Clears the feature flags cache.
   static void clearFeatureFlagsCache() async {
+    _inMemoryFlags = null;
     await _storage.delete(
       key: SecureStorageKeys.featureFlagsCache.toString(),
     );
@@ -256,9 +274,21 @@ class Toggly {
   /// Retrieves feature flags values from the Toggly.io Client API.
   static Future<Map<String, bool>> fetchFeatureFlags() async {
     try {
+      // Prepare headers
+      Map<String, dynamic> headers = {};
+
+      if (Toggly._useSignedDefinitions) {
+        String? etag =
+            await _storage.get(key: SecureStorageKeys.etag.toString());
+        if (etag != null) {
+          headers['If-None-Match'] = etag;
+        }
+      }
+
       final response = await _http.get(
         '${Toggly._config.baseURI}/${Toggly._appKey}-${Toggly._environment}/${Toggly._useSignedDefinitions ? 'signed-defs' : 'defs'}?u=${Toggly._identity}',
         queryParameters: {},
+        options: Options(headers: headers),
       );
 
       if (kDebugMode) {
@@ -268,12 +298,37 @@ class Toggly {
       Map<String, bool> flags;
 
       if (Toggly._useSignedDefinitions) {
+        // Store new ETag if present
+        String? newEtag = response.headers['etag']?.first;
+        if (newEtag != null) {
+          await _storage.set(
+            key: SecureStorageKeys.etag.toString(),
+            value: newEtag,
+          );
+        }
+
         // Parse the response
         final signedResponse = Map<String, dynamic>.from(response.data);
         flags = Map<String, bool>.from(signedResponse['data']);
         String signature = signedResponse['signature'];
         int timestamp = signedResponse['timestamp'];
         String keyId = signedResponse['kid'];
+
+        // Check existing cache timestamp
+        String? existingCache = await _storage.get(
+            key: SecureStorageKeys.featureFlagsCache.toString());
+
+        if (existingCache != null) {
+          TogglyFeatureFlagsCache existing = TogglyFeatureFlagsCache.fromJson(
+            jsonDecode(existingCache),
+          );
+
+          // Validate that new timestamp is greater than existing
+          if (existing.timestamp != null && timestamp <= existing.timestamp!) {
+            throw Exception(
+                'New definitions timestamp must be greater than existing timestamp');
+          }
+        }
 
         try {
           final isValid = await _verifySignature(
@@ -308,7 +363,7 @@ class Toggly {
       }
 
       // Cache flags on successful response
-      Toggly._featureFlagsSubject.add(flags);
+      Toggly._featureFlagsSubject?.add(flags);
 
       if (kDebugMode) {
         print('Toggly.fetchFeatureFlags - ${jsonEncode(flags)}');
@@ -316,6 +371,20 @@ class Toggly {
 
       return flags;
     } catch (e) {
+      if (e is DioError && e.response?.statusCode == 304) {
+        // Not modified, use cached version
+        var cached = await cachedFeatureFlags;
+        if (cached != null) {
+          Toggly._featureFlagsSubject?.add(cached);
+          return cached;
+        }
+      } else if (e is DioError && e.response?.statusCode == 403) {
+        // Clear cached data on 403 responses
+        await _storage.delete(key: SecureStorageKeys.etag.toString());
+        await _storage.delete(
+            key: SecureStorageKeys.featureFlagsCache.toString());
+        await _storage.delete(key: SecureStorageKeys.jwks.toString());
+      }
       throw Exception('Failed to fetch feature flags from the API: $e');
     }
   }
@@ -325,32 +394,66 @@ class Toggly {
     bool ignoreExpiration = true,
   }) async {
     try {
-      // Try to get cached JWKs first
+      // Check in-memory cache first
+      if (_inMemoryJwks != null) {
+        final keys = List<Map<String, dynamic>>.from(_inMemoryJwks!['keys']);
+        if (_validateJwks(keys)) {
+          if (ignoreExpiration ||
+              _inMemoryJwks!['_expiresAt'] == null ||
+              _inMemoryJwks!['_expiresAt'] >=
+                  DateTime.now().millisecondsSinceEpoch) {
+            if (kDebugMode) {
+              print('Using in-memory JWKs');
+            }
+            return _inMemoryJwks;
+          }
+        }
+      }
+
+      // Try to get cached JWKs from storage
       var cachedJwks =
           await _storage.get(key: SecureStorageKeys.jwks.toString());
       if (cachedJwks != null) {
         if (kDebugMode) {
-          print('Using cached JWKs');
+          print('Using cached JWKs from storage');
         }
         final jwksData = jsonDecode(cachedJwks);
-        if (ignoreExpiration ||
+
+        // Validate cached keys
+        final keys = List<Map<String, dynamic>>.from(jwksData['keys']);
+        if (!_validateJwks(keys)) {
+          if (kDebugMode) {
+            print('Cached JWKs validation failed, fetching new ones');
+          }
+        } else if (ignoreExpiration ||
             jwksData['_expiresAt'] == null ||
             jwksData['_expiresAt'] >= DateTime.now().millisecondsSinceEpoch) {
+          _inMemoryJwks = jwksData; // Cache in memory
           return jwksData;
         }
       }
 
-      // Fetch JWKs from server if no cache exists
+      // Fetch JWKs from server
       final jwksResponse = await _http.get(
         '${Toggly._config.baseURI}/.well-known/jwks',
         queryParameters: {},
       );
 
       final jwksData = Map<String, dynamic>.from(jwksResponse.data);
+      final keys = List<Map<String, dynamic>>.from(jwksData['keys']);
+
+      // Validate fetched keys
+      if (!_validateJwks(keys)) {
+        throw Exception('Invalid JWKs received from server');
+      }
+
       jwksData['_expiresAt'] =
           DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
 
-      // Cache the JWKs
+      // Cache in memory
+      _inMemoryJwks = jwksData;
+
+      // Cache in storage
       await _storage.set(
         key: SecureStorageKeys.jwks.toString(),
         value: jsonEncode(jwksData),
@@ -369,9 +472,78 @@ class Toggly {
     }
   }
 
+  /// Validates JWKs by computing and checking their key IDs
+  static bool _validateJwks(List<Map<String, dynamic>> keys) {
+    try {
+      for (var key in keys) {
+        if (key['x'] == null || key['y'] == null) {
+          if (kDebugMode) {
+            print('Invalid JWK: missing x or y coordinates');
+          }
+          return false;
+        }
+
+        // Pad base64url strings and decode
+        String padBase64(String value) {
+          var output = value.replaceAll('-', '+').replaceAll('_', '/');
+          switch (output.length % 4) {
+            case 0:
+              break;
+            case 2:
+              output += '==';
+              break;
+            case 3:
+              output += '=';
+              break;
+            default:
+              throw Exception('Illegal base64url string');
+          }
+          return output;
+        }
+
+        // Decode X and Y coordinates
+        final xBytes = base64Url.decode(padBase64(key['x']));
+        final yBytes = base64Url.decode(padBase64(key['y']));
+
+        // Concatenate X and Y bytes
+        final List<int> kidInput = [...xBytes, ...yBytes];
+
+        // Compute SHA1 hash
+        final hash = sha1.convert(kidInput);
+
+        // Convert to uppercase hex string and append ES256
+        final computedKid = hash.bytes
+                .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
+                .join() +
+            'ES256';
+
+        // Verify key ID matches computed value
+        if (key['kid'] != computedKid) {
+          if (kDebugMode) {
+            print(
+                'Invalid key ID in JWK. Expected: $computedKid, Got: ${key['kid']}');
+          }
+          return false;
+        }
+      }
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error validating JWKs: $e');
+      }
+      return false;
+    }
+  }
+
   /// Verifies the signature of feature flags data
   static Future<bool> _verifySignature(String flags, String signature,
       int timestamp, bool allowOfflineValidation, String keyId) async {
+    // Check if keyId is in whitelist if one is provided
+    if (Toggly._config.trustedKeyIds != null &&
+        !Toggly._config.trustedKeyIds!.contains(keyId)) {
+      throw Exception('Key ID not in trusted whitelist');
+    }
+
     // Get JWKs
     final jwksData =
         await _fetchAndCacheJwks(ignoreExpiration: allowOfflineValidation);
@@ -380,7 +552,13 @@ class Toggly {
     }
 
     final jwksList = List<Map<String, dynamic>>.from(jwksData['keys']);
-    final jwk = jwksList.where((jwk) => jwk['kid'] == keyId).first;
+
+    // Find matching key
+    final matchingKeys = jwksList.where((jwk) => jwk['kid'] == keyId);
+    if (matchingKeys.isEmpty) {
+      throw Exception('No matching key found for ID: $keyId');
+    }
+    final jwk = matchingKeys.first;
 
     // Create data string to verify and hash it with SHA-256
     final dataToVerify = '$flags|$timestamp';
@@ -481,46 +659,19 @@ class Toggly {
     }
   }
 
-  static bool _evaluateFeatureGate(
-    Map<String, bool> flags, {
-    required List<String> gate,
-    FeatureRequirement requirement = FeatureRequirement.all,
-    bool negate = false,
-  }) {
-    late bool isEnabled;
-
-    if (requirement == FeatureRequirement.any) {
-      isEnabled = gate.fold<bool>(false, (isEnabled, featureKey) {
-        return isEnabled ||
-            (flags.containsKey(featureKey) && flags[featureKey] == true);
-      });
-    } else {
-      isEnabled = gate.fold<bool>(true, (isEnabled, featureKey) {
-        return isEnabled &&
-            (flags.containsKey(featureKey) && flags[featureKey] == true);
-      });
-    }
-
-    if (kDebugMode) {
-      print('Toggly._evaluateFeatureGate - ${jsonEncode(gate)}');
-    }
-
-    return negate ? !isEnabled : isEnabled;
-  }
-
-  /// Evaluates the value of a feature [gate] for the current feature flags
-  /// values.
-  ///
-  /// Allows testing for ALL or ANY of the features to be true by using the
-  /// [requirement] argument.
-  ///
-  /// Allows negation through the [negate] argument.
   static Future<bool> evaluateFeatureGate(
     List<String> gate, {
     FeatureRequirement requirement = FeatureRequirement.all,
     bool negate = false,
   }) async {
-    return Toggly._featureFlagsSubject.whereNotNull().switchMap(
+    // Fast path: use in-memory flags if available
+    if (_inMemoryFlags != null) {
+      return _evaluateFeatureGate(_inMemoryFlags!,
+          gate: gate, requirement: requirement, negate: negate);
+    }
+
+    // Fallback to stream-based evaluation
+    return Toggly._featureFlagsSubject!.whereNotNull().switchMap(
       (flags) async* {
         yield Toggly._evaluateFeatureGate(flags,
             gate: gate, requirement: requirement, negate: negate);
@@ -528,10 +679,45 @@ class Toggly {
     ).first;
   }
 
+  // Optimize the evaluation logic
+  static bool _evaluateFeatureGate(
+    Map<String, bool> flags, {
+    required List<String> gate,
+    FeatureRequirement requirement = FeatureRequirement.all,
+    bool negate = false,
+  }) {
+    // Fast path for single flag
+    if (gate.length == 1) {
+      final isEnabled = flags[gate.first] ?? false;
+      return negate ? !isEnabled : isEnabled;
+    }
+
+    // Fast path for ALL requirement
+    if (requirement == FeatureRequirement.all) {
+      for (final featureKey in gate) {
+        if (!(flags[featureKey] ?? false)) {
+          return negate;
+        }
+      }
+      return !negate;
+    }
+
+    // ANY requirement
+    for (final featureKey in gate) {
+      if (flags[featureKey] ?? false) {
+        return !negate;
+      }
+    }
+    return negate;
+  }
+
   /// Cancels registered timers and closes the feature flags stream.
   static void dispose() {
     cancelTimers();
-    Toggly._featureFlagsSubject.close();
+    _inMemoryFlags = null;
+    _inMemoryJwks = null; // Clear JWKs cache
+    _featureFlagsSubject?.close();
+    _featureFlagsSubject = null;
   }
 
   /// Starts a [Timer] to periodically retrieve the feature flags values from
