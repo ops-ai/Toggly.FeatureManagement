@@ -25,6 +25,7 @@ namespace Toggly.FeatureManagement
         /// <param name="featureManager"></param>
         /// <param name="featureUsageStatsProvider"></param>
         /// <param name="secureFeatureProvider"></param>
+        /// <param name="serviceProvider"></param>
         public TogglyFeatureManager(IFeatureManager featureManager, IFeatureUsageStatsProvider featureUsageStatsProvider, ISecureFeatureProvider secureFeatureProvider, IServiceProvider serviceProvider)
         {
             _featureManager = featureManager;

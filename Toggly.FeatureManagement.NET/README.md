@@ -271,7 +271,8 @@ To enable signed definitions, add the following to your configuration:
     "AppKey": "[[toggly app key]]",
     "Environment": "Production",
     "BaseUrl": "https://app.toggly.io/",
-    "UseSignedDefinitions": true
+    "UseSignedDefinitions": true,
+    "AllowedKeyIds": ["key1ES256", "key2ES256"]  // Optional: Whitelist specific signing keys
   }
 ```
 
@@ -282,6 +283,7 @@ builder.Services.AddTogglyWeb(options =>
     options.AppKey = builder.Configuration["Toggly:AppKey"]!;
     options.Environment = builder.Configuration["Toggly:Environment"]!;
     options.UseSignedDefinitions = true;
+    options.AllowedKeyIds = new HashSet<string> { "key1ES256", "key2ES256" }; // Optional
 });
 ```
 
@@ -293,17 +295,33 @@ When signed definitions are enabled:
    - The feature definitions (`defs`)
    - A timestamp (`timestamp`)
    - A cryptographic signature (`signature`)
-3. The client verifies the signature using:
-   - The public key from Toggly's JWKS endpoint (`/.well-known/jwks`)
-   - The ES256 algorithm (ECDSA with P-256 curve and SHA-256)
-4. Feature updates are only applied if the signature is valid
+   - A key ID (`keyId`)
+3. The client verifies:
+   - The key ID is in the allowed list (if configured)
+   - The key ID matches the computed value (SHA1 hash of the key's X and Y coordinates + "ES256")
+   - The signature using the public key from Toggly's JWKS endpoint (`/.well-known/jwks`)
+   - The timestamp is newer than the last verified update
+4. Feature updates are only applied if all verifications pass
 
 #### Security Benefits
 
 - **Integrity Protection**: Ensures feature definitions haven't been tampered with during transmission
 - **Authentication**: Verifies that feature updates come from the genuine Toggly server
 - **Replay Protection**: Includes timestamps to prevent replay attacks
+- **Key Whitelisting**: Optional ability to restrict which signing keys are trusted
 - **Standards-Based**: Uses industry-standard JWKS for key distribution and ES256 for signatures
+- **Key Verification**: Validates key IDs using a cryptographic hash of the key coordinates
+
+#### Performance Optimizations
+
+The implementation includes several optimizations:
+1. In-memory caching of:
+   - Verified feature definitions
+   - JWKS public keys
+   - Latest verified timestamp
+2. 30-day caching of JWKS keys
+3. Efficient key lookup using key IDs
+4. Early validation checks before processing signatures
 
 #### Troubleshooting
 
@@ -317,6 +335,7 @@ If you encounter issues with signed definitions:
    ```csharp
    builder.Logging.AddFilter("Toggly.FeatureManagement", LogLevel.Debug);
    ```
+4. Verify that any whitelisted key IDs match the expected format (SHA1 hash + "ES256")
 
 #### Best Practices
 
@@ -324,5 +343,7 @@ If you encounter issues with signed definitions:
 2. Keep your Toggly app key secure
 3. Consider using environment-specific settings
 4. Monitor logs for signature verification failures
+5. Use key whitelisting in production environments
+6. Regularly rotate signing keys
 
 This ensures that your feature flags are securely managed and protected against tampering.

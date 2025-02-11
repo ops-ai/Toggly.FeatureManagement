@@ -21,5 +21,10 @@ namespace Toggly.FeatureManagement.Data
         /// Timestamp of the definitions
         /// </summary>
         public long Timestamp { get; set; }
+
+        /// <summary>
+        /// Key Id of the signature
+        /// </summary>
+        public string Kid { get; set; }
     }
 }

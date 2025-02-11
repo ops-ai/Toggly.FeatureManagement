@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using Toggly.FeatureManagement.Data;
 
-namespace Toggly.FeatureManagement.Storage.RavenDB
+namespace Toggly.FeatureManagement.Storage.DistributedCache
 {
     /// <summary>
     /// Snapshot of the features

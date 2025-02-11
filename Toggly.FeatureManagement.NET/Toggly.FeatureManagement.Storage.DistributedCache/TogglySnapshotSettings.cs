@@ -1,4 +1,4 @@
-﻿namespace Toggly.FeatureManagement.Storage.RavenDB
+﻿namespace Toggly.FeatureManagement.Storage.DistributedCache
 {
     public class TogglySnapshotSettings
     {

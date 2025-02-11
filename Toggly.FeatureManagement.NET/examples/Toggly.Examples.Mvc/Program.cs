@@ -19,6 +19,7 @@ builder.Services.AddTogglyWeb(options =>
     {
         options.AppKey = builder.Configuration["Toggly:AppKey"];
         options.Environment = builder.Configuration["Toggly:Environment"];
+        options.UseSignedDefinitions = true;
     });
 builder.Services.AddTogglyRavenDbSnapshotProvider();
 
