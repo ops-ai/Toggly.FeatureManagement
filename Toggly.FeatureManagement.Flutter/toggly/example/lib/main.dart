@@ -121,11 +121,11 @@ class AppDescription extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 100.0, left: 38.0, right: 38.0),
+    return const Padding(
+      padding: EdgeInsets.only(bottom: 100.0, left: 38.0, right: 38.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
           Text(
             'See feature flags in action',
             style: TextStyle(

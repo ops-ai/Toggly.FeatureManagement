@@ -135,7 +135,18 @@ class Toggly {
             key: SecureStorageKeys.featureFlagsCache.toString());
         await _storage.delete(key: SecureStorageKeys.jwks.toString());
       }
-      throw Exception('Failed to fetch feature flags from the API: $e');
+      var cached = await cachedFeatureFlags;
+      if (cached != null) {
+        Toggly._featureFlagsSubject?.add(cached);
+        return TogglyInitResponse(
+          status: TogglyLoadFeatureFlagsResponse.cached,
+        );
+      }
+
+      Toggly._featureFlagsSubject?.add(Toggly._flagDefaults);
+      return TogglyInitResponse(
+        status: TogglyLoadFeatureFlagsResponse.defaults,
+      );
     }
   }
 
@@ -225,6 +236,8 @@ class Toggly {
       }
       return null;
     } catch (_) {
+      await _storage.delete(
+          key: SecureStorageKeys.featureFlagsCache.toString());
       return null;
     }
   }
@@ -512,10 +525,8 @@ class Toggly {
         final hash = sha1.convert(kidInput);
 
         // Convert to uppercase hex string and append ES256
-        final computedKid = hash.bytes
-                .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-                .join() +
-            'ES256';
+        final computedKid =
+            '${hash.bytes.map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase()).join()}ES256';
 
         // Verify key ID matches computed value
         if (key['kid'] != computedKid) {

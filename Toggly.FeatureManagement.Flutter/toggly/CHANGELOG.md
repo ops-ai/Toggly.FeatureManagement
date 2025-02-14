@@ -1,3 +1,16 @@
+
+## 1.1.4
+
+2025-02-14 (Date of Last Commit)
+
+* Clear cached feature flags if cache deserialization or verification fails.
+
+## 1.1.3
+
+2025-02-12 (Date of Last Commit)
+
+* Return cached feature flags if the API call fails
+
 ## 1.1.2
 
 2025-02-07 (Date of Last Commit)

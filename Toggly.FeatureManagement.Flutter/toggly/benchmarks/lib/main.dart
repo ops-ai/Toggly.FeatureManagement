@@ -1,6 +1,5 @@
 import 'package:benchmark_harness/benchmark_harness.dart';
 import 'package:feature_flags_toggly/feature_flags_toggly.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'dart:developer' as developer;
 
