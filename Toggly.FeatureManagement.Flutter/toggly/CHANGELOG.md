@@ -1,4 +1,16 @@
 
+## 1.1.6
+
+2025-02-15 (Date of Last Commit)
+
+* Added logic to clear cached feature flags if identity changes.
+
+## 1.1.5
+
+2025-02-15 (Date of Last Commit)
+
+* Fixed clearing etag as well if deserialization fails or verification fails.
+
 ## 1.1.4
 
 2025-02-14 (Date of Last Commit)

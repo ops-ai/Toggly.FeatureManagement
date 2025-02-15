@@ -61,6 +61,9 @@ class Toggly {
 
     // Use provided identity or get/generate device ID
     if (identity != null) {
+      if (Toggly._identity != identity) {
+        await clearFeatureFlagsCache();
+      }
       Toggly._identity = identity;
     } else {
       // Try to get stored device ID
@@ -73,6 +76,9 @@ class Toggly {
           key: SecureStorageKeys.deviceId.toString(),
           value: storedId,
         );
+      }
+      if (Toggly._identity != storedId) {
+        await clearFeatureFlagsCache();
       }
       Toggly._identity = storedId;
     }
@@ -130,9 +136,7 @@ class Toggly {
         }
       } else if (e is DioError && e.response?.statusCode == 403) {
         // Clear cached data on 403 responses
-        await _storage.delete(key: SecureStorageKeys.etag.toString());
-        await _storage.delete(
-            key: SecureStorageKeys.featureFlagsCache.toString());
+        await clearFeatureFlagsCache();
         await _storage.delete(key: SecureStorageKeys.jwks.toString());
       }
       var cached = await cachedFeatureFlags;
@@ -154,6 +158,9 @@ class Toggly {
   /// feature rollouts.
   static Future<TogglyInitResponse> setIdentity(String? identity) async {
     if (identity != null) {
+      if (Toggly._identity != identity) {
+        await clearFeatureFlagsCache();
+      }
       Toggly._identity = identity;
     } else {
       // Try to get stored device ID
@@ -166,6 +173,9 @@ class Toggly {
           key: SecureStorageKeys.deviceId.toString(),
           value: storedId,
         );
+      }
+      if (Toggly._identity != storedId) {
+        await clearFeatureFlagsCache();
       }
       Toggly._identity = storedId;
     }
@@ -236,8 +246,7 @@ class Toggly {
       }
       return null;
     } catch (_) {
-      await _storage.delete(
-          key: SecureStorageKeys.featureFlagsCache.toString());
+      await clearFeatureFlagsCache();
       return null;
     }
   }
@@ -272,11 +281,12 @@ class Toggly {
   }
 
   /// Clears the feature flags cache.
-  static void clearFeatureFlagsCache() async {
+  static Future clearFeatureFlagsCache() async {
     _inMemoryFlags = null;
     await _storage.delete(
       key: SecureStorageKeys.featureFlagsCache.toString(),
     );
+    await _storage.delete(key: SecureStorageKeys.etag.toString());
   }
 
   /// Returns the feature flags default values provided during [init]
@@ -393,9 +403,7 @@ class Toggly {
         }
       } else if (e is DioError && e.response?.statusCode == 403) {
         // Clear cached data on 403 responses
-        await _storage.delete(key: SecureStorageKeys.etag.toString());
-        await _storage.delete(
-            key: SecureStorageKeys.featureFlagsCache.toString());
+        await clearFeatureFlagsCache();
         await _storage.delete(key: SecureStorageKeys.jwks.toString());
       }
       throw Exception('Failed to fetch feature flags from the API: $e');
