@@ -1,4 +1,23 @@
 
+## 1.1.8
+
+2025-02-19 (Date of Last Commit)
+
+### Reliability
+- Improved offline support by properly handling cached feature flags
+- Added fallback to default values when cache is invalid or missing
+- Added better error handling for signature verification
+- Added debug logging for troubleshooting
+
+### Breaking Changes
+- None
+
+## 1.1.7
+
+2025-02-15 (Date of Last Commit)
+
+* Fixed bug in check when identity changes.
+
 ## 1.1.6
 
 2025-02-15 (Date of Last Commit)

@@ -61,10 +61,8 @@ class Toggly {
 
     // Use provided identity or get/generate device ID
     if (identity != null) {
-      if (Toggly._identity != identity) {
-        await clearFeatureFlagsCache();
-      }
       Toggly._identity = identity;
+      await checkAndClearFeatureFlagsCache();
     } else {
       // Try to get stored device ID
       var storedId =
@@ -77,10 +75,8 @@ class Toggly {
           value: storedId,
         );
       }
-      if (Toggly._identity != storedId) {
-        await clearFeatureFlagsCache();
-      }
       Toggly._identity = storedId;
+      await checkAndClearFeatureFlagsCache();
     }
 
     Toggly._config = config;
@@ -117,41 +113,12 @@ class Toggly {
       );
     }
 
-    try {
-      // Try to fetch flags from the API
-      await Toggly.fetchFeatureFlags();
+    // Try to fetch flags from the API
+    final status = await Toggly.fetchFeatureFlags();
 
-      return TogglyInitResponse(
-        status: TogglyLoadFeatureFlagsResponse.fetched,
-      );
-    } catch (e) {
-      if (e is DioError && e.response?.statusCode == 304) {
-        // Not modified, use cached version
-        var cached = await cachedFeatureFlags;
-        if (cached != null) {
-          Toggly._featureFlagsSubject?.add(cached);
-          return TogglyInitResponse(
-            status: TogglyLoadFeatureFlagsResponse.cached,
-          );
-        }
-      } else if (e is DioError && e.response?.statusCode == 403) {
-        // Clear cached data on 403 responses
-        await clearFeatureFlagsCache();
-        await _storage.delete(key: SecureStorageKeys.jwks.toString());
-      }
-      var cached = await cachedFeatureFlags;
-      if (cached != null) {
-        Toggly._featureFlagsSubject?.add(cached);
-        return TogglyInitResponse(
-          status: TogglyLoadFeatureFlagsResponse.cached,
-        );
-      }
-
-      Toggly._featureFlagsSubject?.add(Toggly._flagDefaults);
-      return TogglyInitResponse(
-        status: TogglyLoadFeatureFlagsResponse.defaults,
-      );
-    }
+    return TogglyInitResponse(
+      status: status,
+    );
   }
 
   /// Sets an unique identifier to the current session. Useful in case of custom
@@ -182,32 +149,24 @@ class Toggly {
     return await Toggly.refresh();
   }
 
-  /// Returns a [Future] with the current feature flags values.
-  static Future<Map<String, bool>> get featureFlags async {
-    try {
-      if (Toggly._appKey == null) {
-        throw TogglyMissingAppKeyException();
-      }
-
-      return await Toggly.cachedFeatureFlags ?? await fetchFeatureFlags();
-    } catch (_) {
-      return Toggly._flagDefaults;
-    }
-  }
-
   /// Returns a [Future] with the cached feature flags values.
-  static Future<Map<String, bool>?> get cachedFeatureFlags async {
+  static Future<Map<String, bool>> get cachedFeatureFlags async {
     try {
       // Return in-memory flags if available
       if (_inMemoryFlags != null) {
-        return _inMemoryFlags;
+        return _inMemoryFlags!;
       }
 
+      final hashedIdentity =
+          sha256.convert(utf8.encode(Toggly._identity)).toString();
+
       String? cache = await _storage.get(
-          key: SecureStorageKeys.featureFlagsCache.toString());
+          key: SecureStorageKeys.featureFlagsCache.toString() + hashedIdentity);
 
       if (cache == null) {
-        return null;
+        // If no cache exists, return defaults
+        _inMemoryFlags = Map<String, bool>.from(Toggly._flagDefaults);
+        return _inMemoryFlags!;
       }
 
       TogglyFeatureFlagsCache flagsCache = TogglyFeatureFlagsCache.fromJson(
@@ -232,23 +191,21 @@ class Toggly {
         if (!isValid) {
           throw Exception('Invalid signature');
         }
-
-        if (flagsCache.identity == Toggly._identity) {
-          _inMemoryFlags = Map<String, bool>.from(jsonDecode(flagsCache.flags));
-          return _inMemoryFlags;
-        }
-        return null;
       }
 
       if (flagsCache.identity == Toggly._identity) {
         _inMemoryFlags = Map<String, bool>.from(jsonDecode(flagsCache.flags));
-        return _inMemoryFlags;
+        return _inMemoryFlags!;
       }
-      return null;
     } catch (_) {
+      if (kDebugMode) {
+        print('Error fetching cached feature flags');
+      }
       await clearFeatureFlagsCache();
-      return null;
     }
+
+    _inMemoryFlags = Map<String, bool>.from(Toggly._flagDefaults);
+    return _inMemoryFlags!;
   }
 
   /// Stores the provided [featureFlags] into cache.
@@ -268,8 +225,11 @@ class Toggly {
       }
     }
 
+    final hashedIdentity =
+        sha256.convert(utf8.encode(Toggly._identity)).toString();
+
     await _storage.set(
-      key: SecureStorageKeys.featureFlagsCache.toString(),
+      key: SecureStorageKeys.featureFlagsCache.toString() + hashedIdentity,
       value: jsonEncode(TogglyFeatureFlagsCache(
         identity: Toggly._identity,
         flags: featureFlags,
@@ -283,10 +243,33 @@ class Toggly {
   /// Clears the feature flags cache.
   static Future clearFeatureFlagsCache() async {
     _inMemoryFlags = null;
+    final hashedIdentity =
+        sha256.convert(utf8.encode(Toggly._identity)).toString();
+
     await _storage.delete(
-      key: SecureStorageKeys.featureFlagsCache.toString(),
+      key: SecureStorageKeys.featureFlagsCache.toString() + hashedIdentity,
     );
     await _storage.delete(key: SecureStorageKeys.etag.toString());
+  }
+
+  static Future checkAndClearFeatureFlagsCache() async {
+    final hashedIdentity =
+        sha256.convert(utf8.encode(Toggly._identity)).toString();
+
+    String? cache = await _storage.get(
+        key: SecureStorageKeys.featureFlagsCache.toString() + hashedIdentity);
+
+    if (cache == null) {
+      return;
+    }
+
+    TogglyFeatureFlagsCache flagsCache = TogglyFeatureFlagsCache.fromJson(
+      jsonDecode(cache),
+    );
+
+    if (Toggly._identity != flagsCache.identity) {
+      await clearFeatureFlagsCache();
+    }
   }
 
   /// Returns the feature flags default values provided during [init]
@@ -295,7 +278,7 @@ class Toggly {
   }
 
   /// Retrieves feature flags values from the Toggly.io Client API.
-  static Future<Map<String, bool>> fetchFeatureFlags() async {
+  static Future<TogglyLoadFeatureFlagsResponse> fetchFeatureFlags() async {
     try {
       // Prepare headers
       Map<String, dynamic> headers = {};
@@ -321,15 +304,6 @@ class Toggly {
       Map<String, bool> flags;
 
       if (Toggly._useSignedDefinitions) {
-        // Store new ETag if present
-        String? newEtag = response.headers['etag']?.first;
-        if (newEtag != null) {
-          await _storage.set(
-            key: SecureStorageKeys.etag.toString(),
-            value: newEtag,
-          );
-        }
-
         // Parse the response
         final signedResponse = Map<String, dynamic>.from(response.data);
         flags = Map<String, bool>.from(signedResponse['data']);
@@ -337,9 +311,13 @@ class Toggly {
         int timestamp = signedResponse['timestamp'];
         String keyId = signedResponse['kid'];
 
+        final hashedIdentity =
+            sha256.convert(utf8.encode(Toggly._identity)).toString();
+
         // Check existing cache timestamp
         String? existingCache = await _storage.get(
-            key: SecureStorageKeys.featureFlagsCache.toString());
+            key: SecureStorageKeys.featureFlagsCache.toString() +
+                hashedIdentity);
 
         if (existingCache != null) {
           TogglyFeatureFlagsCache existing = TogglyFeatureFlagsCache.fromJson(
@@ -380,6 +358,15 @@ class Toggly {
           }
           throw Exception('Signature verification failed');
         }
+
+        // Store new ETag if present
+        String? newEtag = response.headers['etag']?.first;
+        if (newEtag != null) {
+          await _storage.set(
+            key: SecureStorageKeys.etag.toString(),
+            value: newEtag,
+          );
+        }
       } else {
         flags = Map<String, bool>.from(response.data);
         Toggly.cacheFeatureFlags(featureFlags: jsonEncode(response.data));
@@ -392,21 +379,22 @@ class Toggly {
         print('Toggly.fetchFeatureFlags - ${jsonEncode(flags)}');
       }
 
-      return flags;
+      return TogglyLoadFeatureFlagsResponse.fetched;
     } catch (e) {
       if (e is DioError && e.response?.statusCode == 304) {
         // Not modified, use cached version
         var cached = await cachedFeatureFlags;
-        if (cached != null) {
-          Toggly._featureFlagsSubject?.add(cached);
-          return cached;
-        }
+        Toggly._featureFlagsSubject?.add(cached);
+        return TogglyLoadFeatureFlagsResponse.cached;
       } else if (e is DioError && e.response?.statusCode == 403) {
         // Clear cached data on 403 responses
         await clearFeatureFlagsCache();
         await _storage.delete(key: SecureStorageKeys.jwks.toString());
+
+        return TogglyLoadFeatureFlagsResponse.error;
       }
-      throw Exception('Failed to fetch feature flags from the API: $e');
+
+      return TogglyLoadFeatureFlagsResponse.defaults;
     }
   }
 
@@ -684,18 +672,8 @@ class Toggly {
     bool negate = false,
   }) async {
     // Fast path: use in-memory flags if available
-    if (_inMemoryFlags != null) {
-      return _evaluateFeatureGate(_inMemoryFlags!,
-          gate: gate, requirement: requirement, negate: negate);
-    }
-
-    // Fallback to stream-based evaluation
-    return Toggly._featureFlagsSubject!.whereNotNull().switchMap(
-      (flags) async* {
-        yield Toggly._evaluateFeatureGate(flags,
-            gate: gate, requirement: requirement, negate: negate);
-      },
-    ).first;
+    return _evaluateFeatureGate(await cachedFeatureFlags,
+        gate: gate, requirement: requirement, negate: negate);
   }
 
   // Optimize the evaluation logic
