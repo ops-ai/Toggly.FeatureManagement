@@ -60,6 +60,9 @@ class _MyHomePageState extends State<MyHomePage> {
         "refreshCounter": true,
       },
       identity: '1234567890',
+      config: const TogglyConfig(
+        featureFlagsRefreshInterval: 180000,
+      ),
     );
   }
 

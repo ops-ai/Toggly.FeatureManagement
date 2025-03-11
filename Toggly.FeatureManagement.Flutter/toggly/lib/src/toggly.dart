@@ -7,13 +7,14 @@ import 'package:crypto/crypto.dart';
 
 import 'package:feature_flags_toggly/feature_flags_toggly.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 import 'package:rxdart/rxdart.dart';
 
 /// Static class providing feature flags support.
 ///
 /// Allows enabling and disabling of features easily. Can be used with or without Toggly.io.
-class Toggly {
+class Toggly with WidgetsBindingObserver {
   static const Uuid _uuid = Uuid();
   static late String? _appKey;
   static String _environment = 'Production';
@@ -32,9 +33,26 @@ class Toggly {
   // Add new static field for in-memory JWKs cache
   static Map<String, dynamic>? _inMemoryJwks;
 
+  // Track app lifecycle state
+  static bool _isAppInForeground = true;
+
   static final Toggly _instance = Toggly._internal();
 
-  Toggly._internal();
+  Toggly._internal() {
+    // Register for lifecycle events
+    WidgetsBinding.instance.addObserver(this);
+    _isAppInForeground =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _isAppInForeground = state == AppLifecycleState.resumed;
+    if (_isAppInForeground) {
+      // App came to foreground, refresh flags if needed
+      refresh();
+    }
+  }
 
   factory Toggly() => _instance;
 
@@ -86,6 +104,10 @@ class Toggly {
       print('Toggly.init');
     }
 
+    // Initialize app lifecycle state
+    _isAppInForeground =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
     Toggly.startTimers();
 
     return await Toggly.refresh();
@@ -101,7 +123,17 @@ class Toggly {
   /// previously provided [flagDefaults] during [init]
   static Future<TogglyInitResponse> refresh() async {
     if (kDebugMode) {
-      print('Toggly.refresh');
+      print('Toggly.refresh - App in foreground: $_isAppInForeground');
+    }
+
+    // Skip refresh if app is not in foreground to avoid security exceptions
+    if (!_isAppInForeground) {
+      if (kDebugMode) {
+        print('Toggly.refresh - Skipping refresh as app is not in foreground');
+      }
+      return TogglyInitResponse(
+        status: TogglyLoadFeatureFlagsResponse.cached,
+      );
     }
 
     // In case there is no API key provided, only the flag defaults shall be used
@@ -215,9 +247,6 @@ class Toggly {
     String? signature,
     String? keyId,
   }) async {
-    // Update in-memory cache
-    _inMemoryFlags = Map<String, bool>.from(jsonDecode(featureFlags));
-
     if (Toggly._useSignedDefinitions) {
       if (timestamp == null || signature == null || keyId == null) {
         throw Exception(
@@ -238,6 +267,9 @@ class Toggly {
         keyId: keyId,
       )),
     );
+
+    // Update in-memory cache
+    _inMemoryFlags = Map<String, bool>.from(jsonDecode(featureFlags));
   }
 
   /// Clears the feature flags cache.
@@ -715,6 +747,9 @@ class Toggly {
     _inMemoryJwks = null; // Clear JWKs cache
     _featureFlagsSubject?.close();
     _featureFlagsSubject = null;
+
+    // Remove lifecycle observer
+    WidgetsBinding.instance.removeObserver(_instance);
   }
 
   /// Starts a [Timer] to periodically retrieve the feature flags values from
@@ -735,7 +770,12 @@ class Toggly {
                 'Toggly.syncFeatureFlags - every ${Toggly._config.featureFlagsRefreshInterval / 1000}s');
           }
 
-          await Toggly.refresh();
+          // Only refresh if app is in foreground
+          if (_isAppInForeground) {
+            await Toggly.refresh();
+          } else if (kDebugMode) {
+            print('Skipping refresh as app is not in foreground');
+          }
         },
       );
     }
