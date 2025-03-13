@@ -184,9 +184,14 @@ class Toggly with WidgetsBindingObserver {
   /// Returns a [Future] with the cached feature flags values.
   static Future<Map<String, bool>> get cachedFeatureFlags async {
     try {
-      // Return in-memory flags if available
+      // Return in-memory flags if available to avoid secure storage access
       if (_inMemoryFlags != null) {
         return _inMemoryFlags!;
+      }
+
+      // If app is backgrounded, return defaults from memory to avoid secure storage access
+      if (!_isAppInForeground) {
+        return Map<String, bool>.from(Toggly._flagDefaults);
       }
 
       final hashedIdentity =
@@ -247,6 +252,17 @@ class Toggly with WidgetsBindingObserver {
     String? signature,
     String? keyId,
   }) async {
+    // Update in-memory cache first
+    _inMemoryFlags = Map<String, bool>.from(jsonDecode(featureFlags));
+
+    // Skip secure storage operations if app is backgrounded
+    if (!_isAppInForeground) {
+      if (kDebugMode) {
+        print('Skipping secure storage cache as app is not in foreground');
+      }
+      return;
+    }
+
     if (Toggly._useSignedDefinitions) {
       if (timestamp == null || signature == null || keyId == null) {
         throw Exception(
@@ -267,14 +283,20 @@ class Toggly with WidgetsBindingObserver {
         keyId: keyId,
       )),
     );
-
-    // Update in-memory cache
-    _inMemoryFlags = Map<String, bool>.from(jsonDecode(featureFlags));
   }
 
   /// Clears the feature flags cache.
   static Future clearFeatureFlagsCache() async {
     _inMemoryFlags = null;
+
+    // Skip secure storage operations if app is backgrounded
+    if (!_isAppInForeground) {
+      if (kDebugMode) {
+        print('Skipping secure storage clear as app is not in foreground');
+      }
+      return;
+    }
+
     final hashedIdentity =
         sha256.convert(utf8.encode(Toggly._identity)).toString();
 
@@ -285,6 +307,14 @@ class Toggly with WidgetsBindingObserver {
   }
 
   static Future checkAndClearFeatureFlagsCache() async {
+    // Skip secure storage operations if app is backgrounded
+    if (!_isAppInForeground) {
+      if (kDebugMode) {
+        print('Skipping cache check as app is not in foreground');
+      }
+      return;
+    }
+
     final hashedIdentity =
         sha256.convert(utf8.encode(Toggly._identity)).toString();
 
@@ -449,6 +479,14 @@ class Toggly with WidgetsBindingObserver {
             return _inMemoryJwks;
           }
         }
+      }
+
+      // Skip secure storage operations if app is backgrounded
+      if (!_isAppInForeground) {
+        if (kDebugMode) {
+          print('Skipping JWKs fetch as app is not in foreground');
+        }
+        return null;
       }
 
       // Try to get cached JWKs from storage
