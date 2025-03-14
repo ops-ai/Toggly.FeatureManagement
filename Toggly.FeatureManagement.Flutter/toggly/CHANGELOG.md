@@ -1,4 +1,15 @@
 
+
+## 1.1.11
+
+2025-03-13
+
+### Reliability
+- Added more background state checks before any secure storage operations
+
+### Breaking Changes
+- None
+
 ## 1.1.10
 
 2025-03-13
