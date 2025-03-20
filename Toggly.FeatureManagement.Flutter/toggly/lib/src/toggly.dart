@@ -26,7 +26,10 @@ class Toggly with WidgetsBindingObserver {
   static final _storage = SecureStorageService.getInstance;
   static final _sync = SyncService.getInstance;
   static BehaviorSubject<Map<String, bool>>? _featureFlagsSubject;
-
+  static DateTime? _lastChecked;
+  static DateTime? _lastSynced;
+  static String? _eTag;
+  static String? _lastError;
   // Add new static field for in-memory cache
   static Map<String, bool>? _inMemoryFlags;
 
@@ -43,6 +46,23 @@ class Toggly with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _isAppInForeground =
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
+
+  static Map<String, String?> debug() {
+    return {
+      'user': _identity,
+      'appKey': _appKey,
+      'environment': _environment,
+      'useSignedDefinitions': _useSignedDefinitions.toString(),
+      'isAppInForeground': _isAppInForeground.toString(),
+      'refreshInterval': Toggly._config.featureFlagsRefreshInterval.toString(),
+      'syncServiceRunning':
+          Toggly._sync.refreshFeatureFlagsTimer != null ? 'Yes' : 'No',
+      'lastChecked': _lastChecked?.toString(),
+      'lastSynced': _lastSynced?.toString(),
+      'eTag': _eTag,
+      'lastError': _lastError,
+    };
   }
 
   @override
@@ -226,6 +246,7 @@ class Toggly with WidgetsBindingObserver {
             flagsCache.keyId!);
 
         if (!isValid) {
+          _lastError = 'Invalid signature';
           throw Exception('Invalid signature');
         }
       }
@@ -235,6 +256,7 @@ class Toggly with WidgetsBindingObserver {
         return _inMemoryFlags!;
       }
     } catch (_) {
+      _lastError = 'Error fetching cached feature flags';
       if (kDebugMode) {
         print('Error fetching cached feature flags');
       }
@@ -347,7 +369,7 @@ class Toggly with WidgetsBindingObserver {
 
       if (Toggly._useSignedDefinitions) {
         String? etag =
-            await _storage.get(key: SecureStorageKeys.etag.toString());
+            _eTag ?? await _storage.get(key: SecureStorageKeys.etag.toString());
         if (etag != null) {
           headers['If-None-Match'] = etag;
         }
@@ -407,6 +429,8 @@ class Toggly with WidgetsBindingObserver {
             if (kDebugMode) {
               print('Signature verification successful');
             }
+            _lastChecked = DateTime.now();
+            _lastSynced = DateTime.now();
             Toggly.cacheFeatureFlags(
                 featureFlags: jsonEncode(signedResponse['data']),
                 timestamp: timestamp,
@@ -418,20 +442,34 @@ class Toggly with WidgetsBindingObserver {
             print('Signature verification failed: $e');
             print('Stack trace: $stack');
           }
+          _lastError = 'Signature verification failed';
           throw Exception('Signature verification failed');
         }
 
         // Store new ETag if present
         String? newEtag = response.headers['etag']?.first;
         if (newEtag != null) {
+          _eTag = newEtag;
           await _storage.set(
             key: SecureStorageKeys.etag.toString(),
             value: newEtag,
           );
         }
       } else {
+        _lastChecked = DateTime.now();
+        _lastSynced = DateTime.now();
         flags = Map<String, bool>.from(response.data);
         Toggly.cacheFeatureFlags(featureFlags: jsonEncode(response.data));
+
+        // Store new ETag if present
+        String? newEtag = response.headers['etag']?.first;
+        if (newEtag != null) {
+          _eTag = newEtag;
+          await _storage.set(
+            key: SecureStorageKeys.etag.toString(),
+            value: newEtag,
+          );
+        }
       }
 
       // Cache flags on successful response
@@ -444,6 +482,7 @@ class Toggly with WidgetsBindingObserver {
       return TogglyLoadFeatureFlagsResponse.fetched;
     } catch (e) {
       if (e is DioError && e.response?.statusCode == 304) {
+        _lastChecked = DateTime.now();
         // Not modified, use cached version
         var cached = await cachedFeatureFlags;
         Toggly._featureFlagsSubject?.add(cached);
@@ -504,6 +543,7 @@ class Toggly with WidgetsBindingObserver {
           if (kDebugMode) {
             print('Cached JWKs validation failed, fetching new ones');
           }
+          _lastError = 'Invalid cached JWKs';
         } else if (ignoreExpiration ||
             jwksData['_expiresAt'] == null ||
             jwksData['_expiresAt'] >= DateTime.now().millisecondsSinceEpoch) {
@@ -523,6 +563,7 @@ class Toggly with WidgetsBindingObserver {
 
       // Validate fetched keys
       if (!_validateJwks(keys)) {
+        _lastError = 'Invalid JWKs received from server';
         throw Exception('Invalid JWKs received from server');
       }
 
@@ -547,6 +588,7 @@ class Toggly with WidgetsBindingObserver {
       if (kDebugMode) {
         print('Error fetching JWKs: $e');
       }
+      _lastError = 'Error fetching JWKs';
       return null;
     }
   }
@@ -559,6 +601,7 @@ class Toggly with WidgetsBindingObserver {
           if (kDebugMode) {
             print('Invalid JWK: missing x or y coordinates');
           }
+          _lastError = 'Invalid JWK: missing x or y coordinates';
           return false;
         }
 
@@ -600,6 +643,7 @@ class Toggly with WidgetsBindingObserver {
             print(
                 'Invalid key ID in JWK. Expected: $computedKid, Got: ${key['kid']}');
           }
+          _lastError = 'Invalid key ID in JWK';
           return false;
         }
       }
@@ -608,6 +652,7 @@ class Toggly with WidgetsBindingObserver {
       if (kDebugMode) {
         print('Error validating JWKs: $e');
       }
+      _lastError = 'Error validating JWKs';
       return false;
     }
   }
@@ -618,6 +663,7 @@ class Toggly with WidgetsBindingObserver {
     // Check if keyId is in whitelist if one is provided
     if (Toggly._config.trustedKeyIds != null &&
         !Toggly._config.trustedKeyIds!.contains(keyId)) {
+      _lastError = 'Key ID not in trusted whitelist';
       throw Exception('Key ID not in trusted whitelist');
     }
 
@@ -625,6 +671,7 @@ class Toggly with WidgetsBindingObserver {
     final jwksData =
         await _fetchAndCacheJwks(ignoreExpiration: allowOfflineValidation);
     if (jwksData == null) {
+      _lastError = 'Failed to fetch JWKs';
       throw Exception('Failed to fetch JWKs');
     }
 
@@ -633,6 +680,7 @@ class Toggly with WidgetsBindingObserver {
     // Find matching key
     final matchingKeys = jwksList.where((jwk) => jwk['kid'] == keyId);
     if (matchingKeys.isEmpty) {
+      _lastError = 'No matching key found for ID: $keyId';
       throw Exception('No matching key found for ID: $keyId');
     }
     final jwk = matchingKeys.first;
@@ -643,6 +691,7 @@ class Toggly with WidgetsBindingObserver {
 
     try {
       if (jwk['x'] == null || jwk['y'] == null) {
+        _lastError = 'Invalid JWK: missing x or y coordinates';
         throw Exception('Invalid JWK: missing x or y coordinates');
       }
 
@@ -732,6 +781,7 @@ class Toggly with WidgetsBindingObserver {
         print('Signature verification failed: $e');
         print('Stack trace: $stack');
       }
+      _lastError = 'Signature verification failed';
       throw Exception('Signature verification failed');
     }
   }

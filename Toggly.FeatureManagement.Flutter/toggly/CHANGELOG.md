@@ -1,4 +1,18 @@
 
+## 1.1.13
+
+2025-03-20
+
+### Reliability
+- Added more info to debug method
+
+## 1.1.12
+
+2025-03-19
+
+### Reliability
+- Added debug method for visibility into current state
+
 
 ## 1.1.11
 
