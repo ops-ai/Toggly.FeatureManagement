@@ -1,4 +1,11 @@
 
+## 1.1.14
+
+2025-03-28
+
+### Reliability
+- Simplified state check
+
 ## 1.1.13
 
 2025-03-20

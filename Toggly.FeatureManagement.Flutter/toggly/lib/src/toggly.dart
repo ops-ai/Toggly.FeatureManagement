@@ -36,16 +36,11 @@ class Toggly with WidgetsBindingObserver {
   // Add new static field for in-memory JWKs cache
   static Map<String, dynamic>? _inMemoryJwks;
 
-  // Track app lifecycle state
-  static bool _isAppInForeground = true;
-
   static final Toggly _instance = Toggly._internal();
 
   Toggly._internal() {
     // Register for lifecycle events
     WidgetsBinding.instance.addObserver(this);
-    _isAppInForeground =
-        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
   }
 
   static Map<String, String?> debug() {
@@ -54,7 +49,7 @@ class Toggly with WidgetsBindingObserver {
       'appKey': _appKey,
       'environment': _environment,
       'useSignedDefinitions': _useSignedDefinitions.toString(),
-      'isAppInForeground': _isAppInForeground.toString(),
+      'isAppInForeground': _checkAppVisibility().toString(),
       'refreshInterval': Toggly._config.featureFlagsRefreshInterval.toString(),
       'syncServiceRunning':
           Toggly._sync.refreshFeatureFlagsTimer != null ? 'Yes' : 'No',
@@ -65,11 +60,19 @@ class Toggly with WidgetsBindingObserver {
     };
   }
 
+  static bool _checkAppVisibility() {
+    return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _isAppInForeground = state == AppLifecycleState.resumed;
-    if (_isAppInForeground) {
-      // App came to foreground, refresh flags if needed
+    if (kDebugMode) {
+      print(
+          'Toggly: App state changed to ${_checkAppVisibility() ? "foreground" : "background"}');
+    }
+
+    // If app came to foreground, refresh flags if needed
+    if (_checkAppVisibility()) {
       refresh();
     }
   }
@@ -124,10 +127,6 @@ class Toggly with WidgetsBindingObserver {
       print('Toggly.init');
     }
 
-    // Initialize app lifecycle state
-    _isAppInForeground =
-        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-
     Toggly.startTimers();
 
     return await Toggly.refresh();
@@ -143,13 +142,13 @@ class Toggly with WidgetsBindingObserver {
   /// previously provided [flagDefaults] during [init]
   static Future<TogglyInitResponse> refresh() async {
     if (kDebugMode) {
-      print('Toggly.refresh - App in foreground: $_isAppInForeground');
+      print('Toggly.refresh - App in foreground: $_checkAppVisibility()');
     }
 
-    // Skip refresh if app is not in foreground to avoid security exceptions
-    if (!_isAppInForeground) {
+    // Skip refresh if app is not in foreground
+    if (!_checkAppVisibility()) {
       if (kDebugMode) {
-        print('Toggly.refresh - Skipping refresh as app is not in foreground');
+        print('Skipping refresh as app is not in foreground');
       }
       return TogglyInitResponse(
         status: TogglyLoadFeatureFlagsResponse.cached,
@@ -210,7 +209,7 @@ class Toggly with WidgetsBindingObserver {
       }
 
       // If app is backgrounded, return defaults from memory to avoid secure storage access
-      if (!_isAppInForeground) {
+      if (!_checkAppVisibility()) {
         return Map<String, bool>.from(Toggly._flagDefaults);
       }
 
@@ -278,7 +277,7 @@ class Toggly with WidgetsBindingObserver {
     _inMemoryFlags = Map<String, bool>.from(jsonDecode(featureFlags));
 
     // Skip secure storage operations if app is backgrounded
-    if (!_isAppInForeground) {
+    if (!_checkAppVisibility()) {
       if (kDebugMode) {
         print('Skipping secure storage cache as app is not in foreground');
       }
@@ -312,7 +311,7 @@ class Toggly with WidgetsBindingObserver {
     _inMemoryFlags = null;
 
     // Skip secure storage operations if app is backgrounded
-    if (!_isAppInForeground) {
+    if (!_checkAppVisibility()) {
       if (kDebugMode) {
         print('Skipping secure storage clear as app is not in foreground');
       }
@@ -330,7 +329,7 @@ class Toggly with WidgetsBindingObserver {
 
   static Future checkAndClearFeatureFlagsCache() async {
     // Skip secure storage operations if app is backgrounded
-    if (!_isAppInForeground) {
+    if (!_checkAppVisibility()) {
       if (kDebugMode) {
         print('Skipping cache check as app is not in foreground');
       }
@@ -521,7 +520,7 @@ class Toggly with WidgetsBindingObserver {
       }
 
       // Skip secure storage operations if app is backgrounded
-      if (!_isAppInForeground) {
+      if (!_checkAppVisibility()) {
         if (kDebugMode) {
           print('Skipping JWKs fetch as app is not in foreground');
         }
@@ -859,7 +858,7 @@ class Toggly with WidgetsBindingObserver {
           }
 
           // Only refresh if app is in foreground
-          if (_isAppInForeground) {
+          if (_checkAppVisibility()) {
             await Toggly.refresh();
           } else if (kDebugMode) {
             print('Skipping refresh as app is not in foreground');
