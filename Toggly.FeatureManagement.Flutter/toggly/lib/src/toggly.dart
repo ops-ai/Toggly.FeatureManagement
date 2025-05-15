@@ -141,12 +141,14 @@ class Toggly with WidgetsBindingObserver {
   /// that fails it loads feature flags from cache and defaults to the
   /// previously provided [flagDefaults] during [init]
   static Future<TogglyInitResponse> refresh() async {
+    final appInForeground = _checkAppVisibility();
+
     if (kDebugMode) {
-      print('Toggly.refresh - App in foreground: $_checkAppVisibility()');
+      print('Toggly.refresh - App in foreground: $appInForeground');
     }
 
     // Skip refresh if app is not in foreground
-    if (!_checkAppVisibility()) {
+    if (!appInForeground) {
       if (kDebugMode) {
         print('Skipping refresh as app is not in foreground');
       }
@@ -221,8 +223,7 @@ class Toggly with WidgetsBindingObserver {
 
       if (cache == null) {
         // If no cache exists, return defaults
-        _inMemoryFlags = Map<String, bool>.from(Toggly._flagDefaults);
-        return _inMemoryFlags!;
+        return Map<String, bool>.from(Toggly._flagDefaults);
       }
 
       TogglyFeatureFlagsCache flagsCache = TogglyFeatureFlagsCache.fromJson(
@@ -262,8 +263,7 @@ class Toggly with WidgetsBindingObserver {
       await clearFeatureFlagsCache();
     }
 
-    _inMemoryFlags = Map<String, bool>.from(Toggly._flagDefaults);
-    return _inMemoryFlags!;
+    return Map<String, bool>.from(Toggly._flagDefaults);
   }
 
   /// Stores the provided [featureFlags] into cache.
@@ -309,6 +309,8 @@ class Toggly with WidgetsBindingObserver {
   /// Clears the feature flags cache.
   static Future clearFeatureFlagsCache() async {
     _inMemoryFlags = null;
+    _featureFlagsSubject?.add({});
+    _eTag = null;
 
     // Skip secure storage operations if app is backgrounded
     if (!_checkAppVisibility()) {

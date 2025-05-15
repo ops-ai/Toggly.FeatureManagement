@@ -1,4 +1,12 @@
 
+## 1.1.15
+
+2025-05-15
+
+### Reliability
+- Fixed features being cached in some cases when switching identities
+
+
 ## 1.1.14
 
 2025-03-28
