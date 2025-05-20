@@ -38,7 +38,7 @@
   "description": "Provides feature flags support for Vue.js applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "type": "module",
   "dependencies": {
-    "vue": "^3.2.45"
+    "vue": "^3.5.14"
   },
   "devDependencies": {
     "@types/node": "^18.14.0",
