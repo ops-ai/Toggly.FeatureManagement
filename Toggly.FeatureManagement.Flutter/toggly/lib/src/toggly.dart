@@ -39,8 +39,15 @@ class Toggly with WidgetsBindingObserver {
   static final Toggly _instance = Toggly._internal();
 
   Toggly._internal() {
-    // Register for lifecycle events
-    WidgetsBinding.instance.addObserver(this);
+    // Register for lifecycle events only if binding is available
+    try {
+      WidgetsBinding.instance.addObserver(this);
+    } catch (e) {
+      // Binding not available (e.g., in tests), skip observer registration
+      if (kDebugMode) {
+        print('Toggly: WidgetsBinding not available, skipping observer registration');
+      }
+    }
   }
 
   static Map<String, String?> debug() {
@@ -61,7 +68,12 @@ class Toggly with WidgetsBindingObserver {
   }
 
   static bool _checkAppVisibility() {
-    return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    try {
+      return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    } catch (e) {
+      // Binding not available (e.g., in tests), assume app is in foreground
+      return true;
+    }
   }
 
   @override
@@ -837,8 +849,15 @@ class Toggly with WidgetsBindingObserver {
     _featureFlagsSubject?.close();
     _featureFlagsSubject = null;
 
-    // Remove lifecycle observer
-    WidgetsBinding.instance.removeObserver(_instance);
+    // Remove lifecycle observer only if binding is available
+    try {
+      WidgetsBinding.instance.removeObserver(_instance);
+    } catch (e) {
+      // Binding not available (e.g., in tests), skip observer removal
+      if (kDebugMode) {
+        print('Toggly: WidgetsBinding not available, skipping observer removal');
+      }
+    }
   }
 
   /// Starts a [Timer] to periodically retrieve the feature flags values from

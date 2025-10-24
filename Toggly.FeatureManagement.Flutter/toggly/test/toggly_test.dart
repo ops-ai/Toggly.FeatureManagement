@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:feature_flags_toggly/feature_flags_toggly.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
     await Toggly.init(
       flagDefaults: {
