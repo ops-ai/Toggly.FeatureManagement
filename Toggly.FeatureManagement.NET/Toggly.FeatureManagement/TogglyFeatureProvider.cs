@@ -204,7 +204,7 @@ namespace Toggly.FeatureManagement
 
                     // Get the raw JSON string first
                     var rawJson = await newDefinitionsRequest.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    var signedDefinitionsResponse = System.Text.Json.JsonSerializer.Deserialize<SignedDefinitionsResponse>(rawJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    var signedDefinitionsResponse = JsonSerializer.Deserialize<SignedDefinitionsResponse>(rawJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                     if (signedDefinitionsResponse == null)
                     {
                         _logger.LogWarning("Received empty response from toggly");
@@ -308,24 +308,26 @@ namespace Toggly.FeatureManagement
                         var liveUpdateConnectionString = await liveUpdateResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
                         if (Uri.TryCreate(liveUpdateConnectionString, UriKind.Absolute, out var liveConnectionUri))
                         {
-                            _webSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
-                            _webSocketClient.MessageReceived.Subscribe(msg =>
+                            try
                             {
-                                if (msg.Text == "update") _ = RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
-                            });
-                            _webSocketClient.DisconnectionHappened.Subscribe(info =>
+                                _webSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
+                                _webSocketClient.MessageReceived.Subscribe(msg =>
+                                {
+                                    if (msg.Text == "update") _ = RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
+                                });
+                                _webSocketClient.DisconnectionHappened.Subscribe(info =>
+                                {
+                                    _logger.LogWarning("Websocket disconnected");
+                                });
+                                _webSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
+
+                                await _webSocketClient.StartOrFail().ConfigureAwait(false);
+                            }
+                            catch
                             {
-                                _logger.LogWarning("Websocket disconnected");
-                            });
-                            _webSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
-                            
-                            await _webSocketClient.StartOrFail().ConfigureAwait(false);
+                                //Websocket not available, continue without it
+                            }
                         }
-                    }
-                    else
-                    {
-                        _lastErrorTime = DateTime.UtcNow;
-                        _lastError = await liveUpdateResponse.Content.ReadAsStringAsync();
                     }
                 }
 
