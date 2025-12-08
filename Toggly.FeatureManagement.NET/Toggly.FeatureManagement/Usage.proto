@@ -33,6 +33,7 @@ message StatMessage {
 	int32 uniqueRequestDisabledCount = 7;
 	int32 usedCount = 8;
 	int32 uniqueUsersUsedCount = 9;
+	repeated int32 uniqueUserHashes = 10; // Incremental list of unique user ID hashes seen since last send (for monthly tracking, uses deterministic hash)
 }
 
 message StatResult {

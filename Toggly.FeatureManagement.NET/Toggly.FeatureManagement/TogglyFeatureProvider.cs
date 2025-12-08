@@ -34,7 +34,7 @@ namespace Toggly.FeatureManagement
 
         private readonly string _environment;
 
-        private EntityTagHeaderValue? lastETag = null;
+        private volatile EntityTagHeaderValue? _lastETag = null;
 
         private readonly ConcurrentDictionary<string, FeatureDefinition> _definitions = new ConcurrentDictionary<string, FeatureDefinition>();
 
@@ -44,7 +44,7 @@ namespace Toggly.FeatureManagement
 
         private readonly IFeatureSnapshotProvider? _snapshotProvider;
 
-        private bool _loaded = false;
+        private volatile bool _loaded = false;
 
         private readonly Timer _timer;
 
@@ -52,7 +52,8 @@ namespace Toggly.FeatureManagement
 
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<string>> _experiments = new ConcurrentDictionary<string, ConcurrentHashSet<string>>();
 
-        private WebsocketClient? _webSocketClient = null;
+        private volatile WebsocketClient? _webSocketClient = null;
+        private readonly object _webSocketLock = new object();
 
         private readonly IFeatureStateInternalService _featureStateService;
 
@@ -62,13 +63,18 @@ namespace Toggly.FeatureManagement
 
         private readonly bool _useSignedDefinitions;
 
-        private ConcurrentHashSet<string> _secureFeatures = new ConcurrentHashSet<string>();
+        private readonly ConcurrentHashSet<string> _secureFeatures = new ConcurrentHashSet<string>();
 
         private readonly ConcurrentDictionary<string, (ECDsa Key, DateTime Expiry)> _ecDsaKeys = new ConcurrentDictionary<string, (ECDsa Key, DateTime Expiry)>();
 
         private readonly IOptions<TogglySettings> _settings;
 
         private long _lastDefinitionsTimestamp;
+        private readonly SemaphoreSlim _refreshSemaphore = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _loadSemaphore = new SemaphoreSlim(1, 1);
+        
+        private IMetricsService? _metricsService = null;
+        private readonly object _metricsServiceLock = new object();
 
         /// <summary>
         /// Constructor
@@ -92,8 +98,24 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
-            _timer = new Timer((s) => RefreshFeatures(new TimeSpan(0, 5, 0).Ticks).ConfigureAwait(false), null, TimeSpan.Zero, new TimeSpan(0, 5, 0));
+            _timer = new Timer(TimerCallback, null, TimeSpan.Zero, new TimeSpan(0, 5, 0));
             Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyVersionAttribute>()?.Version}";
+        }
+
+        private void TimerCallback(object? state)
+        {
+            // Fire and forget with proper error handling
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await RefreshFeatures(new TimeSpan(0, 5, 0).Ticks).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in timer callback while refreshing features");
+                }
+            });
         }
 
         private async Task LoadSnapshot()
@@ -132,7 +154,11 @@ namespace Toggly.FeatureManagement
                             
                             var jsonData = JsonSerializer.Serialize(snapshot.Features, serializerOptions);
                             var dataToVerify = $"{jsonData}|{snapshot.Timestamp}";
-                            var hash = SHA256.Create().ComputeHash(Encoding.UTF8.GetBytes(dataToVerify));
+                            byte[] hash;
+                            using (var sha256 = SHA256.Create())
+                            {
+                                hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(dataToVerify));
+                            }
                             if (!ecdsa!.VerifyHash(hash, signature))
                             {
                                 _logger.LogError("Invalid signature");
@@ -149,7 +175,7 @@ namespace Toggly.FeatureManagement
                                     new FeatureFilterConfiguration
                                     {
                                         Name = featureFilter.Name,
-                                        Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
+                                        Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters?.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)) ?? Enumerable.Empty<KeyValuePair<string, string?>>()).Build()
                                     }),
                                 RequirementType = featureDefinition.RequirementType
                             };
@@ -170,19 +196,44 @@ namespace Toggly.FeatureManagement
         private string _lastError = string.Empty;
         private DateTime? _lastErrorTime = null;
         private DateTime? _lastRefresh = null;
-        private IMetricsService? _metricsService = null;
         
         private async Task RefreshFeatures(long? timeout = null)
         {
+            // Prevent concurrent refresh operations (timer and WebSocket could overlap)
+            if (!await _refreshSemaphore.WaitAsync(0).ConfigureAwait(false))
+            {
+                _logger.LogDebug("Refresh already in progress, skipping");
+                return;
+            }
+
             try
             {
+                // Ensure initial load happens only once (singleton, but multiple threads could call this)
                 if (!_loaded)
                 {
-                    await LoadSnapshot().ConfigureAwait(false);
-                    _loaded = true;
+                    await _loadSemaphore.WaitAsync().ConfigureAwait(false);
+                    try
+                    {
+                        if (!_loaded)
+                        {
+                            await LoadSnapshot().ConfigureAwait(false);
+                            _loaded = true;
+                        }
+                    }
+                    finally
+                    {
+                        _loadSemaphore.Release();
+                    }
                 }
 
-                _metricsService ??= _serviceProvider.GetRequiredService<IMetricsService>();
+                // Thread-safe lazy initialization of metrics service
+                if (_metricsService == null)
+                {
+                    lock (_metricsServiceLock)
+                    {
+                        _metricsService ??= _serviceProvider.GetRequiredService<IMetricsService>();
+                    }
+                }
                 
                 using var httpClient = _clientFactory.CreateClient("toggly");
 #if NETCOREAPP3_1_OR_GREATER
@@ -191,7 +242,9 @@ namespace Toggly.FeatureManagement
                 httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Toggly.FeatureManagement", Version));
                 if (timeout.HasValue)
                     httpClient.Timeout = new TimeSpan(timeout.Value);
-                if (lastETag != null) httpClient.DefaultRequestHeaders.IfNoneMatch.Add(lastETag);
+                
+                var currentETag = _lastETag;
+                if (currentETag != null) httpClient.DefaultRequestHeaders.IfNoneMatch.Add(currentETag);
 
                 List<FeatureDefinitionModel>? newDefinitions;
                 if (_useSignedDefinitions)
@@ -211,11 +264,12 @@ namespace Toggly.FeatureManagement
                         return;
                     }
 
-                    // Check timestamp
-                    if (signedDefinitionsResponse.Timestamp < _lastDefinitionsTimestamp)
+                    // Check timestamp (thread-safe read)
+                    var currentTimestamp = Interlocked.Read(ref _lastDefinitionsTimestamp);
+                    if (signedDefinitionsResponse.Timestamp < currentTimestamp)
                     {
                         _logger.LogWarning("Received definitions with older timestamp. Current: {CurrentTimestamp}, Received: {ReceivedTimestamp}", 
-                            _lastDefinitionsTimestamp, signedDefinitionsResponse.Timestamp);
+                            currentTimestamp, signedDefinitionsResponse.Timestamp);
                         return;
                     }
 
@@ -229,7 +283,11 @@ namespace Toggly.FeatureManagement
                     _logger.LogDebug("Data to verify: {DataToVerify}", dataToVerify);
                     
                     var dataBytes = Encoding.UTF8.GetBytes(dataToVerify);
-                    var hash = SHA256.Create().ComputeHash(dataBytes);
+                    byte[] hash;
+                    using (var sha256 = SHA256.Create())
+                    {
+                        hash = sha256.ComputeHash(dataBytes);
+                    }
                     _logger.LogDebug("Hash (hex): {Hash}", BitConverter.ToString(hash).Replace("-", ""));
 
                     // Verify signature
@@ -251,8 +309,8 @@ namespace Toggly.FeatureManagement
                     }
 
                     newDefinitions = signedDefinitionsResponse.Defs;
-                    lastETag = newDefinitionsRequest.Headers.ETag;
-                    _lastDefinitionsTimestamp = signedDefinitionsResponse.Timestamp;
+                    _lastETag = newDefinitionsRequest.Headers.ETag;
+                    Interlocked.Exchange(ref _lastDefinitionsTimestamp, signedDefinitionsResponse.Timestamp);
 
                     if (_snapshotProvider != null)
                         await _snapshotProvider.SaveSnapshotAsync(newDefinitions, signedDefinitionsResponse.Signature, signedDefinitionsResponse.Kid, signedDefinitionsResponse.Timestamp).ConfigureAwait(false);
@@ -272,7 +330,7 @@ namespace Toggly.FeatureManagement
                         return;
                     }
 
-                    lastETag = newDefinitionsRequest.Headers.ETag;
+                    _lastETag = newDefinitionsRequest.Headers.ETag;
                     if (_snapshotProvider != null)
                         await _snapshotProvider.SaveSnapshotAsync(newDefinitions).ConfigureAwait(false);
                 }
@@ -286,7 +344,7 @@ namespace Toggly.FeatureManagement
                             new FeatureFilterConfiguration
                             {
                                 Name = featureFilter.Name,
-                                Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters).Build()
+                                Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters?.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)) ?? Enumerable.Empty<KeyValuePair<string, string?>>()).Build()
                             })
                     };
                     if (featureDefinition.SecuredFeature) _secureFeatures.Add(featureDefinition.FeatureKey);
@@ -294,13 +352,44 @@ namespace Toggly.FeatureManagement
                     _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                     _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
                 }
-                var activeExperiments = newDefinitions.Where(t => t.Metrics != null).SelectMany(t => t.Metrics!).GroupBy(t => t).Select(t => t.Key).ToList();
-                _experiments.Clear();
+                // Update experiments more efficiently
+                var activeExperiments = newDefinitions
+                    .Where(t => t.Metrics != null)
+                    .SelectMany(t => t.Metrics!)
+                    .Distinct()
+                    .ToList();
+                
+                // Build new experiments dictionary
+                var newExperiments = new Dictionary<string, ConcurrentHashSet<string>>();
                 foreach (var activeExperiment in activeExperiments)
-                    _experiments.TryAdd(activeExperiment, new ConcurrentHashSet<string>(newDefinitions.Where(t => t.Metrics != null && t.Metrics.Contains(activeExperiment)).Select(t => t.FeatureKey)));
+                {
+                    var featureKeys = newDefinitions
+                        .Where(t => t.Metrics != null && t.Metrics.Contains(activeExperiment))
+                        .Select(t => t.FeatureKey)
+                        .ToList();
+                    newExperiments[activeExperiment] = new ConcurrentHashSet<string>(featureKeys);
+                }
+                
+                // Atomically replace experiments dictionary
+                _experiments.Clear();
+                foreach (var kvp in newExperiments)
+                {
+                    _experiments.TryAdd(kvp.Key, kvp.Value);
+                }
                 
                 _loaded = true;
-                if (_webSocketClient == null || !_webSocketClient.IsRunning)
+                
+                // Thread-safe websocket client check and initialization
+                var shouldInitializeWebSocket = false;
+                lock (_webSocketLock)
+                {
+                    if (_webSocketClient == null || !_webSocketClient.IsRunning)
+                    {
+                        shouldInitializeWebSocket = true;
+                    }
+                }
+                
+                if (shouldInitializeWebSocket)
                 {
                     var liveUpdateResponse = await httpClient.GetAsync($"definitions/live-updates/{_appKey}/{_environment}").ConfigureAwait(false);
                     if (liveUpdateResponse.IsSuccessStatusCode)
@@ -310,22 +399,43 @@ namespace Toggly.FeatureManagement
                         {
                             try
                             {
-                                _webSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
-                                _webSocketClient.MessageReceived.Subscribe(msg =>
+                                var newWebSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
+                                newWebSocketClient.MessageReceived.Subscribe(msg =>
                                 {
-                                    if (msg.Text == "update") _ = RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
+                                    if (msg.Text == "update")
+                                    {
+                                        // Fire and forget, but log errors
+                                        _ = Task.Run(async () =>
+                                        {
+                                            try
+                                            {
+                                                await RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                _logger.LogError(ex, "Error refreshing features from websocket message");
+                                            }
+                                        });
+                                    }
                                 });
-                                _webSocketClient.DisconnectionHappened.Subscribe(info =>
+                                newWebSocketClient.DisconnectionHappened.Subscribe(info =>
                                 {
-                                    _logger.LogWarning("Websocket disconnected");
+                                    _logger.LogWarning("Websocket disconnected: {Reason}", info.Type);
                                 });
-                                _webSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
+                                newWebSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
 
-                                await _webSocketClient.StartOrFail().ConfigureAwait(false);
+                                await newWebSocketClient.StartOrFail().ConfigureAwait(false);
+                                
+                                // Only assign if successfully started
+                                lock (_webSocketLock)
+                                {
+                                    _webSocketClient?.Dispose();
+                                    _webSocketClient = newWebSocketClient;
+                                }
                             }
-                            catch
+                            catch (Exception ex)
                             {
-                                //Websocket not available, continue without it
+                                _logger.LogWarning(ex, "Websocket not available, continuing without it");
                             }
                         }
                     }
@@ -339,8 +449,14 @@ namespace Toggly.FeatureManagement
                 _lastError = ex.Message;
                 _lastErrorTime = DateTime.UtcNow;
             }
+            finally
+            {
+                _refreshSemaphore.Release();
+            }
         }
 
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> _keyFetchSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
+        
         private async Task<ECDsa?> GetEcdsaKey(string keyId)
         {
             // Check if key ID is in whitelist if one is configured
@@ -350,7 +466,7 @@ namespace Toggly.FeatureManagement
                 return null;
             }
 
-            // Check if we have a valid cached key
+            // Check if we have a valid cached key (double-check pattern)
             if (_ecDsaKeys.TryGetValue(keyId, out var cachedKey))
             {
                 if (cachedKey.Expiry > DateTime.UtcNow)
@@ -360,121 +476,143 @@ namespace Toggly.FeatureManagement
                 _ecDsaKeys.TryRemove(keyId, out _);
             }
 
-            if (_snapshotProvider != null)
+            // Use per-key semaphore to prevent concurrent fetches of the same key
+            // (defensive: even though RefreshFeatures is fast, network issues could cause delays)
+            var keySemaphore = _keyFetchSemaphores.GetOrAdd(keyId, _ => new SemaphoreSlim(1, 1));
+            await keySemaphore.WaitAsync().ConfigureAwait(false);
+            
+            try
             {
-                var jwkSnapshot = await _snapshotProvider.GetJwkSnapshotAsync(CancellationToken.None).ConfigureAwait(false);
-                if (jwkSnapshot.Jwks != null)
+                // Double-check after acquiring lock (another thread might have fetched it)
+                if (_ecDsaKeys.TryGetValue(keyId, out var recheckKey))
                 {
-                    foreach (var key in jwkSnapshot.Jwks.Keys)
+                    if (recheckKey.Expiry > DateTime.UtcNow)
+                        return recheckKey.Key;
+                    
+                    // Remove expired key
+                    _ecDsaKeys.TryRemove(keyId, out _);
+                }
+
+                if (_snapshotProvider != null)
+                {
+                    var jwkSnapshot = await _snapshotProvider.GetJwkSnapshotAsync(CancellationToken.None).ConfigureAwait(false);
+                    if (jwkSnapshot.Jwks != null)
                     {
-                        // Verify key ID for each key
-                        byte[] xCoord = Convert.FromBase64String(key.X.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.X.Length % 4) % 4));
-                        byte[] yCoord = Convert.FromBase64String(key.Y.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.Y.Length % 4) % 4));
-                        
-                        var kidInput = xCoord.Concat(yCoord).ToArray();
-                        string computedKid;
-                        using (var sha1 = SHA1.Create())
+                        foreach (var key in jwkSnapshot.Jwks.Keys)
                         {
-                            var hash = sha1.ComputeHash(kidInput);
-                            computedKid = BitConverter.ToString(hash).Replace("-", "") + "ES256";
-                        }
-
-                        if (key.Kid != computedKid)
-                        {
-                            _logger.LogError("Invalid key ID in JWKS. Expected: {ExpectedKid}, Got: {ActualKid}", computedKid, key.Kid);
-                            continue;
-                        }
-
-                        // If this is the key we're looking for and it's valid
-                        if (key.Kid == keyId && key.Alg == "ES256")
-                        {
-                            _logger.LogDebug("Using JWK: {@Key}", key);
-                            _logger.LogDebug("X coordinate (hex): {X}", BitConverter.ToString(xCoord).Replace("-", ""));
-                            _logger.LogDebug("Y coordinate (hex): {Y}", BitConverter.ToString(yCoord).Replace("-", ""));
-
-                            var ecdsa = ECDsa.Create();
-                            var ecParameters = new ECParameters
+                            // Verify key ID for each key
+                            byte[] xCoord = Convert.FromBase64String(key.X.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.X.Length % 4) % 4));
+                            byte[] yCoord = Convert.FromBase64String(key.Y.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.Y.Length % 4) % 4));
+                            
+                            var kidInput = xCoord.Concat(yCoord).ToArray();
+                            string computedKid;
+                            using (var sha1 = SHA1.Create())
                             {
-                                Curve = ECCurve.NamedCurves.nistP256,
-                                Q = new ECPoint
-                                {
-                                    X = xCoord,
-                                    Y = yCoord
-                                }
-                            };
+                                var hash = sha1.ComputeHash(kidInput);
+                                computedKid = BitConverter.ToString(hash).Replace("-", "") + "ES256";
+                            }
 
-                            ecdsa.ImportParameters(ecParameters);
-                            _ecDsaKeys.TryAdd(keyId, (ecdsa, DateTime.UtcNow.AddDays(30)));
-                            return ecdsa;
+                            if (key.Kid != computedKid)
+                            {
+                                _logger.LogError("Invalid key ID in JWKS. Expected: {ExpectedKid}, Got: {ActualKid}", computedKid, key.Kid);
+                                continue;
+                            }
+
+                            // If this is the key we're looking for and it's valid
+                            if (key.Kid == keyId && key.Alg == "ES256")
+                            {
+                                _logger.LogDebug("Using JWK: {@Key}", key);
+                                _logger.LogDebug("X coordinate (hex): {X}", BitConverter.ToString(xCoord).Replace("-", ""));
+                                _logger.LogDebug("Y coordinate (hex): {Y}", BitConverter.ToString(yCoord).Replace("-", ""));
+
+                                var ecdsa = ECDsa.Create();
+                                var ecParameters = new ECParameters
+                                {
+                                    Curve = ECCurve.NamedCurves.nistP256,
+                                    Q = new ECPoint
+                                    {
+                                        X = xCoord,
+                                        Y = yCoord
+                                    }
+                                };
+
+                                ecdsa.ImportParameters(ecParameters);
+                                _ecDsaKeys.TryAdd(keyId, (ecdsa, DateTime.UtcNow.AddDays(30)));
+                                return ecdsa;
+                            }
                         }
                     }
                 }
-            }
 
-            using var httpClient = _clientFactory.CreateClient("toggly");
+                using var httpClient = _clientFactory.CreateClient("toggly");
 #if NETCOREAPP3_1_OR_GREATER
-            httpClient.DefaultRequestVersion = HttpVersion.Version20;
+                httpClient.DefaultRequestVersion = HttpVersion.Version20;
 #endif
-            httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Toggly.FeatureManagement", Version));
+                httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Toggly.FeatureManagement", Version));
+                        
+                // Fetch JWKS
+                var jwksResponse = await httpClient.GetAsync(".well-known/jwks").ConfigureAwait(false);
+                jwksResponse.EnsureSuccessStatusCode();
+                var jwks = await jwksResponse.Content.ReadFromJsonAsync<JsonWebKeySet>().ConfigureAwait(false);
+                if (jwks == null)
+                {
+                    _logger.LogError("Received empty JWKS from toggly");
+                    return null;
+                }
+                if (_snapshotProvider != null)
+                    await _snapshotProvider.SaveJwkSnapshot(jwks, ((DateTimeOffset)DateTime.UtcNow.AddDays(30)).ToUnixTimeSeconds(), CancellationToken.None).ConfigureAwait(false);
+                
+                foreach (var key in jwks!.Keys)
+                {
+                    // Verify key ID for each key
+                    byte[] xCoord = Convert.FromBase64String(key.X.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.X.Length % 4) % 4));
+                    byte[] yCoord = Convert.FromBase64String(key.Y.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.Y.Length % 4) % 4));
                     
-            // Fetch JWKS
-            var jwksResponse = await httpClient.GetAsync(".well-known/jwks").ConfigureAwait(false);
-            jwksResponse.EnsureSuccessStatusCode();
-            var jwks = await jwksResponse.Content.ReadFromJsonAsync<JsonWebKeySet>().ConfigureAwait(false);
-            if (jwks == null)
-            {
-                _logger.LogError("Received empty JWKS from toggly");
+                    var kidInput = xCoord.Concat(yCoord).ToArray();
+                    string computedKid;
+                    using (var sha1 = SHA1.Create())
+                    {
+                        var hash = sha1.ComputeHash(kidInput);
+                        computedKid = BitConverter.ToString(hash).Replace("-", "") + "ES256";
+                    }
+
+                    if (key.Kid != computedKid)
+                    {
+                        _logger.LogError("Invalid key ID in JWKS. Expected: {ExpectedKid}, Got: {ActualKid}", computedKid, key.Kid);
+                        continue;
+                    }
+
+                    // If this is the key we're looking for and it's valid
+                    if (key.Kid == keyId && key.Alg == "ES256")
+                    {
+                        _logger.LogDebug("Using JWK: {@Key}", key);
+                        _logger.LogDebug("X coordinate (hex): {X}", BitConverter.ToString(xCoord).Replace("-", ""));
+                        _logger.LogDebug("Y coordinate (hex): {Y}", BitConverter.ToString(yCoord).Replace("-", ""));
+
+                        var ecdsa = ECDsa.Create();
+                        var ecParameters = new ECParameters
+                        {
+                            Curve = ECCurve.NamedCurves.nistP256,
+                            Q = new ECPoint
+                            {
+                                X = xCoord,
+                                Y = yCoord
+                            }
+                        };
+
+                        ecdsa.ImportParameters(ecParameters);
+                        _ecDsaKeys.TryAdd(keyId, (ecdsa, DateTime.UtcNow.AddDays(30)));
+                        return ecdsa;
+                    }
+                }
+
+                _logger.LogError("No valid matching ES256 key found in JWKS for key ID: {KeyId}", keyId);
                 return null;
             }
-            if (_snapshotProvider != null)
-                await _snapshotProvider.SaveJwkSnapshot(jwks, ((DateTimeOffset)DateTime.UtcNow.AddDays(30)).ToUnixTimeSeconds(), CancellationToken.None).ConfigureAwait(false);
-            
-            foreach (var key in jwks!.Keys)
+            finally
             {
-                // Verify key ID for each key
-                byte[] xCoord = Convert.FromBase64String(key.X.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.X.Length % 4) % 4));
-                byte[] yCoord = Convert.FromBase64String(key.Y.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.Y.Length % 4) % 4));
-                
-                var kidInput = xCoord.Concat(yCoord).ToArray();
-                string computedKid;
-                using (var sha1 = SHA1.Create())
-                {
-                    var hash = sha1.ComputeHash(kidInput);
-                    computedKid = BitConverter.ToString(hash).Replace("-", "") + "ES256";
-                }
-
-                if (key.Kid != computedKid)
-                {
-                    _logger.LogError("Invalid key ID in JWKS. Expected: {ExpectedKid}, Got: {ActualKid}", computedKid, key.Kid);
-                    continue;
-                }
-
-                // If this is the key we're looking for and it's valid
-                if (key.Kid == keyId && key.Alg == "ES256")
-                {
-                    _logger.LogDebug("Using JWK: {@Key}", key);
-                    _logger.LogDebug("X coordinate (hex): {X}", BitConverter.ToString(xCoord).Replace("-", ""));
-                    _logger.LogDebug("Y coordinate (hex): {Y}", BitConverter.ToString(yCoord).Replace("-", ""));
-
-                    var ecdsa = ECDsa.Create();
-                    var ecParameters = new ECParameters
-                    {
-                        Curve = ECCurve.NamedCurves.nistP256,
-                        Q = new ECPoint
-                        {
-                            X = xCoord,
-                            Y = yCoord
-                        }
-                    };
-
-                    ecdsa.ImportParameters(ecParameters);
-                    _ecDsaKeys.TryAdd(keyId, (ecdsa, DateTime.UtcNow.AddDays(30)));
-                    return ecdsa;
-                }
+                keySemaphore.Release();
             }
-
-            _logger.LogError("No valid matching ES256 key found in JWKS for key ID: {KeyId}", keyId);
-            return null;
         }
 
         /// <summary>
@@ -483,13 +621,17 @@ namespace Toggly.FeatureManagement
         /// <returns></returns>
         public async IAsyncEnumerable<FeatureDefinition> GetAllFeatureDefinitionsAsync()
         {
+            // Wait for initial load with timeout
             if (!_loaded)
             {
-                var i = 0;
-                while (!_loaded && i < 5)
+                var maxWaitTime = TimeSpan.FromSeconds(2.5); // 5 * 500ms
+                var elapsed = TimeSpan.Zero;
+                var delay = TimeSpan.FromMilliseconds(100);
+                
+                while (!_loaded && elapsed < maxWaitTime)
                 {
-                    await Task.Delay(500).ConfigureAwait(false);
-                    i++;
+                    await Task.Delay(delay).ConfigureAwait(false);
+                    elapsed = elapsed.Add(delay);
                 }
             }
 
@@ -504,13 +646,17 @@ namespace Toggly.FeatureManagement
         /// <returns></returns>
         public async Task<FeatureDefinition> GetFeatureDefinitionAsync(string featureName)
         {
+            // Wait for initial load with timeout
             if (!_loaded)
             {
-                var i = 0;
-                while (!_loaded && i < 5)
+                var maxWaitTime = TimeSpan.FromSeconds(2.5); // 5 * 500ms
+                var elapsed = TimeSpan.Zero;
+                var delay = TimeSpan.FromMilliseconds(100);
+                
+                while (!_loaded && elapsed < maxWaitTime)
                 {
-                    await Task.Delay(500).ConfigureAwait(false);
-                    i++;
+                    await Task.Delay(delay).ConfigureAwait(false);
+                    elapsed = elapsed.Add(delay);
                 }
             }
 
@@ -525,7 +671,30 @@ namespace Toggly.FeatureManagement
         /// </summary>
         public void Dispose()
         {
-            _timer.Dispose();
+            _timer?.Dispose();
+            
+            lock (_webSocketLock)
+            {
+                _webSocketClient?.Dispose();
+                _webSocketClient = null;
+            }
+            
+            _refreshSemaphore?.Dispose();
+            _loadSemaphore?.Dispose();
+            
+            // Dispose cached ECDsa keys
+            foreach (var kvp in _ecDsaKeys)
+            {
+                kvp.Value.Key?.Dispose();
+            }
+            _ecDsaKeys.Clear();
+            
+            // Dispose key fetch semaphores
+            foreach (var semaphore in _keyFetchSemaphores.Values)
+            {
+                semaphore?.Dispose();
+            }
+            _keyFetchSemaphores.Clear();
         }
 
         /// <summary>
@@ -547,6 +716,7 @@ namespace Toggly.FeatureManagement
         /// <returns></returns>
         public FeatureProviderDebugInfo GetDebugInfo()
         {
+            // Minor race conditions acceptable for debug info (singleton, infrequent updates)
             return new FeatureProviderDebugInfo
             {
                 AppKey = _appKey,

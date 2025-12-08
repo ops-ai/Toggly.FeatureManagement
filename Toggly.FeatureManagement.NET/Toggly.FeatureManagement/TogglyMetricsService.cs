@@ -56,7 +56,7 @@ namespace Toggly.FeatureManagement
         /// keyed by feature name
         /// values are list of unique users with status: d-email vs e-email
         /// </summary>
-        private readonly ConcurrentDictionary<string, ConcurrentHashSet<string>> _uniqueUsageMap = new ConcurrentDictionary<string, ConcurrentHashSet<string>>();
+        private readonly SemaphoreSlim _sendMetricsSemaphore = new SemaphoreSlim(1, 1);
 
         public TogglyMetricsService(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, IFeatureDefinitionProvider featureDefinitionProvider, IFeatureManager featureManager, Metrics.MetricsClient metricsClient)
         {
@@ -72,31 +72,72 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyMetricsService>();
 
-            _timer = new Timer((s) => SendMetrics().ConfigureAwait(false), null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
-            applicationLifetime.ApplicationStopping.Register(() => SendMetrics().ConfigureAwait(false).GetAwaiter().GetResult());
+            _timer = new Timer(TimerCallback, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
+            applicationLifetime.ApplicationStopping.Register(() =>
+            {
+                // Fire and forget with timeout - we can't block shutdown indefinitely
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        await Task.WhenAny(SendMetrics(), Task.Delay(TimeSpan.FromSeconds(30), cts.Token)).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error sending metrics during shutdown");
+                    }
+                });
+            });
 
             var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
             userAgent = $"Toggly.FeatureManagement/{version}";
         }
 
-        private string _lastError = string.Empty;
+        private volatile string _lastError = string.Empty;
         private DateTime? _lastErrorTime = null;
         private DateTime? _lastSend = null;
+
+        private void TimerCallback(object? state)
+        {
+            // Fire and forget with proper error handling
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await SendMetrics().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in timer callback while sending metrics");
+                }
+            });
+        }
 
         private async Task BeforeSendMetrics()
         {
             var measurements = await _metricsRegistryService.GetMeasurementValuesAsync().ConfigureAwait(false);
-            measurements.ToList().ForEach(m => IncrementMeasurement(m.Key, null, m.Value, true));
+            foreach (var m in measurements)
+                IncrementMeasurement(m.Key, null, m.Value, true);
 
             var counters = await _metricsRegistryService.GetCounterValuesAsync().ConfigureAwait(false);
-            counters.ToList().ForEach(m => IncrementMetricCounter(m.Key, null, m.Value, true));
+            foreach (var m in counters)
+                IncrementMetricCounter(m.Key, null, m.Value, true);
 
             var observations = await _metricsRegistryService.GetObservationValuesAsync().ConfigureAwait(false);
-            observations.ToList().ForEach(m => StoreObservationInstance(m.Value.Item1, m.Key, null, m.Value.Item2, true));
+            foreach (var m in observations)
+                StoreObservationInstance(m.Value.Item1, m.Key, null, m.Value.Item2, true);
         }
 
         private async Task SendMetrics()
         {
+            // Prevent concurrent send operations (timer and ApplicationStopping could overlap)
+            if (!await _sendMetricsSemaphore.WaitAsync(0).ConfigureAwait(false))
+            {
+                _logger.LogDebug("SendMetrics already in progress, skipping");
+                return;
+            }
+
             try
             {
                 await BeforeSendMetrics().ConfigureAwait(false);
@@ -119,13 +160,16 @@ namespace Toggly.FeatureManagement
                     InstanceName = appInstanceName
                 };
 
-                var statKeys = _stats.Keys.Select(t => (t.MetricKey, t.FeatureKey)).ToArray().Distinct().ToArray();
-                for (int i = 0; i < statKeys.Length; i++)
+                var statKeys = _stats.Keys
+                    .Select(t => (t.MetricKey, t.FeatureKey))
+                    .Distinct()
+                    .ToList();
+                for (int i = 0; i < statKeys.Count; i++)
                 {
                     var stat = new MetricStatMessage
                     {
                         Value = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
-                        ValueDisabled = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var disabledCount) ? disabledCount : 0,
+                        ValueDisabled = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, false), out var disabledCount) ? disabledCount : 0,
                         Metric = statKeys[i].MetricKey
                     };
                     
@@ -133,13 +177,16 @@ namespace Toggly.FeatureManagement
                     dataPacket.Stats.Add(stat);
                 }
 
-                var counterKeys = _counters.Keys.Select(t => (t.MetricKey, t.FeatureKey)).ToArray().Distinct().ToArray();
-                for (int i = 0; i < counterKeys.Length; i++)
+                var counterKeys = _counters.Keys
+                    .Select(t => (t.MetricKey, t.FeatureKey))
+                    .Distinct()
+                    .ToList();
+                for (int i = 0; i < counterKeys.Count; i++)
                 {
                     var counter = new MetricCounterMessage
                     {
                         Value = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
-                        ValueDisabled = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var disabledCount) ? disabledCount : 0,
+                        ValueDisabled = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, false), out var disabledCount) ? disabledCount : 0,
                         Metric = counterKeys[i].MetricKey
                     };
 
@@ -179,6 +226,10 @@ namespace Toggly.FeatureManagement
                 _lastError = ex.Message;
                 _lastErrorTime = DateTime.UtcNow;
             }
+            finally
+            {
+                _sendMetricsSemaphore.Release();
+            }
         }
 
         public MetricsDebugInfo GetDebugInfo()
@@ -215,11 +266,11 @@ namespace Toggly.FeatureManagement
 
         private void IncrementMeasurement(string metricKey, string? featureKey, double value, bool enabled)
         {
-            double currentValue;
-            do
-            {
-                currentValue = _stats.GetOrAdd((metricKey, featureKey, enabled), 0);
-            } while (!_stats.TryUpdate((metricKey, featureKey, enabled), currentValue + value, currentValue));
+            // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendMetrics
+            _stats.AddOrUpdate(
+                (metricKey, featureKey, enabled),
+                value, // Add: if key doesn't exist, set to value
+                (key, existingValue) => existingValue + value); // Update: if key exists, add value
         }
 
         /// <inheritdoc/>
@@ -260,7 +311,7 @@ namespace Toggly.FeatureManagement
         public async Task ObserveAsync(string metricKey, double value)
         {
             var date = DateTime.UtcNow;
-            _logger.LogTrace("Record ovserved value: {metricKey}", metricKey);
+            _logger.LogTrace("Record observed value: {metricKey}", metricKey);
             StoreObservationInstance(date, metricKey, null, value, true);
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
@@ -273,7 +324,7 @@ namespace Toggly.FeatureManagement
         public async Task ObserveAsync<TContext>(string metricKey, TContext context, double value)
         {
             var date = DateTime.UtcNow;
-            _logger.LogTrace("Record ovserved value: {metricKey}", metricKey);
+            _logger.LogTrace("Record observed value: {metricKey}", metricKey);
             StoreObservationInstance(date, metricKey, null, value, true);
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
@@ -289,11 +340,11 @@ namespace Toggly.FeatureManagement
 
         private void IncrementMetricCounter(string metricKey, string? featureKey, double value, bool enabled)
         {
-            double currentValue;
-            do
-            {
-                currentValue = _counters.GetOrAdd((metricKey, featureKey, enabled), 0);
-            } while (!_counters.TryUpdate((metricKey, featureKey, enabled), currentValue + value, currentValue));
+            // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendMetrics
+            _counters.AddOrUpdate(
+                (metricKey, featureKey, enabled),
+                value, // Add: if key doesn't exist, set to value
+                (key, existingValue) => existingValue + value); // Update: if key exists, add value
         }
 
         /// <inheritdoc/>

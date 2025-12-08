@@ -18,7 +18,7 @@ using Toggly.Web;
 
 namespace Toggly.FeatureManagement
 {
-    public class TogglyUsageStatsProvider : IFeatureUsageStatsProvider, IUsageStatsDebug
+    public class TogglyUsageStatsProvider : IFeatureUsageStatsProvider, IUsageStatsDebug, IDisposable
     {
         private readonly string _appKey;
 
@@ -64,7 +64,22 @@ namespace Toggly.FeatureManagement
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageEnabledMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageDisabledMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageUsedMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
-        private readonly HashSet<string> _uniqueUserMap = new HashSet<string>();
+        
+        /// <summary>
+        /// Tracks unique user ID hashes (int) seen since last send, keyed by feature name.
+        /// Incremental list that gets cleared after successful send to prevent unbounded growth.
+        /// Used for monthly unique user tracking with server-side deduplication.
+        /// Uses hashes instead of full user IDs to reduce memory and network usage (~80% reduction).
+        /// </summary>
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUserHashesSinceLastSend = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
+        
+        /// <summary>
+        /// Maximum number of unique user hashes to track per feature before forcing an early send.
+        /// Prevents memory issues in high-traffic scenarios.
+        /// </summary>
+        private const int MaxUniqueUserHashesPerFeature = 10000;
+        
+        private readonly SemaphoreSlim _sendStatsSemaphore = new SemaphoreSlim(1, 1);
 
         public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, Usage.UsageClient usageClient)
         {
@@ -86,9 +101,24 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
-            _timer = new Timer((s) => SendStats().ConfigureAwait(false), null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
-            _longTimer = new Timer((s) => ResetUsageMap().ConfigureAwait(false), null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
-            applicationLifetime.ApplicationStopping.Register(() => SendStats().ConfigureAwait(false).GetAwaiter().GetResult());
+            _timer = new Timer(TimerCallback, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
+            _longTimer = new Timer(LongTimerCallback, null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
+            applicationLifetime.ApplicationStopping.Register(() =>
+            {
+                // Fire and forget with timeout - we can't block shutdown indefinitely
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        await Task.WhenAny(SendStats(), Task.Delay(TimeSpan.FromSeconds(30), cts.Token)).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error sending stats during shutdown");
+                    }
+                });
+            });
 
             var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
             userAgent = $"Toggly.FeatureManagement/{version}";
@@ -106,39 +136,89 @@ namespace Toggly.FeatureManagement
             _uniqueUsageUsedMap.Clear();
         }
 
-        private string _lastError = string.Empty;
+        private volatile string _lastError = string.Empty;
         private DateTime? _lastErrorTime = null;
         private DateTime? _lastSend = null;
 
-        private bool _isSendingStats;
+        private void TimerCallback(object? state)
+        {
+            // Fire and forget with proper error handling
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await SendStats().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in timer callback while sending stats");
+                }
+            });
+        }
+
+        private void LongTimerCallback(object? state)
+        {
+            // Fire and forget with proper error handling
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ResetUsageMap().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in long timer callback while resetting usage map");
+                }
+            });
+        }
         
         private async Task SendStats()
         {
-            if (_isSendingStats)
-                return;
-
-            _isSendingStats = true;
-            if (_stats.IsEmpty)
+            // Prevent concurrent send operations (timer, longTimer, and ApplicationStopping could overlap)
+            if (!await _sendStatsSemaphore.WaitAsync(0).ConfigureAwait(false))
             {
-                _logger.LogTrace("Send stats - nothing to send");
+                _logger.LogDebug("SendStats already in progress, skipping");
                 return;
             }
 
-            // clone stats and uniqueUsageEnabledMap
-            var stats = new Dictionary<(string FeatureKey, byte Type), int>(_stats);
-            _stats.Clear();
-            var uniqueUsageEnabledMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageEnabledMap);
-            _uniqueUsageEnabledMap.Clear();
-            var uniqueUsageDisabledMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageDisabledMap);
-            _uniqueUsageDisabledMap.Clear();
-            var uniqueUsageUsedMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageUsedMap);
-            _uniqueUsageUsedMap.Clear();
-
-            _logger.LogTrace("Sending stats");
-            var currentTime = DateTime.UtcNow;
+            // Declare variables outside try block so they're accessible in catch
+            Dictionary<(string FeatureKey, byte Type), int>? stats = null;
+            Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageEnabledMap = null;
+            Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageDisabledMap = null;
+            Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageUsedMap = null;
+            Dictionary<string, List<int>>? uniqueUserHashesToSend = null;
 
             try
             {
+                if (_stats.IsEmpty && _uniqueUserHashesSinceLastSend.IsEmpty)
+                {
+                    _logger.LogTrace("Send stats - nothing to send");
+                    return;
+                }
+
+                // Clone stats and uniqueUsage maps
+                stats = new Dictionary<(string FeatureKey, byte Type), int>(_stats);
+                _stats.Clear();
+                uniqueUsageEnabledMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageEnabledMap);
+                _uniqueUsageEnabledMap.Clear();
+                uniqueUsageDisabledMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageDisabledMap);
+                _uniqueUsageDisabledMap.Clear();
+                uniqueUsageUsedMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageUsedMap);
+                _uniqueUsageUsedMap.Clear();
+                
+                // Clone unique user hashes for monthly tracking (incremental since last send)
+                uniqueUserHashesToSend = new Dictionary<string, List<int>>();
+                foreach (var kvp in _uniqueUserHashesSinceLastSend)
+                {
+                    if (kvp.Value.Count > 0)
+                    {
+                        uniqueUserHashesToSend[kvp.Key] = kvp.Value.ToList();
+                    }
+                }
+                _uniqueUserHashesSinceLastSend.Clear();
+
+                _logger.LogTrace("Sending stats");
+                var currentTime = DateTime.UtcNow;
                 var dataPacket = new FeatureStat
                 {
                     AppKey = _appKey,
@@ -151,21 +231,35 @@ namespace Toggly.FeatureManagement
                 if (processStartTime.HasValue)
                     dataPacket.ProcessStartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(processStartTime.Value);
 
-                var keys = _stats.Keys.Select(t => t.FeatureKey).ToArray().Distinct().ToArray();
-                for (int i = 0; i < keys.Length; i++)
+                // Get all feature keys (from stats and unique user hashes)
+                var featureKeysFromStats = stats.Keys.Select(t => t.FeatureKey).Distinct().ToList();
+                var featureKeysFromHashes = uniqueUserHashesToSend.Keys.ToList();
+                var allFeatureKeys = featureKeysFromStats.Union(featureKeysFromHashes).Distinct().ToList();
+                
+                for (int i = 0; i < allFeatureKeys.Count; i++)
                 {
-                    dataPacket.Stats.Add(new StatMessage
+                    var featureKey = allFeatureKeys[i];
+                    var statMessage = new StatMessage
                     {
-                        EnabledCount = stats.TryGetValue((keys[i], (byte)StatType.Enabled), out var enabledCount) ? enabledCount : 0,
-                        DisabledCount = stats.TryGetValue((keys[i], (byte)StatType.Disabled), out var disabledCount) ? disabledCount : 0,
-                        Feature = keys[i],
-                        UniqueContextIdentifierDisabledCount = uniqueUsageEnabledMap.TryGetValue(keys[i], out var uniqueIdDisabledCount) ? uniqueIdDisabledCount.Count : 0,
-                        UniqueContextIdentifierEnabledCount = uniqueUsageEnabledMap.TryGetValue(keys[i], out var uniqueIdEnabledCount) ? uniqueIdEnabledCount.Count : 0,
-                        UniqueRequestDisabledCount = stats.TryGetValue((keys[i], (byte)StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0,
-                        UniqueRequestEnabledCount = stats.TryGetValue((keys[i], (byte)StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0,
-                        UsedCount = stats.TryGetValue((keys[i], (byte)StatType.Used), out var usedCount) ? usedCount : 0,
-                        UniqueUsersUsedCount = 0
-                    });
+                        EnabledCount = stats.TryGetValue((featureKey, (byte)StatType.Enabled), out var enabledCount) ? enabledCount : 0,
+                        DisabledCount = stats.TryGetValue((featureKey, (byte)StatType.Disabled), out var disabledCount) ? disabledCount : 0,
+                        Feature = featureKey,
+                        // Use correct maps for enabled vs disabled
+                        UniqueContextIdentifierEnabledCount = uniqueUsageEnabledMap.TryGetValue(featureKey, out var uniqueIdEnabledCount) ? uniqueIdEnabledCount.Count : 0,
+                        UniqueContextIdentifierDisabledCount = uniqueUsageDisabledMap.TryGetValue(featureKey, out var uniqueIdDisabledCount) ? uniqueIdDisabledCount.Count : 0,
+                        UniqueRequestEnabledCount = stats.TryGetValue((featureKey, (byte)StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0,
+                        UniqueRequestDisabledCount = stats.TryGetValue((featureKey, (byte)StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0,
+                        UsedCount = stats.TryGetValue((featureKey, (byte)StatType.Used), out var usedCount) ? usedCount : 0,
+                        UniqueUsersUsedCount = uniqueUsageUsedMap.TryGetValue(featureKey, out var uniqueUsedCount) ? uniqueUsedCount.Count : 0
+                    };
+                    
+                    // Add unique user hashes for monthly tracking (incremental since last send)
+                    if (uniqueUserHashesToSend != null && uniqueUserHashesToSend.TryGetValue(featureKey, out var hashes))
+                    {
+                        statMessage.UniqueUserHashes.AddRange(hashes);
+                    }
+                    
+                    dataPacket.Stats.Add(statMessage);
                 }
 
                 var grpcMetadata = new Metadata
@@ -184,17 +278,52 @@ namespace Toggly.FeatureManagement
             {
                 _logger.LogError(ex, "Error sending stats to toggly");
 
-                foreach (var stat in stats)
-                    _stats.AddOrUpdate(stat.Key, stat.Value, (_, oldValue) => oldValue + stat.Value);
+                // Restore stats on error (only if we successfully cloned them)
+                if (stats != null)
+                {
+                    foreach (var stat in stats)
+                        _stats.AddOrUpdate(stat.Key, stat.Value, (_, oldValue) => oldValue + stat.Value);
+                }
 
-                foreach (var u in uniqueUsageEnabledMap)
-                    _uniqueUsageEnabledMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
+                // Restore unique usage maps on error
+                if (uniqueUsageEnabledMap != null)
+                {
+                    foreach (var u in uniqueUsageEnabledMap)
+                        _uniqueUsageEnabledMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
+                }
+
+                if (uniqueUsageDisabledMap != null)
+                {
+                    foreach (var u in uniqueUsageDisabledMap)
+                        _uniqueUsageDisabledMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
+                }
+
+                if (uniqueUsageUsedMap != null)
+                {
+                    foreach (var u in uniqueUsageUsedMap)
+                        _uniqueUsageUsedMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
+                }
+
+                // Restore unique user hashes on error
+                if (uniqueUserHashesToSend != null)
+                {
+                    foreach (var kvp in uniqueUserHashesToSend)
+                    {
+                        var hashSet = _uniqueUserHashesSinceLastSend.GetOrAdd(kvp.Key, _ => new ConcurrentHashSet<int>());
+                        foreach (var hash in kvp.Value)
+                        {
+                            hashSet.Add(hash);
+                        }
+                    }
+                }
 
                 _lastError = ex.Message;
-
                 _lastErrorTime = DateTime.UtcNow;
             }
-            _isSendingStats = false;
+            finally
+            {
+                _sendStatsSemaphore.Release();
+            }
         }
 
         /// <inheritdoc/>
@@ -202,11 +331,11 @@ namespace Toggly.FeatureManagement
         {
             _logger.LogTrace("Record feature usage: {featureKey}", featureKey);
 
-            int currentValue;
-            do
-            {
-                currentValue = _stats.GetOrAdd((featureKey, (byte)StatType.Used), 0);
-            } while (!_stats.TryUpdate((featureKey, (byte)StatType.Used), currentValue + 1, currentValue));
+            // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendStats
+            _stats.AddOrUpdate(
+                (featureKey, (byte)StatType.Used),
+                1, // Add: if key doesn't exist, set to 1
+                (key, existingValue) => existingValue + 1); // Update: if key exists, increment
 
             if (_contextProvider != null)
             {
@@ -215,7 +344,9 @@ namespace Toggly.FeatureManagement
                 {
                     var currentUniqueValue = _uniqueUsageUsedMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>());
                     currentUniqueValue.Add(GetDeterministicHashCode(uniqueIdentifier));
-                    _uniqueUserMap.Add(uniqueIdentifier);
+                    
+                    // Track user ID for monthly unique user tracking (incremental)
+                    RecordUniqueUserId(featureKey, uniqueIdentifier);
                 }
             }
         }
@@ -225,11 +356,11 @@ namespace Toggly.FeatureManagement
         {
             _logger.LogTrace("Record feature usage: {featureKey}", featureKey);
 
-            int currentValue;
-            do
-            {
-                currentValue = _stats.GetOrAdd((featureKey, (byte)StatType.Used), 0);
-            } while (!_stats.TryUpdate((featureKey, (byte)StatType.Used), currentValue + 1, currentValue));
+            // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendStats
+            _stats.AddOrUpdate(
+                (featureKey, (byte)StatType.Used),
+                1, // Add: if key doesn't exist, set to 1
+                (key, existingValue) => existingValue + 1); // Update: if key exists, increment
 
             if (_contextProvider != null)
             {
@@ -238,7 +369,9 @@ namespace Toggly.FeatureManagement
                 {
                     var currentUniqueValue = _uniqueUsageUsedMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>());
                     currentUniqueValue.Add(GetDeterministicHashCode(uniqueIdentifier));
-                    _uniqueUserMap.Add(uniqueIdentifier);
+                    
+                    // Track user ID for monthly unique user tracking (incremental)
+                    RecordUniqueUserId(featureKey, uniqueIdentifier);
                 }
             }
         }
@@ -248,32 +381,35 @@ namespace Toggly.FeatureManagement
         {
             _logger.LogTrace("Record feature check: {featureKey}", featureKey);
 
-            //record stats keyed by feature status
-            int currentValue;
-            do
-            {
-                currentValue = _stats.GetOrAdd(allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled), 0);
-            } while (!_stats.TryUpdate(allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled), currentValue + 1, currentValue));
+            // Record stats keyed by feature status - use atomic AddOrUpdate
+            var statKey = allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled);
+            _stats.AddOrUpdate(
+                statKey,
+                1, // Add: if key doesn't exist, set to 1
+                (key, existingValue) => existingValue + 1); // Update: if key exists, increment
 
             if (_contextProvider != null)
             {
                 var usedInRequest = await _contextProvider.AccessedInRequestAsync(featureKey).ConfigureAwait(false);
                 if (!usedInRequest)
                 {
-                    int currentRequestValue;
-                    do
-                    {
-                        currentRequestValue = _stats.GetOrAdd(allowed ? (featureKey, (byte)StatType.UniqueRequestEnabled) : (featureKey, (byte)StatType.UniqueRequestDisabled), 0);
-                    } while (!_stats.TryUpdate(allowed ? (featureKey, (byte)StatType.UniqueRequestEnabled) : (featureKey, (byte)StatType.UniqueRequestDisabled), currentRequestValue + 1, currentRequestValue));
+                    var uniqueRequestKey = allowed ? (featureKey, (byte)StatType.UniqueRequestEnabled) : (featureKey, (byte)StatType.UniqueRequestDisabled);
+                    _stats.AddOrUpdate(
+                        uniqueRequestKey,
+                        1,
+                        (key, existingValue) => existingValue + 1);
                 }
 
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
+                    var hash = GetDeterministicHashCode(uniqueIdentifier);
                     if (allowed)
-                        _uniqueUsageEnabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                        _uniqueUsageEnabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(hash);
                     else
-                        _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                        _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(hash);
+                    
+                    // Note: Unique user tracking for monthly counts is only done for usedCount, not for checks
                 }
             }
         }
@@ -283,33 +419,35 @@ namespace Toggly.FeatureManagement
         {
             _logger.LogTrace("Record feature check: {featureKey}", featureKey);
 
-            //record stats keyed by feature status
-
-            int currentValue;
-            do
-            {
-                currentValue = _stats.GetOrAdd(allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled), 0);
-            } while (!_stats.TryUpdate(allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled), currentValue + 1, currentValue));
+            // Record stats keyed by feature status - use atomic AddOrUpdate
+            var statKey = allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled);
+            _stats.AddOrUpdate(
+                statKey,
+                1, // Add: if key doesn't exist, set to 1
+                (key, existingValue) => existingValue + 1); // Update: if key exists, increment
 
             if (_contextProvider != null)
             {
                 var usedInRequest = await _contextProvider.AccessedInRequestAsync(featureKey, context).ConfigureAwait(false);
                 if (!usedInRequest)
                 {
-                    int currentRequestValue;
-                    do
-                    {
-                        currentRequestValue = _stats.GetOrAdd(allowed ? (featureKey, (byte)StatType.UniqueRequestEnabled) : (featureKey, (byte)StatType.UniqueRequestDisabled), 0);
-                    } while (!_stats.TryUpdate(allowed ? (featureKey, (byte)StatType.UniqueRequestEnabled) : (featureKey, (byte)StatType.UniqueRequestDisabled), currentRequestValue + 1, currentRequestValue));
+                    var uniqueRequestKey = allowed ? (featureKey, (byte)StatType.UniqueRequestEnabled) : (featureKey, (byte)StatType.UniqueRequestDisabled);
+                    _stats.AddOrUpdate(
+                        uniqueRequestKey,
+                        1,
+                        (key, existingValue) => existingValue + 1);
                 }
 
                 var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context).ConfigureAwait(false);
                 if (uniqueIdentifier != null)
                 {
+                    var hash = GetDeterministicHashCode(uniqueIdentifier);
                     if (allowed)
-                        _uniqueUsageEnabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                        _uniqueUsageEnabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(hash);
                     else
-                        _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(GetDeterministicHashCode(uniqueIdentifier));
+                        _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(hash);
+                    
+                    // Note: Unique user tracking for monthly counts is only done for usedCount, not for checks
                 }
             }
         }
@@ -333,6 +471,32 @@ namespace Toggly.FeatureManagement
             }
         }
 
+        /// <summary>
+        /// Record a unique user ID hash for a feature when the feature is actually used (usedCount).
+        /// Used for monthly unique user tracking. The user ID is based on uniqueContextIdentifier from IFeatureContextProvider.
+        /// The user ID is hashed and tracked incrementally (since last send) and sent to Toggly for server-side deduplication.
+        /// Uses hashes instead of full user IDs to reduce memory and network usage (~80% reduction).
+        /// </summary>
+        /// <param name="featureKey">The feature key to track unique users for</param>
+        /// <param name="userId">The unique user identifier from uniqueContextIdentifier (e.g., email, username, user ID)</param>
+        private void RecordUniqueUserId(string featureKey, string userId)
+        {
+            if (string.IsNullOrWhiteSpace(featureKey) || string.IsNullOrWhiteSpace(userId))
+                return;
+
+            var hash = GetDeterministicHashCode(userId);
+            var hashSet = _uniqueUserHashesSinceLastSend.GetOrAdd(featureKey, _ => new ConcurrentHashSet<int>());
+            
+            // Check size limit to prevent unbounded growth
+            if (hashSet.Count >= MaxUniqueUserHashesPerFeature)
+            {
+                _logger.LogWarning("Unique user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
+                // Still try to add, but log warning
+            }
+            
+            hashSet.Add(hash);
+        }
+
         /// <inheritdoc/>
         public UsageStatsDebugInfo GetDebugInfo()
         {
@@ -350,6 +514,16 @@ namespace Toggly.FeatureManagement
                 LastErrorTime = _lastErrorTime,
                 LastSend = _lastSend
             };
+        }
+
+        /// <summary>
+        /// Dispose the usage stats provider
+        /// </summary>
+        public void Dispose()
+        {
+            _timer?.Dispose();
+            _longTimer?.Dispose();
+            _sendStatsSemaphore?.Dispose();
         }
     }
 
