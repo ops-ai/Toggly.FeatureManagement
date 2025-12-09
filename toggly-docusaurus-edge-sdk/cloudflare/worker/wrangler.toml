@@ -1,0 +1,23 @@
+name = "toggly-docusaurus-edge-worker"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# Required environment variables (set via wrangler secret put or dashboard):
+# - TOGGLY_API_BASE_URL
+# - TOGGLY_ENVIRONMENT
+# - TOGGLY_APP_KEY
+# - ORIGIN_BASE_URL
+
+[env.production]
+# Production environment variables can be set via:
+# wrangler secret put TOGGLY_API_BASE_URL --env production
+# wrangler secret put TOGGLY_ENVIRONMENT --env production
+# wrangler secret put TOGGLY_APP_KEY --env production
+# wrangler secret put ORIGIN_BASE_URL --env production
+
+[env.staging]
+# Staging environment variables can be set via:
+# wrangler secret put TOGGLY_API_BASE_URL --env staging
+# wrangler secret put TOGGLY_ENVIRONMENT --env staging
+# wrangler secret put TOGGLY_APP_KEY --env staging
+# wrangler secret put ORIGIN_BASE_URL --env staging
