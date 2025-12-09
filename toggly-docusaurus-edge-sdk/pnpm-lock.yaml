@@ -29,7 +29,7 @@ importers:
 
   cloudflare/worker:
     dependencies:
-      '@toggly/client-core':
+      '@ops-ai/toggly-client-core':
         specifier: workspace:*
         version: link:../../libs/core
     devDependencies:
@@ -66,15 +66,9 @@ importers:
 
   libs/docusaurus-plugin:
     dependencies:
-      '@toggly/client-core':
-        specifier: workspace:*
-        version: link:../core
       glob:
         specifier: ^10.3.10
         version: 10.5.0
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
       react-dom:
         specifier: ^18.0.0
         version: 18.3.1(react@18.3.1)
@@ -85,6 +79,9 @@ importers:
       '@docusaurus/types':
         specifier: ^3.9.2
         version: 3.9.2(react-dom@18.3.1)(react@18.3.1)
+      '@ops-ai/toggly-client-core':
+        specifier: ^0.1.4
+        version: link:../core
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.25
@@ -97,6 +94,9 @@ importers:
       '@types/webpack':
         specifier: ^5.28.0
         version: 5.28.5
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
       typescript:
         specifier: ^5.3.3
         version: 5.9.3

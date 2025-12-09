@@ -11,7 +11,7 @@ import React, {
   useEffect,
   ReactNode,
 } from 'react';
-import { createTogglyClient, type TogglyConfig, type Flags } from '@ops-ai/toggly-client-core';
+import { createTogglyClient, type TogglyConfig, type Flags } from '../lib/toggly-client';
 
 export interface TogglyProviderProps {
   config: TogglyConfig;
@@ -75,11 +75,11 @@ export function TogglyProvider({
     // Initialize client and load flags
     client
       .getFlags()
-      .then((loadedFlags) => {
+      .then((loadedFlags: Flags) => {
         setFlags(loadedFlags);
         setIsReady(true);
       })
-      .catch((err) => {
+      .catch((err: Error) => {
         setError(err);
         setIsReady(true); // Still mark as ready even on error
       });

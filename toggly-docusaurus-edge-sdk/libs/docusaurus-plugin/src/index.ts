@@ -94,31 +94,40 @@ export default function togglyPlugin(
      * Content loaded: Extract x-feature from doc metadata and build route mapping
      */
     async contentLoaded({ content, actions }) {
-      const { config: pluginConfig } = content as {
-        config: TogglyPluginOptions;
-      };
+      try {
+        const { config: pluginConfig } = content as {
+          config: TogglyPluginOptions;
+        };
 
-      // Extract page feature mapping from files
-      // We parse files directly to get x-feature frontmatter
-      // and will map to routes using Docusaurus's routing structure
-      pageFeatureMapping = await extractFromFiles(context);
+        // Extract page feature mapping from files
+        // We parse files directly to get x-feature frontmatter
+        // and will map to routes using Docusaurus's routing structure
+        pageFeatureMapping = await extractFromFiles(context);
 
-      // Store data for configureWebpack and postBuild
-      (this as any).__togglyPluginData = {
-        pageFeatureMapping,
-        config: pluginConfig,
-      };
+        // Store data for configureWebpack and postBuild
+        (this as any).__togglyPluginData = {
+          pageFeatureMapping,
+          config: pluginConfig,
+        };
 
-      if (isDebug) {
-        console.log(
-          `[Toggly Plugin] Found ${Object.keys(pageFeatureMapping).length} pages with x-feature frontmatter`
-        );
-        if (Object.keys(pageFeatureMapping).length > 0) {
-          console.log('[Toggly Plugin] Page feature mappings:');
-          Object.entries(pageFeatureMapping).forEach(([route, feature]) => {
-            console.log(`  ${route} -> ${feature}`);
-          });
+        if (isDebug) {
+          console.log(
+            `[Toggly Plugin] Found ${Object.keys(pageFeatureMapping).length} pages with x-feature frontmatter`
+          );
+          if (Object.keys(pageFeatureMapping).length > 0) {
+            console.log('[Toggly Plugin] Page feature mappings:');
+            Object.entries(pageFeatureMapping).forEach(([route, feature]) => {
+              console.log(`  ${route} -> ${feature}`);
+            });
+          }
         }
+      } catch (error) {
+        console.error('[Toggly Plugin] Error in contentLoaded:', error);
+        // Store empty data to prevent further errors
+        (this as any).__togglyPluginData = {
+          pageFeatureMapping: {},
+          config: options,
+        };
       }
     },
 
@@ -199,6 +208,8 @@ export default function togglyPlugin(
      * Get client modules: Import the client setup module
      */
     getClientModules() {
+      // Return path relative to the dist directory
+      // Both index.js and client/setup.js are in dist/
       return [path.resolve(__dirname, './client/setup')];
     },
   };
