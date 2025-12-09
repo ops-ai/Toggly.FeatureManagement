@@ -1,5 +1,5 @@
 {
-  "name": "@toggly/cloudflare-worker",
+  "name": "@ops-ai/toggly-cloudflare-worker",
   "version": "0.1.0",
   "description": "Cloudflare Worker for enforcing Toggly feature flag gating at the edge",
   "main": "./src/index.ts",
@@ -21,7 +21,7 @@
   "author": "Toggly",
   "license": "MIT",
   "dependencies": {
-    "@toggly/core": "workspace:*"
+    "@ops-ai/toggly-client-core": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240208.0",

@@ -29,9 +29,9 @@ importers:
 
   cloudflare/worker:
     dependencies:
-      '@toggly/core':
+      '@toggly/client-core':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../libs/core
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20240208.0
@@ -52,7 +52,7 @@ importers:
         specifier: ^3.38.0
         version: 3.114.15(@cloudflare/workers-types@4.20251205.0)
 
-  packages/core:
+  libs/core:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^1.6.0
@@ -64,9 +64,9 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1
 
-  packages/docusaurus-plugin:
+  libs/docusaurus-plugin:
     dependencies:
-      '@toggly/core':
+      '@toggly/client-core':
         specifier: workspace:*
         version: link:../core
       glob:

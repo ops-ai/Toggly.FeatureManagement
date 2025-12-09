@@ -1,11 +1,11 @@
 /**
  * Feature flag fetching and caching utilities
  * 
- * Uses @toggly/core to fetch flags and implements edge-side caching
+ * Uses @ops-ai/toggly-client-core to fetch flags and implements edge-side caching
  * using Cloudflare's cache API.
  */
 
-import { createTogglyClient, type TogglyConfig } from '@toggly/core';
+import { createTogglyClient, type TogglyConfig } from '@ops-ai/toggly-client-core';
 import type { RequestContext, Env } from './types';
 
 const FLAGS_CACHE_TTL_SECONDS = 30; // 30 seconds
@@ -22,7 +22,7 @@ function getFlagsCacheKey(context: RequestContext): string {
 
 /**
  * Get feature flags for the given context
- * Uses both @toggly/core's in-memory cache and Cloudflare's cache API
+ * Uses both @ops-ai/toggly-client-core's in-memory cache and Cloudflare's cache API
  */
 export async function getFlags(
   env: Env,
@@ -48,7 +48,7 @@ export async function getFlags(
     }
   }
 
-  // Fetch flags using @toggly/core
+  // Fetch flags using @ops-ai/toggly-client-core
   const client = createTogglyClient(config);
   const flags = await client.getFlags();
 

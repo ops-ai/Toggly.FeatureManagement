@@ -1,0 +1,59 @@
+{
+  "name": "@ops-ai/toggly-docusaurus-plugin",
+  "version": "0.1.0",
+  "description": "Docusaurus plugin and React bindings for Toggly feature flag gating",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.mjs",
+      "require": "./dist/client/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "keywords": [
+    "toggly",
+    "docusaurus",
+    "feature-flags",
+    "react",
+    "documentation"
+  ],
+  "author": "Toggly",
+  "license": "MIT",
+  "dependencies": {
+    "@ops-ai/toggly-client-core": "workspace:*",
+    "glob": "^10.3.10",
+    "react": "^18.3.1"
+  },
+  "peerDependencies": {
+    "@docusaurus/core": "^3.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "@docusaurus/core": "^3.9.2",
+    "@docusaurus/types": "^3.9.2",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/webpack": "^5.28.0",
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0"
+  }
+}

@@ -38,13 +38,13 @@ graph TD
 
 ### Components
 
--   **`@toggly/core`**: Framework-agnostic Toggly client for feature flag evaluation.
--   **`@toggly/docusaurus-plugin`**:
+-   **`@ops-ai/toggly-client-core`**: Framework-agnostic Toggly client for feature flag evaluation.
+-   **`@ops-ai/toggly-docusaurus-plugin`**:
     -   Extracts `x-feature` frontmatter during build.
     -   Generates `toggly-page-features.json` manifest for the Worker.
     -   Injects configuration into the client bundle.
     -   Provides `<Feature>` components and hooks for the UI.
--   **`@toggly/cloudflare-worker`**:
+-   **`@ops-ai/toggly-cloudflare-worker`**:
     -   Reads the manifest to map routes to features.
     -   Enforces page-level gating (404/redirect).
     -   Enforces section-level gating (strips DOM elements).
@@ -56,7 +56,7 @@ graph TD
 In your Docusaurus project:
 
 ```bash
-npm install @toggly/docusaurus-plugin @toggly/core
+npm install @ops-ai/toggly-docusaurus-plugin @ops-ai/toggly-client-core
 ```
 
 ### 2. Configure Docusaurus
@@ -67,7 +67,7 @@ Add the plugin to `docusaurus.config.js`:
 module.exports = {
   plugins: [
     [
-      '@toggly/docusaurus-plugin',
+      '@ops-ai/toggly-docusaurus-plugin',
       {
         baseURI: 'https://client.toggly.io',
         appKey: 'YOUR_APP_KEY',
@@ -96,7 +96,7 @@ This page is only visible if `enterprise_sso` is enabled.
 Wrap content in your MDX files:
 
 ```jsx
-import { Feature } from '@toggly/docusaurus-plugin/client';
+import { Feature } from '@ops-ai/toggly-docusaurus-plugin/client';
 
 <Feature flag="beta_filters">
   ## Advanced Filters
