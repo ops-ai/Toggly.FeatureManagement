@@ -21,6 +21,7 @@ message FeatureStat {
 	optional string instanceName = 6;
 	optional google.protobuf.Timestamp processStartTime = 7;
 	optional string appVersion = 8;
+	repeated int32 uniqueUserHashes = 9; // Application-level unique user ID hashes (all users, regardless of feature usage)
 }
 
 message StatMessage {

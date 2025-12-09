@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31912.275
@@ -31,6 +31,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.Metrics.SystemMetrics", "Toggly.Metrics.SystemMetrics\Toggly.Metrics.SystemMetrics.csproj", "{CD25B466-F67E-41E1-89F2-70BC005F92EE}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Hangfire", "Toggly.FeatureManagement.Hangfire\Toggly.FeatureManagement.Hangfire.csproj", "{04BF68FB-70DC-4A8B-9569-5FC1713113AE}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.NSwag", "Toggly.FeatureManagement.NSwag\Toggly.FeatureManagement.NSwag.csproj", "{42C9FAC7-DEF8-451D-8A86-E274ED8AFBC6}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Toggly.FeatureManagement.Storage.DistributedCache", "Toggly.FeatureManagement.Storage.DistributedCache\Toggly.FeatureManagement.Storage.DistributedCache.csproj", "{26CE7E90-F18F-4308-9853-B4E59CCD75CA}"
 EndProject
@@ -72,6 +74,10 @@ Global
 		{04BF68FB-70DC-4A8B-9569-5FC1713113AE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{04BF68FB-70DC-4A8B-9569-5FC1713113AE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{04BF68FB-70DC-4A8B-9569-5FC1713113AE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{42C9FAC7-DEF8-451D-8A86-E274ED8AFBC6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{42C9FAC7-DEF8-451D-8A86-E274ED8AFBC6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{42C9FAC7-DEF8-451D-8A86-E274ED8AFBC6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{42C9FAC7-DEF8-451D-8A86-E274ED8AFBC6}.Release|Any CPU.Build.0 = Release|Any CPU
 		{26CE7E90-F18F-4308-9853-B4E59CCD75CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{26CE7E90-F18F-4308-9853-B4E59CCD75CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{26CE7E90-F18F-4308-9853-B4E59CCD75CA}.Release|Any CPU.ActiveCfg = Release|Any CPU

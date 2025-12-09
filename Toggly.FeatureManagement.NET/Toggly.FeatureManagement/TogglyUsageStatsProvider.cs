@@ -1,4 +1,4 @@
-﻿using ConcurrentCollections;
+using ConcurrentCollections;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Configuration;
@@ -74,10 +74,24 @@ namespace Toggly.FeatureManagement
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUserHashesSinceLastSend = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
         
         /// <summary>
+        /// Tracks unique user ID hashes (int) at the application level, regardless of feature usage.
+        /// Incremental list that gets cleared after successful send to prevent unbounded growth.
+        /// Used for monthly unique user tracking with server-side deduplication.
+        /// Uses hashes instead of full user IDs to reduce memory and network usage (~80% reduction).
+        /// </summary>
+        private readonly ConcurrentHashSet<int> _applicationUniqueUserHashesSinceLastSend = new ConcurrentHashSet<int>();
+        
+        /// <summary>
         /// Maximum number of unique user hashes to track per feature before forcing an early send.
         /// Prevents memory issues in high-traffic scenarios.
         /// </summary>
         private const int MaxUniqueUserHashesPerFeature = 10000;
+        
+        /// <summary>
+        /// Maximum number of unique user hashes to track at application level before forcing an early send.
+        /// Prevents memory issues in high-traffic scenarios.
+        /// </summary>
+        private const int MaxApplicationUniqueUserHashes = 10000;
         
         private readonly SemaphoreSlim _sendStatsSemaphore = new SemaphoreSlim(1, 1);
 
@@ -187,10 +201,11 @@ namespace Toggly.FeatureManagement
             Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageDisabledMap = null;
             Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageUsedMap = null;
             Dictionary<string, List<int>>? uniqueUserHashesToSend = null;
+            List<int>? applicationUniqueUserHashesToSend = null;
 
             try
             {
-                if (_stats.IsEmpty && _uniqueUserHashesSinceLastSend.IsEmpty)
+                if (_stats.IsEmpty && _uniqueUserHashesSinceLastSend.IsEmpty && _applicationUniqueUserHashesSinceLastSend.IsEmpty)
                 {
                     _logger.LogTrace("Send stats - nothing to send");
                     return;
@@ -216,6 +231,13 @@ namespace Toggly.FeatureManagement
                     }
                 }
                 _uniqueUserHashesSinceLastSend.Clear();
+                
+                // Clone application-level unique user hashes for monthly tracking (incremental since last send)
+                if (_applicationUniqueUserHashesSinceLastSend.Count > 0)
+                {
+                    applicationUniqueUserHashesToSend = _applicationUniqueUserHashesSinceLastSend.ToList();
+                    _applicationUniqueUserHashesSinceLastSend.Clear();
+                }
 
                 _logger.LogTrace("Sending stats");
                 var currentTime = DateTime.UtcNow;
@@ -260,6 +282,12 @@ namespace Toggly.FeatureManagement
                     }
                     
                     dataPacket.Stats.Add(statMessage);
+                }
+                
+                // Add application-level unique user hashes for monthly tracking (incremental since last send)
+                if (applicationUniqueUserHashesToSend != null && applicationUniqueUserHashesToSend.Count > 0)
+                {
+                    dataPacket.UniqueUserHashes.AddRange(applicationUniqueUserHashesToSend);
                 }
 
                 var grpcMetadata = new Metadata
@@ -316,6 +344,15 @@ namespace Toggly.FeatureManagement
                         }
                     }
                 }
+                
+                // Restore application-level unique user hashes on error
+                if (applicationUniqueUserHashesToSend != null)
+                {
+                    foreach (var hash in applicationUniqueUserHashesToSend)
+                    {
+                        _applicationUniqueUserHashesSinceLastSend.Add(hash);
+                    }
+                }
 
                 _lastError = ex.Message;
                 _lastErrorTime = DateTime.UtcNow;
@@ -347,6 +384,9 @@ namespace Toggly.FeatureManagement
                     
                     // Track user ID for monthly unique user tracking (incremental)
                     RecordUniqueUserId(featureKey, uniqueIdentifier);
+                    
+                    // Track user ID at application level for monthly unique user tracking (incremental)
+                    RecordApplicationUniqueUserId(uniqueIdentifier);
                 }
             }
         }
@@ -372,6 +412,9 @@ namespace Toggly.FeatureManagement
                     
                     // Track user ID for monthly unique user tracking (incremental)
                     RecordUniqueUserId(featureKey, uniqueIdentifier);
+                    
+                    // Track user ID at application level for monthly unique user tracking (incremental)
+                    RecordApplicationUniqueUserId(uniqueIdentifier);
                 }
             }
         }
@@ -409,7 +452,8 @@ namespace Toggly.FeatureManagement
                     else
                         _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(hash);
                     
-                    // Note: Unique user tracking for monthly counts is only done for usedCount, not for checks
+                    // Track user ID at application level for monthly unique user tracking (incremental)
+                    RecordApplicationUniqueUserId(uniqueIdentifier);
                 }
             }
         }
@@ -447,7 +491,8 @@ namespace Toggly.FeatureManagement
                     else
                         _uniqueUsageDisabledMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>()).Add(hash);
                     
-                    // Note: Unique user tracking for monthly counts is only done for usedCount, not for checks
+                    // Track user ID at application level for monthly unique user tracking (incremental)
+                    RecordApplicationUniqueUserId(uniqueIdentifier);
                 }
             }
         }
@@ -495,6 +540,30 @@ namespace Toggly.FeatureManagement
             }
             
             hashSet.Add(hash);
+        }
+        
+        /// <summary>
+        /// Record a unique user ID hash at the application level (regardless of feature usage).
+        /// Used for monthly unique user tracking. The user ID is based on uniqueContextIdentifier from IFeatureContextProvider.
+        /// The user ID is hashed and tracked incrementally (since last send) and sent to Toggly for server-side deduplication.
+        /// Uses hashes instead of full user IDs to reduce memory and network usage (~80% reduction).
+        /// </summary>
+        /// <param name="userId">The unique user identifier from uniqueContextIdentifier (e.g., email, username, user ID)</param>
+        private void RecordApplicationUniqueUserId(string userId)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                return;
+
+            var hash = GetDeterministicHashCode(userId);
+            
+            // Check size limit to prevent unbounded growth
+            if (_applicationUniqueUserHashesSinceLastSend.Count >= MaxApplicationUniqueUserHashes)
+            {
+                _logger.LogWarning("Application-level unique user hash limit reached. Consider sending more frequently or increasing limit.");
+                // Still try to add, but log warning
+            }
+            
+            _applicationUniqueUserHashesSinceLastSend.Add(hash);
         }
 
         /// <inheritdoc/>
