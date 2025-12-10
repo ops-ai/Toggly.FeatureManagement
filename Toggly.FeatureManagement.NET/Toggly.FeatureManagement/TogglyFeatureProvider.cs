@@ -1,4 +1,4 @@
-﻿using ConcurrentCollections;
+using ConcurrentCollections;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -184,6 +184,7 @@ namespace Toggly.FeatureManagement
                             _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
                             _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
                         }
+                        _featureStateService.NotifyDefinitionsChanged();
                     }
                 }
             }
@@ -247,6 +248,7 @@ namespace Toggly.FeatureManagement
                 if (currentETag != null) httpClient.DefaultRequestHeaders.IfNoneMatch.Add(currentETag);
 
                 List<FeatureDefinitionModel>? newDefinitions;
+                var definitionsChanged = false;
                 if (_useSignedDefinitions)
                 {
                     var newDefinitionsRequest = await httpClient.GetAsync($"definitions/v2/{_appKey}/{_environment}").ConfigureAwait(false);
@@ -311,6 +313,7 @@ namespace Toggly.FeatureManagement
                     newDefinitions = signedDefinitionsResponse.Defs;
                     _lastETag = newDefinitionsRequest.Headers.ETag;
                     Interlocked.Exchange(ref _lastDefinitionsTimestamp, signedDefinitionsResponse.Timestamp);
+                    definitionsChanged = true;
 
                     if (_snapshotProvider != null)
                         await _snapshotProvider.SaveSnapshotAsync(newDefinitions, signedDefinitionsResponse.Signature, signedDefinitionsResponse.Kid, signedDefinitionsResponse.Timestamp).ConfigureAwait(false);
@@ -333,6 +336,7 @@ namespace Toggly.FeatureManagement
                     _lastETag = newDefinitionsRequest.Headers.ETag;
                     if (_snapshotProvider != null)
                         await _snapshotProvider.SaveSnapshotAsync(newDefinitions).ConfigureAwait(false);
+                    definitionsChanged = true;
                 }
 
                 foreach (var featureDefinition in newDefinitions)
@@ -375,6 +379,11 @@ namespace Toggly.FeatureManagement
                 foreach (var kvp in newExperiments)
                 {
                     _experiments.TryAdd(kvp.Key, kvp.Value);
+                }
+
+                if (definitionsChanged)
+                {
+                    _featureStateService.NotifyDefinitionsChanged();
                 }
                 
                 _loaded = true;

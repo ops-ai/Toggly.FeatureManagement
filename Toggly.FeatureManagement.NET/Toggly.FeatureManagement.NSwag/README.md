@@ -24,16 +24,21 @@ In your `Startup.cs` or `Program.cs`, add the feature gate filtering to your NSw
 ```csharp
 using Toggly.FeatureManagement.NSwag.Configuration;
 
-services.AddOpenApiDocument(config =>
+services.AddOpenApiDocument((config, services) =>
 {
     config.Title = "My API";
     config.DocumentName = "v1";
     
     // Add feature gate filtering
-    config.AddFeatureGateFiltering(services.BuildServiceProvider());
+    config.AddFeatureGateFiltering(services);
     
     // ... rest of your NSwag configuration
 });
+
+// Serve the filtered document (bypasses NSwag internal cache)
+// Important: use UseFeatureAwareOpenApi instead of UseOpenApi
+app.UseFeatureAwareOpenApi();
+app.UseSwaggerUi();
 ```
 
 ### Example Controller
@@ -76,7 +81,7 @@ With `Toggly.FeatureManagement.NSwag`, endpoints are automatically excluded from
 ## Requirements
 
 - .NET Standard 2.1 or later
-- NSwag.AspNetCore 14.6.2 or compatible
+- NSwag.AspNetCore 14.6.3 or compatible
 - Microsoft.FeatureManagement.AspNetCore 4.3.0 or compatible
 - Toggly.FeatureManagement (base package)
 

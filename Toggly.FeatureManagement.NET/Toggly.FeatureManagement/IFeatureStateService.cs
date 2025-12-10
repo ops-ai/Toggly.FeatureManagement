@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Toggly.FeatureManagement
 {
@@ -46,6 +46,16 @@ namespace Toggly.FeatureManagement
         /// <param name="id">The ID of the callback</param>
         /// <returns>True if the handler was found and removed</returns>
         bool UnregisterFeatureStateChange(string featureKey, Guid id);
+
+        /// <summary>
+        /// Register a callback to be executed when feature definitions change.
+        /// </summary>
+        Guid WhenDefinitionsChange(Action action);
+
+        /// <summary>
+        /// Unregister a definitions change callback.
+        /// </summary>
+        bool UnregisterDefinitionsChange(Guid id);
     }
 
     internal interface IFeatureStateInternalService : IFeatureStateService
@@ -56,5 +66,10 @@ namespace Toggly.FeatureManagement
         /// <param name="featureKey">Feature key</param>
         /// <param name="state">The current state of the feature</param>
         void UpdateFeatureState(string featureKey, bool state);
+
+        /// <summary>
+        /// Notify subscribers that definitions have changed.
+        /// </summary>
+        void NotifyDefinitionsChanged();
     }
 }

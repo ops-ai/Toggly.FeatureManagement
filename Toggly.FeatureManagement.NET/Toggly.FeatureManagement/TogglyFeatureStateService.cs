@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 
 namespace Toggly.FeatureManagement
@@ -11,6 +11,7 @@ namespace Toggly.FeatureManagement
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, Action>> _onSubscribers = new ConcurrentDictionary<string, ConcurrentDictionary<Guid, Action>>();
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, Action>> _offSubscribers = new ConcurrentDictionary<string, ConcurrentDictionary<Guid, Action>>();
         private readonly ConcurrentDictionary<string, bool> _featureStates = new ConcurrentDictionary<string, bool>();
+        private readonly ConcurrentDictionary<Guid, Action> _definitionChangeSubscribers = new ConcurrentDictionary<Guid, Action>();
 
         /// <inheritdoc/>
         public Guid WhenFeatureTurnsOn(object featureKey, Action action)
@@ -72,6 +73,20 @@ namespace Toggly.FeatureManagement
         }
 
         /// <inheritdoc/>
+        public Guid WhenDefinitionsChange(Action action)
+        {
+            var id = Guid.NewGuid();
+            _definitionChangeSubscribers.TryAdd(id, action);
+            return id;
+        }
+
+        /// <inheritdoc/>
+        public bool UnregisterDefinitionsChange(Guid id)
+        {
+            return _definitionChangeSubscribers.TryRemove(id, out _);
+        }
+
+        /// <inheritdoc/>
         public void UpdateFeatureState(string featureKey, bool state)
         {
             if (!_featureStates.ContainsKey(featureKey))
@@ -90,6 +105,22 @@ namespace Toggly.FeatureManagement
             else if (!state && _offSubscribers.ContainsKey(featureKey))
                 foreach (var subscriber in _offSubscribers[featureKey])
                     subscriber.Value();
+        }
+
+        /// <inheritdoc/>
+        public void NotifyDefinitionsChanged()
+        {
+            foreach (var subscriber in _definitionChangeSubscribers.Values)
+            {
+                try
+                {
+                    subscriber();
+                }
+                catch
+                {
+                    // Swallow to avoid breaking other subscribers
+                }
+            }
         }
     }
 }

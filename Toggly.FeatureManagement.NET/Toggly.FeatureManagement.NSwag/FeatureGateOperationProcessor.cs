@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Http;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.Mvc;
 using NSwag.Generation.AspNetCore;
@@ -17,15 +18,16 @@ namespace Toggly.FeatureManagement.NSwag
     /// </summary>
     public class FeatureGateOperationProcessor : IOperationProcessor
     {
-        private readonly IServiceProvider _serviceProvider;
-
+        private readonly IServiceProvider? _rootServiceProvider;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
         /// <summary>
         /// Initializes a new instance of the <see cref="FeatureGateOperationProcessor"/> class.
         /// </summary>
-        /// <param name="serviceProvider">The service provider to resolve IFeatureManager.</param>
-        public FeatureGateOperationProcessor(IServiceProvider serviceProvider)
+        /// <param name="serviceProvider">Service provider to resolve IFeatureManager.</param>
+        public FeatureGateOperationProcessor(IServiceProvider? serviceProvider = null)
         {
-            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+            _rootServiceProvider = serviceProvider;
+            _httpContextAccessor = serviceProvider?.GetService(typeof(IHttpContextAccessor)) as IHttpContextAccessor;
         }
 
         /// <summary>
@@ -43,6 +45,13 @@ namespace Toggly.FeatureManagement.NSwag
             if (actionDescriptor == null)
                 return true; // Include if we can't determine the action
 
+            // Prefer request scope for scoped services; fall back to root only for singleton/transient
+            var requestServices = _httpContextAccessor?.HttpContext?.RequestServices;
+            var featureManagerSnapshot = requestServices?.GetService(typeof(IFeatureManagerSnapshot)) as IFeatureManagerSnapshot;
+            var featureManager = featureManagerSnapshot
+                ?? (requestServices?.GetService(typeof(IFeatureManager)) as IFeatureManager)
+                ?? (_rootServiceProvider?.GetService(typeof(IFeatureManager)) as IFeatureManager);
+
             // Check controller-level FeatureGate attribute
             if (actionDescriptor is ControllerActionDescriptor controllerActionDescriptor)
             {
@@ -52,7 +61,7 @@ namespace Toggly.FeatureManagement.NSwag
                     var controllerFeatureGate = controllerType.GetCustomAttribute<FeatureGateAttribute>();
                     if (controllerFeatureGate != null)
                     {
-                        if (!IsFeatureEnabled(controllerFeatureGate))
+                        if (!IsFeatureEnabled(controllerFeatureGate, featureManagerSnapshot, featureManager))
                             return false; // Exclude from Swagger
                     }
                 }
@@ -64,7 +73,7 @@ namespace Toggly.FeatureManagement.NSwag
                     var actionFeatureGate = methodInfo.GetCustomAttribute<FeatureGateAttribute>();
                     if (actionFeatureGate != null)
                     {
-                        if (!IsFeatureEnabled(actionFeatureGate))
+                        if (!IsFeatureEnabled(actionFeatureGate, featureManagerSnapshot, featureManager))
                             return false; // Exclude from Swagger
                     }
                 }
@@ -78,12 +87,10 @@ namespace Toggly.FeatureManagement.NSwag
         /// </summary>
         /// <param name="featureGate">The FeatureGate attribute to evaluate.</param>
         /// <returns>True if the feature gate requirements are met, false otherwise.</returns>
-        private bool IsFeatureEnabled(FeatureGateAttribute featureGate)
+        private bool IsFeatureEnabled(FeatureGateAttribute featureGate, IFeatureManagerSnapshot? featureManagerSnapshot, IFeatureManager? featureManager)
         {
-            // Try to get IFeatureManagerSnapshot first for consistent state during document generation
-            var featureManagerSnapshot = _serviceProvider.GetService(typeof(IFeatureManagerSnapshot)) as IFeatureManagerSnapshot;
-            var featureManager = featureManagerSnapshot ?? 
-                (_serviceProvider.GetService(typeof(IFeatureManager)) as IFeatureManager);
+            if (featureManagerSnapshot == null && featureManager == null)
+                return true; // No provider available, include by default
 
             if (featureManager == null)
                 return true; // If no feature manager, include the operation
