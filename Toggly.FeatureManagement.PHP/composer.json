@@ -1,0 +1,58 @@
+{
+    "name": "toggly/feature-management-php",
+    "description": "Toggly Feature Management library for PHP with Laravel and WordPress support",
+    "type": "library",
+    "keywords": [
+        "toggly",
+        "feature-flags",
+        "feature-management",
+        "feature-toggles",
+        "ab-testing",
+        "laravel",
+        "wordpress"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "opsAI LLC",
+            "email": "support@toggly.io"
+        }
+    ],
+    "require": {
+        "php": "^7.4|^8.0|^8.1|^8.2|^8.3",
+        "psr/container": "^1.0|^2.0",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/simple-cache": "^1.0|^2.0|^3.0",
+        "psr/log": "^1.0|^2.0|^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0|^10.0"
+    },
+    "suggest": {
+        "react/socket": "For WebSocket support",
+        "guzzlehttp/guzzle": "PSR-18 HTTP client implementation",
+        "symfony/http-client": "Alternative PSR-18 HTTP client",
+        "illuminate/support": "For Laravel integration",
+        "illuminate/http": "For Laravel HTTP integration"
+    },
+    "autoload": {
+        "psr-4": {
+            "Toggly\\FeatureManagement\\": "src/Toggly/FeatureManagement/",
+            "Toggly\\Laravel\\": "src/Toggly/Laravel/",
+            "Toggly\\WordPress\\": "src/Toggly/WordPress/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Toggly\\FeatureManagement\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "preferred-install": "dist",
+        "optimize-autoloader": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

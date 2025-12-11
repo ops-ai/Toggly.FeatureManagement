@@ -1,0 +1,135 @@
+<?php
+
+namespace Toggly\Laravel;
+
+use Illuminate\Support\ServiceProvider as BaseServiceProvider;
+use Toggly\FeatureManagement\Config\TogglySettings;
+use Toggly\FeatureManagement\Contracts\FeatureContextProviderInterface;
+use Toggly\FeatureManagement\Contracts\FeatureSnapshotProviderInterface;
+use Toggly\FeatureManagement\Contracts\FeatureStateServiceInterface;
+use Toggly\FeatureManagement\Core\FeatureManager;
+use Toggly\FeatureManagement\Core\FeatureProvider;
+use Toggly\FeatureManagement\Core\FeatureStateService;
+use Toggly\FeatureManagement\Core\MetricsRegistryService;
+use Toggly\FeatureManagement\Core\MetricsService;
+use Toggly\FeatureManagement\Core\UsageStatsProvider;
+use Toggly\FeatureManagement\Http\TogglyHttpClient;
+use Toggly\Laravel\Http\HttpFeatureContextProvider;
+
+class ServiceProvider extends BaseServiceProvider
+{
+    /**
+     * Register services
+     */
+    public function register(): void
+    {
+        // Merge config
+        $this->mergeConfigFrom(__DIR__ . '/config/toggly.php', 'toggly');
+
+        // Register settings
+        $this->app->singleton(TogglySettings::class, function ($app) {
+            return new TogglySettings($app['config']->get('toggly', []));
+        });
+
+        // Register HTTP client
+        $this->app->singleton(TogglyHttpClient::class, function ($app) {
+            $settings = $app->make(TogglySettings::class);
+            $httpClient = $app->make(\Psr\Http\Client\ClientInterface::class);
+            $requestFactory = $app->make(\Psr\Http\Message\RequestFactoryInterface::class);
+            
+            return new TogglyHttpClient(
+                $httpClient,
+                $requestFactory,
+                $settings->getBaseUrl(),
+                'Toggly.FeatureManagement.PHP/1.0',
+                $app->make(\Psr\Log\LoggerInterface::class)
+            );
+        });
+
+        // Register feature state service
+        $this->app->singleton(FeatureStateServiceInterface::class, FeatureStateService::class);
+        $this->app->singleton(FeatureStateService::class);
+
+        // Register metrics registry
+        $this->app->singleton(MetricsRegistryService::class);
+
+        // Register feature provider
+        $this->app->singleton(FeatureProvider::class, function ($app) {
+            $settings = $app->make(TogglySettings::class);
+            $httpClient = $app->make(TogglyHttpClient::class);
+            $stateService = $app->make(FeatureStateServiceInterface::class);
+            $snapshotProvider = $app->bound(FeatureSnapshotProviderInterface::class)
+                ? $app->make(FeatureSnapshotProviderInterface::class)
+                : null;
+            $logger = $app->make(\Psr\Log\LoggerInterface::class);
+
+            return new FeatureProvider($settings, $httpClient, $stateService, $snapshotProvider, $logger);
+        });
+
+        // Register feature manager
+        $this->app->singleton(FeatureManager::class, function ($app) {
+            $featureProvider = $app->make(FeatureProvider::class);
+            $usageStats = $app->make(UsageStatsProvider::class);
+            $secureProvider = $app->make(FeatureProvider::class); // FeatureProvider implements SecureFeatureProviderInterface
+            $authService = $app->bound(\Toggly\FeatureManagement\Contracts\FeatureAuthorizationServiceInterface::class)
+                ? $app->make(\Toggly\FeatureManagement\Contracts\FeatureAuthorizationServiceInterface::class)
+                : null;
+
+            return new FeatureManager($featureProvider, $usageStats, $secureProvider, $authService);
+        });
+
+        // Register usage stats provider
+        $this->app->singleton(UsageStatsProvider::class, function ($app) {
+            $settings = $app->make(TogglySettings::class);
+            $httpClient = $app->make(TogglyHttpClient::class);
+            $contextProvider = $app->bound(FeatureContextProviderInterface::class)
+                ? $app->make(FeatureContextProviderInterface::class)
+                : null;
+            $logger = $app->make(\Psr\Log\LoggerInterface::class);
+
+            return new UsageStatsProvider($settings, $httpClient, $contextProvider, $logger);
+        });
+
+        // Register metrics service
+        $this->app->singleton(MetricsService::class, function ($app) {
+            $settings = $app->make(TogglySettings::class);
+            $httpClient = $app->make(TogglyHttpClient::class);
+            $featureProvider = $app->make(FeatureProvider::class);
+            $metricsRegistry = $app->make(MetricsRegistryService::class);
+            $logger = $app->make(\Psr\Log\LoggerInterface::class);
+
+            return new MetricsService($settings, $httpClient, $featureProvider, $metricsRegistry, $logger);
+        });
+
+        // Register HTTP context provider
+        $this->app->singleton(FeatureContextProviderInterface::class, HttpFeatureContextProvider::class);
+
+        // Register facade
+        $this->app->alias(FeatureManager::class, 'toggly');
+    }
+
+    /**
+     * Bootstrap services
+     */
+    public function boot(): void
+    {
+        // Publish config
+        $this->publishes([
+            __DIR__ . '/config/toggly.php' => config_path('toggly.php'),
+        ], 'toggly-config');
+
+        // Note: Scheduling should be done in app/Console/Kernel.php
+        // Add these to your schedule method:
+        // $schedule->call(function () {
+        //     app(FeatureProvider::class)->refreshFeatures();
+        // })->everyFiveMinutes();
+        // 
+        // $schedule->call(function () {
+        //     app(UsageStatsProvider::class)->sendStats();
+        // })->everyMinute();
+        // 
+        // $schedule->call(function () {
+        //     app(MetricsService::class)->sendMetrics();
+        // })->everyMinute();
+    }
+}
