@@ -18,6 +18,12 @@
             "email": "support@toggly.io"
         }
     ],
+    "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement",
+    "support": {
+        "issues": "https://github.com/ops-ai/Toggly.FeatureManagement/issues",
+        "source": "https://github.com/ops-ai/Toggly.FeatureManagement",
+        "docs": "https://docs.toggly.io/docs/sdks/php"
+    },
     "require": {
         "php": "^7.4|^8.0|^8.1|^8.2|^8.3",
         "psr/container": "^1.0|^2.0",
