@@ -192,13 +192,17 @@ export default function togglyPlugin(
         return {};
       }
 
-      const { config: pluginConfig } = pluginData;
+      const { config: pluginConfig, pageFeatureMapping } = pluginData;
 
       return {
         headTags: [
           {
             tagName: 'script',
             innerHTML: `window.__TOGGLY_CONFIG__ = ${JSON.stringify(pluginConfig)};`,
+          },
+          {
+            tagName: 'script',
+            innerHTML: `window.__TOGGLY_PAGE_FEATURES__ = ${JSON.stringify(pageFeatureMapping)};`,
           },
         ],
       };
@@ -210,7 +214,10 @@ export default function togglyPlugin(
     getClientModules() {
       // Return path relative to the dist directory
       // Both index.js and client/setup.js are in dist/
-      return [path.resolve(__dirname, './client/setup')];
+      return [
+        path.resolve(__dirname, './client/setup'),
+        path.resolve(__dirname, './client/nav-gate'),
+      ];
     },
   };
 }
@@ -237,6 +244,8 @@ async function extractFromFiles(context: LoadContext): Promise<PageFeatureMappin
     ignore: ['node_modules/**'],
   });
 
+  const stripOrderPrefix = (seg: string): string => seg.replace(/^\d+-/, '');
+
   for (const file of files) {
     const filePath = path.join(docsDir, file);
     const content = fs.readFileSync(filePath, 'utf-8');
@@ -253,10 +262,17 @@ async function extractFromFiles(context: LoadContext): Promise<PageFeatureMappin
         // Remove quotes if present
         featureKey = featureKey.replace(/^["']|["']$/g, '');
 
+        // Normalize path similar to Docusaurus: remove numeric order prefixes (NN-)
+        const normalized = file
+          .replace(/\\/g, '/')
+          .split('/')
+          .map(stripOrderPrefix)
+          .join('/');
+
         // Convert file path to Docusaurus route path
         // Docusaurus routes docs as: /docs/<path>
         // File structure: docs/<category>/<file>.md -> /docs/<category>/<file>
-        let routePath = file.replace(/\.(md|mdx)$/, '').replace(/\\/g, '/');
+        let routePath = normalized.replace(/\.(md|mdx)$/, '');
 
         // Handle index files - they become the parent directory route
         if (path.basename(routePath) === 'index') {

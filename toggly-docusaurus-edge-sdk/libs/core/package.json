@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-client-core",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Framework-agnostic Toggly client for feature flag evaluation",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
