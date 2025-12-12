@@ -2,6 +2,7 @@
 
 namespace Toggly\Laravel;
 
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 use Toggly\FeatureManagement\Config\TogglySettings;
 use Toggly\FeatureManagement\Contracts\FeatureContextProviderInterface;
@@ -15,6 +16,7 @@ use Toggly\FeatureManagement\Core\MetricsService;
 use Toggly\FeatureManagement\Core\UsageStatsProvider;
 use Toggly\FeatureManagement\Http\TogglyHttpClient;
 use Toggly\Laravel\Http\HttpFeatureContextProvider;
+use Toggly\Laravel\View\Components\Feature as FeatureComponent;
 
 class ServiceProvider extends BaseServiceProvider
 {
@@ -118,6 +120,15 @@ class ServiceProvider extends BaseServiceProvider
             __DIR__ . '/config/toggly.php' => config_path('toggly.php'),
         ], 'toggly-config');
 
+        // Publish Blade views
+        $this->loadViewsFrom(__DIR__ . '/resources/views', 'toggly');
+
+        // Register Blade component
+        Blade::component('feature', FeatureComponent::class);
+
+        // Register Blade directives
+        $this->registerBladeDirectives();
+
         // Note: Scheduling should be done in app/Console/Kernel.php
         // Add these to your schedule method:
         // $schedule->call(function () {
@@ -131,5 +142,81 @@ class ServiceProvider extends BaseServiceProvider
         // $schedule->call(function () {
         //     app(MetricsService::class)->sendMetrics();
         // })->everyMinute();
+    }
+
+    /**
+     * Register Blade directives for feature flags
+     */
+    private function registerBladeDirectives(): void
+    {
+        // @feature directive (if statement style)
+        Blade::if('feature', function ($feature, $requirement = 'any') {
+            $featureManager = app(FeatureManager::class);
+            $context = $this->buildBladeContext();
+            
+            $features = is_string($feature) ? explode(',', $feature) : (array) $feature;
+            $features = array_map('trim', $features);
+            $requirement = strtolower($requirement);
+
+            if ($requirement === 'all') {
+                // All features must be enabled
+                foreach ($features as $feat) {
+                    if (!$featureManager->isEnabled($feat, $context)) {
+                        return false;
+                    }
+                }
+                return true;
+            } else {
+                // Any feature must be enabled (default)
+                foreach ($features as $feat) {
+                    if ($featureManager->isEnabled($feat, $context)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
+
+        // @unlessfeature directive (opposite of @feature)
+        Blade::if('unlessfeature', function ($feature) {
+            $featureManager = app(FeatureManager::class);
+            $context = $this->buildBladeContext();
+            
+            $features = is_string($feature) ? explode(',', $feature) : (array) $feature;
+            $features = array_map('trim', $features);
+
+            // Return true if NO features are enabled
+            foreach ($features as $feat) {
+                if ($featureManager->isEnabled($feat, $context)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    /**
+     * Build context for Blade directive evaluation
+     */
+    private function buildBladeContext(): array
+    {
+        $context = [];
+
+        if (auth()->check()) {
+            $user = auth()->user();
+            $context['userId'] = $user->id;
+            $context['user_id'] = $user->id;
+            
+            // Add groups if available
+            if (method_exists($user, 'groups')) {
+                $context['groups'] = $user->groups();
+            }
+        }
+
+        if (request()) {
+            $context['ip'] = request()->ip();
+        }
+
+        return $context;
     }
 }
