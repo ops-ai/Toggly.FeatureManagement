@@ -1,0 +1,63 @@
+{
+  "name": "@ops-ai/svelte-feature-flags-toggly",
+  "version": "1.0.0",
+  "description": "Provides feature flags support for Svelte applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
+  "type": "module",
+  "main": "./dist/svelte-feature-flags-toggly.cjs",
+  "module": "./dist/svelte-feature-flags-toggly.es.js",
+  "svelte": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/svelte-feature-flags-toggly.es.js",
+      "require": "./dist/svelte-feature-flags-toggly.cjs",
+      "svelte": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && tsc --emitDeclarationOnly --outDir dist/types",
+    "prepublishOnly": "npm run build",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",
+    "test": "vitest",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "keywords": [
+    "svelte",
+    "feature-flags",
+    "feature-toggles",
+    "toggly",
+    "ab-testing"
+  ],
+  "author": {
+    "name": "Cosmin Atomei",
+    "email": "cosmin.atomei@gmail.com"
+  },
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement/Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.FeatureManagement/Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly#readme",
+  "peerDependencies": {
+    "svelte": "^4.0.0 || ^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^3.0.0",
+    "@types/node": "^20.0.0",
+    "svelte": "^4.2.0",
+    "svelte-check": "^3.6.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

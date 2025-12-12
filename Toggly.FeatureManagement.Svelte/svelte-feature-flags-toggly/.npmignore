@@ -1,0 +1,12 @@
+src
+example
+.svelte-kit
+node_modules
+*.log
+.env
+.env.*
+!.env.example
+tsconfig.json
+vite.config.ts
+svelte.config.js
+.gitignore
