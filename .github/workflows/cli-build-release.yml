@@ -1,0 +1,164 @@
+name: Build and Release CLI
+
+on:
+  push:
+    tags:
+      - 'cli-v*'
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.CLI/**'
+      - '.github/workflows/cli-build-release.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'CLI version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact-name: toggly-cli-linux-x64
+            binary-name: toggly-cli
+          - os: ubuntu-latest
+            rid: linux-arm64
+            artifact-name: toggly-cli-linux-arm64
+            binary-name: toggly-cli
+          - os: windows-latest
+            rid: win-x64
+            artifact-name: toggly-cli-windows-x64
+            binary-name: toggly-cli.exe
+          - os: macos-latest
+            rid: osx-x64
+            artifact-name: toggly-cli-macos-x64
+            binary-name: toggly-cli
+          - os: macos-latest
+            rid: osx-arm64
+            artifact-name: toggly-cli-macos-arm64
+            binary-name: toggly-cli
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore Toggly.CLI/Toggly.CLI.csproj
+
+      - name: Build and publish
+        run: |
+          dotnet publish Toggly.CLI/Toggly.CLI.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained \
+            -p:PublishSingleFile=true \
+            -p:PublishAot=true \
+            -p:PublishTrimmed=true \
+            -p:InvariantGlobalization=true \
+            -o ./publish/${{ matrix.rid }}
+
+      - name: Create archive (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd ./publish/${{ matrix.rid }}
+          tar -czf ../../${{ matrix.artifact-name }}.tar.gz ${{ matrix.binary-name }}
+          cd ../..
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd ./publish/${{ matrix.rid }}
+          Compress-Archive -Path ${{ matrix.binary-name }} -DestinationPath ../../${{ matrix.artifact-name }}.zip
+          cd ../..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-name }}.*
+          retention-days: 30
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/cli-v') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+          pattern: toggly-cli-*
+          merge-multiple: false
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/cli-v}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=cli-v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Toggly CLI ${{ steps.version.outputs.version }}
+          body: |
+            ## Toggly CLI ${{ steps.version.outputs.version }}
+            
+            ### Downloads
+            
+            - **Linux x64**: [toggly-cli-linux-x64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/toggly-cli-linux-x64.tar.gz)
+            - **Linux ARM64**: [toggly-cli-linux-arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/toggly-cli-linux-arm64.tar.gz)
+            - **Windows x64**: [toggly-cli-windows-x64.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/toggly-cli-windows-x64.zip)
+            - **macOS x64 (Intel)**: [toggly-cli-macos-x64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/toggly-cli-macos-x64.tar.gz)
+            - **macOS ARM64 (Apple Silicon)**: [toggly-cli-macos-arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/toggly-cli-macos-arm64.tar.gz)
+            
+            ### Installation
+            
+            After downloading, extract the archive and add the binary to your PATH.
+            
+            **Linux/macOS:**
+            ```bash
+            tar -xzf toggly-cli-*.tar.gz
+            chmod +x toggly-cli
+            sudo mv toggly-cli /usr/local/bin/
+            ```
+            
+            **Windows:**
+            ```powershell
+            Expand-Archive toggly-cli-windows-x64.zip
+            # Add toggly-cli.exe to your PATH
+            ```
+            
+            See the [CLI documentation](https://docs.toggly.io/docs/using-toggly/cli) for more information.
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
