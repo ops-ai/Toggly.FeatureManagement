@@ -54,10 +54,17 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
+      - name: Install dependencies (Linux ARM64)
+        if: matrix.rid == 'linux-arm64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang gcc-aarch64-linux-gnu zlib1g-dev
+
       - name: Restore dependencies
         run: dotnet restore Toggly.CLI/Toggly.CLI.csproj
 
       - name: Build and publish
+        shell: bash
         run: |
           dotnet publish Toggly.CLI/Toggly.CLI.csproj \
             -c Release \
@@ -69,11 +76,33 @@ jobs:
             -p:InvariantGlobalization=true \
             -o ./publish/${{ matrix.rid }}
 
+          # Rename binary to match expected artifact name
+          cd ./publish/${{ matrix.rid }}
+          
+          # Expected binary name
+          TARGET_BIN="${{ matrix.binary-name }}"
+          
+          # Default output name from dotnet publish
+          DEFAULT_BIN="Toggly.CLI"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            DEFAULT_BIN="Toggly.CLI.exe"
+          fi
+
+          if [[ ! -f "$TARGET_BIN" && -f "$DEFAULT_BIN" ]]; then
+            echo "Renaming $DEFAULT_BIN to $TARGET_BIN"
+            mv "$DEFAULT_BIN" "$TARGET_BIN"
+          elif [[ ! -f "$TARGET_BIN" ]]; then
+            echo "Error: Could not find binary. Listing directory:"
+            ls -R
+            exit 1
+          fi
+
       - name: Create archive (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           cd ./publish/${{ matrix.rid }}
+          chmod +x ${{ matrix.binary-name }}
           tar -czf ../../${{ matrix.artifact-name }}.tar.gz ${{ matrix.binary-name }}
           cd ../..
 
