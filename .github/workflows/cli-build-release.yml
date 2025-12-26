@@ -74,7 +74,7 @@ jobs:
             -p:PublishAot=true \
             -p:PublishTrimmed=true \
             -p:InvariantGlobalization=true \
-            -p:StripSymbols=true \
+            -p:StripSymbols=false \
             -o ./publish/${{ matrix.rid }}
 
           # Rename binary to match expected artifact name
