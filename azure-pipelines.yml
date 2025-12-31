@@ -62,6 +62,7 @@ steps:
     projectName: '$(Build.DefinitionName)'
     scanPath: '$(build.artifactstagingdirectory)'
     format: 'ALL'
+    installerVersion: '12.1.9'
     additionalArguments: '--disableBundleAudit --disableRubygems --disableNodeJS --disablePyPkg --disablePyDist --out "$(Agent.BuildDirectory)"'
   continueOnError: true
 
