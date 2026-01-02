@@ -245,7 +245,17 @@ namespace Toggly.FeatureManagement
                     httpClient.Timeout = new TimeSpan(timeout.Value);
                 
                 var currentETag = _lastETag;
-                if (currentETag != null) httpClient.DefaultRequestHeaders.IfNoneMatch.Add(currentETag);
+                if (currentETag != null)
+                {
+                    // Clear any existing If-None-Match headers and add our ETag
+                    httpClient.DefaultRequestHeaders.IfNoneMatch.Clear();
+                    httpClient.DefaultRequestHeaders.IfNoneMatch.Add(currentETag);
+                    _logger.LogDebug("Sending If-None-Match header: {ETag}", currentETag);
+                }
+                else
+                {
+                    _logger.LogDebug("No ETag available, making full request");
+                }
 
                 List<FeatureDefinitionModel>? newDefinitions;
                 var definitionsChanged = false;
@@ -311,7 +321,16 @@ namespace Toggly.FeatureManagement
                     }
 
                     newDefinitions = signedDefinitionsResponse.Defs;
-                    _lastETag = newDefinitionsRequest.Headers.ETag;
+                    var receivedETag = newDefinitionsRequest.Headers.ETag;
+                    if (receivedETag != null)
+                    {
+                        _lastETag = receivedETag;
+                        _logger.LogDebug("Received and stored ETag: {ETag}", receivedETag);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Response did not include ETag header");
+                    }
                     Interlocked.Exchange(ref _lastDefinitionsTimestamp, signedDefinitionsResponse.Timestamp);
                     definitionsChanged = true;
 
@@ -333,7 +352,16 @@ namespace Toggly.FeatureManagement
                         return;
                     }
 
-                    _lastETag = newDefinitionsRequest.Headers.ETag;
+                    var receivedETag = newDefinitionsRequest.Headers.ETag;
+                    if (receivedETag != null)
+                    {
+                        _lastETag = receivedETag;
+                        _logger.LogDebug("Received and stored ETag: {ETag}", receivedETag);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Response did not include ETag header");
+                    }
                     if (_snapshotProvider != null)
                         await _snapshotProvider.SaveSnapshotAsync(newDefinitions).ConfigureAwait(false);
                     definitionsChanged = true;
