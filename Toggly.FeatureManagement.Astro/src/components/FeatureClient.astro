@@ -1,0 +1,144 @@
+---
+/**
+ * FeatureClient - Client-side hydrated feature flag component
+ * 
+ * This component evaluates feature flags on the client side using Astro islands.
+ * Use this when you need dynamic, client-side feature flag evaluation or when
+ * you want to update the UI based on flag changes without a page reload.
+ * 
+ * @example Basic usage with client:load
+ * ```astro
+ * <FeatureClient flag="new-feature" client="load">
+ *   <p>This content hydrates and checks the flag on the client</p>
+ * </FeatureClient>
+ * ```
+ * 
+ * @example With client:visible for lazy loading
+ * ```astro
+ * <FeatureClient flag="beta-widget" client="visible">
+ *   <BetaWidget />
+ * </FeatureClient>
+ * ```
+ * 
+ * @example With fallback
+ * ```astro
+ * <FeatureClient flag="premium-feature" client="load">
+ *   <PremiumContent />
+ *   <div slot="fallback">
+ *     <p>Upgrade to access premium features</p>
+ *   </div>
+ * </FeatureClient>
+ * ```
+ */
+
+interface Props {
+  /** Feature flag key to check */
+  flag: string;
+  /** Hydration strategy: 'load', 'idle', or 'visible' (default: 'load') */
+  client?: 'load' | 'idle' | 'visible';
+  /** Requirement for multiple flags: 'all' or 'any' (default: 'all') */
+  requirement?: 'all' | 'any';
+  /** If true, negates the result (default: false) */
+  negate?: boolean;
+}
+
+const { flag, client = 'load', requirement = 'all', negate = false } = Astro.props;
+---
+
+<div
+  data-toggly-feature={flag}
+  data-toggly-requirement={requirement}
+  data-toggly-negate={negate}
+  data-toggly-hydrate={client}
+  class="toggly-feature-client"
+>
+  <div data-toggly-content>
+    <slot />
+  </div>
+  <div data-toggly-fallback style="display: none;">
+    <slot name="fallback" />
+  </div>
+</div>
+
+<script>
+  import { $flags, $isReady } from '@ops-ai/astro-feature-flags-toggly/client/store';
+
+  // Hydrate all FeatureClient components
+  function hydrateFeatureClients() {
+    const elements = document.querySelectorAll<HTMLElement>('.toggly-feature-client');
+
+    elements.forEach((element) => {
+      const flag = element.dataset.togglyFeature;
+      const requirement = (element.dataset.togglyRequirement as 'all' | 'any') || 'all';
+      const negate = element.dataset.togglyNegate === 'true';
+
+      if (!flag) return;
+
+      const content = element.querySelector<HTMLElement>('[data-toggly-content]');
+      const fallback = element.querySelector<HTMLElement>('[data-toggly-fallback]');
+
+      if (!content || !fallback) return;
+
+      // Subscribe to flags changes
+      const unsubscribe = $flags.subscribe((flags) => {
+        // Wait for flags to be ready
+        const ready = $isReady.get();
+        if (!ready) return;
+
+        // Evaluate flag
+        const flagKeys = flag.split(',').map((k) => k.trim());
+        let isEnabled: boolean;
+
+        if (requirement === 'any') {
+          isEnabled = flagKeys.some((key) => flags[key] === true);
+        } else {
+          isEnabled = flagKeys.every((key) => flags[key] === true);
+        }
+
+        if (negate) {
+          isEnabled = !isEnabled;
+        }
+
+        // Show/hide content based on flag
+        if (isEnabled) {
+          content.style.display = '';
+          fallback.style.display = 'none';
+        } else {
+          content.style.display = 'none';
+          fallback.style.display = '';
+        }
+      });
+
+      // Store unsubscribe function for cleanup
+      (element as any).__togglyUnsubscribe = unsubscribe;
+    });
+  }
+
+  // Hydrate on page load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', hydrateFeatureClients);
+  } else {
+    hydrateFeatureClients();
+  }
+
+  // Re-hydrate on navigation (for view transitions)
+  document.addEventListener('astro:page-load', hydrateFeatureClients);
+
+  // Cleanup on navigation
+  document.addEventListener('astro:before-swap', () => {
+    document.querySelectorAll('.toggly-feature-client').forEach((element) => {
+      const unsubscribe = (element as any).__togglyUnsubscribe;
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    });
+  });
+</script>
+
+<style>
+  .toggly-feature-client {
+    display: contents;
+  }
+</style>
+
+

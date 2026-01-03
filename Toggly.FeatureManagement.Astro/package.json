@@ -1,0 +1,91 @@
+{
+  "name": "@ops-ai/astro-feature-flags-toggly",
+  "version": "1.0.0",
+  "description": "Toggly feature flags SDK for Astro with SSR, SSG, and framework support",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./integration": {
+      "types": "./dist/integration/index.d.ts",
+      "import": "./dist/integration/index.js"
+    },
+    "./components/Feature.astro": "./dist/components/Feature.astro",
+    "./components/FeatureClient.astro": "./dist/components/FeatureClient.astro",
+    "./react": {
+      "types": "./dist/frameworks/react/index.d.ts",
+      "import": "./dist/frameworks/react/index.js"
+    },
+    "./vue": {
+      "types": "./dist/frameworks/vue/index.d.ts",
+      "import": "./dist/frameworks/vue/index.js"
+    },
+    "./svelte": {
+      "types": "./dist/frameworks/svelte/index.d.ts",
+      "import": "./dist/frameworks/svelte/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && npm run copy-astro-components",
+    "copy-astro-components": "mkdir -p dist/components && cp src/components/*.astro dist/components/",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "astro",
+    "feature-flags",
+    "toggly",
+    "feature-toggle",
+    "ssr",
+    "ssg"
+  ],
+  "author": "Ops.AI <hello@ops.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+  },
+  "dependencies": {
+    "nanostores": "^0.10.0",
+    "glob": "^10.3.10"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.5.0",
+    "@types/node": "^20.11.0",
+    "astro": "^4.3.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.3"
+  },
+  "peerDependencies": {
+    "astro": "^4.0.0",
+    "@ops-ai/toggly-client-core": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@nanostores/react": {
+      "optional": true
+    },
+    "@nanostores/vue": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    }
+  }
+}
+
+

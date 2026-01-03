@@ -1,0 +1,79 @@
+---
+/**
+ * Feature - Server-rendered feature flag component for Astro
+ * 
+ * This component evaluates feature flags on the server side during SSR/SSG.
+ * Use this for content that should be evaluated at build time or on each request.
+ * 
+ * @example
+ * ```astro
+ * <Feature flag="new-dashboard">
+ *   <p>This content is only shown when the feature is enabled</p>
+ * </Feature>
+ * ```
+ * 
+ * @example Multiple flags with 'any' requirement
+ * ```astro
+ * <Feature flags={['feature1', 'feature2']} requirement="any">
+ *   <p>Shown if at least one feature is enabled</p>
+ * </Feature>
+ * ```
+ * 
+ * @example With fallback content
+ * ```astro
+ * <Feature flag="beta-feature">
+ *   <p>Beta content</p>
+ *   <div slot="fallback">
+ *     <p>Beta feature not available yet</p>
+ *   </div>
+ * </Feature>
+ * ```
+ */
+
+interface Props {
+  /** Single feature flag key to check */
+  flag?: string;
+  /** Multiple feature flag keys to check */
+  flags?: string[];
+  /** Requirement for multiple flags: 'all' or 'any' (default: 'all') */
+  requirement?: 'all' | 'any';
+  /** If true, negates the result (default: false) */
+  negate?: boolean;
+}
+
+const { flag, flags, requirement = 'all', negate = false } = Astro.props;
+
+// Get Toggly client from Astro.locals
+const toggly = Astro.locals.toggly;
+
+if (!toggly) {
+  console.warn(
+    '[Toggly Feature] Client not found in Astro.locals. ' +
+    'Make sure the Toggly integration is properly configured.'
+  );
+}
+
+// Build feature keys array
+const flagKeys: string[] = [];
+if (flag) {
+  flagKeys.push(flag);
+}
+if (flags && Array.isArray(flags)) {
+  flagKeys.push(...flags);
+}
+
+// Evaluate feature gate
+let isEnabled = false;
+if (toggly && flagKeys.length > 0) {
+  try {
+    isEnabled = await toggly.evaluateGate(flagKeys, requirement, negate);
+  } catch (error) {
+    console.error('[Toggly Feature] Error evaluating feature gate:', error);
+    isEnabled = false;
+  }
+}
+---
+
+{isEnabled ? <slot /> : <slot name="fallback" />}
+
+

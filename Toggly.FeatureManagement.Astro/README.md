@@ -1,0 +1,460 @@
+# Toggly Astro SDK
+
+Feature flag management for Astro applications with support for SSR, SSG, and client-side rendering.
+
+## Features
+
+- 🚀 **Native Astro Components** - Server-rendered `.astro` components for optimal performance
+- 🏝️ **Island Architecture** - Client-side hydration with Astro islands
+- ⚛️ **Framework Support** - React, Vue, and Svelte component wrappers
+- 📄 **Page-Level Gating** - Control entire pages via frontmatter
+- 🔄 **SSR & SSG Support** - Works seamlessly with both rendering modes
+- 🎯 **User Targeting** - Identity-based feature rollouts
+- ⚡ **Lightweight** - Minimal client bundle using nanostores (~300 bytes)
+- 🔌 **Edge Ready** - Optional Cloudflare Worker integration
+
+## Installation
+
+```bash
+npm install @ops-ai/astro-feature-flags-toggly
+```
+
+## Quick Start
+
+### 1. Add the Integration
+
+In your `astro.config.mjs`:
+
+```javascript
+import { defineConfig } from 'astro/config';
+import togglyIntegration from '@ops-ai/astro-feature-flags-toggly/integration';
+
+export default defineConfig({
+  integrations: [
+    togglyIntegration({
+      appKey: process.env.TOGGLY_APP_KEY,
+      environment: process.env.TOGGLY_ENVIRONMENT || 'Production',
+      baseURI: 'https://client.toggly.io',
+      flagDefaults: {
+        // Fallback values when API is unavailable
+        'example-feature': false,
+      },
+      isDebug: process.env.NODE_ENV === 'development',
+    }),
+  ],
+});
+```
+
+### 2. Configure Middleware
+
+Create or update `src/middleware.ts`:
+
+```typescript
+import { sequence } from 'astro:middleware';
+import { createTogglyMiddleware } from '@ops-ai/astro-feature-flags-toggly';
+
+const toggly = createTogglyMiddleware({
+  appKey: import.meta.env.TOGGLY_APP_KEY,
+  environment: import.meta.env.TOGGLY_ENVIRONMENT || 'Production',
+});
+
+export const onRequest = sequence(toggly);
+```
+
+### 3. Use the Feature Component
+
+In your `.astro` files:
+
+```astro
+---
+import Feature from '@ops-ai/astro-feature-flags-toggly/components/Feature.astro';
+---
+
+<Feature flag="new-dashboard">
+  <h1>New Dashboard</h1>
+  <p>This content is only visible when the feature is enabled</p>
+</Feature>
+```
+
+## Usage
+
+### Server-Side Components (Recommended)
+
+Use the `Feature.astro` component for server-side evaluation (SSR/SSG):
+
+```astro
+---
+import Feature from '@ops-ai/astro-feature-flags-toggly/components/Feature.astro';
+---
+
+<!-- Single flag -->
+<Feature flag="beta-feature">
+  <p>Beta content</p>
+</Feature>
+
+<!-- Multiple flags with 'all' requirement -->
+<Feature flags={['feature1', 'feature2']}>
+  <p>Both features must be enabled</p>
+</Feature>
+
+<!-- Multiple flags with 'any' requirement -->
+<Feature flags={['feature1', 'feature2']} requirement="any">
+  <p>At least one feature must be enabled</p>
+</Feature>
+
+<!-- With fallback content -->
+<Feature flag="premium-feature">
+  <p>Premium content</p>
+  <div slot="fallback">
+    <p>Upgrade to unlock this feature</p>
+  </div>
+</Feature>
+
+<!-- Negated (show when disabled) -->
+<Feature flag="old-feature" negate={true}>
+  <p>This shows when the feature is OFF</p>
+</Feature>
+```
+
+### Client-Side Components (Islands)
+
+Use `FeatureClient.astro` for client-side evaluation with hydration:
+
+```astro
+---
+import FeatureClient from '@ops-ai/astro-feature-flags-toggly/components/FeatureClient.astro';
+---
+
+<!-- Hydrate on page load -->
+<FeatureClient flag="interactive-widget" client="load">
+  <InteractiveWidget />
+</FeatureClient>
+
+<!-- Lazy hydration when visible -->
+<FeatureClient flag="below-fold-content" client="visible">
+  <HeavyComponent />
+</FeatureClient>
+
+<!-- Hydrate when browser is idle -->
+<FeatureClient flag="non-critical-feature" client="idle">
+  <NonCriticalContent />
+</FeatureClient>
+```
+
+### Page-Level Gating
+
+Control entire pages using frontmatter:
+
+```astro
+---
+// src/pages/beta-feature.astro
+x-feature: beta-feature
+---
+
+<html>
+  <body>
+    <h1>Beta Feature Page</h1>
+    <p>This entire page is gated by the 'beta-feature' flag</p>
+  </body>
+</html>
+```
+
+During build, the integration generates a `toggly-page-features.json` manifest that can be used with a Cloudflare Worker for true edge enforcement (404s for disabled pages).
+
+### React Integration
+
+Use in React islands:
+
+```tsx
+// Component.tsx
+import { Feature, useFeatureFlag } from '@ops-ai/astro-feature-flags-toggly/react';
+
+// With component
+export function Dashboard() {
+  return (
+    <Feature flag="new-dashboard">
+      <NewDashboard />
+    </Feature>
+  );
+}
+
+// With hook
+export function ConditionalContent() {
+  const { enabled, isReady } = useFeatureFlag('premium-feature');
+
+  if (!isReady) return <Loading />;
+  if (!enabled) return <FreeTier />;
+  return <PremiumTier />;
+}
+```
+
+In your Astro file:
+
+```astro
+---
+import Dashboard from '../components/Dashboard.tsx';
+---
+
+<Dashboard client:load />
+```
+
+### Vue Integration
+
+```vue
+<!-- Component.vue -->
+<script setup>
+import { Feature, useFeatureFlag } from '@ops-ai/astro-feature-flags-toggly/vue';
+
+const { enabled } = useFeatureFlag('new-feature');
+</script>
+
+<template>
+  <Feature flag="beta-widget">
+    <BetaWidget />
+    <template #fallback>
+      <ComingSoon />
+    </template>
+  </Feature>
+
+  <div v-if="enabled">
+    <p>Feature-controlled content</p>
+  </div>
+</template>
+```
+
+### Svelte Integration
+
+```svelte
+<!-- Component.svelte -->
+<script>
+import { Feature, featureFlag } from '@ops-ai/astro-feature-flags-toggly/svelte';
+
+const newDashboard = featureFlag('new-dashboard');
+</script>
+
+<Feature flag="beta-feature">
+  <BetaContent />
+  <svelte:fragment slot="fallback">
+    <RegularContent />
+  </svelte:fragment>
+</Feature>
+
+{#if $newDashboard}
+  <NewDashboard />
+{:else}
+  <OldDashboard />
+{/if}
+```
+
+## Configuration Options
+
+```typescript
+interface TogglyConfig {
+  /** Base URI for the Toggly API (default: 'https://client.toggly.io') */
+  baseURI?: string;
+  
+  /** Application key from Toggly */
+  appKey?: string;
+  
+  /** Environment name (default: 'Production') */
+  environment?: string;
+  
+  /** Default flag values to use when API is unavailable */
+  flagDefaults?: Record<string, boolean>;
+  
+  /** Feature flags refresh interval in milliseconds (default: 180000 = 3 minutes) */
+  featureFlagsRefreshInterval?: number;
+  
+  /** Enable debug logging (default: false) */
+  isDebug?: boolean;
+  
+  /** Connection timeout in milliseconds (default: 5000) */
+  connectTimeout?: number;
+  
+  /** User identity for targeting (optional) */
+  identity?: string;
+}
+```
+
+## SSR vs SSG Considerations
+
+### SSR (Server-Side Rendering)
+
+- Flags are fetched on each request
+- Fresh flag values for every visitor
+- Slightly slower initial page load
+- Use `output: 'server'` in `astro.config.mjs`
+
+```javascript
+export default defineConfig({
+  output: 'server',
+  // ...
+});
+```
+
+### SSG (Static Site Generation)
+
+- Flags are fetched at build time
+- Same flag values for all visitors
+- Fastest possible page loads
+- Requires rebuild to update flags
+- Use client-side components for dynamic updates
+
+```javascript
+export default defineConfig({
+  output: 'static',
+  // ...
+});
+```
+
+### Hybrid Approach
+
+Use server components for critical gating and client components for non-critical features:
+
+```astro
+---
+import Feature from '@ops-ai/astro-feature-flags-toggly/components/Feature.astro';
+import FeatureClient from '@ops-ai/astro-feature-flags-toggly/components/FeatureClient.astro';
+---
+
+<!-- Critical feature - evaluated at build/request time -->
+<Feature flag="access-control">
+  <SecureContent />
+</Feature>
+
+<!-- Non-critical feature - evaluated on client -->
+<FeatureClient flag="ui-enhancement" client="idle">
+  <EnhancedUI />
+</FeatureClient>
+```
+
+## Advanced Usage
+
+### User Identity for Targeting
+
+```typescript
+// In middleware or component
+import { setIdentity } from '@ops-ai/astro-feature-flags-toggly';
+
+// Set user identity for targeting
+setIdentity('user-123');
+
+// Clear identity (e.g., on logout)
+import { clearIdentity } from '@ops-ai/astro-feature-flags-toggly';
+clearIdentity();
+```
+
+### Manual Flag Refresh
+
+```typescript
+import { refreshFlags } from '@ops-ai/astro-feature-flags-toggly';
+
+// Manually refresh flags
+await refreshFlags();
+```
+
+### Programmatic Flag Evaluation
+
+In server-side code:
+
+```typescript
+const toggly = Astro.locals.toggly;
+
+const isEnabled = await toggly.getFlag('feature-key');
+const allFlags = await toggly.getFlags();
+```
+
+## Edge Enforcement (Optional)
+
+For true enforcement at the edge (prevents page access even if client-side JS is disabled):
+
+1. The integration generates `toggly-page-features.json` during build
+2. Deploy a Cloudflare Worker that reads this manifest
+3. The worker intercepts requests and returns 404 for disabled pages
+
+See the [Cloudflare Worker integration guide](https://github.com/ops-ai/Toggly.CloudflareWorker) for setup instructions.
+
+## TypeScript Support
+
+Full TypeScript support is included:
+
+```typescript
+import type {
+  TogglyConfig,
+  Flags,
+  TogglyClient,
+  FeatureProps,
+} from '@ops-ai/astro-feature-flags-toggly';
+
+// Augmented Astro global
+Astro.locals.toggly; // Typed as TogglyClient
+```
+
+## Best Practices
+
+1. **Use Server Components When Possible** - Better performance, no client-side JavaScript
+2. **Set Flag Defaults** - Always provide fallback values for offline scenarios
+3. **Use Environment Variables** - Never hardcode credentials
+4. **Enable Debug Mode in Development** - Helps troubleshoot issues
+5. **Cache Appropriately** - Adjust `featureFlagsRefreshInterval` based on your needs
+6. **Provide User Identity** - Required for targeting and consistent rollouts
+7. **Consider SSR vs SSG** - Choose based on how dynamic your flags need to be
+8. **Use Page-Level Gating** - For entire pages, use frontmatter instead of wrapping all content
+
+## Troubleshooting
+
+### Flags not loading
+
+1. Check that the integration is properly configured in `astro.config.mjs`
+2. Verify `appKey` and `environment` are correct
+3. Enable debug mode: `isDebug: true`
+4. Check browser console and server logs
+
+### TypeScript errors
+
+Make sure you have the necessary dependencies:
+
+```bash
+npm install -D @types/node astro
+```
+
+### Client components not hydrating
+
+Ensure you're using the correct hydration directive:
+
+```astro
+<FeatureClient flag="test" client="load">
+  <!-- content -->
+</FeatureClient>
+```
+
+### Middleware not working
+
+Verify middleware is properly configured in `src/middleware.ts` and exported as `onRequest`.
+
+## Examples
+
+Check the `examples/` directory for complete working examples:
+
+- Basic Astro + Toggly setup
+- SSR with feature flags
+- SSG with client-side updates
+- React/Vue/Svelte islands
+
+## License
+
+MIT
+
+## Support
+
+- [Documentation](https://docs.toggly.io)
+- [GitHub Issues](https://github.com/ops-ai/Toggly.FeatureManagement/issues)
+- [Discord Community](https://discord.gg/toggly)
+
+## Related
+
+- [@ops-ai/toggly-client-core](https://www.npmjs.com/package/@ops-ai/toggly-client-core) - Core client library
+- [@ops-ai/toggly-docusaurus-plugin](https://www.npmjs.com/package/@ops-ai/toggly-docusaurus-plugin) - Docusaurus integration
+- [@ops-ai/react-feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/react-feature-flags-toggly) - React SDK
+
+
