@@ -223,7 +223,14 @@ namespace Toggly.FeatureManagement
                     }
                     finally
                     {
-                        _loadSemaphore.Release();
+                        try
+                        {
+                            _loadSemaphore.Release();
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // Semaphore was disposed during execution, ignore
+                        }
                     }
                 }
 
@@ -488,7 +495,14 @@ namespace Toggly.FeatureManagement
             }
             finally
             {
-                _refreshSemaphore.Release();
+                try
+                {
+                    _refreshSemaphore.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Semaphore was disposed during execution (e.g., during application shutdown), ignore
+                }
             }
         }
 
@@ -648,7 +662,14 @@ namespace Toggly.FeatureManagement
             }
             finally
             {
-                keySemaphore.Release();
+                try
+                {
+                    keySemaphore.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Semaphore was disposed during execution (e.g., during application shutdown), ignore
+                }
             }
         }
 
