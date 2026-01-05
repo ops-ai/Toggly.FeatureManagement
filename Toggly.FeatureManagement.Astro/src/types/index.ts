@@ -102,10 +102,10 @@ export interface FeatureClientProps {
  * Augment Astro global types
  */
 declare global {
-  interface AstroGlobal {
-    locals: {
+  namespace App {
+    interface Locals {
       toggly: TogglyClient;
-    };
+    }
   }
 
   interface Window {

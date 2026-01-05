@@ -2,7 +2,7 @@
  * Vue Composables for Toggly
  */
 
-import { computed, type ComputedRef } from 'vue';
+import { computed, type Ref } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { $flags, $isReady } from '../../client/store.js';
 
@@ -30,8 +30,8 @@ export function useFeatureFlag(
   flagKey: string,
   defaultValue: boolean = false
 ): {
-  enabled: ComputedRef<boolean>;
-  isReady: ComputedRef<boolean>;
+  enabled: Readonly<Ref<boolean>>;
+  isReady: Readonly<Ref<boolean>>;
 } {
   const flags = useStore($flags);
   const isReady = useStore($isReady);
@@ -66,8 +66,8 @@ export function useFeatureGate(
   requirement: 'all' | 'any' = 'all',
   negate: boolean = false
 ): {
-  enabled: ComputedRef<boolean>;
-  isReady: ComputedRef<boolean>;
+  enabled: Readonly<Ref<boolean>>;
+  isReady: Readonly<Ref<boolean>>;
 } {
   const flags = useStore($flags);
   const isReady = useStore($isReady);

@@ -9,13 +9,14 @@ import type { TogglyConfig } from '../types/index.js';
 
 /**
  * Auto-initialize Toggly if configuration is available on window
+ * Only runs in browser environment
  */
-if (typeof window !== 'undefined') {
-  const config = (window as any).__TOGGLY_CONFIG__ as TogglyConfig | undefined;
+if (typeof globalThis !== 'undefined' && typeof (globalThis as any).window !== 'undefined') {
+  const config = (globalThis as any).window.__TOGGLY_CONFIG__ as TogglyConfig | undefined;
 
   if (config) {
     // Initialize client with config from integration
-    initTogglyClient(config).catch((error) => {
+    initTogglyClient(config).catch((error: Error) => {
       console.error('[Toggly] Auto-initialization failed:', error);
     });
   } else {

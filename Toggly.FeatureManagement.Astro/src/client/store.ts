@@ -1,7 +1,8 @@
 /**
  * Toggly Client-Side Store using Nanostores
  * 
- * Provides reactive state management for feature flags on the client side
+ * Provides reactive state management for feature flags on the client side.
+ * This module includes its own embedded Toggly client implementation.
  */
 
 import { atom, computed, type ReadableAtom } from 'nanostores';

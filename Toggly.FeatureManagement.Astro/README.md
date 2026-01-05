@@ -203,7 +203,8 @@ import Dashboard from '../components/Dashboard.tsx';
 ```vue
 <!-- Component.vue -->
 <script setup>
-import { Feature, useFeatureFlag } from '@ops-ai/astro-feature-flags-toggly/vue';
+import Feature from '@ops-ai/astro-feature-flags-toggly/vue/Feature.vue';
+import { useFeatureFlag } from '@ops-ai/astro-feature-flags-toggly/vue';
 
 const { enabled } = useFeatureFlag('new-feature');
 </script>
@@ -227,7 +228,8 @@ const { enabled } = useFeatureFlag('new-feature');
 ```svelte
 <!-- Component.svelte -->
 <script>
-import { Feature, featureFlag } from '@ops-ai/astro-feature-flags-toggly/svelte';
+import Feature from '@ops-ai/astro-feature-flags-toggly/svelte/Feature.svelte';
+import { featureFlag } from '@ops-ai/astro-feature-flags-toggly/svelte';
 
 const newDashboard = featureFlag('new-dashboard');
 </script>
@@ -453,8 +455,8 @@ MIT
 
 ## Related
 
-- [@ops-ai/toggly-client-core](https://www.npmjs.com/package/@ops-ai/toggly-client-core) - Core client library
 - [@ops-ai/toggly-docusaurus-plugin](https://www.npmjs.com/package/@ops-ai/toggly-docusaurus-plugin) - Docusaurus integration
 - [@ops-ai/react-feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/react-feature-flags-toggly) - React SDK
+- [@ops-ai/feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/feature-flags-toggly) - Vanilla JavaScript SDK
 
 

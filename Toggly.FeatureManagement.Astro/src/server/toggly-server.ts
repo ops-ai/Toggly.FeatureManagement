@@ -3,6 +3,7 @@
  * 
  * This module provides server-side feature flag evaluation for Astro applications.
  * It caches flags for SSG builds and fetches fresh flags for SSR requests.
+ * This is a complete, embedded Toggly client implementation.
  */
 
 import type { TogglyConfig, Flags, TogglyClient } from '../types/index.js';

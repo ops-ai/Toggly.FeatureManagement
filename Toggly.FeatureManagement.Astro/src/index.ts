@@ -8,6 +8,9 @@
  * - React, Vue, and Svelte framework wrappers
  * - Frontmatter-based page gating
  * - Optional edge enforcement
+ * 
+ * This SDK includes its own embedded Toggly client implementation,
+ * so no external dependencies on toggly-client-core are needed.
  */
 
 // Integration

@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/astro-feature-flags-toggly",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Toggly feature flags SDK for Astro with SSR, SSG, and framework support",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,6 +15,14 @@
       "types": "./dist/integration/index.d.ts",
       "import": "./dist/integration/index.js"
     },
+    "./client/setup": {
+      "types": "./dist/client/setup.d.ts",
+      "import": "./dist/client/setup.js"
+    },
+    "./client/store": {
+      "types": "./dist/client/store.d.ts",
+      "import": "./dist/client/store.js"
+    },
     "./components/Feature.astro": "./dist/components/Feature.astro",
     "./components/FeatureClient.astro": "./dist/components/FeatureClient.astro",
     "./react": {
@@ -25,17 +33,19 @@
       "types": "./dist/frameworks/vue/index.d.ts",
       "import": "./dist/frameworks/vue/index.js"
     },
+    "./vue/Feature.vue": "./dist/frameworks/vue/Feature.vue",
     "./svelte": {
       "types": "./dist/frameworks/svelte/index.d.ts",
       "import": "./dist/frameworks/svelte/index.js"
-    }
+    },
+    "./svelte/Feature.svelte": "./dist/frameworks/svelte/Feature.svelte"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup && npm run copy-astro-components",
-    "copy-astro-components": "mkdir -p dist/components && cp src/components/*.astro dist/components/",
+    "build": "tsup && npm run copy-components",
+    "copy-components": "mkdir -p dist/components dist/frameworks/vue dist/frameworks/svelte && cp src/components/*.astro dist/components/ && cp src/frameworks/vue/*.vue dist/frameworks/vue/ && cp src/frameworks/svelte/*.svelte dist/frameworks/svelte/",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
@@ -55,22 +65,36 @@
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
   },
   "dependencies": {
-    "nanostores": "^0.10.0",
     "glob": "^10.3.10"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.5.0",
+    "@astrojs/check": "^0.9.0",
+    "@nanostores/react": "^1.0.0",
+    "@nanostores/vue": "^1.0.1",
     "@types/node": "^20.11.0",
-    "astro": "^4.3.0",
+    "@types/react": "^19.2.7",
+    "astro": "^5.16.0",
+    "react": "^19.2.3",
+    "svelte": "^5.46.1",
     "tsup": "^8.0.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vue": "^3.5.26"
   },
   "peerDependencies": {
-    "astro": "^4.0.0",
-    "@ops-ai/toggly-client-core": "^1.0.0"
+    "@nanostores/react": "^1.0.0",
+    "@nanostores/svelte": "^0.10.0",
+    "@nanostores/vue": "^1.0.0",
+    "astro": "^5.0.0",
+    "nanostores": "^1.0.0",
+    "react": ">=18.0.0",
+    "svelte": ">=4.0.0",
+    "vue": ">=3.0.0"
   },
   "peerDependenciesMeta": {
     "@nanostores/react": {
+      "optional": true
+    },
+    "@nanostores/svelte": {
       "optional": true
     },
     "@nanostores/vue": {
@@ -79,13 +103,11 @@
     "react": {
       "optional": true
     },
-    "vue": {
+    "svelte": {
       "optional": true
     },
-    "svelte": {
+    "vue": {
       "optional": true
     }
   }
 }
-
-
