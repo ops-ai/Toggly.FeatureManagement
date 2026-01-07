@@ -153,7 +153,7 @@ namespace Toggly.FeatureManagement.NSwag
         protected virtual async Task<OpenApiDocument> GenerateDocumentAsync(HttpContext context)
         {
             var gen = context.RequestServices.GetRequiredService<IOpenApiDocumentGenerator>();
-            var document = await gen.GenerateAsync("v1");
+            var document = await gen.GenerateAsync(_documentName);
 
             // var document = await _documentProvider.GenerateAsync(_documentName);
 
