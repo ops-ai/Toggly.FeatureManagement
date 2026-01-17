@@ -50,13 +50,13 @@
 		<PackageReference Include="Grpc.Net.Client" Version="2.60.0" />
 		<PackageReference Include="Grpc.Net.ClientFactory" Version="2.60.0" />
 		<PackageReference Include="Grpc.Net.Client.Web" Version="2.60.0" />
-		<PackageReference Include="Grpc.Tools" Version="2.60.0">
+		<PackageReference Include="Grpc.Tools" Version="2.76.0">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="3.1.0" />
 		<PackageReference Include="Microsoft.Extensions.Http" Version="6.0.0" />
-		<PackageReference Include="Microsoft.Extensions.Http.Polly" Version="6.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Http.Polly" Version="10.0.1" />
 		<PackageReference Include="Microsoft.FeatureManagement" Version="*" />
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1">
 		  <PrivateAssets>all</PrivateAssets>
