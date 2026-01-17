@@ -23,27 +23,39 @@ message MetricStat {
 
 message MetricStatMessage {
 	string metric = 1;
-	reserved 2,3;
+	int32 enabledCount = 2 [deprecated = true]; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
+	int32 disabledCount = 3 [deprecated = true]; //optional metric count when feature is disabled
 	optional string feature = 4; //optional feature referenced for subcount
-	double value = 5; //value for metric if feature is not specified, otherwise value when feature is enabled
-	optional double valueDisabled = 6; //value when feature is disabled
+	double value = 5 [deprecated = true]; //value for metric if feature is not specified, otherwise value when feature is enabled
+	optional double valueDisabled = 6 [deprecated = true]; //value when feature is disabled
+	
+	// Multi-variate support - Key: variant name (e.g., "enabled", "control", "variant_a"), Value: metric value
+	map<string, double> variantValues = 7;
 }
 
 message MetricCounterMessage {
 	string metric = 1;
-	reserved 2,3;
+	int32 enabledCount = 2 [deprecated = true]; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
+	int32 disabledCount = 3 [deprecated = true]; //optional metric count when feature is disabled
 	optional string feature = 4; //optional feature referenced for subcount
-	double value = 5; //value for metric if feature is not specified, otherwise value when feature is enabled
-	optional double valueDisabled = 6; //value when feature is disabled
+	double value = 5 [deprecated = true]; //value for metric if feature is not specified, otherwise value when feature is enabled
+	optional double valueDisabled = 6 [deprecated = true]; //value when feature is disabled
+	
+	// Multi-variate support - Key: variant name (e.g., "enabled", "control", "variant_a"), Value: metric value
+	map<string, double> variantValues = 7;
 }
 
 message MetricObservationMessage {
 	google.protobuf.Timestamp time = 1;
 	string metric = 2;
-	reserved 3,4;
+	int32 enabledCount = 3 [deprecated = true]; //total count for metric if feature is not specified, otherwise metric count when feature is enabled
+	int32 disabledCount = 4 [deprecated = true]; //optional metric count when feature is disabled
 	optional string feature = 5; //optional feature referenced for subcount
-	double value = 6; //value for metric if feature is not specified, otherwise value when feature is enabled
-	optional double valueDisabled = 7; //value when feature is disabled
+	double value = 6 [deprecated = true]; //value for metric if feature is not specified, otherwise value when feature is enabled
+	optional double valueDisabled = 7 [deprecated = true]; //value when feature is disabled
+	
+	// Multi-variate support - Key: variant name (e.g., "enabled", "control", "variant_a"), Value: metric value
+	map<string, double> variantValues = 8;
 }
 
 message MetricResult {

@@ -21,17 +21,17 @@ class MetricsService implements MetricsServiceInterface
     private LoggerInterface $logger;
 
     /**
-     * @var array<string, array{enabled: float, disabled: float}> Measurements by metric key
+     * @var array<string, array<string, float>> Measurements by metric key, variant-keyed
      */
     private array $measurements = [];
 
     /**
-     * @var array<string, array{0: int, 1: float, enabled: bool}> Observations
+     * @var array<array{time: int, metricKey: string, featureKey: string|null, variant: string, value: float}> Observations
      */
     private array $observations = [];
 
     /**
-     * @var array<string, array{enabled: float, disabled: float}> Counters by metric key
+     * @var array<string, array<string, float>> Counters by metric key, variant-keyed
      */
     private array $counters = [];
 
@@ -140,47 +140,80 @@ class MetricsService implements MetricsServiceInterface
     }
 
     /**
-     * Increment a measurement
+     * Increment a measurement (backward compatibility)
      */
     private function incrementMeasurement(string $metricKey, ?string $featureKey, float $value, bool $enabled): void
     {
-        $key = $featureKey !== null ? "{$metricKey}:{$featureKey}" : $metricKey;
-        $subKey = $enabled ? 'enabled' : 'disabled';
-
-        if (!isset($this->measurements[$key])) {
-            $this->measurements[$key] = ['enabled' => 0.0, 'disabled' => 0.0];
-        }
-
-        $this->measurements[$key][$subKey] += $value;
+        $variant = $enabled ? 'enabled' : 'disabled';
+        $this->incrementMeasurementVariant($metricKey, $featureKey, $value, $variant);
     }
 
     /**
-     * Store an observation
+     * Increment a measurement with variant support
+     */
+    private function incrementMeasurementVariant(string $metricKey, ?string $featureKey, float $value, string $variant): void
+    {
+        $key = $featureKey !== null ? "{$metricKey}:{$featureKey}" : $metricKey;
+
+        if (!isset($this->measurements[$key])) {
+            $this->measurements[$key] = [];
+        }
+
+        if (!isset($this->measurements[$key][$variant])) {
+            $this->measurements[$key][$variant] = 0.0;
+        }
+
+        $this->measurements[$key][$variant] += $value;
+    }
+
+    /**
+     * Store an observation (backward compatibility)
      */
     private function storeObservation(int $date, string $metricKey, ?string $featureKey, float $value, bool $enabled): void
     {
+        $variant = $enabled ? 'enabled' : 'disabled';
+        $this->storeObservationVariant($date, $metricKey, $featureKey, $value, $variant);
+    }
+
+    /**
+     * Store an observation with variant support
+     */
+    private function storeObservationVariant(int $date, string $metricKey, ?string $featureKey, float $value, string $variant): void
+    {
         $this->observations[] = [
-            0 => $date,
-            1 => $value,
+            'time' => $date,
             'metricKey' => $metricKey,
             'featureKey' => $featureKey,
-            'enabled' => $enabled,
+            'variant' => $variant,
+            'value' => $value,
         ];
     }
 
     /**
-     * Increment a counter
+     * Increment a counter (backward compatibility)
      */
     private function incrementMetricCounter(string $metricKey, ?string $featureKey, float $value, bool $enabled): void
     {
+        $variant = $enabled ? 'enabled' : 'disabled';
+        $this->incrementMetricCounterVariant($metricKey, $featureKey, $value, $variant);
+    }
+
+    /**
+     * Increment a counter with variant support
+     */
+    private function incrementMetricCounterVariant(string $metricKey, ?string $featureKey, float $value, string $variant): void
+    {
         $key = $featureKey !== null ? "{$metricKey}:{$featureKey}" : $metricKey;
-        $subKey = $enabled ? 'enabled' : 'disabled';
 
         if (!isset($this->counters[$key])) {
-            $this->counters[$key] = ['enabled' => 0.0, 'disabled' => 0.0];
+            $this->counters[$key] = [];
         }
 
-        $this->counters[$key][$subKey] += $value;
+        if (!isset($this->counters[$key][$variant])) {
+            $this->counters[$key][$variant] = 0.0;
+        }
+
+        $this->counters[$key][$variant] += $value;
     }
 
     /**
@@ -239,12 +272,11 @@ class MetricsService implements MetricsServiceInterface
             ];
 
             // Process measurements
-            foreach ($measurementsToSend as $key => $values) {
+            foreach ($measurementsToSend as $key => $variantValues) {
                 [$metricKey, $featureKey] = $this->parseKey($key);
                 $stat = [
                     'metric' => $metricKey,
-                    'value' => $values['enabled'],
-                    'valueDisabled' => $values['disabled'],
+                    'variantValues' => $variantValues, // Now sends all variants as a map
                 ];
                 if ($featureKey !== null) {
                     $stat['feature'] = $featureKey;
@@ -253,12 +285,11 @@ class MetricsService implements MetricsServiceInterface
             }
 
             // Process counters
-            foreach ($countersToSend as $key => $values) {
+            foreach ($countersToSend as $key => $variantValues) {
                 [$metricKey, $featureKey] = $this->parseKey($key);
                 $counter = [
                     'metric' => $metricKey,
-                    'value' => $values['enabled'],
-                    'valueDisabled' => $values['disabled'],
+                    'variantValues' => $variantValues, // Now sends all variants as a map
                 ];
                 if ($featureKey !== null) {
                     $counter['feature'] = $featureKey;
@@ -266,19 +297,26 @@ class MetricsService implements MetricsServiceInterface
                 $payload['counters'][] = $counter;
             }
 
-            // Process observations
+            // Process observations (group by time+metric+feature)
+            $observationGroups = [];
             foreach ($observationsToSend as $obs) {
-                $observation = [
-                    'metric' => $obs['metricKey'],
-                    'time' => date('c', $obs[0]),
-                    'value' => $obs['enabled'] ? $obs[1] : 0,
-                    'valueDisabled' => $obs['enabled'] ? 0 : $obs[1],
-                ];
-                if ($obs['featureKey'] !== null) {
-                    $observation['feature'] = $obs['featureKey'];
+                $groupKey = $obs['time'] . ':' . $obs['metricKey'] . ':' . ($obs['featureKey'] ?? '');
+                
+                if (!isset($observationGroups[$groupKey])) {
+                    $observationGroups[$groupKey] = [
+                        'metric' => $obs['metricKey'],
+                        'time' => date('c', $obs['time']),
+                        'variantValues' => [],
+                    ];
+                    if ($obs['featureKey'] !== null) {
+                        $observationGroups[$groupKey]['feature'] = $obs['featureKey'];
+                    }
                 }
-                $payload['observations'][] = $observation;
+                
+                $observationGroups[$groupKey]['variantValues'][$obs['variant']] = $obs['value'];
             }
+            
+            $payload['observations'] = array_values($observationGroups);
 
             // Send to API
             $this->httpClient->post('api/metrics', $payload);

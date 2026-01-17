@@ -66,12 +66,20 @@ namespace Toggly.FeatureManagement
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageUsedMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
         
         /// <summary>
-        /// Tracks unique user ID hashes (int) seen since last send, keyed by feature name.
+        /// Tracks unique user ID hashes (int) who USED features since last send, keyed by feature name.
         /// Incremental list that gets cleared after successful send to prevent unbounded growth.
         /// Used for monthly unique user tracking with server-side deduplication.
         /// Uses hashes instead of full user IDs to reduce memory and network usage (~80% reduction).
         /// </summary>
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUserHashesSinceLastSend = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
+        
+        /// <summary>
+        /// Tracks unique user ID hashes (int) who VIEWED/CHECKED features since last send, keyed by feature name.
+        /// Incremental list that gets cleared after successful send to prevent unbounded growth.
+        /// Used for monthly unique user tracking with server-side deduplication.
+        /// Uses hashes instead of full user IDs to reduce memory and network usage (~80% reduction).
+        /// </summary>
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueViewedUserHashesSinceLastSend = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
         
         /// <summary>
         /// Tracks unique user ID hashes (int) at the application level, regardless of feature usage.
@@ -201,11 +209,12 @@ namespace Toggly.FeatureManagement
             Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageDisabledMap = null;
             Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageUsedMap = null;
             Dictionary<string, List<int>>? uniqueUserHashesToSend = null;
+            Dictionary<string, List<int>>? uniqueViewedUserHashesToSend = null;
             List<int>? applicationUniqueUserHashesToSend = null;
 
             try
             {
-                if (_stats.IsEmpty && _uniqueUserHashesSinceLastSend.IsEmpty && _applicationUniqueUserHashesSinceLastSend.IsEmpty)
+                if (_stats.IsEmpty && _uniqueUserHashesSinceLastSend.IsEmpty && _uniqueViewedUserHashesSinceLastSend.IsEmpty && _applicationUniqueUserHashesSinceLastSend.IsEmpty)
                 {
                     _logger.LogTrace("Send stats - nothing to send");
                     return;
@@ -232,6 +241,17 @@ namespace Toggly.FeatureManagement
                 }
                 _uniqueUserHashesSinceLastSend.Clear();
                 
+                // Clone unique viewed user hashes for monthly tracking (incremental since last send)
+                uniqueViewedUserHashesToSend = new Dictionary<string, List<int>>();
+                foreach (var kvp in _uniqueViewedUserHashesSinceLastSend)
+                {
+                    if (kvp.Value.Count > 0)
+                    {
+                        uniqueViewedUserHashesToSend[kvp.Key] = kvp.Value.ToList();
+                    }
+                }
+                _uniqueViewedUserHashesSinceLastSend.Clear();
+                
                 // Clone application-level unique user hashes for monthly tracking (incremental since last send)
                 if (_applicationUniqueUserHashesSinceLastSend.Count > 0)
                 {
@@ -253,10 +273,11 @@ namespace Toggly.FeatureManagement
                 if (processStartTime.HasValue)
                     dataPacket.ProcessStartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(processStartTime.Value);
 
-                // Get all feature keys (from stats and unique user hashes)
+                // Get all feature keys (from stats, unique user hashes, and unique viewed user hashes)
                 var featureKeysFromStats = stats.Keys.Select(t => t.FeatureKey).Distinct().ToList();
-                var featureKeysFromHashes = uniqueUserHashesToSend.Keys.ToList();
-                var allFeatureKeys = featureKeysFromStats.Union(featureKeysFromHashes).Distinct().ToList();
+                var featureKeysFromUsedHashes = uniqueUserHashesToSend.Keys.ToList();
+                var featureKeysFromViewedHashes = uniqueViewedUserHashesToSend.Keys.ToList();
+                var allFeatureKeys = featureKeysFromStats.Union(featureKeysFromUsedHashes).Union(featureKeysFromViewedHashes).Distinct().ToList();
                 
                 for (int i = 0; i < allFeatureKeys.Count; i++)
                 {
@@ -279,6 +300,12 @@ namespace Toggly.FeatureManagement
                     if (uniqueUserHashesToSend != null && uniqueUserHashesToSend.TryGetValue(featureKey, out var hashes))
                     {
                         statMessage.UniqueUserHashes.AddRange(hashes);
+                    }
+                    
+                    // Add unique viewed user hashes for monthly tracking (incremental since last send)
+                    if (uniqueViewedUserHashesToSend != null && uniqueViewedUserHashesToSend.TryGetValue(featureKey, out var viewedHashes))
+                    {
+                        statMessage.UniqueViewedUserHashes.AddRange(viewedHashes);
                     }
                     
                     dataPacket.Stats.Add(statMessage);
@@ -338,6 +365,19 @@ namespace Toggly.FeatureManagement
                     foreach (var kvp in uniqueUserHashesToSend)
                     {
                         var hashSet = _uniqueUserHashesSinceLastSend.GetOrAdd(kvp.Key, _ => new ConcurrentHashSet<int>());
+                        foreach (var hash in kvp.Value)
+                        {
+                            hashSet.Add(hash);
+                        }
+                    }
+                }
+                
+                // Restore unique viewed user hashes on error
+                if (uniqueViewedUserHashesToSend != null)
+                {
+                    foreach (var kvp in uniqueViewedUserHashesToSend)
+                    {
+                        var hashSet = _uniqueViewedUserHashesSinceLastSend.GetOrAdd(kvp.Key, _ => new ConcurrentHashSet<int>());
                         foreach (var hash in kvp.Value)
                         {
                             hashSet.Add(hash);
@@ -536,6 +576,32 @@ namespace Toggly.FeatureManagement
             if (hashSet.Count >= MaxUniqueUserHashesPerFeature)
             {
                 _logger.LogWarning("Unique user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
+                // Still try to add, but log warning
+            }
+            
+            hashSet.Add(hash);
+        }
+        
+        /// <summary>
+        /// Record a unique user ID hash for a feature when the feature is checked/viewed (but not necessarily used).
+        /// Used for monthly unique user tracking. The user ID is based on uniqueContextIdentifier from IFeatureContextProvider.
+        /// The user ID is hashed and tracked incrementally (since last send) and sent to Toggly for server-side deduplication.
+        /// Uses hashes instead of full user IDs to reduce memory and network usage (~80% reduction).
+        /// </summary>
+        /// <param name="featureKey">The feature key to track unique viewed users for</param>
+        /// <param name="userId">The unique user identifier from uniqueContextIdentifier (e.g., email, username, user ID)</param>
+        private void RecordUniqueViewedUserId(string featureKey, string userId)
+        {
+            if (string.IsNullOrWhiteSpace(featureKey) || string.IsNullOrWhiteSpace(userId))
+                return;
+
+            var hash = GetDeterministicHashCode(userId);
+            var hashSet = _uniqueViewedUserHashesSinceLastSend.GetOrAdd(featureKey, _ => new ConcurrentHashSet<int>());
+            
+            // Check size limit to prevent unbounded growth
+            if (hashSet.Count >= MaxUniqueUserHashesPerFeature)
+            {
+                _logger.LogWarning("Unique viewed user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
                 // Still try to add, but log warning
             }
             

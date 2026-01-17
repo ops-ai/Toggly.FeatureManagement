@@ -40,9 +40,14 @@ class UsageStatsProvider implements UsageStatsProviderInterface
     private array $uniqueUsageUsed = [];
 
     /**
-     * @var array<string, array<int>> Unique user hashes for monthly tracking
+     * @var array<string, array<int>> Unique user hashes for monthly tracking (USED)
      */
     private array $uniqueUserHashes = [];
+
+    /**
+     * @var array<string, array<int>> Unique viewed user hashes for monthly tracking (VIEWED)
+     */
+    private array $uniqueViewedUserHashes = [];
 
     /**
      * @var array<int> Application-level unique user hashes
@@ -173,7 +178,7 @@ class UsageStatsProvider implements UsageStatsProviderInterface
     }
 
     /**
-     * Record unique user ID for a feature
+     * Record unique user ID for a feature (USED tracking)
      */
     private function recordUniqueUserId(string $featureKey, string $userId): void
     {
@@ -192,6 +197,30 @@ class UsageStatsProvider implements UsageStatsProviderInterface
 
         if (!in_array($hash, $this->uniqueUserHashes[$featureKey], true)) {
             $this->uniqueUserHashes[$featureKey][] = $hash;
+        }
+    }
+
+    /**
+     * Record unique viewed user ID for a feature (VIEWED tracking)
+     */
+    private function recordUniqueViewedUserId(string $featureKey, string $userId): void
+    {
+        if (empty($featureKey) || empty($userId)) {
+            return;
+        }
+
+        $hash = $this->getDeterministicHashCode($userId);
+        if (!isset($this->uniqueViewedUserHashes[$featureKey])) {
+            $this->uniqueViewedUserHashes[$featureKey] = [];
+        }
+
+        if (count($this->uniqueViewedUserHashes[$featureKey]) >= self::MAX_UNIQUE_USER_HASHES_PER_FEATURE) {
+            $this->logger->warning("Unique viewed user hash limit reached for feature", ['feature' => $featureKey]);
+            return;
+        }
+
+        if (!in_array($hash, $this->uniqueViewedUserHashes[$featureKey], true)) {
+            $this->uniqueViewedUserHashes[$featureKey][] = $hash;
         }
     }
 
@@ -239,7 +268,7 @@ class UsageStatsProvider implements UsageStatsProviderInterface
             return;
         }
 
-        if (empty($this->stats) && empty($this->uniqueUserHashes) && empty($this->applicationUniqueUserHashes)) {
+        if (empty($this->stats) && empty($this->uniqueUserHashes) && empty($this->uniqueViewedUserHashes) && empty($this->applicationUniqueUserHashes)) {
             $this->logger->debug('No stats to send');
             return;
         }
@@ -253,6 +282,7 @@ class UsageStatsProvider implements UsageStatsProviderInterface
             $uniqueDisabledToSend = $this->uniqueUsageDisabled;
             $uniqueUsedToSend = $this->uniqueUsageUsed;
             $uniqueHashesToSend = $this->uniqueUserHashes;
+            $uniqueViewedHashesToSend = $this->uniqueViewedUserHashes;
             $appHashesToSend = $this->applicationUniqueUserHashes;
 
             // Clear current stats
@@ -261,6 +291,7 @@ class UsageStatsProvider implements UsageStatsProviderInterface
             $this->uniqueUsageDisabled = [];
             $this->uniqueUsageUsed = [];
             $this->uniqueUserHashes = [];
+            $this->uniqueViewedUserHashes = [];
             $this->applicationUniqueUserHashes = [];
 
             // Build payload
@@ -278,7 +309,8 @@ class UsageStatsProvider implements UsageStatsProviderInterface
                 array_keys($uniqueEnabledToSend),
                 array_keys($uniqueDisabledToSend),
                 array_keys($uniqueUsedToSend),
-                array_keys($uniqueHashesToSend)
+                array_keys($uniqueHashesToSend),
+                array_keys($uniqueViewedHashesToSend)
             ));
 
             foreach ($featureKeys as $featureKey) {
@@ -294,9 +326,14 @@ class UsageStatsProvider implements UsageStatsProviderInterface
                     'uniqueUsersUsedCount' => count($uniqueUsedToSend[$featureKey] ?? []),
                 ];
 
-                // Add unique user hashes
+                // Add unique user hashes (USED tracking)
                 if (isset($uniqueHashesToSend[$featureKey])) {
                     $stat['uniqueUserHashes'] = $uniqueHashesToSend[$featureKey];
+                }
+
+                // Add unique viewed user hashes (VIEWED tracking)
+                if (isset($uniqueViewedHashesToSend[$featureKey])) {
+                    $stat['uniqueViewedUserHashes'] = $uniqueViewedHashesToSend[$featureKey];
                 }
 
                 $payload['stats'][] = $stat;
@@ -319,6 +356,7 @@ class UsageStatsProvider implements UsageStatsProviderInterface
             $this->uniqueUsageDisabled = array_merge_recursive($this->uniqueUsageDisabled, $uniqueDisabledToSend ?? []);
             $this->uniqueUsageUsed = array_merge_recursive($this->uniqueUsageUsed, $uniqueUsedToSend ?? []);
             $this->uniqueUserHashes = array_merge_recursive($this->uniqueUserHashes, $uniqueHashesToSend ?? []);
+            $this->uniqueViewedUserHashes = array_merge_recursive($this->uniqueViewedUserHashes, $uniqueViewedHashesToSend ?? []);
             $this->applicationUniqueUserHashes = array_merge($this->applicationUniqueUserHashes, $appHashesToSend ?? []);
 
             $this->logger->error('Error sending stats to Toggly', ['error' => $e->getMessage()]);

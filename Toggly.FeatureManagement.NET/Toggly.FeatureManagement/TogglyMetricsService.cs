@@ -32,11 +32,12 @@ namespace Toggly.FeatureManagement
 
         private readonly IHttpClientFactory _clientFactory;
 
-        private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), double> _stats = new ConcurrentDictionary<(string, string?, bool), double>();
+        // Multi-variant support: Track metrics per variant name instead of boolean enabled/disabled
+        private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, string Variant), double> _stats = new ConcurrentDictionary<(string, string?, string), double>();
         
-        private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), double> _counters = new ConcurrentDictionary<(string, string?, bool), double>();
+        private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, string Variant), double> _counters = new ConcurrentDictionary<(string, string?, string), double>();
         
-        private readonly ConcurrentBag<(DateTime Date, string MetricKey, string? FeatureKey, bool Enabled, double Value)> _observations = new ConcurrentBag<(DateTime, string, string?, bool, double)>();
+        private readonly ConcurrentBag<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)> _observations = new ConcurrentBag<(DateTime, string, string?, string, double)>();
 
         private readonly Timer _timer;
 
@@ -168,13 +169,29 @@ namespace Toggly.FeatureManagement
                 {
                     var stat = new MetricStatMessage
                     {
-                        Value = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
-                        ValueDisabled = _stats.TryRemove((statKeys[i].MetricKey, statKeys[i].FeatureKey, false), out var disabledCount) ? disabledCount : 0,
                         Metric = statKeys[i].MetricKey
                     };
                     
                     if (statKeys[i].FeatureKey != null) stat.Feature = statKeys[i].FeatureKey;
-                    dataPacket.Stats.Add(stat);
+                    
+                    // Collect all variants for this metric+feature combination
+                    var variantsToRemove = _stats.Keys
+                        .Where(k => k.MetricKey == statKeys[i].MetricKey && k.FeatureKey == statKeys[i].FeatureKey)
+                        .ToList();
+                    
+                    foreach (var key in variantsToRemove)
+                    {
+                        if (_stats.TryRemove(key, out var value) && value > 0)
+                        {
+                            stat.VariantValues[key.Variant] = value;
+                        }
+                    }
+                    
+                    // Only add if we have variant values
+                    if (stat.VariantValues.Count > 0)
+                    {
+                        dataPacket.Stats.Add(stat);
+                    }
                 }
 
                 var counterKeys = _counters.Keys
@@ -185,28 +202,55 @@ namespace Toggly.FeatureManagement
                 {
                     var counter = new MetricCounterMessage
                     {
-                        Value = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, true), out var enabledCount) ? enabledCount : 0,
-                        ValueDisabled = _counters.TryRemove((counterKeys[i].MetricKey, counterKeys[i].FeatureKey, false), out var disabledCount) ? disabledCount : 0,
                         Metric = counterKeys[i].MetricKey
                     };
 
                     if (counterKeys[i].FeatureKey != null) counter.Feature = counterKeys[i].FeatureKey;
-                    dataPacket.Counters.Add(counter);
+                    
+                    // Collect all variants for this metric+feature combination
+                    var variantsToRemove = _counters.Keys
+                        .Where(k => k.MetricKey == counterKeys[i].MetricKey && k.FeatureKey == counterKeys[i].FeatureKey)
+                        .ToList();
+                    
+                    foreach (var key in variantsToRemove)
+                    {
+                        if (_counters.TryRemove(key, out var value) && value > 0)
+                        {
+                            counter.VariantValues[key.Variant] = value;
+                        }
+                    }
+                    
+                    // Only add if we have variant values
+                    if (counter.VariantValues.Count > 0)
+                    {
+                        dataPacket.Counters.Add(counter);
+                    }
                 }
 
+                // Group observations by metric+feature+time, then aggregate variants
+                var observationGroups = new System.Collections.Generic.Dictionary<(DateTime, string, string?), MetricObservationMessage>();
+                
                 while (_observations.TryTake(out var observation))
                 {
-                    var observationMessage = new MetricObservationMessage
-                    {
-                        Time = observation.Date.ToTimestamp(),
-                        Value = observation.Enabled ? observation.Value : 0,
-                        ValueDisabled = !observation.Enabled ? observation.Value : 0,
-                        Metric = observation.MetricKey
-                    };
+                    var key = (observation.Date, observation.MetricKey, observation.FeatureKey);
                     
-                    if (observation.FeatureKey != null) observationMessage.Feature = observation.FeatureKey;
-                    dataPacket.Observations.Add(observationMessage);
+                    if (!observationGroups.TryGetValue(key, out var observationMessage))
+                    {
+                        observationMessage = new MetricObservationMessage
+                        {
+                            Time = observation.Date.ToTimestamp(),
+                            Metric = observation.MetricKey
+                        };
+                        
+                        if (observation.FeatureKey != null) observationMessage.Feature = observation.FeatureKey;
+                        observationGroups[key] = observationMessage;
+                    }
+                    
+                    // Add to variant values map
+                    observationMessage.VariantValues[observation.Variant] = observation.Value;
                 }
+                
+                dataPacket.Observations.AddRange(observationGroups.Values);
 
                 var grpcMetadata = new Metadata
                 {
@@ -266,9 +310,16 @@ namespace Toggly.FeatureManagement
 
         private void IncrementMeasurement(string metricKey, string? featureKey, double value, bool enabled)
         {
+            // Map boolean to variant name for backward compatibility
+            var variant = enabled ? "enabled" : "disabled";
+            IncrementMeasurement(metricKey, featureKey, value, variant);
+        }
+        
+        private void IncrementMeasurement(string metricKey, string? featureKey, double value, string variant)
+        {
             // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendMetrics
             _stats.AddOrUpdate(
-                (metricKey, featureKey, enabled),
+                (metricKey, featureKey, variant),
                 value, // Add: if key doesn't exist, set to value
                 (key, existingValue) => existingValue + value); // Update: if key exists, add value
         }
@@ -304,7 +355,14 @@ namespace Toggly.FeatureManagement
 
         private void StoreObservationInstance(DateTime date, string metricKey, string? featureKey, double value, bool enabled)
         {
-            _observations.Add((date, metricKey, featureKey, enabled, value));
+            // Map boolean to variant name for backward compatibility
+            var variant = enabled ? "enabled" : "disabled";
+            StoreObservationInstance(date, metricKey, featureKey, value, variant);
+        }
+        
+        private void StoreObservationInstance(DateTime date, string metricKey, string? featureKey, double value, string variant)
+        {
+            _observations.Add((date, metricKey, featureKey, variant, value));
         }
 
         /// <inheritdoc/>
@@ -340,9 +398,16 @@ namespace Toggly.FeatureManagement
 
         private void IncrementMetricCounter(string metricKey, string? featureKey, double value, bool enabled)
         {
+            // Map boolean to variant name for backward compatibility
+            var variant = enabled ? "enabled" : "disabled";
+            IncrementMetricCounter(metricKey, featureKey, value, variant);
+        }
+        
+        private void IncrementMetricCounter(string metricKey, string? featureKey, double value, string variant)
+        {
             // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendMetrics
             _counters.AddOrUpdate(
-                (metricKey, featureKey, enabled),
+                (metricKey, featureKey, variant),
                 value, // Add: if key doesn't exist, set to value
                 (key, existingValue) => existingValue + value); // Update: if key exists, add value
         }
@@ -395,9 +460,9 @@ namespace Toggly.FeatureManagement
         public string? BaseUrl { get; set; }
 
         /// <summary>
-        /// Currently collected stats
+        /// Currently collected stats (multi-variant support)
         /// </summary>
-        public ConcurrentDictionary<(string MetricKey, string? FeatureKey, bool Enabled), double>? Stats { get; set; }
+        public ConcurrentDictionary<(string MetricKey, string? FeatureKey, string Variant), double>? Stats { get; set; }
 
         /// <summary>
         /// The user agent
