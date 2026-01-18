@@ -20,7 +20,7 @@ using Toggly.Web;
 
 namespace Toggly.FeatureManagement
 {
-    public class TogglyMetricsService : IMetricsService, IMetricsDebug
+    public class TogglyMetricsService : IMetricsService, IMetricsDebug, IDisposable
     {
         private readonly string _appKey;
 
@@ -59,6 +59,9 @@ namespace Toggly.FeatureManagement
         /// </summary>
         private readonly SemaphoreSlim _sendMetricsSemaphore = new SemaphoreSlim(1, 1);
 
+        private volatile bool _disposed = false;
+        private volatile bool _shuttingDown = false;
+
         public TogglyMetricsService(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, IFeatureDefinitionProvider featureDefinitionProvider, IFeatureManager featureManager, Metrics.MetricsClient metricsClient)
         {
             _appKey = togglySettings.Value.AppKey;
@@ -74,25 +77,72 @@ namespace Toggly.FeatureManagement
             _logger = loggerFactory.CreateLogger<TogglyMetricsService>();
 
             _timer = new Timer(TimerCallback, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
-            applicationLifetime.ApplicationStopping.Register(() =>
-            {
-                // Fire and forget with timeout - we can't block shutdown indefinitely
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                        await Task.WhenAny(SendMetrics(), Task.Delay(TimeSpan.FromSeconds(30), cts.Token)).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error sending metrics during shutdown");
-                    }
-                });
-            });
+            applicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
 
             var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
             userAgent = $"Toggly.FeatureManagement/{version}";
+        }
+
+        private void OnApplicationStopping()
+        {
+            _shuttingDown = true;
+            
+            // Stop the timer immediately to prevent new callbacks
+            _timer.Change(Timeout.Infinite, Timeout.Infinite);
+            
+            // Send metrics synchronously during shutdown to avoid async/dispose race conditions
+            try
+            {
+                // Use a synchronous wait with timeout
+                var sendTask = SendMetrics(suppressLogging: true);
+                sendTask.Wait(TimeSpan.FromSeconds(30));
+            }
+            catch (AggregateException ae)
+            {
+                // Swallow exceptions during shutdown - logger may already be disposed
+                foreach (var ex in ae.Flatten().InnerExceptions)
+                {
+                    TryLog(LogLevel.Error, ex, "Error sending metrics during shutdown");
+                }
+            }
+            catch (Exception ex)
+            {
+                TryLog(LogLevel.Error, ex, "Error sending metrics during shutdown");
+            }
+        }
+
+        /// <summary>
+        /// Safely attempts to log, handling cases where the logger may be disposed
+        /// </summary>
+        private void TryLog(LogLevel level, string message, params object[] args)
+        {
+            if (_disposed) return;
+            
+            try
+            {
+                _logger.Log(level, message, args);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Logger factory was disposed, ignore
+            }
+        }
+
+        /// <summary>
+        /// Safely attempts to log an exception, handling cases where the logger may be disposed
+        /// </summary>
+        private void TryLog(LogLevel level, Exception? exception, string message, params object[] args)
+        {
+            if (_disposed) return;
+            
+            try
+            {
+                _logger.Log(level, exception, message, args);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Logger factory was disposed, ignore
+            }
         }
 
         private volatile string _lastError = string.Empty;
@@ -101,6 +151,9 @@ namespace Toggly.FeatureManagement
 
         private void TimerCallback(object? state)
         {
+            // Skip if shutting down or disposed
+            if (_shuttingDown || _disposed) return;
+            
             // Fire and forget with proper error handling
             _ = Task.Run(async () =>
             {
@@ -110,7 +163,7 @@ namespace Toggly.FeatureManagement
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in timer callback while sending metrics");
+                    TryLog(LogLevel.Error, ex, "Error in timer callback while sending metrics");
                 }
             });
         }
@@ -130,12 +183,14 @@ namespace Toggly.FeatureManagement
                 StoreObservationInstance(m.Value.Item1, m.Key, null, m.Value.Item2, true);
         }
 
-        private async Task SendMetrics()
+        private Task SendMetrics() => SendMetrics(suppressLogging: false);
+
+        private async Task SendMetrics(bool suppressLogging)
         {
             // Prevent concurrent send operations (timer and ApplicationStopping could overlap)
             if (!await _sendMetricsSemaphore.WaitAsync(0).ConfigureAwait(false))
             {
-                _logger.LogDebug("SendMetrics already in progress, skipping");
+                if (!suppressLogging) TryLog(LogLevel.Debug, "SendMetrics already in progress, skipping");
                 return;
             }
 
@@ -145,11 +200,11 @@ namespace Toggly.FeatureManagement
 
                 if (_stats.IsEmpty && _counters.IsEmpty && _observations.IsEmpty)
                 {
-                    _logger.LogTrace("Send metrics - nothing to send");
+                    if (!suppressLogging) TryLog(LogLevel.Trace, "Send metrics - nothing to send");
                     return;
                 }
 
-                _logger.LogTrace("Sending metrics");
+                if (!suppressLogging) TryLog(LogLevel.Trace, "Sending metrics");
                 var currentTime = DateTime.UtcNow;
 
                 
@@ -260,13 +315,13 @@ namespace Toggly.FeatureManagement
                 var result = await _metricsClient.SendMetricsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(180)).ConfigureAwait(false);
 
                 if (result.Count != dataPacket.Stats.Count)
-                    _logger.LogWarning("Metric count did not match. Possible data integrity issues");
+                    if (!suppressLogging) TryLog(LogLevel.Warning, "Metric count did not match. Possible data integrity issues");
 
                 _lastSend = DateTime.UtcNow;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending metrics to toggly");
+                if (!suppressLogging) TryLog(LogLevel.Error, ex, "Error sending metrics to toggly");
                 _lastError = ex.Message;
                 _lastErrorTime = DateTime.UtcNow;
             }
@@ -327,7 +382,7 @@ namespace Toggly.FeatureManagement
         /// <inheritdoc/>
         public async Task MeasureAsync(string metricKey, double value)
         {
-            _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
+            TryLog(LogLevel.Trace, "Record feature usage: {metricKey}", metricKey);
             IncrementMeasurement(metricKey, null, value, true);
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
@@ -339,7 +394,7 @@ namespace Toggly.FeatureManagement
         /// <inheritdoc/>
         public async Task MeasureAsync<TContext>(string metricKey, TContext context, double value)
         {
-            _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
+            TryLog(LogLevel.Trace, "Record feature usage: {metricKey}", metricKey);
             IncrementMeasurement(metricKey, null, value, true);
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
@@ -369,7 +424,7 @@ namespace Toggly.FeatureManagement
         public async Task ObserveAsync(string metricKey, double value)
         {
             var date = DateTime.UtcNow;
-            _logger.LogTrace("Record observed value: {metricKey}", metricKey);
+            TryLog(LogLevel.Trace, "Record observed value: {metricKey}", metricKey);
             StoreObservationInstance(date, metricKey, null, value, true);
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
@@ -382,7 +437,7 @@ namespace Toggly.FeatureManagement
         public async Task ObserveAsync<TContext>(string metricKey, TContext context, double value)
         {
             var date = DateTime.UtcNow;
-            _logger.LogTrace("Record observed value: {metricKey}", metricKey);
+            TryLog(LogLevel.Trace, "Record observed value: {metricKey}", metricKey);
             StoreObservationInstance(date, metricKey, null, value, true);
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
@@ -415,7 +470,7 @@ namespace Toggly.FeatureManagement
         /// <inheritdoc/>
         public async Task IncrementCounterAsync(string metricKey, double value)
         {
-            _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
+            TryLog(LogLevel.Trace, "Record feature usage: {metricKey}", metricKey);
             IncrementMetricCounter(metricKey, null, value, true);
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
@@ -427,13 +482,36 @@ namespace Toggly.FeatureManagement
         /// <inheritdoc/>
         public async Task IncrementCounterAsync<TContext>(string metricKey, TContext context, double value)
         {
-            _logger.LogTrace("Record feature usage: {metricKey}", metricKey);
+            TryLog(LogLevel.Trace, "Record feature usage: {metricKey}", metricKey);
             IncrementMetricCounter(metricKey, null, value, true);
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
             if (features != null)
                 foreach (var feature in features)
                     IncrementMetricCounter(metricKey, feature, value, await _featureManager.IsEnabledAsync(feature, context));
+        }
+
+        #endregion
+
+        #region IDisposable
+
+        /// <summary>
+        /// Disposes the metrics service, stopping the timer and releasing resources
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _shuttingDown = true;
+
+            // Stop the timer
+            _timer.Change(Timeout.Infinite, Timeout.Infinite);
+            _timer.Dispose();
+
+            // Dispose the semaphore
+            _sendMetricsSemaphore.Dispose();
+
+            GC.SuppressFinalize(this);
         }
 
         #endregion

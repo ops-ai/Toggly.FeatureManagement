@@ -103,6 +103,9 @@ namespace Toggly.FeatureManagement
         
         private readonly SemaphoreSlim _sendStatsSemaphore = new SemaphoreSlim(1, 1);
 
+        private volatile bool _disposed = false;
+        private volatile bool _shuttingDown = false;
+
         public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, Usage.UsageClient usageClient)
         {
             _appKey = togglySettings.Value.AppKey;
@@ -125,25 +128,73 @@ namespace Toggly.FeatureManagement
 
             _timer = new Timer(TimerCallback, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
             _longTimer = new Timer(LongTimerCallback, null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
-            applicationLifetime.ApplicationStopping.Register(() =>
-            {
-                // Fire and forget with timeout - we can't block shutdown indefinitely
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                        await Task.WhenAny(SendStats(), Task.Delay(TimeSpan.FromSeconds(30), cts.Token)).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error sending stats during shutdown");
-                    }
-                });
-            });
+            applicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
 
             var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
             userAgent = $"Toggly.FeatureManagement/{version}";
+        }
+
+        private void OnApplicationStopping()
+        {
+            _shuttingDown = true;
+            
+            // Stop the timers immediately to prevent new callbacks
+            _timer.Change(Timeout.Infinite, Timeout.Infinite);
+            _longTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            
+            // Send stats synchronously during shutdown to avoid async/dispose race conditions
+            try
+            {
+                // Use a synchronous wait with timeout
+                var sendTask = SendStats(suppressLogging: true);
+                sendTask.Wait(TimeSpan.FromSeconds(30));
+            }
+            catch (AggregateException ae)
+            {
+                // Swallow exceptions during shutdown - logger may already be disposed
+                foreach (var ex in ae.Flatten().InnerExceptions)
+                {
+                    TryLog(LogLevel.Error, ex, "Error sending stats during shutdown");
+                }
+            }
+            catch (Exception ex)
+            {
+                TryLog(LogLevel.Error, ex, "Error sending stats during shutdown");
+            }
+        }
+
+        /// <summary>
+        /// Safely attempts to log, handling cases where the logger may be disposed
+        /// </summary>
+        private void TryLog(LogLevel level, string message, params object[] args)
+        {
+            if (_disposed) return;
+            
+            try
+            {
+                _logger.Log(level, message, args);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Logger factory was disposed, ignore
+            }
+        }
+
+        /// <summary>
+        /// Safely attempts to log an exception, handling cases where the logger may be disposed
+        /// </summary>
+        private void TryLog(LogLevel level, Exception? exception, string message, params object[] args)
+        {
+            if (_disposed) return;
+            
+            try
+            {
+                _logger.Log(level, exception, message, args);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Logger factory was disposed, ignore
+            }
         }
 
         private async Task ResetUsageMap()
@@ -151,7 +202,7 @@ namespace Toggly.FeatureManagement
             if (!_uniqueUsageEnabledMap.Any() && !_uniqueUsageDisabledMap.Any() && !_uniqueUsageUsedMap.Any())
                 return;
 
-            _logger.LogTrace("Send remaining stats and clear unique usage map");
+            TryLog(LogLevel.Trace, "Send remaining stats and clear unique usage map");
             await SendStats().ConfigureAwait(false);
             _uniqueUsageEnabledMap.Clear();
             _uniqueUsageDisabledMap.Clear();
@@ -164,6 +215,9 @@ namespace Toggly.FeatureManagement
 
         private void TimerCallback(object? state)
         {
+            // Skip if shutting down or disposed
+            if (_shuttingDown || _disposed) return;
+            
             // Fire and forget with proper error handling
             _ = Task.Run(async () =>
             {
@@ -173,13 +227,16 @@ namespace Toggly.FeatureManagement
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in timer callback while sending stats");
+                    TryLog(LogLevel.Error, ex, "Error in timer callback while sending stats");
                 }
             });
         }
 
         private void LongTimerCallback(object? state)
         {
+            // Skip if shutting down or disposed
+            if (_shuttingDown || _disposed) return;
+            
             // Fire and forget with proper error handling
             _ = Task.Run(async () =>
             {
@@ -189,17 +246,19 @@ namespace Toggly.FeatureManagement
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in long timer callback while resetting usage map");
+                    TryLog(LogLevel.Error, ex, "Error in long timer callback while resetting usage map");
                 }
             });
         }
         
-        private async Task SendStats()
+        private Task SendStats() => SendStats(suppressLogging: false);
+
+        private async Task SendStats(bool suppressLogging)
         {
             // Prevent concurrent send operations (timer, longTimer, and ApplicationStopping could overlap)
             if (!await _sendStatsSemaphore.WaitAsync(0).ConfigureAwait(false))
             {
-                _logger.LogDebug("SendStats already in progress, skipping");
+                if (!suppressLogging) TryLog(LogLevel.Debug, "SendStats already in progress, skipping");
                 return;
             }
 
@@ -216,7 +275,7 @@ namespace Toggly.FeatureManagement
             {
                 if (_stats.IsEmpty && _uniqueUserHashesSinceLastSend.IsEmpty && _uniqueViewedUserHashesSinceLastSend.IsEmpty && _applicationUniqueUserHashesSinceLastSend.IsEmpty)
                 {
-                    _logger.LogTrace("Send stats - nothing to send");
+                    if (!suppressLogging) TryLog(LogLevel.Trace, "Send stats - nothing to send");
                     return;
                 }
 
@@ -259,7 +318,7 @@ namespace Toggly.FeatureManagement
                     _applicationUniqueUserHashesSinceLastSend.Clear();
                 }
 
-                _logger.LogTrace("Sending stats");
+                if (!suppressLogging) TryLog(LogLevel.Trace, "Sending stats");
                 var currentTime = DateTime.UtcNow;
                 var dataPacket = new FeatureStat
                 {
@@ -325,13 +384,13 @@ namespace Toggly.FeatureManagement
                 var result = await _usageClient.SendStatsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(180)).ConfigureAwait(false);
 
                 if (result.FeatureCount != dataPacket.Stats.Count)
-                    _logger.LogWarning("Feature count did not match. Possible data integrity issues");
+                    if (!suppressLogging) TryLog(LogLevel.Warning, "Feature count did not match. Possible data integrity issues");
 
                 _lastSend = DateTime.UtcNow;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending stats to toggly");
+                if (!suppressLogging) TryLog(LogLevel.Error, ex, "Error sending stats to toggly");
 
                 // Restore stats on error (only if we successfully cloned them)
                 if (stats != null)
@@ -406,7 +465,7 @@ namespace Toggly.FeatureManagement
         /// <inheritdoc/>
         public async Task RecordUsageAsync(string featureKey)
         {
-            _logger.LogTrace("Record feature usage: {featureKey}", featureKey);
+            TryLog(LogLevel.Trace, "Record feature usage: {featureKey}", featureKey);
 
             // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendStats
             _stats.AddOrUpdate(
@@ -434,7 +493,7 @@ namespace Toggly.FeatureManagement
         /// <inheritdoc/>
         public async Task RecordUsageAsync<TContext>(string featureKey, TContext context)
         {
-            _logger.LogTrace("Record feature usage: {featureKey}", featureKey);
+            TryLog(LogLevel.Trace, "Record feature usage: {featureKey}", featureKey);
 
             // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendStats
             _stats.AddOrUpdate(
@@ -462,7 +521,7 @@ namespace Toggly.FeatureManagement
         /// <inheritdoc/>
         public async Task RecordCheckAsync(string featureKey, bool allowed)
         {
-            _logger.LogTrace("Record feature check: {featureKey}", featureKey);
+            TryLog(LogLevel.Trace, "Record feature check: {featureKey}", featureKey);
 
             // Record stats keyed by feature status - use atomic AddOrUpdate
             var statKey = allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled);
@@ -501,7 +560,7 @@ namespace Toggly.FeatureManagement
         /// <inheritdoc/>
         public async Task RecordUsageAsync<TContext>(string featureKey, TContext context, bool allowed)
         {
-            _logger.LogTrace("Record feature check: {featureKey}", featureKey);
+            TryLog(LogLevel.Trace, "Record feature check: {featureKey}", featureKey);
 
             // Record stats keyed by feature status - use atomic AddOrUpdate
             var statKey = allowed ? (featureKey, (byte)StatType.Enabled) : (featureKey, (byte)StatType.Disabled);
@@ -575,7 +634,7 @@ namespace Toggly.FeatureManagement
             // Check size limit to prevent unbounded growth
             if (hashSet.Count >= MaxUniqueUserHashesPerFeature)
             {
-                _logger.LogWarning("Unique user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
+                TryLog(LogLevel.Warning, "Unique user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
                 // Still try to add, but log warning
             }
             
@@ -601,7 +660,7 @@ namespace Toggly.FeatureManagement
             // Check size limit to prevent unbounded growth
             if (hashSet.Count >= MaxUniqueUserHashesPerFeature)
             {
-                _logger.LogWarning("Unique viewed user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
+                TryLog(LogLevel.Warning, "Unique viewed user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
                 // Still try to add, but log warning
             }
             
@@ -625,7 +684,7 @@ namespace Toggly.FeatureManagement
             // Check size limit to prevent unbounded growth
             if (_applicationUniqueUserHashesSinceLastSend.Count >= MaxApplicationUniqueUserHashes)
             {
-                _logger.LogWarning("Application-level unique user hash limit reached. Consider sending more frequently or increasing limit.");
+                TryLog(LogLevel.Warning, "Application-level unique user hash limit reached. Consider sending more frequently or increasing limit.");
                 // Still try to add, but log warning
             }
             
@@ -656,9 +715,19 @@ namespace Toggly.FeatureManagement
         /// </summary>
         public void Dispose()
         {
+            if (_disposed) return;
+            _disposed = true;
+            _shuttingDown = true;
+
+            // Stop the timers
+            _timer?.Change(Timeout.Infinite, Timeout.Infinite);
+            _longTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+
             _timer?.Dispose();
             _longTimer?.Dispose();
             _sendStatsSemaphore?.Dispose();
+
+            GC.SuppressFinalize(this);
         }
     }
 
