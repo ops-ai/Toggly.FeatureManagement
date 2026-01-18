@@ -21,7 +21,7 @@ builder.Services.AddHealthChecks()
 
 ```csharp
 builder.Services.AddHealthChecks()
-    .AddTogglyHealthCheck(options =>
+    .AddTogglyHealthCheck("Toggly", HealthStatus.Degraded, [], options =>
     {
         // Maximum age of definitions before considered stale (default: 10 minutes)
         options.StalenessThreshold = TimeSpan.FromMinutes(15);

@@ -197,6 +197,7 @@ namespace Toggly.FeatureManagement
         private string _lastError = string.Empty;
         private DateTime? _lastErrorTime = null;
         private DateTime? _lastRefresh = null;
+        private DateTime? _lastDefinitionsCheck = null;
         
         private async Task RefreshFeatures(long? timeout = null)
         {
@@ -270,7 +271,10 @@ namespace Toggly.FeatureManagement
                 {
                     var newDefinitionsRequest = await httpClient.GetAsync($"definitions/v2/{_appKey}/{_environment}").ConfigureAwait(false);
                     if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
+                    {
+                        _lastDefinitionsCheck = DateTime.UtcNow;
                         return;
+                    }
 
                     newDefinitionsRequest.EnsureSuccessStatusCode();
 
@@ -348,7 +352,10 @@ namespace Toggly.FeatureManagement
                 {
                     var newDefinitionsRequest = await httpClient.GetAsync($"definitions/{_appKey}/{_environment}").ConfigureAwait(false);
                     if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
+                    {
+                        _lastDefinitionsCheck = DateTime.UtcNow;
                         return;
+                    }
 
                     newDefinitionsRequest.EnsureSuccessStatusCode();
 
@@ -486,6 +493,7 @@ namespace Toggly.FeatureManagement
                 }
 
                 _lastRefresh = DateTime.UtcNow;
+                _lastDefinitionsCheck = DateTime.UtcNow;
             }
             catch (Exception ex)
             {
@@ -785,6 +793,7 @@ namespace Toggly.FeatureManagement
                 LastError = _lastError,
                 LastErrorTime = _lastErrorTime,
                 LastRefresh = _lastRefresh,
+                LastDefinitionsCheck = _lastDefinitionsCheck,
                 WebsocketClientRunning = _webSocketClient?.IsRunning ?? false,
                 Loaded = _loaded
             };

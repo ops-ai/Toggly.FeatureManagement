@@ -46,14 +46,14 @@ namespace Toggly.FeatureManagement.HealthChecks
             // Add diagnostic data if enabled
             if (_options.IncludeDiagnosticData)
             {
-                data["appKey"] = debugInfo.AppKey ?? "unknown";
+                data["appKey"] = MaskAppKey(debugInfo.AppKey);
                 data["environment"] = debugInfo.Environment ?? "unknown";
                 data["definitionCount"] = debugInfo.Definitions?.Count ?? 0;
                 data["websocketConnected"] = debugInfo.WebsocketClientRunning;
                 data["loaded"] = debugInfo.Loaded;
 
-                if (debugInfo.LastRefresh.HasValue)
-                    data["lastRefresh"] = debugInfo.LastRefresh.Value.ToString("O");
+                if (debugInfo.LastDefinitionsCheck.HasValue)
+                    data["lastDefinitionsCheck"] = debugInfo.LastDefinitionsCheck.Value.ToString("O");
 
                 if (!string.IsNullOrEmpty(debugInfo.LastError))
                 {
@@ -71,21 +71,22 @@ namespace Toggly.FeatureManagement.HealthChecks
                     data: data));
             }
 
-            // Check 2: Definition staleness - only stale if WebSocket is disconnected AND definitions are old
+            // Check 2: Definition staleness - only stale if WebSocket is disconnected AND last check is old
             // When WebSocket is connected, updates are pushed in real-time so age doesn't matter
+            // LastDefinitionsCheck tracks when we last verified definitions (even if unchanged via ETag 304)
             if (!debugInfo.WebsocketClientRunning)
             {
-                var definitionsAge = debugInfo.LastRefresh.HasValue
-                    ? DateTime.UtcNow - debugInfo.LastRefresh.Value
+                var timeSinceLastCheck = debugInfo.LastDefinitionsCheck.HasValue
+                    ? DateTime.UtcNow - debugInfo.LastDefinitionsCheck.Value
                     : TimeSpan.MaxValue;
 
-                if (definitionsAge > _options.StalenessThreshold)
+                if (timeSinceLastCheck > _options.StalenessThreshold)
                 {
-                    data["definitionsAge"] = definitionsAge.ToString();
+                    data["timeSinceLastCheck"] = timeSinceLastCheck.ToString();
                     data["stalenessThreshold"] = _options.StalenessThreshold.ToString();
 
                     return Task.FromResult(HealthCheckResult.Unhealthy(
-                        $"Feature definitions are stale ({definitionsAge:g} old) and WebSocket is disconnected",
+                        $"Feature definitions check is stale ({timeSinceLastCheck:g} since last check) and WebSocket is disconnected",
                         data: data));
                 }
             }
@@ -117,6 +118,20 @@ namespace Toggly.FeatureManagement.HealthChecks
             return Task.FromResult(HealthCheckResult.Healthy(
                 "Toggly SDK is healthy",
                 data: data));
+        }
+
+        /// <summary>
+        /// Masks the app key to only show the last 6 characters.
+        /// </summary>
+        private static string MaskAppKey(string? appKey)
+        {
+            if (string.IsNullOrEmpty(appKey))
+                return "unknown";
+
+            if (appKey.Length <= 6)
+                return appKey;
+
+            return $"*** {appKey[^6..]}";
         }
 
         /// <summary>

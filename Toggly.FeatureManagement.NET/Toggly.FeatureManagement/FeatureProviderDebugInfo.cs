@@ -47,9 +47,14 @@ namespace Toggly.FeatureManagement
         public DateTime? LastErrorTime { get; set; }
 
         /// <summary>
-        /// Last refresh time
+        /// Last refresh time (when definitions actually changed)
         /// </summary>
         public DateTime? LastRefresh { get; set; }
+
+        /// <summary>
+        /// Last definitions check time (when a check was performed, even if definitions were unchanged via ETag)
+        /// </summary>
+        public DateTime? LastDefinitionsCheck { get; set; }
         
         /// <summary>
         /// Websocket client running
