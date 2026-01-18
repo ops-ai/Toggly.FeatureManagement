@@ -38,7 +38,8 @@ namespace Toggly.FeatureManagement
             Disabled,
             UniqueRequestEnabled,
             UniqueRequestDisabled,
-            Used
+            Used,
+            Viewed
         }
 
         private readonly Timer _timer;
@@ -64,6 +65,7 @@ namespace Toggly.FeatureManagement
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageEnabledMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageDisabledMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
         private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageUsedMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
+        private readonly ConcurrentDictionary<string, ConcurrentHashSet<int>> _uniqueUsageViewedMap = new ConcurrentDictionary<string, ConcurrentHashSet<int>>();
         
         /// <summary>
         /// Tracks unique user ID hashes (int) who USED features since last send, keyed by feature name.
@@ -267,6 +269,7 @@ namespace Toggly.FeatureManagement
             Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageEnabledMap = null;
             Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageDisabledMap = null;
             Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageUsedMap = null;
+            Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageViewedMap = null;
             Dictionary<string, List<int>>? uniqueUserHashesToSend = null;
             Dictionary<string, List<int>>? uniqueViewedUserHashesToSend = null;
             List<int>? applicationUniqueUserHashesToSend = null;
@@ -288,6 +291,8 @@ namespace Toggly.FeatureManagement
                 _uniqueUsageDisabledMap.Clear();
                 uniqueUsageUsedMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageUsedMap);
                 _uniqueUsageUsedMap.Clear();
+                uniqueUsageViewedMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageViewedMap);
+                _uniqueUsageViewedMap.Clear();
                 
                 // Clone unique user hashes for monthly tracking (incremental since last send)
                 uniqueUserHashesToSend = new Dictionary<string, List<int>>();
@@ -355,6 +360,18 @@ namespace Toggly.FeatureManagement
                         UniqueUsersUsedCount = uniqueUsageUsedMap.TryGetValue(featureKey, out var uniqueUsedCount) ? uniqueUsedCount.Count : 0
                     };
                     
+                    // Add viewedCount via variantStats (new approach, not legacy fields)
+                    var viewedCount = stats.TryGetValue((featureKey, (byte)StatType.Viewed), out var vc) ? vc : 0;
+                    if (viewedCount > 0)
+                    {
+                        // Views are associated with "enabled" variant by default (you only view enabled features)
+                        if (!statMessage.VariantStats.ContainsKey("enabled"))
+                        {
+                            statMessage.VariantStats["enabled"] = new VariantStats();
+                        }
+                        statMessage.VariantStats["enabled"].ViewedCount = viewedCount;
+                    }
+                    
                     // Add unique user hashes for monthly tracking (incremental since last send)
                     if (uniqueUserHashesToSend != null && uniqueUserHashesToSend.TryGetValue(featureKey, out var hashes))
                     {
@@ -416,6 +433,12 @@ namespace Toggly.FeatureManagement
                 {
                     foreach (var u in uniqueUsageUsedMap)
                         _uniqueUsageUsedMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
+                }
+
+                if (uniqueUsageViewedMap != null)
+                {
+                    foreach (var u in uniqueUsageViewedMap)
+                        _uniqueUsageViewedMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
                 }
 
                 // Restore unique user hashes on error
@@ -511,6 +534,62 @@ namespace Toggly.FeatureManagement
                     
                     // Track user ID for monthly unique user tracking (incremental)
                     RecordUniqueUserId(featureKey, uniqueIdentifier);
+                    
+                    // Track user ID at application level for monthly unique user tracking (incremental)
+                    RecordApplicationUniqueUserId(uniqueIdentifier);
+                }
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task RecordViewAsync(string featureKey)
+        {
+            TryLog(LogLevel.Trace, "Record feature view: {featureKey}", featureKey);
+
+            // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendStats
+            _stats.AddOrUpdate(
+                (featureKey, (byte)StatType.Viewed),
+                1, // Add: if key doesn't exist, set to 1
+                (key, existingValue) => existingValue + 1); // Update: if key exists, increment
+
+            if (_contextProvider != null)
+            {
+                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync().ConfigureAwait(false);
+                if (uniqueIdentifier != null)
+                {
+                    var currentUniqueValue = _uniqueUsageViewedMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>());
+                    currentUniqueValue.Add(GetDeterministicHashCode(uniqueIdentifier));
+                    
+                    // Track user ID for monthly unique user tracking (incremental) - use "viewed" hash list
+                    RecordUniqueViewedUserId(featureKey, uniqueIdentifier);
+                    
+                    // Track user ID at application level for monthly unique user tracking (incremental)
+                    RecordApplicationUniqueUserId(uniqueIdentifier);
+                }
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task RecordViewAsync<TContext>(string featureKey, TContext context)
+        {
+            TryLog(LogLevel.Trace, "Record feature view: {featureKey}", featureKey);
+
+            // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendStats
+            _stats.AddOrUpdate(
+                (featureKey, (byte)StatType.Viewed),
+                1, // Add: if key doesn't exist, set to 1
+                (key, existingValue) => existingValue + 1); // Update: if key exists, increment
+
+            if (_contextProvider != null)
+            {
+                var uniqueIdentifier = await _contextProvider.GetContextIdentifierAsync(context).ConfigureAwait(false);
+                if (uniqueIdentifier != null)
+                {
+                    var currentUniqueValue = _uniqueUsageViewedMap.GetOrAdd(featureKey, new ConcurrentHashSet<int>());
+                    currentUniqueValue.Add(GetDeterministicHashCode(uniqueIdentifier));
+                    
+                    // Track user ID for monthly unique user tracking (incremental) - use "viewed" hash list
+                    RecordUniqueViewedUserId(featureKey, uniqueIdentifier);
                     
                     // Track user ID at application level for monthly unique user tracking (incremental)
                     RecordApplicationUniqueUserId(uniqueIdentifier);

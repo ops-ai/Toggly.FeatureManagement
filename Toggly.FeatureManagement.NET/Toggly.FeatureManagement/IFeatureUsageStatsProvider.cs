@@ -23,7 +23,7 @@ namespace Toggly.FeatureManagement
         Task RecordUsageAsync<TContext>(string featureKey, TContext context, bool allowed);
 
         /// <summary>
-        /// Record a feature being used
+        /// Record a feature being used (e.g., user interacted with the feature)
         /// </summary>
         /// <param name="featureKey">Name/key of the feature</param>
         /// <returns></returns>
@@ -37,5 +37,21 @@ namespace Toggly.FeatureManagement
         /// <param name="context"></param>
         /// <returns></returns>
         Task RecordUsageAsync<TContext>(string featureKey, TContext context);
+
+        /// <summary>
+        /// Record a feature being viewed (e.g., UI component was rendered/displayed to user)
+        /// </summary>
+        /// <param name="featureKey">Name/key of the feature</param>
+        /// <returns></returns>
+        Task RecordViewAsync(string featureKey);
+
+        /// <summary>
+        /// Record a feature being viewed given a custom context
+        /// </summary>
+        /// <typeparam name="TContext"></typeparam>
+        /// <param name="featureKey">Name/key of the feature</param>
+        /// <param name="context">A custom context for unique user tracking</param>
+        /// <returns></returns>
+        Task RecordViewAsync<TContext>(string featureKey, TContext context);
     }
 }

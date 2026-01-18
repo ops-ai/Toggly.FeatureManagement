@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.Mvc;
@@ -11,32 +11,31 @@ namespace Toggly.FeatureManagement
 {
     /// <summary>
     /// An attribute that can be placed on MVC controller actions or Razor Page handlers 
-    /// to gate access based on feature flags AND record that a feature was used.
-    /// This combines the behavior of [FeatureGate] with usage tracking.
+    /// to gate access based on feature flags AND record that a feature was viewed.
+    /// This combines the behavior of [FeatureGate] with view tracking.
     /// </summary>
     /// <remarks>
     /// If the feature is disabled, the action will not execute and the IDisabledFeaturesHandler will be invoked.
-    /// If the feature is enabled, a usage event is recorded and the action executes.
+    /// If the feature is enabled, a view event is recorded and the action executes.
     /// </remarks>
     /// <example>
     /// <code>
-    /// // Gates on the feature AND records usage when enabled
-    /// [FeatureUsage("new_checkout")]
-    /// public IActionResult SubmitOrder(OrderModel order)
+    /// // Gates on the feature AND records a view when enabled
+    /// [FeatureView("new_dashboard")]
+    /// public IActionResult Dashboard()
     /// {
-    ///     // Process order...
-    ///     return RedirectToAction("Confirmation");
+    ///     return View();
     /// }
     /// </code>
     /// </example>
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = true)]
-    public class FeatureUsageAttribute : ActionFilterAttribute, IAsyncPageFilter
+    public class FeatureViewAttribute : ActionFilterAttribute, IAsyncPageFilter
     {
         /// <summary>
-        /// Creates an attribute that gates on features and records usage.
+        /// Creates an attribute that gates on features and records views.
         /// </summary>
         /// <param name="features">The names of the features that the attribute will represent.</param>
-        public FeatureUsageAttribute(params string[] features)
+        public FeatureViewAttribute(params string[] features)
         {
             if (features == null || features.Length == 0)
                 throw new ArgumentNullException(nameof(features));
@@ -45,10 +44,10 @@ namespace Toggly.FeatureManagement
         }
 
         /// <summary>
-        /// Creates an attribute that gates on features and records usage.
+        /// Creates an attribute that gates on features and records views.
         /// </summary>
         /// <param name="features">A set of enums representing the features that the attribute will represent.</param>
-        public FeatureUsageAttribute(params object[] features)
+        public FeatureViewAttribute(params object[] features)
         {
             if (features == null || features.Length == 0)
                 throw new ArgumentNullException(nameof(features));
@@ -81,7 +80,7 @@ namespace Toggly.FeatureManagement
         public RequirementType RequirementType { get; set; } = RequirementType.All;
 
         /// <summary>
-        /// Performs controller action pre-processing to gate on features and record usage.
+        /// Performs controller action pre-processing to gate on features and record views.
         /// </summary>
         /// <param name="context">The context of the MVC action.</param>
         /// <param name="next">The action delegate.</param>
@@ -103,11 +102,11 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
-            // Feature is enabled - record the usage
+            // Feature is enabled - record the view
             var statsProvider = context.HttpContext.RequestServices.GetRequiredService<IFeatureUsageStatsProvider>();
             foreach (var feature in Features)
             {
-                await statsProvider.RecordUsageAsync(feature).ConfigureAwait(false);
+                await statsProvider.RecordViewAsync(feature).ConfigureAwait(false);
             }
 
             await next().ConfigureAwait(false);
@@ -115,7 +114,7 @@ namespace Toggly.FeatureManagement
 
         /// <summary>
         /// Called asynchronously before the handler method is invoked, after model binding is complete.
-        /// Gates on features and records usage.
+        /// Gates on features and records views.
         /// </summary>
         /// <param name="context">The <see cref="PageHandlerExecutingContext"/>.</param>
         /// <param name="next">The <see cref="PageHandlerExecutionDelegate"/>. Invoked to execute the next page filter or the handler method itself.</param>
@@ -134,11 +133,11 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
-            // Feature is enabled - record the usage
+            // Feature is enabled - record the view
             var statsProvider = context.HttpContext.RequestServices.GetRequiredService<IFeatureUsageStatsProvider>();
             foreach (var feature in Features)
             {
-                await statsProvider.RecordUsageAsync(feature).ConfigureAwait(false);
+                await statsProvider.RecordViewAsync(feature).ConfigureAwait(false);
             }
 
             await next.Invoke().ConfigureAwait(false);
@@ -178,6 +177,18 @@ namespace Toggly.FeatureManagement
                 }
                 return false;
             }
+        }
+    }
+
+    /// <summary>
+    /// Default handler for disabled features - returns a 404 Not Found result.
+    /// </summary>
+    internal class DefaultDisabledFeaturesHandler : IDisabledFeaturesHandler
+    {
+        public Task HandleDisabledFeatures(IEnumerable<string> features, ActionExecutingContext context)
+        {
+            context.Result = new Microsoft.AspNetCore.Mvc.NotFoundResult();
+            return Task.CompletedTask;
         }
     }
 }
