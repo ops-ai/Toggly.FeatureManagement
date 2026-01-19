@@ -1,8 +1,9 @@
+import type { App } from 'vue'
 import togglyService, { TogglyOptions } from './toggly.service'
 import Feature from '../components/Feature.vue'
 
 export default {
-  install: (app, options: TogglyOptions) => {
+  install: (app: App, options: TogglyOptions) => {
     const $toggly = togglyService.init(options)
     app.provide('$toggly', $toggly)
     app.component('Feature', Feature)

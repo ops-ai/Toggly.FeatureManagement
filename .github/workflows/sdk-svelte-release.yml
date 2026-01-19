@@ -27,6 +27,15 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -55,8 +64,8 @@ jobs:
       - name: Commit version bump
         run: |
           cd $GITHUB_WORKSPACE
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/package.json Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/package-lock.json
-          git commit -m "Bumped Svelte SDK to ${{ steps.version.outputs.new_version }} [skip ci]"
+          git commit -S -m "Bumped Svelte SDK to ${{ steps.version.outputs.new_version }} [skip ci]"
           git push

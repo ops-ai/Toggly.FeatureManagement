@@ -34,7 +34,7 @@ export class Toggly implements TogglyService {
   private _features: { [key: string]: boolean } | null = null
   private _loadingFeatures: boolean = false
 
-  shouldShowFeatureDuringEvaluation: boolean
+  shouldShowFeatureDuringEvaluation: boolean = false
 
   init = (options: TogglyOptions) => {
     if (!options.appKey) {
