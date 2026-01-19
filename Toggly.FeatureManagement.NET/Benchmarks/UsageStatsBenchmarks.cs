@@ -63,10 +63,52 @@ namespace Toggly.FeatureManagement.Benchmarks
         /// Direct measurement of usage recording with context
         /// </summary>
         [Benchmark]
-        public async Task RecordUsageAsync()
+        public async Task RecordUsageAsyncWithContext()
         {
             var context = new { UserId = "test-user" };
             await _usageStatsProvider.RecordUsageAsync(SimpleFlagName, context, true);
+        }
+
+        /// <summary>
+        /// Direct measurement of usage recording without context
+        /// </summary>
+        [Benchmark]
+        public async Task RecordUsageAsync()
+        {
+            await _usageStatsProvider.RecordUsageAsync(SimpleFlagName);
+        }
+
+        /// <summary>
+        /// Direct measurement of view recording without context
+        /// </summary>
+        [Benchmark]
+        public async Task RecordViewAsync()
+        {
+            await _usageStatsProvider.RecordViewAsync(SimpleFlagName);
+        }
+
+        /// <summary>
+        /// Direct measurement of view recording with context
+        /// </summary>
+        [Benchmark]
+        public async Task RecordViewAsyncWithContext()
+        {
+            var context = new { UserId = "test-user" };
+            await _usageStatsProvider.RecordViewAsync(SimpleFlagName, context);
+        }
+
+        /// <summary>
+        /// Typical funnel: Check → View → Use
+        /// </summary>
+        [Benchmark]
+        public async Task TypicalUserFunnel()
+        {
+            // 1. Feature is checked (evaluation)
+            await _usageStatsProvider.RecordCheckAsync(SimpleFlagName, true);
+            // 2. Feature UI is viewed/rendered
+            await _usageStatsProvider.RecordViewAsync(SimpleFlagName);
+            // 3. User actually uses the feature
+            await _usageStatsProvider.RecordUsageAsync(SimpleFlagName);
         }
     }
 }
