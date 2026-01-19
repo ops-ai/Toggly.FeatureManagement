@@ -176,6 +176,16 @@ export class MyComponent {
 | 18.x | ✅ Full |
 | 19.x | ✅ Full |
 
+## Security Notes
+
+This SDK is built with Angular 18 development dependencies to maximize compatibility with Angular 15-19+ applications. The Angular 18 build tooling has known security advisories (XSS vulnerabilities in SSR/template sanitization) that:
+
+- **Do not affect this library** - The vulnerabilities are in Angular's server-side rendering and template sanitization features
+- **Do not affect your application** - Your app uses its own Angular version with its own security patches
+- **Only impact development builds** - These are dev dependencies, not runtime dependencies
+
+Your application should use the latest patch version of your Angular version to ensure you have all security fixes.
+
 ## License
 
 MIT
