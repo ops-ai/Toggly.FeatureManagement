@@ -1,15 +1,70 @@
-import { Injectable } from '@angular/core'
+import { Injectable, Provider } from '@angular/core'
 import { ITogglyOptions } from './models'
 
+/**
+ * Configuration options for Toggly
+ */
 @Injectable({
   providedIn: 'root',
 })
 export class TogglyOptions implements ITogglyOptions {
+  /** Base URI for the Toggly API (default: https://client.toggly.io) */
   baseURI?: string
+
+  /** Your Toggly application key */
   appKey?: string
+
+  /** Environment name (default: Production) */
   environment?: string
+
+  /** User identity for personalized feature flags */
   identity?: string
+
+  /** Default feature flag values when offline or during initialization */
   featureDefaults?: { [key: string]: boolean }
+
+  /** Whether to show features during evaluation (default: false) */
   showFeatureDuringEvaluation?: boolean
+
+  /** Custom URL for fetching feature definitions */
   customDefinitionsUrl?: string
+}
+
+/**
+ * Provider function for standalone Angular applications (Angular 15+)
+ *
+ * Usage in app.config.ts:
+ * ```typescript
+ * import { provideToggly } from '@ops-ai/ngx-feature-flags-toggly';
+ *
+ * export const appConfig: ApplicationConfig = {
+ *   providers: [
+ *     provideToggly({
+ *       appKey: 'your-app-key',
+ *       environment: 'Production'
+ *     })
+ *   ]
+ * };
+ * ```
+ *
+ * Usage in main.ts:
+ * ```typescript
+ * import { bootstrapApplication } from '@angular/platform-browser';
+ * import { provideToggly } from '@ops-ai/ngx-feature-flags-toggly';
+ *
+ * bootstrapApplication(AppComponent, {
+ *   providers: [
+ *     provideToggly({
+ *       appKey: 'your-app-key',
+ *       environment: 'Production'
+ *     })
+ *   ]
+ * });
+ * ```
+ */
+export function provideToggly(config: ITogglyOptions): Provider {
+  return {
+    provide: TogglyOptions,
+    useValue: config,
+  }
 }

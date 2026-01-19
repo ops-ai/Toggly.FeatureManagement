@@ -7,8 +7,39 @@ import {
 } from '@angular/core'
 import { TogglyService } from './toggly.service'
 
+/**
+ * Structural directive for conditionally rendering content based on feature flags
+ *
+ * Usage with NgModule:
+ * ```html
+ * <div *featureFlag="'my-feature'">
+ *   This content is shown when the feature is enabled
+ * </div>
+ * ```
+ *
+ * Usage with standalone (Angular 15+):
+ * ```typescript
+ * import { FeatureFlagDirective } from '@ops-ai/ngx-feature-flags-toggly';
+ *
+ * @Component({
+ *   standalone: true,
+ *   imports: [FeatureFlagDirective],
+ *   template: `
+ *     <div *featureFlag="'my-feature'">Feature content</div>
+ *   `
+ * })
+ * ```
+ *
+ * Advanced usage with multiple features:
+ * ```html
+ * <div *featureFlag="['feature-a', 'feature-b']; requirement: 'any'">
+ *   Shown when any feature is enabled
+ * </div>
+ * ```
+ */
 @Directive({
   selector: '[featureFlag]',
+  standalone: true,
 })
 export class FeatureFlagDirective implements OnInit {
   private flag: string[] = []
@@ -17,7 +48,7 @@ export class FeatureFlagDirective implements OnInit {
   @Input() set featureFlag(value: string | string[]) {
     if (value) {
       if (typeof value === 'string') {
-        this.flag.push(value)
+        this.flag = [value]
       } else if (Array.isArray(value)) {
         this.flag = value
       }
@@ -25,11 +56,12 @@ export class FeatureFlagDirective implements OnInit {
       this.updateView()
     }
   }
-  @Input('featureFlagRequirement') requirement: string = 'all'
+
+  @Input('featureFlagRequirement') requirement: 'all' | 'any' = 'all'
   @Input('featureFlagNegate') negate: boolean = false
 
   constructor(
-    private _templateRef: TemplateRef<any>,
+    private _templateRef: TemplateRef<unknown>,
     private _viewContainer: ViewContainerRef,
     private _toggly: TogglyService,
   ) {}

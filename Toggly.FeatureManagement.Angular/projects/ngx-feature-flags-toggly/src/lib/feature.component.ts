@@ -5,11 +5,43 @@ import {
   OnChanges,
   SimpleChanges,
 } from '@angular/core'
+import { CommonModule } from '@angular/common'
 import { FeatureTemplateDirective } from './feature-template.directive'
 import { TogglyService } from './toggly.service'
 
+/**
+ * Feature component for conditionally rendering content based on feature flags
+ *
+ * Usage with NgModule:
+ * ```html
+ * <feature featureKey="my-feature">
+ *   <ng-template featureTemplate>
+ *     <p>This content is shown when the feature is enabled</p>
+ *   </ng-template>
+ * </feature>
+ * ```
+ *
+ * Usage with standalone (Angular 15+):
+ * ```typescript
+ * import { FeatureComponent, FeatureTemplateDirective } from '@ops-ai/ngx-feature-flags-toggly';
+ *
+ * @Component({
+ *   standalone: true,
+ *   imports: [FeatureComponent, FeatureTemplateDirective],
+ *   template: `
+ *     <feature featureKey="my-feature">
+ *       <ng-template featureTemplate>
+ *         <p>Feature content</p>
+ *       </ng-template>
+ *     </feature>
+ *   `
+ * })
+ * ```
+ */
 @Component({
   selector: 'feature',
+  standalone: true,
+  imports: [CommonModule],
   template: `
     <ng-container *ngIf="shouldShow && content">
       <ng-container [ngTemplateOutlet]="content.templateRef"></ng-container>
@@ -20,8 +52,9 @@ import { TogglyService } from './toggly.service'
 export class FeatureComponent implements OnChanges {
   @Input() featureKey: string | undefined
   @Input() featureKeys: string[] | undefined
-  @Input() requirement: string = 'all'
+  @Input() requirement: 'all' | 'any' = 'all'
   @Input() negate: boolean = false
+
   @ContentChild(FeatureTemplateDirective)
   content!: FeatureTemplateDirective
 
@@ -31,22 +64,14 @@ export class FeatureComponent implements OnChanges {
   constructor(private toggly: TogglyService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
-    var gate: string[] = []
+    let gate: string[] = []
+
     if (this.featureKey) {
       gate.push(this.featureKey)
     }
     if (this.featureKeys) {
-      gate = gate.concat(this.featureKeys as string[])
+      gate = gate.concat(this.featureKeys)
     }
-
-    // // Check for misusage
-    // if (!this.content) {
-    //   console.error(
-    //     `Toggly --- Missing template for feature with the following feature keys: "${gate.join(
-    //       ', ',
-    //     )}". You can provide a template using <ng-template featureTemplate>...</ng-template>.`,
-    //   )
-    // }
 
     this.isLoading = true
 

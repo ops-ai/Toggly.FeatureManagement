@@ -1,12 +1,36 @@
 {
   "name": "@ops-ai/ngx-feature-flags-toggly",
   "description": "Provides feature flags support for Angular applications allowing you to check feature status and enable/disable them easily.",
-  "version": "1.0.4",
+  "version": "2.0.0",
+  "license": "MIT",
+  "author": {
+    "name": "Ops.AI",
+    "email": "hello@ops.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.Angular"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.FeatureManagement.Angular#readme",
+  "keywords": [
+    "angular",
+    "feature-flags",
+    "feature-toggles",
+    "toggly",
+    "ab-testing",
+    "feature-management"
+  ],
   "peerDependencies": {
-    "@angular/common": "^13.3.0",
-    "@angular/core": "^13.3.0"
+    "@angular/common": ">=15.0.0",
+    "@angular/core": ">=15.0.0",
+    "@angular/router": ">=15.0.0"
   },
   "dependencies": {
     "tslib": "^2.3.0"
-  }
+  },
+  "sideEffects": false
 }
