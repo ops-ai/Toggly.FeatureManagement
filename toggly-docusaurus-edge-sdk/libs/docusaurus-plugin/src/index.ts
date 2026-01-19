@@ -28,6 +28,16 @@ export interface TogglyPluginOptions {
   connectTimeout?: number;
   /** User identity for targeting (optional) */
   identity?: string;
+  /** 
+   * Render all Feature component children during static build (SSR).
+   * When true, feature-gated content renders during build so:
+   * - All headings create anchors (fixing broken anchor detection)
+   * - All content is indexed by search engines
+   * - SEO content is present in static HTML
+   * At runtime, actual flag values are still evaluated.
+   * (default: true)
+   */
+  renderAllDuringBuild?: boolean;
 }
 
 interface PageFeatureMapping {
@@ -63,6 +73,7 @@ export default function togglyPlugin(
     isDebug = false,
     connectTimeout = 5 * 1000,
     identity,
+    renderAllDuringBuild = true, // Default to true for better DX
   } = options;
 
   // Store page feature mapping for postBuild
@@ -86,6 +97,7 @@ export default function togglyPlugin(
           isDebug,
           connectTimeout,
           identity,
+          renderAllDuringBuild,
         },
       };
     },

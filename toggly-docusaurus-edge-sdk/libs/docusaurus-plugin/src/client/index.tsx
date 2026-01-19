@@ -155,17 +155,40 @@ export interface FeatureProps {
   fallback?: ReactNode;
   /** Default value if flag is not found (default: false) */
   defaultValue?: boolean;
+  /** 
+   * HTML element to use as wrapper (default: 'div').
+   * The wrapper uses `display: contents` so it doesn't affect layout.
+   * Use 'span' for inline content if needed.
+   */
+  as?: 'div' | 'span';
 }
+
+/**
+ * Check if we're in SSR (static build) mode
+ */
+const isSSR = typeof window === 'undefined';
 
 /**
  * Feature - React component for conditional rendering based on feature flags
  *
+ * This component wraps children in a `data-feature` element that:
+ * 1. During static build: Renders all content (so anchors exist, build passes)
+ * 2. At the edge (Cloudflare Worker): HTMLRewriter removes disabled content
+ * 3. At runtime: Falls back to client-side evaluation if no edge worker
+ *
+ * The wrapper uses `display: contents` so it doesn't affect layout.
+ * Use the `as` prop to specify 'span' for inline content.
+ *
  * @example
  * ```tsx
+ * // Block content (default)
  * <Feature flag="beta_advanced_filters">
  *   <h2>Advanced Filters (Beta)</h2>
  *   <p>This feature is in beta...</p>
  * </Feature>
+ *
+ * // Inline content
+ * <Feature flag="beta" as="span">new beta feature</Feature>
  * ```
  */
 export function Feature({
@@ -173,13 +196,72 @@ export function Feature({
   children,
   fallback = null,
   defaultValue = false,
+  as: Element = 'div',
 }: FeatureProps): JSX.Element {
-  const { enabled, isReady } = useFlag(flag, defaultValue);
+  // Wrapper style - display: contents makes it invisible to layout
+  const wrapperStyle = { display: 'contents' as const };
 
-  if (!isReady) {
-    // While loading, show nothing or a loading state
-    return <>{fallback}</>;
+  // During SSR, render children with data-feature attribute
+  // The Cloudflare Worker will strip disabled features at the edge
+  if (isSSR) {
+    return (
+      <Element data-feature={flag} style={wrapperStyle}>
+        {children}
+      </Element>
+    );
   }
 
-  return <>{enabled ? children : fallback}</>;
+  // Client-side rendering - use actual flag evaluation
+  return (
+    <FeatureClient 
+      flag={flag} 
+      fallback={fallback} 
+      defaultValue={defaultValue}
+      as={Element}
+    >
+      {children}
+    </FeatureClient>
+  );
+}
+
+/**
+ * Client-side Feature component that uses hooks
+ * Separated to avoid hooks being called during SSR
+ */
+function FeatureClient({
+  flag,
+  children,
+  fallback = null,
+  defaultValue = false,
+  as: Element = 'div',
+}: FeatureProps): JSX.Element {
+  const { enabled, isReady } = useFlag(flag, defaultValue);
+  
+  // Wrapper style - display: contents makes it invisible to layout
+  const wrapperStyle = { display: 'contents' as const };
+
+  // Always wrap with data-feature for edge worker compatibility
+  // The wrapper is invisible to layout due to display: contents
+  
+  // If still loading, show children wrapped (for hydration match with SSR)
+  if (!isReady) {
+    return (
+      <Element data-feature={flag} style={wrapperStyle}>
+        {children}
+      </Element>
+    );
+  }
+
+  // When ready, show enabled content or fallback
+  // Keep the wrapper for consistency (edge worker will handle removal if disabled)
+  if (enabled) {
+    return (
+      <Element data-feature={flag} style={wrapperStyle}>
+        {children}
+      </Element>
+    );
+  }
+
+  // Feature is disabled - render fallback (no wrapper needed)
+  return <>{fallback}</>;
 }
