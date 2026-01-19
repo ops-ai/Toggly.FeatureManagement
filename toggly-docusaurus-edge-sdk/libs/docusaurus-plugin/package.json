@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-docusaurus-plugin",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Docusaurus plugin and React bindings for Toggly feature flag gating",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
