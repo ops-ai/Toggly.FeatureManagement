@@ -68,4 +68,5 @@ jobs:
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add Toggly.FeatureManagement.Astro/package.json Toggly.FeatureManagement.Astro/package-lock.json
           git commit -S -m "Bumped Astro SDK to ${{ steps.version.outputs.new_version }} [skip ci]"
+          git pull --rebase
           git push

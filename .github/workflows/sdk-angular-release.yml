@@ -70,4 +70,5 @@ jobs:
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly/package.json
           git commit -S -m "Bumped Angular SDK to ${{ steps.version.outputs.new_version }} [skip ci]"
+          git pull --rebase
           git push
