@@ -164,6 +164,8 @@ namespace Toggly.FeatureManagement.Benchmarks
         public Task RecordUsageAsync<TContext>(string featureKey, TContext context, bool allowed) => Task.CompletedTask;
         public Task RecordUsageAsync(string featureKey) => Task.CompletedTask;
         public Task RecordUsageAsync<TContext>(string featureKey, TContext context) => Task.CompletedTask;
+        public Task RecordViewAsync(string featureKey) => Task.CompletedTask;
+        public Task RecordViewAsync<TContext>(string featureKey, TContext context) => Task.CompletedTask;
     }
 }
 

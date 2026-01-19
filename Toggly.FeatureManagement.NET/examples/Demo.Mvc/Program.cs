@@ -35,7 +35,7 @@ namespace Demo.Mvc
                 options.UseSignedDefinitions = true;
             });
 
-            builder.Services.AddSingleton<IDisabledFeaturesHandler, FeatureNotEnabledHandler>();
+            builder.Services.AddSingleton<Microsoft.FeatureManagement.Mvc.IDisabledFeaturesHandler, FeatureNotEnabledHandler>();
 
             // Add services to the container.
             builder.Services.AddControllersWithViews();

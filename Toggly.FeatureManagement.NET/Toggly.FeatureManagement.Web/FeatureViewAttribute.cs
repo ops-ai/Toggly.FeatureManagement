@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.FeatureManagement;
-using Microsoft.FeatureManagement.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,6 +8,20 @@ using System.Threading.Tasks;
 
 namespace Toggly.FeatureManagement
 {
+    /// <summary>
+    /// A handler that is invoked when a feature gated endpoint is accessed but the feature(s) are disabled.
+    /// </summary>
+    public interface IDisabledFeaturesHandler
+    {
+        /// <summary>
+        /// Called when disabled features are accessed.
+        /// </summary>
+        /// <param name="features">The list of feature names that were disabled.</param>
+        /// <param name="context">The action executing context.</param>
+        /// <returns>A task representing the async operation.</returns>
+        Task HandleDisabledFeatures(IEnumerable<string> features, ActionExecutingContext context);
+    }
+
     /// <summary>
     /// An attribute that can be placed on MVC controller actions or Razor Page handlers 
     /// to gate access based on feature flags AND record that a feature was viewed.
