@@ -41,8 +41,7 @@
   "license": "BSD-3-Clause",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
-    "directory": "Toggly.FeatureManagement/Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly"
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
   },
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
