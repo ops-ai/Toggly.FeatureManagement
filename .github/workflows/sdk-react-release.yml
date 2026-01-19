@@ -68,5 +68,6 @@ jobs:
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add Toggly.FeatureManagement.React/package.json Toggly.FeatureManagement.React/package-lock.json
           git commit -S -m "Bumped React SDK to ${{ steps.version.outputs.new_version }} [skip ci]"
+          git checkout -- .
           git pull --rebase
           git push

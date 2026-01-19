@@ -68,5 +68,6 @@ jobs:
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/package.json toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/package-lock.json
           git commit -S -m "Bumped Docusaurus SDK to ${{ steps.version.outputs.new_version }} [skip ci]"
+          git checkout -- .
           git pull --rebase
           git push
