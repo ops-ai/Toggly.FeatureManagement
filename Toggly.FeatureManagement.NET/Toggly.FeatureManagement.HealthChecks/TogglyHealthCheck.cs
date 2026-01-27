@@ -66,7 +66,8 @@ namespace Toggly.FeatureManagement.HealthChecks
             // Check 1: SDK not loaded
             if (!debugInfo.Loaded)
             {
-                return Task.FromResult(HealthCheckResult.Unhealthy(
+                return Task.FromResult(new HealthCheckResult(
+                    context.Registration.FailureStatus,
                     "Toggly SDK has not completed initial load",
                     data: data));
             }
@@ -85,7 +86,8 @@ namespace Toggly.FeatureManagement.HealthChecks
                     data["timeSinceLastCheck"] = timeSinceLastCheck.ToString();
                     data["stalenessThreshold"] = _options.StalenessThreshold.ToString();
 
-                    return Task.FromResult(HealthCheckResult.Unhealthy(
+                    return Task.FromResult(new HealthCheckResult(
+                        context.Registration.FailureStatus,
                         $"Feature definitions check is stale ({timeSinceLastCheck:g} since last check) and WebSocket is disconnected",
                         data: data));
                 }
