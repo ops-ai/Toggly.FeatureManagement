@@ -6,7 +6,6 @@ on:
       - develop
     paths:
       - 'toggly-docusaurus-edge-sdk/**'
-      - '.github/workflows/sdk-docusaurus-release.yml'
   workflow_dispatch:
     inputs:
       bump_type:

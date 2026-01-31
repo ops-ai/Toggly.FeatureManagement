@@ -6,7 +6,6 @@ on:
       - develop
     paths:
       - 'Toggly.FeatureManagement.Astro/**'
-      - '.github/workflows/sdk-astro-release.yml'
   workflow_dispatch:
     inputs:
       bump_type:

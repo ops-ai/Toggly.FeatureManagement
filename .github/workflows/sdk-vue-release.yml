@@ -6,7 +6,6 @@ on:
       - develop
     paths:
       - 'Toggly.FeatureManagement.Vue/**'
-      - '.github/workflows/sdk-vue-release.yml'
   workflow_dispatch:
     inputs:
       bump_type:

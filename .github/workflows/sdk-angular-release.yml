@@ -6,7 +6,6 @@ on:
       - develop
     paths:
       - 'Toggly.FeatureManagement.Angular/**'
-      - '.github/workflows/sdk-angular-release.yml'
   workflow_dispatch:
     inputs:
       bump_type:

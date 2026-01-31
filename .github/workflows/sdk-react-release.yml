@@ -6,7 +6,6 @@ on:
       - develop
     paths:
       - 'Toggly.FeatureManagement.React/**'
-      - '.github/workflows/sdk-react-release.yml'
   workflow_dispatch:
     inputs:
       bump_type:
