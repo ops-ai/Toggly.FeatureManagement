@@ -61,9 +61,9 @@ jobs:
           # Get current version from package.json
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           
-          # Get version from previous commit
-          git fetch origin develop
-          PREVIOUS_VERSION=$(git show origin/develop:Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version")
+          # Get version from previous commit (HEAD~1)
+          # This checks if version changed in the commits being pushed
+          PREVIOUS_VERSION=$(git show HEAD~1:Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
           
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
