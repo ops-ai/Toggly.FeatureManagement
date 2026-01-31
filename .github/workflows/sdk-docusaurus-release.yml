@@ -23,6 +23,10 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: sdk-release
+  cancel-in-progress: false
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
@@ -118,9 +122,31 @@ jobs:
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
+          
+          # Pull latest changes before committing
+          git pull --rebase origin develop
+          
+          # Add version bump changes
           git add toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/package.json toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/package-lock.json
+          
+          # Commit with bump type
           BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          git commit -S -m "Bumped Docusaurus SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
-          git checkout -- .
-          git pull --rebase
-          git push
+          git commit -S -m "Bumped Docusaurus SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]" || true
+          
+          # Push with retry logic
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git push origin develop; then
+              echo "Successfully pushed version bump"
+              exit 0
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Push failed, attempt $RETRY_COUNT of $MAX_RETRIES"
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              git pull --rebase origin develop
+              sleep 2
+            fi
+          done
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
