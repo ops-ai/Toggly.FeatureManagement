@@ -23,10 +23,6 @@ permissions:
   contents: write
   id-token: write
 
-concurrency:
-  group: sdk-release
-  cancel-in-progress: false
-
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
@@ -123,30 +119,38 @@ jobs:
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           
-          # Pull latest changes before committing
-          git pull --rebase origin develop
-          
-          # Add version bump changes
+          # Add version bump changes FIRST (before pulling)
           git add Toggly.FeatureManagement.React/package.json Toggly.FeatureManagement.React/package-lock.json
           
           # Commit with bump type
           BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          git commit -S -m "Bumped React SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]" || true
+          git commit -S -m "Bumped React SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
           
-          # Push with retry logic
+          # Now pull and push with retry logic
           MAX_RETRIES=3
           RETRY_COUNT=0
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            # Pull latest changes with rebase
+            if ! git pull --rebase origin develop; then
+              echo "Pull/rebase failed, retrying..."
+              git rebase --abort 2>/dev/null || true
+              sleep 2
+              continue
+            fi
+            
+            # Try to push
             if git push origin develop; then
               echo "Successfully pushed version bump"
               exit 0
             fi
+            
             RETRY_COUNT=$((RETRY_COUNT + 1))
             echo "Push failed, attempt $RETRY_COUNT of $MAX_RETRIES"
+            
             if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              git pull --rebase origin develop
               sleep 2
             fi
           done
+          
           echo "Failed to push after $MAX_RETRIES attempts"
           exit 1
