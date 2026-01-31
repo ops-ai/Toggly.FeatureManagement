@@ -275,8 +275,53 @@ interface TogglyConfig {
   
   /** User identity for targeting (optional) */
   identity?: string;
+  
+  /**
+   * When true, all features are enabled during build time (SSG).
+   * This is useful when you have an edge worker (like Cloudflare Worker) that
+   * filters content based on feature flags at runtime.
+   * During dev server, actual feature flags from the API are still used.
+   * (default: false)
+   */
+  allFeaturesEnabledDuringBuild?: boolean;
 }
 ```
+
+## Build Mode for Edge Filtering
+
+If you're using an edge worker (Cloudflare Worker, Vercel Edge, etc.) to filter content based on feature flags at runtime, you can enable all features during the static build:
+
+```javascript
+// astro.config.mjs
+const isDev = process.env.NODE_ENV === 'development';
+const isBuild = process.argv.includes('build');
+
+export default defineConfig({
+  integrations: [
+    togglyIntegration({
+      appKey: process.env.TOGGLY_APP_KEY,
+      environment: process.env.TOGGLY_ENVIRONMENT || 'Production',
+      baseURI: 'https://client.toggly.io',
+      // Enable all features during production builds
+      // Use actual feature flags during development
+      allFeaturesEnabledDuringBuild: isBuild && !isDev,
+      isDebug: isDev,
+    }),
+  ],
+});
+```
+
+**Benefits:**
+- **SEO**: All feature-flagged content is present in the static build for search engines
+- **No broken links**: Features disabled during build won't cause broken internal links
+- **Edge performance**: Static build generated once, edge worker does lightweight filtering
+- **Dynamic control**: Toggle features at the edge without rebuilding
+- **Dev experience**: See actual feature states during local development
+
+**How it works:**
+1. **Development** (`npm run dev`): Fetches actual feature flags from Toggly API
+2. **Build** (`npm run build`): Builds static site with all features enabled
+3. **Runtime** (Edge/CDN): Edge worker filters content based on current feature flag states
 
 ## SSR vs SSG Considerations
 

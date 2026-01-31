@@ -22,6 +22,14 @@ export interface TogglyConfig {
   connectTimeout?: number;
   /** User identity for targeting (optional) */
   identity?: string;
+  /**
+   * When true, all features are enabled during build time (SSG).
+   * This is useful when you have an edge worker (like Cloudflare Worker) that
+   * filters content based on feature flags at runtime.
+   * During dev server, actual feature flags from the API are still used.
+   * (default: false)
+   */
+  allFeaturesEnabledDuringBuild?: boolean;
 }
 
 /**

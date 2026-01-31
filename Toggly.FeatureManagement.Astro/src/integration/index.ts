@@ -26,11 +26,13 @@ export default function togglyIntegration(
     featureFlagsRefreshInterval: 3 * 60 * 1000,
     isDebug: false,
     connectTimeout: 5 * 1000,
+    allFeaturesEnabledDuringBuild: false,
     ...options,
   };
 
   let pageFeatureMapping: PageFeatureMapping = {};
   let astroConfig: AstroConfig;
+  let buildTimeClient: any = null;
 
   return {
     name: '@ops-ai/astro-feature-flags-toggly',
@@ -43,10 +45,12 @@ export default function togglyIntegration(
         }
 
         // Inject client setup script
+        // For client-side, we never want allFeaturesEnabledDuringBuild since that's only for SSG
+        const clientConfig = { ...config, allFeaturesEnabledDuringBuild: false };
         injectScript(
           'page',
           `
-          window.__TOGGLY_CONFIG__ = ${JSON.stringify(config)};
+          window.__TOGGLY_CONFIG__ = ${JSON.stringify(clientConfig)};
           import('@ops-ai/astro-feature-flags-toggly/client/setup');
         `
         );
@@ -66,8 +70,9 @@ export default function togglyIntegration(
           console.log('[Toggly Integration] Server setup...');
         }
 
-        // Create server client for SSR
-        const togglyClient = createTogglyServerClient(config);
+        // Create server client for SSR/dev server
+        // In dev mode, we don't enable all features - we use actual flags
+        const togglyClient = createTogglyServerClient(config, false);
 
         // Inject into server context (this will be available in SSR)
         server.middlewares.use((req, res, next) => {
@@ -80,6 +85,16 @@ export default function togglyIntegration(
       'astro:build:start': async () => {
         if (config.isDebug) {
           console.log('[Toggly Integration] Build started, extracting frontmatter...');
+        }
+
+        // If allFeaturesEnabledDuringBuild is true, create a build-time client
+        // that will override all flags to true
+        if (config.allFeaturesEnabledDuringBuild) {
+          if (config.isDebug) {
+            console.log('[Toggly Integration] Build mode: All features will be enabled');
+          }
+          // Create a build-time client that enables all features
+          buildTimeClient = createTogglyServerClient(config, true);
         }
 
         // Extract page feature mapping from frontmatter
@@ -252,8 +267,9 @@ export function createTogglyMiddleware(config: TogglyConfig) {
     next: () => Promise<Response>
   ): Promise<Response> {
     // Create or reuse Toggly client
+    // In middleware (runtime), we never enable all features - we use actual flags
     if (!locals.toggly) {
-      locals.toggly = createTogglyServerClient(config);
+      locals.toggly = createTogglyServerClient(config, false);
     }
 
     return next();

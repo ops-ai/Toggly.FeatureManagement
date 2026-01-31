@@ -8,6 +8,16 @@ on:
       - 'Toggly.FeatureManagement.Vue/**'
       - '.github/workflows/sdk-vue-release.yml'
   workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
@@ -45,13 +55,54 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Bump patch version
-        id: version
+      - name: Check if version was manually bumped
+        id: check_version
         run: |
+          # Get current version from package.json
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          
+          # Get version from previous commit
+          git fetch origin develop
+          PREVIOUS_VERSION=$(git show origin/develop:Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version")
+          
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+          
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "manually_bumped=true" >> $GITHUB_OUTPUT
+            echo "Version was manually bumped from $PREVIOUS_VERSION to $CURRENT_VERSION"
+          else
+            echo "manually_bumped=false" >> $GITHUB_OUTPUT
+            echo "No manual version bump detected"
+          fi
+
+      - name: Bump version (if not manually bumped)
+        id: auto_version
+        if: steps.check_version.outputs.manually_bumped == 'false'
+        run: |
+          # Determine bump type (default to patch for automatic runs)
+          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+          echo "Bumping $BUMP_TYPE version..."
+          
           # Bump version and capture the new version
-          NEW_VERSION=$(npm version patch --no-git-tag-version)
+          NEW_VERSION=$(npm version $BUMP_TYPE --no-git-tag-version)
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Bumped to version $NEW_VERSION"
+      
+      - name: Set version output (manual bump)
+        id: manual_version
+        if: steps.check_version.outputs.manually_bumped == 'true'
+        run: |
+          echo "new_version=v${{ steps.check_version.outputs.current_version }}" >> $GITHUB_OUTPUT
+      
+      - name: Set final version
+        id: version
+        run: |
+          if [ "${{ steps.check_version.outputs.manually_bumped }}" == "true" ]; then
+            echo "new_version=${{ steps.manual_version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          else
+            echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build
         run: npm run build
@@ -62,12 +113,14 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
+        if: steps.check_version.outputs.manually_bumped == 'false'
         run: |
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/package.json Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/package-lock.json
-          git commit -S -m "Bumped Vue SDK to ${{ steps.version.outputs.new_version }} [skip ci]"
+          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+          git commit -S -m "Bumped Vue SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
           git checkout -- .
           git pull --rebase
           git push

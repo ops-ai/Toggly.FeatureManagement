@@ -20,8 +20,9 @@ export class TogglyServer implements TogglyClient {
   private config: TogglyConfig;
   private cache: CachedFlags | null = null;
   private fetchPromise: Promise<Flags> | null = null;
+  private isBuildTime: boolean = false;
 
-  constructor(config: TogglyConfig) {
+  constructor(config: TogglyConfig, isBuildTime: boolean = false) {
     this.config = {
       baseURI: 'https://client.toggly.io',
       environment: 'Production',
@@ -29,8 +30,10 @@ export class TogglyServer implements TogglyClient {
       featureFlagsRefreshInterval: 3 * 60 * 1000, // 3 minutes
       isDebug: false,
       connectTimeout: 5 * 1000, // 5 seconds
+      allFeaturesEnabledDuringBuild: false,
       ...config,
     };
+    this.isBuildTime = isBuildTime;
   }
 
   /**
@@ -96,7 +99,19 @@ export class TogglyServer implements TogglyClient {
         );
       }
 
-      const flags = (await response.json()) as Flags;
+      let flags = (await response.json()) as Flags;
+
+      // If allFeaturesEnabledDuringBuild is true and we're in build time,
+      // override all flags to true
+      if (this.config.allFeaturesEnabledDuringBuild && this.isBuildTime) {
+        if (this.config.isDebug) {
+          console.log('[Toggly Server] Build mode: Enabling all features');
+        }
+        flags = Object.keys(flags).reduce((acc, key) => {
+          acc[key] = true;
+          return acc;
+        }, {} as Flags);
+      }
 
       if (this.config.isDebug) {
         console.log('[Toggly Server] Fetched flags:', flags);
@@ -216,8 +231,8 @@ export class TogglyServer implements TogglyClient {
 /**
  * Create a new Toggly server-side client instance
  */
-export function createTogglyServerClient(config: TogglyConfig): TogglyServer {
-  return new TogglyServer(config);
+export function createTogglyServerClient(config: TogglyConfig, isBuildTime: boolean = false): TogglyServer {
+  return new TogglyServer(config, isBuildTime);
 }
 
 
