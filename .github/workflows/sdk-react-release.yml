@@ -1,11 +1,6 @@
 name: React SDK - Build & Publish
 
 on:
-  push:
-    branches:
-      - develop
-    paths:
-      - 'Toggly.FeatureManagement.React/**'
   workflow_dispatch:
     inputs:
       bump_type:

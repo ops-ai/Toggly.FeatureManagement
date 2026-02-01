@@ -1,11 +1,6 @@
 name: Astro SDK - Build & Publish
 
 on:
-  push:
-    branches:
-      - develop
-    paths:
-      - 'Toggly.FeatureManagement.Astro/**'
   workflow_dispatch:
     inputs:
       bump_type:

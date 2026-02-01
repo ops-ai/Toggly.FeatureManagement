@@ -1,11 +1,6 @@
 name: Angular SDK - Build & Publish
 
 on:
-  push:
-    branches:
-      - develop
-    paths:
-      - 'Toggly.FeatureManagement.Angular/**'
   workflow_dispatch:
     inputs:
       bump_type:

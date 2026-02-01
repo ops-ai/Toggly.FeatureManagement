@@ -1,15 +1,6 @@
 name: Build and Release CLI
 
 on:
-  push:
-    tags:
-      - 'cli-v*'
-    branches:
-      - develop
-      - main
-    paths:
-      - 'Toggly.CLI/**'
-      - '.github/workflows/cli-build-release.yml'
   workflow_dispatch:
     inputs:
       version:

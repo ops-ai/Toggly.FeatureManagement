@@ -1,11 +1,6 @@
 name: Vue SDK - Build & Publish
 
 on:
-  push:
-    branches:
-      - develop
-    paths:
-      - 'Toggly.FeatureManagement.Vue/**'
   workflow_dispatch:
     inputs:
       bump_type:

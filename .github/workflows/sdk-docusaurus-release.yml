@@ -1,11 +1,6 @@
 name: Docusaurus SDK - Build & Publish
 
 on:
-  push:
-    branches:
-      - develop
-    paths:
-      - 'toggly-docusaurus-edge-sdk/**'
   workflow_dispatch:
     inputs:
       bump_type:
