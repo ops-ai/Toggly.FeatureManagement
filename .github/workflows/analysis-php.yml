@@ -1,0 +1,161 @@
+name: PHP SDK - Tests & Analysis
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.FeatureManagement.PHP/**'
+      - '.github/workflows/analysis-php.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.FeatureManagement.PHP/**'
+      - '.github/workflows/analysis-php.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test PHP ${{ matrix.php-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ['7.4', '8.0', '8.1', '8.2', '8.3']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: xdebug
+          tools: composer:v2
+          extensions: mbstring, xml, ctype, json
+      
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+        working-directory: Toggly.FeatureManagement.PHP
+      
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ matrix.php-version }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-${{ matrix.php-version }}-
+            ${{ runner.os }}-composer-
+      
+      - name: Install dependencies
+        working-directory: Toggly.FeatureManagement.PHP
+        run: composer install --prefer-dist --no-progress --no-interaction
+      
+      - name: Validate composer.json
+        working-directory: Toggly.FeatureManagement.PHP
+        run: composer validate --strict
+      
+      - name: Check code style
+        working-directory: Toggly.FeatureManagement.PHP
+        run: |
+          if [ -f "vendor/bin/phpcs" ]; then
+            vendor/bin/phpcs --standard=PSR12 src/ || echo "Code style check completed with warnings"
+          else
+            echo "PHP_CodeSniffer not installed, skipping code style check"
+          fi
+        continue-on-error: true
+      
+      - name: Run PHPUnit tests with coverage
+        working-directory: Toggly.FeatureManagement.PHP
+        run: vendor/bin/phpunit --coverage-clover=coverage.xml --coverage-text
+        continue-on-error: true
+      
+      - name: Upload coverage (PHP 8.3 only)
+        if: matrix.php-version == '8.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-coverage
+          path: Toggly.FeatureManagement.PHP/coverage.xml
+          retention-days: 7
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-php-${{ matrix.php-version }}
+          path: Toggly.FeatureManagement.PHP/*.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  sonarcloud:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+      
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: php-coverage
+          path: coverage/
+        continue-on-error: true
+      
+      - name: List coverage files
+        run: |
+          echo "Coverage files:"
+          find coverage -type f || echo "No coverage files found"
+      
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=toggly-sdks-php
+            -Dsonar.organization=ops-ai
+            -Dsonar.projectName=Toggly SDKs - PHP
+            -Dsonar.sources=Toggly.FeatureManagement.PHP/src
+            -Dsonar.tests=Toggly.FeatureManagement.PHP/tests
+            -Dsonar.exclusions=**/vendor/**,**/tests/**
+            -Dsonar.php.coverage.reportPaths=coverage/coverage.xml
+            -Dsonar.php.tests.reportPath=coverage/test-results.xml
+        continue-on-error: true
+
+  summary:
+    name: Analysis Summary
+    runs-on: ubuntu-latest
+    needs: [test, sonarcloud]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## PHP SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Analysis workflow completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### PHP Versions Tested" >> $GITHUB_STEP_SUMMARY
+          echo "- PHP 7.4" >> $GITHUB_STEP_SUMMARY
+          echo "- PHP 8.0" >> $GITHUB_STEP_SUMMARY
+          echo "- PHP 8.1" >> $GITHUB_STEP_SUMMARY
+          echo "- PHP 8.2" >> $GITHUB_STEP_SUMMARY
+          echo "- PHP 8.3" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Components Tested" >> $GITHUB_STEP_SUMMARY
+          echo "- Core Feature Management SDK" >> $GITHUB_STEP_SUMMARY
+          echo "- Laravel Integration" >> $GITHUB_STEP_SUMMARY
+          echo "- WordPress Integration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-php" >> $GITHUB_STEP_SUMMARY

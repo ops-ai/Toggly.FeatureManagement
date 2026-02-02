@@ -48,7 +48,10 @@
     "copy-components": "mkdir -p dist/components dist/frameworks/vue dist/frameworks/svelte && cp src/components/*.astro dist/components/ && cp src/frameworks/vue/*.vue dist/frameworks/vue/ && cp src/frameworks/svelte/*.svelte dist/frameworks/svelte/",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "astro",
@@ -73,11 +76,14 @@
     "@nanostores/vue": "^1.0.1",
     "@types/node": "^20.11.0",
     "@types/react": "^19.2.7",
+    "@vitest/coverage-v8": "^1.0.0",
     "astro": "^5.16.0",
+    "jsdom": "^23.0.0",
     "react": "^19.2.3",
     "svelte": "^5.46.1",
     "tsup": "^8.0.0",
     "typescript": "^5.3.3",
+    "vitest": "^1.0.0",
     "vue": "^3.5.26"
   },
   "peerDependencies": {

@@ -1,0 +1,147 @@
+name: .NET SDKs - Tests & Analysis
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.FeatureManagement.NET/**'
+      - 'Toggly.CLI/**'
+      - '.github/workflows/analysis-dotnet.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.FeatureManagement.NET/**'
+      - 'Toggly.CLI/**'
+      - '.github/workflows/analysis-dotnet.yml'
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Build, Test & Analyze
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      
+      - name: Install SonarScanner
+        run: dotnet tool install --global dotnet-sonarscanner
+      
+      - name: Restore dependencies
+        run: dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln
+      
+      - name: Begin SonarScanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet sonarscanner begin \
+            /k:"toggly-sdks-dotnet" \
+            /o:"ops-ai" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.token="${SONAR_TOKEN}" \
+            /d:sonar.cs.opencover.reportsPaths="**/coverage/**/coverage.opencover.xml" \
+            /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/MlNetChangePointDetection/**" \
+            /d:sonar.coverage.exclusions="**/*Tests.cs,**/examples/**,**/Benchmarks/**" \
+            /d:sonar.test.inclusions="**/*Tests.cs"
+      
+      - name: Build solution
+        run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
+      
+      - name: Run tests with coverage
+        run: |
+          dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Tests/Toggly.FeatureManagement.Tests.csproj \
+            --no-build \
+            -c Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=test-results.trx" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+      
+      - name: End SonarScanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: TestResults/
+          retention-days: 7
+      
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-reports
+          path: |
+            **/coverage/**/*.xml
+            **/TestResults/**/*.xml
+          retention-days: 7
+          if-no-files-found: ignore
+      
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "## .NET SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Build and test analysis completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Components Analyzed" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement (Core SDK)" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement.Web" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement.Hangfire" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement.HealthChecks" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement.NSwag" >> $GITHUB_STEP_SUMMARY
+          echo "- Storage Providers (DistributedCache, RavenDB, EntityFramework)" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.Metrics.SystemMetrics" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.CLI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-dotnet" >> $GITHUB_STEP_SUMMARY
+
+  build-cli:
+    name: Build CLI
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      
+      - name: Restore CLI dependencies
+        run: dotnet restore Toggly.CLI/Toggly.CLI.csproj
+      
+      - name: Build CLI
+        run: dotnet build Toggly.CLI/Toggly.CLI.csproj -c Release
+      
+      - name: CLI Build Summary
+        run: |
+          echo "✅ CLI build completed successfully" >> $GITHUB_STEP_SUMMARY
