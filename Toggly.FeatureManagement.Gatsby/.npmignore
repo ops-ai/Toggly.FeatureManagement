@@ -1,0 +1,16 @@
+src/
+example/
+.github/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+tsconfig.json
+tsup.config.ts
+.gitignore
+.DS_Store
+node_modules/
+*.log
+.env*
+# Exclude .d.mts files to prevent Gatsby GraphQL parsing warnings
+dist/**/*.d.mts

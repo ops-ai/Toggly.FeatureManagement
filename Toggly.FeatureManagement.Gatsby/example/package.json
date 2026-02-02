@@ -1,0 +1,23 @@
+{
+  "name": "gatsby-feature-flags-toggly-example",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Example Gatsby site demonstrating @ops-ai/gatsby-feature-flags-toggly",
+  "scripts": {
+    "dev": "gatsby develop",
+    "build": "gatsby build",
+    "serve": "gatsby serve",
+    "clean": "gatsby clean"
+  },
+  "dependencies": {
+    "@ops-ai/gatsby-feature-flags-toggly": "^1.0.2",
+    "gatsby": "^5.13.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "name": "@ops-ai/gatsby-feature-flags-toggly",
+  "version": "1.0.3",
+  "description": "Toggly feature flags SDK for Gatsby with SSR, SSG, and build-time page gating",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.mjs",
+      "require": "./dist/hooks/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.mjs",
+      "require": "./dist/components/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/store.d.ts",
+      "import": "./dist/client/store.mjs",
+      "require": "./dist/client/store.js"
+    },
+    "./gatsby-node": "./gatsby-node.js",
+    "./gatsby-ssr": "./gatsby-ssr.js",
+    "./gatsby-browser": "./gatsby-browser.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "gatsby-node.js",
+    "gatsby-ssr.js",
+    "gatsby-browser.js"
+  ],
+  "scripts": {
+    "build": "tsup && npm run remove-mts",
+    "remove-mts": "find dist -name '*.d.mts' -type f -delete 2>/dev/null || true",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "gatsby",
+    "gatsby-plugin",
+    "feature-flags",
+    "toggly",
+    "feature-toggle",
+    "ssr",
+    "ssg",
+    "react"
+  ],
+  "author": "Ops.AI <hello@ops.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+  },
+  "dependencies": {
+    "nanostores": "^0.11.3",
+    "@nanostores/react": "^0.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.0",
+    "gatsby": "^5.13.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.3"
+  },
+  "peerDependencies": {
+    "gatsby": "^5.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  }
+}

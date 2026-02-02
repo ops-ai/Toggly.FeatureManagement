@@ -1,0 +1,27 @@
+---
+title: Beta Page
+description: Example of page-level feature gating
+x-feature: beta-feature
+---
+
+# Beta Page
+
+This page requires the `beta-feature` flag to be enabled.
+
+## Page-Level Gating
+
+By adding `x-feature: beta-feature` to the frontmatter, this page is registered in the feature manifest during build.
+
+### How It Works
+
+1. During `gatsby build`, the plugin extracts the `x-feature` field
+2. The page path is mapped to the feature in `toggly-page-features.json`
+3. An edge worker can read this manifest and return 404 if the feature is disabled
+
+### Benefits
+
+- **SEO-Friendly**: Page is built and crawlable
+- **Dynamic Control**: Can be hidden/shown without rebuild
+- **Edge Enforcement**: Block access before serving HTML
+
+[← Back to Home](/)
