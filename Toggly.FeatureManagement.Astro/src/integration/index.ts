@@ -55,12 +55,42 @@ export default function togglyIntegration(
         `
         );
 
-        // Add middleware to inject Toggly client into Astro.locals
+        // Add Vite plugin to strip x-feature directives before Astro's compiler
         updateConfig({
           vite: {
             ssr: {
               noExternal: ['@ops-ai/astro-feature-flags-toggly'],
             },
+            plugins: [
+              {
+                name: 'toggly-x-feature-transform',
+                enforce: 'pre' as const,
+                load(id: string) {
+                  // Only process .astro files
+                  if (!id.endsWith('.astro')) return null;
+
+                  const code = fs.readFileSync(id, 'utf-8');
+
+                  // Check if frontmatter contains x-feature:
+                  const frontmatterMatch = code.match(/^(---\s*\n)([\s\S]*?)(\n---)/);
+                  if (!frontmatterMatch) return null;
+
+                  const frontmatter = frontmatterMatch[2];
+                  if (!/^x-feature:\s*.+$/m.test(frontmatter)) return null;
+
+                  // Strip the x-feature line entirely so esbuild doesn't choke on it
+                  const updatedFrontmatter = frontmatter.replace(
+                    /^x-feature:\s*.+\n?/m,
+                    ''
+                  );
+
+                  return code.replace(
+                    frontmatterMatch[0],
+                    frontmatterMatch[1] + updatedFrontmatter + frontmatterMatch[3]
+                  );
+                },
+              },
+            ],
           },
         });
       },
