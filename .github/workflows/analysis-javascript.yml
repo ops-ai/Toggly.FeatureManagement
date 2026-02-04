@@ -89,6 +89,11 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: npm ci
       
+      - name: Build package (if needed)
+        working-directory: ${{ matrix.path }}
+        run: npm run build || echo "No build script configured"
+        continue-on-error: true
+      
       - name: Run TypeScript type check
         working-directory: ${{ matrix.path }}
         run: npm run typecheck || echo "No typecheck script configured"
