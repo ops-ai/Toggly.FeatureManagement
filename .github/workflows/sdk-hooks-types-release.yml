@@ -141,8 +141,12 @@ jobs:
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           
+          # Clean npm cache to avoid any stale files
+          npm cache clean --force
+          
           # Add version bump changes FIRST (before pulling)
           git add toggly-hooks-types/package.json
+          git add toggly-hooks-types/package-lock.json
           git add toggly-hooks-types/CHANGELOG.md
           
           # Commit with bump type
@@ -153,11 +157,12 @@ jobs:
           MAX_RETRIES=3
           RETRY_COUNT=0
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            # Pull latest changes with rebase
-            if ! git pull --rebase origin develop; then
+            # Pull latest changes with rebase and autostash
+            if ! git pull --rebase --autostash origin develop; then
               echo "Pull/rebase failed, retrying..."
               git rebase --abort 2>/dev/null || true
               sleep 2
+              RETRY_COUNT=$((RETRY_COUNT + 1))
               continue
             fi
             
