@@ -504,4 +504,105 @@ MIT
 - [@ops-ai/react-feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/react-feature-flags-toggly) - React SDK
 - [@ops-ai/feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/feature-flags-toggly) - Vanilla JavaScript SDK
 
+## Extensibility with Hooks
+
+Toggly provides a powerful hooks system that allows you to extend SDK functionality by hooking into feature flag lifecycle events. This is perfect for integrating with analytics, monitoring tools, or implementing custom behaviors.
+
+### What are Hooks?
+
+Hooks let you execute custom code at specific points in the feature flag evaluation lifecycle:
+
+- **beforeEvaluation**: Called before a feature flag is evaluated
+- **afterEvaluation**: Called after a feature flag is evaluated (with the result)
+- **beforeIdentify**: Called before user identity is set or cleared
+- **afterIdentify**: Called after user identity is set or cleared
+- **afterRefresh**: Called after feature definitions are refreshed from Toggly
+
+### Creating a Hook
+
+```typescript
+import type { Hook } from '@ops-ai/toggly-hooks-types';
+
+const myAnalyticsHook: Hook = {
+  getMetadata: () => ({
+    name: 'MyAnalyticsHook',
+    version: '1.0.0'
+  }),
+  
+  afterEvaluation: async (data) => {
+    // Send to analytics
+    analytics.track('Feature Flag Evaluated', {
+      feature: data.featureKey,
+      enabled: data.result
+    });
+  }
+};
+```
+
+### Registering Hooks
+
+**During initialization in astro.config:**
+
+```typescript
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import toggly from '@ops-ai/astro-feature-flags-toggly';
+
+export default defineConfig({
+  integrations: [
+    toggly({
+      appKey: 'your-app-key',
+      environment: 'your-environment-name',
+      hooks: [myAnalyticsHook]
+    })
+  ]
+});
+```
+
+**At runtime (client-side):**
+
+```typescript
+import { togglyStore } from '@ops-ai/astro-feature-flags-toggly/client';
+import { get } from 'svelte/store';
+
+const store = get(togglyStore);
+
+// Add a hook
+store.hookExecutor.addHook(myAnalyticsHook);
+
+// Remove a hook
+store.hookExecutor.removeHook(myAnalyticsHook);
+```
+
+### Common Use Cases
+
+**Analytics Integration:**
+```typescript
+const clarityHook: Hook = {
+  getMetadata: () => ({ name: 'Microsoft Clarity', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (typeof clarity !== 'undefined') {
+      clarity('event', `FeatureFlag:${data.featureKey}`);
+    }
+  }
+};
+```
+
+**Debug Logging:**
+```typescript
+const debugHook: Hook = {
+  getMetadata: () => ({ name: 'DebugLogger', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (import.meta.env.DEV) {
+      console.debug('[Toggly]', data.featureKey, '=', data.result);
+    }
+  }
+};
+```
+
+## Related SDKs
+
+- [@ops-ai/react-feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/react-feature-flags-toggly) - React SDK
+- [@ops-ai/feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/feature-flags-toggly) - Vanilla JavaScript SDK
+
 

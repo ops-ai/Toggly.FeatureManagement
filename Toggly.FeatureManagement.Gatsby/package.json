@@ -62,6 +62,7 @@
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
   },
   "dependencies": {
+    "@ops-ai/toggly-hooks-types": "^1.0.0",
     "nanostores": "^0.11.3",
     "@nanostores/react": "^0.8.0"
   },

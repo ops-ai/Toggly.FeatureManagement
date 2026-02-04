@@ -2,6 +2,8 @@
  * Toggly Astro SDK - Type Definitions
  */
 
+import type { Hook } from '@ops-ai/toggly-hooks-types';
+
 /**
  * Configuration options for Toggly integration
  */
@@ -30,6 +32,8 @@ export interface TogglyConfig {
    * (default: false)
    */
   allFeaturesEnabledDuringBuild?: boolean;
+  /** Hooks to extend SDK behavior at key lifecycle points */
+  hooks?: Hook[];
 }
 
 /**

@@ -129,6 +129,150 @@ if (Toggly.evaluateFeatureGate(['ExampleFeatureKey1', 'ExampleFeatureKey2'], Fea
 }
 ```
 
+## Extensibility with Hooks
+
+Toggly provides a powerful hooks system that allows you to extend SDK functionality by hooking into feature flag lifecycle events. This is perfect for integrating with analytics, monitoring tools, or implementing custom behaviors.
+
+### What are Hooks?
+
+Hooks let you execute custom code at specific points in the feature flag evaluation lifecycle:
+
+- **beforeEvaluation**: Called before a feature flag is evaluated
+- **afterEvaluation**: Called after a feature flag is evaluated (with the result)
+- **beforeIdentify**: Called before user identity is set or cleared
+- **afterIdentify**: Called after user identity is set or cleared
+- **afterRefresh**: Called after feature definitions are refreshed from Toggly
+
+### Creating a Hook
+
+A hook is an object that implements the `Hook` interface from `@ops-ai/toggly-hooks-types`:
+
+```js
+const myAnalyticsHook = {
+  getMetadata: () => ({
+    name: 'MyAnalyticsHook',
+    version: '1.0.0'
+  }),
+  
+  beforeEvaluation: async (data) => {
+    console.log('About to evaluate:', data.featureKey);
+  },
+  
+  afterEvaluation: async (data) => {
+    console.log('Evaluated:', data.featureKey, '=', data.result);
+    // Send to analytics
+    analytics.track('Feature Flag Evaluated', {
+      feature: data.featureKey,
+      enabled: data.result
+    });
+  },
+  
+  beforeIdentify: async (data) => {
+    console.log('Setting identity:', data.userId);
+  },
+  
+  afterIdentify: async (data) => {
+    console.log('Identity set:', data.userId);
+  },
+  
+  afterRefresh: async () => {
+    console.log('Feature definitions refreshed');
+  }
+};
+```
+
+### Registering Hooks
+
+You can register hooks in two ways:
+
+**1. During initialization:**
+
+```js
+Toggly.init({
+  appKey: '<YOUR_APP_KEY>',
+  environment: '<YOUR_APP_ENVIRONMENT>',
+  hooks: [myAnalyticsHook, myMonitoringHook]
+})
+  .then(function () {
+    // Hooks are now active
+  });
+```
+
+**2. At runtime:**
+
+```js
+// Add a hook
+Toggly.addHook(myAnalyticsHook);
+
+// Remove a hook
+Toggly.removeHook(myAnalyticsHook);
+```
+
+### Hook Execution Order
+
+When multiple hooks are registered:
+- **before hooks** execute in FIFO order (first registered, first executed)
+- **after hooks** execute in LIFO order (last registered, first executed)
+
+This creates a "wrap" pattern where the first hook to start is the last to finish.
+
+### Error Isolation
+
+Hooks are designed to be safe:
+- If a hook throws an error, it won't affect feature flag evaluation
+- Other hooks will continue to execute
+- Errors are logged but don't propagate to your application code
+
+### Performance
+
+Hooks are optimized for minimal performance impact:
+- Hooks execute asynchronously without blocking evaluation
+- Hook execution is extremely fast (typically < 1ms per hook)
+- Multiple hooks can be registered without significant overhead
+
+### Common Use Cases
+
+**Analytics Integration:**
+```js
+const clarityHook = {
+  getMetadata: () => ({ name: 'Microsoft Clarity', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (typeof clarity !== 'undefined') {
+      clarity('event', `FeatureFlag:${data.featureKey}`);
+    }
+  }
+};
+```
+
+**Debug Logging:**
+```js
+const debugHook = {
+  getMetadata: () => ({ name: 'DebugLogger', version: '1.0.0' }),
+  beforeEvaluation: async (data) => {
+    console.debug('[Toggly] Evaluating:', data);
+  },
+  afterEvaluation: async (data) => {
+    console.debug('[Toggly] Result:', data.featureKey, '=', data.result);
+  }
+};
+```
+
+**Performance Monitoring:**
+```js
+const performanceHook = {
+  getMetadata: () => ({ name: 'PerformanceMonitor', version: '1.0.0' }),
+  beforeEvaluation: async (data) => {
+    return { startTime: performance.now() };
+  },
+  afterEvaluation: async (data) => {
+    const duration = performance.now() - data.context.startTime;
+    if (duration > 10) {
+      console.warn(`Slow evaluation: ${data.featureKey} took ${duration}ms`);
+    }
+  }
+};
+```
+
 ## Find out more about Toggly.io
 
 Visit [our official website](https://toggly.io) or [check out a video overview of our product](https://docs.toggly.io/).

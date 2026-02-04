@@ -186,6 +186,190 @@ This SDK is built with Angular 18 development dependencies to maximize compatibi
 
 Your application should use the latest patch version of your Angular version to ensure you have all security fixes.
 
+## Extensibility with Hooks
+
+Toggly provides a powerful hooks system that allows you to extend SDK functionality by hooking into feature flag lifecycle events. This is perfect for integrating with analytics, monitoring tools, or implementing custom behaviors.
+
+### What are Hooks?
+
+Hooks let you execute custom code at specific points in the feature flag evaluation lifecycle:
+
+- **beforeEvaluation**: Called before a feature flag is evaluated
+- **afterEvaluation**: Called after a feature flag is evaluated (with the result)
+- **beforeIdentify**: Called before user identity is set or cleared
+- **afterIdentify**: Called after user identity is set or cleared
+- **afterRefresh**: Called after feature definitions are refreshed from Toggly
+
+### Creating a Hook
+
+A hook is an object that implements the `Hook` interface from `@ops-ai/toggly-hooks-types`:
+
+```typescript
+import { Hook } from '@ops-ai/toggly-hooks-types';
+
+const myAnalyticsHook: Hook = {
+  getMetadata: () => ({
+    name: 'MyAnalyticsHook',
+    version: '1.0.0'
+  }),
+  
+  afterEvaluation: async (data) => {
+    // Send to analytics
+    this.analytics.track('Feature Flag Evaluated', {
+      feature: data.featureKey,
+      enabled: data.result
+    });
+  },
+  
+  afterIdentify: async (data) => {
+    // Update analytics user context
+    this.analytics.identify(data.userId, data.context);
+  }
+};
+```
+
+### Registering Hooks
+
+You can register hooks in two ways:
+
+**1. During module configuration:**
+
+```typescript
+import { NgModule } from '@angular/core';
+import { TogglyModule } from '@ops-ai/ngx-feature-flags-toggly';
+import { myAnalyticsHook } from './hooks/analytics.hook';
+
+@NgModule({
+  imports: [
+    TogglyModule.forRoot({
+      appKey: 'your-app-key',
+      environment: 'your-environment-name',
+      hooks: [myAnalyticsHook]
+    })
+  ]
+})
+export class AppModule { }
+```
+
+**2. At runtime using the service:**
+
+```typescript
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { TogglyService } from '@ops-ai/ngx-feature-flags-toggly';
+import { Hook } from '@ops-ai/toggly-hooks-types';
+
+@Component({
+  selector: 'app-my-component',
+  template: '...'
+})
+export class MyComponent implements OnInit, OnDestroy {
+  private analyticsHook: Hook;
+  
+  constructor(private togglyService: TogglyService) {
+    this.analyticsHook = {
+      getMetadata: () => ({ name: 'Analytics', version: '1.0.0' }),
+      afterEvaluation: async (data) => {
+        // Your analytics logic
+      }
+    };
+  }
+  
+  ngOnInit(): void {
+    this.togglyService.addHook(this.analyticsHook);
+  }
+  
+  ngOnDestroy(): void {
+    this.togglyService.removeHook(this.analyticsHook);
+  }
+}
+```
+
+### Hook Execution Order
+
+When multiple hooks are registered:
+- **before hooks** execute in FIFO order (first registered, first executed)
+- **after hooks** execute in LIFO order (last registered, first executed)
+
+This creates a "wrap" pattern where the first hook to start is the last to finish.
+
+### Error Isolation
+
+Hooks are designed to be safe:
+- If a hook throws an error, it won't affect feature flag evaluation
+- Other hooks will continue to execute
+- Errors are logged but don't propagate to your application code
+
+### Performance
+
+Hooks are optimized for minimal performance impact:
+- Hooks execute asynchronously without blocking evaluation
+- Hook execution is extremely fast (typically < 1ms per hook)
+- Multiple hooks can be registered without significant overhead
+
+### Common Use Cases
+
+**Analytics Integration:**
+```typescript
+import { Hook } from '@ops-ai/toggly-hooks-types';
+
+export const clarityHook: Hook = {
+  getMetadata: () => ({ name: 'Microsoft Clarity', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (typeof (window as any).clarity !== 'undefined') {
+      (window as any).clarity('event', `FeatureFlag:${data.featureKey}`);
+    }
+  }
+};
+```
+
+**Debug Logging (Development Only):**
+```typescript
+import { Hook } from '@ops-ai/toggly-hooks-types';
+import { environment } from '../environments/environment';
+
+export const debugHook: Hook = {
+  getMetadata: () => ({ name: 'DebugLogger', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (!environment.production) {
+      console.debug('[Toggly]', data.featureKey, '=', data.result);
+    }
+  }
+};
+```
+
+**Angular Service Integration:**
+```typescript
+import { Injectable } from '@angular/core';
+import { TogglyService } from '@ops-ai/ngx-feature-flags-toggly';
+import { Hook } from '@ops-ai/toggly-hooks-types';
+import { AnalyticsService } from './analytics.service';
+
+@Injectable({ providedIn: 'root' })
+export class FeatureFlagAnalyticsService {
+  private hook: Hook;
+  
+  constructor(
+    private togglyService: TogglyService,
+    private analytics: AnalyticsService
+  ) {
+    this.hook = {
+      getMetadata: () => ({ name: 'AnalyticsHook', version: '1.0.0' }),
+      afterEvaluation: async (data) => {
+        this.analytics.trackFeatureFlag(data.featureKey, data.result);
+      }
+    };
+  }
+  
+  enable(): void {
+    this.togglyService.addHook(this.hook);
+  }
+  
+  disable(): void {
+    this.togglyService.removeHook(this.hook);
+  }
+}
+```
+
 ## License
 
 MIT

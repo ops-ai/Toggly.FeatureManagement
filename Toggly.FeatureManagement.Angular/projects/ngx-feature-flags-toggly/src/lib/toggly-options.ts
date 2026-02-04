@@ -1,6 +1,8 @@
 import { Injectable, Provider } from '@angular/core'
 import { ITogglyOptions } from './models'
 
+import type { Hook } from '@ops-ai/toggly-hooks-types';
+
 /**
  * Configuration options for Toggly
  */
@@ -28,6 +30,9 @@ export class TogglyOptions implements ITogglyOptions {
 
   /** Custom URL for fetching feature definitions */
   customDefinitionsUrl?: string
+
+  /** Hooks to extend SDK behavior at key lifecycle points */
+  hooks?: Hook[]
 }
 
 /**

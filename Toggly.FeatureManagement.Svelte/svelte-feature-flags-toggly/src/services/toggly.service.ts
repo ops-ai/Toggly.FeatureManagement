@@ -1,3 +1,6 @@
+import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { HookExecutor } from './hooks';
+
 export interface TogglyOptions {
   baseURI?: string
   appKey?: string
@@ -6,6 +9,8 @@ export interface TogglyOptions {
   featureDefaults?: { [key: string]: boolean }
   showFeatureDuringEvaluation?: boolean
   featureFlagsRefreshInterval?: number
+  /** Hooks to extend SDK behavior at key lifecycle points */
+  hooks?: Hook[]
 }
 
 export interface TogglyService {
@@ -25,6 +30,8 @@ export interface TogglyService {
   isFeatureOn: (featureKey: string) => Promise<boolean>
   isFeatureOff: (featureKey: string) => Promise<boolean>
   refreshFlags: () => Promise<void>
+  addHook: (hook: Hook) => void
+  removeHook: (name: string) => boolean
 }
 
 export class Toggly implements TogglyService {
@@ -32,10 +39,12 @@ export class Toggly implements TogglyService {
     baseURI: 'https://client.toggly.io',
     showFeatureDuringEvaluation: false,
     featureFlagsRefreshInterval: 3 * 60 * 1000, // 3 minutes
+    hooks: []
   }
   private _features: { [key: string]: boolean } | null = null
   private _loadingFeatures: boolean = false
   private _lastFetchTime: number = 0
+  private _hookExecutor = new HookExecutor()
 
   shouldShowFeatureDuringEvaluation: boolean = false
 
@@ -64,6 +73,11 @@ export class Toggly implements TogglyService {
 
     this._config = Object.assign({}, this._config, config)
     this.shouldShowFeatureDuringEvaluation = this._config.showFeatureDuringEvaluation ?? false
+    
+    // Register initial hooks
+    if (this._config.hooks) {
+      this._config.hooks.forEach(hook => this._hookExecutor.addHook(hook))
+    }
   }
 
   _loadFeatures = async () => {
@@ -107,6 +121,11 @@ export class Toggly implements TogglyService {
       const response = await fetch(url)
       this._features = await response.json()
       this._lastFetchTime = Date.now()
+      
+      // Trigger afterRefresh hooks
+      if (this._features) {
+        this._hookExecutor.executeAfterRefresh(this._features)
+      }
     } catch (error) {
       // If we have cached features, use them; otherwise use defaults
       if (this._features === null) {
@@ -170,16 +189,37 @@ export class Toggly implements TogglyService {
   }
 
   isFeatureOn = async (featureKey: string) => {
-    return await this._evaluateFeatureGate([featureKey])
+    const dataMap = this._hookExecutor.executeBeforeEvaluation(featureKey)
+    const result = await this._evaluateFeatureGate([featureKey])
+    this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
+    return result
   }
 
   isFeatureOff = async (featureKey: string) => {
-    return await this._evaluateFeatureGate([featureKey], 'all', true)
+    const dataMap = this._hookExecutor.executeBeforeEvaluation(featureKey)
+    const result = await this._evaluateFeatureGate([featureKey], 'all', true)
+    this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
+    return result
   }
 
   refreshFlags = async (): Promise<void> => {
     this._lastFetchTime = 0 // Force refresh
     await this._loadFeatures()
+  }
+
+  /**
+   * Add a hook dynamically
+   */
+  addHook(hook: Hook): void {
+    this._hookExecutor.addHook(hook)
+  }
+
+  /**
+   * Remove a hook by name
+   * @returns true if hook was found and removed, false otherwise
+   */
+  removeHook(name: string): boolean {
+    return this._hookExecutor.removeHook(name)
   }
 }
 

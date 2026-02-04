@@ -1,9 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import { FeatureRequirement, StorageKeys, TogglyConfig } from './models';
+import { HookExecutor } from './hooks';
+import type { Hook } from '@ops-ai/toggly-hooks-types';
 
 export class Toggly {
   private static _config: TogglyConfig;
   private static _refreshInterval: number | undefined;
+  private static _hookExecutor = new HookExecutor();
 
   static init(config: TogglyConfig = {} as TogglyConfig): Promise<{ [key: string]: boolean }> {
     Toggly._config = Object.assign({
@@ -13,8 +16,14 @@ export class Toggly {
       featureFlagsRefreshInterval: 3 * 60 * 1000,
       isDebug: false,
       environment: 'Production',
-      flagDefaults: {}
+      flagDefaults: {},
+      hooks: []
     }, config);
+
+    // Register initial hooks
+    if (Toggly._config.hooks) {
+      Toggly._config.hooks.forEach(hook => Toggly._hookExecutor.addHook(hook));
+    }
 
     if (!Toggly.identity) {
       Toggly.identity = uuidv4();
@@ -36,11 +45,20 @@ export class Toggly {
   }
 
   static set identity(v: string) {
+    const dataMap = Toggly._hookExecutor.executeBeforeIdentify(v);
     localStorage.setItem(StorageKeys.togglyIdentityKey.toString(), v);
+    Toggly._hookExecutor.executeAfterIdentify(v, dataMap);
   }
 
   static clearIdentity() {
-    localStorage.removeItem(StorageKeys.togglyIdentityKey.toString());
+    const currentIdentity = Toggly.identity;
+    if (currentIdentity) {
+      const dataMap = Toggly._hookExecutor.executeBeforeIdentify('');
+      localStorage.removeItem(StorageKeys.togglyIdentityKey.toString());
+      Toggly._hookExecutor.executeAfterIdentify('', dataMap);
+    } else {
+      localStorage.removeItem(StorageKeys.togglyIdentityKey.toString());
+    }
   }
 
   private static get _cachedFeatureFlags(): { [key: string]: boolean } {
@@ -95,7 +113,10 @@ export class Toggly {
     }
 
     // Try to fetch flags from the API
-    return Toggly.fetchFeatureFlags();
+    return Toggly.fetchFeatureFlags().then(flags => {
+      Toggly._hookExecutor.executeAfterRefresh(flags);
+      return flags;
+    });
   }
 
   private static _evaluateFeatureGate(flags: { [key: string]: boolean } = {}, featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false) {
@@ -121,15 +142,45 @@ export class Toggly {
   }
 
   static evaluateFeatureGate(featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false): boolean {
-    return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate);
+    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate);
+    
+    // Execute hooks for each flag in the gate
+    featureGate.forEach(key => {
+      const dataMap = Toggly._hookExecutor.executeBeforeEvaluation(key);
+      const flagValue = Toggly.featureFlagsValue[key] || false;
+      Toggly._hookExecutor.executeAfterEvaluation(key, dataMap, flagValue);
+    });
+    
+    return result;
   }
 
   static isFeatureOn(featureKey: string): boolean {
-    return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey]);
+    const dataMap = Toggly._hookExecutor.executeBeforeEvaluation(featureKey);
+    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey]);
+    Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result);
+    return result;
   }
 
   static isFeatureOff(featureKey: string): boolean {
-    return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey], FeatureRequirement.all, true);
+    const dataMap = Toggly._hookExecutor.executeBeforeEvaluation(featureKey);
+    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey], FeatureRequirement.all, true);
+    Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result);
+    return result;
+  }
+
+  /**
+   * Add a hook dynamically
+   */
+  static addHook(hook: Hook): void {
+    Toggly._hookExecutor.addHook(hook);
+  }
+
+  /**
+   * Remove a hook by name
+   * @returns true if hook was found and removed, false otherwise
+   */
+  static removeHook(name: string): boolean {
+    return Toggly._hookExecutor.removeHook(name);
   }
 
   static cancelRefreshInterval() {

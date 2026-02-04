@@ -1,3 +1,5 @@
+import type { Hook } from '@ops-ai/toggly-hooks-types';
+
 /**
  * Toggly configuration options for Gatsby plugin
  */
@@ -28,6 +30,9 @@ export interface TogglyPluginOptions {
   
   /** Connection timeout in milliseconds */
   connectTimeout?: number;
+  
+  /** Hooks to extend SDK behavior at key lifecycle points */
+  hooks?: Hook[];
 }
 
 /**

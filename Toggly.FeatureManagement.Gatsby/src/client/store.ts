@@ -7,6 +7,8 @@
 
 import { atom, computed, type ReadableAtom } from 'nanostores';
 import type { TogglyPluginOptions, Flags, GateRequirement } from '../types/index.js';
+import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { HookExecutor } from './hooks.js';
 
 /**
  * Atom containing all feature flags
@@ -31,8 +33,9 @@ let clientInstance: TogglyClientInstance | null = null;
 /**
  * Internal config type with required properties except identity
  */
-type ClientConfig = Required<Omit<TogglyPluginOptions, 'identity'>> & {
+type ClientConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'hooks'>> & {
   identity?: string;
+  hooks?: Hook[];
 };
 
 /**
@@ -42,6 +45,7 @@ class TogglyClientInstance {
   private config: ClientConfig;
   private cache: Flags | null = null;
   private refreshInterval: ReturnType<typeof setInterval> | null = null;
+  public hookExecutor = new HookExecutor();
 
   constructor(config: TogglyPluginOptions) {
     this.config = {
@@ -52,8 +56,14 @@ class TogglyClientInstance {
       isDebug: false,
       connectTimeout: 5 * 1000,
       allFeaturesEnabledDuringBuild: false,
+      hooks: [],
       ...config,
     };
+    
+    // Register initial hooks
+    if (this.config.hooks) {
+      this.config.hooks.forEach(hook => this.hookExecutor.addHook(hook));
+    }
   }
 
   private getApiUrl(): string {
@@ -136,6 +146,9 @@ class TogglyClientInstance {
       $flags.set(flags);
       $isReady.set(true);
       $error.set(null);
+      
+      // Trigger afterRefresh hooks
+      this.hookExecutor.executeAfterRefresh(flags);
 
       // Start refresh interval if configured
       if (
@@ -152,6 +165,21 @@ class TogglyClientInstance {
   }
 
   async refresh(): Promise<void> {
+    try {
+      const flags = await this.fetchFlags();
+      this.cache = flags;
+      $flags.set(flags);
+      
+      // Trigger afterRefresh hooks
+      this.hookExecutor.executeAfterRefresh(flags);
+
+      if (this.config.isDebug) {
+        console.log('[Toggly Client] Flags refreshed');
+      }
+    } catch (error) {
+      console.error('[Toggly Client] Refresh error:', error);
+    }
+  }
     try {
       const flags = await this.fetchFlags();
       this.cache = flags;
@@ -263,6 +291,29 @@ export function stopRefreshInterval(): void {
   if (clientInstance) {
     clientInstance.stopRefreshInterval();
   }
+}
+
+/**
+ * Add a hook dynamically
+ */
+export function addHook(hook: Hook): void {
+  if (!clientInstance) {
+    console.error('[Toggly Client] Client not initialized');
+    return;
+  }
+  clientInstance.hookExecutor.addHook(hook);
+}
+
+/**
+ * Remove a hook by name
+ * @returns true if hook was found and removed, false otherwise
+ */
+export function removeHook(name: string): boolean {
+  if (!clientInstance) {
+    console.error('[Toggly Client] Client not initialized');
+    return false;
+  }
+  return clientInstance.hookExecutor.removeHook(name);
 }
 
 /**

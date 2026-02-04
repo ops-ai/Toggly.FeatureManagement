@@ -1,0 +1,43 @@
+# Source files
+src/
+reference/
+
+# Config files
+tsconfig.json
+.eslintrc*
+.prettierrc*
+
+# CI/CD
+.github/
+.vscode/
+.idea/
+
+# Development
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Build artifacts (keep dist/)
+node_modules/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (except README)
+docs/
+*.md
+!README.md
+
+# Misc
+.DS_Store
+*.swp
+*.swo
+*~

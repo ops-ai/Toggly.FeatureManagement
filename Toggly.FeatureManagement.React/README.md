@@ -163,6 +163,157 @@ You can also check multiple feature keys and make use of the *requirement* (all/
 </Feature>
 ```
 
+## Extensibility with Hooks
+
+Toggly provides a powerful hooks system that allows you to extend SDK functionality by hooking into feature flag lifecycle events. This is perfect for integrating with analytics, monitoring tools, or implementing custom behaviors.
+
+### What are Hooks?
+
+Hooks let you execute custom code at specific points in the feature flag evaluation lifecycle:
+
+- **beforeEvaluation**: Called before a feature flag is evaluated
+- **afterEvaluation**: Called after a feature flag is evaluated (with the result)
+- **beforeIdentify**: Called before user identity is set or cleared
+- **afterIdentify**: Called after user identity is set or cleared
+- **afterRefresh**: Called after feature definitions are refreshed from Toggly
+
+### Creating a Hook
+
+A hook is an object that implements the `Hook` interface from `@ops-ai/toggly-hooks-types`:
+
+```typescript
+import { Hook } from '@ops-ai/toggly-hooks-types';
+
+const myAnalyticsHook: Hook = {
+  getMetadata: () => ({
+    name: 'MyAnalyticsHook',
+    version: '1.0.0'
+  }),
+  
+  afterEvaluation: async (data) => {
+    // Send to analytics
+    analytics.track('Feature Flag Evaluated', {
+      feature: data.featureKey,
+      enabled: data.result,
+      userId: data.userId
+    });
+  },
+  
+  afterIdentify: async (data) => {
+    // Update analytics user context
+    analytics.identify(data.userId, data.context);
+  }
+};
+```
+
+### Registering Hooks
+
+You can register hooks in two ways:
+
+**1. During initialization:**
+
+```typescript
+const TogglyProvider = await createTogglyProvider({
+  appKey: 'your-app-key',
+  environment: 'your-environment-name',
+  hooks: [myAnalyticsHook, myMonitoringHook]
+});
+```
+
+**2. At runtime using the service:**
+
+```typescript
+import { useToggly } from '@ops-ai/react-feature-flags-toggly';
+
+function MyComponent() {
+  const { togglyService } = useToggly();
+  
+  useEffect(() => {
+    // Add a hook
+    togglyService.addHook(myAnalyticsHook);
+    
+    // Cleanup: remove hook on unmount
+    return () => {
+      togglyService.removeHook(myAnalyticsHook);
+    };
+  }, [togglyService]);
+  
+  return <div>...</div>;
+}
+```
+
+### Hook Execution Order
+
+When multiple hooks are registered:
+- **before hooks** execute in FIFO order (first registered, first executed)
+- **after hooks** execute in LIFO order (last registered, first executed)
+
+This creates a "wrap" pattern where the first hook to start is the last to finish.
+
+### Error Isolation
+
+Hooks are designed to be safe:
+- If a hook throws an error, it won't affect feature flag evaluation
+- Other hooks will continue to execute
+- Errors are logged but don't propagate to your application code
+
+### Performance
+
+Hooks are optimized for minimal performance impact:
+- Hooks execute asynchronously without blocking evaluation
+- Hook execution is extremely fast (typically < 1ms per hook)
+- Multiple hooks can be registered without significant overhead
+
+### Common Use Cases
+
+**Analytics Integration:**
+```typescript
+const clarityHook: Hook = {
+  getMetadata: () => ({ name: 'Microsoft Clarity', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (typeof clarity !== 'undefined') {
+      clarity('event', `FeatureFlag:${data.featureKey}`);
+    }
+  }
+};
+```
+
+**Debug Logging (Development Only):**
+```typescript
+const debugHook: Hook = {
+  getMetadata: () => ({ name: 'DebugLogger', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('[Toggly]', data.featureKey, '=', data.result);
+    }
+  }
+};
+```
+
+**React Component Hook Integration:**
+```typescript
+function useFeatureFlagAnalytics() {
+  const { togglyService } = useToggly();
+  
+  useEffect(() => {
+    const analyticsHook: Hook = {
+      getMetadata: () => ({ name: 'Analytics', version: '1.0.0' }),
+      afterEvaluation: async (data) => {
+        // Your analytics logic
+        trackEvent('feature_evaluated', {
+          feature: data.featureKey,
+          result: data.result
+        });
+      }
+    };
+    
+    togglyService.addHook(analyticsHook);
+    
+    return () => togglyService.removeHook(analyticsHook);
+  }, [togglyService]);
+}
+```
+
 ## Find out more about Toggly.io
 
 Visit [our official website](https://toggly.io) or [check out a video overview of our product](https://docs.toggly.io/).

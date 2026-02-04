@@ -1,0 +1,45 @@
+{
+  "name": "@ops-ai/toggly-hooks-types",
+  "version": "1.0.0",
+  "description": "TypeScript types for Toggly SDK hooks",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "toggly",
+    "hooks",
+    "feature-flags",
+    "types",
+    "typescript",
+    "extensibility"
+  ],
+  "author": {
+    "name": "Toggly",
+    "email": "hello@toggly.io"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement/toggly-hooks-types"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.FeatureManagement/toggly-hooks-types#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

@@ -13,6 +13,7 @@ on:
       - 'Toggly.FeatureManagement.Astro/**'
       - 'toggly-docusaurus-edge-sdk/**'
       - 'Toggly.FeatureManagement.Javascript/**'
+      - 'toggly-hooks-types/**'
       - '.github/workflows/analysis-javascript.yml'
   pull_request:
     branches:
@@ -26,6 +27,7 @@ on:
       - 'Toggly.FeatureManagement.Astro/**'
       - 'toggly-docusaurus-edge-sdk/**'
       - 'Toggly.FeatureManagement.Javascript/**'
+      - 'toggly-hooks-types/**'
       - '.github/workflows/analysis-javascript.yml'
   workflow_dispatch:
 
@@ -65,6 +67,10 @@ jobs:
             path: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
             test-cmd: npm test
             has-lint: true
+          - sdk: Hooks-Types
+            path: toggly-hooks-types
+            test-cmd: npm run typecheck
+            has-lint: false
     
     steps:
       - name: Checkout code
@@ -149,7 +155,7 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-javascript
             -Dsonar.organization=ops-ai
             -Dsonar.projectName=Toggly SDKs - JavaScript/TypeScript
-            -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript
+            -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,toggly-hooks-types
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
@@ -178,5 +184,6 @@ jobs:
           echo "- Astro" >> $GITHUB_STEP_SUMMARY
           echo "- JavaScript (vanilla)" >> $GITHUB_STEP_SUMMARY
           echo "- Docusaurus" >> $GITHUB_STEP_SUMMARY
+          echo "- Hooks Types" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-javascript" >> $GITHUB_STEP_SUMMARY

@@ -541,3 +541,102 @@ MIT © [Ops.AI](https://ops.ai)
 - [@ops-ai/react-feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/react-feature-flags-toggly) - React SDK
 - [@ops-ai/astro-feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/astro-feature-flags-toggly) - Astro SDK
 - [@ops-ai/ngx-feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/ngx-feature-flags-toggly) - Angular SDK
+
+## Extensibility with Hooks
+
+Toggly provides a powerful hooks system that allows you to extend SDK functionality by hooking into feature flag lifecycle events. This is perfect for integrating with analytics, monitoring tools, or implementing custom behaviors.
+
+### What are Hooks?
+
+Hooks let you execute custom code at specific points in the feature flag evaluation lifecycle:
+
+- **beforeEvaluation**: Called before a feature flag is evaluated
+- **afterEvaluation**: Called after a feature flag is evaluated (with the result)
+- **beforeIdentify**: Called before user identity is set or cleared
+- **afterIdentify**: Called after user identity is set or cleared
+- **afterRefresh**: Called after feature definitions are refreshed from Toggly
+
+### Creating a Hook
+
+```typescript
+import { Hook } from '@ops-ai/toggly-hooks-types';
+
+const myAnalyticsHook: Hook = {
+  getMetadata: () => ({
+    name: 'MyAnalyticsHook',
+    version: '1.0.0'
+  }),
+  
+  afterEvaluation: async (data) => {
+    // Send to analytics
+    analytics.track('Feature Flag Evaluated', {
+      feature: data.featureKey,
+      enabled: data.result
+    });
+  }
+};
+```
+
+### Registering Hooks
+
+**During initialization in gatsby-config:**
+
+```javascript
+// gatsby-config.js
+module.exports = {
+  plugins: [
+    {
+      resolve: '@ops-ai/gatsby-feature-flags-toggly',
+      options: {
+        appKey: 'your-app-key',
+        environment: 'your-environment-name',
+        hooks: [myAnalyticsHook]
+      }
+    }
+  ]
+};
+```
+
+**At runtime:**
+
+```typescript
+import { addHook, removeHook } from '@ops-ai/gatsby-feature-flags-toggly';
+
+// Add a hook
+addHook(myAnalyticsHook);
+
+// Remove a hook
+removeHook(myAnalyticsHook);
+```
+
+### Common Use Cases
+
+**Analytics Integration:**
+```typescript
+const clarityHook: Hook = {
+  getMetadata: () => ({ name: 'Microsoft Clarity', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (typeof clarity !== 'undefined') {
+      clarity('event', `FeatureFlag:${data.featureKey}`);
+    }
+  }
+};
+```
+
+**Debug Logging:**
+```typescript
+const debugHook: Hook = {
+  getMetadata: () => ({ name: 'DebugLogger', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('[Toggly]', data.featureKey, '=', data.result);
+    }
+  }
+};
+```
+
+## Related SDKs
+
+- [@ops-ai/react-feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/react-feature-flags-toggly) - React SDK
+- [@ops-ai/astro-feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/astro-feature-flags-toggly) - Astro SDK
+- [@ops-ai/ngx-feature-flags-toggly](https://www.npmjs.com/package/@ops-ai/ngx-feature-flags-toggly) - Angular SDK

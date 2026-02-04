@@ -68,6 +68,7 @@
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
   },
   "dependencies": {
+    "@ops-ai/toggly-hooks-types": "^1.0.0",
     "glob": "^10.3.10"
   },
   "devDependencies": {

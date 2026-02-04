@@ -7,6 +7,8 @@
 
 import { atom, computed, type ReadableAtom } from 'nanostores';
 import type { TogglyConfig, Flags } from '../types/index.js';
+import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { HookExecutor } from './hooks.js';
 
 /**
  * Atom containing all feature flags
@@ -35,6 +37,7 @@ class TogglyClientInstance {
   private config: TogglyConfig;
   private cache: Flags | null = null;
   private refreshInterval: NodeJS.Timeout | null = null;
+  public hookExecutor = new HookExecutor();
 
   constructor(config: TogglyConfig) {
     this.config = {
@@ -44,8 +47,14 @@ class TogglyClientInstance {
       featureFlagsRefreshInterval: 3 * 60 * 1000,
       isDebug: false,
       connectTimeout: 5 * 1000,
+      hooks: [],
       ...config,
     };
+    
+    // Register initial hooks
+    if (this.config.hooks) {
+      this.config.hooks.forEach(hook => this.hookExecutor.addHook(hook));
+    }
   }
 
   private getApiUrl(): string {
@@ -129,6 +138,9 @@ class TogglyClientInstance {
       $flags.set(flags);
       $isReady.set(true);
       $error.set(null);
+      
+      // Trigger afterRefresh hooks
+      this.hookExecutor.executeAfterRefresh(flags);
 
       // Start refresh interval if configured
       if (
@@ -149,6 +161,9 @@ class TogglyClientInstance {
       const flags = await this.fetchFlags();
       this.cache = flags;
       $flags.set(flags);
+      
+      // Trigger afterRefresh hooks
+      this.hookExecutor.executeAfterRefresh(flags);
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Flags refreshed');
@@ -299,4 +314,26 @@ export function $gate(
   });
 }
 
+/**
+ * Add a hook dynamically
+ */
+export function addHook(hook: Hook): void {
+  if (!clientInstance) {
+    console.error('[Toggly Client] Client not initialized');
+    return;
+  }
+  clientInstance.hookExecutor.addHook(hook);
+}
+
+/**
+ * Remove a hook by name
+ * @returns true if hook was found and removed, false otherwise
+ */
+export function removeHook(name: string): boolean {
+  if (!clientInstance) {
+    console.error('[Toggly Client] Client not initialized');
+    return false;
+  }
+  return clientInstance.hookExecutor.removeHook(name);
+}
 

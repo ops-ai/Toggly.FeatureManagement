@@ -170,6 +170,100 @@ And even evaluate a feature gate (with requirement & negate support).
 await this.$toggly.evaluateFeatureGate('firstFeature', 'secondFeature'], 'any', true)
 ```
 
+## Extensibility with Hooks
+
+Toggly provides a powerful hooks system that allows you to extend SDK functionality by hooking into feature flag lifecycle events. This is perfect for integrating with analytics, monitoring tools, or implementing custom behaviors.
+
+### What are Hooks?
+
+Hooks let you execute custom code at specific points in the feature flag evaluation lifecycle:
+
+- **beforeEvaluation**: Called before a feature flag is evaluated
+- **afterEvaluation**: Called after a feature flag is evaluated (with the result)
+- **beforeIdentify**: Called before user identity is set or cleared
+- **afterIdentify**: Called after user identity is set or cleared
+- **afterRefresh**: Called after feature definitions are refreshed from Toggly
+
+### Creating a Hook
+
+```typescript
+import { Hook } from '@ops-ai/toggly-hooks-types';
+
+const myAnalyticsHook: Hook = {
+  getMetadata: () => ({
+    name: 'MyAnalyticsHook',
+    version: '1.0.0'
+  }),
+  
+  afterEvaluation: async (data) => {
+    // Send to analytics
+    analytics.track('Feature Flag Evaluated', {
+      feature: data.featureKey,
+      enabled: data.result
+    });
+  }
+};
+```
+
+### Registering Hooks
+
+**During plugin initialization:**
+
+```typescript
+import { createToggly } from '@ops-ai/vue-feature-flags-toggly';
+
+app.use(createToggly({
+  appKey: 'your-app-key',
+  environment: 'your-environment-name',
+  hooks: [myAnalyticsHook]
+}));
+```
+
+**At runtime:**
+
+```vue
+<script setup lang="ts">
+import { useToggly } from '@ops-ai/vue-feature-flags-toggly';
+import { onMounted, onUnmounted } from 'vue';
+
+const toggly = useToggly();
+
+onMounted(() => {
+  toggly.addHook(myAnalyticsHook);
+});
+
+onUnmounted(() => {
+  toggly.removeHook(myAnalyticsHook);
+});
+</script>
+```
+
+### Common Use Cases
+
+**Analytics Integration:**
+```typescript
+const clarityHook: Hook = {
+  getMetadata: () => ({ name: 'Microsoft Clarity', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (typeof clarity !== 'undefined') {
+      clarity('event', `FeatureFlag:${data.featureKey}`);
+    }
+  }
+};
+```
+
+**Debug Logging:**
+```typescript
+const debugHook: Hook = {
+  getMetadata: () => ({ name: 'DebugLogger', version: '1.0.0' }),
+  afterEvaluation: async (data) => {
+    if (import.meta.env.DEV) {
+      console.debug('[Toggly]', data.featureKey, '=', data.result);
+    }
+  }
+};
+```
+
 ## Find out more about Toggly.io
 
 Visit [our official website](https://toggly.io) or [check out a video overview of our product](https://docs.toggly.io/).

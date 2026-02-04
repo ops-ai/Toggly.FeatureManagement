@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core'
 import { ITogglyService } from './models'
 import { TogglyOptions } from './toggly-options'
+import { HookExecutor } from './hooks'
+import type { Hook } from '@ops-ai/toggly-hooks-types'
 
 @Injectable({
   providedIn: 'root',
@@ -8,6 +10,7 @@ import { TogglyOptions } from './toggly-options'
 export class TogglyService implements ITogglyService {
   private _features: { [key: string]: boolean } | null = null
   private _loadingFeatures: boolean = false
+  private _hookExecutor = new HookExecutor()
 
   shouldShowFeatureDuringEvaluation: boolean = false
 
@@ -36,6 +39,11 @@ export class TogglyService implements ITogglyService {
 
     this.shouldShowFeatureDuringEvaluation =
       this._config.showFeatureDuringEvaluation ?? false
+
+    // Register initial hooks
+    if (this._config.hooks) {
+      this._config.hooks.forEach(hook => this._hookExecutor.addHook(hook))
+    }
   }
 
   private _loadFeatures = async () => {
@@ -71,6 +79,11 @@ export class TogglyService implements ITogglyService {
 
       const response = await fetch(url)
       this._features = await response.json()
+
+      // Trigger afterRefresh hooks
+      if (this._features) {
+        this._hookExecutor.executeAfterRefresh(this._features)
+      }
     } catch (error) {
       this._features = this._config.featureDefaults ?? {}
       console.warn(
@@ -131,10 +144,31 @@ export class TogglyService implements ITogglyService {
   }
 
   isFeatureOn = async (featureKey: string) => {
-    return await this._evaluateFeatureGate([featureKey])
+    const dataMap = this._hookExecutor.executeBeforeEvaluation(featureKey)
+    const result = await this._evaluateFeatureGate([featureKey])
+    this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
+    return result
   }
 
   isFeatureOff = async (featureKey: string) => {
-    return await this._evaluateFeatureGate([featureKey], 'all', true)
+    const dataMap = this._hookExecutor.executeBeforeEvaluation(featureKey)
+    const result = await this._evaluateFeatureGate([featureKey], 'all', true)
+    this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
+    return result
+  }
+
+  /**
+   * Add a hook dynamically
+   */
+  addHook(hook: Hook): void {
+    this._hookExecutor.addHook(hook)
+  }
+
+  /**
+   * Remove a hook by name
+   * @returns true if hook was found and removed, false otherwise
+   */
+  removeHook(name: string): boolean {
+    return this._hookExecutor.removeHook(name)
   }
 }
