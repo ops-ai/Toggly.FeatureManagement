@@ -87,7 +87,7 @@ jobs:
       
       - name: Install dependencies
         working-directory: ${{ matrix.path }}
-        run: npm ci
+        run: npm ci || npm install
       
       - name: Build package (if needed)
         working-directory: ${{ matrix.path }}
