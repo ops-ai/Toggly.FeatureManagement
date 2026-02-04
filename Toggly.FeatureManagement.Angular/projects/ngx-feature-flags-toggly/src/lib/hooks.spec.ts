@@ -1,5 +1,3 @@
-import 'zone.js';
-import 'zone.js/testing';
 import { TestBed } from '@angular/core/testing';
 import { Hook, EvaluationSeriesData, IdentitySeriesData } from '@ops-ai/toggly-hooks-types';
 import { TogglyService } from './toggly.service';

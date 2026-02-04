@@ -20,7 +20,17 @@ export default {
     '!src/**/*.d.ts',
     '!src/**/*.spec.{ts,tsx}',
     '!src/**/*.test.{ts,tsx}',
+    '!src/**/index.ts',
   ],
+  coverageReporters: ['text', 'text-summary', 'lcov'],
+  coverageThreshold: {
+    global: {
+      statements: 90,
+      branches: 85,
+      functions: 90,
+      lines: 90,
+    },
+  },
   testMatch: [
     '**/src/**/*.spec.ts',
     '**/src/**/*.spec.tsx',

@@ -1,0 +1,173 @@
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { Component } from '@angular/core';
+import { FeatureFlagDirective } from './feature.directive';
+import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
+
+// Host component for structural directive testing
+@Component({
+  standalone: true,
+  imports: [FeatureFlagDirective],
+  template: `
+    <div *featureFlag="flag; requirement: requirement; negate: negate">
+      <span class="content">Feature Content</span>
+    </div>
+  `,
+})
+class DirectiveHostComponent {
+  flag: string | string[] = '';
+  requirement: 'all' | 'any' = 'all';
+  negate = false;
+}
+
+describe('FeatureFlagDirective', () => {
+  let fixture: ComponentFixture<DirectiveHostComponent>;
+  let host: DirectiveHostComponent;
+
+  function configureAndCreate(
+    defaults: { [k: string]: boolean } = { Enabled: true, Disabled: false, A: true, B: true, C: false }
+  ) {
+    spyOn(console, 'warn');
+    TestBed.configureTestingModule({
+      imports: [DirectiveHostComponent, NgxFeatureFlagsTogglyModule.forRoot({ featureDefaults: defaults })],
+    });
+    fixture = TestBed.createComponent(DirectiveHostComponent);
+    host = fixture.componentInstance;
+  }
+
+  describe('Single feature key', () => {
+    it('should show content when feature is enabled', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = 'Enabled';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
+    }));
+
+    it('should hide content when feature is disabled', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = 'Disabled';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeNull();
+    }));
+
+    it('should hide content for unknown feature', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = 'Unknown';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeNull();
+    }));
+  });
+
+  describe('Multiple feature keys (array)', () => {
+    it('should show when all keys enabled', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = ['A', 'B'];
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
+    }));
+
+    it('should hide when some keys disabled (all)', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = ['A', 'C'];
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeNull();
+    }));
+  });
+
+  describe('Requirement: any', () => {
+    it('should show when any key enabled', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = ['A', 'C'];
+      host.requirement = 'any';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
+    }));
+
+    it('should hide when none enabled', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = ['C'];
+      host.requirement = 'any';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeNull();
+    }));
+  });
+
+  describe('Negate', () => {
+    it('should hide when enabled and negate true', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = 'Enabled';
+      host.negate = true;
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeNull();
+    }));
+
+    it('should show when disabled and negate true', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = 'Disabled';
+      host.negate = true;
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
+    }));
+  });
+
+  describe('View lifecycle', () => {
+    it('should not create duplicate views when already visible', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = 'Enabled';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.content').length).toBe(1);
+
+      // Re-trigger by changing input to same value (string -> array)
+      host.flag = ['Enabled'];
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.content').length).toBe(1);
+    }));
+
+    it('should clear view when feature becomes disabled', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = 'Enabled';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
+
+      host.flag = 'Disabled';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeNull();
+    }));
+  });
+
+  describe('Empty features', () => {
+    it('should show content when no features defined', fakeAsync(() => {
+      configureAndCreate({});
+      host.flag = 'Any';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
+    }));
+  });
+});

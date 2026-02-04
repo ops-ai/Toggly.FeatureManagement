@@ -1,0 +1,179 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { get } from 'svelte/store';
+import {
+  togglyServiceStore,
+  togglyFlagsStore,
+  getTogglyService,
+  createFeatureStore,
+  isFeatureOn,
+  isFeatureOff,
+  evaluateFeatureGate,
+} from '../stores/toggly.store';
+import { Toggly } from '../services/toggly.service';
+
+describe('Toggly Store', () => {
+  beforeEach(() => {
+    // Reset stores between tests
+    togglyServiceStore.set(null);
+    togglyFlagsStore.set({});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  // ─── togglyServiceStore ──────────────────────
+  describe('togglyServiceStore', () => {
+    it('should initialize as null', () => {
+      expect(get(togglyServiceStore)).toBeNull();
+    });
+
+    it('should store a Toggly service instance', () => {
+      const service = new Toggly({ featureDefaults: { F1: true } });
+      togglyServiceStore.set(service);
+      expect(get(togglyServiceStore)).toBe(service);
+    });
+  });
+
+  // ─── togglyFlagsStore ──────────────────────
+  describe('togglyFlagsStore', () => {
+    it('should initialize as empty object', () => {
+      expect(get(togglyFlagsStore)).toEqual({});
+    });
+
+    it('should store flags', () => {
+      togglyFlagsStore.set({ F1: true, F2: false });
+      expect(get(togglyFlagsStore)).toEqual({ F1: true, F2: false });
+    });
+  });
+
+  // ─── getTogglyService ──────────────────────
+  describe('getTogglyService', () => {
+    it('should throw when service not initialized', () => {
+      expect(() => getTogglyService()).toThrow(
+        'Toggly service not initialized. Call createToggly() first.'
+      );
+    });
+
+    it('should return service when initialized', () => {
+      const service = new Toggly({ featureDefaults: { F1: true } });
+      togglyServiceStore.set(service);
+      expect(getTogglyService()).toBe(service);
+    });
+  });
+
+  // ─── createFeatureStore ──────────────────────
+  describe('createFeatureStore', () => {
+    it('should create a derived store for a feature key', () => {
+      togglyFlagsStore.set({ F1: true, F2: false });
+      const f1Store = createFeatureStore('F1');
+      expect(get(f1Store)).toBe(true);
+    });
+
+    it('should return false for unknown feature key', () => {
+      togglyFlagsStore.set({ F1: true });
+      const unknownStore = createFeatureStore('Unknown');
+      expect(get(unknownStore)).toBe(false);
+    });
+
+    it('should reactively update when flags change', () => {
+      const f1Store = createFeatureStore('F1');
+      expect(get(f1Store)).toBe(false);
+
+      togglyFlagsStore.set({ F1: true });
+      expect(get(f1Store)).toBe(true);
+
+      togglyFlagsStore.set({ F1: false });
+      expect(get(f1Store)).toBe(false);
+    });
+  });
+
+  // ─── isFeatureOn ──────────────────────
+  describe('isFeatureOn', () => {
+    it('should return true for enabled feature', async () => {
+      const service = new Toggly({ featureDefaults: { F1: true } });
+      togglyServiceStore.set(service);
+
+      const result = await isFeatureOn('F1');
+      expect(result).toBe(true);
+    });
+
+    it('should return false for disabled feature', async () => {
+      const service = new Toggly({ featureDefaults: { F1: false } });
+      togglyServiceStore.set(service);
+
+      const result = await isFeatureOn('F1');
+      expect(result).toBe(false);
+    });
+
+    it('should throw when service not initialized', async () => {
+      await expect(isFeatureOn('F1')).rejects.toThrow(
+        'Toggly service not initialized'
+      );
+    });
+  });
+
+  // ─── isFeatureOff ──────────────────────
+  describe('isFeatureOff', () => {
+    it('should return true for disabled feature', async () => {
+      const service = new Toggly({ featureDefaults: { F1: false } });
+      togglyServiceStore.set(service);
+
+      const result = await isFeatureOff('F1');
+      expect(result).toBe(true);
+    });
+
+    it('should return false for enabled feature', async () => {
+      const service = new Toggly({ featureDefaults: { F1: true } });
+      togglyServiceStore.set(service);
+
+      const result = await isFeatureOff('F1');
+      expect(result).toBe(false);
+    });
+
+    it('should throw when service not initialized', async () => {
+      await expect(isFeatureOff('F1')).rejects.toThrow(
+        'Toggly service not initialized'
+      );
+    });
+  });
+
+  // ─── evaluateFeatureGate ──────────────────────
+  describe('evaluateFeatureGate', () => {
+    it('should evaluate "all" requirement', async () => {
+      const service = new Toggly({ featureDefaults: { F1: true, F2: true } });
+      togglyServiceStore.set(service);
+
+      const result = await evaluateFeatureGate(['F1', 'F2'], 'all', false);
+      expect(result).toBe(true);
+    });
+
+    it('should evaluate "any" requirement', async () => {
+      const service = new Toggly({ featureDefaults: { F1: true, F2: false } });
+      togglyServiceStore.set(service);
+
+      const result = await evaluateFeatureGate(['F1', 'F2'], 'any', false);
+      expect(result).toBe(true);
+    });
+
+    it('should support negate', async () => {
+      const service = new Toggly({ featureDefaults: { F1: true } });
+      togglyServiceStore.set(service);
+
+      const result = await evaluateFeatureGate(['F1'], 'all', true);
+      expect(result).toBe(false);
+    });
+
+    it('should throw when service not initialized', async () => {
+      await expect(evaluateFeatureGate(['F1'], 'all', false)).rejects.toThrow(
+        'Toggly service not initialized'
+      );
+    });
+
+    it('should use default parameters', async () => {
+      const service = new Toggly({ featureDefaults: { F1: true, F2: false } });
+      togglyServiceStore.set(service);
+
+      // Default: requirement='all', negate=false
+      const result = await evaluateFeatureGate(['F1', 'F2']);
+      expect(result).toBeFalsy();
+    });
+  });
+});
