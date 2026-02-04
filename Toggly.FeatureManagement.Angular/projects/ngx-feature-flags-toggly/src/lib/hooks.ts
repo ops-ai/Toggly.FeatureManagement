@@ -39,16 +39,16 @@ export class HookExecutor {
    * Execute beforeEvaluation hooks in registration order (FIFO)
    * Collects data from each hook to pass to afterEvaluation
    */
-  executeBeforeEvaluation(
+  async executeBeforeEvaluation(
     flagKey: string,
     defaultValue?: boolean
-  ): Map<string, EvaluationSeriesData | void> {
+  ): Promise<Map<string, EvaluationSeriesData | void>> {
     const dataMap = new Map<string, EvaluationSeriesData | void>();
-
+    
     for (const hook of this.hooks) {
       if (hook.beforeEvaluation) {
         try {
-          const data = hook.beforeEvaluation(flagKey, defaultValue);
+          const data = await hook.beforeEvaluation(flagKey, defaultValue);
           dataMap.set(hook.getMetadata().name, data);
         } catch (error) {
           console.error(
@@ -58,7 +58,7 @@ export class HookExecutor {
         }
       }
     }
-
+    
     return dataMap;
   }
 
@@ -66,18 +66,18 @@ export class HookExecutor {
    * Execute afterEvaluation hooks in reverse order (LIFO)
    * Passes data from corresponding beforeEvaluation
    */
-  executeAfterEvaluation(
+  async executeAfterEvaluation(
     flagKey: string,
     dataMap: Map<string, EvaluationSeriesData | void>,
     result: boolean
-  ): void {
+  ): Promise<void> {
     // Execute in reverse order
     for (let i = this.hooks.length - 1; i >= 0; i--) {
       const hook = this.hooks[i];
       if (hook.afterEvaluation) {
         try {
           const data = dataMap.get(hook.getMetadata().name);
-          hook.afterEvaluation(flagKey, data, result);
+          await hook.afterEvaluation(flagKey, data, result);
         } catch (error) {
           console.error(
             `[Toggly] Error in hook "${hook.getMetadata().name}.afterEvaluation":`,
@@ -91,13 +91,13 @@ export class HookExecutor {
   /**
    * Execute beforeIdentify hooks in registration order (FIFO)
    */
-  executeBeforeIdentify(identity: string): Map<string, IdentitySeriesData | void> {
+  async executeBeforeIdentify(identity: string): Promise<Map<string, IdentitySeriesData | void>> {
     const dataMap = new Map<string, IdentitySeriesData | void>();
-
+    
     for (const hook of this.hooks) {
       if (hook.beforeIdentify) {
         try {
-          const data = hook.beforeIdentify(identity);
+          const data = await hook.beforeIdentify(identity);
           dataMap.set(hook.getMetadata().name, data);
         } catch (error) {
           console.error(
@@ -107,23 +107,23 @@ export class HookExecutor {
         }
       }
     }
-
+    
     return dataMap;
   }
 
   /**
    * Execute afterIdentify hooks in reverse order (LIFO)
    */
-  executeAfterIdentify(
+  async executeAfterIdentify(
     identity: string,
     dataMap: Map<string, IdentitySeriesData | void>
-  ): void {
+  ): Promise<void> {
     for (let i = this.hooks.length - 1; i >= 0; i--) {
       const hook = this.hooks[i];
       if (hook.afterIdentify) {
         try {
           const data = dataMap.get(hook.getMetadata().name);
-          hook.afterIdentify(identity, data);
+          await hook.afterIdentify(identity, data);
         } catch (error) {
           console.error(
             `[Toggly] Error in hook "${hook.getMetadata().name}.afterIdentify":`,
@@ -137,11 +137,11 @@ export class HookExecutor {
   /**
    * Execute afterRefresh hooks in registration order (FIFO)
    */
-  executeAfterRefresh(flags: { [key: string]: boolean }): void {
+  async executeAfterRefresh(flags: { [key: string]: boolean }): Promise<void> {
     for (const hook of this.hooks) {
       if (hook.afterRefresh) {
         try {
-          hook.afterRefresh(flags);
+          await hook.afterRefresh(flags);
         } catch (error) {
           console.error(
             `[Toggly] Error in hook "${hook.getMetadata().name}.afterRefresh":`,

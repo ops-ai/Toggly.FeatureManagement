@@ -144,27 +144,35 @@ export class Toggly {
   static evaluateFeatureGate(featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false): boolean {
     const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate);
     
-    // Execute hooks for each flag in the gate
+    // Execute hooks for each flag in the gate (fire-and-forget pattern)
     featureGate.forEach(key => {
-      const dataMap = Toggly._hookExecutor.executeBeforeEvaluation(key);
+      const dataMapPromise = Toggly._hookExecutor.executeBeforeEvaluation(key);
       const flagValue = Toggly.featureFlagsValue[key] || false;
-      Toggly._hookExecutor.executeAfterEvaluation(key, dataMap, flagValue);
+      Promise.resolve(dataMapPromise).then(dataMap => 
+        Toggly._hookExecutor.executeAfterEvaluation(key, dataMap, flagValue)
+      ).catch(err => console.error('[Toggly] Hook execution error:', err));
     });
     
     return result;
   }
 
   static isFeatureOn(featureKey: string): boolean {
-    const dataMap = Toggly._hookExecutor.executeBeforeEvaluation(featureKey);
+    const dataMapPromise = Toggly._hookExecutor.executeBeforeEvaluation(featureKey);
     const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey]);
-    Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result);
+    // Fire-and-forget pattern for async hooks in synchronous context
+    Promise.resolve(dataMapPromise).then(dataMap => 
+      Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
+    ).catch(err => console.error('[Toggly] Hook execution error:', err));
     return result;
   }
 
   static isFeatureOff(featureKey: string): boolean {
-    const dataMap = Toggly._hookExecutor.executeBeforeEvaluation(featureKey);
+    const dataMapPromise = Toggly._hookExecutor.executeBeforeEvaluation(featureKey);
     const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey], FeatureRequirement.all, true);
-    Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result);
+    // Fire-and-forget pattern for async hooks in synchronous context
+    Promise.resolve(dataMapPromise).then(dataMap => 
+      Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
+    ).catch(err => console.error('[Toggly] Hook execution error:', err));
     return result;
   }
 
