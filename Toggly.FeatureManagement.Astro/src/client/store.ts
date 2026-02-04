@@ -84,6 +84,7 @@ class TogglyClientInstance {
         headers: {
           Accept: 'application/json',
         },
+        cache: 'no-store',
         signal: controller.signal,
       });
 

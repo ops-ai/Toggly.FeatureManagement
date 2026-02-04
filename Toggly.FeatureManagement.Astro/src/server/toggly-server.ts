@@ -88,6 +88,7 @@ export class TogglyServer implements TogglyClient {
         headers: {
           Accept: 'application/json',
         },
+        cache: 'no-store',
         signal: controller.signal,
       });
 

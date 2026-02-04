@@ -299,7 +299,11 @@ export function createTogglyMiddleware(config: TogglyConfig) {
     // Create or reuse Toggly client
     // In middleware (runtime), we never enable all features - we use actual flags
     if (!locals.toggly) {
-      locals.toggly = createTogglyServerClient(config, false);
+      const client = createTogglyServerClient(config, false);
+      // Pre-fetch flags before page rendering starts so Feature components
+      // have cached flags available immediately
+      await client.refreshFlags();
+      locals.toggly = client;
     }
 
     return next();
