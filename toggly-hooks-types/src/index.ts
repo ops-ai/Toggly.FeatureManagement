@@ -38,7 +38,7 @@ export interface Hook {
   beforeEvaluation?(
     flagKey: string,
     defaultValue?: boolean
-  ): EvaluationSeriesData | void;
+  ): Promise<EvaluationSeriesData | void> | EvaluationSeriesData | void;
 
   /**
    * Called after feature flag evaluation
@@ -50,13 +50,13 @@ export interface Hook {
     flagKey: string,
     data: EvaluationSeriesData | void,
     result: boolean
-  ): void;
+  ): Promise<void> | void;
 
   /**
    * Called before identity is set or changed
    * Return value is passed to afterIdentify
    */
-  beforeIdentify?(identity: string): IdentitySeriesData | void;
+  beforeIdentify?(identity: string): Promise<IdentitySeriesData | void> | IdentitySeriesData | void;
 
   /**
    * Called after identity has been set or changed
@@ -66,11 +66,11 @@ export interface Hook {
   afterIdentify?(
     identity: string,
     data: IdentitySeriesData | void
-  ): void;
+  ): Promise<void> | void;
 
   /**
    * Called when feature flags are refreshed from the server
    * @param flags - Updated flags object
    */
-  afterRefresh?(flags: { [key: string]: boolean }): void;
+  afterRefresh?(flags: { [key: string]: boolean }): Promise<void> | void;
 }
