@@ -25,7 +25,7 @@
     "dist"
   ],
   "dependencies": {
-    "@ops-ai/toggly-hooks-types": "^1.0.0",
+    "@ops-ai/toggly-hooks-types": "^1.1.0",
     "rxjs": "^7.5.7",
     "uuid": "^9.0.0"
   },

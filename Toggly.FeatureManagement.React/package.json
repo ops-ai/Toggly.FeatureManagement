@@ -35,7 +35,7 @@
     "typescript": "^4.9.5"
   },
   "dependencies": {
-    "@ops-ai/toggly-hooks-types": "^1.0.0"
+    "@ops-ai/toggly-hooks-types": "^1.1.0"
   },
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",

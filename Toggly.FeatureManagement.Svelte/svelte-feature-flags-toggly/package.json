@@ -60,6 +60,6 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
-    "@ops-ai/toggly-hooks-types": "^1.0.0"
+    "@ops-ai/toggly-hooks-types": "^1.1.0"
   }
 }
