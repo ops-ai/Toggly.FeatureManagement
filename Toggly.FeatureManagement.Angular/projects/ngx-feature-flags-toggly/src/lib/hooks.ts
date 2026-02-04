@@ -44,7 +44,7 @@ export class HookExecutor {
     defaultValue?: boolean
   ): Promise<Map<string, EvaluationSeriesData | void>> {
     const dataMap = new Map<string, EvaluationSeriesData | void>();
-    
+
     for (const hook of this.hooks) {
       if (hook.beforeEvaluation) {
         try {
@@ -58,7 +58,7 @@ export class HookExecutor {
         }
       }
     }
-    
+
     return dataMap;
   }
 
@@ -93,7 +93,7 @@ export class HookExecutor {
    */
   async executeBeforeIdentify(identity: string): Promise<Map<string, IdentitySeriesData | void>> {
     const dataMap = new Map<string, IdentitySeriesData | void>();
-    
+
     for (const hook of this.hooks) {
       if (hook.beforeIdentify) {
         try {
@@ -107,7 +107,7 @@ export class HookExecutor {
         }
       }
     }
-    
+
     return dataMap;
   }
 

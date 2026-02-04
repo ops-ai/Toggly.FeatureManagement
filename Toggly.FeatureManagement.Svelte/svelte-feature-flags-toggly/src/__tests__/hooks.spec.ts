@@ -12,10 +12,18 @@ describe('TogglyService Hooks', () => {
 
   const testHook: Hook = {
     getMetadata: () => ({ name: 'TestHook', version: '1.0.0' }),
-    beforeEvaluation: async (data) => { beforeEvalCalls.push(data); },
-    afterEvaluation: async (data) => { afterEvalCalls.push(data); },
-    beforeIdentify: async (data) => { beforeIdentifyCalls.push(data); },
-    afterIdentify: async (data) => { afterIdentifyCalls.push(data); },
+    beforeEvaluation: async (flagKey, defaultValue) => { 
+      beforeEvalCalls.push({ flagKey, defaultValue }); 
+    },
+    afterEvaluation: async (flagKey, data, result) => { 
+      afterEvalCalls.push({ flagKey, data, result }); 
+    },
+    beforeIdentify: async (identity) => { 
+      beforeIdentifyCalls.push({ identity }); 
+    },
+    afterIdentify: async (identity, data) => { 
+      afterIdentifyCalls.push({ identity, data }); 
+    },
     afterRefresh: async () => { afterRefreshCalls++; }
   };
 
@@ -74,8 +82,9 @@ describe('TogglyService Hooks', () => {
     it('should call beforeEvaluation on evaluateFeatureGate', async () => {
       await service.evaluateFeatureGate(['Feature1', 'Feature2'], 'all', false);
       
+      // Should call beforeEvaluation once for the gate (using first key)
       expect(beforeEvalCalls.length).toBe(1);
-      expect(beforeEvalCalls[0].featureKeys).toEqual(['Feature1', 'Feature2']);
+      expect(beforeEvalCalls[0].flagKey).toBe('Feature1');
     });
   });
 
