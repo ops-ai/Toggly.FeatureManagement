@@ -87,7 +87,7 @@ jobs:
       
       - name: Install dependencies
         working-directory: ${{ matrix.path }}
-        run: npm ci
+        run: npm ci || npm install
       
       - name: Build package (if needed)
         working-directory: ${{ matrix.path }}
@@ -159,7 +159,7 @@ jobs:
           args: >
             -Dsonar.projectKey=toggly-sdks-javascript
             -Dsonar.organization=ops-ai
-            -Dsonar.projectName=Toggly SDKs - JavaScript/TypeScript
+            -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
             -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,toggly-hooks-types
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
