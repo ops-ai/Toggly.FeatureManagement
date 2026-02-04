@@ -34,6 +34,7 @@
     "@angular-eslint/template-parser": "^18.0.0",
     "@angular/cli": "^18.2.0",
     "@angular/compiler-cli": "^18.2.0",
+    "@ops-ai/toggly-hooks-types": "^1.0.0",
     "@types/jasmine": "~5.1.0",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",

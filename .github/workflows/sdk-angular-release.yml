@@ -46,6 +46,9 @@ jobs:
           node-version: 'lts/*'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Clear NPM cache
+        run: npm cache clean --force
+
       - name: Install dependencies
         run: npm install
 
@@ -117,38 +120,40 @@ jobs:
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           
-          # Add version bump changes FIRST (before pulling)
+          # Add version bump changes
           git add Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly/package.json
+          git add Toggly.FeatureManagement.Angular/package.json
+          git add Toggly.FeatureManagement.Angular/package-lock.json
           
           # Commit with bump type
           BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
           git commit -S -m "Bumped Angular SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
           
-          # Now pull and push with retry logic
+          # Pull and push with retry logic
           MAX_RETRIES=3
           RETRY_COUNT=0
+          
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            # Pull latest changes with rebase
-            if ! git pull --rebase origin develop; then
-              echo "Pull/rebase failed, retrying..."
+            # Try to pull with rebase (using autostash to handle any conflicts)
+            if git pull --rebase --autostash origin develop; then
+              # Pull succeeded, now try to push
+              if git push origin develop; then
+                echo "✅ Successfully pushed version bump"
+                exit 0
+              else
+                echo "⚠️ Push failed, retrying..."
+              fi
+            else
+              echo "⚠️ Pull/rebase failed, aborting rebase and retrying..."
               git rebase --abort 2>/dev/null || true
-              sleep 2
-              continue
-            fi
-            
-            # Try to push
-            if git push origin develop; then
-              echo "Successfully pushed version bump"
-              exit 0
             fi
             
             RETRY_COUNT=$((RETRY_COUNT + 1))
-            echo "Push failed, attempt $RETRY_COUNT of $MAX_RETRIES"
-            
             if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
               sleep 2
             fi
           done
           
-          echo "Failed to push after $MAX_RETRIES attempts"
+          echo "❌ Failed to push after $MAX_RETRIES attempts"
           exit 1
