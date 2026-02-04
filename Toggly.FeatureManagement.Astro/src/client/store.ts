@@ -140,7 +140,7 @@ class TogglyClientInstance {
       $error.set(null);
       
       // Trigger afterRefresh hooks
-      this.hookExecutor.executeAfterRefresh(flags);
+      await this.hookExecutor.executeAfterRefresh(flags);
 
       // Start refresh interval if configured
       if (
@@ -163,7 +163,7 @@ class TogglyClientInstance {
       $flags.set(flags);
       
       // Trigger afterRefresh hooks
-      this.hookExecutor.executeAfterRefresh(flags);
+      await this.hookExecutor.executeAfterRefresh(flags);
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Flags refreshed');
@@ -271,6 +271,20 @@ export function stopRefreshInterval(): void {
   if (clientInstance) {
     clientInstance.stopRefreshInterval();
   }
+}
+
+/**
+ * Reset the client instance (for testing purposes)
+ * @internal
+ */
+export function __resetClient(): void {
+  if (clientInstance) {
+    clientInstance.stopRefreshInterval();
+  }
+  clientInstance = null;
+  $flags.set({});
+  $isReady.set(false);
+  $error.set(null);
 }
 
 /**

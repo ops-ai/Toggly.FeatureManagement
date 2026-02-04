@@ -167,7 +167,13 @@ export class Toggly implements TogglyService {
     requirement = 'all',
     negate = false,
   ) => {
-    return await this._evaluateFeatureGate(featureKeys, requirement, negate)
+    if (featureKeys.length > 0) {
+      const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKeys[0]);
+      const result = await this._evaluateFeatureGate(featureKeys, requirement, negate);
+      await this._hookExecutor.executeAfterEvaluation(featureKeys[0], dataMap, result);
+      return result;
+    }
+    return await this._evaluateFeatureGate(featureKeys, requirement, negate);
   }
 
   isFeatureOn = async (featureKey: string) => {

@@ -13,12 +13,14 @@ import type {
   CachedFlags,
   GateRequirement,
 } from '../types/index.js';
+import type { Hook } from '@ops-ai/toggly-hooks-types';
 
 /**
- * Server config type with required properties except identity
+ * Server config type with required properties except identity and hooks
  */
-type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity'>> & {
+type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'hooks'>> & {
   identity?: string;
+  hooks?: Hook[];
 };
 
 /**

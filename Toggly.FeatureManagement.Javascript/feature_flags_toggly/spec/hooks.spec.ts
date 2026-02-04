@@ -4,17 +4,29 @@ import { Toggly } from '../lib/toggly';
 
 describe('Toggly Hooks', () => {
   let beforeEvalCalls: EvaluationSeriesData[] = [];
-  let afterEvalCalls: EvaluationSeriesData[] = [];
+  let afterEvalCalls: any[] = [];
   let beforeIdentifyCalls: IdentitySeriesData[] = [];
-  let afterIdentifyCalls: IdentitySeriesData[] = [];
+  let afterIdentifyCalls: any[] = [];
   let afterRefreshCalls: number = 0;
 
   const testHook: Hook = {
     getMetadata: () => ({ name: 'TestHook', version: '1.0.0' }),
-    beforeEvaluation: async (data) => { beforeEvalCalls.push(data); },
-    afterEvaluation: async (data) => { afterEvalCalls.push(data); },
-    beforeIdentify: async (data) => { beforeIdentifyCalls.push(data); },
-    afterIdentify: async (data) => { afterIdentifyCalls.push(data); },
+    beforeEvaluation: async (flagKey, defaultValue) => {
+      const data = { flagKey, defaultValue };
+      beforeEvalCalls.push(data);
+      return data;
+    },
+    afterEvaluation: async (flagKey, dataMap, result) => {
+      afterEvalCalls.push({ flagKey, data: dataMap, result });
+    },
+    beforeIdentify: async (identity) => {
+      const data = { identity };
+      beforeIdentifyCalls.push(data);
+      return data;
+    },
+    afterIdentify: async (identity, dataMap) => {
+      afterIdentifyCalls.push({ identity, data: dataMap });
+    },
     afterRefresh: async () => { afterRefreshCalls++; }
   };
 
@@ -27,26 +39,41 @@ describe('Toggly Hooks', () => {
   });
 
   describe('Hook Registration', () => {
-    test('should register hook via config', async () => {
-      await Toggly.init({
+    test('should register hook via config', (done) => {
+      Toggly.init({
         flagDefaults: { TestFeature: true },
         hooks: [testHook]
+      }).then(() => {
+        Toggly.isFeatureOn('TestFeature');
+        
+        setTimeout(() => {
+          try {
+            expect(beforeEvalCalls.length).toBe(1);
+            expect(afterEvalCalls.length).toBe(1);
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }, 200);
       });
-
-      Toggly.isFeatureOn('TestFeature');
-      
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(afterEvalCalls.length).toBe(1);
     });
 
-    test('should register hook via addHook', async () => {
-      await Toggly.init({ flagDefaults: { TestFeature: true } });
-      Toggly.addHook(testHook);
+    test('should register hook via addHook', (done) => {
+      Toggly.init({ flagDefaults: { TestFeature: true } }).then(() => {
+        Toggly.addHook(testHook);
 
-      Toggly.isFeatureOn('TestFeature');
-      
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(afterEvalCalls.length).toBe(1);
+        Toggly.isFeatureOn('TestFeature');
+        
+        setTimeout(() => {
+          try {
+            expect(beforeEvalCalls.length).toBe(1);
+            expect(afterEvalCalls.length).toBe(1);
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }, 200);
+      });
     });
 
     test('should remove hook via removeHook', async () => {
@@ -58,7 +85,7 @@ describe('Toggly Hooks', () => {
       Toggly.isFeatureOn('TestFeature');
       expect(beforeEvalCalls.length).toBe(1);
 
-      Toggly.removeHook(testHook);
+      Toggly.removeHook('TestHook');
       Toggly.isFeatureOn('TestFeature');
       
       expect(beforeEvalCalls.length).toBe(1); // No new calls
@@ -71,29 +98,52 @@ describe('Toggly Hooks', () => {
         flagDefaults: { Feature1: true, Feature2: false },
         hooks: [testHook]
       });
+      // Reset counters after init to avoid counting initialization calls
+      beforeEvalCalls = [];
+      afterEvalCalls = [];
     });
 
-    test('should call beforeEvaluation on isFeatureOn', () => {
+    test('should call beforeEvaluation on isFeatureOn', (done) => {
       Toggly.isFeatureOn('Feature1');
       
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(beforeEvalCalls[0].featureKey).toBe('Feature1');
-      expect(beforeEvalCalls[0].context).toBeUndefined();
+      setTimeout(() => {
+        try {
+          expect(beforeEvalCalls.length).toBe(1);
+          expect(beforeEvalCalls[0].flagKey).toBe('Feature1');
+          expect(beforeEvalCalls[0].context).toBeUndefined();
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 200);
     });
 
-    test('should call beforeEvaluation on isFeatureOff', () => {
+    test('should call beforeEvaluation on isFeatureOff', (done) => {
       Toggly.isFeatureOff('Feature2');
       
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(beforeEvalCalls[0].featureKey).toBe('Feature2');
+      setTimeout(() => {
+        try {
+          expect(beforeEvalCalls.length).toBe(1);
+          expect(beforeEvalCalls[0].flagKey).toBe('Feature2');
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 200);
     });
 
-    test('should call beforeEvaluation on evaluateFeatureGate', () => {
+    test('should call beforeEvaluation on evaluateFeatureGate', (done) => {
       Toggly.evaluateFeatureGate(['Feature1', 'Feature2'], FeatureRequirement.all);
       
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(beforeEvalCalls[0].featureKeys).toEqual(['Feature1', 'Feature2']);
-      expect(beforeEvalCalls[0].requirement).toBe(FeatureRequirement.all);
+      setTimeout(() => {
+        try {
+          expect(beforeEvalCalls.length).toBe(1);
+          expect(beforeEvalCalls[0].flagKey).toBe('Feature1');
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 200);
     });
   });
 
@@ -103,30 +153,54 @@ describe('Toggly Hooks', () => {
         flagDefaults: { Feature1: true, Feature2: false },
         hooks: [testHook]
       });
+      // Reset counters after init
+      beforeEvalCalls = [];
+      afterEvalCalls = [];
     });
 
-    test('should call afterEvaluation with result', () => {
+    test('should call afterEvaluation with result', (done) => {
       Toggly.isFeatureOn('Feature1');
       
-      expect(afterEvalCalls.length).toBe(1);
-      expect(afterEvalCalls[0].featureKey).toBe('Feature1');
-      expect(afterEvalCalls[0].result).toBe(true);
+      setTimeout(() => {
+        try {
+          expect(afterEvalCalls.length).toBe(1);
+          expect(afterEvalCalls[0].flagKey).toBe('Feature1');
+          expect(afterEvalCalls[0].result).toBe(true);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 200);
     });
 
-    test('should call afterEvaluation for false result', () => {
+    test('should call afterEvaluation for false result', (done) => {
       Toggly.isFeatureOn('Feature2');
       
-      expect(afterEvalCalls.length).toBe(1);
-      expect(afterEvalCalls[0].featureKey).toBe('Feature2');
-      expect(afterEvalCalls[0].result).toBe(false);
+      setTimeout(() => {
+        try {
+          expect(afterEvalCalls.length).toBe(1);
+          expect(afterEvalCalls[0].flagKey).toBe('Feature2');
+          expect(afterEvalCalls[0].result).toBe(false);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 200);
     });
 
-    test('should call afterEvaluation for gate evaluation', () => {
+    test('should call afterEvaluation for gate evaluation', (done) => {
       const result = Toggly.evaluateFeatureGate(['Feature1', 'Feature2'], FeatureRequirement.any);
       
-      expect(afterEvalCalls.length).toBe(1);
-      expect(afterEvalCalls[0].featureKeys).toEqual(['Feature1', 'Feature2']);
-      expect(afterEvalCalls[0].result).toBe(true);
+      setTimeout(() => {
+        try {
+          expect(afterEvalCalls.length).toBe(1);
+          expect(afterEvalCalls[0].flagKey).toBe('Feature1');
+          expect(afterEvalCalls[0].result).toBe(true);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 200);
     });
   });
 
@@ -136,191 +210,271 @@ describe('Toggly Hooks', () => {
         flagDefaults: { Feature1: true },
         hooks: [testHook]
       });
-    });
-
-    test('should call beforeIdentify and afterIdentify on setIdentity', async () => {
-      await Toggly.setIdentity('user123', { email: 'test@example.com' });
-      
-      expect(beforeIdentifyCalls.length).toBe(1);
-      expect(beforeIdentifyCalls[0].userId).toBe('user123');
-      expect(beforeIdentifyCalls[0].context).toEqual({ email: 'test@example.com' });
-      
-      expect(afterIdentifyCalls.length).toBe(1);
-      expect(afterIdentifyCalls[0].userId).toBe('user123');
-    });
-
-    test('should call beforeIdentify and afterIdentify on clearIdentity', async () => {
-      await Toggly.setIdentity('user123');
+      // Reset counters after init
       beforeIdentifyCalls = [];
       afterIdentifyCalls = [];
+    });
+
+    test('should call identity hooks when setting identity', (done) => {
+      Toggly.identity = 'user123';
       
-      await Toggly.clearIdentity();
+      // Give hooks time to execute (fire-and-forget pattern)
+      setTimeout(() => {
+        try {
+          expect(beforeIdentifyCalls.length).toBe(1);
+          expect(beforeIdentifyCalls[0].identity).toBe('user123');
+          
+          expect(afterIdentifyCalls.length).toBe(1);
+          expect(afterIdentifyCalls[0].identity).toBe('user123');
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 200);
+    });
+
+    test('should call beforeIdentify and afterIdentify on clearIdentity', (done) => {
+      Toggly.identity = 'user123';
       
-      expect(beforeIdentifyCalls.length).toBe(1);
-      expect(beforeIdentifyCalls[0].userId).toBeUndefined();
-      
-      expect(afterIdentifyCalls.length).toBe(1);
-      expect(afterIdentifyCalls[0].userId).toBeUndefined();
+      // Wait for the first identity hooks to complete
+      setTimeout(() => {
+        beforeIdentifyCalls = [];
+        afterIdentifyCalls = [];
+        
+        Toggly.clearIdentity();
+        
+        // Give hooks time to execute (fire-and-forget pattern)
+        setTimeout(() => {
+          try {
+            expect(beforeIdentifyCalls.length).toBe(1);
+            expect(beforeIdentifyCalls[0].identity).toBe('');
+            
+            expect(afterIdentifyCalls.length).toBe(1);
+            expect(afterIdentifyCalls[0].identity).toBe('');
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }, 200);
+      }, 200);
     });
   });
 
   describe('afterRefresh Hook', () => {
-    test('should call afterRefresh when definitions are refreshed', async () => {
-      await Toggly.init({
+    test('should call afterRefresh when definitions are refreshed', (done) => {
+      Toggly.init({
         flagDefaults: { Feature1: true },
         hooks: [testHook]
+      }).then(() => {
+        // Reset counter after init
+        afterRefreshCalls = 0;
+        return Toggly.refresh();
+      }).then(() => {
+        // Wait for fire-and-forget hooks to complete
+        setTimeout(() => {
+          try {
+            expect(afterRefreshCalls).toBe(1);
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }, 200);
       });
-
-      await Toggly.refresh();
-      
-      expect(afterRefreshCalls).toBe(1);
     });
   });
 
   describe('Multiple Hooks', () => {
-    test('should execute multiple hooks in order (FIFO for before)', async () => {
+    test('should execute multiple hooks in order (FIFO for before)', (done) => {
       const callOrder: string[] = [];
       
       const hook1: Hook = {
         getMetadata: () => ({ name: 'Hook1', version: '1.0.0' }),
-        beforeEvaluation: async () => { callOrder.push('hook1-before'); },
-        afterEvaluation: async () => { callOrder.push('hook1-after'); }
+        beforeEvaluation: async (flagKey, defaultValue) => { 
+          callOrder.push('hook1-before'); 
+          return { flagKey, defaultValue };
+        },
+        afterEvaluation: async (flagKey, dataMap, result) => { 
+          callOrder.push('hook1-after'); 
+        }
       };
       
       const hook2: Hook = {
         getMetadata: () => ({ name: 'Hook2', version: '1.0.0' }),
-        beforeEvaluation: async () => { callOrder.push('hook2-before'); },
-        afterEvaluation: async () => { callOrder.push('hook2-after'); }
+        beforeEvaluation: async (flagKey, defaultValue) => { 
+          callOrder.push('hook2-before'); 
+          return { flagKey, defaultValue };
+        },
+        afterEvaluation: async (flagKey, dataMap, result) => { 
+          callOrder.push('hook2-after'); 
+        }
       };
 
-      await Toggly.init({
+      Toggly.init({
         flagDefaults: { Feature1: true },
         hooks: [hook1, hook2]
+      }).then(() => {
+        Toggly.isFeatureOn('Feature1');
+        
+        // Give fire-and-forget hooks time to complete
+        setTimeout(() => {
+          try {
+            // FIFO for before, LIFO for after
+            expect(callOrder).toEqual([
+              'hook1-before',
+              'hook2-before',
+              'hook2-after',
+              'hook1-after'
+            ]);
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }, 200);
       });
-
-      Toggly.isFeatureOn('Feature1');
-      
-      // FIFO for before, LIFO for after
-      expect(callOrder).toEqual([
-        'hook1-before',
-        'hook2-before',
-        'hook2-after',
-        'hook1-after'
-      ]);
     });
   });
 
   describe('Hook Error Isolation', () => {
-    test('should not fail evaluation when hook throws error', async () => {
+    test('should not fail evaluation when hook throws error', (done) => {
       const errorHook: Hook = {
         getMetadata: () => ({ name: 'ErrorHook', version: '1.0.0' }),
-        beforeEvaluation: async () => { throw new Error('Hook error'); }
+        beforeEvaluation: async (flagKey, defaultValue) => { throw new Error('Hook error'); }
       };
 
-      await Toggly.init({
+      Toggly.init({
         flagDefaults: { Feature1: true },
         hooks: [errorHook, testHook]
+      }).then(() => {
+        // Should not throw
+        const result = Toggly.isFeatureOn('Feature1');
+        
+        expect(result).toBe(true);
+        
+        // Give hooks time to execute
+        setTimeout(() => {
+          try {
+            // Second hook should still execute
+            expect(afterEvalCalls.length).toBe(1);
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }, 200);
       });
-
-      // Should not throw
-      const result = Toggly.isFeatureOn('Feature1');
-      
-      expect(result).toBe(true);
-      // Second hook should still execute
-      expect(afterEvalCalls.length).toBe(1);
     });
 
-    test('should not fail when afterEvaluation hook throws', async () => {
+    test('should not fail when afterEvaluation hook throws', (done) => {
       const errorHook: Hook = {
         getMetadata: () => ({ name: 'ErrorHook', version: '1.0.0' }),
-        afterEvaluation: async () => { throw new Error('Hook error'); }
+        afterEvaluation: async (flagKey, dataMap, result) => { throw new Error('Hook error'); }
       };
 
-      await Toggly.init({
+      Toggly.init({
         flagDefaults: { Feature1: true },
         hooks: [errorHook]
+      }).then(() => {
+        // Should not throw
+        expect(() => Toggly.isFeatureOn('Feature1')).not.toThrow();
+        done();
       });
-
-      // Should not throw
-      expect(() => Toggly.isFeatureOn('Feature1')).not.toThrow();
     });
   });
 
   describe('Hook Context Propagation', () => {
-    test('should pass context from beforeEvaluation to afterEvaluation', async () => {
-      let capturedContext: any;
+    test('should pass context from beforeEvaluation to afterEvaluation', (done) => {
+      let capturedData: (EvaluationSeriesData & { timestamp: number }) | undefined;
+      let beforeCalled = false;
+      let afterCalled = false;
       
       const contextHook: Hook = {
         getMetadata: () => ({ name: 'ContextHook', version: '1.0.0' }),
-        beforeEvaluation: async (data) => {
-          return { timestamp: Date.now() };
+        beforeEvaluation: async (flagKey, defaultValue) => {
+          beforeCalled = true;
+          return { flagKey, defaultValue, timestamp: Date.now() };
         },
-        afterEvaluation: async (data) => {
-          capturedContext = data.context;
+        afterEvaluation: async (flagKey, data, result) => {
+          afterCalled = true;
+          // data is the return value from beforeEvaluation for this specific hook
+          if (data) {
+            capturedData = data as (EvaluationSeriesData & { timestamp: number });
+          }
         }
       };
 
-      await Toggly.init({
+      Toggly.init({
         flagDefaults: { Feature1: true },
         hooks: [contextHook]
+      }).then(() => {
+        Toggly.isFeatureOn('Feature1');
+        
+        // Give fire-and-forget hooks time to complete (async in sync context)
+        setTimeout(() => {
+          try {
+            expect(beforeCalled).toBe(true);
+            expect(afterCalled).toBe(true);
+            expect(capturedData).toBeDefined();
+            expect(capturedData!.flagKey).toBe('Feature1');
+            expect(capturedData!.timestamp).toBeDefined();
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }, 1000);
       });
-
-      Toggly.isFeatureOn('Feature1');
-      
-      expect(capturedContext).toBeDefined();
-      expect(capturedContext.timestamp).toBeDefined();
     });
   });
 
   describe('Performance', () => {
-    test('should handle 100 hook executions efficiently', async () => {
+    test('should handle 100 hook executions efficiently', (done) => {
       const performanceHook: Hook = {
         getMetadata: () => ({ name: 'PerfHook', version: '1.0.0' }),
-        beforeEvaluation: async () => {},
-        afterEvaluation: async () => {}
+        beforeEvaluation: async (flagKey, defaultValue) => ({ flagKey, defaultValue }),
+        afterEvaluation: async (flagKey, dataMap, result) => {}
       };
 
-      await Toggly.init({
+      Toggly.init({
         flagDefaults: { Feature1: true },
         hooks: [performanceHook]
+      }).then(() => {
+        const startTime = performance.now();
+        
+        for (let i = 0; i < 100; i++) {
+          Toggly.isFeatureOn('Feature1');
+        }
+        
+        const endTime = performance.now();
+        const duration = endTime - startTime;
+        
+        // Should complete 100 evaluations in under 100ms
+        expect(duration).toBeLessThan(100);
+        done();
       });
-
-      const startTime = performance.now();
-      
-      for (let i = 0; i < 100; i++) {
-        Toggly.isFeatureOn('Feature1');
-      }
-      
-      const endTime = performance.now();
-      const duration = endTime - startTime;
-      
-      // Should complete 100 evaluations in under 100ms
-      expect(duration).toBeLessThan(100);
     });
 
-    test('should handle multiple hooks without significant overhead', async () => {
+    test('should handle multiple hooks without significant overhead', (done) => {
       const hooks: Hook[] = Array.from({ length: 5 }, (_, i) => ({
         getMetadata: () => ({ name: `Hook${i}`, version: '1.0.0' }),
-        beforeEvaluation: async () => {},
-        afterEvaluation: async () => {}
+        beforeEvaluation: async (flagKey, defaultValue) => ({ flagKey, defaultValue }),
+        afterEvaluation: async (flagKey, dataMap, result) => {}
       }));
 
-      await Toggly.init({
+      Toggly.init({
         flagDefaults: { Feature1: true },
         hooks
+      }).then(() => {
+        const startTime = performance.now();
+        
+        for (let i = 0; i < 50; i++) {
+          Toggly.isFeatureOn('Feature1');
+        }
+        
+        const endTime = performance.now();
+        const duration = endTime - startTime;
+        
+        // 50 evaluations with 5 hooks should complete in under 100ms
+        expect(duration).toBeLessThan(100);
+        done();
       });
-
-      const startTime = performance.now();
-      
-      for (let i = 0; i < 50; i++) {
-        Toggly.isFeatureOn('Feature1');
-      }
-      
-      const endTime = performance.now();
-      const duration = endTime - startTime;
-      
-      // 50 evaluations with 5 hooks should complete in under 100ms
-      expect(duration).toBeLessThan(100);
     });
   });
 });

@@ -171,19 +171,7 @@ class TogglyClientInstance {
       $flags.set(flags);
       
       // Trigger afterRefresh hooks
-      this.hookExecutor.executeAfterRefresh(flags);
-
-      if (this.config.isDebug) {
-        console.log('[Toggly Client] Flags refreshed');
-      }
-    } catch (error) {
-      console.error('[Toggly Client] Refresh error:', error);
-    }
-  }
-    try {
-      const flags = await this.fetchFlags();
-      this.cache = flags;
-      $flags.set(flags);
+      await this.hookExecutor.executeAfterRefresh(flags);
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Flags refreshed');

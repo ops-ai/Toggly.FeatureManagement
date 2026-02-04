@@ -45,17 +45,21 @@ export class Toggly {
   }
 
   static set identity(v: string) {
-    const dataMap = Toggly._hookExecutor.executeBeforeIdentify(v);
+    const dataMapPromise = Toggly._hookExecutor.executeBeforeIdentify(v);
     localStorage.setItem(StorageKeys.togglyIdentityKey.toString(), v);
-    Toggly._hookExecutor.executeAfterIdentify(v, dataMap);
+    Promise.resolve(dataMapPromise).then(dataMap =>
+      Toggly._hookExecutor.executeAfterIdentify(v, dataMap)
+    ).catch(err => console.error('[Toggly] Hook execution error:', err));
   }
 
   static clearIdentity() {
     const currentIdentity = Toggly.identity;
     if (currentIdentity) {
-      const dataMap = Toggly._hookExecutor.executeBeforeIdentify('');
+      const dataMapPromise = Toggly._hookExecutor.executeBeforeIdentify('');
       localStorage.removeItem(StorageKeys.togglyIdentityKey.toString());
-      Toggly._hookExecutor.executeAfterIdentify('', dataMap);
+      Promise.resolve(dataMapPromise).then(dataMap =>
+        Toggly._hookExecutor.executeAfterIdentify('', dataMap)
+      ).catch(err => console.error('[Toggly] Hook execution error:', err));
     } else {
       localStorage.removeItem(StorageKeys.togglyIdentityKey.toString());
     }
@@ -107,14 +111,21 @@ export class Toggly {
     if (!Toggly._config.appKey) {
       if (Toggly._config.isDebug) { console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(Toggly._config.flagDefaults)}`); }
 
+      const flags = Toggly._config.flagDefaults;
+      // Fire-and-forget: execute hooks for flag defaults
+      Promise.resolve(Toggly._hookExecutor.executeAfterRefresh(flags))
+        .catch(err => console.error('[Toggly] Hook execution error:', err));
+      
       return new Promise((resolve, reject) => {
-        resolve(Toggly._config.flagDefaults);
+        resolve(flags);
       });
     }
 
     // Try to fetch flags from the API
     return Toggly.fetchFeatureFlags().then(flags => {
-      Toggly._hookExecutor.executeAfterRefresh(flags);
+      // Fire-and-forget: execute hooks
+      Promise.resolve(Toggly._hookExecutor.executeAfterRefresh(flags))
+        .catch(err => console.error('[Toggly] Hook execution error:', err));
       return flags;
     });
   }
@@ -142,16 +153,17 @@ export class Toggly {
   }
 
   static evaluateFeatureGate(featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false): boolean {
-    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate);
+    if (featureGate.length === 0) {
+      return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate);
+    }
     
-    // Execute hooks for each flag in the gate (fire-and-forget pattern)
-    featureGate.forEach(key => {
-      const dataMapPromise = Toggly._hookExecutor.executeBeforeEvaluation(key);
-      const flagValue = Toggly.featureFlagsValue[key] || false;
-      Promise.resolve(dataMapPromise).then(dataMap => 
-        Toggly._hookExecutor.executeAfterEvaluation(key, dataMap, flagValue)
-      ).catch(err => console.error('[Toggly] Hook execution error:', err));
-    });
+    // Execute hooks once for the gate using the first key (fire-and-forget pattern)
+    const firstKey = featureGate[0];
+    const dataMapPromise = Toggly._hookExecutor.executeBeforeEvaluation(firstKey);
+    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate);
+    Promise.resolve(dataMapPromise).then(dataMap =>
+      Toggly._hookExecutor.executeAfterEvaluation(firstKey, dataMap, result)
+    ).catch(err => console.error('[Toggly] Hook execution error:', err));
     
     return result;
   }

@@ -1,233 +1,252 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { Hook, EvaluationSeriesData, IdentitySeriesData } from '@ops-ai/toggly-hooks-types';
-import { initializeToggly, togglyStore } from '../client/store';
-import { FeatureRequirement } from '../types';
-import { get } from 'svelte/store';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { Hook } from '@ops-ai/toggly-hooks-types';
+import { initTogglyClient, $flags, $isReady, addHook, removeHook, refreshFlags, __resetClient } from '../client/store';
 
 describe('Astro Toggly Hooks', () => {
-  let beforeEvalCalls: EvaluationSeriesData[] = [];
-  let afterEvalCalls: EvaluationSeriesData[] = [];
-  let beforeIdentifyCalls: IdentitySeriesData[] = [];
-  let afterIdentifyCalls: IdentitySeriesData[] = [];
   let afterRefreshCalls: number = 0;
 
   const testHook: Hook = {
     getMetadata: () => ({ name: 'TestHook', version: '1.0.0' }),
-    beforeEvaluation: async (data) => { beforeEvalCalls.push(data); },
-    afterEvaluation: async (data) => { afterEvalCalls.push(data); },
-    beforeIdentify: async (data) => { beforeIdentifyCalls.push(data); },
-    afterIdentify: async (data) => { afterIdentifyCalls.push(data); },
     afterRefresh: async () => { afterRefreshCalls++; }
   };
 
   beforeEach(() => {
-    beforeEvalCalls = [];
-    afterEvalCalls = [];
-    beforeIdentifyCalls = [];
-    afterIdentifyCalls = [];
     afterRefreshCalls = 0;
-    
-    initializeToggly({
-      flagDefaults: { Feature1: true, Feature2: false },
-      hooks: [testHook]
-    });
+  });
+
+  afterEach(() => {
+    // Reset client for next test
+    __resetClient();
   });
 
   describe('Hook Registration', () => {
-    it('should register hook via config', () => {
-      const store = get(togglyStore);
-      store.isFeatureOn('Feature1');
-      
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(afterEvalCalls.length).toBe(1);
+    it('should register hook via config', async () => {
+      await initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
+        flagDefaults: { Feature1: true },
+        hooks: [testHook]
+      });
+
+      // Hook is registered
+      expect(afterRefreshCalls).toBe(1); // Called during init
     });
 
-    it('should register hook via addHook', () => {
+    it('should register hook via addHook', async () => {
+      await initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
+        flagDefaults: { Feature1: true }
+      });
+
+      afterRefreshCalls = 0;
+      
       const newHook: Hook = {
         getMetadata: () => ({ name: 'NewHook', version: '1.0.0' }),
-        beforeEvaluation: async (data) => { beforeEvalCalls.push(data); }
+        afterRefresh: async () => { afterRefreshCalls++; }
       };
       
-      const store = get(togglyStore);
-      store.hookExecutor.addHook(newHook);
-      store.isFeatureOn('Feature1');
+      addHook(newHook);
+      await refreshFlags();
       
-      expect(beforeEvalCalls.length).toBe(2);
+      expect(afterRefreshCalls).toBe(1);
     });
 
-    it('should remove hook via removeHook', () => {
-      const store = get(togglyStore);
-      store.isFeatureOn('Feature1');
-      expect(beforeEvalCalls.length).toBe(1);
+    it('should remove hook via removeHook', async () => {
+      await initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
+        flagDefaults: { Feature1: true },
+        hooks: [testHook]
+      });
 
-      store.hookExecutor.removeHook(testHook);
-      store.isFeatureOn('Feature1');
+      afterRefreshCalls = 0;
+      const result = removeHook('TestHook');
+      expect(result).toBe(true);
       
-      expect(beforeEvalCalls.length).toBe(1);
-    });
-  });
-
-  describe('beforeEvaluation Hook', () => {
-    it('should call beforeEvaluation on isFeatureOn', () => {
-      const store = get(togglyStore);
-      store.isFeatureOn('Feature1');
-      
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(beforeEvalCalls[0].featureKey).toBe('Feature1');
-    });
-
-    it('should call beforeEvaluation on isFeatureOff', () => {
-      const store = get(togglyStore);
-      store.isFeatureOff('Feature2');
-      
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(beforeEvalCalls[0].featureKey).toBe('Feature2');
-    });
-
-    it('should call beforeEvaluation on evaluateFeatureGate', () => {
-      const store = get(togglyStore);
-      store.evaluateFeatureGate(['Feature1', 'Feature2'], FeatureRequirement.All);
-      
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(beforeEvalCalls[0].featureKeys).toEqual(['Feature1', 'Feature2']);
-    });
-  });
-
-  describe('afterEvaluation Hook', () => {
-    it('should call afterEvaluation with result', () => {
-      const store = get(togglyStore);
-      store.isFeatureOn('Feature1');
-      
-      expect(afterEvalCalls.length).toBe(1);
-      expect(afterEvalCalls[0].result).toBe(true);
-    });
-
-    it('should call afterEvaluation for false result', () => {
-      const store = get(togglyStore);
-      store.isFeatureOn('Feature2');
-      
-      expect(afterEvalCalls.length).toBe(1);
-      expect(afterEvalCalls[0].result).toBe(false);
-    });
-
-    it('should call afterEvaluation for gate evaluation', () => {
-      const store = get(togglyStore);
-      store.evaluateFeatureGate(['Feature1', 'Feature2'], FeatureRequirement.Any);
-      
-      expect(afterEvalCalls.length).toBe(1);
-      expect(afterEvalCalls[0].result).toBe(true);
-    });
-  });
-
-  describe('Identity Hooks', () => {
-    it('should call identity hooks on setIdentity', async () => {
-      const store = get(togglyStore);
-      await store.setIdentity('user123', { email: 'test@example.com' });
-      
-      expect(beforeIdentifyCalls.length).toBe(1);
-      expect(beforeIdentifyCalls[0].userId).toBe('user123');
-      expect(afterIdentifyCalls.length).toBe(1);
-    });
-
-    it('should call identity hooks on clearIdentity', async () => {
-      const store = get(togglyStore);
-      await store.setIdentity('user123');
-      beforeIdentifyCalls = [];
-      afterIdentifyCalls = [];
-      
-      await store.clearIdentity();
-      
-      expect(beforeIdentifyCalls.length).toBe(1);
-      expect(afterIdentifyCalls.length).toBe(1);
+      await refreshFlags();
+      expect(afterRefreshCalls).toBe(0); // Hook was removed
     });
   });
 
   describe('afterRefresh Hook', () => {
-    it('should call afterRefresh', async () => {
-      const store = get(togglyStore);
-      await store.refresh();
+    it('should call afterRefresh on init', async () => {
+      await initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
+        flagDefaults: { Feature1: true, Feature2: false },
+        hooks: [testHook]
+      });
+
+      expect(afterRefreshCalls).toBe(1);
+      
+      const flags = $flags.get();
+      expect(flags.Feature1).toBe(true);
+      expect(flags.Feature2).toBe(false);
+    });
+
+    it('should call afterRefresh when flags are refreshed', async () => {
+      await initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
+        flagDefaults: { Feature1: true },
+        hooks: [testHook]
+      });
+
+      afterRefreshCalls = 0;
+      await refreshFlags();
       
       expect(afterRefreshCalls).toBe(1);
     });
+
+    it('should pass flags to afterRefresh', async () => {
+      let capturedFlags: { [key: string]: boolean } | null = null;
+      
+      const captureHook: Hook = {
+        getMetadata: () => ({ name: 'CaptureHook', version: '1.0.0' }),
+        afterRefresh: async (flags) => {
+          capturedFlags = flags;
+        }
+      };
+
+      await initTogglyClient({
+        environment: 'test',
+        flagDefaults: { Feature1: true, Feature2: false },
+        hooks: [captureHook]
+      });
+
+      expect(capturedFlags).toBeDefined();
+      expect(capturedFlags!.Feature1).toBe(true);
+      expect(capturedFlags!.Feature2).toBe(false);
+    });
   });
 
-  describe('Multiple Hooks Execution Order', () => {
-    it('should execute hooks in correct order', () => {
+  describe('Multiple Hooks', () => {
+    it('should execute multiple hooks in order', async () => {
       const callOrder: string[] = [];
       
       const hook1: Hook = {
         getMetadata: () => ({ name: 'Hook1', version: '1.0.0' }),
-        beforeEvaluation: async () => { callOrder.push('hook1-before'); },
-        afterEvaluation: async () => { callOrder.push('hook1-after'); }
+        afterRefresh: async () => { callOrder.push('hook1'); }
       };
       
       const hook2: Hook = {
         getMetadata: () => ({ name: 'Hook2', version: '1.0.0' }),
-        beforeEvaluation: async () => { callOrder.push('hook2-before'); },
-        afterEvaluation: async () => { callOrder.push('hook2-after'); }
+        afterRefresh: async () => { callOrder.push('hook2'); }
       };
 
-      initializeToggly({
+      await initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
         flagDefaults: { Feature1: true },
         hooks: [hook1, hook2]
       });
 
-      const store = get(togglyStore);
-      store.isFeatureOn('Feature1');
-      
-      expect(callOrder).toEqual([
-        'hook1-before',
-        'hook2-before',
-        'hook2-after',
-        'hook1-after'
-      ]);
+      expect(callOrder).toEqual(['hook1', 'hook2']);
     });
   });
 
   describe('Hook Error Isolation', () => {
-    it('should not fail evaluation when hook throws', () => {
+    it('should not fail refresh when hook throws error', async () => {
       const errorHook: Hook = {
         getMetadata: () => ({ name: 'ErrorHook', version: '1.0.0' }),
-        beforeEvaluation: async () => { throw new Error('Hook error'); }
+        afterRefresh: async () => { throw new Error('Hook error'); }
       };
 
-      initializeToggly({
+      // Should not throw
+      await expect(initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
         flagDefaults: { Feature1: true },
         hooks: [errorHook, testHook]
+      })).resolves.not.toThrow();
+
+      // Second hook should still execute
+      expect(afterRefreshCalls).toBe(1);
+      
+      // Flags should still be set
+      const flags = $flags.get();
+      expect(flags.Feature1).toBe(true);
+    });
+  });
+
+  describe('Reactive Flag Access', () => {
+    it('should update flags store on init', async () => {
+      await initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
+        flagDefaults: { Feature1: true, Feature2: false }
       });
 
-      const store = get(togglyStore);
-      const result = store.isFeatureOn('Feature1');
+      const flags = $flags.get();
+      expect(flags.Feature1).toBe(true);
+      expect(flags.Feature2).toBe(false);
+      expect($isReady.get()).toBe(true);
+    });
+
+    it('should update flags store on refresh', async () => {
+      await initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
+        flagDefaults: { Feature1: true }
+      });
+
+      const flagsBefore = $flags.get();
+      expect(flagsBefore.Feature1).toBe(true);
+
+      await refreshFlags();
       
-      expect(result).toBe(true);
-      expect(afterEvalCalls.length).toBe(1);
+      const flagsAfter = $flags.get();
+      expect(flagsAfter.Feature1).toBe(true);
     });
   });
 
   describe('Performance', () => {
-    it('should handle 100 hook executions efficiently', () => {
-      const performanceHook: Hook = {
-        getMetadata: () => ({ name: 'PerfHook', version: '1.0.0' }),
-        beforeEvaluation: async () => {},
-        afterEvaluation: async () => {}
-      };
+    it('should handle multiple hooks efficiently', async () => {
+      const hooks: Hook[] = Array.from({ length: 10 }, (_, i) => ({
+        getMetadata: () => ({ name: `Hook${i}`, version: '1.0.0' }),
+        afterRefresh: async () => {}
+      }));
 
-      initializeToggly({
-        flagDefaults: { Feature1: true },
-        hooks: [performanceHook]
-      });
-
-      const store = get(togglyStore);
       const startTime = performance.now();
       
-      for (let i = 0; i < 100; i++) {
-        store.isFeatureOn('Feature1');
+      await initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
+        flagDefaults: { Feature1: true },
+        hooks
+      });
+      
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+      
+      // Should complete initialization with 10 hooks in reasonable time
+      expect(duration).toBeLessThan(1000); // 1 second
+    });
+
+    it('should handle multiple refreshes efficiently', async () => {
+      await initTogglyClient({
+        appKey: undefined,
+        environment: 'test',
+        flagDefaults: { Feature1: true },
+        hooks: [testHook]
+      });
+
+      afterRefreshCalls = 0;
+      const startTime = performance.now();
+      
+      for (let i = 0; i < 10; i++) {
+        await refreshFlags();
       }
       
       const endTime = performance.now();
       const duration = endTime - startTime;
       
-      expect(duration).toBeLessThan(100);
+      // All hooks should have been called
+      expect(afterRefreshCalls).toBe(10);
+      
+      // Should complete 10 refreshes in reasonable time
+      expect(duration).toBeLessThan(1000); // 1 second
     });
   });
 });

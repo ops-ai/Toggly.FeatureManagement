@@ -13,13 +13,17 @@ describe('TogglyService Hooks', () => {
   const testHook: Hook = {
     getMetadata: () => ({ name: 'TestHook', version: '1.0.0' }),
     beforeEvaluation: async (flagKey, defaultValue) => { 
-      beforeEvalCalls.push({ flagKey, defaultValue }); 
+      const data = { flagKey, defaultValue };
+      beforeEvalCalls.push(data);
+      return data;
     },
     afterEvaluation: async (flagKey, data, result) => { 
       afterEvalCalls.push({ flagKey, data, result }); 
     },
     beforeIdentify: async (identity) => { 
-      beforeIdentifyCalls.push({ identity }); 
+      const data = { identity };
+      beforeIdentifyCalls.push(data);
+      return data;
     },
     afterIdentify: async (identity, data) => { 
       afterIdentifyCalls.push({ identity, data }); 
@@ -78,7 +82,7 @@ describe('TogglyService Hooks', () => {
       await service.isFeatureOn('Feature1');
       
       expect(beforeEvalCalls.length).toBe(1);
-      expect(beforeEvalCalls[0].featureKey).toBe('Feature1');
+      expect(beforeEvalCalls[0].flagKey).toBe('Feature1');
     });
 
     it('should call beforeEvaluation on evaluateFeatureGate', async () => {
