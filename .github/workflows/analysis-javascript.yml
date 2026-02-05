@@ -14,6 +14,7 @@ on:
       - 'toggly-docusaurus-edge-sdk/**'
       - 'Toggly.FeatureManagement.Javascript/**'
       - 'toggly-hooks-types/**'
+      - 'toggly-clarity-hook/**'
       - '.github/workflows/analysis-javascript.yml'
   pull_request:
     branches:
@@ -28,6 +29,7 @@ on:
       - 'toggly-docusaurus-edge-sdk/**'
       - 'Toggly.FeatureManagement.Javascript/**'
       - 'toggly-hooks-types/**'
+      - 'toggly-clarity-hook/**'
       - '.github/workflows/analysis-javascript.yml'
   workflow_dispatch:
 
@@ -70,6 +72,10 @@ jobs:
           - sdk: Hooks-Types
             path: toggly-hooks-types
             test-cmd: npm run typecheck
+            has-lint: false
+          - sdk: Clarity-Hook
+            path: toggly-clarity-hook
+            test-cmd: npm test -- --coverage
             has-lint: false
     
     steps:
@@ -152,6 +158,7 @@ jobs:
             ["Astro"]="Toggly.FeatureManagement.Astro"
             ["JavaScript"]="Toggly.FeatureManagement.Javascript/feature_flags_toggly"
             ["Docusaurus"]="toggly-docusaurus-edge-sdk/libs/docusaurus-plugin"
+            ["Clarity-Hook"]="toggly-clarity-hook"
           )
           find coverage-artifacts -name "lcov.info" -type f | while read file; do
             sdk_name=$(echo "$file" | sed 's|coverage-artifacts/coverage-||' | sed 's|/.*||')
@@ -180,7 +187,7 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-javascript
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
-            -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,toggly-hooks-types
+            -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,toggly-hooks-types,toggly-clarity-hook
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js
             -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
@@ -211,5 +218,6 @@ jobs:
           echo "- JavaScript (vanilla)" >> $GITHUB_STEP_SUMMARY
           echo "- Docusaurus" >> $GITHUB_STEP_SUMMARY
           echo "- Hooks Types" >> $GITHUB_STEP_SUMMARY
+          echo "- Clarity Hook" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-javascript" >> $GITHUB_STEP_SUMMARY
