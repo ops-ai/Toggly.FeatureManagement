@@ -49,19 +49,19 @@ jobs:
             has-lint: false
           - sdk: Vue
             path: Toggly.FeatureManagement.Vue/vue-feature-flags-toggly
-            test-cmd: npm test
+            test-cmd: npm test -- --coverage
             has-lint: false
           - sdk: Svelte
             path: Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly
-            test-cmd: npm test
+            test-cmd: npx vitest run --coverage
             has-lint: false
           - sdk: Astro
             path: Toggly.FeatureManagement.Astro
-            test-cmd: npm test
+            test-cmd: npm test -- --coverage
             has-lint: false
           - sdk: JavaScript
             path: Toggly.FeatureManagement.Javascript/feature_flags_toggly
-            test-cmd: npm test
+            test-cmd: npm test -- --coverage
             has-lint: false
           - sdk: Docusaurus
             path: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
