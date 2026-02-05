@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { Toggly } from '../services/toggly.service';
+import { Toggly, type TogglyOptions } from '../services/toggly.service';
 
 describe('Toggly Service', () => {
   beforeEach(() => {
@@ -54,7 +54,7 @@ describe('Toggly Service', () => {
 
     it('should default environment to Production when appKey provided without environment', () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const config = { appKey: 'test-key' };
+      const config: TogglyOptions = { appKey: 'test-key' };
       new Toggly(config);
       expect(config.environment).toBe('Production');
     });
@@ -80,7 +80,7 @@ describe('Toggly Service', () => {
 
   // ─── Feature Loading ──────────────────────────
   describe('Feature Loading', () => {
-    let fetchSpy: ReturnType<typeof vi.spyOn>;
+    let fetchSpy: any;
 
     beforeEach(() => {
       fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
