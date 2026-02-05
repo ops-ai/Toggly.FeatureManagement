@@ -143,11 +143,30 @@ jobs:
       - name: Organize coverage files
         run: |
           mkdir -p coverage
+          # Map SDK names to repo-root-relative paths (must match matrix.path)
+          declare -A SDK_PATHS=(
+            ["Angular"]="Toggly.FeatureManagement.Angular"
+            ["React"]="Toggly.FeatureManagement.React"
+            ["Vue"]="Toggly.FeatureManagement.Vue/vue-feature-flags-toggly"
+            ["Svelte"]="Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly"
+            ["Astro"]="Toggly.FeatureManagement.Astro"
+            ["JavaScript"]="Toggly.FeatureManagement.Javascript/feature_flags_toggly"
+            ["Docusaurus"]="toggly-docusaurus-edge-sdk/libs/docusaurus-plugin"
+          )
           find coverage-artifacts -name "lcov.info" -type f | while read file; do
             sdk_name=$(echo "$file" | sed 's|coverage-artifacts/coverage-||' | sed 's|/.*||')
-            cp "$file" "coverage/${sdk_name}-lcov.info" || true
+            prefix="${SDK_PATHS[$sdk_name]}"
+            if [ -n "$prefix" ]; then
+              # Rewrite SF: paths to be relative to repo root so SonarCloud can match them
+              sed "s|SF:|SF:${prefix}/|g" "$file" > "coverage/${sdk_name}-lcov.info"
+            else
+              cp "$file" "coverage/${sdk_name}-lcov.info" || true
+            fi
           done
+          echo "Coverage files:"
           ls -la coverage/ || echo "No coverage files found"
+          echo "Sample paths from lcov files:"
+          grep "^SF:" coverage/*.info 2>/dev/null | head -20 || true
         continue-on-error: true
       
       - name: SonarCloud Scan
@@ -162,8 +181,8 @@ jobs:
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
             -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,toggly-hooks-types
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
-            -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js
+            -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=.
