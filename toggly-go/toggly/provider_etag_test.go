@@ -37,7 +37,7 @@ func TestDefinitionsProvider_RefreshUnsigned_UsesETag(t *testing.T) {
 	cfg := Config{
 		AppKey:       "app",
 		Environment:  "env",
-		BaseURL:      srv.URL + "/",
+		DefinitionsURL: srv.URL + "/",
 		HTTPTimeout:  2 * time.Second,
 		RefreshInterval: time.Minute,
 	}

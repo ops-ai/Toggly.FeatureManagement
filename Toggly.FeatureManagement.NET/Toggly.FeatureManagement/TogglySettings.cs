@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Toggly.FeatureManagement
 {
@@ -23,6 +23,11 @@ namespace Toggly.FeatureManagement
         /// Base URL of the toggly instance. Leave blank unless you have a reason to change
         /// </summary>
         public string? BaseUrl { get; set; }
+
+        /// <summary>
+        /// Base URL for definitions and JWKS. Defaults to the Cloudflare worker.
+        /// </summary>
+        public string? DefinitionsBaseUrl { get; set; }
 
         /// <summary>
         /// The current version of the application. Used to track deployments

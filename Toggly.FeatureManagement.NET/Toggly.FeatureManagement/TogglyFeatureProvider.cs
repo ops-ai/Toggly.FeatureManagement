@@ -47,6 +47,10 @@ namespace Toggly.FeatureManagement
         private volatile bool _loaded = false;
 
         private readonly Timer _timer;
+        private readonly TimeSpan _refreshInterval = new TimeSpan(0, 5, 0);
+        private readonly TimeSpan _fallbackRefreshInterval = new TimeSpan(0, 20, 0);
+        private DateTime _lastFallbackRefresh = DateTime.MinValue;
+        private volatile bool _webSocketConnected = false;
 
         private readonly string Version;
 
@@ -98,7 +102,7 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
-            _timer = new Timer(TimerCallback, null, TimeSpan.Zero, new TimeSpan(0, 5, 0));
+            _timer = new Timer(TimerCallback, null, TimeSpan.Zero, _refreshInterval);
             Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyVersionAttribute>()?.Version}";
         }
 
@@ -109,7 +113,17 @@ namespace Toggly.FeatureManagement
             {
                 try
                 {
-                    await RefreshFeatures(new TimeSpan(0, 5, 0).Ticks).ConfigureAwait(false);
+                    if (_webSocketConnected)
+                    {
+                        var now = DateTime.UtcNow;
+                        if (now - _lastFallbackRefresh < _fallbackRefreshInterval)
+                        {
+                            return;
+                        }
+                        _lastFallbackRefresh = now;
+                    }
+
+                    await RefreshFeatures(_refreshInterval.Ticks).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -442,53 +456,60 @@ namespace Toggly.FeatureManagement
                 
                 if (shouldInitializeWebSocket)
                 {
-                    var liveUpdateResponse = await httpClient.GetAsync($"definitions/live-updates/{_appKey}/{_environment}").ConfigureAwait(false);
-                    if (liveUpdateResponse.IsSuccessStatusCode)
+                    try
                     {
-                        var liveUpdateConnectionString = await liveUpdateResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        if (Uri.TryCreate(liveUpdateConnectionString, UriKind.Absolute, out var liveConnectionUri))
+                        var baseUri = new Uri(_settings.Value.DefinitionsBaseUrl ?? "https://definitions.toggly.io/");
+                        var wsBuilder = new UriBuilder(new Uri(baseUri, $"{_appKey}/ws"))
                         {
-                            try
+                            Scheme = baseUri.Scheme == Uri.UriSchemeHttps ? "wss" : "ws",
+                            Port = baseUri.IsDefaultPort ? -1 : baseUri.Port
+                        };
+                        var liveConnectionUri = wsBuilder.Uri;
+
+                        var newWebSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
+                        newWebSocketClient.MessageReceived.Subscribe(msg =>
+                        {
+                            if (msg.Text == "update" || msg.Text == "flags-updated")
                             {
-                                var newWebSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
-                                newWebSocketClient.MessageReceived.Subscribe(msg =>
+                                // Fire and forget, but log errors
+                                _ = Task.Run(async () =>
                                 {
-                                    if (msg.Text == "update")
+                                    try
                                     {
-                                        // Fire and forget, but log errors
-                                        _ = Task.Run(async () =>
-                                        {
-                                            try
-                                            {
-                                                await RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                _logger.LogError(ex, "Error refreshing features from websocket message");
-                                            }
-                                        });
+                                        await RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogError(ex, "Error refreshing features from websocket message");
                                     }
                                 });
-                                newWebSocketClient.DisconnectionHappened.Subscribe(info =>
-                                {
-                                    _logger.LogWarning("Websocket disconnected: {Reason}", info.Type);
-                                });
-                                newWebSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
+                            }
+                        });
+                        newWebSocketClient.DisconnectionHappened.Subscribe(info =>
+                        {
+                            _webSocketConnected = false;
+                            _logger.LogWarning("Websocket disconnected: {Reason}", info.Type);
+                        });
+                        newWebSocketClient.ReconnectionHappened.Subscribe(_ =>
+                        {
+                            _webSocketConnected = true;
+                        });
+                        newWebSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
 
-                                await newWebSocketClient.StartOrFail().ConfigureAwait(false);
-                                
-                                // Only assign if successfully started
-                                lock (_webSocketLock)
-                                {
-                                    _webSocketClient?.Dispose();
-                                    _webSocketClient = newWebSocketClient;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Websocket not available, continuing without it");
-                            }
+                        await newWebSocketClient.StartOrFail().ConfigureAwait(false);
+                        _webSocketConnected = true;
+                        _lastFallbackRefresh = DateTime.UtcNow;
+
+                        // Only assign if successfully started
+                        lock (_webSocketLock)
+                        {
+                            _webSocketClient?.Dispose();
+                            _webSocketClient = newWebSocketClient;
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Websocket not available, continuing without it");
                     }
                 }
 

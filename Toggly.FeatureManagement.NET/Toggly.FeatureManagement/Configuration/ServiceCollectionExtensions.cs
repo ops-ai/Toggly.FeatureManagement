@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
@@ -34,6 +34,8 @@ namespace Toggly.FeatureManagement.Configuration
                 {
                     if (!string.IsNullOrEmpty(togglyOptions.AppKey)) options.AppKey = togglyOptions.AppKey;
                     options.BaseUrl = !string.IsNullOrEmpty(togglyOptions.BaseUrl) ? togglyOptions.BaseUrl : "https://app.toggly.io/";
+                    if (!string.IsNullOrEmpty(togglyOptions.DefinitionsBaseUrl))
+                        options.DefinitionsBaseUrl = togglyOptions.DefinitionsBaseUrl;
                     if (!string.IsNullOrEmpty(togglyOptions.Environment)) options.Environment = togglyOptions.Environment;
                     if (!string.IsNullOrEmpty(togglyOptions.AppVersion)) options.AppVersion = togglyOptions.AppVersion;
                     if (!string.IsNullOrEmpty(togglyOptions.InstanceName)) options.InstanceName = togglyOptions.InstanceName;
@@ -63,9 +65,10 @@ namespace Toggly.FeatureManagement.Configuration
         {
             services.AddHttpClient("toggly", (sp, config) =>
             {
-                var baseUrl = sp.GetRequiredService<IOptions<TogglySettings>>().Value.BaseUrl;
+                var settings = sp.GetRequiredService<IOptions<TogglySettings>>().Value;
+                var definitionsBaseUrl = settings.DefinitionsBaseUrl ?? "https://definitions.toggly.io/";
 
-                config.BaseAddress = new Uri(baseUrl ?? "https://app.toggly.io/");
+                config.BaseAddress = new Uri(definitionsBaseUrl);
             })
             .SetHandlerLifetime(TimeSpan.FromMinutes(60))
             .AddPolicyHandler(GetRetryPolicy())

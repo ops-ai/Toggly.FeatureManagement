@@ -15,6 +15,7 @@ func main() {
 		AppKey:       "YOUR_APP_KEY",
 		Environment:  "Production",
 		BaseURL:      "https://app.toggly.io/",
+		DefinitionsURL: "https://definitions.toggly.io/",
 		SessionStore: session.NewMemoryStore(),
 		SessionTTL:   30 * time.Minute,
 

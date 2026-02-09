@@ -4,37 +4,20 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
+	"strings"
 	"time"
 
 	"nhooyr.io/websocket"
 )
 
-// Start connects to the Toggly live updates channel.
+// Start connects to the Toggly live updates channel directly.
 //
-// It fetches the WebSocket URL from:
-//   GET {baseURL}/definitions/live-updates/{appKey}/{env}
+// It connects to:
+//   wss://definitions.toggly.io/{appKey}/ws
 //
 // Then connects and calls onUpdate when receiving the text message "update".
-func Start(ctx context.Context, baseURL, appKey, env string, hc *http.Client, onUpdate func()) (io.Closer, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%sdefinitions/live-updates/%s/%s", baseURL, appKey, env), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := hc.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("live-updates url fetch failed: %s", resp.Status)
-	}
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	wsURL := string(b)
-
+func Start(ctx context.Context, baseURL, appKey string, onUpdate func(), onDisconnect func()) (io.Closer, error) {
+	wsURL := buildWebSocketURL(baseURL, appKey)
 	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{})
 	if err != nil {
 		return nil, err
@@ -42,6 +25,11 @@ func Start(ctx context.Context, baseURL, appKey, env string, hc *http.Client, on
 
 	go func() {
 		defer c.Close(websocket.StatusNormalClosure, "")
+		defer func() {
+			if onDisconnect != nil {
+				onDisconnect()
+			}
+		}()
 		for {
 			_, msg, err := c.Read(ctx)
 			if err != nil {
@@ -63,6 +51,17 @@ func Start(ctx context.Context, baseURL, appKey, env string, hc *http.Client, on
 		defer cancel()
 		return c.Close(websocket.StatusNormalClosure, ctx.Err().Error())
 	}), nil
+}
+
+func buildWebSocketURL(baseURL, appKey string) string {
+	base := strings.TrimRight(baseURL, "/")
+	switch {
+	case strings.HasPrefix(base, "https://"):
+		base = "wss://" + strings.TrimPrefix(base, "https://")
+	case strings.HasPrefix(base, "http://"):
+		base = "ws://" + strings.TrimPrefix(base, "http://")
+	}
+	return fmt.Sprintf("%s/%s/ws", base, appKey)
 }
 
 type closerFunc func() error

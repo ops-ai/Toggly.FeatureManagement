@@ -87,10 +87,10 @@ class TogglySettings
     }
 
     /**
-     * Get the base URL, defaulting to https://app.toggly.io/
+     * Get the base URL, defaulting to https://definitions.toggly.io/
      */
     public function getBaseUrl(): string
     {
-        return $this->baseUrl ?? 'https://app.toggly.io/';
+        return $this->baseUrl ?? 'https://definitions.toggly.io/';
     }
 }

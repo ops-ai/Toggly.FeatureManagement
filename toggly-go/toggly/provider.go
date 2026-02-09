@@ -35,6 +35,9 @@ type definitionsProvider struct {
 
 	liveMu     sync.Mutex
 	liveCloser io.Closer
+	liveConnected bool
+	lastFallback  time.Time
+	fallbackInterval time.Duration
 
 	stop chan struct{}
 	wg   sync.WaitGroup
@@ -49,6 +52,7 @@ func newDefinitionsProvider(cfg Config, snap snapshot.Provider) *definitionsProv
 		defsByKey: map[string]definitions.FeatureDefinitionModel{},
 		secure:    map[string]struct{}{},
 		stop:      make(chan struct{}),
+		fallbackInterval: 20 * time.Minute,
 	}
 }
 
@@ -71,10 +75,32 @@ func (p *definitionsProvider) start() {
 			case <-p.stop:
 				return
 			case <-ticker.C:
+				if p.shouldSkipRefresh() {
+					continue
+				}
 				_ = p.refresh(context.Background(), p.cfg.HTTPTimeout)
 			}
 		}
 	}()
+}
+
+func (p *definitionsProvider) shouldSkipRefresh() bool {
+	p.liveMu.Lock()
+	connected := p.liveConnected
+	lastFallback := p.lastFallback
+	fallbackInterval := p.fallbackInterval
+	p.liveMu.Unlock()
+
+	if !connected {
+		return false
+	}
+	if time.Since(lastFallback) < fallbackInterval {
+		return true
+	}
+	p.liveMu.Lock()
+	p.lastFallback = time.Now()
+	p.liveMu.Unlock()
+	return false
 }
 
 func (p *definitionsProvider) close() {
@@ -99,14 +125,20 @@ func (p *definitionsProvider) startLiveUpdates() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	closer, err := live.Start(ctx, p.cfg.BaseURL, p.cfg.AppKey, p.cfg.Environment, p.hc, func() {
+	closer, err := live.Start(ctx, p.cfg.DefinitionsURL, p.cfg.AppKey, func() {
 		_ = p.refresh(context.Background(), 10*time.Second)
+	}, func() {
+		p.liveMu.Lock()
+		p.liveConnected = false
+		p.liveMu.Unlock()
 	})
 	if err != nil {
 		return
 	}
 	p.liveMu.Lock()
 	p.liveCloser = closer
+	p.liveConnected = true
+	p.lastFallback = time.Now()
 	p.liveMu.Unlock()
 }
 
@@ -179,7 +211,7 @@ func (p *definitionsProvider) loadSnapshot(ctx context.Context) error {
 }
 
 func (p *definitionsProvider) refreshUnsigned(ctx context.Context) error {
-	url := fmt.Sprintf("%sdefinitions/%s/%s", p.cfg.BaseURL, p.cfg.AppKey, p.cfg.Environment)
+	url := fmt.Sprintf("%sdefinitions/%s/%s", p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -228,7 +260,7 @@ func (p *definitionsProvider) refreshUnsigned(ctx context.Context) error {
 }
 
 func (p *definitionsProvider) refreshSigned(ctx context.Context) error {
-	url := fmt.Sprintf("%sdefinitions/v2/%s/%s", p.cfg.BaseURL, p.cfg.AppKey, p.cfg.Environment)
+	url := fmt.Sprintf("%sdefinitions/v2/%s/%s", p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -317,7 +349,7 @@ func (p *definitionsProvider) loadOrFetchJWKS(ctx context.Context) (*definitions
 	}
 
 	// fetch
-	url := fmt.Sprintf("%s.well-known/jwks", p.cfg.BaseURL)
+	url := fmt.Sprintf("%s.well-known/jwks", p.cfg.DefinitionsURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err

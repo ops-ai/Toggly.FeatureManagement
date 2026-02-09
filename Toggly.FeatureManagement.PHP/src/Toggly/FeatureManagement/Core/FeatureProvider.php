@@ -53,6 +53,8 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
     private ?int $lastErrorTime = null;
     private ?int $lastRefresh = null;
     private bool $refreshInProgress = false;
+    private ?int $lastFallbackPoll = null;
+    private int $fallbackInterval;
 
     public function __construct(
         TogglySettings $settings,
@@ -67,6 +69,7 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
         $this->featureStateService = $featureStateService;
         $this->logger = $logger ?? new NullLogger();
         $this->webSocketClient = new WebSocketClient($this->logger);
+        $this->fallbackInterval = max($settings->refreshInterval * 4, 600);
 
         // Initialize security components if signed definitions are enabled
         if ($settings->useSignedDefinitions) {
@@ -174,11 +177,19 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
     /**
      * Refresh features from API
      */
-    public function refreshFeatures(): void
+    public function refreshFeatures(bool $force = false): void
     {
         if ($this->refreshInProgress) {
             $this->logger->debug('Refresh already in progress, skipping');
             return;
+        }
+
+        if (!$force && $this->webSocketClient->isRunning()) {
+            $now = time();
+            if ($this->lastFallbackPoll !== null && ($now - $this->lastFallbackPoll) < $this->fallbackInterval) {
+                return;
+            }
+            $this->lastFallbackPoll = $now;
         }
 
         $this->refreshInProgress = true;
@@ -319,27 +330,24 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
         }
 
         try {
-            $path = "definitions/live-updates/{$this->settings->appKey}/{$this->settings->environment}";
-            $response = $this->httpClient->get($path);
-
-            if ($response === null) {
-                return;
+            $baseUrl = rtrim($this->settings->getBaseUrl(), '/');
+            if (str_starts_with($baseUrl, 'https://')) {
+                $wsBase = 'wss://' . substr($baseUrl, 8);
+            } elseif (str_starts_with($baseUrl, 'http://')) {
+                $wsBase = 'ws://' . substr($baseUrl, 7);
+            } else {
+                $wsBase = $baseUrl;
             }
-
-            $response->getBody()->rewind();
-            $wsUrl = trim($response->getBody()->getContents());
-
-            if (empty($wsUrl)) {
-                return;
-            }
+            $wsUrl = $wsBase . "/{$this->settings->appKey}/ws";
 
             $connected = $this->webSocketClient->connect($wsUrl, function () {
                 $this->logger->info('WebSocket update received, refreshing features');
-                $this->refreshFeatures();
+                $this->refreshFeatures(true);
             });
 
             if ($connected) {
                 $this->logger->info('WebSocket connected for live updates');
+                $this->lastFallbackPoll = time();
             }
         } catch (\Exception $e) {
             $this->logger->warning('WebSocket not available, continuing without it', ['error' => $e->getMessage()]);

@@ -17,6 +17,7 @@ type Config struct {
 	AppKey      string
 	Environment string
 	BaseURL     string
+	DefinitionsURL string
 
 	UseSignedDefinitions bool
 	AllowedKeyIDs        map[string]struct{}
@@ -63,7 +64,7 @@ type Config struct {
 	// The caller can call Refresh manually (not yet exposed) if needed.
 	DisableBackgroundRefresh bool
 
-	// EnableLiveUpdates enables WebSocket live updates (definitions/live-updates/...).
+	// EnableLiveUpdates enables WebSocket live updates (direct worker websocket).
 	EnableLiveUpdates bool
 }
 
@@ -76,6 +77,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.BaseURL != "" && c.BaseURL[len(c.BaseURL)-1] != '/' {
 		c.BaseURL += "/"
+	}
+	if c.DefinitionsURL == "" {
+		c.DefinitionsURL = "https://definitions.toggly.io/"
+	}
+	if c.DefinitionsURL != "" && c.DefinitionsURL[len(c.DefinitionsURL)-1] != '/' {
+		c.DefinitionsURL += "/"
 	}
 	if c.RefreshInterval == 0 {
 		c.RefreshInterval = 5 * time.Minute
