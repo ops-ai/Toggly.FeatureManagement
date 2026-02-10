@@ -1,0 +1,94 @@
+{
+  "name": "@ops-ai/react-native-toggly",
+  "version": "1.0.0",
+  "description": "Feature flags SDK for React Native and Expo applications. Provides hooks, context, and components for feature flag management. Can be used with or without Toggly.io.",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/index.d.ts",
+  "react-native": "src/index.tsx",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "npm run build:cjs && npm run build:esm && npm run build:types",
+    "build:cjs": "tsc --project tsconfig.cjs.json",
+    "build:esm": "tsc --project tsconfig.esm.json",
+    "build:types": "tsc --project tsconfig.types.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "feature-flags",
+    "feature-toggle",
+    "toggly",
+    "mobile",
+    "ios",
+    "android",
+    "hooks",
+    "context",
+    "provider"
+  ],
+  "author": {
+    "name": "Toggly",
+    "email": "hello@toggly.io"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.ReactNative/libs/react-native"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.FeatureManagement.ReactNative#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@ops-ai/react-native-toggly-core": "file:../core",
+    "@ops-ai/toggly-hooks-types": "^1.1.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0",
+    "@react-native-community/netinfo": "^11.0.0",
+    "@testing-library/react": "^14.3.1",
+    "@testing-library/react-native": "^12.0.0",
+    "@types/jest": "^29.5.0",
+    "@types/react": "^18.2.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "babel-jest": "^29.7.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^30.2.0",
+    "react": "18.3.1",
+    "react-dom": "^18.3.1",
+    "react-native": "^0.74.0",
+    "react-test-renderer": "18.3.1",
+    "typescript": "^5.4.0"
+  },
+  "peerDependencies": {
+    "@react-native-community/netinfo": ">=9.0.0",
+    "react": ">=18.0.0",
+    "react-native": ">=0.70.0"
+  },
+  "peerDependenciesMeta": {
+    "@react-native-community/netinfo": {
+      "optional": true
+    }
+  }
+}

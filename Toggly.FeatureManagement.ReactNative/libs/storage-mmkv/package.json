@@ -1,0 +1,66 @@
+{
+  "name": "@ops-ai/react-native-toggly-storage-mmkv",
+  "version": "1.0.0",
+  "description": "MMKV storage adapter for React Native Toggly SDK. High-performance persistent storage using react-native-mmkv.",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/index.d.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "npm run build:cjs && npm run build:esm && npm run build:types",
+    "build:cjs": "tsc --project tsconfig.cjs.json",
+    "build:esm": "tsc --project tsconfig.esm.json",
+    "build:types": "tsc --project tsconfig.types.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "jest --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "toggly",
+    "feature-flags",
+    "mmkv",
+    "storage",
+    "performance",
+    "persistence"
+  ],
+  "author": {
+    "name": "Toggly",
+    "email": "hello@toggly.io"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.ReactNative/libs/storage-mmkv"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.FeatureManagement.ReactNative#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@ops-ai/react-native-toggly-core": "file:../core"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "jest": "^29.7.0",
+    "react-native-mmkv": "^2.12.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.4.0"
+  },
+  "peerDependencies": {
+    "react-native-mmkv": ">=2.0.0"
+  }
+}
