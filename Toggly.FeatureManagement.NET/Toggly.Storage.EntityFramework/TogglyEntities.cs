@@ -1,67 +1,84 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Toggly.FeatureManagement.Storage.EntityFramework
 {
-    public partial class TogglyEntities : DbContext
+    /// <summary>
+    /// Entity Framework DbContext for Toggly snapshots
+    /// </summary>
+    public class TogglyEntities : DbContext
     {
-        public TogglyEntities() : base()
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="options"></param>
+        public TogglyEntities(DbContextOptions<TogglyEntities> options) : base(options)
         {
         }
 
-        public virtual DbSet<Feature> TogglyFeatures { get; set; }
-        
-        public virtual DbSet<FeatureFilter> TogglyFeatureFilters { get; set; }
+        /// <summary>
+        /// Snapshot table
+        /// </summary>
+        public virtual DbSet<SnapshotEntity> TogglySnapshots { get; set; } = null!;
 
+        /// <summary>
+        /// Configure the model
+        /// </summary>
+        /// <param name="modelBuilder"></param>
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Feature>()
-                .HasMany(e => e.Filters)
-                .WithOne(e => e.Feature)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<FeatureFilter>()
-                .HasMany(e => e.Parameters)
-                .WithOne(e => e.Filter)
-                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<SnapshotEntity>(entity =>
+            {
+                entity.ToTable("TogglySnapshots");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).HasMaxLength(100);
+                entity.Property(e => e.Data).IsRequired();
+                entity.Property(e => e.Signature).HasMaxLength(1000);
+                entity.Property(e => e.KeyId).HasMaxLength(100);
+            });
         }
     }
 
-    [Table("TogglyFeatures")]
-    public partial class Feature
+    /// <summary>
+    /// Snapshot entity for storing feature and JWK snapshots
+    /// </summary>
+    [Table("TogglySnapshots")]
+    public class SnapshotEntity
     {
+        /// <summary>
+        /// Unique identifier for the snapshot (e.g., "toggly_features" or "toggly_jwks")
+        /// </summary>
         [Key]
         [StringLength(100)]
-        public string FeatureKey { get; set; }
+        public string Id { get; set; } = string.Empty;
 
-        public virtual ICollection<FeatureFilter> Filters { get; set; }
-    }
+        /// <summary>
+        /// JSON serialized snapshot data
+        /// </summary>
+        [Required]
+        public string Data { get; set; } = string.Empty;
 
-    [Table("TogglyFeatureFilters")]
-    public partial class FeatureFilter
-    {
-        [Key]
-        [StringLength(100)]
-        public string Name { get; set; }
-
-        public virtual Feature Feature { get; set; }
-
-        public virtual ICollection<FeatureFilterParameter> Parameters { get; set; }
-    }
-
-    [Table("TogglyFeatureFilterParameters")]
-    public partial class FeatureFilterParameter
-    {
-        [Key]
-        public long Id { get; set; }
-
-        [StringLength(100)]
-        public string Name { get; set; }
-
+        /// <summary>
+        /// Signature for signed definitions (features only)
+        /// </summary>
         [StringLength(1000)]
-        public string Value { get; set; }
+        public string? Signature { get; set; }
 
-        public virtual FeatureFilter Filter { get; set; }
+        /// <summary>
+        /// Key ID for signature verification (features only)
+        /// </summary>
+        [StringLength(100)]
+        public string? KeyId { get; set; }
+
+        /// <summary>
+        /// Timestamp of the snapshot
+        /// </summary>
+        public long? Timestamp { get; set; }
+
+        /// <summary>
+        /// Last update time
+        /// </summary>
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 }

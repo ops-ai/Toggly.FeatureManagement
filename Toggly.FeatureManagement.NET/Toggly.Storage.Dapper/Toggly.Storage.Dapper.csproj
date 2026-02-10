@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageId>Toggly.FeatureManagement.Storage.Dapper</PackageId>
+    <Description>Dapper snapshot provider for Toggly Feature Management. Lightweight and fast SQL-based storage for feature flag snapshots supporting SQL Server, PostgreSQL, MySQL, and SQLite.</Description>
+    <PackageProjectUrl>https://toggly.io</PackageProjectUrl>
+    <PackageIcon>packagephoto.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>feature management;toggly;feature flags;dapper;sql;snapshot provider</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <AssemblyTitle>Toggly Dapper Feature Snapshot Provider</AssemblyTitle>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="packagephoto.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="packagephoto.png">
+      <PackagePath>\</PackagePath>
+      <Pack>True</Pack>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md">
+      <PackagePath>\</PackagePath>
+      <Pack>True</Pack>
+    </None>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TF_BUILD)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.35" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Toggly.FeatureManagement\Toggly.FeatureManagement.csproj" />
+  </ItemGroup>
+
+</Project>

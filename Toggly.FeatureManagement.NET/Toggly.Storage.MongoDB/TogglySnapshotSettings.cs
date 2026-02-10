@@ -1,9 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-
-namespace Toggly.FeatureManagement.Storage.EntityFramework
+namespace Toggly.FeatureManagement.Storage.MongoDB
 {
     /// <summary>
-    /// Settings for Entity Framework snapshot provider
+    /// Settings for MongoDB snapshot provider
     /// </summary>
     public class TogglySnapshotSettings
     {
@@ -18,8 +16,13 @@ namespace Toggly.FeatureManagement.Storage.EntityFramework
         public string JwkDocumentName { get; set; } = "toggly_jwks";
 
         /// <summary>
-        /// Whether to automatically create the table if it doesn't exist (default: true)
+        /// Database name for storing snapshots (default: "toggly")
         /// </summary>
-        public bool AutoCreateTable { get; set; } = true;
+        public string DatabaseName { get; set; } = "toggly";
+
+        /// <summary>
+        /// Collection name for storing snapshots (default: "snapshots")
+        /// </summary>
+        public string CollectionName { get; set; } = "snapshots";
     }
 }

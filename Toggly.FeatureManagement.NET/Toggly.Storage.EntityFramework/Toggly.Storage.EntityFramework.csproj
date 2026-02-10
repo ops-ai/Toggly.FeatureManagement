@@ -1,33 +1,51 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>net6.0;net8.0;net9.0</TargetFrameworks>
-	  <ImplicitUsings>enable</ImplicitUsings>
-	  <Nullable>enable</Nullable>
-	  <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-	  <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-	  <PackageProjectUrl>https://toggly.io</PackageProjectUrl>
-	  <PackageIcon>packagephoto.png</PackageIcon>
-	  <PackageReadmeFile>README.md</PackageReadmeFile>
-	  <RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
-	  <RepositoryType>git</RepositoryType>
-	  <PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
-	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <TargetFrameworks>net6.0;net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageId>Toggly.FeatureManagement.Storage.EntityFramework</PackageId>
+    <Description>Entity Framework Core snapshot provider for Toggly Feature Management. Store feature flag snapshots in any database supported by EF Core.</Description>
+    <PackageProjectUrl>https://toggly.io</PackageProjectUrl>
+    <PackageIcon>packagephoto.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>feature management;toggly;feature flags;entity framework;ef core;snapshot provider</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
-	<ItemGroup>
-		<Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
-	</ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\README.md" Link="README.md">
+    <None Include="README.md">
       <PackagePath>\</PackagePath>
       <Pack>True</Pack>
     </None>
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="6.0.4" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0-preview.1.25081.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0-preview.1.25081.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,10 +53,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="packagephoto.png">
+    <None Remove="packagephoto.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="packagephoto.png">
       <PackagePath>\</PackagePath>
       <Pack>True</Pack>
-    </None>
+    </Content>
   </ItemGroup>
 
 </Project>

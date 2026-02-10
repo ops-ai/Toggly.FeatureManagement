@@ -63,13 +63,47 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Cache Store
+    | Cache Configuration
     |--------------------------------------------------------------------------
     |
-    | Laravel cache store to use for snapshot provider.
+    | Cache-specific settings for the cache snapshot provider.
     |
     */
-    'cache_store' => env('TOGGLY_CACHE_STORE', 'default'),
+    'cache' => [
+        /*
+        |----------------------------------------------------------------------
+        | Cache Store
+        |----------------------------------------------------------------------
+        |
+        | Laravel cache store to use for snapshot provider. Set to null to use
+        | the default cache store configured in config/cache.php.
+        | Respects CACHE_DRIVER environment variable when null.
+        |
+        */
+        'store' => env('TOGGLY_CACHE_STORE', null),
+
+        /*
+        |----------------------------------------------------------------------
+        | Cache Key Prefix
+        |----------------------------------------------------------------------
+        |
+        | Prefix for all Toggly cache keys. Useful to avoid collisions with
+        | other cached data in your application.
+        |
+        */
+        'prefix' => env('TOGGLY_CACHE_PREFIX', 'toggly'),
+
+        /*
+        |----------------------------------------------------------------------
+        | Cache TTL
+        |----------------------------------------------------------------------
+        |
+        | Time-to-live for cached snapshots in seconds. Set to null to cache
+        | forever (until manually invalidated). Default is null (forever).
+        |
+        */
+        'ttl' => env('TOGGLY_CACHE_TTL', null),
+    ],
 
     /*
     |--------------------------------------------------------------------------

@@ -15,7 +15,11 @@ use Toggly\FeatureManagement\Core\MetricsRegistryService;
 use Toggly\FeatureManagement\Core\MetricsService;
 use Toggly\FeatureManagement\Core\UsageStatsProvider;
 use Toggly\FeatureManagement\Http\TogglyHttpClient;
+use Toggly\FeatureManagement\Storage\SnapshotProviders\DatabaseSnapshotProvider;
+use Toggly\FeatureManagement\Storage\SnapshotProviders\FileSnapshotProvider;
+use Toggly\FeatureManagement\Storage\SnapshotSettings;
 use Toggly\Laravel\Http\HttpFeatureContextProvider;
+use Toggly\Laravel\Storage\LaravelCacheSnapshotProvider;
 use Toggly\Laravel\View\Components\Feature as FeatureComponent;
 
 class ServiceProvider extends BaseServiceProvider
@@ -54,6 +58,9 @@ class ServiceProvider extends BaseServiceProvider
 
         // Register metrics registry
         $this->app->singleton(MetricsRegistryService::class);
+
+        // Register snapshot provider based on configuration
+        $this->registerSnapshotProvider();
 
         // Register feature provider
         $this->app->singleton(FeatureProvider::class, function ($app) {
@@ -206,7 +213,7 @@ class ServiceProvider extends BaseServiceProvider
             $user = auth()->user();
             $context['userId'] = $user->id;
             $context['user_id'] = $user->id;
-            
+
             // Add groups if available
             if (method_exists($user, 'groups')) {
                 $context['groups'] = $user->groups();
@@ -218,5 +225,59 @@ class ServiceProvider extends BaseServiceProvider
         }
 
         return $context;
+    }
+
+    /**
+     * Register the snapshot provider based on configuration
+     */
+    private function registerSnapshotProvider(): void
+    {
+        $this->app->singleton(FeatureSnapshotProviderInterface::class, function ($app) {
+            $provider = $app['config']->get('toggly.snapshot_provider', 'cache');
+
+            return match ($provider) {
+                'cache' => $this->createCacheSnapshotProvider($app),
+                'database' => $this->createDatabaseSnapshotProvider($app),
+                'file' => $this->createFileSnapshotProvider($app),
+                default => $this->createCacheSnapshotProvider($app),
+            };
+        });
+    }
+
+    /**
+     * Create the Laravel cache snapshot provider
+     */
+    private function createCacheSnapshotProvider($app): LaravelCacheSnapshotProvider
+    {
+        $cacheConfig = $app['config']->get('toggly.cache', []);
+
+        return new LaravelCacheSnapshotProvider(
+            cache: $app->make(\Illuminate\Contracts\Cache\Factory::class),
+            store: $cacheConfig['store'] ?? null,
+            prefix: $cacheConfig['prefix'] ?? 'toggly',
+            ttl: $cacheConfig['ttl'] ?? null
+        );
+    }
+
+    /**
+     * Create the database snapshot provider
+     */
+    private function createDatabaseSnapshotProvider($app): DatabaseSnapshotProvider
+    {
+        return new DatabaseSnapshotProvider(
+            pdo: $app->make('db')->connection()->getPdo(),
+            settings: new SnapshotSettings()
+        );
+    }
+
+    /**
+     * Create the file snapshot provider
+     */
+    private function createFileSnapshotProvider($app): FileSnapshotProvider
+    {
+        return new FileSnapshotProvider(
+            directory: storage_path('toggly'),
+            settings: new SnapshotSettings()
+        );
     }
 }
