@@ -1,0 +1,176 @@
+name: iOS SDK - Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  SDK_ROOT: Toggly.FeatureManagement.iOS
+
+jobs:
+  validate:
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ github.event.inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "Invalid version format. Expected: X.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+
+      - name: Check if tag exists
+        run: |
+          if git rev-parse "ios-sdk-v${{ github.event.inputs.version }}" >/dev/null 2>&1; then
+            echo "Tag ios-sdk-v${{ github.event.inputs.version }} already exists"
+            exit 1
+          fi
+
+  build-and-test:
+    needs: validate
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Show versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Resolve dependencies
+        working-directory: ${{ env.SDK_ROOT }}
+        run: swift package resolve
+
+      - name: Build
+        working-directory: ${{ env.SDK_ROOT }}
+        run: swift build -c release
+
+      - name: Run tests
+        working-directory: ${{ env.SDK_ROOT }}
+        run: swift test
+
+  release:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_tag_gpgsign: true
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+      - name: Update version in source
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          sed -i "s/public let togglyVersion = \".*\"/public let togglyVersion = \"$VERSION\"/" \
+            ${{ env.SDK_ROOT }}/TogglyCore/Sources/TogglyCore.swift
+          sed -i "s/public let togglySwiftUIVersion = \".*\"/public let togglySwiftUIVersion = \"$VERSION\"/" \
+            ${{ env.SDK_ROOT }}/TogglySwiftUI/Sources/TogglySwiftUI.swift
+          sed -i "s/public let togglyUIKitVersion = \".*\"/public let togglyUIKitVersion = \"$VERSION\"/" \
+            ${{ env.SDK_ROOT }}/TogglyUIKit/Sources/TogglyUIKit.swift
+          sed -i "s/public let togglyCombineVersion = \".*\"/public let togglyCombineVersion = \"$VERSION\"/" \
+            ${{ env.SDK_ROOT }}/TogglyCombine/Sources/TogglyCombine.swift
+
+      - name: Commit version update
+        run: |
+          git add -A
+          git commit -S -m "Released iOS SDK v${{ github.event.inputs.version }} [skip ci]" || echo "No changes to commit"
+          git push origin develop
+
+      - name: Create and push tag
+        run: |
+          git tag -s -m "iOS SDK v${{ github.event.inputs.version }}" "ios-sdk-v${{ github.event.inputs.version }}"
+          git push origin "ios-sdk-v${{ github.event.inputs.version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-sdk-v${{ github.event.inputs.version }}
+          name: iOS SDK v${{ github.event.inputs.version }}
+          body: |
+            ## iOS SDK v${{ github.event.inputs.version }}
+
+            ### Installation
+
+            #### Swift Package Manager
+
+            Add the following to your `Package.swift`:
+
+            ```swift
+            dependencies: [
+                .package(url: "https://github.com/ops-ai/Toggly.FeatureManagement.git", from: "${{ github.event.inputs.version }}")
+            ]
+            ```
+
+            Or in Xcode: File → Add Package Dependencies → Enter the repository URL.
+
+            ### Packages
+
+            - **TogglyCore**: Core feature flag functionality
+            - **TogglySwiftUI**: SwiftUI property wrappers and view modifiers
+            - **TogglyUIKit**: UIKit extensions and utilities
+            - **TogglyCombine**: Combine publishers for reactive patterns
+
+            ### Requirements
+
+            - iOS 14.0+
+            - macOS 11.0+
+            - tvOS 14.0+
+            - watchOS 7.0+
+            - Swift 5.5+
+          prerelease: ${{ github.event.inputs.prerelease }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "## iOS SDK Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | ios-sdk-v${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Packages Released" >> $GITHUB_STEP_SUMMARY
+          echo "- TogglyCore" >> $GITHUB_STEP_SUMMARY
+          echo "- TogglySwiftUI" >> $GITHUB_STEP_SUMMARY
+          echo "- TogglyUIKit" >> $GITHUB_STEP_SUMMARY
+          echo "- TogglyCombine" >> $GITHUB_STEP_SUMMARY
