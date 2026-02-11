@@ -1,0 +1,28 @@
+[package]
+name = "toggly-macros"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Procedural macros for Toggly feature flags"
+readme = "../README.md"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+darling = "0.20"
+
+[dev-dependencies]
+toggly = { workspace = true }
+tokio = { workspace = true }
+trybuild = "1.0"

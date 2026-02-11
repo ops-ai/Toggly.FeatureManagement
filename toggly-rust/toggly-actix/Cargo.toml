@@ -1,0 +1,27 @@
+[package]
+name = "toggly-actix"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Actix-web integration for Toggly feature flags"
+readme = "../README.md"
+
+[dependencies]
+toggly = { workspace = true }
+actix-web = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+futures-util = "0.3"
+
+[dev-dependencies]
+actix-rt = "2.9"
+tokio-test = { workspace = true }

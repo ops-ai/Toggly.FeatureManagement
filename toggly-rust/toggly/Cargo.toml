@@ -1,0 +1,50 @@
+[package]
+name = "toggly"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "High-performance Rust SDK for Toggly feature flags"
+readme = "../README.md"
+
+[features]
+default = ["rustls-tls"]
+rustls-tls = ["reqwest/rustls-tls"]
+native-tls = ["reqwest/native-tls"]
+metrics = ["dep:metrics", "dep:prometheus"]
+
+[dependencies]
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+dashmap = { workspace = true }
+tracing = { workspace = true }
+
+# Optional metrics
+metrics = { workspace = true, optional = true }
+prometheus = { workspace = true, optional = true }
+
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Hash functions for percentage rollouts
+sha2 = "0.10"
+base64 = "0.21"
+rand = "0.8"
+regex = "1.10"
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+wiremock = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'rust-v*'
+
+defaults:
+  run:
+    working-directory: toggly-rust
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        run: cargo test --all-features --workspace
+
+      - name: Publish toggly (core)
+        run: cargo publish -p toggly --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+
+      - name: Wait for crates.io
+        run: sleep 30
+
+      - name: Publish toggly-macros
+        run: cargo publish -p toggly-macros --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+
+      - name: Wait for crates.io
+        run: sleep 30
+
+      - name: Publish toggly-actix
+        run: cargo publish -p toggly-actix --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+
+      - name: Publish toggly-axum
+        run: cargo publish -p toggly-axum --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+
+      - name: Publish toggly-rocket
+        run: cargo publish -p toggly-rocket --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+
+  github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: publish
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/rust-v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Rust SDK v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Toggly Rust SDK v${{ steps.version.outputs.VERSION }}
+
+            ### Installation
+
+            Add to your `Cargo.toml`:
+
+            ```toml
+            [dependencies]
+            toggly = "${{ steps.version.outputs.VERSION }}"
+
+            # Optional framework integrations
+            toggly-actix = "${{ steps.version.outputs.VERSION }}"
+            toggly-axum = "${{ steps.version.outputs.VERSION }}"
+            toggly-rocket = "${{ steps.version.outputs.VERSION }}"
+            toggly-macros = "${{ steps.version.outputs.VERSION }}"
+            ```
+
+            See the [documentation](https://docs.toggly.io/sdks/rust) for usage examples.
+          draft: false
+          prerelease: false
+          generate_release_notes: true

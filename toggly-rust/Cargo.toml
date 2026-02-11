@@ -1,0 +1,54 @@
+[workspace]
+resolver = "2"
+members = [
+    "toggly",
+    "toggly-macros",
+    "toggly-actix",
+    "toggly-axum",
+    "toggly-rocket",
+]
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Ops.ai <contact@ops.ai>"]
+edition = "2021"
+rust-version = "1.70"
+license = "MIT"
+repository = "https://github.com/ops-ai/toggly-feature-flags"
+homepage = "https://toggly.io"
+documentation = "https://docs.toggly.io/sdks/rust"
+keywords = ["toggly", "feature-flags", "feature-toggles", "ab-testing", "experiments"]
+categories = ["web-programming", "development-tools"]
+
+[workspace.dependencies]
+# Core dependencies
+tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "sync", "time"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+async-trait = "0.1"
+parking_lot = "0.12"
+dashmap = "5.5"
+
+# Logging/Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Metrics
+metrics = "0.22"
+prometheus = "0.13"
+
+# Framework integrations
+actix-web = "4.4"
+axum = "0.7"
+rocket = "0.5"
+
+# Testing
+mockito = "1.2"
+tokio-test = "0.4"
+wiremock = "0.5"
+
+# Workspace crates
+toggly = { path = "toggly" }
+toggly-macros = { path = "toggly-macros" }
