@@ -22,10 +22,10 @@ env:
 
 jobs:
   build-and-test:
-    runs-on: macos-14
+    runs-on: macos-15
     strategy:
       matrix:
-        xcode: ['15.4', '16.0']
+        xcode: ['16.1', '16.2']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
         run: swift test -v --enable-code-coverage
 
       - name: Generate code coverage report
-        if: matrix.xcode == '16.0'
+        if: matrix.xcode == '16.2'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           xcrun llvm-cov export \
@@ -63,7 +63,7 @@ jobs:
             > coverage.lcov || true
 
       - name: Upload coverage to Codecov
-        if: matrix.xcode == '16.0'
+        if: matrix.xcode == '16.2'
         uses: codecov/codecov-action@v4
         with:
           file: ${{ env.SDK_ROOT }}/coverage.lcov
@@ -73,7 +73,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   lint:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -86,20 +86,20 @@ jobs:
         run: swiftlint lint --reporter github-actions-logging || true
 
   build-platforms:
-    runs-on: macos-14
+    runs-on: macos-15
     strategy:
       matrix:
         destination:
-          - 'platform=iOS Simulator,name=iPhone 15,OS=17.5'
+          - 'platform=iOS Simulator,name=iPhone 16,OS=18.1'
           - 'platform=macOS'
-          - 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=17.5'
-          - 'platform=watchOS Simulator,name=Apple Watch Series 9 (45mm),OS=10.5'
+          - 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=18.1'
+          - 'platform=watchOS Simulator,name=Apple Watch Series 10 (46mm),OS=11.1'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+        run: sudo xcode-select -s /Applications/Xcode_16.1.app
 
       - name: Build for platform
         working-directory: ${{ env.SDK_ROOT }}
