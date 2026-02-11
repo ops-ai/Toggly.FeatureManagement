@@ -352,3 +352,7 @@ MigrationBackup/
 # Mac OS
 .DS_Store
 Toggly.FeatureManagement.PHP/vendor
+Toggly.FeatureManagement.ReactNative/libs/core/dist
+Toggly.FeatureManagement.ReactNative/libs/react-native/dist
+Toggly.FeatureManagement.ReactNative/libs/storage-mmkv/dist
+Toggly.FeatureManagement.ReactNative/libs/storage-async/dist

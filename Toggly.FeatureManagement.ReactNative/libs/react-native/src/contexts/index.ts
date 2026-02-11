@@ -1,6 +1,2 @@
-export {
-  TogglyContext,
-  TogglyContextValue,
-  useTogglyContext,
-  useTogglyService,
-} from './TogglyContext';
+export { TogglyContext, useTogglyContext, useTogglyService } from './TogglyContext';
+export type { TogglyContextValue } from './TogglyContext';

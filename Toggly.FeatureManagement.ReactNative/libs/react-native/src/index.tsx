@@ -1,28 +1,22 @@
 // Components
-export {
-  TogglyProvider,
-  TogglyProviderProps,
-  createTogglyProvider,
-} from './components/TogglyProvider';
-export { Feature, FeatureProps, withFeature } from './components/Feature';
+export { TogglyProvider, createTogglyProvider } from './components/TogglyProvider';
+export type { TogglyProviderProps } from './components/TogglyProvider';
+export { Feature, withFeature } from './components/Feature';
+export type { FeatureProps } from './components/Feature';
 
 // Hooks
-export {
-  useFeatureFlag,
-  useFeatureGate,
+export { useFeatureFlag, useFeatureGate } from './hooks/useFeatureFlag';
+export type {
   UseFeatureFlagOptions,
   UseFeatureFlagResult,
   UseFeatureGateOptions,
 } from './hooks/useFeatureFlag';
-export { useToggly, UseTogglyResult } from './hooks/useToggly';
+export { useToggly } from './hooks/useToggly';
+export type { UseTogglyResult } from './hooks/useToggly';
 
 // Context
-export {
-  TogglyContext,
-  TogglyContextValue,
-  useTogglyContext,
-  useTogglyService,
-} from './contexts/TogglyContext';
+export { TogglyContext, useTogglyContext, useTogglyService } from './contexts/TogglyContext';
+export type { TogglyContextValue } from './contexts/TogglyContext';
 
 // Re-export core types for convenience
 export type {
