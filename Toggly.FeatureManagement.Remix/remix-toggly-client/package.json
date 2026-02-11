@@ -1,0 +1,85 @@
+{
+  "name": "@ops-ai/remix-toggly-client",
+  "version": "1.0.0",
+  "description": "Client-side React components and hooks for Toggly feature flags in Remix",
+  "keywords": [
+    "toggly",
+    "feature-flags",
+    "feature-toggles",
+    "remix",
+    "react",
+    "hooks",
+    "client",
+    "ssr",
+    "hydration"
+  ],
+  "homepage": "https://toggly.io",
+  "bugs": {
+    "url": "https://github.com/ops-ai/toggly-feature-flags/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ops-ai/toggly-feature-flags.git",
+    "directory": "Toggly.FeatureManagement.Remix/remix-toggly-client"
+  },
+  "license": "MIT",
+  "author": "Ops.ai <contact@ops.ai>",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "clean": "rimraf dist",
+    "dev": "rollup -c -w",
+    "lint": "eslint src --ext .ts,.tsx",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ops-ai/remix-toggly-core": "file:../remix-toggly-core"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.2.1",
+    "@types/jest": "^29.5.12",
+    "@types/react": "^18.2.64",
+    "@types/react-dom": "^18.2.21",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "rimraf": "^5.0.5",
+    "rollup": "^4.12.1",
+    "rollup-plugin-dts": "^6.1.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.4.2"
+  },
+  "peerDependencies": {
+    "@remix-run/react": "^2.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
