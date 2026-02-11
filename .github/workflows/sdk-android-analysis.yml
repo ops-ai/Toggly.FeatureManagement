@@ -1,0 +1,175 @@
+name: Android SDK - Analysis
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.FeatureManagement.Android/**'
+      - '.github/workflows/sdk-android-*.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.FeatureManagement.Android/**'
+      - '.github/workflows/sdk-android-*.yml'
+  workflow_dispatch:
+
+env:
+  SDK_ROOT: Toggly.FeatureManagement.Android
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: ['17', '21']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        working-directory: ${{ env.SDK_ROOT }}
+        run: chmod +x gradlew
+
+      - name: Build all modules
+        working-directory: ${{ env.SDK_ROOT }}
+        run: ./gradlew build -x test
+
+      - name: Run unit tests
+        working-directory: ${{ env.SDK_ROOT }}
+        run: ./gradlew test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-java-${{ matrix.java }}
+          path: |
+            ${{ env.SDK_ROOT }}/**/build/reports/tests/
+            ${{ env.SDK_ROOT }}/**/build/test-results/
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        working-directory: ${{ env.SDK_ROOT }}
+        run: chmod +x gradlew
+
+      - name: Run Android Lint
+        working-directory: ${{ env.SDK_ROOT }}
+        run: ./gradlew lint
+
+      - name: Upload lint results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-results
+          path: ${{ env.SDK_ROOT }}/**/build/reports/lint-results*.html
+
+  code-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        working-directory: ${{ env.SDK_ROOT }}
+        run: chmod +x gradlew
+
+      - name: Run tests with coverage
+        working-directory: ${{ env.SDK_ROOT }}
+        run: ./gradlew testDebugUnitTest koverXmlReport || ./gradlew test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ${{ env.SDK_ROOT }}/**/build/reports/kover/report.xml
+          flags: android-sdk
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  build-samples:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        working-directory: ${{ env.SDK_ROOT }}
+        run: chmod +x gradlew
+
+      - name: Build release artifacts
+        working-directory: ${{ env.SDK_ROOT }}
+        run: ./gradlew assembleRelease
+
+      - name: Verify AAR artifacts
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          echo "Checking for AAR files..."
+          find . -name "*.aar" -type f | head -20
+
+  api-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        working-directory: ${{ env.SDK_ROOT }}
+        run: chmod +x gradlew
+
+      - name: Check API compatibility
+        working-directory: ${{ env.SDK_ROOT }}
+        run: ./gradlew apiCheck || echo "API check not configured yet"

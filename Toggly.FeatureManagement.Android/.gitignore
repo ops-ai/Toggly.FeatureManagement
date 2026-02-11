@@ -1,0 +1,20 @@
+# Gradle build output
+build/
+*/build/
+
+# Gradle wrapper cache
+.gradle/
+
+# Local configuration
+local.properties
+
+# IntelliJ IDEA / Android Studio
+.idea/
+*.iml
+
+# Kotlin
+*.kotlin_module
+
+# OS-specific
+.DS_Store
+Thumbs.db
