@@ -1,0 +1,285 @@
+package io.toggly.core.context;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * Context for evaluating feature flags.
+ *
+ * <p>Contains user identity, group memberships, and custom traits for targeting rules.</p>
+ *
+ * <p>Example usage:</p>
+ * <pre>{@code
+ * EvaluationContext context = EvaluationContext.builder()
+ *     .identity("user-123")
+ *     .addGroup("premium")
+ *     .addGroup("beta-testers")
+ *     .trait("plan", "enterprise")
+ *     .trait("country", "US")
+ *     .build();
+ *
+ * boolean enabled = client.isEnabled("new-feature", context);
+ * }</pre>
+ */
+public final class EvaluationContext {
+
+    private static final EvaluationContext EMPTY = new EvaluationContext(null, Collections.emptySet(), Collections.emptyMap());
+
+    private final String identity;
+    private final Set<String> groups;
+    private final Map<String, Object> traits;
+
+    private EvaluationContext(String identity, Set<String> groups, Map<String, Object> traits) {
+        this.identity = identity;
+        this.groups = Collections.unmodifiableSet(new HashSet<>(groups));
+        this.traits = Collections.unmodifiableMap(new HashMap<>(traits));
+    }
+
+    /**
+     * Returns an empty context with no identity, groups, or traits.
+     *
+     * @return an empty context
+     */
+    public static EvaluationContext empty() {
+        return EMPTY;
+    }
+
+    /**
+     * Creates a context with just an identity.
+     *
+     * @param identity the user identity
+     * @return a new context
+     */
+    public static EvaluationContext forIdentity(String identity) {
+        return new EvaluationContext(identity, Collections.emptySet(), Collections.emptyMap());
+    }
+
+    /**
+     * Creates a new builder for EvaluationContext.
+     *
+     * @return a new builder
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * Returns the user identity.
+     *
+     * @return the identity or null if not set
+     */
+    public String getIdentity() {
+        return identity;
+    }
+
+    /**
+     * Returns the user's group memberships.
+     *
+     * @return an unmodifiable set of groups
+     */
+    public Set<String> getGroups() {
+        return groups;
+    }
+
+    /**
+     * Returns the custom traits.
+     *
+     * @return an unmodifiable map of traits
+     */
+    public Map<String, Object> getTraits() {
+        return traits;
+    }
+
+    /**
+     * Checks if the user belongs to a specific group.
+     *
+     * @param group the group name
+     * @return true if the user is in the group
+     */
+    public boolean hasGroup(String group) {
+        return groups.contains(group);
+    }
+
+    /**
+     * Checks if the user belongs to any of the specified groups.
+     *
+     * @param groupNames the group names to check
+     * @return true if the user is in any of the groups
+     */
+    public boolean hasAnyGroup(Set<String> groupNames) {
+        for (String group : groupNames) {
+            if (groups.contains(group)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Gets a trait value.
+     *
+     * @param key the trait key
+     * @return the trait value or null
+     */
+    public Object getTrait(String key) {
+        return traits.get(key);
+    }
+
+    /**
+     * Gets a trait value as a String.
+     *
+     * @param key the trait key
+     * @return the trait value as string or null
+     */
+    public String getTraitAsString(String key) {
+        Object value = traits.get(key);
+        return value != null ? value.toString() : null;
+    }
+
+    /**
+     * Creates a new context with the specified identity added.
+     *
+     * @param identity the identity to add
+     * @return a new context with the identity
+     */
+    public EvaluationContext withIdentity(String identity) {
+        return new EvaluationContext(identity, this.groups, this.traits);
+    }
+
+    /**
+     * Creates a new context with an additional group.
+     *
+     * @param group the group to add
+     * @return a new context with the group
+     */
+    public EvaluationContext withGroup(String group) {
+        Set<String> newGroups = new HashSet<>(this.groups);
+        newGroups.add(group);
+        return new EvaluationContext(this.identity, newGroups, this.traits);
+    }
+
+    /**
+     * Creates a new context with an additional trait.
+     *
+     * @param key the trait key
+     * @param value the trait value
+     * @return a new context with the trait
+     */
+    public EvaluationContext withTrait(String key, Object value) {
+        Map<String, Object> newTraits = new HashMap<>(this.traits);
+        newTraits.put(key, value);
+        return new EvaluationContext(this.identity, this.groups, newTraits);
+    }
+
+    /**
+     * Builder for {@link EvaluationContext}.
+     */
+    public static final class Builder {
+        private String identity;
+        private final Set<String> groups = new HashSet<>();
+        private final Map<String, Object> traits = new HashMap<>();
+
+        private Builder() {}
+
+        /**
+         * Sets the user identity.
+         *
+         * @param identity the user identity
+         * @return this builder
+         */
+        public Builder identity(String identity) {
+            this.identity = identity;
+            return this;
+        }
+
+        /**
+         * Adds a group membership.
+         *
+         * @param group the group name
+         * @return this builder
+         */
+        public Builder addGroup(String group) {
+            if (group != null) {
+                this.groups.add(group);
+            }
+            return this;
+        }
+
+        /**
+         * Sets all group memberships.
+         *
+         * @param groups the groups
+         * @return this builder
+         */
+        public Builder groups(Set<String> groups) {
+            this.groups.clear();
+            if (groups != null) {
+                this.groups.addAll(groups);
+            }
+            return this;
+        }
+
+        /**
+         * Adds a custom trait.
+         *
+         * @param key the trait key
+         * @param value the trait value
+         * @return this builder
+         */
+        public Builder trait(String key, Object value) {
+            this.traits.put(key, value);
+            return this;
+        }
+
+        /**
+         * Sets all custom traits.
+         *
+         * @param traits the traits map
+         * @return this builder
+         */
+        public Builder traits(Map<String, Object> traits) {
+            this.traits.clear();
+            if (traits != null) {
+                this.traits.putAll(traits);
+            }
+            return this;
+        }
+
+        /**
+         * Builds the EvaluationContext.
+         *
+         * @return a new EvaluationContext
+         */
+        public EvaluationContext build() {
+            return new EvaluationContext(identity, groups, traits);
+        }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        EvaluationContext that = (EvaluationContext) o;
+        return Objects.equals(identity, that.identity) &&
+                Objects.equals(groups, that.groups) &&
+                Objects.equals(traits, that.traits);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(identity, groups, traits);
+    }
+
+    @Override
+    public String toString() {
+        return "EvaluationContext{" +
+                "identity='" + identity + '\'' +
+                ", groups=" + groups +
+                ", traits=" + traits +
+                '}';
+    }
+}

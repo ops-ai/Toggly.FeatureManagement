@@ -1,0 +1,2 @@
+io.toggly.spring.boot.TogglyAutoConfiguration
+io.toggly.spring.boot.actuator.TogglyActuatorAutoConfiguration
