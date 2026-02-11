@@ -6,7 +6,7 @@ from typing import Any
 
 from flask import Flask, g, has_request_context, request
 
-from toggly import EvaluationContext, TogglyClient, TogglyConfig, set_default_client
+from toggly import EvaluationContext, TogglyClient, TogglyConfig, get_default_client, set_default_client
 
 
 class Toggly:
@@ -484,6 +484,4 @@ def get_client() -> TogglyClient | None:
     Returns:
         The TogglyClient or None if not initialized.
     """
-    from toggly import get_default_client
-
     return get_default_client()

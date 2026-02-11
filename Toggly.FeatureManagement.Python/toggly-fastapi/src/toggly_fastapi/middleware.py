@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Optional, Union
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -20,12 +20,12 @@ from toggly import (
 )
 
 # Context variable to store request-scoped Toggly helper
-_toggly_context: ContextVar["TogglyRequestHelper | None"] = ContextVar(
+_toggly_context: ContextVar[Optional["TogglyRequestHelper"]] = ContextVar(
     "toggly_context", default=None
 )
 
 # Module-level client reference
-_client: TogglyClient | AsyncTogglyClient | None = None
+_client: Optional[Union[TogglyClient, AsyncTogglyClient]] = None
 
 
 def configure_toggly(

@@ -1,9 +1,16 @@
 """Django app configuration for Toggly."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
+
 from django.apps import AppConfig
 from django.conf import settings
 
 from toggly import TogglyClient, TogglyConfig as BaseTogglyConfig, set_default_client
+
+if TYPE_CHECKING:
+    pass
 
 
 class TogglyConfig(AppConfig):
@@ -44,6 +51,6 @@ class TogglyConfig(AppConfig):
         self._client = client
 
     @property
-    def client(self) -> TogglyClient | None:
+    def client(self) -> Optional[TogglyClient]:
         """Get the Toggly client instance."""
         return getattr(self, "_client", None)

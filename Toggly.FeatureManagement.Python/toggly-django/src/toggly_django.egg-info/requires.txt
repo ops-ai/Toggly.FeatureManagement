@@ -1,0 +1,9 @@
+toggly>=0.1.0
+django>=4.2
+
+[dev]
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-django>=4.5.0
+mypy>=1.0.0
+ruff>=0.1.0

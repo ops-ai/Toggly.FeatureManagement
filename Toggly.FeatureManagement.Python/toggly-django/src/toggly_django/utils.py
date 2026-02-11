@@ -2,17 +2,27 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
+from django.conf import settings as django_settings
 from django.http import HttpRequest
 
-from toggly import EvaluationContext, TogglyClient, get_default_client
+from toggly import (
+    EvaluationContext,
+    TogglyClient,
+    TogglyConfig,
+    get_default_client,
+    set_default_client,
+)
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractUser
 
+# Module-level client storage
+_client: Optional[TogglyClient] = None
 
-def get_client() -> TogglyClient | None:
+
+def get_client() -> Optional[TogglyClient]:
     """Get the Toggly client instance.
 
     Returns:
@@ -49,7 +59,11 @@ def get_context_from_request(
 
         # Get user groups if requested
         if include_user_groups and hasattr(user, "groups"):
-            groups = list(user.groups.values_list("name", flat=True))
+            try:
+                groups = list(user.groups.values_list("name", flat=True))
+            except (AttributeError, TypeError):
+                # Fallback for mocked groups or non-standard group objects
+                groups = [g.name for g in user.groups.all()]
 
         # Add user traits
         if hasattr(user, "email") and user.email:
@@ -62,6 +76,10 @@ def get_context_from_request(
     # Add request metadata
     traits["path"] = request.path
     traits["method"] = request.method
+
+    # Add remote address if available
+    if hasattr(request, "META") and "REMOTE_ADDR" in request.META:
+        traits["remote_addr"] = request.META["REMOTE_ADDR"]
 
     # Add session ID if available
     if hasattr(request, "session") and request.session.session_key:
@@ -121,3 +139,46 @@ def is_feature_disabled(
     return not is_feature_enabled(
         feature_key, request, context, default=not default
     )
+
+
+def configure_toggly(
+    client: Optional[TogglyClient] = None,
+    app_key: Optional[str] = None,
+    environment: str = "Production",
+    **kwargs: Any,
+) -> TogglyClient:
+    """Configure Toggly client from settings or explicit parameters.
+
+    Args:
+        client: An existing TogglyClient instance to use.
+        app_key: The Toggly app key.
+        environment: The environment name.
+        **kwargs: Additional configuration options.
+
+    Returns:
+        The configured TogglyClient instance.
+    """
+    global _client
+
+    if client is not None:
+        _client = client
+        set_default_client(client)
+        return client
+
+    # Get from Django settings if not provided
+    if app_key is None:
+        app_key = getattr(django_settings, "TOGGLY_APP_KEY", None)
+
+    env = getattr(django_settings, "TOGGLY_ENVIRONMENT", environment)
+
+    config = TogglyConfig(
+        app_key=app_key,
+        environment=env,
+        **kwargs,
+    )
+
+    _client = TogglyClient(config)
+    _client.init()
+    set_default_client(_client)
+
+    return _client

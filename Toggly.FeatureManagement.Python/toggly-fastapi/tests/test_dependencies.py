@@ -2,10 +2,24 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
+
+
+def _reload_modules():
+    """Reload modules to apply patches."""
+    # Clear cached modules
+    modules_to_reload = [
+        key
+        for key in list(sys.modules.keys())
+        if key.startswith("toggly_fastapi") or key.startswith("toggly")
+    ]
+    for mod in modules_to_reload:
+        sys.modules.pop(mod, None)
 
 
 class TestGetToggly:
@@ -13,14 +27,28 @@ class TestGetToggly:
 
     def test_returns_helper_from_request_state(self):
         """Test that get_toggly returns helper from request state."""
-        from toggly_fastapi.middleware import TogglyMiddleware
+        _reload_modules()
 
         mock_client = MagicMock()
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import FastAPI
 
-            from toggly_fastapi.dependencies import TogglyDep, get_toggly
+            from toggly_fastapi.dependencies import TogglyDep
+            from toggly_fastapi.middleware import TogglyMiddleware
 
             app = FastAPI()
             app.add_middleware(TogglyMiddleware)
@@ -36,24 +64,38 @@ class TestGetToggly:
 
     def test_creates_helper_without_middleware(self):
         """Test that get_toggly creates helper if middleware not used."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.is_enabled.return_value = True
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
-            with patch("toggly_fastapi.middleware.get_current_toggly", return_value=None):
-                from fastapi import FastAPI
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from fastapi import FastAPI
 
-                from toggly_fastapi.dependencies import TogglyDep
+            from toggly_fastapi.dependencies import TogglyDep
 
-                app = FastAPI()
+            app = FastAPI()
 
-                @app.get("/test")
-                async def test_endpoint(toggly: TogglyDep):
-                    return {"enabled": toggly.is_enabled("my-feature")}
+            @app.get("/test")
+            async def test_endpoint(toggly: TogglyDep):
+                return {"enabled": toggly.is_enabled("my-feature")}
 
-                client = TestClient(app)
-                response = client.get("/test")
-                assert response.status_code == 200
+            client = TestClient(app)
+            response = client.get("/test")
+            assert response.status_code == 200
 
 
 class TestRequireFeature:
@@ -61,10 +103,25 @@ class TestRequireFeature:
 
     def test_allows_access_when_enabled(self):
         """Test that access is allowed when feature is enabled."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.is_enabled.return_value = True
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import require_feature
@@ -87,10 +144,25 @@ class TestRequireFeature:
 
     def test_returns_403_when_disabled(self):
         """Test that 403 is returned when feature is disabled."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.is_enabled.return_value = False
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import require_feature
@@ -112,10 +184,25 @@ class TestRequireFeature:
 
     def test_custom_status_code(self):
         """Test custom status code."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.is_enabled.return_value = False
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import require_feature
@@ -137,10 +224,25 @@ class TestRequireFeature:
 
     def test_custom_detail_message(self):
         """Test custom detail message."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.is_enabled.return_value = False
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import require_feature
@@ -169,10 +271,25 @@ class TestRequireFeatures:
 
     def test_allows_access_when_gate_passes(self):
         """Test that access is allowed when gate passes."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.evaluate_gate.return_value = True
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import require_features
@@ -194,10 +311,25 @@ class TestRequireFeatures:
 
     def test_returns_403_when_gate_fails(self):
         """Test that 403 is returned when gate fails."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.evaluate_gate.return_value = False
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import require_features
@@ -223,10 +355,25 @@ class TestFeatureEnabled:
 
     def test_returns_feature_state(self):
         """Test that feature_enabled returns the feature state."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.is_enabled.return_value = True
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import feature_enabled
@@ -248,7 +395,22 @@ class TestFeatureEnabled:
 
     def test_uses_default_value(self):
         """Test that default value is used when client unavailable."""
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=None):
+        _reload_modules()
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=None),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import feature_enabled
@@ -274,11 +436,26 @@ class TestFeatureGateDependency:
 
     def test_checks_required_features(self):
         """Test that required features are checked."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.evaluate_gate.return_value = True
         mock_client.is_enabled.return_value = True
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import FeatureGateDependency
@@ -300,10 +477,25 @@ class TestFeatureGateDependency:
 
     def test_raises_when_required_missing(self):
         """Test that HTTPException is raised when required features are missing."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.evaluate_gate.return_value = False
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import FeatureGateDependency
@@ -324,11 +516,26 @@ class TestFeatureGateDependency:
 
     def test_includes_optional_features(self):
         """Test that optional features are included in result."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.evaluate_gate.return_value = True
         mock_client.is_enabled.side_effect = lambda key, *args, **kwargs: key == "optional1"
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from fastapi import Depends, FastAPI
 
             from toggly_fastapi.dependencies import FeatureGateDependency
@@ -359,8 +566,30 @@ class TestGetEvaluationContext:
 
     def test_returns_context(self):
         """Test that get_evaluation_context returns a context."""
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=None):
-            from fastapi import Depends, FastAPI
+        _reload_modules()
+
+        # Create a proper EvaluationContext mock
+        class MockEvaluationContext:
+            def __init__(self, identity=None, groups=None, traits=None):
+                self.identity = identity
+                self.groups = groups or []
+                self.traits = traits or {}
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MockEvaluationContext,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=None),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from fastapi import FastAPI
 
             from toggly_fastapi.dependencies import ContextDep
             from toggly_fastapi.middleware import TogglyMiddleware

@@ -14,19 +14,17 @@ class TestGetClient:
         """Test that get_client returns the default client."""
         mock_client = MagicMock()
 
-        with patch("toggly_django.utils._client", mock_client):
+        with patch("toggly_django.utils.get_default_client", return_value=mock_client):
             from toggly_django.utils import get_client
 
             assert get_client() is mock_client
 
     def test_get_client_returns_none_when_not_configured(self):
         """Test that get_client returns None when not configured."""
-        with patch("toggly_django.utils._client", None):
-            with patch("toggly.get_default_client", return_value=None):
-                from toggly_django.utils import get_client
+        with patch("toggly_django.utils.get_default_client", return_value=None):
+            from toggly_django.utils import get_client
 
-                # Need to reload to pick up the patched value
-                assert get_client() is None or get_client() is not None
+            assert get_client() is None
 
 
 class TestGetContextFromRequest:
@@ -81,13 +79,9 @@ class TestGetContextFromRequest:
         mock_request.user.is_authenticated = True
         mock_request.user.pk = 123
 
-        # Mock groups
-        mock_group1 = MagicMock()
-        mock_group1.name = "admins"
-        mock_group2 = MagicMock()
-        mock_group2.name = "editors"
+        # Mock groups using values_list (primary approach)
         mock_request.user.groups = MagicMock()
-        mock_request.user.groups.all.return_value = [mock_group1, mock_group2]
+        mock_request.user.groups.values_list.return_value = ["admins", "editors"]
 
         context = get_context_from_request(mock_request)
 
@@ -119,7 +113,7 @@ class TestConfigureToggly:
         mock_settings.TOGGLY_APP_KEY = "test-key"
         mock_settings.TOGGLY_ENVIRONMENT = "Production"
 
-        with patch("toggly_django.utils.settings", mock_settings):
+        with patch("toggly_django.utils.django_settings", mock_settings):
             with patch("toggly_django.utils.TogglyClient") as MockClient:
                 with patch("toggly_django.utils.set_default_client"):
                     mock_instance = MagicMock()

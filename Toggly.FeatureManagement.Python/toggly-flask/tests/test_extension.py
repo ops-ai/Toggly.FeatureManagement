@@ -285,13 +285,14 @@ class TestGetContextFromRequest:
         app = Flask(__name__)
 
         with app.test_request_context("/"):
-            # Mock Flask-Login current_user
-            with patch("toggly_flask.extension.current_user") as mock_user:
-                mock_user.is_authenticated = True
-                mock_user.id = 123
-                mock_user.email = "test@example.com"
-                mock_user.roles = None
+            # Mock Flask-Login current_user - patch at the flask_login module level
+            mock_user = MagicMock()
+            mock_user.is_authenticated = True
+            mock_user.id = 123
+            mock_user.email = "test@example.com"
+            mock_user.roles = None
 
+            with patch.dict("sys.modules", {"flask_login": MagicMock(current_user=mock_user)}):
                 context = get_context_from_request()
 
                 assert context.identity == "123"

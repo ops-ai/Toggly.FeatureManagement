@@ -1,0 +1,12 @@
+pyproject.toml
+src/toggly_flask/__init__.py
+src/toggly_flask/decorators.py
+src/toggly_flask/extension.py
+src/toggly_flask/py.typed
+src/toggly_flask.egg-info/PKG-INFO
+src/toggly_flask.egg-info/SOURCES.txt
+src/toggly_flask.egg-info/dependency_links.txt
+src/toggly_flask.egg-info/requires.txt
+src/toggly_flask.egg-info/top_level.txt
+tests/test_decorators.py
+tests/test_extension.py

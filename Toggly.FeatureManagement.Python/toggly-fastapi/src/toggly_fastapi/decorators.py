@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import functools
 import inspect
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 from fastapi import Depends, HTTPException, Request
 from starlette.status import HTTP_403_FORBIDDEN
@@ -21,8 +21,8 @@ def feature_flag_required(
     feature_key: str,
     *,
     status_code: int = HTTP_403_FORBIDDEN,
-    detail: str | None = None,
-    fallback: Callable[..., Any] | None = None,
+    detail: Optional[str] = None,
+    fallback: Optional[Callable[..., Any]] = None,
 ) -> Callable[[F], F]:
     """Decorator to require a feature flag for a route handler.
 
@@ -131,8 +131,8 @@ def feature_gate_required(
     requirement: FeatureRequirement = FeatureRequirement.ALL,
     negate: bool = False,
     status_code: int = HTTP_403_FORBIDDEN,
-    detail: str | None = None,
-    fallback: Callable[..., Any] | None = None,
+    detail: Optional[str] = None,
+    fallback: Optional[Callable[..., Any]] = None,
 ) -> Callable[[F], F]:
     """Decorator to require multiple feature flags for a route handler.
 
@@ -329,7 +329,7 @@ class FeatureFlagRouter:
         feature_key: str,
         *,
         status_code: int = HTTP_403_FORBIDDEN,
-        detail: str | None = None,
+        detail: Optional[str] = None,
     ) -> None:
         """Initialize the feature flag router.
 

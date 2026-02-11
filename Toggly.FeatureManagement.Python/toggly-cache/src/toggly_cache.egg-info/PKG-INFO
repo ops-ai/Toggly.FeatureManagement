@@ -1,0 +1,209 @@
+Metadata-Version: 2.4
+Name: toggly-cache
+Version: 0.1.0
+Summary: Caching providers for Toggly feature flag management (Redis, Memcached)
+Author-email: Toggly <support@toggly.io>
+Maintainer-email: Toggly <support@toggly.io>
+License: MIT
+Project-URL: Homepage, https://toggly.io
+Project-URL: Documentation, https://docs.toggly.io/sdks/python/cache
+Project-URL: Repository, https://github.com/ops-ai/toggly-sdks
+Keywords: feature-flags,toggly,redis,memcached,cache
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Typing :: Typed
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: toggly>=0.1.0
+Provides-Extra: redis
+Requires-Dist: redis>=4.0.0; extra == "redis"
+Provides-Extra: memcached
+Requires-Dist: pymemcache>=4.0.0; extra == "memcached"
+Provides-Extra: all
+Requires-Dist: redis>=4.0.0; extra == "all"
+Requires-Dist: pymemcache>=4.0.0; extra == "all"
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: fakeredis>=2.0.0; extra == "dev"
+Requires-Dist: mypy>=1.0.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Dynamic: license-file
+
+# Toggly Cache
+
+Caching providers for [Toggly](https://toggly.io) feature flag management. This package provides Redis and Memcached snapshot providers for distributed caching of feature flag definitions.
+
+## Installation
+
+```bash
+# Install with Redis support
+pip install toggly-cache[redis]
+
+# Install with Memcached support
+pip install toggly-cache[memcached]
+
+# Install with both
+pip install toggly-cache[all]
+```
+
+## Quick Start
+
+### Redis Provider
+
+```python
+from toggly import TogglyClient, TogglyConfig
+from toggly_cache import RedisSnapshotProvider
+
+# Create a Redis snapshot provider
+provider = RedisSnapshotProvider(
+    host="localhost",
+    port=6379,
+    db=0,
+    prefix="toggly:",
+    ttl=3600,  # Cache for 1 hour
+)
+
+# Use with TogglyClient
+config = TogglyConfig(
+    app_key="your-app-key",
+    environment="production",
+    snapshot_provider=provider,
+)
+
+client = TogglyClient(config)
+```
+
+### Memcached Provider
+
+```python
+from toggly import TogglyClient, TogglyConfig
+from toggly_cache import MemcachedSnapshotProvider
+
+# Create a Memcached snapshot provider
+provider = MemcachedSnapshotProvider(
+    servers=[("localhost", 11211)],
+    prefix="toggly:",
+    ttl=3600,  # Cache for 1 hour
+)
+
+# Use with TogglyClient
+config = TogglyConfig(
+    app_key="your-app-key",
+    environment="production",
+    snapshot_provider=provider,
+)
+
+client = TogglyClient(config)
+```
+
+## Configuration
+
+### Redis Provider Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `client` | `Redis` | None | Existing Redis client instance |
+| `host` | `str` | "localhost" | Redis host |
+| `port` | `int` | 6379 | Redis port |
+| `db` | `int` | 0 | Redis database number |
+| `password` | `str` | None | Redis password |
+| `prefix` | `str` | "toggly:" | Key prefix for Redis keys |
+| `ttl` | `int` | None | TTL in seconds (None = no expiry) |
+
+### Memcached Provider Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `client` | `Client` | None | Existing pymemcache client |
+| `servers` | `list[tuple]` | None | List of (host, port) tuples |
+| `prefix` | `str` | "toggly:" | Key prefix for Memcached keys |
+| `ttl` | `int` | 0 | TTL in seconds (0 = no expiry) |
+
+## Using Existing Clients
+
+You can pass an existing Redis or Memcached client:
+
+```python
+# Redis
+import redis
+redis_client = redis.Redis(host="localhost", port=6379)
+provider = RedisSnapshotProvider(client=redis_client)
+
+# Memcached
+from pymemcache.client.base import Client
+memcached_client = Client(("localhost", 11211))
+provider = MemcachedSnapshotProvider(client=memcached_client)
+```
+
+## Cluster Support
+
+### Redis Cluster
+
+```python
+from redis.cluster import RedisCluster
+from toggly_cache import RedisSnapshotProvider
+
+cluster = RedisCluster(
+    host="cluster-node-1",
+    port=6379,
+)
+provider = RedisSnapshotProvider(client=cluster)
+```
+
+### Memcached with Multiple Servers
+
+```python
+from toggly_cache import MemcachedSnapshotProvider
+
+# Automatically uses HashClient for consistent hashing
+provider = MemcachedSnapshotProvider(
+    servers=[
+        ("memcached-1", 11211),
+        ("memcached-2", 11211),
+        ("memcached-3", 11211),
+    ],
+)
+```
+
+## How It Works
+
+Cache providers implement the `SnapshotProvider` interface from the core `toggly` package. When the TogglyClient loads feature definitions:
+
+1. It first tries to load from the snapshot provider (cache)
+2. If not found, it fetches from the Toggly API
+3. After fetching, it saves the definitions to the snapshot provider
+
+This enables:
+- **Faster startup**: Cached definitions are loaded immediately
+- **Offline resilience**: App works even if Toggly API is temporarily unavailable
+- **Reduced API calls**: Definitions are cached between restarts
+- **Distributed caching**: Multiple app instances share the same cache
+
+## Requirements
+
+- Python 3.8+
+- `toggly>=0.1.0`
+- `redis>=4.0.0` (for Redis provider)
+- `pymemcache>=4.0.0` (for Memcached provider)
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Links
+
+- [Toggly Documentation](https://docs.toggly.io/sdks/python/cache)
+- [GitHub Repository](https://github.com/ops-ai/toggly-sdks)
+- [PyPI Package](https://pypi.org/project/toggly-cache/)

@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+def _reload_modules():
+    """Reload modules to apply patches."""
+    modules_to_reload = [
+        key
+        for key in list(sys.modules.keys())
+        if key.startswith("toggly_fastapi") or key.startswith("toggly")
+    ]
+    for mod in modules_to_reload:
+        sys.modules.pop(mod, None)
 
 
 class TestConfigureToggly:
@@ -12,24 +24,51 @@ class TestConfigureToggly:
 
     def test_creates_client(self):
         """Test that configure_toggly creates a client."""
-        with patch("toggly_fastapi.middleware.TogglyClient") as MockClient:
-            mock_instance = MagicMock()
-            MockClient.return_value = mock_instance
+        _reload_modules()
 
-            with patch("toggly_fastapi.middleware.set_default_client"):
-                from toggly_fastapi.middleware import configure_toggly
+        mock_instance = MagicMock()
 
-                result = configure_toggly(app_key="test-key")
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock(return_value=mock_instance),
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=None),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from toggly_fastapi.middleware import configure_toggly
 
-                MockClient.assert_called_once()
-                mock_instance.init.assert_called_once()
-                assert result is mock_instance
+            result = configure_toggly(app_key="test-key")
+
+            mock_instance.init.assert_called_once()
+            assert result is mock_instance
 
     def test_uses_provided_client(self):
         """Test that configure_toggly uses provided client."""
+        _reload_modules()
+
         mock_client = MagicMock()
 
-        with patch("toggly_fastapi.middleware.set_default_client"):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=None),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from toggly_fastapi.middleware import configure_toggly
 
             result = configure_toggly(client=mock_client)
@@ -42,9 +81,24 @@ class TestGetTogglyClient:
 
     def test_returns_module_client(self):
         """Test that get_toggly_client returns the module-level client."""
+        _reload_modules()
+
         mock_client = MagicMock()
 
-        with patch("toggly_fastapi.middleware._client", mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
             from toggly_fastapi.middleware import get_toggly_client
 
             result = get_toggly_client()
@@ -52,41 +106,64 @@ class TestGetTogglyClient:
 
     def test_falls_back_to_default_client(self):
         """Test fallback to default client."""
+        _reload_modules()
+
         mock_client = MagicMock()
 
-        with patch("toggly_fastapi.middleware._client", None):
-            with patch(
-                "toggly_fastapi.middleware.get_default_client",
-                return_value=mock_client,
-            ):
-                from toggly_fastapi.middleware import get_toggly_client
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from toggly_fastapi.middleware import get_toggly_client
 
-                result = get_toggly_client()
-                # May return mock_client or None depending on patching order
+            result = get_toggly_client()
+            # Returns default client
+            assert result is mock_client
 
 
 class TestTogglyMiddleware:
     """Tests for TogglyMiddleware."""
 
-    @pytest.mark.asyncio
-    async def test_attaches_helper_to_request_state(self):
+    def test_attaches_helper_to_request_state(self):
         """Test that middleware attaches helper to request.state."""
-        from starlette.requests import Request
-        from starlette.testclient import TestClient
-
-        from toggly_fastapi.middleware import TogglyMiddleware
+        _reload_modules()
 
         mock_client = MagicMock()
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
-            from fastapi import FastAPI
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from fastapi import FastAPI, Request
+            from starlette.testclient import TestClient
+
+            from toggly_fastapi.middleware import TogglyMiddleware
 
             app = FastAPI()
             app.add_middleware(TogglyMiddleware)
 
             @app.get("/test")
             async def test_endpoint(request: Request):
-                assert hasattr(request.state, "toggly")
                 return {"has_toggly": hasattr(request.state, "toggly")}
 
             client = TestClient(app)
@@ -94,19 +171,31 @@ class TestTogglyMiddleware:
             assert response.status_code == 200
             assert response.json()["has_toggly"] is True
 
-    @pytest.mark.asyncio
-    async def test_helper_provides_is_enabled(self):
+    def test_helper_provides_is_enabled(self):
         """Test that helper provides is_enabled method."""
-        from starlette.requests import Request
-        from starlette.testclient import TestClient
-
-        from toggly_fastapi.middleware import TogglyMiddleware
+        _reload_modules()
 
         mock_client = MagicMock()
         mock_client.is_enabled.return_value = True
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
-            from fastapi import FastAPI
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from fastapi import FastAPI, Request
+            from starlette.testclient import TestClient
+
+            from toggly_fastapi.middleware import TogglyMiddleware
 
             app = FastAPI()
             app.add_middleware(TogglyMiddleware)
@@ -126,13 +215,26 @@ class TestTogglyRequestHelper:
 
     def test_is_enabled_returns_default_without_client(self):
         """Test is_enabled returns default when no client."""
-        from starlette.requests import Request
-        from starlette.testclient import TestClient
+        _reload_modules()
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=None):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=None),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from starlette.requests import Request
+
             from toggly_fastapi.middleware import TogglyRequestHelper
 
-            # Create a minimal mock request
             mock_scope = {
                 "type": "http",
                 "method": "GET",
@@ -149,10 +251,27 @@ class TestTogglyRequestHelper:
 
     def test_is_enabled_calls_client(self):
         """Test is_enabled delegates to client."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.is_enabled.return_value = True
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from starlette.requests import Request
+
             from toggly_fastapi.middleware import TogglyRequestHelper
 
             mock_scope = {
@@ -162,8 +281,6 @@ class TestTogglyRequestHelper:
                 "query_string": b"",
                 "headers": [],
             }
-            from starlette.requests import Request
-
             request = Request(mock_scope)
             helper = TogglyRequestHelper(request)
 
@@ -174,10 +291,27 @@ class TestTogglyRequestHelper:
 
     def test_is_disabled_negates_is_enabled(self):
         """Test is_disabled returns opposite of is_enabled."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.is_enabled.return_value = True
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from starlette.requests import Request
+
             from toggly_fastapi.middleware import TogglyRequestHelper
 
             mock_scope = {
@@ -187,8 +321,6 @@ class TestTogglyRequestHelper:
                 "query_string": b"",
                 "headers": [],
             }
-            from starlette.requests import Request
-
             request = Request(mock_scope)
             helper = TogglyRequestHelper(request)
 
@@ -196,10 +328,27 @@ class TestTogglyRequestHelper:
 
     def test_evaluate_gate(self):
         """Test evaluate_gate method."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.evaluate_gate.return_value = True
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from starlette.requests import Request
+
             from toggly_fastapi.middleware import TogglyRequestHelper
 
             mock_scope = {
@@ -209,8 +358,6 @@ class TestTogglyRequestHelper:
                 "query_string": b"",
                 "headers": [],
             }
-            from starlette.requests import Request
-
             request = Request(mock_scope)
             helper = TogglyRequestHelper(request)
 
@@ -221,10 +368,27 @@ class TestTogglyRequestHelper:
 
     def test_flags_property(self):
         """Test flags property."""
+        _reload_modules()
+
         mock_client = MagicMock()
         mock_client.feature_flags = {"feature1": True, "feature2": False}
 
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=mock_client):
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MagicMock,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=mock_client),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from starlette.requests import Request
+
             from toggly_fastapi.middleware import TogglyRequestHelper
 
             mock_scope = {
@@ -234,8 +398,6 @@ class TestTogglyRequestHelper:
                 "query_string": b"",
                 "headers": [],
             }
-            from starlette.requests import Request
-
             request = Request(mock_scope)
             helper = TogglyRequestHelper(request)
 
@@ -243,7 +405,31 @@ class TestTogglyRequestHelper:
 
     def test_context_is_cached(self):
         """Test that context is cached."""
-        with patch("toggly_fastapi.middleware.get_toggly_client", return_value=None):
+        _reload_modules()
+
+        # Create a proper mock for EvaluationContext
+        class MockEvaluationContext:
+            def __init__(self, identity=None, groups=None, traits=None):
+                self.identity = identity
+                self.groups = groups or []
+                self.traits = traits or {}
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MockEvaluationContext,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=None),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from starlette.requests import Request
+
             from toggly_fastapi.middleware import TogglyRequestHelper
 
             mock_scope = {
@@ -253,8 +439,6 @@ class TestTogglyRequestHelper:
                 "query_string": b"",
                 "headers": [],
             }
-            from starlette.requests import Request
-
             request = Request(mock_scope)
             helper = TogglyRequestHelper(request)
 
@@ -269,47 +453,91 @@ class TestGetContextFromRequest:
 
     def test_extracts_request_metadata(self):
         """Test extraction of request metadata."""
-        from toggly_fastapi.middleware import get_context_from_request
+        _reload_modules()
 
-        mock_scope = {
-            "type": "http",
-            "method": "POST",
-            "path": "/api/test",
-            "query_string": b"",
-            "headers": [],
-        }
-        from starlette.requests import Request
+        class MockEvaluationContext:
+            def __init__(self, identity=None, groups=None, traits=None):
+                self.identity = identity
+                self.groups = groups or []
+                self.traits = traits or {}
 
-        request = Request(mock_scope)
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MockEvaluationContext,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=None),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from starlette.requests import Request
 
-        context = get_context_from_request(request)
+            from toggly_fastapi.middleware import get_context_from_request
 
-        assert context.traits["path"] == "/api/test"
-        assert context.traits["method"] == "POST"
+            mock_scope = {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/test",
+                "query_string": b"",
+                "headers": [],
+            }
+            request = Request(mock_scope)
+
+            context = get_context_from_request(request)
+
+            assert context.traits["path"] == "/api/test"
+            assert context.traits["method"] == "POST"
 
     def test_extracts_user_from_state(self):
         """Test extraction of user from request.state."""
-        from toggly_fastapi.middleware import get_context_from_request
+        _reload_modules()
 
-        mock_scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/test",
-            "query_string": b"",
-            "headers": [],
-            "state": {},
-        }
-        from starlette.requests import Request
+        class MockEvaluationContext:
+            def __init__(self, identity=None, groups=None, traits=None):
+                self.identity = identity
+                self.groups = groups or []
+                self.traits = traits or {}
 
-        request = Request(mock_scope)
+        with patch.dict(
+            "sys.modules",
+            {
+                "toggly": MagicMock(
+                    TogglyClient=MagicMock,
+                    TogglyConfig=MagicMock,
+                    EvaluationContext=MockEvaluationContext,
+                    FeatureRequirement=MagicMock,
+                    get_default_client=MagicMock(return_value=None),
+                    set_default_client=MagicMock(),
+                    AsyncTogglyClient=MagicMock,
+                ),
+            },
+        ):
+            from starlette.requests import Request
 
-        # Set user on state
-        mock_user = MagicMock()
-        mock_user.id = 123
-        mock_user.email = "test@example.com"
-        request.state.user = mock_user
+            from toggly_fastapi.middleware import get_context_from_request
 
-        context = get_context_from_request(request)
+            mock_scope = {
+                "type": "http",
+                "method": "GET",
+                "path": "/test",
+                "query_string": b"",
+                "headers": [],
+                "state": {},
+            }
+            request = Request(mock_scope)
 
-        assert context.identity == "123"
-        assert context.traits.get("email") == "test@example.com"
+            # Set user on state
+            mock_user = MagicMock()
+            mock_user.id = 123
+            mock_user.email = "test@example.com"
+            request.state.user = mock_user
+
+            context = get_context_from_request(request)
+
+            assert context.identity == "123"
+            assert context.traits.get("email") == "test@example.com"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Callable
+from typing import Annotated, Any, Callable, Optional, Union
 
 from fastapi import Depends, HTTPException, Request
 from starlette.status import HTTP_403_FORBIDDEN
@@ -89,7 +89,7 @@ def get_evaluation_context(request: Request) -> EvaluationContext:
 ContextDep = Annotated[EvaluationContext, Depends(get_evaluation_context)]
 
 
-def get_client() -> TogglyClient | None:
+def get_client() -> Optional[TogglyClient]:
     """FastAPI dependency that provides the Toggly client.
 
     Returns:
@@ -110,14 +110,14 @@ def get_client() -> TogglyClient | None:
 
 
 # Type alias for cleaner dependency injection
-ClientDep = Annotated[TogglyClient | None, Depends(get_client)]
+ClientDep = Annotated[Optional[TogglyClient], Depends(get_client)]
 
 
 def require_feature(
     feature_key: str,
     *,
     status_code: int = HTTP_403_FORBIDDEN,
-    detail: str | None = None,
+    detail: Optional[str] = None,
 ) -> Callable[[TogglyRequestHelper], bool]:
     """Create a dependency that requires a feature to be enabled.
 
@@ -173,7 +173,7 @@ def require_features(
     requirement: FeatureRequirement = FeatureRequirement.ALL,
     negate: bool = False,
     status_code: int = HTTP_403_FORBIDDEN,
-    detail: str | None = None,
+    detail: Optional[str] = None,
 ) -> Callable[[TogglyRequestHelper], bool]:
     """Create a dependency that requires multiple features.
 
@@ -284,12 +284,12 @@ class FeatureGateDependency:
 
     def __init__(
         self,
-        required: list[str] | None = None,
-        optional: list[str] | None = None,
+        required: Optional[list[str]] = None,
+        optional: Optional[list[str]] = None,
         *,
         requirement: FeatureRequirement = FeatureRequirement.ALL,
         status_code: int = HTTP_403_FORBIDDEN,
-        detail: str | None = None,
+        detail: Optional[str] = None,
     ) -> None:
         """Initialize the dependency.
 
@@ -339,9 +339,9 @@ class FeatureGateDependency:
 
 
 def with_feature_context(
-    identity: str | None = None,
-    groups: list[str] | None = None,
-    traits: dict[str, Any] | None = None,
+    identity: Optional[str] = None,
+    groups: Optional[list[str]] = None,
+    traits: Optional[dict[str, Any]] = None,
 ) -> Callable[[Request], EvaluationContext]:
     """Create a custom evaluation context dependency.
 
