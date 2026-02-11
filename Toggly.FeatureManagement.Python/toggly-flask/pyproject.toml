@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toggly-flask"
+version = "0.1.0"
+description = "Flask integration for Toggly feature flag management"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Toggly", email = "support@toggly.io"}
+]
+maintainers = [
+    {name = "Toggly", email = "support@toggly.io"}
+]
+keywords = [
+    "feature-flags",
+    "feature-toggles",
+    "flask",
+    "toggly",
+    "experimentation"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Flask",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed"
+]
+requires-python = ">=3.8"
+dependencies = [
+    "toggly>=0.1.0",
+    "flask>=2.0"
+]
+
+[project.urls]
+Homepage = "https://toggly.io"
+Documentation = "https://docs.toggly.io/sdks/python/flask"
+Repository = "https://github.com/ops-ai/toggly-sdks"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+toggly_flask = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --cov=src/toggly_flask --cov-report=xml --cov-report=term-missing"
+
+[tool.mypy]
+python_version = "3.8"
+strict = true
+
+[tool.ruff]
+target-version = "py38"
+line-length = 100
+
+[tool.coverage.run]
+source = ["src/toggly_flask"]
+branch = true
