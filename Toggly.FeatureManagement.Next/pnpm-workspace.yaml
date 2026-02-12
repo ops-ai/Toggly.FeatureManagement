@@ -1,0 +1,5 @@
+packages:
+  - 'nextjs-toggly-core'
+  - 'nextjs-toggly-server'
+  - 'nextjs-toggly-client'
+  - 'nextjs-toggly-edge'
