@@ -1,0 +1,60 @@
+# frozen_string_literal: true
+
+# Toggly Feature Flags Configuration
+# https://docs.toggly.io/sdks/ruby
+
+Toggly::Rails.configure do |config|
+  # Required: Your Toggly app key
+  # Get this from your Toggly dashboard: https://app.toggly.io
+  config.app_key = <%= app_key %>
+
+  # Required: Environment name
+  # Common values: "Production", "Staging", "Development"
+  config.environment = <%= environment_name %>
+
+  # Optional: Custom API endpoint (for self-hosted or enterprise)
+  # config.base_url = "https://custom.toggly.io"
+
+  # Optional: How often to refresh definitions (in seconds)
+  # config.refresh_interval = 300
+
+  # Optional: HTTP timeout for API requests (in seconds)
+  # config.http_timeout = 10
+
+  # Optional: Enable features by default in development
+  # config.enable_undefined_in_dev = Rails.env.development?
+
+  # Optional: Disable background refresh (useful in tests)
+  # config.disable_background_refresh = Rails.env.test?
+
+  # Optional: Use Rails.cache for persistence
+  # config.use_rails_cache = true
+
+  # Optional: Custom context builder
+  # config.context_builder = ->(request, user) do
+  #   Toggly::Context.new(
+  #     identity: user&.id&.to_s,
+  #     groups: user&.roles&.pluck(:name) || [],
+  #     traits: {
+  #       plan: user&.subscription&.plan,
+  #       country: request&.headers["CF-IPCountry"]
+  #     }
+  #   )
+  # end
+
+  # Optional: Configure how user identity is extracted
+  # config.identity_method = :id  # Method to call on current_user
+
+  # Optional: Configure how user groups are extracted
+  # config.groups_method = :role_names  # Method to call on current_user
+
+  # Optional: Add custom trait extractors
+  # config.add_trait(:plan) { |request, user| user&.subscription&.plan }
+  # config.add_trait(:country) { |request, _user| request&.headers["CF-IPCountry"] }
+
+  # Optional: Default values for offline mode
+  # config.defaults = {
+  #   "critical-feature" => true,
+  #   "experimental-feature" => false
+  # }
+end

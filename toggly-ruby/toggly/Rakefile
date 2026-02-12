@@ -1,0 +1,23 @@
+# frozen_string_literal: true
+
+require "bundler/gem_tasks"
+require "rspec/core/rake_task"
+
+RSpec::Core::RakeTask.new(:spec)
+
+task default: :spec
+
+desc "Run RuboCop"
+task :lint do
+  sh "bundle exec rubocop"
+end
+
+desc "Run RuboCop with auto-fix"
+task :lint_fix do
+  sh "bundle exec rubocop -A"
+end
+
+desc "Generate documentation"
+task :doc do
+  sh "bundle exec yard doc"
+end

@@ -1,0 +1,17 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gemspec
+
+gem "toggly", path: "../toggly"
+
+group :development, :test do
+  gem "rspec", "~> 3.12"
+  gem "webmock", "~> 3.18"
+  gem "simplecov", "~> 0.22", require: false
+  gem "rubocop", "~> 1.56", require: false
+  gem "rubocop-rspec", "~> 2.24", require: false
+  gem "rake", "~> 13.0"
+  gem "mock_redis", "~> 0.44"
+end

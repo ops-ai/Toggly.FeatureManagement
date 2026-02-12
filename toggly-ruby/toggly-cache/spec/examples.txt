@@ -1,0 +1,21 @@
+example_id                                                 | status | run_time        |
+---------------------------------------------------------- | ------ | --------------- |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:1:1] | passed | 0.00031 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:1:2] | passed | 0.00004 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:2:1] | passed | 0.00008 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:2:2] | passed | 0.00006 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:2:3] | passed | 0.00007 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:3:1] | passed | 0.00004 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:3:2] | passed | 0.00005 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:4:1] | passed | 0.00034 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:5:1] | passed | 0.00005 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:5:2] | passed | 0.00006 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:6:1] | passed | 0.00004 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:6:2] | passed | 0.00012 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:7:1] | passed | 0.00016 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:8:1] | passed | 0.00011 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:8:2] | passed | 0.00282 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:8:3] | passed | 0.00046 seconds |
+./spec/toggly/cache/redis_snapshot_provider_spec.rb[1:9:1] | passed | 0.00006 seconds |
+./spec/toggly/cache_spec.rb[1:1:1]                         | passed | 0.00016 seconds |
+./spec/toggly/cache_spec.rb[1:1:2]                         | passed | 0.00024 seconds |
