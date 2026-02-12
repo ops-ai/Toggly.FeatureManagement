@@ -1,0 +1,43 @@
+{
+  "name": "toggly-nuxt-sdk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Toggly Feature Flags SDK for Nuxt 3 - Monorepo",
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:core": "pnpm --filter @ops-ai/nuxt-toggly-core build",
+    "build:server": "pnpm --filter @ops-ai/nuxt-toggly-server build",
+    "build:client": "pnpm --filter @ops-ai/nuxt-toggly-client build",
+    "build:module": "pnpm --filter @ops-ai/nuxt-toggly build",
+    "test": "pnpm -r test",
+    "test:coverage": "pnpm -r test:coverage",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "clean": "pnpm -r exec rm -rf dist coverage node_modules",
+    "dev:playground": "pnpm --filter @ops-ai/nuxt-toggly dev"
+  },
+  "keywords": [
+    "nuxt",
+    "nuxt3",
+    "feature-flags",
+    "feature-toggles",
+    "toggly",
+    "vue3"
+  ],
+  "author": "OpsAI <support@ops.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/toggly-sdks.git",
+    "directory": "Toggly.FeatureManagement.Nuxt"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/toggly-sdks/issues"
+  },
+  "homepage": "https://toggly.io",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@9.15.4"
+}

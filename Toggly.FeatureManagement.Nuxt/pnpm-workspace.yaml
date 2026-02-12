@@ -1,0 +1,5 @@
+packages:
+  - 'nuxt-toggly-core'
+  - 'nuxt-toggly-server'
+  - 'nuxt-toggly-client'
+  - 'nuxt-toggly'

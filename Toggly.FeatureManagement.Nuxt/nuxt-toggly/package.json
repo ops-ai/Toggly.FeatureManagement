@@ -1,0 +1,72 @@
+{
+  "name": "@ops-ai/nuxt-toggly",
+  "version": "1.0.0",
+  "description": "Feature flags for Nuxt 3 - composables, components, directives, and server utilities",
+  "type": "module",
+  "main": "./dist/module.cjs",
+  "module": "./dist/module.mjs",
+  "types": "./dist/types.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/module.mjs",
+      "require": "./dist/module.cjs",
+      "types": "./dist/types.d.ts"
+    },
+    "./runtime/*": "./dist/runtime/*"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "nuxt-module-build build",
+    "dev": "nuxi dev playground",
+    "dev:build": "nuxi build playground",
+    "dev:prepare": "nuxt-module-build build --stub && nuxi prepare playground",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "nuxt",
+    "nuxt3",
+    "nuxt-module",
+    "feature-flags",
+    "feature-toggles",
+    "toggly",
+    "vue3",
+    "typescript"
+  ],
+  "author": "OpsAI <support@ops.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/toggly-sdks.git",
+    "directory": "Toggly.FeatureManagement.Nuxt/nuxt-toggly"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/toggly-sdks/issues"
+  },
+  "homepage": "https://toggly.io",
+  "dependencies": {
+    "@nuxt/kit": "^3.16.0",
+    "@ops-ai/nuxt-toggly-core": "workspace:*",
+    "@ops-ai/nuxt-toggly-client": "workspace:*",
+    "@ops-ai/nuxt-toggly-server": "workspace:*"
+  },
+  "peerDependencies": {
+    "nuxt": "^3.0.0"
+  },
+  "devDependencies": {
+    "@nuxt/module-builder": "^0.8.4",
+    "@nuxt/schema": "^3.16.0",
+    "@types/node": "^22.13.1",
+    "@vitest/coverage-v8": "^3.0.4",
+    "eslint": "^9.19.0",
+    "nuxt": "^3.16.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4",
+    "vue": "^3.5.13"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
