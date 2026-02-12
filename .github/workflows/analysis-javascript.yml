@@ -13,6 +13,7 @@ on:
       - 'Toggly.FeatureManagement.Astro/**'
       - 'toggly-docusaurus-edge-sdk/**'
       - 'Toggly.FeatureManagement.Javascript/**'
+      - 'Toggly.FeatureManagement.Node/**'
       - 'toggly-hooks-types/**'
       - 'toggly-clarity-hook/**'
       - '.github/workflows/analysis-javascript.yml'
@@ -28,6 +29,7 @@ on:
       - 'Toggly.FeatureManagement.Astro/**'
       - 'toggly-docusaurus-edge-sdk/**'
       - 'Toggly.FeatureManagement.Javascript/**'
+      - 'Toggly.FeatureManagement.Node/**'
       - 'toggly-hooks-types/**'
       - 'toggly-clarity-hook/**'
       - '.github/workflows/analysis-javascript.yml'
@@ -77,45 +79,45 @@ jobs:
             path: toggly-clarity-hook
             test-cmd: npm test -- --coverage
             has-lint: false
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Full history for SonarCloud
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
           cache: 'npm'
           cache-dependency-path: ${{ matrix.path }}/package-lock.json
-      
+
       - name: Install dependencies
         working-directory: ${{ matrix.path }}
         run: npm ci || npm install
-      
+
       - name: Build package (if needed)
         working-directory: ${{ matrix.path }}
         run: npm run build || echo "No build script configured"
         continue-on-error: true
-      
+
       - name: Run TypeScript type check
         working-directory: ${{ matrix.path }}
         run: npm run typecheck || echo "No typecheck script configured"
         continue-on-error: true
-      
+
       - name: Run linter
         if: matrix.has-lint == true
         working-directory: ${{ matrix.path }}
         run: npm run lint
         continue-on-error: true
-      
+
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}
         run: ${{ matrix.test-cmd }}
         continue-on-error: true
-      
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         if: always()
@@ -127,25 +129,94 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  test-node-server:
+    name: Test Node.js Server ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: Core
+            dir: toggly-node-core
+          - package: Express
+            dir: toggly-express
+          - package: Fastify
+            dir: toggly-fastify
+          - package: Hono
+            dir: toggly-hono
+          - package: Koa
+            dir: toggly-koa
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        working-directory: Toggly.FeatureManagement.Node
+        run: pnpm install
+
+      - name: Build all packages
+        working-directory: Toggly.FeatureManagement.Node
+        run: pnpm -r build
+
+      - name: Run tests with coverage
+        working-directory: Toggly.FeatureManagement.Node/${{ matrix.dir }}
+        run: pnpm test:coverage
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-Node-${{ matrix.package }}
+          path: |
+            Toggly.FeatureManagement.Node/${{ matrix.dir }}/coverage/
+            Toggly.FeatureManagement.Node/${{ matrix.dir }}/coverage/lcov.info
+          retention-days: 7
+          if-no-files-found: ignore
+
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, test-node-server]
     if: always()
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Full history for better analysis
-      
+
       - name: Download all coverage reports
         uses: actions/download-artifact@v4
         with:
           pattern: coverage-*
           path: coverage-artifacts/
         continue-on-error: true
-      
+
       - name: Organize coverage files
         run: |
           mkdir -p coverage
@@ -159,6 +230,11 @@ jobs:
             ["JavaScript"]="Toggly.FeatureManagement.Javascript/feature_flags_toggly"
             ["Docusaurus"]="toggly-docusaurus-edge-sdk/libs/docusaurus-plugin"
             ["Clarity-Hook"]="toggly-clarity-hook"
+            ["Node-Core"]="Toggly.FeatureManagement.Node/toggly-node-core"
+            ["Node-Express"]="Toggly.FeatureManagement.Node/toggly-express"
+            ["Node-Fastify"]="Toggly.FeatureManagement.Node/toggly-fastify"
+            ["Node-Hono"]="Toggly.FeatureManagement.Node/toggly-hono"
+            ["Node-Koa"]="Toggly.FeatureManagement.Node/toggly-koa"
           )
           find coverage-artifacts -name "lcov.info" -type f | while read file; do
             sdk_name=$(echo "$file" | sed 's|coverage-artifacts/coverage-||' | sed 's|/.*||')
@@ -175,7 +251,7 @@ jobs:
           echo "Sample paths from lcov files:"
           grep "^SF:" coverage/*.info 2>/dev/null | head -20 || true
         continue-on-error: true
-      
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v5.0.0
         env:
@@ -187,7 +263,7 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-javascript
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
-            -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,toggly-hooks-types,toggly-clarity-hook
+            -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,toggly-hooks-types,toggly-clarity-hook
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js
             -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
@@ -199,17 +275,15 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [test, sonarcloud]
+    needs: [test, test-node-server, sonarcloud]
     if: always()
-    
+
     steps:
       - name: Check test results
         run: |
           echo "## JavaScript/TypeScript SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Analysis workflow completed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### SDKs Analyzed" >> $GITHUB_STEP_SUMMARY
+          echo "### Frontend SDKs" >> $GITHUB_STEP_SUMMARY
           echo "- Angular" >> $GITHUB_STEP_SUMMARY
           echo "- React" >> $GITHUB_STEP_SUMMARY
           echo "- Vue" >> $GITHUB_STEP_SUMMARY
@@ -217,6 +291,15 @@ jobs:
           echo "- Astro" >> $GITHUB_STEP_SUMMARY
           echo "- JavaScript (vanilla)" >> $GITHUB_STEP_SUMMARY
           echo "- Docusaurus" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Node.js Server SDKs" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/toggly-node-core" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/toggly-express" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/toggly-fastify" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/toggly-hono" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/toggly-koa" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Utilities" >> $GITHUB_STEP_SUMMARY
           echo "- Hooks Types" >> $GITHUB_STEP_SUMMARY
           echo "- Clarity Hook" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
