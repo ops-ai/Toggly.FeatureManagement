@@ -1,0 +1,65 @@
+{
+  "name": "@ops-ai/toggly-appinsights-hook",
+  "version": "1.0.0",
+  "description": "Azure Application Insights hook for Toggly Feature Flags SDK. Automatically tracks feature flag data in Application Insights for monitoring and analytics.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "toggly",
+    "feature-flags",
+    "feature-toggles",
+    "application-insights",
+    "azure",
+    "azure-monitor",
+    "app-insights",
+    "analytics",
+    "monitoring",
+    "telemetry",
+    "hooks",
+    "tracking",
+    "apm",
+    "observability"
+  ],
+  "author": {
+    "name": "Toggly",
+    "email": "hello@toggly.io"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "toggly-appinsights-hook"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/toggly-appinsights-hook#readme",
+  "dependencies": {
+    "@ops-ai/toggly-hooks-types": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
