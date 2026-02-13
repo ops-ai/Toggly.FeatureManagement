@@ -1,0 +1,63 @@
+{
+  "name": "@ops-ai/toggly-ga4-hook",
+  "version": "1.0.0",
+  "description": "Google Analytics 4 hook for Toggly Feature Flags SDK. Automatically pushes feature flag data to GA4 for analytics and user behavior correlation.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "toggly",
+    "feature-flags",
+    "feature-toggles",
+    "google-analytics",
+    "ga4",
+    "analytics",
+    "gtag",
+    "hooks",
+    "monitoring",
+    "tracking",
+    "experimentation",
+    "ab-testing"
+  ],
+  "author": {
+    "name": "Toggly",
+    "email": "hello@toggly.io"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "toggly-ga4-hook"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/toggly-ga4-hook#readme",
+  "dependencies": {
+    "@ops-ai/toggly-hooks-types": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

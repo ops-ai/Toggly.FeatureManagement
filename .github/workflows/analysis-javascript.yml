@@ -16,6 +16,7 @@ on:
       - 'Toggly.FeatureManagement.Node/**'
       - 'toggly-hooks-types/**'
       - 'toggly-clarity-hook/**'
+      - 'toggly-ga4-hook/**'
       - '.github/workflows/analysis-javascript.yml'
   pull_request:
     branches:
@@ -32,6 +33,7 @@ on:
       - 'Toggly.FeatureManagement.Node/**'
       - 'toggly-hooks-types/**'
       - 'toggly-clarity-hook/**'
+      - 'toggly-ga4-hook/**'
       - '.github/workflows/analysis-javascript.yml'
   workflow_dispatch:
 
@@ -77,6 +79,10 @@ jobs:
             has-lint: false
           - sdk: Clarity-Hook
             path: toggly-clarity-hook
+            test-cmd: npm test -- --coverage
+            has-lint: false
+          - sdk: GA4-Hook
+            path: toggly-ga4-hook
             test-cmd: npm test -- --coverage
             has-lint: false
 
@@ -230,6 +236,7 @@ jobs:
             ["JavaScript"]="Toggly.FeatureManagement.Javascript/feature_flags_toggly"
             ["Docusaurus"]="toggly-docusaurus-edge-sdk/libs/docusaurus-plugin"
             ["Clarity-Hook"]="toggly-clarity-hook"
+            ["GA4-Hook"]="toggly-ga4-hook"
             ["Node-Core"]="Toggly.FeatureManagement.Node/toggly-node-core"
             ["Node-Express"]="Toggly.FeatureManagement.Node/toggly-express"
             ["Node-Fastify"]="Toggly.FeatureManagement.Node/toggly-fastify"
@@ -263,7 +270,7 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-javascript
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
-            -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,toggly-hooks-types,toggly-clarity-hook
+            -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,toggly-hooks-types,toggly-clarity-hook,toggly-ga4-hook
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js
             -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
@@ -302,5 +309,6 @@ jobs:
           echo "### Utilities" >> $GITHUB_STEP_SUMMARY
           echo "- Hooks Types" >> $GITHUB_STEP_SUMMARY
           echo "- Clarity Hook" >> $GITHUB_STEP_SUMMARY
+          echo "- GA4 Hook" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-javascript" >> $GITHUB_STEP_SUMMARY
