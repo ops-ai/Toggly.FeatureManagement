@@ -125,12 +125,8 @@ func (p *definitionsProvider) startLiveUpdates() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	closer, err := live.Start(ctx, p.cfg.DefinitionsURL, p.cfg.AppKey, func() {
+	closer, err := live.Start(ctx, p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment, p.hc, func() {
 		_ = p.refresh(context.Background(), 10*time.Second)
-	}, func() {
-		p.liveMu.Lock()
-		p.liveConnected = false
-		p.liveMu.Unlock()
 	})
 	if err != nil {
 		return

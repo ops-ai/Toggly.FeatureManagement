@@ -34,10 +34,9 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
           channel: 'stable'
           cache: true
-      
+
       - name: Verify Flutter installation
         run: |
           flutter --version
@@ -177,10 +176,9 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
           channel: 'stable'
           cache: true
-      
+
       - name: Setup Java (for Android)
         if: matrix.platform == 'Android'
         uses: actions/setup-java@v4

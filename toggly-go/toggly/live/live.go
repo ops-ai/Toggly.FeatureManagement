@@ -4,32 +4,39 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
 	"nhooyr.io/websocket"
 )
 
-// Start connects to the Toggly live updates channel directly.
+// Start connects to the Toggly live updates channel.
 //
-// It connects to:
-//   wss://definitions.toggly.io/{appKey}/ws
+// It first resolves the WebSocket URL by calling:
+//
+//	GET {baseURL}definitions/live-updates/{appKey}/{envKey}
 //
 // Then connects and calls onUpdate when receiving the text message "update".
-func Start(ctx context.Context, baseURL, appKey string, onUpdate func(), onDisconnect func()) (io.Closer, error) {
-	wsURL := buildWebSocketURL(baseURL, appKey)
-	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{})
+func Start(ctx context.Context, baseURL, appKey, envKey string, httpClient *http.Client, onUpdate func()) (io.Closer, error) {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+
+	wsURL, err := resolveWebSocketURL(ctx, httpClient, baseURL, appKey, envKey)
+	if err != nil {
+		return nil, err
+	}
+
+	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+		HTTPClient: httpClient,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	go func() {
 		defer c.Close(websocket.StatusNormalClosure, "")
-		defer func() {
-			if onDisconnect != nil {
-				onDisconnect()
-			}
-		}()
 		for {
 			_, msg, err := c.Read(ctx)
 			if err != nil {
@@ -38,7 +45,6 @@ func Start(ctx context.Context, baseURL, appKey string, onUpdate func(), onDisco
 			if string(msg) == "update" {
 				// Fire-and-forget like .NET SDK.
 				go func() {
-					// small guard
 					defer func() { _ = recover() }()
 					onUpdate()
 				}()
@@ -53,15 +59,22 @@ func Start(ctx context.Context, baseURL, appKey string, onUpdate func(), onDisco
 	}), nil
 }
 
-func buildWebSocketURL(baseURL, appKey string) string {
-	base := strings.TrimRight(baseURL, "/")
-	switch {
-	case strings.HasPrefix(base, "https://"):
-		base = "wss://" + strings.TrimPrefix(base, "https://")
-	case strings.HasPrefix(base, "http://"):
-		base = "ws://" + strings.TrimPrefix(base, "http://")
+func resolveWebSocketURL(ctx context.Context, httpClient *http.Client, baseURL, appKey, envKey string) (string, error) {
+	lookupURL := fmt.Sprintf("%s/definitions/live-updates/%s/%s", strings.TrimRight(baseURL, "/"), appKey, envKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, lookupURL, nil)
+	if err != nil {
+		return "", err
 	}
-	return fmt.Sprintf("%s/%s/ws", base, appKey)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(body)), nil
 }
 
 type closerFunc func() error

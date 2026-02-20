@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php-version: ['7.4', '8.0', '8.1', '8.2', '8.3']
+        php-version: ['8.2', '8.3', '8.4']
     
     steps:
       - name: Checkout code
@@ -47,14 +47,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-${{ matrix.php-version }}-${{ hashFiles('**/composer.lock') }}
+          key: ${{ runner.os }}-composer-${{ matrix.php-version }}-${{ hashFiles('**/composer.json') }}
           restore-keys: |
             ${{ runner.os }}-composer-${{ matrix.php-version }}-
             ${{ runner.os }}-composer-
       
       - name: Install dependencies
         working-directory: Toggly.FeatureManagement.PHP
-        run: composer install --prefer-dist --no-progress --no-interaction
+        run: composer update --prefer-dist --no-progress --no-interaction --prefer-stable
       
       - name: Validate composer.json
         working-directory: Toggly.FeatureManagement.PHP
@@ -164,11 +164,9 @@ jobs:
           echo "✅ Analysis workflow completed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### PHP Versions Tested" >> $GITHUB_STEP_SUMMARY
-          echo "- PHP 7.4" >> $GITHUB_STEP_SUMMARY
-          echo "- PHP 8.0" >> $GITHUB_STEP_SUMMARY
-          echo "- PHP 8.1" >> $GITHUB_STEP_SUMMARY
           echo "- PHP 8.2" >> $GITHUB_STEP_SUMMARY
           echo "- PHP 8.3" >> $GITHUB_STEP_SUMMARY
+          echo "- PHP 8.4" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Components Tested" >> $GITHUB_STEP_SUMMARY
           echo "- Core Feature Management SDK" >> $GITHUB_STEP_SUMMARY
