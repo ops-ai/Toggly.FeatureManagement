@@ -16,7 +16,7 @@ type Batcher struct {
 	environment string
 	instance    string
 
-	mu sync.Mutex
+	mu           sync.Mutex
 	stats        []*metricspb.MetricStatMessage
 	counters     []*metricspb.MetricCounterMessage
 	observations []*metricspb.MetricObservationMessage

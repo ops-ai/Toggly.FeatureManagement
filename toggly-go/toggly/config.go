@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics"
-	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/snapshot"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/secure"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/session"
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/snapshot"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage"
 )
 
@@ -14,9 +14,9 @@ import (
 //
 // This mirrors the .NET TogglySettings shape.
 type Config struct {
-	AppKey      string
-	Environment string
-	BaseURL     string
+	AppKey         string
+	Environment    string
+	BaseURL        string
 	DefinitionsURL string
 
 	UseSignedDefinitions bool
@@ -51,14 +51,14 @@ type Config struct {
 	AuthorizationService secure.AuthorizationService
 
 	// EnableUsage enables usage statistics batching and send via gRPC.
-	EnableUsage bool
+	EnableUsage        bool
 	UsageFlushInterval time.Duration
-	UsageClient *usage.Client
+	UsageClient        *usage.Client
 
 	// EnableMetrics enables metrics batching and send via gRPC.
-	EnableMetrics bool
+	EnableMetrics        bool
 	MetricsFlushInterval time.Duration
-	MetricsClient *metrics.Client
+	MetricsClient        *metrics.Client
 
 	// DisableBackgroundRefresh prevents starting the background refresh loop.
 	// The caller can call Refresh manually (not yet exposed) if needed.

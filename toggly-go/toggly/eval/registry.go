@@ -9,7 +9,7 @@ type Evaluator interface {
 
 // Registry holds filter evaluators.
 type Registry struct {
-	mu   sync.RWMutex
+	mu    sync.RWMutex
 	evals map[string]Evaluator
 }
 

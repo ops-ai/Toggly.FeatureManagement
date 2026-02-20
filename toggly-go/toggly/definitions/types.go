@@ -56,5 +56,5 @@ type JWK struct {
 	X   string `json:"x"`
 	Y   string `json:"y"`
 	Alg string `json:"alg"`
-	Exp *int64  `json:"exp"`
+	Exp *int64 `json:"exp"`
 }

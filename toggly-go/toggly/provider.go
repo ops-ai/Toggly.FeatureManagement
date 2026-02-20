@@ -15,15 +15,15 @@ import (
 )
 
 type definitionsProvider struct {
-	cfg      Config
-	hc       *http.Client
-	snap     snapshot.Provider
+	cfg  Config
+	hc   *http.Client
+	snap snapshot.Provider
 
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	defsByKey map[string]definitions.FeatureDefinitionModel
-	etag     string
-	lastTS   int64
-	secure   map[string]struct{}
+	etag      string
+	lastTS    int64
+	secure    map[string]struct{}
 
 	lastErr     string
 	lastErrTime *time.Time
@@ -33,10 +33,10 @@ type definitionsProvider struct {
 	jwks       *definitions.JWKSet
 	jwksExpiry time.Time
 
-	liveMu     sync.Mutex
-	liveCloser io.Closer
-	liveConnected bool
-	lastFallback  time.Time
+	liveMu           sync.Mutex
+	liveCloser       io.Closer
+	liveConnected    bool
+	lastFallback     time.Time
 	fallbackInterval time.Duration
 
 	stop chan struct{}
@@ -46,12 +46,12 @@ type definitionsProvider struct {
 func newDefinitionsProvider(cfg Config, snap snapshot.Provider) *definitionsProvider {
 	cfg.applyDefaults()
 	return &definitionsProvider{
-		cfg:       cfg,
-		hc:        &http.Client{Timeout: cfg.HTTPTimeout},
-		snap:      snap,
-		defsByKey: map[string]definitions.FeatureDefinitionModel{},
-		secure:    map[string]struct{}{},
-		stop:      make(chan struct{}),
+		cfg:              cfg,
+		hc:               &http.Client{Timeout: cfg.HTTPTimeout},
+		snap:             snap,
+		defsByKey:        map[string]definitions.FeatureDefinitionModel{},
+		secure:           map[string]struct{}{},
+		stop:             make(chan struct{}),
 		fallbackInterval: 20 * time.Minute,
 	}
 }

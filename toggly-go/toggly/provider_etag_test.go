@@ -35,10 +35,10 @@ func TestDefinitionsProvider_RefreshUnsigned_UsesETag(t *testing.T) {
 	defer srv.Close()
 
 	cfg := Config{
-		AppKey:       "app",
-		Environment:  "env",
-		DefinitionsURL: srv.URL + "/",
-		HTTPTimeout:  2 * time.Second,
+		AppKey:          "app",
+		Environment:     "env",
+		DefinitionsURL:  srv.URL + "/",
+		HTTPTimeout:     2 * time.Second,
 		RefreshInterval: time.Minute,
 	}
 	p := newDefinitionsProvider(cfg, nil)

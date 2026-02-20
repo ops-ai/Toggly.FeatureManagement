@@ -12,12 +12,12 @@ import (
 
 func main() {
 	client, err := toggly.NewClient(toggly.Config{
-		AppKey:       "YOUR_APP_KEY",
-		Environment:  "Production",
-		BaseURL:      "https://app.toggly.io/",
+		AppKey:         "YOUR_APP_KEY",
+		Environment:    "Production",
+		BaseURL:        "https://app.toggly.io/",
 		DefinitionsURL: "https://definitions.toggly.io/",
-		SessionStore: session.NewMemoryStore(),
-		SessionTTL:   30 * time.Minute,
+		SessionStore:   session.NewMemoryStore(),
+		SessionTTL:     30 * time.Minute,
 
 		EnableLiveUpdates: true,
 		EnableUsage:       true,

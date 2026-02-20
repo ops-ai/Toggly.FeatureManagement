@@ -21,7 +21,7 @@ type MemoryStore struct {
 }
 
 type entry struct {
-	v      bool
+	v       bool
 	expires time.Time
 }
 

@@ -46,7 +46,7 @@ jobs:
         run: flutter pub get
       
       - name: Verify dependencies
-        run: flutter pub get --check
+        run: flutter pub get --enforce-lockfile
       
       - name: Run code generation (if needed)
         run: |

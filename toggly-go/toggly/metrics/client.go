@@ -45,9 +45,15 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
-func (c *Client) Measure(metric string, value float64, feature *string) { c.batcher.Measure(metric, value, feature) }
-func (c *Client) Increment(metric string, value float64, feature *string) { c.batcher.Increment(metric, value, feature) }
-func (c *Client) Observe(metric string, value float64, feature *string) { c.batcher.Observe(metric, value, feature) }
+func (c *Client) Measure(metric string, value float64, feature *string) {
+	c.batcher.Measure(metric, value, feature)
+}
+func (c *Client) Increment(metric string, value float64, feature *string) {
+	c.batcher.Increment(metric, value, feature)
+}
+func (c *Client) Observe(metric string, value float64, feature *string) {
+	c.batcher.Observe(metric, value, feature)
+}
 
 func (c *Client) Flush(ctx context.Context) error { return c.batcher.Flush(ctx, c.api) }
 

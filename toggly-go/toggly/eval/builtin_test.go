@@ -9,8 +9,8 @@ func TestTargetingEvaluator_UserAndGroup(t *testing.T) {
 	e := TargetingEvaluator{}
 
 	params := map[string]any{
-		"Audience.Users:0":                "alice",
-		"Audience.Groups:0":               "beta",
+		"Audience.Users:0":                  "alice",
+		"Audience.Groups:0":                 "beta",
 		"Audience.DefaultRolloutPercentage": float64(0),
 	}
 

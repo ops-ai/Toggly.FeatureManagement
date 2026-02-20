@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 	_ "github.com/lib/pq"
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
 func getPostgresDB(t *testing.T) *sql.DB {

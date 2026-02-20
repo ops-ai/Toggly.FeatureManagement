@@ -71,8 +71,10 @@ func WithErrorHandler(h ErrorHandler) GateOption {
 // - evaluation context => extracted from request context (togglyctx.From)
 func FeatureGate(e Evaluator, featureKey string, opts ...GateOption) func(http.Handler) http.Handler {
 	cfg := gateConfig{
-		onDeny:  func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) },
-		onError: func(w http.ResponseWriter, r *http.Request, _ error) { http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable) },
+		onDeny: func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) },
+		onError: func(w http.ResponseWriter, r *http.Request, _ error) {
+			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+		},
 	}
 	for _, o := range opts {
 		o(&cfg)

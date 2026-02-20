@@ -15,13 +15,13 @@ import (
 //
 // This mirrors the .NET behavior at a high level (batched send every minute).
 type Batcher struct {
-	appKey      string
-	environment string
-	instance    string
-	appVersion  string
+	appKey       string
+	environment  string
+	instance     string
+	appVersion   string
 	processStart time.Time
 
-	mu sync.Mutex
+	mu         sync.Mutex
 	perFeature map[string]*featureAgg
 	appUnique  map[int32]struct{}
 }
@@ -118,14 +118,14 @@ func (b *Batcher) buildAndReset() *usagepb.FeatureStat {
 
 	for feature, agg := range b.perFeature {
 		out.Stats = append(out.Stats, &usagepb.StatMessage{
-			Feature: feature,
-			EnabledCount: agg.enabledCount,
-			DisabledCount: agg.disabledCount,
-			UniqueContextIdentifierEnabledCount: int32(len(agg.uniqueUsersEnabled)),
+			Feature:                              feature,
+			EnabledCount:                         agg.enabledCount,
+			DisabledCount:                        agg.disabledCount,
+			UniqueContextIdentifierEnabledCount:  int32(len(agg.uniqueUsersEnabled)),
 			UniqueContextIdentifierDisabledCount: int32(len(agg.uniqueUsersDisabled)),
-			UsedCount: agg.usedCount,
-			UniqueUsersUsedCount: int32(len(agg.uniqueUsersUsed)),
-			UniqueUserHashes: keys(agg.uniqueHashesDelta),
+			UsedCount:                            agg.usedCount,
+			UniqueUsersUsedCount:                 int32(len(agg.uniqueUsersUsed)),
+			UniqueUserHashes:                     keys(agg.uniqueHashesDelta),
 		})
 	}
 

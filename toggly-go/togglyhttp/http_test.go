@@ -11,7 +11,7 @@ import (
 )
 
 type fakeEval struct {
-	on map[string]bool
+	on  map[string]bool
 	err error
 }
 

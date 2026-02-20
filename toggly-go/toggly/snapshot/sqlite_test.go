@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
 func newTestSQLiteDB(t *testing.T) *sql.DB {

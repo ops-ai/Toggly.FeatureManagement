@@ -9,9 +9,9 @@ import (
 
 func TestClient_PercentageDeterministicByIdentityOnly(t *testing.T) {
 	c, err := NewClient(Config{
-		AppKey:                  "app",
-		Environment:             "env",
-		BaseURL:                 "https://example.invalid/", // unused
+		AppKey:                   "app",
+		Environment:              "env",
+		BaseURL:                  "https://example.invalid/", // unused
 		DisableBackgroundRefresh: true,
 	})
 	if err != nil {
