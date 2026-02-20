@@ -77,35 +77,53 @@ jobs:
           path: toggly-go/coverage.out
           retention-days: 7
 
-  sonarcloud:
-    name: SonarCloud Analysis
+  sonar:
+    name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: test
     if: always()
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: Download coverage report
         uses: actions/download-artifact@v4
         with:
           name: go-coverage
           path: toggly-go/
         continue-on-error: true
-      
+
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
         with:
           projectBaseDir: toggly-go
           args: >
             -Dsonar.projectKey=toggly-sdks-go
             -Dsonar.organization=ops-ai
+            -Dsonar.projectName=Toggly SDKs - Go
+            -Dsonar.sources=.
+            -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**
+            -Dsonar.tests=.
+            -Dsonar.test.inclusions=**/*_test.go
+            -Dsonar.go.coverage.reportPaths=coverage.out
+        continue-on-error: true
+
+      - name: SonarQube Server Scan
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          projectBaseDir: toggly-go
+          args: >
+            -Dsonar.projectKey=toggly-sdks-go
             -Dsonar.projectName=Toggly SDKs - Go
             -Dsonar.sources=.
             -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**
@@ -149,7 +167,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [test, sonarcloud, build]
+    needs: [test, sonar, build]
     if: always()
     
     steps:
@@ -173,3 +191,4 @@ jobs:
           echo "- togglytemplate (template helpers)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-go" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarQube Server for detailed results: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=toggly-sdks-go" >> $GITHUB_STEP_SUMMARY
