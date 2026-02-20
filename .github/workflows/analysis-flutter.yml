@@ -126,7 +126,7 @@ jobs:
           args: >
             -Dsonar.projectKey=toggly-sdks-flutter
             -Dsonar.organization=ops-ai
-            -Dsonar.projectName=Toggly SDKs - Flutter/Dart
+            -Dsonar.projectName="Toggly SDKs - Flutter/Dart"
             -Dsonar.sources=lib
             -Dsonar.tests=test
             -Dsonar.exclusions=**/.*/**,**/example/**,**/benchmarks/**,**/*.g.dart,**/*.freezed.dart
@@ -142,7 +142,7 @@ jobs:
           projectBaseDir: Toggly.FeatureManagement.Flutter/toggly
           args: >
             -Dsonar.projectKey=toggly-sdks-flutter
-            -Dsonar.projectName=Toggly SDKs - Flutter/Dart
+            -Dsonar.projectName="Toggly SDKs - Flutter/Dart"
             -Dsonar.sources=lib
             -Dsonar.tests=test
             -Dsonar.exclusions=**/.*/**,**/example/**,**/benchmarks/**,**/*.g.dart,**/*.freezed.dart

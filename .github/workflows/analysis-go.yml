@@ -107,7 +107,7 @@ jobs:
           args: >
             -Dsonar.projectKey=toggly-sdks-go
             -Dsonar.organization=ops-ai
-            -Dsonar.projectName=Toggly SDKs - Go
+            -Dsonar.projectName="Toggly SDKs - Go"
             -Dsonar.sources=.
             -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**
             -Dsonar.tests=.
@@ -124,7 +124,7 @@ jobs:
           projectBaseDir: toggly-go
           args: >
             -Dsonar.projectKey=toggly-sdks-go
-            -Dsonar.projectName=Toggly SDKs - Go
+            -Dsonar.projectName="Toggly SDKs - Go"
             -Dsonar.sources=.
             -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**
             -Dsonar.tests=.

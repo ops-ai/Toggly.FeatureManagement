@@ -126,7 +126,7 @@ jobs:
           args: >
             -Dsonar.projectKey=toggly-sdks-php
             -Dsonar.organization=ops-ai
-            -Dsonar.projectName=Toggly SDKs - PHP
+            -Dsonar.projectName="Toggly SDKs - PHP"
             -Dsonar.sources=Toggly.FeatureManagement.PHP/src
             -Dsonar.tests=Toggly.FeatureManagement.PHP/tests
             -Dsonar.exclusions=**/vendor/**,**/tests/**
@@ -142,7 +142,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-php
-            -Dsonar.projectName=Toggly SDKs - PHP
+            -Dsonar.projectName="Toggly SDKs - PHP"
             -Dsonar.sources=Toggly.FeatureManagement.PHP/src
             -Dsonar.tests=Toggly.FeatureManagement.PHP/tests
             -Dsonar.exclusions=**/vendor/**,**/tests/**
