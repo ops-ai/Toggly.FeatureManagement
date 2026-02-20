@@ -222,6 +222,39 @@ jobs:
         with:
           fetch-depth: 0  # Full history for better analysis
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies for TypeScript analysis
+        run: |
+          # Install dependencies in each SDK so SonarQube can resolve tsconfig extends chains
+          for dir in \
+            Toggly.FeatureManagement.Angular \
+            Toggly.FeatureManagement.React \
+            "Toggly.FeatureManagement.Vue/vue-feature-flags-toggly" \
+            "Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly" \
+            Toggly.FeatureManagement.Astro \
+            "Toggly.FeatureManagement.Javascript/feature_flags_toggly" \
+            "toggly-docusaurus-edge-sdk/libs/docusaurus-plugin" \
+            toggly-hooks-types \
+            toggly-clarity-hook \
+            toggly-ga4-hook \
+            toggly-appinsights-hook; do
+            echo "Installing dependencies in $dir"
+            npm install --ignore-scripts --no-audit --no-fund --prefix "$dir" || true
+          done
+          # Install Node.js server SDKs via pnpm workspace
+          echo "Installing Node.js server SDK dependencies"
+          pnpm install --ignore-scripts --dir Toggly.FeatureManagement.Node || true
+        continue-on-error: true
+
       - name: Download all coverage reports
         uses: actions/download-artifact@v4
         with:
