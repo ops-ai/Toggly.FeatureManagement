@@ -6,9 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
-
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage/usagepb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Batcher accumulates usage stats and periodically flushes them.
@@ -97,13 +96,11 @@ func (b *Batcher) buildAndReset() *usagepb.FeatureStat {
 	defer b.mu.Unlock()
 
 	now := time.Now().UTC()
-	ts, _ := ptypes.TimestampProto(now)
-	pst, _ := ptypes.TimestampProto(b.processStart)
 
 	out := &usagepb.FeatureStat{
 		AppKey:           b.appKey,
 		Environment:      b.environment,
-		Time:             ts,
+		Time:             timestamppb.New(now),
 		Stats:            []*usagepb.StatMessage{},
 		TotalUniqueUsers: int32(len(b.appUnique)),
 		UniqueUserHashes: keys(b.appUnique),
@@ -114,7 +111,7 @@ func (b *Batcher) buildAndReset() *usagepb.FeatureStat {
 	if b.appVersion != "" {
 		out.AppVersion = &b.appVersion
 	}
-	out.ProcessStartTime = pst
+	out.ProcessStartTime = timestamppb.New(b.processStart)
 
 	for feature, agg := range b.perFeature {
 		out.Stats = append(out.Stats, &usagepb.StatMessage{

@@ -3,12 +3,12 @@ module github.com/ops-ai/Toggly.FeatureManagement/toggly-go
 go 1.22
 
 require (
-	github.com/golang/protobuf v1.5.4
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/redis/go-redis/v9 v9.5.1
 	go.mongodb.org/mongo-driver v1.17.2
 	google.golang.org/grpc v1.69.2
+	google.golang.org/protobuf v1.35.1
 	nhooyr.io/websocket v1.8.17
 )
 
@@ -28,5 +28,4 @@ require (
 	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241015192408-796eee8c2d53 // indirect
-	google.golang.org/protobuf v1.35.1 // indirect
 )

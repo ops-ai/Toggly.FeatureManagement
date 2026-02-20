@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package Usage;
+
+option go_package = "github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage/usagepb";
+
+import "google/protobuf/timestamp.proto";
+
+message FeatureStat {
+  string appKey = 1;
+  string environment = 2;
+  google.protobuf.Timestamp time = 3;
+  repeated StatMessage stats = 4;
+  int32 totalUniqueUsers = 5;
+  optional string instanceName = 6;
+  optional google.protobuf.Timestamp processStartTime = 7;
+  optional string appVersion = 8;
+  repeated int32 uniqueUserHashes = 9 [packed = true];
+}
+
+message StatMessage {
+  string feature = 1;
+  int32 enabledCount = 2;
+  int32 disabledCount = 3;
+  int32 uniqueContextIdentifierEnabledCount = 4;
+  int32 uniqueContextIdentifierDisabledCount = 5;
+  int32 uniqueRequestEnabledCount = 6;
+  int32 uniqueRequestDisabledCount = 7;
+  int32 usedCount = 8;
+  int32 uniqueUsersUsedCount = 9;
+  repeated int32 uniqueUserHashes = 10 [packed = true];
+}
+
+message StatResult {
+  int32 featureCount = 1;
+}
+
+service Usage {
+  rpc SendStats(FeatureStat) returns (StatResult);
+}
