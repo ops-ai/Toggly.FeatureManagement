@@ -62,8 +62,12 @@ jobs:
       - name: Restore solution dependencies
         run: dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln
 
-      - name: Restore storage test dependencies
+      - name: Restore additional test dependencies
         run: |
+          dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Web.Tests/Toggly.FeatureManagement.Web.Tests.csproj
+          dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.DistributedCache.Tests/Toggly.FeatureManagement.Storage.DistributedCache.Tests.csproj
+          dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Hangfire.Tests/Toggly.FeatureManagement.Hangfire.Tests.csproj
+          dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.NSwag.Tests/Toggly.FeatureManagement.NSwag.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Storage.Dapper.Tests/Toggly.Storage.Dapper.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Storage.EntityFramework.Tests/Toggly.Storage.EntityFramework.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj
@@ -94,8 +98,12 @@ jobs:
       - name: Build solution
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
 
-      - name: Build storage test projects
+      - name: Build additional test projects
         run: |
+          dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Web.Tests/Toggly.FeatureManagement.Web.Tests.csproj -c Release
+          dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.DistributedCache.Tests/Toggly.FeatureManagement.Storage.DistributedCache.Tests.csproj -c Release
+          dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Hangfire.Tests/Toggly.FeatureManagement.Hangfire.Tests.csproj -c Release
+          dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.NSwag.Tests/Toggly.FeatureManagement.NSwag.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.Dapper.Tests/Toggly.Storage.Dapper.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.EntityFramework.Tests/Toggly.Storage.EntityFramework.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj -c Release
@@ -108,6 +116,46 @@ jobs:
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --logger "trx;LogFileName=core-test-results.trx" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+
+      - name: Run Web tests
+        run: |
+          dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Web.Tests/Toggly.FeatureManagement.Web.Tests.csproj \
+            --no-build -c Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=web-test-results.trx" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+
+      - name: Run DistributedCache storage tests
+        run: |
+          dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.DistributedCache.Tests/Toggly.FeatureManagement.Storage.DistributedCache.Tests.csproj \
+            --no-build -c Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=distributedcache-test-results.trx" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+
+      - name: Run Hangfire tests
+        run: |
+          dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Hangfire.Tests/Toggly.FeatureManagement.Hangfire.Tests.csproj \
+            --no-build -c Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=hangfire-test-results.trx" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+
+      - name: Run NSwag tests
+        run: |
+          dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.NSwag.Tests/Toggly.FeatureManagement.NSwag.Tests.csproj \
+            --no-build -c Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=nswag-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
         continue-on-error: true
 

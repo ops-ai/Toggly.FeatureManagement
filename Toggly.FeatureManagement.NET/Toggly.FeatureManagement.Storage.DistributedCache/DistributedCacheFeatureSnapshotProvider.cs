@@ -11,7 +11,27 @@ using System;
 namespace Toggly.FeatureManagement.Storage.DistributedCache
 {
     /// <summary>
-    /// RavenDB feature snapshot provider
+    /// Internal DTO for feature snapshot serialization
+    /// </summary>
+    internal class FeatureSnapshotDto
+    {
+        public List<FeatureDefinitionModel>? Features { get; set; }
+        public string? Signature { get; set; }
+        public string? KeyId { get; set; }
+        public long? Timestamp { get; set; }
+    }
+
+    /// <summary>
+    /// Internal DTO for JWK snapshot serialization
+    /// </summary>
+    internal class JwkSnapshotDto
+    {
+        public JsonWebKeySet? Jwks { get; set; }
+        public long? Timestamp { get; set; }
+    }
+
+    /// <summary>
+    /// Distributed cache feature snapshot provider
     /// </summary>
     public class DistributedCacheFeatureSnapshotProvider : IFeatureSnapshotProvider
     {
@@ -41,10 +61,10 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
             {
                 return (null, null, null, null);
             }
-            var features = JsonSerializer.Deserialize<(List<FeatureDefinitionModel>, string?, string?, long?)>(snapshot);
-            return (features.Item1, features.Item2, features.Item3, features.Item4);
+            var dto = JsonSerializer.Deserialize<FeatureSnapshotDto>(snapshot);
+            return (dto?.Features, dto?.Signature, dto?.KeyId, dto?.Timestamp);
         }
-        
+
         /// <summary>
         /// Save the snapshot of the features
         /// </summary>
@@ -56,7 +76,14 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
         /// <returns></returns>
         public async Task SaveSnapshotAsync(List<FeatureDefinitionModel> features, string? signature = null, string? keyId = null, long? timestamp = null, CancellationToken ct = default)
         {
-            await _cache.SetAsync(_snapshotSettings.Value.DocumentName ?? "FeatureSnapshots", JsonSerializer.SerializeToUtf8Bytes((features, signature, keyId, timestamp)), ct).ConfigureAwait(false);
+            var dto = new FeatureSnapshotDto
+            {
+                Features = features,
+                Signature = signature,
+                KeyId = keyId,
+                Timestamp = timestamp
+            };
+            await _cache.SetAsync(_snapshotSettings.Value.DocumentName ?? "FeatureSnapshots", JsonSerializer.SerializeToUtf8Bytes(dto), ct).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -68,7 +95,12 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
         /// <returns></returns>
         public async Task SaveJwkSnapshot(JsonWebKeySet jwks, long timestamp, CancellationToken ct = default)
         {
-            await _cache.SetAsync(_snapshotSettings.Value.JwkDocumentName ?? "JwkSnapshots", JsonSerializer.SerializeToUtf8Bytes((jwks, timestamp)), new DistributedCacheEntryOptions { AbsoluteExpiration = DateTimeOffset.FromUnixTimeSeconds(timestamp) }, ct).ConfigureAwait(false);
+            var dto = new JwkSnapshotDto
+            {
+                Jwks = jwks,
+                Timestamp = timestamp
+            };
+            await _cache.SetAsync(_snapshotSettings.Value.JwkDocumentName ?? "JwkSnapshots", JsonSerializer.SerializeToUtf8Bytes(dto), new DistributedCacheEntryOptions { AbsoluteExpiration = DateTimeOffset.FromUnixTimeSeconds(timestamp) }, ct).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -83,7 +115,8 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
             {
                 return (null, null);
             }
-            return JsonSerializer.Deserialize<(JsonWebKeySet?, long?)>(snapshot);
+            var dto = JsonSerializer.Deserialize<JwkSnapshotDto>(snapshot);
+            return (dto?.Jwks, dto?.Timestamp);
         }
     }
 }
