@@ -109,6 +109,20 @@ jobs:
           path: coverage-artifacts/
         continue-on-error: true
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install dependencies for TypeScript analysis
+        run: |
+          npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/core || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/core
+          npm run build --prefix Toggly.FeatureManagement.ReactNative/libs/core
+          npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/react-native || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/react-native
+          npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/storage-async || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/storage-async
+          npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/storage-mmkv || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/storage-mmkv
+        continue-on-error: true
+
       - name: Organize coverage files
         run: |
           mkdir -p coverage
