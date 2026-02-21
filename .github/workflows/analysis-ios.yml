@@ -168,7 +168,7 @@ jobs:
             -Dsonar.sources=${{ env.SDK_ROOT }}
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
             -Dsonar.test.inclusions=**/Tests/**
-            -Dsonar.swift.coverage.reportPaths=coverage-artifacts/coverage.lcov
+            -Dsonar.swift.coverage.reportPaths=coverage-artifacts/${{ env.SDK_ROOT }}/coverage.lcov
         continue-on-error: true
 
       - name: SonarQube Server Scan
@@ -183,7 +183,7 @@ jobs:
             -Dsonar.sources=${{ env.SDK_ROOT }}
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
             -Dsonar.test.inclusions=**/Tests/**
-            -Dsonar.swift.coverage.reportPaths=coverage-artifacts/coverage.lcov
+            -Dsonar.swift.coverage.reportPaths=coverage-artifacts/${{ env.SDK_ROOT }}/coverage.lcov
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
