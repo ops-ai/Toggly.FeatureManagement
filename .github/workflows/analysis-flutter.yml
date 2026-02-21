@@ -193,10 +193,60 @@ jobs:
         run: ${{ matrix.build-cmd }}
         continue-on-error: true
 
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache OWASP Dependency Check database
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/OWASP-Dependency-Check/data/
+          key: dependency-check-db-${{ runner.os }}-v6
+          restore-keys: |
+            dependency-check-db-${{ runner.os }}-
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'toggly-sdks-flutter'
+          path: 'Toggly.FeatureManagement.Flutter/toggly'
+          format: 'ALL'
+          args: >-
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+            --enableExperimental
+            --disableAssembly
+            --disableRubygems
+            --disableBundleAudit
+            --disableNodeJS
+            --disableNodeAudit
+            --disablePyPkg
+            --disablePyDist
+        continue-on-error: true
+
+      - name: Upload Dependency Check report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report-flutter
+          path: reports/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+        continue-on-error: true
+
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [analyze, sonar, build-platforms]
+    needs: [analyze, sonar, build-platforms, dependency-check]
     if: always()
     
     steps:
