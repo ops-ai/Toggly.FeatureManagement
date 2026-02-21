@@ -239,6 +239,7 @@ jobs:
             Toggly.FeatureManagement.Angular \
             Toggly.FeatureManagement.React \
             "Toggly.FeatureManagement.Vue/vue-feature-flags-toggly" \
+            "Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/example" \
             "Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly" \
             Toggly.FeatureManagement.Astro \
             "Toggly.FeatureManagement.Javascript/feature_flags_toggly" \
