@@ -122,6 +122,15 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-coverage
+          path: ${{ env.SDK_ROOT }}/**/build/reports/kover/report.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
   build-samples:
     runs-on: ubuntu-latest
     steps:
@@ -173,3 +182,96 @@ jobs:
       - name: Check API compatibility
         working-directory: ${{ env.SDK_ROOT }}
         run: ./gradlew apiCheck || echo "API check not configured yet"
+
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        env:
+          JAVA_HOME: /opt/jdk
+        with:
+          project: 'toggly-sdks-android'
+          path: ${{ env.SDK_ROOT }}
+          format: 'XML'
+          out: 'dependency-check-reports'
+          args: >
+            --disableAssembly
+            --disableRubygems
+            --disableBundleAudit
+            --disableNodeJS
+            --disableNodeAudit
+            --disablePyPkg
+            --disablePyDist
+        continue-on-error: true
+
+      - name: Upload Dependency Check report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report-android
+          path: dependency-check-reports/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  sonar:
+    name: SonarQube Analysis
+    runs-on: ubuntu-latest
+    needs: [code-coverage, dependency-check]
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: android-coverage
+          path: coverage-artifacts/
+        continue-on-error: true
+
+      - name: Download Dependency Check report
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-check-report-android
+          path: dependency-check-reports/
+        continue-on-error: true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.projectKey=toggly-sdks-android
+            -Dsonar.organization=ops-ai
+            -Dsonar.projectName="Toggly SDKs - Android"
+            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.exclusions=**/build/**,**/test/**,**/androidTest/**,**/*.bak
+            -Dsonar.test.inclusions=**/src/test/**,**/src/androidTest/**
+            -Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/report.xml
+        continue-on-error: true
+
+      - name: SonarQube Server Scan
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=toggly-sdks-android
+            -Dsonar.projectName="Toggly SDKs - Android"
+            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.exclusions=**/build/**,**/test/**,**/androidTest/**,**/*.bak
+            -Dsonar.test.inclusions=**/src/test/**,**/src/androidTest/**
+            -Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/report.xml
+            -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
+        continue-on-error: true
