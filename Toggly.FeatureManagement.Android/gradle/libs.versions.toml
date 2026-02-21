@@ -49,6 +49,7 @@ turbine = "1.2.0"
 robolectric = "4.14.1"
 coroutinesTest = "1.9.0"
 archCoreTesting = "2.2.0"
+kover = "0.9.0"
 
 [libraries]
 # AndroidX Core
@@ -125,6 +126,7 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 maven-publish = { id = "com.vanniktech.maven.publish", version = "0.30.0" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
 
 [bundles]
 compose = ["compose-ui", "compose-ui-graphics", "compose-ui-tooling-preview", "compose-material3", "compose-runtime", "compose-foundation"]

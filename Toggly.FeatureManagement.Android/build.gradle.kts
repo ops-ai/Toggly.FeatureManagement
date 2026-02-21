@@ -8,11 +8,20 @@ plugins {
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.hilt) apply false
     alias(libs.plugins.maven.publish) apply false
+    alias(libs.plugins.kover)
 }
 
 allprojects {
     group = "io.toggly"
     version = "1.0.0"
+}
+
+dependencies {
+    kover(project(":toggly-android-core"))
+    kover(project(":toggly-compose"))
+    kover(project(":toggly-views"))
+    kover(project(":toggly-room"))
+    kover(project(":toggly-datastore"))
 }
 
 tasks.register("clean", Delete::class) {
