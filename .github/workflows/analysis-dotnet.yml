@@ -78,6 +78,7 @@ jobs:
         run: |
           dotnet sonarscanner begin \
             /k:"toggly-sdks-dotnet" \
+            "/n:Toggly SDKs - .NET" \
             /o:"ops-ai" \
             /v:"${{ steps.gitversion.outputs.semVer }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
@@ -171,6 +172,7 @@ jobs:
         run: |
           dotnet sonarscanner begin \
             /k:"toggly-sdks-dotnet" \
+            "/n:Toggly SDKs - .NET" \
             /v:"${{ steps.gitversion.outputs.semVer }}" \
             /d:sonar.host.url="${SONAR_HOST_URL}" \
             /d:sonar.token="${SONAR_SERVER_TOKEN}" \
