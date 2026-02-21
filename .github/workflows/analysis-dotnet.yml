@@ -82,9 +82,10 @@ jobs:
             /v:"${{ steps.gitversion.outputs.semVer }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.token="${SONAR_TOKEN}" \
-            /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
-            /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx" \
-            /d:sonar.coverageReportPaths="coverage-report/SonarQube.xml" \
+            /d:sonar.projectBaseDir="Toggly.FeatureManagement.NET" \
+            /d:sonar.cs.opencover.reportsPaths="../TestResults/**/coverage.opencover.xml" \
+            /d:sonar.cs.vstest.reportsPaths="../TestResults/**/*.trx" \
+            /d:sonar.coverageReportPaths="../coverage-report/SonarQube.xml" \
             /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**" \
             /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**" \
             /d:sonar.test.inclusions="**/*Tests*.cs"
@@ -173,10 +174,11 @@ jobs:
             /v:"${{ steps.gitversion.outputs.semVer }}" \
             /d:sonar.host.url="${SONAR_HOST_URL}" \
             /d:sonar.token="${SONAR_SERVER_TOKEN}" \
-            /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
-            /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx" \
-            /d:sonar.coverageReportPaths="coverage-report/SonarQube.xml" \
-            /d:sonar.dependencyCheck.reportPath="dependency-check-reports/dependency-check-report.xml" \
+            /d:sonar.projectBaseDir="Toggly.FeatureManagement.NET" \
+            /d:sonar.cs.opencover.reportsPaths="../TestResults/**/coverage.opencover.xml" \
+            /d:sonar.cs.vstest.reportsPaths="../TestResults/**/*.trx" \
+            /d:sonar.coverageReportPaths="../coverage-report/SonarQube.xml" \
+            /d:sonar.dependencyCheck.reportPath="../dependency-check-reports/dependency-check-report.xml" \
             /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**" \
             /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**" \
             /d:sonar.test.inclusions="**/*Tests*.cs"

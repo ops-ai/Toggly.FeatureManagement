@@ -43,38 +43,6 @@ steps:
     updateAssemblyInfoFilename: '$(Build.SourcesDirectory)\Toggly.FeatureManagement.NET\AssemblyInfo.cs'
     additionalArguments: '/output buildserver'
 
-- task: SonarCloudPrepare@1
-  inputs:
-    SonarCloud: 'SonarCloud'
-    organization: 'ops-ai'
-    scannerMode: 'MSBuild'
-    projectKey: 'ops-ai_toggly-feature-management'
-    projectName: 'Toggly Feature Management'
-    projectVersion: '0.1'
-    extraProperties: |
-      sonar.dependencyCheck.reportPath=$(Agent.BuildDirectory)\dependency-check-report.xml
-      sonar.dependencyCheck.htmlReportPath=$(Agent.BuildDirectory)\dependency-check-report.html
-      sonar.coverageReportPaths=$(Agent.TempDirectory)\SonarQube.xml
-      sonar.coverage.exclusions="**Tests*.cs"
-
-# Cache OWASP Dependency Check database to avoid long download times
-- task: Cache@2
-  displayName: 'Cache OWASP Dependency Check DB'
-  inputs:
-    key: 'dependency-check | "$(Agent.OS)" | v6'
-    path: '$(Agent.ToolsDirectory)/dependency-check/data'
-    restoreKeys: |
-      dependency-check | "$(Agent.OS)"
-
-- task: dependency-check-build-task@6
-  inputs:
-    projectName: '$(Build.DefinitionName)'
-    scanPath: '$(build.artifactstagingdirectory)'
-    format: 'ALL'
-    nvdApiKey: '$(NVD_API_KEY)'
-    additionalArguments: '--disableBundleAudit --disableRubygems --disableNodeJS --disablePyPkg --disablePyDist --out "$(Agent.BuildDirectory)" --data "$(Agent.ToolsDirectory)/dependency-check/data"'
-  continueOnError: true
-
 - task: UseDotNet@2
   inputs:
     packageType: 'sdk'
@@ -106,23 +74,11 @@ steps:
     modifyOutputPath: true
     zipAfterPublish: true
 
-- task: reportgenerator@4
-  inputs:
-    reports: '$(Agent.TempDirectory)\**\coverage.cobertura.xml'
-    targetdir: '$(Agent.TempDirectory)\'
-    reporttypes: 'SonarQube'
-
 - task: DotNetCoreCLI@2
   inputs:
     command: 'pack'
     packagesToPack: '$(solution)'
     versioningScheme: 'byBuildNumber'
-
-- task: SonarCloudAnalyze@1
-
-- task: SonarCloudPublish@1
-  inputs:
-    pollingTimeoutSec: '300'
 
 - task: PublishBuildArtifacts@1
   inputs:
