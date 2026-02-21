@@ -1,6 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Options;
-using Mongo2Go;
+using EphemeralMongo;
 using MongoDB.Driver;
 using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.Data;
@@ -11,7 +11,7 @@ namespace Toggly.Storage.MongoDB.Tests;
 
 public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
 {
-    private MongoDbRunner _runner = null!;
+    private IMongoRunner _runner = null!;
     private IMongoClient _client = null!;
     private MongoDBFeatureSnapshotProvider _provider = null!;
     private IOptions<TogglySnapshotSettings> _settings = null!;
@@ -20,7 +20,7 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
 
     public Task InitializeAsync()
     {
-        _runner = MongoDbRunner.Start();
+        _runner = MongoRunner.Run();
         _client = new MongoClient(_runner.ConnectionString);
 
         _settings = Options.Create(new TogglySnapshotSettings
