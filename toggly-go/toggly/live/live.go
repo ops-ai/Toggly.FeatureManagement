@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"nhooyr.io/websocket"
 )
@@ -53,9 +52,7 @@ func Start(ctx context.Context, baseURL, appKey, envKey string, httpClient *http
 	}()
 
 	return closerFunc(func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		return c.Close(websocket.StatusNormalClosure, ctx.Err().Error())
+		return c.Close(websocket.StatusNormalClosure, "")
 	}), nil
 }
 
