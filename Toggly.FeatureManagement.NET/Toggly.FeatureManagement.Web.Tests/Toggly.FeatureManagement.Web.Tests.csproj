@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Toggly.FeatureManagement.Web\Toggly.FeatureManagement.Web.csproj" />
+    <ProjectReference Include="..\Toggly.FeatureManagement\Toggly.FeatureManagement.csproj" />
   </ItemGroup>
 
 </Project>
