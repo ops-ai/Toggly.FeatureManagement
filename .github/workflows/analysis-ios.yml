@@ -60,6 +60,8 @@ jobs:
             -instr-profile .build/debug/codecov/default.profdata \
             -format lcov \
             -ignore-filename-regex '.build|Tests' \
+            2>/dev/null \
+            | sed "s|${GITHUB_WORKSPACE}/||g" \
             > coverage.lcov || true
 
       - name: Upload coverage to Codecov
