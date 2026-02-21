@@ -27,6 +27,8 @@ public class DependencyInjectionTests
             options.AppKey = "test-key";
             options.Environment = "Test";
         });
+        // AddTogglyFeatureManagement is required because TogglyMetricsService depends on IFeatureManager
+        services.AddTogglyFeatureManagement();
 
         var provider = services.BuildServiceProvider();
 
@@ -167,6 +169,8 @@ public class DependencyInjectionTests
         services.AddSingleton<IHostEnvironment>(new TestHostEnvironment());
         services.AddSingleton<IHostApplicationLifetime>(new TestHostApplicationLifetime());
         services.AddToggly();
+        // AddTogglyFeatureManagement is required because TogglyMetricsService depends on IFeatureManager
+        services.AddTogglyFeatureManagement();
         var provider = services.BuildServiceProvider();
 
         // Act

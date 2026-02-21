@@ -4,7 +4,6 @@
 		<TargetFrameworks>netstandard2.1;netcoreapp3.1;net5.0;net6.0;net7.0;net8.0;net9.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-		<InternalsVisibleTo>Toggly.FeatureManagement.Tests</InternalsVisibleTo>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<PackageProjectUrl>https://toggly.io</PackageProjectUrl>
 		<PackageIcon>toggly_favicon.png</PackageIcon>

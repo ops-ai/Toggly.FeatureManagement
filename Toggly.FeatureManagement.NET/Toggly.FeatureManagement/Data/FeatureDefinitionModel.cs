@@ -69,7 +69,18 @@ namespace Toggly.FeatureManagement.Data
         public int GetHashCode(FeatureDefinitionModel obj)
         {
             if (obj == null) return 0;
-            return obj.FeatureKey.GetHashCode() ^ obj.Filters.GetHashCode();
+            unchecked
+            {
+                int hash = obj.FeatureKey?.GetHashCode() ?? 0;
+                if (obj.Filters != null)
+                {
+                    foreach (var filter in obj.Filters)
+                    {
+                        hash ^= filter.GetHashCode(filter);
+                    }
+                }
+                return hash;
+            }
         }
     }
 
@@ -119,7 +130,18 @@ namespace Toggly.FeatureManagement.Data
         public int GetHashCode(FeatureFilter obj)
         {
             if (obj == null) return 0;
-            return obj.Name.GetHashCode() ^ (obj.Parameters?.GetHashCode() ?? 2);
+            unchecked
+            {
+                int hash = obj.Name?.GetHashCode() ?? 0;
+                if (obj.Parameters != null)
+                {
+                    foreach (var kvp in obj.Parameters.OrderBy(k => k.Key))
+                    {
+                        hash ^= kvp.Key.GetHashCode() ^ (kvp.Value?.GetHashCode() ?? 0);
+                    }
+                }
+                return hash;
+            }
         }
 
         /// <summary>
