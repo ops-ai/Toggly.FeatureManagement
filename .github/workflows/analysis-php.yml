@@ -72,7 +72,7 @@ jobs:
       
       - name: Run PHPUnit tests with coverage
         working-directory: Toggly.FeatureManagement.PHP
-        run: vendor/bin/phpunit --coverage-clover=coverage.xml --coverage-text
+        run: vendor/bin/phpunit --coverage-clover=coverage.xml --log-junit=test-results.xml --coverage-text
         continue-on-error: true
       
       - name: Upload coverage (PHP 8.3 only)
@@ -80,7 +80,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: php-coverage
-          path: Toggly.FeatureManagement.PHP/coverage.xml
+          path: |
+            Toggly.FeatureManagement.PHP/coverage.xml
+            Toggly.FeatureManagement.PHP/test-results.xml
           retention-days: 7
       
       - name: Upload test results

@@ -27,6 +27,6 @@ module.exports = {
       tsconfig: 'tsconfig.json',
     }],
   },
+  coverageProvider: 'v8',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
-  forceExit: true,
 };

@@ -90,8 +90,8 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  sonarcloud:
-    name: SonarCloud Analysis
+  sonar:
+    name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: test
     if: always()
@@ -142,19 +142,37 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-react-native
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - React Native"
-            -Dsonar.sources=Toggly.FeatureManagement.ReactNative/packages
+            -Dsonar.sources=Toggly.FeatureManagement.ReactNative/libs
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js
             -Dsonar.coverage.exclusions=**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
-            -Dsonar.tests=.
+            -Dsonar.tests=Toggly.FeatureManagement.ReactNative/libs
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
+        continue-on-error: true
+
+      - name: SonarQube Server Scan
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=toggly-sdks-react-native
+            -Dsonar.projectName="Toggly SDKs - React Native"
+            -Dsonar.sources=Toggly.FeatureManagement.ReactNative/libs
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js
+            -Dsonar.coverage.exclusions=**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js
+            -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
+            -Dsonar.tests=Toggly.FeatureManagement.ReactNative/libs
             -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
         continue-on-error: true
 
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [test, sonarcloud]
+    needs: [test, sonar]
     if: always()
 
     steps:
@@ -170,4 +188,4 @@ jobs:
           echo "- @ops-ai/react-native-toggly-storage-async" >> $GITHUB_STEP_SUMMARY
           echo "- @ops-ai/react-native-toggly-storage-mmkv" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-react-native" >> $GITHUB_STEP_SUMMARY
+          echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-react-native" >> $GITHUB_STEP_SUMMARY
