@@ -177,7 +177,6 @@ jobs:
             /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="coverage-report/SonarQube.xml" \
             /d:sonar.dependencyCheck.reportPath="dependency-check-reports/dependency-check-report.xml" \
-            /d:sonar.dependencyCheck.htmlReportPath="dependency-check-reports/dependency-check-report.html" \
             /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**" \
             /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**" \
             /d:sonar.test.inclusions="**/*Tests*.cs"

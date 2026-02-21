@@ -213,7 +213,7 @@ jobs:
   sonar:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [test, test-node-server]
+    needs: [test, test-node-server, dependency-check]
     if: always()
 
     steps:
@@ -319,6 +319,13 @@ jobs:
             -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
         continue-on-error: true
 
+      - name: Download Dependency Check report (for SonarQube Server)
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-check-report-javascript
+          path: dependency-check-reports/
+        continue-on-error: true
+
       - name: SonarQube Server Scan
         uses: SonarSource/sonarqube-scan-action@v5.0.0
         env:
@@ -335,6 +342,7 @@ jobs:
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
+            -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
   dependency-check:

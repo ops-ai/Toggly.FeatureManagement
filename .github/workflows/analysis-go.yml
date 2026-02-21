@@ -80,7 +80,7 @@ jobs:
   sonar:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, dependency-check]
     if: always()
 
     steps:
@@ -115,6 +115,13 @@ jobs:
             -Dsonar.go.coverage.reportPaths=coverage.out
         continue-on-error: true
 
+      - name: Download Dependency Check report (for SonarQube Server)
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-check-report-go
+          path: dependency-check-reports/
+        continue-on-error: true
+
       - name: SonarQube Server Scan
         uses: SonarSource/sonarqube-scan-action@v5.0.0
         env:
@@ -130,6 +137,7 @@ jobs:
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*_test.go
             -Dsonar.go.coverage.reportPaths=coverage.out
+            -Dsonar.dependencyCheck.reportPath=../dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
   build:
