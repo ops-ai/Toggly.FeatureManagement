@@ -142,7 +142,7 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - PHP"
             -Dsonar.sources=Toggly.FeatureManagement.PHP/src
             -Dsonar.tests=Toggly.FeatureManagement.PHP/tests
-            -Dsonar.exclusions=**/vendor/**,**/tests/**
+            -Dsonar.exclusions=**/vendor/**
             -Dsonar.php.coverage.reportPaths=coverage/coverage.xml
             -Dsonar.php.tests.reportPath=coverage/test-results.xml
         continue-on-error: true
@@ -165,7 +165,7 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - PHP"
             -Dsonar.sources=Toggly.FeatureManagement.PHP/src
             -Dsonar.tests=Toggly.FeatureManagement.PHP/tests
-            -Dsonar.exclusions=**/vendor/**,**/tests/**
+            -Dsonar.exclusions=**/vendor/**
             -Dsonar.php.coverage.reportPaths=coverage/coverage.xml
             -Dsonar.php.tests.reportPath=coverage/test-results.xml
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml

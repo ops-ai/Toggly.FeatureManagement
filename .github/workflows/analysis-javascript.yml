@@ -242,7 +242,6 @@ jobs:
             "Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly" \
             Toggly.FeatureManagement.Astro \
             "Toggly.FeatureManagement.Javascript/feature_flags_toggly" \
-            "toggly-docusaurus-edge-sdk/libs/docusaurus-plugin" \
             toggly-hooks-types \
             toggly-clarity-hook \
             toggly-ga4-hook \
@@ -250,9 +249,11 @@ jobs:
             echo "Installing dependencies in $dir"
             npm install --ignore-scripts --no-audit --no-fund --prefix "$dir" || true
           done
-          # Install Node.js server SDKs via pnpm workspace
+          # Install pnpm workspaces (all sub-packages resolved in one pass)
           echo "Installing Node.js server SDK dependencies"
           pnpm install --ignore-scripts --dir Toggly.FeatureManagement.Node || true
+          echo "Installing toggly-docusaurus-edge-sdk workspace dependencies"
+          pnpm install --ignore-scripts --dir toggly-docusaurus-edge-sdk || true
         continue-on-error: true
 
       - name: Download all coverage reports

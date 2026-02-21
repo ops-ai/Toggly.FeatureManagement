@@ -99,6 +99,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get Flutter dependencies
+        working-directory: Toggly.FeatureManagement.Flutter/toggly
+        run: flutter pub get
+
       - name: Download coverage report
         uses: actions/download-artifact@v4
         with:
