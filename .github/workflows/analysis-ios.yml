@@ -96,6 +96,22 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}
         run: swiftlint lint --reporter github-actions-logging || true
 
+      - name: Generate SwiftLint report for SonarQube
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          swiftlint lint 2>/dev/null \
+            | sed "s|${GITHUB_WORKSPACE}/||g" \
+            > swiftlint-report.txt || true
+
+      - name: Upload SwiftLint report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-swiftlint
+          path: ${{ env.SDK_ROOT }}/swiftlint-report.txt
+          retention-days: 7
+          if-no-files-found: ignore
+
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
@@ -134,7 +150,7 @@ jobs:
   sonar:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [build-and-test, dependency-check]
+    needs: [build-and-test, lint, dependency-check]
     if: always()
     steps:
       - name: Checkout code
@@ -147,6 +163,13 @@ jobs:
         with:
           name: ios-coverage
           path: coverage-artifacts/
+        continue-on-error: true
+
+      - name: Download SwiftLint report
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-swiftlint
+          path: swiftlint-artifacts/
         continue-on-error: true
 
       - name: Download Dependency Check report
@@ -171,6 +194,7 @@ jobs:
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
             -Dsonar.test.inclusions=**/Tests/**
             -Dsonar.swift.coverage.reportPaths=coverage-artifacts/${{ env.SDK_ROOT }}/coverage.lcov
+            -Dsonar.swift.swiftlint.report=swiftlint-artifacts/swiftlint-report.txt
         continue-on-error: true
 
       - name: SonarQube Server Scan
@@ -186,6 +210,7 @@ jobs:
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
             -Dsonar.test.inclusions=**/Tests/**
             -Dsonar.swift.coverage.reportPaths=coverage-artifacts/${{ env.SDK_ROOT }}/coverage.lcov
+            -Dsonar.swift.swiftlint.report=swiftlint-artifacts/swiftlint-report.txt
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
