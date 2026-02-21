@@ -118,6 +118,17 @@ jobs:
           echo "Coverage files:"
           find coverage -type f || echo "No coverage files found"
 
+      - name: Normalize paths in test results
+        run: |
+          if [ -f "coverage/test-results.xml" ]; then
+            # PHPUnit writes absolute paths; strip the workspace prefix so Sonar
+            # can match them against the relative paths it discovers during analysis.
+            sed -i "s|${GITHUB_WORKSPACE}/||g" coverage/test-results.xml
+            echo "Paths normalized in test-results.xml"
+          else
+            echo "test-results.xml not found, skipping normalization"
+          fi
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v5.0.0
         env:
