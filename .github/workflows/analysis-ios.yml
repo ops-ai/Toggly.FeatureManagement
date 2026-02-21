@@ -165,9 +165,9 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-ios
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - iOS"
-            -Dsonar.sources=${{ env.SDK_ROOT }}/Sources
-            -Dsonar.tests=${{ env.SDK_ROOT }}/Tests
+            -Dsonar.sources=${{ env.SDK_ROOT }}
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
+            -Dsonar.test.inclusions=**/Tests/**
             -Dsonar.swift.coverage.reportPaths=coverage-artifacts/coverage.lcov
         continue-on-error: true
 
@@ -180,9 +180,9 @@ jobs:
           args: >
             -Dsonar.projectKey=toggly-sdks-ios
             -Dsonar.projectName="Toggly SDKs - iOS"
-            -Dsonar.sources=${{ env.SDK_ROOT }}/Sources
-            -Dsonar.tests=${{ env.SDK_ROOT }}/Tests
+            -Dsonar.sources=${{ env.SDK_ROOT }}
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
+            -Dsonar.test.inclusions=**/Tests/**
             -Dsonar.swift.coverage.reportPaths=coverage-artifacts/coverage.lcov
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
