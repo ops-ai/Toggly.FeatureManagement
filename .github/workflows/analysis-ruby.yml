@@ -1,0 +1,295 @@
+name: Ruby SDKs - Tests & Analysis
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'toggly-ruby/**'
+      - '.github/workflows/analysis-ruby.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'toggly-ruby/**'
+      - '.github/workflows/analysis-ruby.yml'
+  workflow_dispatch:
+
+env:
+  SDK_ROOT: toggly-ruby
+
+jobs:
+  test-core:
+    name: Test toggly (Ruby ${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ['3.0', '3.1', '3.2', '3.3']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby ${{ matrix.ruby }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+          working-directory: ${{ env.SDK_ROOT }}/toggly
+
+      - name: Run tests
+        working-directory: ${{ env.SDK_ROOT }}/toggly
+        run: bundle exec rspec --format documentation
+
+      - name: Upload coverage (Ruby 3.3 only)
+        if: matrix.ruby == '3.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruby-coverage-core
+          path: ${{ env.SDK_ROOT }}/toggly/coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  test-rails:
+    name: Test toggly-rails (Ruby ${{ matrix.ruby }}, Rails ${{ matrix.rails }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ['3.1', '3.2', '3.3']
+        rails: ['7.0', '7.1', '7.2', '8.0']
+        exclude:
+          - ruby: '3.0'
+            rails: '8.0'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby ${{ matrix.ruby }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+          working-directory: ${{ env.SDK_ROOT }}/toggly-rails
+
+      - name: Install specific Rails version
+        working-directory: ${{ env.SDK_ROOT }}/toggly-rails
+        run: |
+          bundle config set --local without ''
+          bundle add rails --version "~> ${{ matrix.rails }}" --skip-install
+          bundle install
+
+      - name: Run tests
+        working-directory: ${{ env.SDK_ROOT }}/toggly-rails
+        run: bundle exec rspec --format documentation
+        continue-on-error: true
+
+  test-cache:
+    name: Test toggly-cache (Ruby ${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ['3.0', '3.1', '3.2', '3.3']
+
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby ${{ matrix.ruby }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+          working-directory: ${{ env.SDK_ROOT }}/toggly-cache
+
+      - name: Run tests
+        working-directory: ${{ env.SDK_ROOT }}/toggly-cache
+        run: bundle exec rspec --format documentation
+        env:
+          REDIS_URL: redis://localhost:6379
+        continue-on-error: true
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: ${{ env.SDK_ROOT }}/toggly
+
+      - name: Run RuboCop on toggly
+        working-directory: ${{ env.SDK_ROOT }}/toggly
+        run: bundle exec rubocop --parallel
+        continue-on-error: true
+
+      - name: Run RuboCop on toggly-rails
+        working-directory: ${{ env.SDK_ROOT }}/toggly-rails
+        run: bundle exec rubocop --parallel
+        continue-on-error: true
+
+      - name: Run RuboCop on toggly-cache
+        working-directory: ${{ env.SDK_ROOT }}/toggly-cache
+        run: bundle exec rubocop --parallel
+        continue-on-error: true
+
+  sonar:
+    name: SonarQube Analysis
+    runs-on: ubuntu-latest
+    needs: [test-core, test-rails, test-cache, dependency-check]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: ruby-coverage-core
+          path: coverage-artifacts/
+        continue-on-error: true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v6.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.projectKey=toggly-sdks-ruby
+            -Dsonar.organization=ops-ai
+            -Dsonar.projectName="Toggly SDKs - Ruby"
+            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.exclusions=**/vendor/**,**/spec/**,**/test/**,**/coverage/**,**/*.gemspec
+            -Dsonar.tests=${{ env.SDK_ROOT }}
+            -Dsonar.test.inclusions=**/spec/**,**/test/**
+        continue-on-error: true
+
+      - name: Download Dependency Check report (for SonarQube Server)
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-check-report-ruby
+          path: dependency-check-reports/
+        continue-on-error: true
+
+      - name: SonarQube Server Scan
+        uses: SonarSource/sonarqube-scan-action@v6.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=toggly-sdks-ruby
+            -Dsonar.projectName="Toggly SDKs - Ruby"
+            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.exclusions=**/vendor/**,**/spec/**,**/test/**,**/coverage/**,**/*.gemspec
+            -Dsonar.tests=${{ env.SDK_ROOT }}
+            -Dsonar.test.inclusions=**/spec/**,**/test/**
+            -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
+        continue-on-error: true
+
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache OWASP Dependency Check database
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/OWASP-Dependency-Check/data/
+          key: dependency-check-db-${{ runner.os }}-v6
+          restore-keys: |
+            dependency-check-db-${{ runner.os }}-
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'toggly-sdks-ruby'
+          path: ${{ env.SDK_ROOT }}
+          format: 'ALL'
+          args: >-
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+            --enableExperimental
+            --disableAssembly
+            --disableNodeJS
+            --disableNodeAudit
+            --disablePyPkg
+            --disablePyDist
+        continue-on-error: true
+
+      - name: Upload Dependency Check report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report-ruby
+          path: reports/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+        continue-on-error: true
+
+  summary:
+    name: Analysis Summary
+    runs-on: ubuntu-latest
+    needs: [test-core, test-rails, test-cache, lint, sonar, dependency-check]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Ruby SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Analysis workflow completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Packages Analyzed" >> $GITHUB_STEP_SUMMARY
+          echo "- toggly (Core)" >> $GITHUB_STEP_SUMMARY
+          echo "- toggly-rails" >> $GITHUB_STEP_SUMMARY
+          echo "- toggly-cache" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Ruby Versions Tested" >> $GITHUB_STEP_SUMMARY
+          echo "- 3.0, 3.1, 3.2, 3.3" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Rails Versions Tested" >> $GITHUB_STEP_SUMMARY
+          echo "- 7.0, 7.1, 7.2, 8.0" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-ruby" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarQube Server for detailed results: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=toggly-sdks-ruby" >> $GITHUB_STEP_SUMMARY

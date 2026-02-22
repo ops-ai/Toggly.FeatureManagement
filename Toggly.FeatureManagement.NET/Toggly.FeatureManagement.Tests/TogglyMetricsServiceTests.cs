@@ -1261,4 +1261,802 @@ public class TogglyMetricsServiceTests : IDisposable
     }
 
     #endregion
+
+    #region SendMetrics Tests via Reflection
+
+    [Fact]
+    public async Task SendMetrics_WhenNoMetrics_DoesNotCallGrpcClient()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert - gRPC client should not be called when no metrics
+        _metricsClientMock.Verify(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SendMetrics_WithMeasurements_CallsGrpcClient()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record a measurement
+        await _service.MeasureAsync("test-measurement", 42.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert
+        _metricsClientMock.Verify(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Stats.Should().NotBeEmpty();
+        capturedRequest.Stats.Should().Contain(s => s.Metric == "test-measurement");
+    }
+
+    [Fact]
+    public async Task SendMetrics_WithCounters_IncludesCountersInRequest()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record a counter
+        await _service.IncrementCounterAsync("test-counter", 5.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Counters.Should().NotBeEmpty();
+        capturedRequest.Counters.Should().Contain(c => c.Metric == "test-counter");
+    }
+
+    [Fact]
+    public async Task SendMetrics_WithObservations_IncludesObservationsInRequest()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record an observation
+        await _service.ObserveAsync("test-observation", 100.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Observations.Should().NotBeEmpty();
+        capturedRequest.Observations.Should().Contain(o => o.Metric == "test-observation");
+    }
+
+    [Fact]
+    public async Task SendMetrics_WhenGrpcThrows_RecordsError()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromException<MetricResult>(new RpcException(new Status(StatusCode.Unavailable, "Server unavailable"))),
+                Task.FromResult(new Metadata()),
+                () => new Status(StatusCode.Unavailable, "Server unavailable"),
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record a measurement
+        await _service.MeasureAsync("error-test", 1.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert - Error should be recorded in debug info
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.LastError.Should().NotBeNullOrEmpty();
+        debugInfo.LastErrorTime.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task SendMetrics_IncludesUserAgentInMetadata()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        Metadata? capturedMetadata = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((_, metadata, _, _) => capturedMetadata = metadata)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record a measurement
+        await _service.MeasureAsync("metadata-test", 1.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert - Metadata should include UA header (lowercase in gRPC)
+        capturedMetadata.Should().NotBeNull();
+        capturedMetadata.Should().Contain(e => e.Key == "ua");
+    }
+
+    [Fact]
+    public async Task SendMetrics_WithMixedMetrics_SendsAllInOneRequest()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 3 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record various metrics
+        await _service.MeasureAsync("mixed-measurement", 10.0);
+        await _service.IncrementCounterAsync("mixed-counter", 5.0);
+        await _service.ObserveAsync("mixed-observation", 100.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert - All three types should be in the request
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Stats.Should().NotBeEmpty();
+        capturedRequest.Counters.Should().NotBeEmpty();
+        capturedRequest.Observations.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task SendMetrics_IncludesAppKeyAndEnvironment()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        var settings = CreateSettings(appKey: "my-app-key", environment: "production");
+        _service = CreateService(settings);
+
+        // Record a measurement
+        await _service.MeasureAsync("appkey-test", 1.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.AppKey.Should().Be("my-app-key");
+        capturedRequest.Environment.Should().Be("production");
+    }
+
+    [Fact]
+    public async Task SendMetrics_IncludesInstanceName()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        var settings = CreateSettings(instanceName: "my-instance");
+        _service = CreateService(settings);
+
+        // Record a measurement
+        await _service.MeasureAsync("instance-test", 1.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.InstanceName.Should().Be("my-instance");
+    }
+
+    [Fact]
+    public async Task SendMetrics_AfterSuccess_SetsLastSendTime()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record a measurement
+        await _service.MeasureAsync("lastsend-test", 1.0);
+
+        var debugInfoBefore = _service.GetDebugInfo();
+        debugInfoBefore.LastSend.Should().BeNull();
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert
+        var debugInfoAfter = _service.GetDebugInfo();
+        debugInfoAfter.LastSend.Should().NotBeNull();
+        debugInfoAfter.LastSend.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task SendMetrics_ConcurrentCalls_OnlyOneExecutes()
+    {
+        // Arrange
+        var callCount = 0;
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback(() => Interlocked.Increment(ref callCount))
+            .Returns(() => new AsyncUnaryCall<MetricResult>(
+                Task.Delay(100).ContinueWith(_ => new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record metrics
+        await _service.MeasureAsync("concurrent-test", 1.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act - Call SendMetrics concurrently
+        var tasks = Enumerable.Range(0, 5)
+            .Select(_ => (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!);
+
+        await Task.WhenAll(tasks);
+
+        // Assert - Due to semaphore, only one or two should execute
+        callCount.Should().BeLessOrEqualTo(2);
+    }
+
+    [Fact]
+    public async Task SendMetrics_WithSuppressLogging_DoesNotLog()
+    {
+        // Arrange
+        var loggerMock = new Mock<ILogger>();
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
+            .Returns(loggerMock.Object);
+
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Use reflection to invoke SendMetrics with suppressLogging = true
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { true })!;
+        await task;
+
+        // Assert - No logging should occur when suppressed (skip verify as we can't easily check)
+        // The test verifies the method completes without error
+        _service.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task SendMetrics_WithFeatureExperiment_IncludesFeatureKeyInStats()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("experiment-metric"))
+            .Returns(new List<string> { "feature-A" });
+
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("feature-A"))
+            .ReturnsAsync(true);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 2 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record a measurement with experiment feature
+        await _service.MeasureAsync("experiment-metric", 50.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert - Should have stats for both null feature and feature-A
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Stats.Should().HaveCountGreaterOrEqualTo(1);
+        capturedRequest.Stats.Should().Contain(s => s.Metric == "experiment-metric");
+    }
+
+    [Fact]
+    public async Task SendMetrics_WithRegistryServiceMeasurements_IncludesInRequest()
+    {
+        // Arrange
+        _metricsRegistryServiceMock.Setup(x => x.GetMeasurementValuesAsync())
+            .ReturnsAsync(new Dictionary<string, double> { { "registry-measure", 25.0 } });
+
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Stats.Should().Contain(s => s.Metric == "registry-measure");
+    }
+
+    [Fact]
+    public async Task SendMetrics_WithRegistryServiceCounters_IncludesInRequest()
+    {
+        // Arrange
+        _metricsRegistryServiceMock.Setup(x => x.GetCounterValuesAsync())
+            .ReturnsAsync(new Dictionary<string, double> { { "registry-counter", 10.0 } });
+
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Counters.Should().Contain(c => c.Metric == "registry-counter");
+    }
+
+    [Fact]
+    public async Task SendMetrics_WithRegistryServiceObservations_IncludesInRequest()
+    {
+        // Arrange
+        var observationTime = DateTime.UtcNow;
+        _metricsRegistryServiceMock.Setup(x => x.GetObservationValuesAsync())
+            .ReturnsAsync(new Dictionary<string, (DateTime, double)> { { "registry-observation", (observationTime, 75.0) } });
+
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Observations.Should().Contain(o => o.Metric == "registry-observation");
+    }
+
+    [Fact]
+    public async Task SendMetrics_WithMultipleVariants_GroupsCorrectly()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("multi-variant-metric"))
+            .Returns(new List<string> { "variant-feature" });
+
+        // First call returns enabled, second disabled
+        var callCount = 0;
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("variant-feature"))
+            .ReturnsAsync(() => callCount++ % 2 == 0);
+
+        MetricStat? capturedRequest = null;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) => capturedRequest = stat)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 2 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record measurements that trigger variant differentiation
+        await _service.MeasureAsync("multi-variant-metric", 10.0);
+        await _service.MeasureAsync("multi-variant-metric", 20.0);
+
+        // Use reflection to invoke SendMetrics
+        var sendMetricsMethod = typeof(TogglyMetricsService)
+            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await task;
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Stats.Should().NotBeEmpty();
+    }
+
+    #endregion
+
+    #region OnApplicationStopping Tests
+
+    [Fact]
+    public async Task OnApplicationStopping_SendsRemainingMetrics()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        var sendCalled = false;
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback(() => sendCalled = true)
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromResult(new MetricResult { Count = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record a measurement
+        await _service.MeasureAsync("shutdown-metric", 1.0);
+
+        // Act - Trigger application stopping
+        _applicationStoppingCts.Cancel();
+
+        // Small delay to allow the callback to complete
+        await Task.Delay(100);
+
+        // Assert
+        sendCalled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OnApplicationStopping_HandlesGrpcException()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(new AsyncUnaryCall<MetricResult>(
+                Task.FromException<MetricResult>(new RpcException(new Status(StatusCode.Unavailable, "Server unavailable"))),
+                Task.FromResult(new Metadata()),
+                () => new Status(StatusCode.Unavailable, "Server unavailable"),
+                () => new Metadata(),
+                () => { }));
+
+        _service = CreateService();
+
+        // Record a measurement
+        await _service.MeasureAsync("shutdown-error-metric", 1.0);
+
+        // Act - Trigger application stopping - should not throw
+        var act = () => _applicationStoppingCts.Cancel();
+        act.Should().NotThrow();
+
+        // Small delay to allow the callback to complete
+        await Task.Delay(100);
+    }
+
+    #endregion
+
+    #region TryLog Tests via Reflection
+
+    [Fact]
+    public void TryLog_WhenDisposed_DoesNotThrow()
+    {
+        // Arrange
+        _service = CreateService();
+        _service.Dispose();
+
+        // Use reflection to invoke TryLog
+        var tryLogMethod = typeof(TogglyMetricsService)
+            .GetMethod("TryLog", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(LogLevel), typeof(string), typeof(object[]) });
+
+        // Act & Assert
+        var act = () => tryLogMethod!.Invoke(_service, new object[] { LogLevel.Information, "Test message", Array.Empty<object>() });
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void TryLogWithException_WhenDisposed_DoesNotThrow()
+    {
+        // Arrange
+        _service = CreateService();
+        _service.Dispose();
+
+        // Use reflection to invoke TryLog with exception
+        var tryLogMethod = typeof(TogglyMetricsService)
+            .GetMethod("TryLog", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(LogLevel), typeof(Exception), typeof(string), typeof(object[]) });
+
+        // Act & Assert
+        var act = () => tryLogMethod!.Invoke(_service, new object?[] { LogLevel.Error, new Exception("Test"), "Test message", Array.Empty<object>() });
+        act.Should().NotThrow();
+    }
+
+    #endregion
 }

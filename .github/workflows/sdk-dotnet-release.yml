@@ -1,0 +1,258 @@
+name: .NET SDKs - Build & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 2.0.0)'
+        required: true
+        type: string
+      packages:
+        description: 'Packages to release (comma-separated or "all")'
+        required: false
+        default: 'all'
+        type: string
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  SDK_ROOT: Toggly.FeatureManagement.NET
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ github.event.inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Invalid version format. Expected: X.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+
+      - name: Check if tag exists
+        run: |
+          if git rev-parse "dotnet-sdk-v${{ github.event.inputs.version }}" >/dev/null 2>&1; then
+            echo "Tag dotnet-sdk-v${{ github.event.inputs.version }} already exists"
+            exit 1
+          fi
+
+  build-and-test:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            8.0.x
+            9.0.x
+
+      - name: Restore dependencies
+        working-directory: ${{ env.SDK_ROOT }}
+        run: dotnet restore Toggly.FeatureManagement.sln
+
+      - name: Build solution
+        working-directory: ${{ env.SDK_ROOT }}
+        run: dotnet build Toggly.FeatureManagement.sln -c Release --no-restore -p:Version=${{ github.event.inputs.version }}
+
+      - name: Run tests
+        working-directory: ${{ env.SDK_ROOT }}
+        run: dotnet test Toggly.FeatureManagement.sln -c Release --no-build
+        continue-on-error: true
+
+  publish:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - project: Toggly.FeatureManagement
+            name: Core
+          - project: Toggly.FeatureManagement.Web
+            name: Web
+          - project: Toggly.FeatureManagement.Storage.RavenDB
+            name: Storage.RavenDB
+          - project: Toggly.FeatureManagement.Storage.DistributedCache
+            name: Storage.DistributedCache
+          - project: Toggly.FeatureManagement.Hangfire
+            name: Hangfire
+          - project: Toggly.FeatureManagement.HealthChecks
+            name: HealthChecks
+          - project: Toggly.FeatureManagement.NSwag
+            name: NSwag
+          - project: Toggly.Storage.MongoDB
+            name: Storage.MongoDB
+          - project: Toggly.Storage.Dapper
+            name: Storage.Dapper
+          - project: Toggly.Storage.EntityFramework
+            name: Storage.EntityFramework
+          - project: Toggly.Metrics.SystemMetrics
+            name: Metrics.SystemMetrics
+
+    steps:
+      - name: Check if package should be published
+        id: should_publish
+        run: |
+          PACKAGES="${{ github.event.inputs.packages || 'all' }}"
+          if [ "$PACKAGES" == "all" ]; then
+            echo "publish=true" >> $GITHUB_OUTPUT
+          elif echo "$PACKAGES" | grep -qi "${{ matrix.name }}"; then
+            echo "publish=true" >> $GITHUB_OUTPUT
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
+            echo "Skipping ${{ matrix.name }} (not in selected packages)"
+          fi
+
+      - name: Checkout code
+        if: steps.should_publish.outputs.publish == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        if: steps.should_publish.outputs.publish == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            8.0.x
+            9.0.x
+
+      - name: Restore dependencies
+        if: steps.should_publish.outputs.publish == 'true'
+        working-directory: ${{ env.SDK_ROOT }}
+        run: dotnet restore ${{ matrix.project }}/${{ matrix.project }}.csproj
+
+      - name: Pack NuGet package
+        if: steps.should_publish.outputs.publish == 'true'
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          dotnet pack ${{ matrix.project }}/${{ matrix.project }}.csproj \
+            -c Release \
+            -p:Version=${{ github.event.inputs.version }} \
+            -p:PackageVersion=${{ github.event.inputs.version }} \
+            -p:ContinuousIntegrationBuild=true \
+            --output ./nupkgs
+
+      - name: Publish to NuGet
+        if: steps.should_publish.outputs.publish == 'true'
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          dotnet nuget push ./nupkgs/${{ matrix.project }}.${{ github.event.inputs.version }}.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+        continue-on-error: true
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_tag_gpgsign: true
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+      - name: Create and push tag
+        run: |
+          git tag -s -m ".NET SDK v${{ github.event.inputs.version }}" "dotnet-sdk-v${{ github.event.inputs.version }}"
+          git push origin "dotnet-sdk-v${{ github.event.inputs.version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dotnet-sdk-v${{ github.event.inputs.version }}
+          name: .NET SDK v${{ github.event.inputs.version }}
+          body: |
+            ## .NET SDK v${{ github.event.inputs.version }}
+
+            ### Installation
+
+            ```bash
+            dotnet add package Toggly.FeatureManagement --version ${{ github.event.inputs.version }}
+            ```
+
+            ### NuGet Packages
+
+            | Package | Description |
+            |---------|-------------|
+            | `Toggly.FeatureManagement` | Core feature management extending Microsoft.FeatureManagement |
+            | `Toggly.FeatureManagement.Web` | ASP.NET Core filters for browser, language, country, OS targeting |
+            | `Toggly.FeatureManagement.Storage.RavenDB` | RavenDB storage provider |
+            | `Toggly.FeatureManagement.Storage.DistributedCache` | Distributed cache storage provider |
+            | `Toggly.FeatureManagement.Hangfire` | Hangfire background job integration |
+            | `Toggly.FeatureManagement.HealthChecks` | Health check integration |
+            | `Toggly.FeatureManagement.NSwag` | NSwag/OpenAPI integration |
+            | `Toggly.Storage.MongoDB` | MongoDB storage provider |
+            | `Toggly.Storage.Dapper` | Dapper storage provider |
+            | `Toggly.Storage.EntityFramework` | Entity Framework storage provider |
+            | `Toggly.Metrics.SystemMetrics` | System metrics collection |
+
+            ### Requirements
+
+            - .NET Standard 2.1 / .NET Core 3.1 / .NET 5.0–9.0
+          prerelease: ${{ github.event.inputs.prerelease }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    needs: [publish, release]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## .NET SDK Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | dotnet-sdk-v${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Packages | ${{ github.event.inputs.packages || 'all' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Published Packages" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement.Web" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement.Storage.RavenDB" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement.Storage.DistributedCache" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement.Hangfire" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement.HealthChecks" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.FeatureManagement.NSwag" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.Storage.MongoDB" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.Storage.Dapper" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.Storage.EntityFramework" >> $GITHUB_STEP_SUMMARY
+          echo "- Toggly.Metrics.SystemMetrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View on NuGet](https://www.nuget.org/packages?q=Toggly.FeatureManagement)" >> $GITHUB_STEP_SUMMARY

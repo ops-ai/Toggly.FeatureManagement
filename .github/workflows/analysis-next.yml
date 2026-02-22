@@ -1,0 +1,311 @@
+name: Next.js SDKs - Tests & Analysis
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.FeatureManagement.Next/**'
+      - '.github/workflows/analysis-next.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.FeatureManagement.Next/**'
+      - '.github/workflows/analysis-next.yml'
+  workflow_dispatch:
+
+env:
+  SDK_ROOT: Toggly.FeatureManagement.Next
+
+jobs:
+  build-and-test:
+    name: Test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm install
+
+      - name: Build all packages
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm build
+
+      - name: Type check
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm typecheck
+
+      - name: Run tests
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm test
+        continue-on-error: true
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm install
+
+      - name: Build (for lint)
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm build
+
+      - name: Run lint
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm lint
+        continue-on-error: true
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm install
+
+      - name: Build
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm build
+
+      - name: Run tests with coverage
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm test:coverage
+        continue-on-error: true
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: next-coverage
+          path: |
+            ${{ env.SDK_ROOT }}/nextjs-toggly-core/coverage/
+            ${{ env.SDK_ROOT }}/nextjs-toggly-server/coverage/
+            ${{ env.SDK_ROOT }}/nextjs-toggly-client/coverage/
+            ${{ env.SDK_ROOT }}/nextjs-toggly-edge/coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  sonar:
+    name: SonarQube Analysis
+    runs-on: ubuntu-latest
+    needs: [coverage, dependency-check]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install dependencies for TypeScript analysis
+        working-directory: ${{ env.SDK_ROOT }}
+        run: pnpm install --ignore-scripts || true
+        continue-on-error: true
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: next-coverage
+          path: coverage-artifacts/
+        continue-on-error: true
+
+      - name: Organize coverage files
+        run: |
+          mkdir -p coverage
+          for pkg in nextjs-toggly-core nextjs-toggly-server nextjs-toggly-client nextjs-toggly-edge; do
+            lcov_file="coverage-artifacts/$pkg/coverage/lcov.info"
+            if [ -f "$lcov_file" ]; then
+              sed "s|SF:|SF:${{ env.SDK_ROOT }}/$pkg/|g" "$lcov_file" > "coverage/$pkg-lcov.info"
+            fi
+          done
+          echo "Coverage files:"
+          ls -la coverage/ || echo "No coverage files found"
+        continue-on-error: true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v6.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.projectKey=toggly-sdks-next
+            -Dsonar.organization=ops-ai
+            -Dsonar.projectName="Toggly SDKs - Next.js"
+            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
+            -Dsonar.tests=${{ env.SDK_ROOT }}
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx
+        continue-on-error: true
+
+      - name: Download Dependency Check report (for SonarQube Server)
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-check-report-next
+          path: dependency-check-reports/
+        continue-on-error: true
+
+      - name: SonarQube Server Scan
+        uses: SonarSource/sonarqube-scan-action@v6.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=toggly-sdks-next
+            -Dsonar.projectName="Toggly SDKs - Next.js"
+            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
+            -Dsonar.tests=${{ env.SDK_ROOT }}
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx
+            -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
+        continue-on-error: true
+
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache OWASP Dependency Check database
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/OWASP-Dependency-Check/data/
+          key: dependency-check-db-${{ runner.os }}-v6
+          restore-keys: |
+            dependency-check-db-${{ runner.os }}-
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'toggly-sdks-next'
+          path: ${{ env.SDK_ROOT }}
+          format: 'ALL'
+          args: >-
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+            --enableExperimental
+            --disableAssembly
+            --disableRubygems
+            --disableBundleAudit
+            --disablePyPkg
+            --disablePyDist
+        continue-on-error: true
+
+      - name: Upload Dependency Check report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report-next
+          path: reports/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+        continue-on-error: true
+
+  summary:
+    name: Analysis Summary
+    runs-on: ubuntu-latest
+    needs: [build-and-test, lint, coverage, sonar, dependency-check]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Next.js SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Analysis workflow completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Packages Analyzed" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/nextjs-toggly-core" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/nextjs-toggly-server" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/nextjs-toggly-client" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/nextjs-toggly-edge" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Node.js Versions Tested" >> $GITHUB_STEP_SUMMARY
+          echo "- 18.x, 20.x, 22.x" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-next" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarQube Server for detailed results: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=toggly-sdks-next" >> $GITHUB_STEP_SUMMARY

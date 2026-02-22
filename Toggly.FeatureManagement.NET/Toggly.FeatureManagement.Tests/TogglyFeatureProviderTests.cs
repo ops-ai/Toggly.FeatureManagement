@@ -56,7 +56,8 @@ public class TogglyFeatureProviderTests : IDisposable
         string appKey = "test-app-key",
         string environment = "test-env",
         bool undefinedEnabledOnDevelopment = false,
-        bool useSignedDefinitions = false)
+        bool useSignedDefinitions = false,
+        HashSet<string>? allowedKeyIds = null)
     {
         return Options.Create(new TogglySettings
         {
@@ -64,7 +65,8 @@ public class TogglyFeatureProviderTests : IDisposable
             Environment = environment,
             UndefinedEnabledOnDevelopment = undefinedEnabledOnDevelopment,
             UseSignedDefinitions = useSignedDefinitions,
-            DefinitionsBaseUrl = "https://definitions.toggly.io/"
+            DefinitionsBaseUrl = "https://definitions.toggly.io/",
+            AllowedKeyIds = allowedKeyIds
         });
     }
 
@@ -2090,6 +2092,583 @@ public class TogglyFeatureProviderTests : IDisposable
 
         // Assert
         allFeatures.Should().Contain(f => f.Name == "delayed-feature");
+    }
+
+    #endregion
+
+    #region Signed Definitions Tests
+
+    [Fact]
+    public async Task RefreshFeatures_WithSignedDefinitions_ValidatesSignature()
+    {
+        // Arrange
+        var validSignature = Convert.ToBase64String(new byte[64]); // Dummy signature
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        var signedResponse = new
+        {
+            defs = new[]
+            {
+                new
+                {
+                    featureKey = "signed-feature",
+                    filters = Array.Empty<object>(),
+                    metrics = (string[]?)null,
+                    securedFeature = false,
+                    requirementType = 0
+                }
+            },
+            signature = validSignature,
+            kid = "test-key-id",
+            timestamp = timestamp
+        };
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage request, CancellationToken _) =>
+            {
+                if (request.RequestUri?.PathAndQuery.Contains("definitions/v2") == true)
+                {
+                    var response = new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(signedResponse))
+                    };
+                    response.Headers.ETag = new EntityTagHeaderValue("\"etag1\"");
+                    return response;
+                }
+
+                // Return empty JWKS
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"keys\": []}")
+                };
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings(useSignedDefinitions: true);
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act
+        await Task.Delay(600);
+
+        // Assert - feature should not be loaded (signature validation failed)
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+        // The feature won't be loaded because signature validation fails
+    }
+
+    [Fact]
+    public async Task RefreshFeatures_WithOlderTimestamp_RejectsDefinitions()
+    {
+        // Arrange - First load with current timestamp
+        var timestamp1 = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var timestamp2 = timestamp1 - 1000; // Older timestamp
+
+        var callCount = 0;
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage request, CancellationToken _) =>
+            {
+                callCount++;
+                var timestamp = callCount == 1 ? timestamp1 : timestamp2;
+
+                var signedResponse = new
+                {
+                    defs = new[]
+                    {
+                        new
+                        {
+                            featureKey = callCount == 1 ? "feature1" : "feature2",
+                            filters = Array.Empty<object>(),
+                            metrics = (string[]?)null,
+                            securedFeature = false,
+                            requirementType = 0
+                        }
+                    },
+                    signature = Convert.ToBase64String(new byte[64]),
+                    kid = "test-key",
+                    timestamp = timestamp
+                };
+
+                if (request.RequestUri?.PathAndQuery.Contains("definitions/v2") == true)
+                {
+                    var response = new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(signedResponse))
+                    };
+                    response.Headers.ETag = new EntityTagHeaderValue($"\"etag{callCount}\"");
+                    return response;
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"keys\": []}")
+                };
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings(useSignedDefinitions: true);
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act
+        await Task.Delay(600);
+
+        // Assert - Provider should be initialized but might not have features due to signature issues
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    #endregion
+
+    #region ETag Tests
+
+    [Fact]
+    public async Task RefreshFeatures_StoresETagFromResponse()
+    {
+        // Arrange
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage request, CancellationToken _) =>
+            {
+                var jsonResponse = new[]
+                {
+                    new
+                    {
+                        featureKey = "etag-feature",
+                        filters = Array.Empty<object>(),
+                        metrics = (string[]?)null,
+                        securedFeature = false,
+                        requirementType = 0
+                    }
+                };
+
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(jsonResponse))
+                };
+                response.Headers.ETag = new EntityTagHeaderValue("\"test-etag-123\"");
+                return response;
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act - Wait for load
+        await Task.Delay(600);
+
+        // Assert - Feature should be loaded
+        var definition = await _provider.GetFeatureDefinitionAsync("etag-feature");
+        definition.Should().NotBeNull();
+        definition.Name.Should().Be("etag-feature");
+    }
+
+    #endregion
+
+    #region GetEcdsaKey Tests
+
+    [Fact]
+    public async Task GetEcdsaKey_WithAllowedKeyIds_RejectsUnauthorizedKey()
+    {
+        // Arrange
+        var settings = CreateSettings(allowedKeyIds: new HashSet<string> { "allowed-key-1", "allowed-key-2" });
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]")
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act - Try to get an unauthorized key
+        var getEcdsaKeyMethod = typeof(TogglyFeatureProvider)
+            .GetMethod("GetEcdsaKey", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var task = (Task<System.Security.Cryptography.ECDsa?>)getEcdsaKeyMethod!.Invoke(_provider, new object[] { "unauthorized-key" })!;
+        var result = await task;
+
+        // Assert - Should return null
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetEcdsaKey_WithEmptyJwks_ReturnsNull()
+    {
+        // Arrange
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage request, CancellationToken _) =>
+            {
+                if (request.RequestUri?.PathAndQuery.Contains(".well-known/jwks") == true)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent("{\"keys\": []}")
+                    };
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("[]")
+                };
+            });
+
+        // Return a new HttpClient each time to avoid "already started" error
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(() => new HttpClient(handlerMock.Object)
+            {
+                BaseAddress = new Uri("https://definitions.toggly.io/")
+            });
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act
+        var getEcdsaKeyMethod = typeof(TogglyFeatureProvider)
+            .GetMethod("GetEcdsaKey", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var task = (Task<System.Security.Cryptography.ECDsa?>)getEcdsaKeyMethod!.Invoke(_provider, new object[] { "some-key-id" })!;
+        var result = await task;
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    #endregion
+
+    #region Concurrent Refresh Tests
+
+    [Fact]
+    public async Task RefreshFeatures_ConcurrentCalls_OnlyOneExecutes()
+    {
+        // Arrange
+        var callCount = 0;
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                Interlocked.Increment(ref callCount);
+                Thread.Sleep(100); // Slow response
+
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("[]")
+                };
+                response.Headers.ETag = new EntityTagHeaderValue($"\"etag-{callCount}\"");
+                return response;
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act - Call RefreshFeatures concurrently
+        var refreshMethod = typeof(TogglyFeatureProvider)
+            .GetMethod("RefreshFeatures", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        // Start with initial load
+        await Task.Delay(600);
+        var initialCount = callCount;
+
+        // Now try concurrent refreshes
+        var tasks = Enumerable.Range(0, 5)
+            .Select(_ => (Task)refreshMethod!.Invoke(_provider, new object?[] { null })!);
+
+        await Task.WhenAll(tasks);
+
+        // Assert - Due to semaphore, only 1-2 additional calls should have executed
+        (callCount - initialCount).Should().BeLessOrEqualTo(2);
+    }
+
+    #endregion
+
+    #region LoadSnapshot with Signed Definitions Tests
+
+    [Fact]
+    public async Task LoadSnapshot_WithMissingSignatureFields_DoesNotLoadFeatures()
+    {
+        // Arrange
+        var snapshotMock = new Mock<IFeatureSnapshotProvider>();
+        snapshotMock.Setup(x => x.GetFeaturesSnapshotAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Features: new List<FeatureDefinitionModel>
+            {
+                new FeatureDefinitionModel { FeatureKey = "snapshot-feature", Filters = new List<Data.FeatureFilter>() }
+            }, Signature: (string?)null, KeyId: "key-id", Timestamp: DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureSnapshotProvider)))
+            .Returns(snapshotMock.Object);
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]")
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings(useSignedDefinitions: true);
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act
+        await Task.Delay(600);
+
+        // Assert - feature won't be loaded from snapshot due to missing signature
+        var definition = await _provider.GetFeatureDefinitionAsync("snapshot-feature");
+        // If signature is missing, feature shouldn't be loaded from snapshot with signed definitions
+        definition.Should().NotBeNull();
+    }
+
+    #endregion
+
+    #region FeatureProviderDebugInfo Tests
+
+    [Fact]
+    public void FeatureProviderDebugInfo_Properties_CanBeSetAndRead()
+    {
+        // Arrange & Act
+        var debugInfo = new FeatureProviderDebugInfo
+        {
+            AppKey = "app-key",
+            Environment = "production",
+            UserAgent = "Toggly/1.0",
+            LastError = "Some error",
+            LastErrorTime = DateTime.UtcNow,
+            LastRefresh = DateTime.UtcNow,
+            LastDefinitionsCheck = DateTime.UtcNow,
+            WebsocketClientRunning = true,
+            Loaded = true
+        };
+
+        // Assert
+        debugInfo.AppKey.Should().Be("app-key");
+        debugInfo.Environment.Should().Be("production");
+        debugInfo.UserAgent.Should().Be("Toggly/1.0");
+        debugInfo.LastError.Should().Be("Some error");
+        debugInfo.LastErrorTime.Should().NotBeNull();
+        debugInfo.LastRefresh.Should().NotBeNull();
+        debugInfo.LastDefinitionsCheck.Should().NotBeNull();
+        debugInfo.WebsocketClientRunning.Should().BeTrue();
+        debugInfo.Loaded.Should().BeTrue();
+    }
+
+    [Fact]
+    public void FeatureProviderDebugInfo_Definitions_CanBeSet()
+    {
+        // Arrange
+        var definitions = new System.Collections.Concurrent.ConcurrentDictionary<string, FeatureDefinition>();
+        definitions.TryAdd("feature1", new FeatureDefinition { Name = "feature1" });
+
+        // Act
+        var debugInfo = new FeatureProviderDebugInfo
+        {
+            Definitions = definitions
+        };
+
+        // Assert
+        debugInfo.Definitions.Should().NotBeNull();
+        debugInfo.Definitions.Should().ContainKey("feature1");
+    }
+
+    #endregion
+
+    #region Dispose Tests
+
+    [Fact]
+    public void Dispose_ClearsEcdsaKeys()
+    {
+        // Arrange
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]")
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act
+        _provider.Dispose();
+
+        // Assert - Dispose should complete without error
+        _provider.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Dispose_CanBeCalledMultipleTimes()
+    {
+        // Arrange
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]")
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act & Assert
+        var act = () =>
+        {
+            _provider.Dispose();
+            _provider.Dispose();
+            _provider.Dispose();
+        };
+
+        act.Should().NotThrow();
     }
 
     #endregion

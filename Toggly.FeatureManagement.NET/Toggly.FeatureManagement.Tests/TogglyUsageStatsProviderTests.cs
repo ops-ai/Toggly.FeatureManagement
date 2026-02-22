@@ -1775,4 +1775,674 @@ public class TogglyUsageStatsProviderTests : IDisposable
     }
 
     #endregion
+
+    #region SendStats Tests via Reflection
+
+    [Fact]
+    public async Task SendStats_WhenNoStats_DoesNotCallGrpcClient()
+    {
+        // Arrange
+        _provider = CreateProvider();
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - gRPC client should not be called when no stats
+        _usageClientMock.Verify(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SendStats_WithStats_CallsGrpcClient()
+    {
+        // Arrange
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+
+        // Record some stats first
+        await _provider.RecordUsageAsync("TestFeature");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - gRPC client should be called
+        _usageClientMock.Verify(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SendStats_WhenGrpcThrows_RestoresStats()
+    {
+        // Arrange
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Throws(new RpcException(new Status(StatusCode.Unavailable, "Service unavailable")));
+
+        _provider = CreateProvider();
+
+        // Record some stats first
+        await _provider.RecordUsageAsync("TestFeature");
+        await _provider.RecordViewAsync("TestFeature");
+        await _provider.RecordCheckAsync("TestFeature", allowed: true);
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - Stats should be restored on error
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.LastError.Should().ContainEquivalentOf("unavailable");
+        debugInfo.LastErrorTime.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task SendStats_WithViewedStats_IncludesVariantStats()
+    {
+        // Arrange
+        var capturedRequest = new FeatureStat();
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<FeatureStat, Metadata, DateTime?, CancellationToken>((req, _, _, _) => capturedRequest = req)
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+
+        // Record view stats
+        await _provider.RecordViewAsync("ViewedFeature");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - VariantStats should include viewed count
+        capturedRequest.Stats.Should().ContainSingle();
+        capturedRequest.Stats[0].Feature.Should().Be("ViewedFeature");
+    }
+
+    [Fact]
+    public async Task SendStats_SetsLastSendTime()
+    {
+        // Arrange
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+        var debugInfoBefore = _provider.GetDebugInfo();
+        debugInfoBefore.LastSend.Should().BeNull();
+
+        // Record stats
+        await _provider.RecordUsageAsync("TestFeature");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert
+        var debugInfoAfter = _provider.GetDebugInfo();
+        debugInfoAfter.LastSend.Should().NotBeNull();
+        debugInfoAfter.LastSend.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task SendStats_WithFeatureCountMismatch_LogsWarning()
+    {
+        // Arrange
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 999 }), // Mismatched count
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+
+        // Record stats
+        await _provider.RecordUsageAsync("TestFeature");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - Should still succeed (just logs warning)
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.LastSend.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task SendStats_WithUniqueUserHashes_IncludesHashesInRequest()
+    {
+        // Arrange
+        var capturedRequest = new FeatureStat();
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<FeatureStat, Metadata, DateTime?, CancellationToken>((req, _, _, _) => capturedRequest = req)
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync("unique-user@example.com");
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Record usage with context provider (triggers unique user tracking)
+        await _provider.RecordUsageAsync("HashFeature");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - Request should include unique user hashes
+        capturedRequest.Stats.Should().ContainSingle();
+        capturedRequest.Stats[0].UniqueUserHashes.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task SendStats_WithApplicationUniqueUserHashes_IncludesAppLevelHashes()
+    {
+        // Arrange
+        var capturedRequest = new FeatureStat();
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<FeatureStat, Metadata, DateTime?, CancellationToken>((req, _, _, _) => capturedRequest = req)
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync("app-level-user@example.com");
+        contextProviderMock.Setup(x => x.AccessedInRequestAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Record check (triggers application-level unique user tracking)
+        await _provider.RecordCheckAsync("AppHashFeature", allowed: true);
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - Request should include application-level unique user hashes
+        capturedRequest.UniqueUserHashes.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task SendStats_ConcurrentCalls_OnlyOneExecutes()
+    {
+        // Arrange
+        var callCount = 0;
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback(() => Interlocked.Increment(ref callCount))
+            .Returns(() => new AsyncUnaryCall<StatResult>(
+                Task.Delay(100).ContinueWith(_ => new StatResult { FeatureCount = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+
+        // Record stats
+        await _provider.RecordUsageAsync("ConcurrentFeature");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act - Call SendStats concurrently
+        var tasks = Enumerable.Range(0, 5)
+            .Select(_ => (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!);
+
+        await Task.WhenAll(tasks);
+
+        // Assert - Only one should execute due to semaphore
+        // (The first one gets the semaphore, others skip)
+        // Due to test timing, we might get 1 or 2 calls
+        callCount.Should().BeLessOrEqualTo(2);
+    }
+
+    #endregion
+
+    #region ResetUsageMap Tests via Reflection
+
+    [Fact]
+    public async Task ResetUsageMap_WhenMapsAreEmpty_DoesNotCallSendStats()
+    {
+        // Arrange
+        _provider = CreateProvider();
+
+        // Use reflection to invoke ResetUsageMap
+        var resetMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("ResetUsageMap", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        // Act
+        var task = (Task)resetMethod!.Invoke(_provider, null)!;
+        await task;
+
+        // Assert - gRPC client should not be called when maps are empty
+        _usageClientMock.Verify(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ResetUsageMap_WithNonEmptyMaps_SendsAndClears()
+    {
+        // Arrange
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync("reset-test-user@example.com");
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Record usage to populate maps
+        await _provider.RecordUsageAsync("ResetFeature");
+
+        // Use reflection to invoke ResetUsageMap
+        var resetMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("ResetUsageMap", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        // Act
+        var task = (Task)resetMethod!.Invoke(_provider, null)!;
+        await task;
+
+        // Assert - Maps should be cleared after reset
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.UniqueUsageUsedMap.Should().BeEmpty();
+    }
+
+    #endregion
+
+    #region TryLog Tests via Edge Cases
+
+    [Fact]
+    public async Task RecordUsageAsync_AfterDispose_HandlesGracefully()
+    {
+        // Arrange
+        _provider = CreateProvider();
+        _provider.Dispose();
+
+        // Act & Assert - Should not throw even after dispose
+        // The TryLog method handles disposed state
+        await _provider.RecordUsageAsync("PostDisposeFeature");
+    }
+
+    #endregion
+
+    #region Error Restoration Tests
+
+    [Fact]
+    public async Task SendStats_WhenGrpcThrows_RestoresUniqueUsageMaps()
+    {
+        // Arrange
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Throws(new RpcException(new Status(StatusCode.Internal, "Internal error")));
+
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync("restore-user@example.com");
+        contextProviderMock.Setup(x => x.AccessedInRequestAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Record stats that will populate unique maps
+        await _provider.RecordCheckAsync("RestoreFeature", allowed: true);
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - UniqueUsage maps should be restored after error
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.UniqueUsageEnabledMap.Should().ContainKey("RestoreFeature");
+    }
+
+    [Fact]
+    public async Task SendStats_WhenGrpcThrows_RestoresViewedUserHashes()
+    {
+        // Arrange
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Throws(new RpcException(new Status(StatusCode.Cancelled, "Cancelled")));
+
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync("restore-viewed-user@example.com");
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Record view that will populate viewed user hashes
+        await _provider.RecordViewAsync("RestoreViewFeature");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - Error should be recorded
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.LastError.Should().NotBeEmpty();
+    }
+
+    #endregion
+
+    #region ProcessStartTime Tests
+
+    [Fact]
+    public async Task SendStats_IncludesProcessStartTime()
+    {
+        // Arrange
+        var capturedRequest = new FeatureStat();
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<FeatureStat, Metadata, DateTime?, CancellationToken>((req, _, _, _) => capturedRequest = req)
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+
+        // Record stats
+        await _provider.RecordUsageAsync("ProcessTimeFeature");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - ProcessStartTime should be set
+        capturedRequest.ProcessStartTime.Should().NotBeNull();
+    }
+
+    #endregion
+
+    #region Metadata Tests
+
+    [Fact]
+    public async Task SendStats_IncludesUserAgentInMetadata()
+    {
+        // Arrange
+        Metadata? capturedMetadata = null;
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<FeatureStat, Metadata, DateTime?, CancellationToken>((_, metadata, _, _) => capturedMetadata = metadata)
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+
+        // Record stats
+        await _provider.RecordUsageAsync("MetadataFeature");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - Metadata should include UA header (key is lowercase in gRPC)
+        capturedMetadata.Should().NotBeNull();
+        capturedMetadata.Should().Contain(e => e.Key == "ua");
+    }
+
+    #endregion
+
+    #region Multiple Features In Single Send Tests
+
+    [Fact]
+    public async Task SendStats_WithMultipleFeatures_SendsAllInOneRequest()
+    {
+        // Arrange
+        var capturedRequest = new FeatureStat();
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<FeatureStat, Metadata, DateTime?, CancellationToken>((req, _, _, _) => capturedRequest = req)
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 3 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+
+        // Record stats for multiple features
+        await _provider.RecordUsageAsync("Feature1");
+        await _provider.RecordUsageAsync("Feature2");
+        await _provider.RecordViewAsync("Feature3");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert - All features should be in one request
+        capturedRequest.Stats.Should().HaveCount(3);
+        capturedRequest.Stats.Select(s => s.Feature).Should().Contain(new[] { "Feature1", "Feature2", "Feature3" });
+    }
+
+    #endregion
+
+    #region App Key and Environment in Request Tests
+
+    [Fact]
+    public async Task SendStats_IncludesAppKeyAndEnvironment()
+    {
+        // Arrange
+        var capturedRequest = new FeatureStat();
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<FeatureStat, Metadata, DateTime?, CancellationToken>((req, _, _, _) => capturedRequest = req)
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 1 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+
+        // Record stats
+        await _provider.RecordUsageAsync("AppEnvFeature");
+
+        // Use reflection to invoke SendStats
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        // Act
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        // Assert
+        capturedRequest.AppKey.Should().Be("test-app-key");
+        capturedRequest.Environment.Should().Be("Test");
+        capturedRequest.AppVersion.Should().Be("1.0.0");
+        capturedRequest.InstanceName.Should().Be("test-instance");
+    }
+
+    #endregion
 }

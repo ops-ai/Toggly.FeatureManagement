@@ -1,0 +1,204 @@
+name: Flutter SDK - Build & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.1.16)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  SDK_ROOT: Toggly.FeatureManagement.Flutter/toggly
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ github.event.inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Invalid version format. Expected: X.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+
+      - name: Check if tag exists
+        run: |
+          if git rev-parse "flutter-sdk-v${{ github.event.inputs.version }}" >/dev/null 2>&1; then
+            echo "Tag flutter-sdk-v${{ github.event.inputs.version }} already exists"
+            exit 1
+          fi
+
+  build-and-test:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Install dependencies
+        working-directory: ${{ env.SDK_ROOT }}
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: ${{ env.SDK_ROOT }}
+        run: flutter analyze
+        continue-on-error: true
+
+      - name: Run tests
+        working-directory: ${{ env.SDK_ROOT }}
+        run: flutter test
+        continue-on-error: true
+
+  publish:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_tag_gpgsign: true
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Update version in pubspec.yaml
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          sed -i "s/^version: .*/version: ${{ github.event.inputs.version }}/" pubspec.yaml
+          echo "Updated pubspec.yaml to version ${{ github.event.inputs.version }}"
+
+      - name: Install dependencies
+        working-directory: ${{ env.SDK_ROOT }}
+        run: flutter pub get
+
+      - name: Dry run publish
+        working-directory: ${{ env.SDK_ROOT }}
+        run: flutter pub publish --dry-run
+
+      - name: Publish to pub.dev
+        working-directory: ${{ env.SDK_ROOT }}
+        run: flutter pub publish --force
+        env:
+          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+      - name: Commit version update
+        run: |
+          git add ${{ env.SDK_ROOT }}/pubspec.yaml
+          git commit -S -m "Released Flutter SDK v${{ github.event.inputs.version }} [skip ci]" || echo "No changes to commit"
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version update"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              sleep 2
+            fi
+          done
+
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Create and push tag
+        run: |
+          git tag -s -m "Flutter SDK v${{ github.event.inputs.version }}" "flutter-sdk-v${{ github.event.inputs.version }}"
+          git push origin "flutter-sdk-v${{ github.event.inputs.version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: flutter-sdk-v${{ github.event.inputs.version }}
+          name: Flutter SDK v${{ github.event.inputs.version }}
+          body: |
+            ## Flutter SDK v${{ github.event.inputs.version }}
+
+            ### Installation
+
+            Add to your `pubspec.yaml`:
+
+            ```yaml
+            dependencies:
+              feature_flags_toggly: ^${{ github.event.inputs.version }}
+            ```
+
+            Or install via command line:
+
+            ```bash
+            flutter pub add feature_flags_toggly
+            ```
+
+            ### Requirements
+
+            - Dart SDK >=2.18.2 <4.0.0
+            - Flutter >=1.17.0
+
+            ### Links
+
+            - [pub.dev package](https://pub.dev/packages/feature_flags_toggly)
+            - [Documentation](https://docs.toggly.io/docs/sdks/flutter)
+          prerelease: ${{ github.event.inputs.prerelease }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    needs: publish
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Flutter SDK Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | flutter-sdk-v${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | feature_flags_toggly |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View on pub.dev](https://pub.dev/packages/feature_flags_toggly)" >> $GITHUB_STEP_SUMMARY
