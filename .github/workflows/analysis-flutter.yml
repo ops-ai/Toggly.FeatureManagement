@@ -269,6 +269,7 @@ jobs:
     
     steps:
       - name: Generate summary
+        working-directory: .
         run: |
           echo "## Flutter SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

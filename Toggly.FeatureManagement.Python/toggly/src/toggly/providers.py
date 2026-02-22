@@ -12,7 +12,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from toggly.models import FeatureDefinition, FeatureFilter, JsonWebKey, JsonWebKeySet
+from toggly.models import FeatureDefinition, JsonWebKey, JsonWebKeySet
 
 
 @dataclass
@@ -41,18 +41,7 @@ class DefinitionsSnapshot:
             Dictionary representation of the snapshot.
         """
         return {
-            "definitions": [
-                {
-                    "feature_key": d.feature_key,
-                    "filters": [
-                        {"name": f.name, "parameters": f.parameters} for f in d.filters
-                    ],
-                    "requirement_type": d.requirement_type,
-                    "secured_feature": d.secured_feature,
-                    "metrics": d.metrics,
-                }
-                for d in self.definitions
-            ],
+            "definitions": [d.to_dict() for d in self.definitions],
             "signature": self.signature,
             "key_id": self.key_id,
             "timestamp": self.timestamp,
@@ -69,21 +58,9 @@ class DefinitionsSnapshot:
         Returns:
             A DefinitionsSnapshot instance.
         """
-        definitions = []
-        for d in data.get("definitions", []):
-            filters = [
-                FeatureFilter(name=f["name"], parameters=f.get("parameters", {}))
-                for f in d.get("filters", [])
-            ]
-            definitions.append(
-                FeatureDefinition(
-                    feature_key=d["feature_key"],
-                    filters=filters,
-                    requirement_type=d.get("requirement_type", "Any"),
-                    secured_feature=d.get("secured_feature", False),
-                    metrics=d.get("metrics"),
-                )
-            )
+        definitions = [
+            FeatureDefinition.from_dict(d) for d in data.get("definitions", [])
+        ]
         return cls(
             definitions=definitions,
             signature=data.get("signature"),

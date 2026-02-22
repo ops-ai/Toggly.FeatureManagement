@@ -34,7 +34,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: '1.24.x'
           cache: true
           cache-dependency-path: toggly-go/go.sum
       
@@ -56,12 +56,11 @@ jobs:
             exit 1
           fi
       
-      - name: Install golangci-lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
-      
       - name: Run golangci-lint
-        run: $(go env GOPATH)/bin/golangci-lint run --timeout=5m
+        uses: golangci/golangci-lint-action@v9
+        with:
+          args: --timeout=5m
+          working-directory: toggly-go
         continue-on-error: true
       
       - name: Run tests with coverage
@@ -154,7 +153,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: '1.24.x'
           cache: true
           cache-dependency-path: toggly-go/go.sum
       
@@ -230,6 +229,7 @@ jobs:
     
     steps:
       - name: Generate summary
+        working-directory: .
         run: |
           echo "## Go SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

@@ -68,6 +68,7 @@ toggly_django = ["py.typed"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-v --cov=src/toggly_django --cov-report=xml --cov-report=term-missing"
 

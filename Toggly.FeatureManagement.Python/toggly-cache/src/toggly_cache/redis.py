@@ -57,7 +57,7 @@ class RedisSnapshotProvider(SnapshotProvider):
 
     def __init__(
         self,
-        client: "Redis[bytes] | None" = None,
+        client: "Redis | None" = None,
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -107,7 +107,7 @@ class RedisSnapshotProvider(SnapshotProvider):
         self._ttl = ttl
 
     @property
-    def client(self) -> "Redis[bytes]":
+    def client(self) -> "Redis":
         """Get the Redis client instance."""
         return self._client
 
@@ -170,13 +170,12 @@ class RedisSnapshotProvider(SnapshotProvider):
         key = self._make_key(app_key, environment)
 
         try:
-            data = self._client.get(key)
-            if data is None:
+            raw: bytes | None = self._client.get(key)  # type: ignore[assignment]
+            if raw is None:
                 logger.debug("No snapshot found in Redis for key: %s", key)
                 return None
 
-            if isinstance(data, bytes):
-                data = data.decode("utf-8")
+            data: str = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
 
             definitions_data = json.loads(data)
             definitions = [
@@ -208,7 +207,7 @@ class RedisSnapshotProvider(SnapshotProvider):
         key = self._make_key(app_key, environment)
 
         try:
-            result = self._client.delete(key)
+            result: int = self._client.delete(key)  # type: ignore[assignment]
             deleted = result > 0
             if deleted:
                 logger.debug("Deleted snapshot from Redis key: %s", key)

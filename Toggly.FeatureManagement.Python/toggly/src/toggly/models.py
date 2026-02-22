@@ -59,6 +59,33 @@ class FeatureDefinition:
         if self.requirement_type not in ("Any", "All"):
             raise ValueError("Requirement type must be 'Any' or 'All'")
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to a dictionary for serialization."""
+        return {
+            "feature_key": self.feature_key,
+            "filters": [
+                {"name": f.name, "parameters": f.parameters} for f in self.filters
+            ],
+            "requirement_type": self.requirement_type,
+            "secured_feature": self.secured_feature,
+            "metrics": self.metrics,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> FeatureDefinition:
+        """Create a FeatureDefinition from a dictionary."""
+        filters = [
+            FeatureFilter(name=f["name"], parameters=f.get("parameters", {}))
+            for f in data.get("filters", [])
+        ]
+        return cls(
+            feature_key=data["feature_key"],
+            filters=filters,
+            requirement_type=data.get("requirement_type", "Any"),
+            secured_feature=data.get("secured_feature", False),
+            metrics=data.get("metrics"),
+        )
+
 
 @dataclass
 class FeatureState:

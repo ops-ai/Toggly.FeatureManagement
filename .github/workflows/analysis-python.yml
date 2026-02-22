@@ -220,7 +220,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -521,6 +521,7 @@ jobs:
 
     steps:
       - name: Generate summary
+        working-directory: .
         run: |
           echo "## Python SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

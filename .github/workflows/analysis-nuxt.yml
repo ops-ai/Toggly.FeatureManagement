@@ -222,6 +222,7 @@ jobs:
 
     steps:
       - name: Generate summary
+        working-directory: .
         run: |
           echo "## Nuxt SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
