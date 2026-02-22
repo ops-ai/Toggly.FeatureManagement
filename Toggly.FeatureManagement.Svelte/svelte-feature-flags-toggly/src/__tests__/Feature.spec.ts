@@ -42,7 +42,7 @@ describe('Feature Component', () => {
     });
 
     await waitFor(() => {
-      expect(container.innerHTML).toBe('');
+      expect(container.textContent).toBe('');
     });
   });
 
@@ -95,7 +95,7 @@ describe('Feature Component', () => {
     });
 
     await waitFor(() => {
-      expect(container.innerHTML).toBe('');
+      expect(container.textContent).toBe('');
     });
   });
 
@@ -132,8 +132,7 @@ describe('Feature Component', () => {
     });
 
     await waitFor(() => {
-      // After error, shouldShow should be false
-      expect(container.innerHTML).toBe('');
+      expect(container.textContent).toBe('');
     });
   });
 
