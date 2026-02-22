@@ -313,8 +313,8 @@ jobs:
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
             -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,toggly-hooks-types,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js
-            -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js,Toggly.FeatureManagement.ReactNative/**,Toggly.FeatureManagement.Gatsby/**,Toggly.FeatureManagement.Next/**,Toggly.FeatureManagement.Nuxt/**,Toggly.FeatureManagement.Remix/**,Toggly.FeatureManagement.Css/**,Toggly.FeatureManagement.Wordpress/**,toggly-ruby/**,toggly-rust/**
+            -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=.
@@ -338,8 +338,8 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-javascript
             -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
             -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,toggly-hooks-types,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js
-            -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js,Toggly.FeatureManagement.ReactNative/**,Toggly.FeatureManagement.Gatsby/**,Toggly.FeatureManagement.Next/**,Toggly.FeatureManagement.Nuxt/**,Toggly.FeatureManagement.Remix/**,Toggly.FeatureManagement.Css/**,Toggly.FeatureManagement.Wordpress/**,toggly-ruby/**,toggly-rust/**
+            -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=.
