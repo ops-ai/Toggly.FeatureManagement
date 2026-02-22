@@ -494,13 +494,13 @@ class Toggly with WidgetsBindingObserver {
 
       return TogglyLoadFeatureFlagsResponse.fetched;
     } catch (e) {
-      if (e is DioError && e.response?.statusCode == 304) {
+      if (e is DioException && e.response?.statusCode == 304) {
         _lastChecked = DateTime.now();
         // Not modified, use cached version
         var cached = await cachedFeatureFlags;
         Toggly._featureFlagsSubject?.add(cached);
         return TogglyLoadFeatureFlagsResponse.cached;
-      } else if (e is DioError && e.response?.statusCode == 403) {
+      } else if (e is DioException && e.response?.statusCode == 403) {
         // Clear cached data on 403 responses
         await clearFeatureFlagsCache();
         await _storage.delete(key: SecureStorageKeys.jwks.toString());

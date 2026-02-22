@@ -12,7 +12,7 @@ members = [
 version = "0.1.0"
 authors = ["Ops.ai <contact@ops.ai>"]
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.85"
 license = "MIT"
 repository = "https://github.com/ops-ai/toggly-feature-flags"
 homepage = "https://toggly.io"
@@ -21,6 +21,9 @@ keywords = ["toggly", "feature-flags", "feature-toggles", "ab-testing", "experim
 categories = ["web-programming", "development-tools"]
 
 [workspace.dependencies]
+# Pinned transitive dep: time >=0.3.46 uses edition 2024 and requires Rust 1.88+
+time = ">=0.3.7, <0.3.46"
+
 # Core dependencies
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "sync", "time"] }
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }

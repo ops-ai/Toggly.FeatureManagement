@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: [stable, beta, 1.70.0]
+        rust: [stable, beta, 1.85.0]
     defaults:
       run:
         working-directory: toggly-rust
@@ -135,10 +135,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.70
+      - name: Install Rust 1.85
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.70.0
+          toolchain: 1.85.0
 
       - name: Check MSRV
         run: cargo check --all-features --workspace
@@ -290,7 +290,7 @@ jobs:
           echo "✅ Analysis workflow completed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Analysis Results" >> $GITHUB_STEP_SUMMARY
-          echo "- Tests executed across stable, beta, and MSRV (1.70)" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests executed across stable, beta, and MSRV (1.85)" >> $GITHUB_STEP_SUMMARY
           echo "- Code coverage collected (cargo-llvm-cov)" >> $GITHUB_STEP_SUMMARY
           echo "- Code formatting checked (cargo fmt)" >> $GITHUB_STEP_SUMMARY
           echo "- Static analysis completed (clippy)" >> $GITHUB_STEP_SUMMARY

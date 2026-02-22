@@ -2,7 +2,7 @@
  * Remix-specific utilities for Toggly
  */
 
-import { useLoaderData, useRouteLoaderData } from '@remix-run/react';
+import { useLoaderData, useRouteLoaderData, type SerializeFrom } from '@remix-run/react';
 import {
   TOGGLY_LOADER_KEY,
 } from '@ops-ai/remix-toggly-core';
@@ -46,12 +46,18 @@ export function RemixTogglyProvider({
   try {
     if (routeId) {
       // Get from specific route
-      const routeData = useRouteLoaderData<Record<string, unknown>>(routeId);
-      serverContext = routeData?.[TOGGLY_LOADER_KEY] as ServerFeatureContext | undefined;
+      const routeData = useRouteLoaderData(routeId) as
+        | Record<string, unknown>
+        | undefined;
+      serverContext = routeData?.[TOGGLY_LOADER_KEY] as
+        | ServerFeatureContext
+        | undefined;
     } else {
       // Get from current route
-      const loaderData = useLoaderData<Record<string, unknown>>();
-      serverContext = loaderData?.[TOGGLY_LOADER_KEY] as ServerFeatureContext | undefined;
+      const loaderData = useLoaderData() as Record<string, unknown>;
+      serverContext = loaderData?.[TOGGLY_LOADER_KEY] as
+        | ServerFeatureContext
+        | undefined;
     }
   } catch {
     // Loader data not available (e.g., error boundary)
@@ -82,10 +88,12 @@ export function RemixTogglyProvider({
  * Hook to get Toggly context from loader data
  */
 export function useTogglyLoaderData<T extends Record<string, unknown> = Record<string, unknown>>(): {
-  data: T;
+  data: SerializeFrom<T>;
   toggly: ServerFeatureContext | undefined;
 } {
-  const loaderData = useLoaderData<T & { [TOGGLY_LOADER_KEY]?: ServerFeatureContext }>();
+  const loaderData = useLoaderData() as SerializeFrom<T> & {
+    [TOGGLY_LOADER_KEY]?: ServerFeatureContext;
+  };
 
   return {
     data: loaderData,
@@ -99,10 +107,12 @@ export function useTogglyLoaderData<T extends Record<string, unknown> = Record<s
 export function useTogglyRouteLoaderData<T extends Record<string, unknown> = Record<string, unknown>>(
   routeId: string
 ): {
-  data: T | undefined;
+  data: SerializeFrom<T> | undefined;
   toggly: ServerFeatureContext | undefined;
 } {
-  const routeData = useRouteLoaderData<T & { [TOGGLY_LOADER_KEY]?: ServerFeatureContext }>(routeId);
+  const routeData = useRouteLoaderData(routeId) as
+    | (SerializeFrom<T> & { [TOGGLY_LOADER_KEY]?: ServerFeatureContext })
+    | undefined;
 
   return {
     data: routeData,
@@ -125,7 +135,8 @@ export function extractServerContext<T extends Record<string, unknown>>(
 export function hasTogglyContext<T extends Record<string, unknown>>(
   loaderData: T
 ): loaderData is T & { [TOGGLY_LOADER_KEY]: ServerFeatureContext } {
-  return TOGGLY_LOADER_KEY in loaderData && loaderData[TOGGLY_LOADER_KEY] !== undefined;
+  const data = loaderData as Record<string, unknown>;
+  return TOGGLY_LOADER_KEY in data && data[TOGGLY_LOADER_KEY] !== undefined;
 }
 
 /**

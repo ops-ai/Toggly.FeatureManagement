@@ -81,11 +81,11 @@ jobs:
           cache: 'maven'
 
       - name: Run SpotBugs
-        run: mvn -B spotbugs:check --file pom.xml
+        run: mvn -B compile spotbugs:check --file pom.xml
         continue-on-error: true
 
       - name: Run Checkstyle
-        run: mvn -B checkstyle:check --file pom.xml
+        run: mvn -B compile checkstyle:check --file pom.xml
         continue-on-error: true
 
   coverage:
