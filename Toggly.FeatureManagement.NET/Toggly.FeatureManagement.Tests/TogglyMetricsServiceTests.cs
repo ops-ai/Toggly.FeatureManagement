@@ -791,4 +791,474 @@ public class TogglyMetricsServiceTests : IDisposable
     }
 
     #endregion
+
+    #region Metric Key Edge Cases Tests
+
+    [Fact]
+    public async Task MeasureAsync_WithEmptyMetricKey_RecordsMetric()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("", 10.0);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task MeasureAsync_WithVeryLongMetricKey_RecordsMetric()
+    {
+        // Arrange
+        var longKey = new string('a', 500);
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(longKey))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync(longKey, 10.0);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task MeasureAsync_WithSpecialCharacters_RecordsMetric()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("metric-with_special.chars:123/test", 10.0);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task MeasureAsync_WithUnicodeMetricKey_RecordsMetric()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("指标-metric-🎉", 10.0);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    #endregion
+
+    #region Value Edge Cases Tests
+
+    [Fact]
+    public async Task MeasureAsync_WithZeroValue_RecordsMetric()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("zero-metric", 0.0);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task MeasureAsync_WithNegativeValue_RecordsMetric()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("negative-metric", -50.5);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task MeasureAsync_WithVeryLargeValue_RecordsMetric()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("large-metric", double.MaxValue / 2);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task MeasureAsync_WithVerySmallValue_RecordsMetric()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("small-metric", double.Epsilon);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    #endregion
+
+    #region Empty Feature List Tests
+
+    [Fact]
+    public async Task MeasureAsync_WithEmptyFeatureList_OnlyRecordsBase()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("empty-feature-metric"))
+            .Returns(new List<string>());
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("empty-feature-metric", 100.0);
+
+        // Assert - verify no feature manager calls
+        _featureManagerMock.Verify(x => x.IsEnabledAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ObserveAsync_WithEmptyFeatureList_OnlyRecordsBase()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("empty-feature-observation"))
+            .Returns(new List<string>());
+
+        _service = CreateService();
+
+        // Act
+        await _service.ObserveAsync("empty-feature-observation", 50.0);
+
+        // Assert
+        _featureManagerMock.Verify(x => x.IsEnabledAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task IncrementCounterAsync_WithEmptyFeatureList_OnlyRecordsBase()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("empty-feature-counter"))
+            .Returns(new List<string>());
+
+        _service = CreateService();
+
+        // Act
+        await _service.IncrementCounterAsync("empty-feature-counter", 1.0);
+
+        // Assert
+        _featureManagerMock.Verify(x => x.IsEnabledAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    #endregion
+
+    #region Feature Enabled/Disabled Tests
+
+    [Fact]
+    public async Task MeasureAsync_WithAllFeaturesEnabled_RecordsAllAsEnabled()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("all-enabled-metric"))
+            .Returns(new List<string> { "feature1", "feature2", "feature3" });
+
+        _featureManagerMock.Setup(x => x.IsEnabledAsync(It.IsAny<string>())).ReturnsAsync(true);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("all-enabled-metric", 100.0);
+
+        // Assert
+        _featureManagerMock.Verify(x => x.IsEnabledAsync("feature1"), Times.Once);
+        _featureManagerMock.Verify(x => x.IsEnabledAsync("feature2"), Times.Once);
+        _featureManagerMock.Verify(x => x.IsEnabledAsync("feature3"), Times.Once);
+    }
+
+    [Fact]
+    public async Task MeasureAsync_WithAllFeaturesDisabled_RecordsAllAsDisabled()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("all-disabled-metric"))
+            .Returns(new List<string> { "feature1", "feature2" });
+
+        _featureManagerMock.Setup(x => x.IsEnabledAsync(It.IsAny<string>())).ReturnsAsync(false);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("all-disabled-metric", 50.0);
+
+        // Assert
+        _featureManagerMock.Verify(x => x.IsEnabledAsync("feature1"), Times.Once);
+        _featureManagerMock.Verify(x => x.IsEnabledAsync("feature2"), Times.Once);
+    }
+
+    #endregion
+
+    #region Debug Info State Tests
+
+    [Fact]
+    public void GetDebugInfo_InitialState_HasNoErrors()
+    {
+        // Arrange
+        _service = CreateService();
+
+        // Act
+        var debugInfo = _service.GetDebugInfo();
+
+        // Assert
+        debugInfo.LastError.Should().BeEmpty();
+        debugInfo.LastErrorTime.Should().BeNull();
+        debugInfo.LastSend.Should().BeNull();
+    }
+
+    [Fact]
+    public void GetDebugInfo_UserAgent_HasCorrectFormat()
+    {
+        // Arrange
+        _service = CreateService();
+
+        // Act
+        var debugInfo = _service.GetDebugInfo();
+
+        // Assert
+        debugInfo.UserAgent.Should().StartWith("Toggly.FeatureManagement/");
+    }
+
+    #endregion
+
+    #region Dispose Edge Cases Tests
+
+    [Fact]
+    public async Task Dispose_AfterManyOperations_CleansUpProperly()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act - record many metrics
+        for (int i = 0; i < 50; i++)
+        {
+            await _service.MeasureAsync($"cleanup-metric-{i % 5}", i * 1.0);
+            await _service.ObserveAsync($"cleanup-observation-{i % 5}", i * 2.0);
+            await _service.IncrementCounterAsync($"cleanup-counter-{i % 5}", 1.0);
+        }
+
+        // Dispose
+        _service.Dispose();
+        _service = null;
+
+        // Assert - no exception thrown
+    }
+
+    [Fact]
+    public void Dispose_CalledMultipleTimes_DoesNotThrow()
+    {
+        // Arrange
+        _service = CreateService();
+
+        // Act & Assert
+        _service.Dispose();
+        _service.Dispose();
+        _service.Dispose();
+        _service = null;
+    }
+
+    #endregion
+
+    #region Context Type Variations Tests
+
+    [Fact]
+    public async Task MeasureAsync_WithAnonymousContext_PassesToFeatureManager()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("anon-metric"))
+            .Returns(new List<string> { "feature" });
+
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("feature", It.IsAny<object>()))
+            .ReturnsAsync(true);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("anon-metric", new { Id = 123, Name = "Test" }, 10.0);
+
+        // Assert
+        _featureManagerMock.Verify(x => x.IsEnabledAsync("feature", It.IsAny<object>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ObserveAsync_WithCustomContext_PassesToFeatureManager()
+    {
+        // Arrange
+        var context = new TestContext { Value = 42 };
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("custom-metric"))
+            .Returns(new List<string> { "feature" });
+
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("feature", context))
+            .ReturnsAsync(true);
+
+        _service = CreateService();
+
+        // Act
+        await _service.ObserveAsync("custom-metric", context, 99.9);
+
+        // Assert
+        _featureManagerMock.Verify(x => x.IsEnabledAsync("feature", context), Times.Once);
+    }
+
+    [Fact]
+    public async Task IncrementCounterAsync_WithStringContext_PassesToFeatureManager()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("string-metric"))
+            .Returns(new List<string> { "feature" });
+
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("feature", "user-123"))
+            .ReturnsAsync(true);
+
+        _service = CreateService();
+
+        // Act
+        await _service.IncrementCounterAsync("string-metric", "user-123", 5.0);
+
+        // Assert
+        _featureManagerMock.Verify(x => x.IsEnabledAsync("feature", "user-123"), Times.Once);
+    }
+
+    private class TestContext
+    {
+        public int Value { get; set; }
+    }
+
+    #endregion
+
+    #region Same Metric Different Features Tests
+
+    [Fact]
+    public async Task MeasureAsync_SameMetricDifferentFeatureStates_TracksCorrectly()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric("mixed-state-metric"))
+            .Returns(new List<string> { "enabled-feature", "disabled-feature" });
+
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("enabled-feature")).ReturnsAsync(true);
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("disabled-feature")).ReturnsAsync(false);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("mixed-state-metric", 100.0);
+
+        // Assert
+        _featureManagerMock.Verify(x => x.IsEnabledAsync("enabled-feature"), Times.Once);
+        _featureManagerMock.Verify(x => x.IsEnabledAsync("disabled-feature"), Times.Once);
+    }
+
+    #endregion
+
+    #region Multiple Calls Same Metric Tests
+
+    [Fact]
+    public async Task MeasureAsync_MultipleCalls_AccumulatesValues()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.MeasureAsync("accumulation-metric", 10.0);
+        await _service.MeasureAsync("accumulation-metric", 20.0);
+        await _service.MeasureAsync("accumulation-metric", 30.0);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task IncrementCounterAsync_MultipleDifferentMetrics_TracksAllSeparately()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.IncrementCounterAsync("counter-a", 1.0);
+        await _service.IncrementCounterAsync("counter-b", 2.0);
+        await _service.IncrementCounterAsync("counter-c", 3.0);
+        await _service.IncrementCounterAsync("counter-a", 4.0);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    #endregion
+
+    #region Observation Timestamp Tests
+
+    [Fact]
+    public async Task ObserveAsync_MultipleObservations_StoresWithDifferentTimestamps()
+    {
+        // Arrange
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns((List<string>?)null);
+
+        _service = CreateService();
+
+        // Act
+        await _service.ObserveAsync("timestamp-observation", 10.0);
+        await Task.Delay(10); // Small delay to ensure different timestamps
+        await _service.ObserveAsync("timestamp-observation", 20.0);
+
+        // Assert
+        var debugInfo = _service.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    #endregion
 }

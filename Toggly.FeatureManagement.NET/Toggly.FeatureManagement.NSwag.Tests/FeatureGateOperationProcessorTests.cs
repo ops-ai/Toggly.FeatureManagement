@@ -303,6 +303,205 @@ public class FeatureGateOperationProcessorTests
 
     #endregion
 
+    #region IsFeatureEnabled Tests via Reflection
+
+    [Fact]
+    public void IsFeatureEnabled_WithNullFeatureManagers_ReturnsTrue()
+    {
+        // Arrange
+        var processor = new FeatureGateOperationProcessor(null);
+        var featureGate = new FeatureGateAttribute("TestFeature");
+
+        // Use reflection to invoke private method
+        var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
+            "IsFeatureEnabled",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Act
+        var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, null })!;
+
+        // Assert
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsFeatureEnabled_WithFeatureManagerOnly_AndEnabledFeature_ReturnsTrue()
+    {
+        // Arrange
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("EnabledFeature")).ReturnsAsync(true);
+        var processor = new FeatureGateOperationProcessor(_serviceProviderMock.Object);
+        var featureGate = new FeatureGateAttribute("EnabledFeature");
+
+        var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
+            "IsFeatureEnabled",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Act
+        var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
+
+        // Assert
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsFeatureEnabled_WithFeatureManagerOnly_AndDisabledFeature_ReturnsFalse()
+    {
+        // Arrange
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("DisabledFeature")).ReturnsAsync(false);
+        var processor = new FeatureGateOperationProcessor(_serviceProviderMock.Object);
+        var featureGate = new FeatureGateAttribute("DisabledFeature");
+
+        var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
+            "IsFeatureEnabled",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Act
+        var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsFeatureEnabled_RequirementTypeAll_AllEnabled_ReturnsTrue()
+    {
+        // Arrange
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("Feature1")).ReturnsAsync(true);
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("Feature2")).ReturnsAsync(true);
+        var processor = new FeatureGateOperationProcessor(_serviceProviderMock.Object);
+        var featureGate = new FeatureGateAttribute(RequirementType.All, "Feature1", "Feature2");
+
+        var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
+            "IsFeatureEnabled",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Act
+        var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
+
+        // Assert
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsFeatureEnabled_RequirementTypeAll_OneDisabled_ReturnsFalse()
+    {
+        // Arrange
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("Feature1")).ReturnsAsync(true);
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("Feature2")).ReturnsAsync(false);
+        var processor = new FeatureGateOperationProcessor(_serviceProviderMock.Object);
+        var featureGate = new FeatureGateAttribute(RequirementType.All, "Feature1", "Feature2");
+
+        var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
+            "IsFeatureEnabled",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Act
+        var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsFeatureEnabled_RequirementTypeAny_OneEnabled_ReturnsTrue()
+    {
+        // Arrange
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("Feature1")).ReturnsAsync(true);
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("Feature2")).ReturnsAsync(false);
+        var processor = new FeatureGateOperationProcessor(_serviceProviderMock.Object);
+        var featureGate = new FeatureGateAttribute(RequirementType.Any, "Feature1", "Feature2");
+
+        var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
+            "IsFeatureEnabled",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Act
+        var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
+
+        // Assert
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsFeatureEnabled_RequirementTypeAny_NoneEnabled_ReturnsFalse()
+    {
+        // Arrange
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("Feature1")).ReturnsAsync(false);
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("Feature2")).ReturnsAsync(false);
+        var processor = new FeatureGateOperationProcessor(_serviceProviderMock.Object);
+        var featureGate = new FeatureGateAttribute(RequirementType.Any, "Feature1", "Feature2");
+
+        var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
+            "IsFeatureEnabled",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Act
+        var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsFeatureEnabled_RequirementTypeAny_AllEnabled_ReturnsTrue()
+    {
+        // Arrange
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("Feature1")).ReturnsAsync(true);
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("Feature2")).ReturnsAsync(true);
+        var processor = new FeatureGateOperationProcessor(_serviceProviderMock.Object);
+        var featureGate = new FeatureGateAttribute(RequirementType.Any, "Feature1", "Feature2");
+
+        var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
+            "IsFeatureEnabled",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Act
+        var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
+
+        // Assert
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsFeatureEnabled_WithFeatureManagerSnapshotNull_AndFeatureManagerNull_ReturnsTrue()
+    {
+        // Arrange
+        var processor = new FeatureGateOperationProcessor(null);
+        var featureGate = new FeatureGateAttribute("TestFeature");
+
+        var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
+            "IsFeatureEnabled",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Act - both managers are null
+        var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, null })!;
+
+        // Assert
+        result.Should().BeTrue(); // Line 92-93: if both null, return true
+    }
+
+    [Fact]
+    public void IsFeatureEnabled_WithSingleFeature_DefaultRequirementType_UsesAll()
+    {
+        // Arrange
+        _featureManagerMock.Setup(x => x.IsEnabledAsync("SingleFeature")).ReturnsAsync(true);
+        var processor = new FeatureGateOperationProcessor(_serviceProviderMock.Object);
+        var featureGate = new FeatureGateAttribute("SingleFeature"); // Default RequirementType is All
+
+        var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
+            "IsFeatureEnabled",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Act
+        var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
+
+        // Assert
+        result.Should().BeTrue();
+        featureGate.RequirementType.Should().Be(RequirementType.All);
+    }
+
+    #endregion
+
     #region Test Controllers
 
     [FeatureGate("ControllerFeature")]
@@ -322,6 +521,11 @@ public class FeatureGateOperationProcessorTests
 
     [FeatureGate(RequirementType.Any, "FeatureA", "FeatureB")]
     private class TestAnyFeatureController : ControllerBase
+    {
+        public IActionResult Index() => Ok();
+    }
+
+    private class TestNoFeatureController : ControllerBase
     {
         public IActionResult Index() => Ok();
     }

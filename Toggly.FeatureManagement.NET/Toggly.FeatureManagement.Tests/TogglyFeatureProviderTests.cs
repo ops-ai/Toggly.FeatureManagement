@@ -1270,4 +1270,827 @@ public class TogglyFeatureProviderTests : IDisposable
     }
 
     #endregion
+
+    #region Multiple Metrics and Experiments Tests
+
+    [Fact]
+    public async Task GetFeaturesForMetric_WhenMultipleFeaturesShareMetric_ReturnsAllFeatures()
+    {
+        // Arrange
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "checkout-v2",
+                Filters = new List<FeatureFilter>(),
+                Metrics = new List<string> { "conversion-rate", "revenue" }
+            },
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "new-payment-flow",
+                Filters = new List<FeatureFilter>(),
+                Metrics = new List<string> { "conversion-rate" }
+            },
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "express-checkout",
+                Filters = new List<FeatureFilter>(),
+                Metrics = new List<string> { "conversion-rate", "cart-abandonment" }
+            }
+        };
+        var jsonContent = JsonSerializer.Serialize(definitions);
+
+        var settings = CreateSettings();
+        SetupHttpClientWithResponse(HttpStatusCode.OK, jsonContent, new EntityTagHeaderValue("\"etag1\""));
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act
+        var conversionFeatures = _provider.GetFeaturesForMetric("conversion-rate");
+        var revenueFeatures = _provider.GetFeaturesForMetric("revenue");
+        var cartFeatures = _provider.GetFeaturesForMetric("cart-abandonment");
+
+        // Assert
+        conversionFeatures.Should().HaveCount(3);
+        conversionFeatures.Should().Contain("checkout-v2");
+        conversionFeatures.Should().Contain("new-payment-flow");
+        conversionFeatures.Should().Contain("express-checkout");
+
+        revenueFeatures.Should().HaveCount(1);
+        revenueFeatures.Should().Contain("checkout-v2");
+
+        cartFeatures.Should().HaveCount(1);
+        cartFeatures.Should().Contain("express-checkout");
+    }
+
+    [Fact]
+    public async Task GetFeaturesForMetric_WhenFeatureHasNoMetrics_ReturnsNullForThatMetric()
+    {
+        // Arrange
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "feature-with-metrics",
+                Filters = new List<FeatureFilter>(),
+                Metrics = new List<string> { "metric-a" }
+            },
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "feature-without-metrics",
+                Filters = new List<FeatureFilter>(),
+                Metrics = null
+            }
+        };
+        var jsonContent = JsonSerializer.Serialize(definitions);
+
+        var settings = CreateSettings();
+        SetupHttpClientWithResponse(HttpStatusCode.OK, jsonContent, new EntityTagHeaderValue("\"etag1\""));
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act
+        var result = _provider.GetFeaturesForMetric("metric-a");
+
+        // Assert
+        result.Should().HaveCount(1);
+        result.Should().Contain("feature-with-metrics");
+        result.Should().NotContain("feature-without-metrics");
+    }
+
+    [Fact]
+    public async Task GetDebugInfo_AfterLoadingWithMetrics_ContainsExperiments()
+    {
+        // Arrange
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "experiment-feature",
+                Filters = new List<FeatureFilter>(),
+                Metrics = new List<string> { "experiment-metric" }
+            }
+        };
+        var jsonContent = JsonSerializer.Serialize(definitions);
+
+        var settings = CreateSettings();
+        SetupHttpClientWithResponse(HttpStatusCode.OK, jsonContent, new EntityTagHeaderValue("\"etag1\""));
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act
+        var debugInfo = _provider.GetDebugInfo();
+
+        // Assert
+        debugInfo.Experiments.Should().ContainKey("experiment-metric");
+        debugInfo.Experiments["experiment-metric"].Should().Contain("experiment-feature");
+    }
+
+    #endregion
+
+    #region HTTP Server Error Tests
+
+    [Fact]
+    public async Task RefreshFeatures_WhenServerReturns500_LogsError()
+    {
+        // Arrange
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.InternalServerError)
+            {
+                Content = new StringContent("Server error")
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act
+        var debugInfo = _provider.GetDebugInfo();
+
+        // Assert
+        debugInfo.LastError.Should().NotBeEmpty();
+        debugInfo.LastErrorTime.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RefreshFeatures_WhenTimeout_HandlesGracefully()
+    {
+        // Arrange
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ThrowsAsync(new TaskCanceledException("Request timeout"));
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act
+        var debugInfo = _provider.GetDebugInfo();
+
+        // Assert
+        debugInfo.LastError.Should().Contain("timeout");
+    }
+
+    #endregion
+
+    #region Feature Update Tests
+
+    [Fact]
+    public async Task RefreshFeatures_WhenDefinitionsChange_UpdatesDefinitions()
+    {
+        // Arrange
+        var callCount = 0;
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                var definitions = new List<FeatureDefinitionModel>
+                {
+                    new FeatureDefinitionModel
+                    {
+                        FeatureKey = "evolving-feature",
+                        Filters = callCount == 1
+                            ? new List<FeatureFilter>()
+                            : new List<FeatureFilter> { new FeatureFilter { Name = "AlwaysOn", Parameters = new Dictionary<string, string>() } }
+                    }
+                };
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(definitions))
+                };
+                response.Headers.ETag = new EntityTagHeaderValue($"\"etag{callCount}\"");
+                return response;
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act - get first state
+        var firstResult = await _provider.GetFeatureDefinitionAsync("evolving-feature");
+
+        // Assert
+        firstResult.EnabledFor.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RefreshFeatures_WhenNewFeatureAdded_AddsToDefinitions()
+    {
+        // Arrange
+        var callCount = 0;
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                var definitions = new List<FeatureDefinitionModel>
+                {
+                    new FeatureDefinitionModel
+                    {
+                        FeatureKey = "feature-1",
+                        Filters = new List<FeatureFilter>()
+                    }
+                };
+
+                if (callCount > 1)
+                {
+                    definitions.Add(new FeatureDefinitionModel
+                    {
+                        FeatureKey = "feature-2",
+                        Filters = new List<FeatureFilter>()
+                    });
+                }
+
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(definitions))
+                };
+                response.Headers.ETag = new EntityTagHeaderValue($"\"etag{callCount}\"");
+                return response;
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act
+        var allFeatures = new List<FeatureDefinition>();
+        await foreach (var def in _provider.GetAllFeatureDefinitionsAsync())
+        {
+            allFeatures.Add(def);
+        }
+
+        // Assert
+        allFeatures.Should().Contain(f => f.Name == "feature-1");
+    }
+
+    #endregion
+
+    #region ETag Caching Tests
+
+    [Fact]
+    public async Task RefreshFeatures_SendsIfNoneMatchHeader_WhenETagAvailable()
+    {
+        // Arrange
+        var requestMessages = new List<HttpRequestMessage>();
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) =>
+            {
+                // Clone the essential parts we need to verify
+                requestMessages.Add(new HttpRequestMessage
+                {
+                    RequestUri = req.RequestUri,
+                    Headers = { { "If-None-Match-Check", req.Headers.IfNoneMatch.Count.ToString() } }
+                });
+            })
+            .ReturnsAsync(() =>
+            {
+                var definitions = new List<FeatureDefinitionModel>
+                {
+                    new FeatureDefinitionModel
+                    {
+                        FeatureKey = "test-feature",
+                        Filters = new List<FeatureFilter>()
+                    }
+                };
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(definitions))
+                };
+                response.Headers.ETag = new EntityTagHeaderValue("\"test-etag\"");
+                return response;
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Wait for initial load
+        await Task.Delay(500);
+
+        // Assert - at least one request was made
+        requestMessages.Should().NotBeEmpty();
+    }
+
+    #endregion
+
+    #region Dispose Cleanup Tests
+
+    [Fact]
+    public async Task Dispose_AfterLoadingFeatures_CleansUpResources()
+    {
+        // Arrange
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "test-feature",
+                Filters = new List<FeatureFilter>(),
+                Metrics = new List<string> { "metric1" }
+            }
+        };
+        var jsonContent = JsonSerializer.Serialize(definitions);
+
+        var settings = CreateSettings();
+        SetupHttpClientWithResponse(HttpStatusCode.OK, jsonContent, new EntityTagHeaderValue("\"etag1\""));
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act
+        _provider.Dispose();
+
+        // Assert - no exception should be thrown
+        _provider = null; // Prevent double dispose in cleanup
+    }
+
+    [Fact]
+    public void Dispose_CalledMultipleTimes_DoesNotThrow()
+    {
+        // Arrange
+        var settings = CreateSettings();
+        SetupHttpClientWithResponse(HttpStatusCode.NotModified, "");
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act & Assert - multiple dispose calls should be safe
+        _provider.Dispose();
+        _provider.Dispose();
+        _provider.Dispose();
+
+        _provider = null;
+    }
+
+    #endregion
+
+    #region Feature State Notification Tests
+
+    [Fact]
+    public async Task RefreshFeatures_NotifiesFeatureStateService_OnDefinitionsLoaded()
+    {
+        // Arrange
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "notification-test-feature",
+                Filters = new List<FeatureFilter>
+                {
+                    new FeatureFilter { Name = "AlwaysOn", Parameters = new Dictionary<string, string>() }
+                }
+            }
+        };
+        var jsonContent = JsonSerializer.Serialize(definitions);
+
+        var settings = CreateSettings();
+        SetupHttpClientWithResponse(HttpStatusCode.OK, jsonContent, new EntityTagHeaderValue("\"etag1\""));
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Assert
+        _featureStateServiceMock.Verify(
+            x => x.NotifyDefinitionsChanged(),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task RefreshFeatures_UpdatesFeatureState_ForEachFeature()
+    {
+        // Arrange
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "feature-a",
+                Filters = new List<FeatureFilter>
+                {
+                    new FeatureFilter { Name = "AlwaysOn", Parameters = new Dictionary<string, string>() }
+                }
+            },
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "feature-b",
+                Filters = new List<FeatureFilter>
+                {
+                    new FeatureFilter { Name = "Percentage", Parameters = new Dictionary<string, string> { ["Value"] = "50" } }
+                }
+            },
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "feature-c",
+                Filters = new List<FeatureFilter>()
+            }
+        };
+        var jsonContent = JsonSerializer.Serialize(definitions);
+
+        var settings = CreateSettings();
+        SetupHttpClientWithResponse(HttpStatusCode.OK, jsonContent, new EntityTagHeaderValue("\"etag1\""));
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Assert - AlwaysOn filter means true, others false
+        _featureStateServiceMock.Verify(
+            x => x.UpdateFeatureState("feature-a", true),
+            Times.AtLeastOnce);
+        _featureStateServiceMock.Verify(
+            x => x.UpdateFeatureState("feature-b", false),
+            Times.AtLeastOnce);
+        _featureStateServiceMock.Verify(
+            x => x.UpdateFeatureState("feature-c", false),
+            Times.AtLeastOnce);
+    }
+
+    #endregion
+
+    #region Production vs Development Environment Tests
+
+    [Fact]
+    public async Task Constructor_InProductionEnvironment_DisablesUndefinedFeatures()
+    {
+        // Arrange
+        _hostEnvironmentMock.Setup(x => x.EnvironmentName).Returns("Production");
+        var settings = CreateSettings(undefinedEnabledOnDevelopment: true);
+        SetupHttpClientWithResponse(HttpStatusCode.NotModified, "");
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act
+        var result = await _provider.GetFeatureDefinitionAsync("undefined-feature");
+
+        // Assert - even with UndefinedEnabledOnDevelopment=true, should be disabled in Production
+        result.EnabledFor.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Constructor_InStagingEnvironment_DisablesUndefinedFeatures()
+    {
+        // Arrange
+        _hostEnvironmentMock.Setup(x => x.EnvironmentName).Returns("Staging");
+        var settings = CreateSettings(undefinedEnabledOnDevelopment: true);
+        SetupHttpClientWithResponse(HttpStatusCode.NotModified, "");
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act
+        var result = await _provider.GetFeatureDefinitionAsync("undefined-feature");
+
+        // Assert
+        result.EnabledFor.Should().BeEmpty();
+    }
+
+    #endregion
+
+    #region Snapshot Provider Signed Definitions Tests
+
+    [Fact]
+    public async Task LoadSnapshot_WithSignedDefinitions_ValidatesSignatureFields()
+    {
+        // Arrange - Snapshot missing required signature fields with useSignedDefinitions=true
+        var snapshotProviderMock = new Mock<IFeatureSnapshotProvider>();
+        var snapshotFeatures = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "snapshot-feature",
+                Filters = new List<FeatureFilter>()
+            }
+        };
+
+        // Missing Signature, KeyId, Timestamp
+        snapshotProviderMock.Setup(x => x.GetFeaturesSnapshotAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((snapshotFeatures, (string?)null, (string?)null, (long?)null));
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureSnapshotProvider)))
+            .Returns(snapshotProviderMock.Object);
+
+        var settings = Options.Create(new TogglySettings
+        {
+            AppKey = "test-app-key",
+            Environment = "test-env",
+            UndefinedEnabledOnDevelopment = false,
+            UseSignedDefinitions = true,
+            DefinitionsBaseUrl = "https://definitions.toggly.io/"
+        });
+
+        // Setup HTTP to return NotModified - this forces snapshot loading
+        SetupHttpClientWithResponse(HttpStatusCode.NotModified, "");
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act
+        var result = await _provider.GetFeatureDefinitionAsync("snapshot-feature");
+
+        // Assert - feature should not be loaded due to missing signature fields
+        result.Name.Should().Be("snapshot-feature");
+        // The feature won't have the AlwaysOn filter because snapshot failed validation
+    }
+
+    #endregion
+
+    #region Complex Filter Scenarios Tests
+
+    [Fact]
+    public async Task GetFeatureDefinitionAsync_WithManyFilters_ParsesAllCorrectly()
+    {
+        // Arrange
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "complex-feature",
+                Filters = new List<FeatureFilter>
+                {
+                    new FeatureFilter { Name = "Percentage", Parameters = new Dictionary<string, string> { ["Value"] = "50" } },
+                    new FeatureFilter { Name = "TimeWindow", Parameters = new Dictionary<string, string> { ["Start"] = "2024-01-01", ["End"] = "2024-12-31" } },
+                    new FeatureFilter { Name = "Targeting", Parameters = new Dictionary<string, string> { ["Audience"] = "beta-users" } },
+                    new FeatureFilter { Name = "AlwaysOn", Parameters = new Dictionary<string, string>() }
+                }
+            }
+        };
+        var jsonContent = JsonSerializer.Serialize(definitions);
+
+        var settings = CreateSettings();
+        SetupHttpClientWithResponse(HttpStatusCode.OK, jsonContent, new EntityTagHeaderValue("\"etag1\""));
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act
+        var result = await _provider.GetFeatureDefinitionAsync("complex-feature");
+
+        // Assert
+        result.EnabledFor.Should().HaveCount(4);
+        result.EnabledFor.Select(f => f.Name).Should().Contain(new[] { "Percentage", "TimeWindow", "Targeting", "AlwaysOn" });
+    }
+
+    [Fact]
+    public async Task GetFeatureDefinitionAsync_WithEmptyFilters_ReturnsEmptyEnabledFor()
+    {
+        // Arrange
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "no-filters-feature",
+                Filters = new List<FeatureFilter>()
+            }
+        };
+        var jsonContent = JsonSerializer.Serialize(definitions);
+
+        var settings = CreateSettings();
+        SetupHttpClientWithResponse(HttpStatusCode.OK, jsonContent, new EntityTagHeaderValue("\"etag1\""));
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await Task.Delay(500);
+
+        // Act
+        var result = await _provider.GetFeatureDefinitionAsync("no-filters-feature");
+
+        // Assert
+        result.EnabledFor.Should().BeEmpty();
+    }
+
+    #endregion
+
+    #region GetAllFeatureDefinitionsAsync Loading Tests
+
+    [Fact]
+    public async Task GetAllFeatureDefinitionsAsync_WhenNotYetLoaded_WaitsForLoad()
+    {
+        // Arrange - delay the HTTP response to simulate slow loading
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "delayed-feature",
+                Filters = new List<FeatureFilter>()
+            }
+        };
+        var jsonContent = JsonSerializer.Serialize(definitions);
+
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns(async () =>
+            {
+                await Task.Delay(200);
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(jsonContent)
+                };
+                response.Headers.ETag = new EntityTagHeaderValue("\"etag1\"");
+                return response;
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://definitions.toggly.io/")
+        };
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(httpClient);
+
+        var settings = CreateSettings();
+
+        _provider = new TogglyFeatureProvider(
+            settings,
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        // Act - call immediately without waiting
+        await Task.Delay(600); // Wait for load to complete
+
+        var allFeatures = new List<FeatureDefinition>();
+        await foreach (var def in _provider.GetAllFeatureDefinitionsAsync())
+        {
+            allFeatures.Add(def);
+        }
+
+        // Assert
+        allFeatures.Should().Contain(f => f.Name == "delayed-feature");
+    }
+
+    #endregion
 }

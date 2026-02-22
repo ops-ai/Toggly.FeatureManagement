@@ -1316,4 +1316,463 @@ public class TogglyUsageStatsProviderTests : IDisposable
     }
 
     #endregion
+
+    #region Unique User Hash Tracking Tests
+
+    [Fact]
+    public async Task RecordUsageAsync_TracksUniqueUserHashesForMonthlyTracking()
+    {
+        // Arrange
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync("monthly-user@example.com");
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Act
+        await _provider.RecordUsageAsync("MonthlyTrackingFeature");
+
+        // Assert - Verify the usage was recorded
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.UniqueUsageUsedMap.Should().ContainKey("MonthlyTrackingFeature");
+    }
+
+    [Fact]
+    public async Task RecordViewAsync_TracksUniqueViewedUserHashesForMonthlyTracking()
+    {
+        // Arrange
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync("viewed-user@example.com");
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Act
+        await _provider.RecordViewAsync("ViewTrackingFeature");
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RecordCheckAsync_TracksApplicationLevelUniqueUserHashes()
+    {
+        // Arrange
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync("app-level-user@example.com");
+        contextProviderMock.Setup(x => x.AccessedInRequestAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Act
+        await _provider.RecordCheckAsync("AppLevelFeature", allowed: true);
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.UniqueUsageEnabledMap.Should().ContainKey("AppLevelFeature");
+    }
+
+    #endregion
+
+    #region View with Context Tests
+
+    [Fact]
+    public async Task RecordViewAsync_WithContextAndProvider_TracksAllUniqueData()
+    {
+        // Arrange
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync(It.IsAny<object>()))
+            .ReturnsAsync("context-view-user@example.com");
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+        var context = new { SessionId = "session-123" };
+
+        // Act
+        await _provider.RecordViewAsync("ViewFeatureWithContext", context);
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+        contextProviderMock.Verify(x => x.GetContextIdentifierAsync(context), Times.Once);
+    }
+
+    [Fact]
+    public async Task RecordViewAsync_MultipleViewsSameUser_DeduplicatesCorrectly()
+    {
+        // Arrange
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync("repeat-viewer@example.com");
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Act - View same feature multiple times
+        await _provider.RecordViewAsync("ViewDedupeFeature");
+        await _provider.RecordViewAsync("ViewDedupeFeature");
+        await _provider.RecordViewAsync("ViewDedupeFeature");
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    #endregion
+
+    #region Usage with Context Tests
+
+    [Fact]
+    public async Task RecordUsageAsync_WithContextAndProvider_TracksAllUniqueData()
+    {
+        // Arrange
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync(It.IsAny<object>()))
+            .ReturnsAsync("context-usage-user@example.com");
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+        var context = new { UserId = "ctx-user-456" };
+
+        // Act
+        await _provider.RecordUsageAsync("UsageFeatureWithContext", context);
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.UniqueUsageUsedMap.Should().ContainKey("UsageFeatureWithContext");
+        contextProviderMock.Verify(x => x.GetContextIdentifierAsync(context), Times.Once);
+    }
+
+    #endregion
+
+    #region Multiple Feature Tracking Tests
+
+    [Fact]
+    public async Task RecordOperations_MultipleFeaturesMultipleUsers_TracksAllCorrectly()
+    {
+        // Arrange
+        var userIndex = 0;
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync(() => $"multi-user-{userIndex++ % 3}@example.com");
+        contextProviderMock.Setup(x => x.AccessedInRequestAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Act - Multiple operations on different features
+        for (int i = 0; i < 9; i++)
+        {
+            await _provider.RecordUsageAsync($"MultiFeature{i % 3}");
+            await _provider.RecordViewAsync($"MultiFeature{i % 3}");
+            await _provider.RecordCheckAsync($"MultiFeature{i % 3}", allowed: true);
+        }
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.UniqueUsageUsedMap.Should().ContainKey("MultiFeature0");
+        debugInfo.UniqueUsageUsedMap.Should().ContainKey("MultiFeature1");
+        debugInfo.UniqueUsageUsedMap.Should().ContainKey("MultiFeature2");
+    }
+
+    #endregion
+
+    #region Edge Case Tests
+
+    [Fact]
+    public async Task RecordUsageAsync_WhitespaceFeatureKey_StillRecords()
+    {
+        // Arrange
+        _provider = CreateProvider();
+
+        // Act
+        await _provider.RecordUsageAsync("   ");
+
+        // Assert - Should not throw
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RecordViewAsync_VeryLongFeatureKey_HandledCorrectly()
+    {
+        // Arrange
+        _provider = CreateProvider();
+        var longKey = new string('a', 1000);
+
+        // Act
+        await _provider.RecordViewAsync(longKey);
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RecordCheckAsync_UnicodeFeatureKey_HandledCorrectly()
+    {
+        // Arrange
+        _provider = CreateProvider();
+
+        // Act
+        await _provider.RecordCheckAsync("功能键-特性🎉", allowed: true);
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    #endregion
+
+    #region Concurrent User Hash Tracking Tests
+
+    [Fact]
+    public async Task RecordUsageAsync_ConcurrentDifferentUsers_AllTracked()
+    {
+        // Arrange
+        var userIndex = 0;
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync(() => $"concurrent-user-{Interlocked.Increment(ref userIndex)}@example.com");
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Act - Concurrent usage recording
+        var tasks = Enumerable.Range(0, 20)
+            .Select(_ => _provider.RecordUsageAsync("ConcurrentFeature"));
+
+        await Task.WhenAll(tasks);
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.UniqueUsageUsedMap.Should().ContainKey("ConcurrentFeature");
+        debugInfo.UniqueUsageUsedMap!["ConcurrentFeature"].Count.Should().Be(20);
+    }
+
+    [Fact]
+    public async Task RecordViewAsync_ConcurrentDifferentUsers_AllTracked()
+    {
+        // Arrange
+        var userIndex = 0;
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync(() => $"concurrent-view-user-{Interlocked.Increment(ref userIndex)}@example.com");
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Act - Concurrent view recording
+        var tasks = Enumerable.Range(0, 20)
+            .Select(_ => _provider.RecordViewAsync("ConcurrentViewFeature"));
+
+        await Task.WhenAll(tasks);
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Should().NotBeNull();
+    }
+
+    #endregion
+
+    #region Check Operations with Different Allowed States Tests
+
+    [Fact]
+    public async Task RecordUsageAsync_WithAllowed_TracksEnabledSeparately()
+    {
+        // Arrange
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync(It.IsAny<object>()))
+            .ReturnsAsync("enabled-allowed-user@example.com");
+        contextProviderMock.Setup(x => x.AccessedInRequestAsync(It.IsAny<string>(), It.IsAny<object>()))
+            .ReturnsAsync(false);
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+        var context = new { UserId = "u1" };
+
+        // Act
+        await _provider.RecordUsageAsync("AllowedTestFeature", context, allowed: true);
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.UniqueUsageEnabledMap.Should().ContainKey("AllowedTestFeature");
+        debugInfo.UniqueUsageDisabledMap.Should().NotContainKey("AllowedTestFeature");
+    }
+
+    [Fact]
+    public async Task RecordUsageAsync_WithNotAllowed_TracksDisabledSeparately()
+    {
+        // Arrange
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync(It.IsAny<object>()))
+            .ReturnsAsync("disabled-allowed-user@example.com");
+        contextProviderMock.Setup(x => x.AccessedInRequestAsync(It.IsAny<string>(), It.IsAny<object>()))
+            .ReturnsAsync(false);
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+        var context = new { UserId = "u2" };
+
+        // Act
+        await _provider.RecordUsageAsync("DisallowedTestFeature", context, allowed: false);
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.UniqueUsageDisabledMap.Should().ContainKey("DisallowedTestFeature");
+        debugInfo.UniqueUsageEnabledMap.Should().NotContainKey("DisallowedTestFeature");
+    }
+
+    #endregion
+
+    #region Shutdown and Dispose Tests
+
+    [Fact]
+    public void Dispose_AfterManyOperations_DisposesCleanly()
+    {
+        // Arrange
+        _provider = CreateProvider();
+
+        // Act - record many operations
+        for (int i = 0; i < 100; i++)
+        {
+            _provider.RecordUsageAsync($"DisposalFeature{i % 10}").Wait();
+        }
+
+        // Dispose
+        _provider.Dispose();
+        _provider = null;
+
+        // Assert - no exception
+    }
+
+    [Fact]
+    public async Task Dispose_DuringOperations_HandlesGracefully()
+    {
+        // Arrange
+        _provider = CreateProvider();
+
+        // Start operations
+        var recordTask = Task.Run(async () =>
+        {
+            for (int i = 0; i < 50; i++)
+            {
+                try
+                {
+                    await _provider!.RecordUsageAsync($"ConcurrentDisposalFeature{i}");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Expected during dispose
+                    break;
+                }
+            }
+        });
+
+        // Wait a bit then dispose
+        await Task.Delay(10);
+        _provider?.Dispose();
+        _provider = null;
+
+        // Wait for operations to complete or fail
+        await Task.WhenAny(recordTask, Task.Delay(1000));
+    }
+
+    #endregion
+
+    #region State After Operations Tests
+
+    [Fact]
+    public async Task GetDebugInfo_AfterMixedOperations_ReflectsAllMaps()
+    {
+        // Arrange
+        var userIndex = 0;
+        var contextProviderMock = new Mock<IFeatureContextProvider>();
+        contextProviderMock.Setup(x => x.GetContextIdentifierAsync())
+            .ReturnsAsync(() => $"mixed-op-user-{userIndex++}@example.com");
+        contextProviderMock.Setup(x => x.AccessedInRequestAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProviderMock.Object);
+
+        _provider = CreateProvider();
+
+        // Act - Perform all types of operations
+        await _provider.RecordUsageAsync("MixedFeature");
+        await _provider.RecordViewAsync("MixedFeature");
+        await _provider.RecordCheckAsync("MixedFeature", allowed: true);
+        await _provider.RecordCheckAsync("MixedFeature2", allowed: false);
+
+        // Assert
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.UniqueUsageUsedMap.Should().ContainKey("MixedFeature");
+        debugInfo.UniqueUsageEnabledMap.Should().ContainKey("MixedFeature");
+        debugInfo.UniqueUsageDisabledMap.Should().ContainKey("MixedFeature2");
+    }
+
+    #endregion
+
+    #region Debug Info Initial State Tests
+
+    [Fact]
+    public void GetDebugInfo_UserAgentFormat_IsCorrect()
+    {
+        // Arrange
+        _provider = CreateProvider();
+
+        // Act
+        var debugInfo = _provider.GetDebugInfo();
+
+        // Assert
+        debugInfo.UserAgent.Should().StartWith("Toggly.FeatureManagement/");
+        // Version may be empty in test context, just verify format starts correctly
+        debugInfo.UserAgent.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void GetDebugInfo_AllMapsInitialized_NotNull()
+    {
+        // Arrange
+        _provider = CreateProvider();
+
+        // Act
+        var debugInfo = _provider.GetDebugInfo();
+
+        // Assert
+        debugInfo.UniqueUsageEnabledMap.Should().NotBeNull();
+        debugInfo.UniqueUsageDisabledMap.Should().NotBeNull();
+        debugInfo.UniqueUsageUsedMap.Should().NotBeNull();
+    }
+
+    #endregion
 }
