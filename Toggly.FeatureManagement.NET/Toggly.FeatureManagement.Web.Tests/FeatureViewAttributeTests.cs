@@ -12,7 +12,7 @@ using Xunit;
 
 namespace Toggly.FeatureManagement.Web.Tests;
 
-public class FeatureUsageAttributeTests
+public class FeatureViewAttributeTests
 {
     #region Constructor Tests (String Features)
 
@@ -20,7 +20,7 @@ public class FeatureUsageAttributeTests
     public void Constructor_WithStringFeatures_StoresThem()
     {
         // Arrange & Act
-        var attribute = new FeatureUsageAttribute("feature1", "feature2");
+        var attribute = new FeatureViewAttribute("feature1", "feature2");
 
         // Assert
         attribute.Features.Should().BeEquivalentTo(new[] { "feature1", "feature2" });
@@ -30,7 +30,7 @@ public class FeatureUsageAttributeTests
     public void Constructor_WithNullFeatures_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var act = () => new FeatureUsageAttribute((string[]?)null!);
+        var act = () => new FeatureViewAttribute((string[]?)null!);
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -38,7 +38,7 @@ public class FeatureUsageAttributeTests
     public void Constructor_WithEmptyFeatures_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var act = () => new FeatureUsageAttribute(Array.Empty<string>());
+        var act = () => new FeatureViewAttribute(Array.Empty<string>());
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -46,7 +46,7 @@ public class FeatureUsageAttributeTests
     public void Constructor_WithSingleFeature_StoresIt()
     {
         // Arrange & Act
-        var attribute = new FeatureUsageAttribute("single-feature");
+        var attribute = new FeatureViewAttribute("single-feature");
 
         // Assert
         attribute.Features.Should().ContainSingle().Which.Should().Be("single-feature");
@@ -60,7 +60,7 @@ public class FeatureUsageAttributeTests
     public void Constructor_WithEnumFeatures_ConvertsToStrings()
     {
         // Arrange & Act
-        var attribute = new FeatureUsageAttribute(TestFeatures.FeatureA, TestFeatures.FeatureB);
+        var attribute = new FeatureViewAttribute(TestFeatures.FeatureA, TestFeatures.FeatureB);
 
         // Assert
         attribute.Features.Should().BeEquivalentTo(new[] { "FeatureA", "FeatureB" });
@@ -70,7 +70,7 @@ public class FeatureUsageAttributeTests
     public void Constructor_WithNonEnumObjects_ThrowsArgumentException()
     {
         // Act & Assert
-        var act = () => new FeatureUsageAttribute(123, 456);
+        var act = () => new FeatureViewAttribute(123, 456);
         act.Should().Throw<ArgumentException>().WithMessage("*enums*");
     }
 
@@ -78,7 +78,7 @@ public class FeatureUsageAttributeTests
     public void Constructor_WithMixedEnumTypes_ConvertsAll()
     {
         // Arrange & Act
-        var attribute = new FeatureUsageAttribute(TestFeatures.FeatureA, OtherFeatures.Beta);
+        var attribute = new FeatureViewAttribute(TestFeatures.FeatureA, OtherFeatures.Beta);
 
         // Assert
         attribute.Features.Should().BeEquivalentTo(new[] { "FeatureA", "Beta" });
@@ -88,7 +88,7 @@ public class FeatureUsageAttributeTests
     public void Constructor_WithNullEnumFeatures_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var act = () => new FeatureUsageAttribute((object[]?)null!);
+        var act = () => new FeatureViewAttribute((object[]?)null!);
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -96,7 +96,7 @@ public class FeatureUsageAttributeTests
     public void Constructor_WithEmptyEnumFeatures_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var act = () => new FeatureUsageAttribute(Array.Empty<object>());
+        var act = () => new FeatureViewAttribute(Array.Empty<object>());
         act.Should().Throw<ArgumentNullException>();
     }
 
@@ -108,7 +108,7 @@ public class FeatureUsageAttributeTests
     public void RequirementType_DefaultsToAll()
     {
         // Arrange & Act
-        var attribute = new FeatureUsageAttribute("feature");
+        var attribute = new FeatureViewAttribute("feature");
 
         // Assert
         attribute.RequirementType.Should().Be(RequirementType.All);
@@ -118,7 +118,7 @@ public class FeatureUsageAttributeTests
     public void RequirementType_CanBeSetToAny()
     {
         // Arrange
-        var attribute = new FeatureUsageAttribute("feature")
+        var attribute = new FeatureViewAttribute("feature")
         {
             // Act
             RequirementType = RequirementType.Any
@@ -136,7 +136,7 @@ public class FeatureUsageAttributeTests
     public void Attribute_CanBeAppliedToMethods()
     {
         // Arrange & Assert
-        var attributeUsage = typeof(FeatureUsageAttribute)
+        var attributeUsage = typeof(FeatureViewAttribute)
             .GetCustomAttributes(typeof(AttributeUsageAttribute), false)
             .Cast<AttributeUsageAttribute>()
             .FirstOrDefault();
@@ -149,7 +149,7 @@ public class FeatureUsageAttributeTests
     public void Attribute_CanBeAppliedToClasses()
     {
         // Arrange & Assert
-        var attributeUsage = typeof(FeatureUsageAttribute)
+        var attributeUsage = typeof(FeatureViewAttribute)
             .GetCustomAttributes(typeof(AttributeUsageAttribute), false)
             .Cast<AttributeUsageAttribute>()
             .FirstOrDefault();
@@ -162,7 +162,7 @@ public class FeatureUsageAttributeTests
     public void Attribute_AllowsMultiple()
     {
         // Arrange & Assert
-        var attributeUsage = typeof(FeatureUsageAttribute)
+        var attributeUsage = typeof(FeatureViewAttribute)
             .GetCustomAttributes(typeof(AttributeUsageAttribute), false)
             .Cast<AttributeUsageAttribute>()
             .FirstOrDefault();
@@ -176,10 +176,10 @@ public class FeatureUsageAttributeTests
     #region OnActionExecutionAsync Tests
 
     [Fact]
-    public async Task OnActionExecutionAsync_WhenFeatureEnabled_RecordsUsageAndExecutesNext()
+    public async Task OnActionExecutionAsync_WhenFeatureEnabled_RecordsViewAndExecutesNext()
     {
         // Arrange
-        var attribute = new FeatureUsageAttribute("enabled-feature");
+        var attribute = new FeatureViewAttribute("enabled-feature");
         var featureManagerMock = new Mock<IFeatureManagerSnapshot>();
         featureManagerMock.Setup(m => m.IsEnabledAsync("enabled-feature"))
             .ReturnsAsync(true);
@@ -207,14 +207,14 @@ public class FeatureUsageAttributeTests
 
         // Assert
         nextCalled.Should().BeTrue();
-        statsProviderMock.Verify(m => m.RecordUsageAsync("enabled-feature"), Times.Once);
+        statsProviderMock.Verify(m => m.RecordViewAsync("enabled-feature"), Times.Once);
     }
 
     [Fact]
     public async Task OnActionExecutionAsync_WhenFeatureDisabled_DoesNotExecuteNextAndInvokesHandler()
     {
         // Arrange
-        var attribute = new FeatureUsageAttribute("disabled-feature");
+        var attribute = new FeatureViewAttribute("disabled-feature");
         var featureManagerMock = new Mock<IFeatureManagerSnapshot>();
         featureManagerMock.Setup(m => m.IsEnabledAsync("disabled-feature"))
             .ReturnsAsync(false);
@@ -243,14 +243,14 @@ public class FeatureUsageAttributeTests
         // Assert
         nextCalled.Should().BeFalse();
         actionContext.Result.Should().BeOfType<NotFoundResult>();
-        statsProviderMock.Verify(m => m.RecordUsageAsync(It.IsAny<string>()), Times.Never);
+        statsProviderMock.Verify(m => m.RecordViewAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
     public async Task OnActionExecutionAsync_WithCustomDisabledFeaturesHandler_InvokesCustomHandler()
     {
         // Arrange
-        var attribute = new FeatureUsageAttribute("disabled-feature");
+        var attribute = new FeatureViewAttribute("disabled-feature");
         var featureManagerMock = new Mock<IFeatureManagerSnapshot>();
         featureManagerMock.Setup(m => m.IsEnabledAsync("disabled-feature"))
             .ReturnsAsync(false);
@@ -286,7 +286,7 @@ public class FeatureUsageAttributeTests
     public async Task OnActionExecutionAsync_WithRequirementTypeAll_RequiresAllFeaturesEnabled()
     {
         // Arrange
-        var attribute = new FeatureUsageAttribute("feature1", "feature2")
+        var attribute = new FeatureViewAttribute("feature1", "feature2")
         {
             RequirementType = RequirementType.All
         };
@@ -324,7 +324,7 @@ public class FeatureUsageAttributeTests
     public async Task OnActionExecutionAsync_WithRequirementTypeAny_RequiresAnyFeatureEnabled()
     {
         // Arrange
-        var attribute = new FeatureUsageAttribute("feature1", "feature2")
+        var attribute = new FeatureViewAttribute("feature1", "feature2")
         {
             RequirementType = RequirementType.Any
         };
@@ -362,7 +362,7 @@ public class FeatureUsageAttributeTests
     public async Task OnActionExecutionAsync_WithRequirementTypeAny_WhenNoFeaturesEnabled_DoesNotExecuteNext()
     {
         // Arrange
-        var attribute = new FeatureUsageAttribute("feature1", "feature2")
+        var attribute = new FeatureViewAttribute("feature1", "feature2")
         {
             RequirementType = RequirementType.Any
         };
@@ -397,10 +397,10 @@ public class FeatureUsageAttributeTests
     }
 
     [Fact]
-    public async Task OnActionExecutionAsync_WithMultipleEnabledFeatures_RecordsUsageForAll()
+    public async Task OnActionExecutionAsync_WithMultipleEnabledFeatures_RecordsViewForAll()
     {
         // Arrange
-        var attribute = new FeatureUsageAttribute("feature1", "feature2", "feature3");
+        var attribute = new FeatureViewAttribute("feature1", "feature2", "feature3");
         var featureManagerMock = new Mock<IFeatureManagerSnapshot>();
         featureManagerMock.Setup(m => m.IsEnabledAsync(It.IsAny<string>())).ReturnsAsync(true);
 
@@ -424,49 +424,9 @@ public class FeatureUsageAttributeTests
         });
 
         // Assert
-        statsProviderMock.Verify(m => m.RecordUsageAsync("feature1"), Times.Once);
-        statsProviderMock.Verify(m => m.RecordUsageAsync("feature2"), Times.Once);
-        statsProviderMock.Verify(m => m.RecordUsageAsync("feature3"), Times.Once);
-    }
-
-    [Fact]
-    public async Task OnActionExecutionAsync_WithRequirementTypeAll_WhenAllEnabled_RecordsUsage()
-    {
-        // Arrange
-        var attribute = new FeatureUsageAttribute("feature1", "feature2")
-        {
-            RequirementType = RequirementType.All
-        };
-
-        var featureManagerMock = new Mock<IFeatureManagerSnapshot>();
-        featureManagerMock.Setup(m => m.IsEnabledAsync("feature1")).ReturnsAsync(true);
-        featureManagerMock.Setup(m => m.IsEnabledAsync("feature2")).ReturnsAsync(true);
-
-        var statsProviderMock = new Mock<IFeatureUsageStatsProvider>();
-
-        var services = new ServiceCollection();
-        services.AddSingleton(featureManagerMock.Object);
-        services.AddSingleton(statsProviderMock.Object);
-        var serviceProvider = services.BuildServiceProvider();
-
-        var httpContext = new DefaultHttpContext { RequestServices = serviceProvider };
-        var actionContext = CreateActionExecutingContext(httpContext);
-        var nextCalled = false;
-
-        // Act
-        await attribute.OnActionExecutionAsync(actionContext, () =>
-        {
-            nextCalled = true;
-            return Task.FromResult(new ActionExecutedContext(
-                new ActionContext(httpContext, new RouteData(), new ActionDescriptor()),
-                new List<IFilterMetadata>(),
-                new object()));
-        });
-
-        // Assert
-        nextCalled.Should().BeTrue();
-        statsProviderMock.Verify(m => m.RecordUsageAsync("feature1"), Times.Once);
-        statsProviderMock.Verify(m => m.RecordUsageAsync("feature2"), Times.Once);
+        statsProviderMock.Verify(m => m.RecordViewAsync("feature1"), Times.Once);
+        statsProviderMock.Verify(m => m.RecordViewAsync("feature2"), Times.Once);
+        statsProviderMock.Verify(m => m.RecordViewAsync("feature3"), Times.Once);
     }
 
     #endregion
@@ -477,7 +437,7 @@ public class FeatureUsageAttributeTests
     public async Task OnPageHandlerSelectionAsync_CompletesImmediately()
     {
         // Arrange
-        var attribute = new FeatureUsageAttribute("feature");
+        var attribute = new FeatureViewAttribute("feature");
         var httpContext = new DefaultHttpContext();
         var pageContext = new PageContext(new ActionContext(httpContext, new RouteData(), new ActionDescriptor()));
         var context = new PageHandlerSelectedContext(pageContext, new List<IFilterMetadata>(), new object());
