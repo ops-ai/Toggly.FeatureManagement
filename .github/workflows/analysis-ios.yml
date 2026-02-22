@@ -7,14 +7,14 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.iOS/**'
-      - '.github/workflows/sdk-ios-*.yml'
+      - '.github/workflows/analysis-ios.yml'
   pull_request:
     branches:
       - develop
       - main
     paths:
       - 'Toggly.FeatureManagement.iOS/**'
-      - '.github/workflows/sdk-ios-*.yml'
+      - '.github/workflows/analysis-ios.yml'
   workflow_dispatch:
 
 env:

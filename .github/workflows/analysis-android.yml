@@ -7,14 +7,14 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.Android/**'
-      - '.github/workflows/sdk-android-*.yml'
+      - '.github/workflows/analysis-android.yml'
   pull_request:
     branches:
       - develop
       - main
     paths:
       - 'Toggly.FeatureManagement.Android/**'
-      - '.github/workflows/sdk-android-*.yml'
+      - '.github/workflows/analysis-android.yml'
   workflow_dispatch:
 
 env:
