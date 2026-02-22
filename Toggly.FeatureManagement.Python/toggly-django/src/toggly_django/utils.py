@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from django.conf import settings as django_settings
 from django.http import HttpRequest
-
 from toggly import (
     EvaluationContext,
     TogglyClient,

@@ -37,7 +37,7 @@ func cleanupRedisKeys(t *testing.T, client *redis.Client, prefix string) {
 
 func TestRedisProvider_LoadDefinitions_WhenEmpty(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	prefix := "test_empty"
 	cleanupRedisKeys(t, client, prefix)
@@ -59,7 +59,7 @@ func TestRedisProvider_LoadDefinitions_WhenEmpty(t *testing.T) {
 
 func TestRedisProvider_SaveAndLoadDefinitions(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	prefix := "test_save_load"
 	cleanupRedisKeys(t, client, prefix)
@@ -125,7 +125,7 @@ func TestRedisProvider_SaveAndLoadDefinitions(t *testing.T) {
 
 func TestRedisProvider_SaveDefinitions_Updates(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	prefix := "test_update"
 	cleanupRedisKeys(t, client, prefix)
@@ -178,7 +178,7 @@ func TestRedisProvider_SaveDefinitions_Updates(t *testing.T) {
 
 func TestRedisProvider_LoadJWKS_WhenEmpty(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	prefix := "test_jwks_empty"
 	cleanupRedisKeys(t, client, prefix)
@@ -200,7 +200,7 @@ func TestRedisProvider_LoadJWKS_WhenEmpty(t *testing.T) {
 
 func TestRedisProvider_SaveAndLoadJWKS(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	prefix := "test_jwks_save"
 	cleanupRedisKeys(t, client, prefix)
@@ -259,7 +259,7 @@ func TestRedisProvider_SaveAndLoadJWKS(t *testing.T) {
 
 func TestRedisProvider_WithTTL(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	prefix := "test_ttl"
 	cleanupRedisKeys(t, client, prefix)
@@ -296,7 +296,7 @@ func TestRedisProvider_WithTTL(t *testing.T) {
 
 func TestRedisProvider_WithoutTTL(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	prefix := "test_no_ttl"
 	cleanupRedisKeys(t, client, prefix)
@@ -330,7 +330,7 @@ func TestRedisProvider_WithoutTTL(t *testing.T) {
 
 func TestRedisProvider_DefaultPrefix(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	cleanupRedisKeys(t, client, "toggly")
 	defer cleanupRedisKeys(t, client, "toggly")
@@ -347,7 +347,7 @@ func TestRedisProvider_DefaultPrefix(t *testing.T) {
 
 func TestRedisProvider_KeyGeneration(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	provider := NewRedisProvider(RedisOptions{
 		Client: client,
@@ -364,14 +364,14 @@ func TestRedisProvider_KeyGeneration(t *testing.T) {
 
 func TestRedisProvider_ImplementsInterface(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	var _ Provider = NewRedisProvider(RedisOptions{Client: client})
 }
 
 func TestRedisProvider_RoundTrip(t *testing.T) {
 	client := getRedisClient(t)
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	prefix := "test_roundtrip"
 	cleanupRedisKeys(t, client, prefix)

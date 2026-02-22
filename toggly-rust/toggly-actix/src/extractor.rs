@@ -30,12 +30,20 @@ impl TogglyData {
     }
 
     /// Check if a feature is enabled.
-    pub async fn is_enabled(&self, feature_key: &str, context: EvalContext) -> toggly::Result<bool> {
+    pub async fn is_enabled(
+        &self,
+        feature_key: &str,
+        context: EvalContext,
+    ) -> toggly::Result<bool> {
         self.0.is_enabled(feature_key, context).await
     }
 
     /// Check if a feature is disabled.
-    pub async fn is_disabled(&self, feature_key: &str, context: EvalContext) -> toggly::Result<bool> {
+    pub async fn is_disabled(
+        &self,
+        feature_key: &str,
+        context: EvalContext,
+    ) -> toggly::Result<bool> {
         self.0.is_disabled(feature_key, context).await
     }
 }
@@ -163,7 +171,9 @@ mod tests {
 
     #[test]
     fn test_feature_enabled_key() {
-        let fe = FeatureEnabled { feature_key: "test".to_string() };
+        let fe = FeatureEnabled {
+            feature_key: "test".to_string(),
+        };
         assert_eq!(fe.feature_key(), "test");
     }
 }

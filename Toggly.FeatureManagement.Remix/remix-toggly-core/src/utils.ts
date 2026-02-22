@@ -216,14 +216,17 @@ export function deserializeFlags(value: string | null | undefined): FeatureFlags
  * Check if we're running on the server
  */
 export function isServer(): boolean {
-  return typeof window === 'undefined';
+  return !isClient();
 }
 
 /**
  * Check if we're running on the client
  */
 export function isClient(): boolean {
-  return typeof window !== 'undefined';
+  return (
+    typeof globalThis !== 'undefined' &&
+    typeof (globalThis as { window?: unknown }).window !== 'undefined'
+  );
 }
 
 /**

@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ruby: ['3.1', '3.2', '3.3', '3.4']
+        ruby: ['3.2', '3.3', '3.4']
 
     steps:
       - name: Checkout code
@@ -63,11 +63,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ruby: ['3.1', '3.2', '3.3', '3.4']
+        ruby: ['3.2', '3.3', '3.4']
         rails: ['7.0', '7.1', '7.2', '8.0']
-        exclude:
-          - ruby: '3.1'
-            rails: '8.0'
 
     steps:
       - name: Checkout code
@@ -79,9 +76,13 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true
-          cache-version: rails-${{ matrix.rails }}
           working-directory: ${{ env.SDK_ROOT }}/toggly-rails
+
+      - name: Install dependencies
+        working-directory: ${{ env.SDK_ROOT }}/toggly-rails
+        run: |
+          bundle config set frozen false
+          bundle install --jobs 4
 
       - name: Run tests
         working-directory: ${{ env.SDK_ROOT }}/toggly-rails
@@ -94,7 +95,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ruby: ['3.1', '3.2', '3.3', '3.4']
+        ruby: ['3.2', '3.3', '3.4']
 
     services:
       redis:
@@ -146,10 +147,18 @@ jobs:
         run: bundle exec rubocop --parallel
         continue-on-error: true
 
+      - name: Install toggly-rails dependencies
+        working-directory: ${{ env.SDK_ROOT }}/toggly-rails
+        run: bundle install --jobs 4
+
       - name: Run RuboCop on toggly-rails
         working-directory: ${{ env.SDK_ROOT }}/toggly-rails
         run: bundle exec rubocop --parallel
         continue-on-error: true
+
+      - name: Install toggly-cache dependencies
+        working-directory: ${{ env.SDK_ROOT }}/toggly-cache
+        run: bundle install --jobs 4
 
       - name: Run RuboCop on toggly-cache
         working-directory: ${{ env.SDK_ROOT }}/toggly-cache
@@ -282,7 +291,7 @@ jobs:
           echo "- toggly-cache" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Ruby Versions Tested" >> $GITHUB_STEP_SUMMARY
-          echo "- 3.1, 3.2, 3.3, 3.4" >> $GITHUB_STEP_SUMMARY
+          echo "- 3.2, 3.3, 3.4" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Rails Versions Tested" >> $GITHUB_STEP_SUMMARY
           echo "- 7.0, 7.1, 7.2, 8.0" >> $GITHUB_STEP_SUMMARY

@@ -2,30 +2,30 @@
  * React context for Toggly feature flags
  */
 
-import React, {
+import {
   createContext,
   useContext,
   useState,
   useCallback,
   useMemo,
   useEffect,
+  type ReactElement,
   type ReactNode,
 } from 'react';
 import {
-  FeatureFlags,
-  ServerFeatureContext,
-  IdentityContext,
-  TogglyConfig,
-  TogglyHook,
-  HookMetadata,
-  EvaluationSeriesData,
-  IdentitySeriesData,
   isFeatureEnabled as coreIsFeatureEnabled,
   evaluateFeatureGate,
   buildDefinitionsUrl,
   fetchWithTimeout,
   createLogger,
   mergeConfig,
+} from '@ops-ai/remix-toggly-core';
+import type {
+  FeatureFlags,
+  ServerFeatureContext,
+  IdentityContext,
+  TogglyConfig,
+  TogglyHook,
 } from '@ops-ai/remix-toggly-core';
 
 /**
@@ -91,7 +91,7 @@ export function TogglyProvider({
   enableRefresh = false,
   refreshInterval = 60000,
   onFlagsChange,
-}: TogglyProviderProps): React.ReactElement {
+}: TogglyProviderProps): ReactElement {
   const mergedConfig = useMemo(
     () => (config ? mergeConfig(config) : undefined),
     [config]
@@ -110,58 +110,6 @@ export function TogglyProvider({
   );
   const [isReady, setIsReady] = useState(!!serverContext);
   const [hooks, setHooks] = useState<TogglyHook[]>([]);
-
-  // Execute hooks for evaluation
-  const executeBeforeEvaluation = useCallback(
-    async (
-      flagKey: string,
-      defaultValue?: boolean
-    ): Promise<Map<string, EvaluationSeriesData | void>> => {
-      const dataMap = new Map<string, EvaluationSeriesData | void>();
-
-      for (const hook of hooks) {
-        if (hook.beforeEvaluation) {
-          try {
-            const data = await hook.beforeEvaluation(flagKey, defaultValue);
-            dataMap.set(hook.getMetadata().name, data);
-          } catch (error) {
-            logger.error(
-              `Error in hook "${hook.getMetadata().name}.beforeEvaluation":`,
-              error
-            );
-          }
-        }
-      }
-
-      return dataMap;
-    },
-    [hooks, logger]
-  );
-
-  const executeAfterEvaluation = useCallback(
-    async (
-      flagKey: string,
-      dataMap: Map<string, EvaluationSeriesData | void>,
-      result: boolean
-    ): Promise<void> => {
-      // Execute in reverse order
-      for (let i = hooks.length - 1; i >= 0; i--) {
-        const hook = hooks[i];
-        if (hook.afterEvaluation) {
-          try {
-            const data = dataMap.get(hook.getMetadata().name);
-            await hook.afterEvaluation(flagKey, data, result);
-          } catch (error) {
-            logger.error(
-              `Error in hook "${hook.getMetadata().name}.afterEvaluation":`,
-              error
-            );
-          }
-        }
-      }
-    },
-    [hooks, logger]
-  );
 
   const executeAfterRefresh = useCallback(
     async (newFlags: FeatureFlags): Promise<void> => {
@@ -199,7 +147,11 @@ export function TogglyProvider({
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
-        const newFlags = await response.json();
+        const payload = await response.json();
+        const newFlags =
+          payload && typeof payload === 'object'
+            ? (payload as FeatureFlags)
+            : {};
         logger.debug(`Fetched ${Object.keys(newFlags).length} flags.`);
 
         return newFlags;
@@ -267,7 +219,7 @@ export function TogglyProvider({
       for (const hook of hooks) {
         if (hook.beforeIdentify) {
           try {
-            await hook.beforeIdentify(newIdentity, context);
+            await hook.beforeIdentify(newIdentity);
           } catch (error) {
             logger.error(
               `Error in hook "${hook.getMetadata().name}.beforeIdentify":`,
@@ -288,7 +240,7 @@ export function TogglyProvider({
         const hook = hooks[i];
         if (hook.afterIdentify) {
           try {
-            await hook.afterIdentify(newIdentity, undefined, context);
+            await hook.afterIdentify(newIdentity, undefined);
           } catch (error) {
             logger.error(
               `Error in hook "${hook.getMetadata().name}.afterIdentify":`,

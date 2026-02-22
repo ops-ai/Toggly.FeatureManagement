@@ -2,7 +2,7 @@
  * Feature component for declarative feature flag rendering
  */
 
-import React, { type ReactNode, type ReactElement } from 'react';
+import type { ReactNode, ReactElement } from 'react';
 import { useFeature, useFeatureGate } from '../hooks';
 import type { FeatureRequirement } from '@ops-ai/remix-toggly-core';
 

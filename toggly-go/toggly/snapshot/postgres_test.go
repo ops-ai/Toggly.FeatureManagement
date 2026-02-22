@@ -31,7 +31,7 @@ func cleanupPostgresTable(t *testing.T, db *sql.DB, tableName string) {
 
 func TestPostgresProvider_LoadDefinitions_WhenEmpty(t *testing.T) {
 	db := getPostgresDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	tableName := "test_snapshots_empty"
 	cleanupPostgresTable(t, db, tableName)
@@ -54,7 +54,7 @@ func TestPostgresProvider_LoadDefinitions_WhenEmpty(t *testing.T) {
 
 func TestPostgresProvider_SaveAndLoadDefinitions(t *testing.T) {
 	db := getPostgresDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	tableName := "test_snapshots_save_load"
 	cleanupPostgresTable(t, db, tableName)
@@ -121,7 +121,7 @@ func TestPostgresProvider_SaveAndLoadDefinitions(t *testing.T) {
 
 func TestPostgresProvider_SaveDefinitions_Updates(t *testing.T) {
 	db := getPostgresDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	tableName := "test_snapshots_update"
 	cleanupPostgresTable(t, db, tableName)
@@ -179,7 +179,7 @@ func TestPostgresProvider_SaveDefinitions_Updates(t *testing.T) {
 
 func TestPostgresProvider_SaveAndLoadJWKS(t *testing.T) {
 	db := getPostgresDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	tableName := "test_snapshots_jwks"
 	cleanupPostgresTable(t, db, tableName)
@@ -235,7 +235,7 @@ func TestPostgresProvider_SaveAndLoadJWKS(t *testing.T) {
 
 func TestPostgresProvider_CustomOptions(t *testing.T) {
 	db := getPostgresDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	tableName := "custom_pg_snapshots"
 	cleanupPostgresTable(t, db, tableName)
@@ -270,7 +270,7 @@ func TestPostgresProvider_CustomOptions(t *testing.T) {
 
 func TestPostgresProvider_DefaultOptions(t *testing.T) {
 	db := getPostgresDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewPostgresProvider(PostgresOptions{DB: db})
 
@@ -287,14 +287,14 @@ func TestPostgresProvider_DefaultOptions(t *testing.T) {
 
 func TestPostgresProvider_ImplementsInterface(t *testing.T) {
 	db := getPostgresDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	var _ Provider = NewPostgresProvider(PostgresOptions{DB: db})
 }
 
 func TestPostgresProvider_RoundTrip(t *testing.T) {
 	db := getPostgresDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	tableName := "test_snapshots_roundtrip"
 	cleanupPostgresTable(t, db, tableName)

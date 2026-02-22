@@ -86,11 +86,7 @@ impl TogglyClient {
     ///
     /// `true` if the feature is enabled, `false` otherwise.
     #[instrument(skip(self, context), fields(feature = %feature_key))]
-    pub async fn is_enabled(
-        &self,
-        feature_key: &str,
-        context: EvalContext,
-    ) -> crate::Result<bool> {
+    pub async fn is_enabled(&self, feature_key: &str, context: EvalContext) -> crate::Result<bool> {
         if feature_key.is_empty() {
             return Err(crate::Error::Config("feature_key is required".to_string()));
         }

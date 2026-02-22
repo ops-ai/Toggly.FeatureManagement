@@ -131,7 +131,11 @@ mod tests {
     use super::*;
     use crate::definitions::FeatureFilter;
 
-    fn make_definition(key: &str, filters: Vec<(&str, serde_json::Value)>, req: RequirementType) -> FeatureDefinition {
+    fn make_definition(
+        key: &str,
+        filters: Vec<(&str, serde_json::Value)>,
+        req: RequirementType,
+    ) -> FeatureDefinition {
         FeatureDefinition {
             feature_key: key.to_string(),
             filters: filters
@@ -163,7 +167,11 @@ mod tests {
     #[test]
     fn test_engine_always_on() {
         let engine = Engine::with_defaults();
-        let def = make_definition("test", vec![("AlwaysOn", serde_json::json!({}))], RequirementType::Any);
+        let def = make_definition(
+            "test",
+            vec![("AlwaysOn", serde_json::json!({}))],
+            RequirementType::Any,
+        );
 
         let result = engine.evaluate(&def, &EvalContext::default()).unwrap();
         assert!(result);
@@ -172,7 +180,11 @@ mod tests {
     #[test]
     fn test_engine_always_off() {
         let engine = Engine::with_defaults();
-        let def = make_definition("test", vec![("AlwaysOff", serde_json::json!({}))], RequirementType::Any);
+        let def = make_definition(
+            "test",
+            vec![("AlwaysOff", serde_json::json!({}))],
+            RequirementType::Any,
+        );
 
         let result = engine.evaluate(&def, &EvalContext::default()).unwrap();
         assert!(!result);
@@ -239,9 +251,7 @@ mod tests {
         // Missing evaluator in All mode - should fail
         let def = make_definition(
             "test",
-            vec![
-                ("UnknownFilter", serde_json::json!({})),
-            ],
+            vec![("UnknownFilter", serde_json::json!({}))],
             RequirementType::All,
         );
         assert!(!engine.evaluate(&def, &EvalContext::default()).unwrap());

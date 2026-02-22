@@ -3,8 +3,19 @@
  * Client-side React components and hooks for Toggly feature flags in Remix
  */
 
-// Re-export core types
+// Re-export core value exports
 export {
+  TogglyError,
+  TogglyNetworkError,
+  TogglyConfigError,
+  TogglyTimeoutError,
+  TOGGLY_LOADER_KEY,
+  HEADERS,
+  STORAGE_KEYS,
+} from '@ops-ai/remix-toggly-core';
+
+// Re-export core type exports
+export type {
   TogglyConfig,
   FeatureFlags,
   IdentityContext,
@@ -15,23 +26,15 @@ export {
   IdentitySeriesData,
   FeatureRequirement,
   EvaluationResult,
-  TogglyError,
-  TogglyNetworkError,
-  TogglyConfigError,
-  TogglyTimeoutError,
-  TOGGLY_LOADER_KEY,
-  HEADERS,
-  STORAGE_KEYS,
 } from '@ops-ai/remix-toggly-core';
 
 // Export context and provider
 export {
   TogglyProvider,
-  TogglyProviderProps,
-  TogglyContextValue,
   useTogglyContext,
   TogglyContext,
 } from './context';
+export type { TogglyProviderProps, TogglyContextValue } from './context';
 
 // Export hooks
 export {
@@ -55,26 +58,27 @@ export {
 // Export components
 export {
   Feature,
-  FeatureProps,
   FeatureEnabled,
-  FeatureEnabledProps,
   FeatureDisabled,
-  FeatureDisabledProps,
   FeatureSwitch,
-  FeatureSwitchProps,
   FeatureGate,
+} from './components/Feature';
+export type {
+  FeatureProps,
+  FeatureEnabledProps,
+  FeatureDisabledProps,
+  FeatureSwitchProps,
   FeatureGateProps,
 } from './components/Feature';
 
 // Export Remix-specific utilities
 export {
   RemixTogglyProvider,
-  RemixTogglyProviderProps,
   useTogglyLoaderData,
   useTogglyRouteLoaderData,
   extractServerContext,
   hasTogglyContext,
-  LoaderDataWithToggly,
   TogglyScript,
   getWindowTogglyData,
 } from './remix';
+export type { RemixTogglyProviderProps, LoaderDataWithToggly } from './remix';

@@ -80,7 +80,11 @@ impl EvalContextBuilder {
     }
 
     /// Add a trait.
-    pub fn trait_value(mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
+    pub fn trait_value(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+    ) -> Self {
         self.context.traits.insert(key.into(), value.into());
         self
     }

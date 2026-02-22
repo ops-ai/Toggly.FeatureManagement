@@ -47,7 +47,10 @@ impl Registry {
         self.register("Percentage", Arc::new(PercentageEvaluator));
         self.register("Targeting", Arc::new(TargetingEvaluator));
         self.register("TimeWindow", Arc::new(TimeWindowEvaluator));
-        self.register("ContextualTargeting", Arc::new(ContextualTargetingEvaluator));
+        self.register(
+            "ContextualTargeting",
+            Arc::new(ContextualTargetingEvaluator),
+        );
     }
 
     /// Register a filter evaluator.

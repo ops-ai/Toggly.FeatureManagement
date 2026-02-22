@@ -22,6 +22,7 @@ class TogglyConfig:
         ...     environment="Production",
         ...     feature_defaults={"new-feature": False}
         ... )
+
     """
 
     app_key: str | None = None
@@ -102,6 +103,7 @@ class TogglyConfig:
 
         Returns:
             A new TogglyConfig with the updated app key.
+
         """
         return self._copy(app_key=app_key)
 
@@ -113,6 +115,7 @@ class TogglyConfig:
 
         Returns:
             A new TogglyConfig with the updated environment.
+
         """
         return self._copy(environment=environment)
 
@@ -124,6 +127,7 @@ class TogglyConfig:
 
         Returns:
             A new TogglyConfig with the updated defaults.
+
         """
         return self._copy(feature_defaults={**self.feature_defaults, **defaults})
 
@@ -135,6 +139,7 @@ class TogglyConfig:
 
         Returns:
             A new TogglyConfig with the updated provider.
+
         """
         return self._copy(snapshot_provider=provider)
 
@@ -146,6 +151,7 @@ class TogglyConfig:
 
         Returns:
             A new TogglyConfig with the handler added.
+
         """
         handlers = self.state_change_handlers + [handler]
         return self._copy(state_change_handlers=handlers)
@@ -158,6 +164,7 @@ class TogglyConfig:
 
         Returns:
             A new TogglyConfig with the updates applied.
+
         """
         return TogglyConfig(
             app_key=changes.get("app_key", self.app_key),
@@ -190,6 +197,7 @@ class TogglyConfig:
 
         Returns:
             Dictionary representation of the config.
+
         """
         return {
             "app_key": "***" if self.app_key else None,

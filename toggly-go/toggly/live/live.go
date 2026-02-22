@@ -35,7 +35,7 @@ func Start(ctx context.Context, baseURL, appKey, envKey string, httpClient *http
 	}
 
 	go func() {
-		defer c.Close(websocket.StatusNormalClosure, "")
+		defer func() { _ = c.Close(websocket.StatusNormalClosure, "") }()
 		for {
 			_, msg, err := c.Read(ctx)
 			if err != nil {
@@ -66,7 +66,7 @@ func resolveWebSocketURL(ctx context.Context, httpClient *http.Client, baseURL, 
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err

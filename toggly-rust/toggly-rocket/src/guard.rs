@@ -143,13 +143,17 @@ mod tests {
 
     #[test]
     fn test_feature_enabled_key() {
-        let fe = FeatureEnabled { feature_key: "test".to_string() };
+        let fe = FeatureEnabled {
+            feature_key: "test".to_string(),
+        };
         assert_eq!(fe.feature_key(), "test");
     }
 
     #[test]
     fn test_feature_disabled_key() {
-        let fd = FeatureDisabled { feature_key: "test".to_string() };
+        let fd = FeatureDisabled {
+            feature_key: "test".to_string(),
+        };
         assert_eq!(fd.feature_key(), "test");
     }
 }

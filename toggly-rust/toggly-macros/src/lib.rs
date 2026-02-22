@@ -308,9 +308,13 @@ pub fn feature_gate(input: TokenStream) -> TokenStream {
     let context = &input.context;
     let enabled_block = &input.enabled_block;
 
-    let disabled_block = input.disabled_block.as_ref().map(|b| {
-        quote! { else #b }
-    }).unwrap_or_default();
+    let disabled_block = input
+        .disabled_block
+        .as_ref()
+        .map(|b| {
+            quote! { else #b }
+        })
+        .unwrap_or_default();
 
     let expanded = quote! {
         {

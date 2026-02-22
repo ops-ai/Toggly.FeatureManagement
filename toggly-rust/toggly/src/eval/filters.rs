@@ -95,7 +95,11 @@ impl Evaluator for TargetingEvaluator {
         };
 
         // Check Audience (list of identities)
-        if let Some(audience) = filter.parameters.get("Audience").or_else(|| filter.parameters.get("audience")) {
+        if let Some(audience) = filter
+            .parameters
+            .get("Audience")
+            .or_else(|| filter.parameters.get("audience"))
+        {
             if let Some(arr) = audience.as_array() {
                 let identities: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
                 if identities.contains(&identity.as_str()) {
@@ -112,7 +116,11 @@ impl Evaluator for TargetingEvaluator {
         }
 
         // Check Groups
-        if let Some(groups) = filter.parameters.get("Groups").or_else(|| filter.parameters.get("groups")) {
+        if let Some(groups) = filter
+            .parameters
+            .get("Groups")
+            .or_else(|| filter.parameters.get("groups"))
+        {
             if let Some(arr) = groups.as_array() {
                 let target_groups: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
                 for group in &context.groups {
@@ -153,7 +161,11 @@ impl Evaluator for TimeWindowEvaluator {
         let now = chrono::Utc::now();
 
         // Check Start time
-        if let Some(start) = filter.parameters.get("Start").or_else(|| filter.parameters.get("start")) {
+        if let Some(start) = filter
+            .parameters
+            .get("Start")
+            .or_else(|| filter.parameters.get("start"))
+        {
             if let Some(start_str) = start.as_str() {
                 if let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(start_str) {
                     if now < start_time {
@@ -164,7 +176,11 @@ impl Evaluator for TimeWindowEvaluator {
         }
 
         // Check End time
-        if let Some(end) = filter.parameters.get("End").or_else(|| filter.parameters.get("end")) {
+        if let Some(end) = filter
+            .parameters
+            .get("End")
+            .or_else(|| filter.parameters.get("end"))
+        {
             if let Some(end_str) = end.as_str() {
                 if let Ok(end_time) = chrono::DateTime::parse_from_rfc3339(end_str) {
                     if now > end_time {
@@ -197,49 +213,63 @@ impl ContextualTargetingEvaluator {
             "Equals" | "equals" | "eq" => actual_value == expected_value,
             "NotEquals" | "notEquals" | "ne" => actual_value != expected_value,
             "Contains" | "contains" => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_str(), expected_value.as_str()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_str(), expected_value.as_str())
+                {
                     actual.contains(expected)
                 } else {
                     false
                 }
             }
             "StartsWith" | "startsWith" => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_str(), expected_value.as_str()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_str(), expected_value.as_str())
+                {
                     actual.starts_with(expected)
                 } else {
                     false
                 }
             }
             "EndsWith" | "endsWith" => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_str(), expected_value.as_str()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_str(), expected_value.as_str())
+                {
                     actual.ends_with(expected)
                 } else {
                     false
                 }
             }
             "GreaterThan" | "greaterThan" | "gt" => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_f64(), expected_value.as_f64()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_f64(), expected_value.as_f64())
+                {
                     actual > expected
                 } else {
                     false
                 }
             }
             "LessThan" | "lessThan" | "lt" => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_f64(), expected_value.as_f64()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_f64(), expected_value.as_f64())
+                {
                     actual < expected
                 } else {
                     false
                 }
             }
             "GreaterThanOrEqual" | "greaterThanOrEqual" | "gte" => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_f64(), expected_value.as_f64()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_f64(), expected_value.as_f64())
+                {
                     actual >= expected
                 } else {
                     false
                 }
             }
             "LessThanOrEqual" | "lessThanOrEqual" | "lte" => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_f64(), expected_value.as_f64()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_f64(), expected_value.as_f64())
+                {
                     actual <= expected
                 } else {
                     false
@@ -262,7 +292,9 @@ impl ContextualTargetingEvaluator {
             "Exists" | "exists" => true,
             "NotExists" | "notExists" => false,
             "Matches" | "matches" | "regex" => {
-                if let (Some(actual), Some(pattern)) = (actual_value.as_str(), expected_value.as_str()) {
+                if let (Some(actual), Some(pattern)) =
+                    (actual_value.as_str(), expected_value.as_str())
+                {
                     regex::Regex::new(pattern)
                         .map(|re| re.is_match(actual))
                         .unwrap_or(false)
@@ -283,7 +315,11 @@ impl Evaluator for ContextualTargetingEvaluator {
         context: &EvalContext,
     ) -> crate::Result<bool> {
         // Get conditions array
-        let conditions = match filter.parameters.get("Conditions").or_else(|| filter.parameters.get("conditions")) {
+        let conditions = match filter
+            .parameters
+            .get("Conditions")
+            .or_else(|| filter.parameters.get("conditions"))
+        {
             Some(v) if v.is_array() => v.as_array().unwrap(),
             _ => return Ok(false),
         };
@@ -304,7 +340,9 @@ impl Evaluator for ContextualTargetingEvaluator {
                 let operator = obj.get("operator")?.as_str()?;
                 let value = obj.get("value")?;
 
-                Some(Self::evaluate_condition(context, trait_name, operator, value))
+                Some(Self::evaluate_condition(
+                    context, trait_name, operator, value,
+                ))
             })
             .collect();
 
@@ -339,7 +377,9 @@ mod tests {
     fn test_always_on() {
         let evaluator = AlwaysOnEvaluator;
         let filter = make_filter("AlwaysOn", serde_json::json!({}));
-        let result = evaluator.evaluate("test", &filter, &EvalContext::default()).unwrap();
+        let result = evaluator
+            .evaluate("test", &filter, &EvalContext::default())
+            .unwrap();
         assert!(result);
     }
 
@@ -347,7 +387,9 @@ mod tests {
     fn test_always_off() {
         let evaluator = AlwaysOffEvaluator;
         let filter = make_filter("AlwaysOff", serde_json::json!({}));
-        let result = evaluator.evaluate("test", &filter, &EvalContext::default()).unwrap();
+        let result = evaluator
+            .evaluate("test", &filter, &EvalContext::default())
+            .unwrap();
         assert!(!result);
     }
 
@@ -381,7 +423,10 @@ mod tests {
     #[test]
     fn test_targeting_with_groups() {
         let evaluator = TargetingEvaluator;
-        let filter = make_filter("Targeting", serde_json::json!({"Groups": ["beta", "premium"]}));
+        let filter = make_filter(
+            "Targeting",
+            serde_json::json!({"Groups": ["beta", "premium"]}),
+        );
 
         let context1 = EvalContext::builder()
             .identity("user-1")

@@ -172,15 +172,19 @@ pub enum FeatureRejection {
 impl IntoResponse for FeatureRejection {
     fn into_response(self) -> Response {
         match self {
-            FeatureRejection::ClientNotFound => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Toggly client not configured").into_response()
-            }
+            FeatureRejection::ClientNotFound => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Toggly client not configured",
+            )
+                .into_response(),
             FeatureRejection::FeatureDisabled => {
                 (StatusCode::NOT_FOUND, "Feature not available").into_response()
             }
-            FeatureRejection::EvaluationError => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Feature evaluation error").into_response()
-            }
+            FeatureRejection::EvaluationError => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Feature evaluation error",
+            )
+                .into_response(),
         }
     }
 }

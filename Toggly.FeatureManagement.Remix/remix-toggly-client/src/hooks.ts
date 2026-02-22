@@ -2,7 +2,7 @@
  * React hooks for Toggly feature flags
  */
 
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTogglyContext } from './context';
 import type { FeatureFlags, FeatureRequirement } from '@ops-ai/remix-toggly-core';
 
@@ -104,7 +104,7 @@ export function useFeatureValue<T>(
  */
 export function useFeatureChange(
   featureKey: string,
-  onChange: (enabled: boolean) => void
+  _onChange: (enabled: boolean) => void
 ): boolean {
   const enabled = useFeature(featureKey);
 

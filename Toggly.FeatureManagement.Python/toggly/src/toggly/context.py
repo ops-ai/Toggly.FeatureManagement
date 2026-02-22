@@ -20,6 +20,7 @@ class EvaluationContext:
         ...     groups=["beta-testers", "premium"],
         ...     traits={"country": "US", "plan": "enterprise"}
         ... )
+
     """
 
     identity: str | None = None
@@ -39,6 +40,7 @@ class EvaluationContext:
 
         Returns:
             A new EvaluationContext with the updated identity.
+
         """
         return EvaluationContext(
             identity=identity,
@@ -54,6 +56,7 @@ class EvaluationContext:
 
         Returns:
             A new EvaluationContext with the updated groups.
+
         """
         return EvaluationContext(
             identity=self.identity,
@@ -69,6 +72,7 @@ class EvaluationContext:
 
         Returns:
             A new EvaluationContext with the updated traits.
+
         """
         merged_traits = {**self.traits, **traits}
         return EvaluationContext(
@@ -82,6 +86,7 @@ class EvaluationContext:
 
         Returns:
             Dictionary representation of the context.
+
         """
         return {
             "identity": self.identity,
@@ -98,6 +103,7 @@ class EvaluationContext:
 
         Returns:
             An EvaluationContext instance.
+
         """
         return cls(
             identity=data.get("identity"),
@@ -111,6 +117,7 @@ class EvaluationContext:
 
         Returns:
             An EvaluationContext with no identity.
+
         """
         return cls()
 
@@ -119,5 +126,6 @@ class EvaluationContext:
 
         Returns:
             True if context has identity, groups, or traits.
+
         """
         return bool(self.identity or self.groups or self.traits)

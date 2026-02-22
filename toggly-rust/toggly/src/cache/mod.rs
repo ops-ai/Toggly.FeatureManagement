@@ -64,7 +64,12 @@ impl<T: Clone> Cache<T> {
         if self.inner.len() >= self.max_entries {
             // Remove ~10% of entries
             let to_remove = self.max_entries / 10;
-            let keys: Vec<String> = self.inner.iter().take(to_remove).map(|e| e.key().clone()).collect();
+            let keys: Vec<String> = self
+                .inner
+                .iter()
+                .take(to_remove)
+                .map(|e| e.key().clone())
+                .collect();
             for key in keys {
                 self.inner.remove(&key);
             }

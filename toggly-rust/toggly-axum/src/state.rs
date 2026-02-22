@@ -59,11 +59,7 @@ impl TogglyState {
     }
 
     /// Check if a feature is enabled with context.
-    pub async fn is_enabled_with_context(
-        &self,
-        feature_key: &str,
-        context: EvalContext,
-    ) -> bool {
+    pub async fn is_enabled_with_context(&self, feature_key: &str, context: EvalContext) -> bool {
         self.client
             .is_enabled(feature_key, context)
             .await

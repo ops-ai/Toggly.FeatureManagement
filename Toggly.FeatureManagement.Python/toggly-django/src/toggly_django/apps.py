@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Optional
 
 from django.apps import AppConfig
 from django.conf import settings
-
-from toggly import TogglyClient, TogglyConfig as BaseTogglyConfig, set_default_client
+from toggly import TogglyClient, set_default_client
+from toggly import TogglyConfig as BaseTogglyConfig
 
 if TYPE_CHECKING:
     pass

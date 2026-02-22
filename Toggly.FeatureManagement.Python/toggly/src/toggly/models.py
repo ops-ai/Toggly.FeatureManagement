@@ -237,6 +237,7 @@ class JsonWebKeySet:
 
         Returns:
             The matching key or None if not found.
+
         """
         for key in self.keys:
             if key.kid == kid:

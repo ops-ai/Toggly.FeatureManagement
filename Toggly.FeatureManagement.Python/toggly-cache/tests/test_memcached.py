@@ -31,16 +31,8 @@ class TestMemcachedSnapshotProvider:
     def sample_definitions(self) -> list[FeatureDefinition]:
         """Create sample feature definitions."""
         return [
-            FeatureDefinition(
-                feature_key="feature-1",
-                feature_name="Feature 1",
-                is_enabled=True,
-            ),
-            FeatureDefinition(
-                feature_key="feature-2",
-                feature_name="Feature 2",
-                is_enabled=False,
-            ),
+            FeatureDefinition(feature_key="feature-1"),
+            FeatureDefinition(feature_key="feature-2"),
         ]
 
     def test_init_with_client(self, mock_memcached, mock_pymemcache):
@@ -136,26 +128,30 @@ class TestMemcachedSnapshotProvider:
         """Test that ImportError is raised if pymemcache is not installed."""
         import sys
 
-        # Temporarily remove pymemcache from modules
-        pymemcache_modules = {
-            k: sys.modules.pop(k, None)
-            for k in list(sys.modules.keys())
-            if k.startswith("pymemcache")
+        saved = {
+            k: sys.modules.pop(k)
+            for k in list(sys.modules)
+            if k.startswith("pymemcache") or k == "toggly_cache.memcached"
+            if k in sys.modules
         }
         try:
-            if "toggly_cache.memcached" in sys.modules:
-                del sys.modules["toggly_cache.memcached"]
+            blocked = {
+                k: None
+                for k in list(saved) if k.startswith("pymemcache")
+            }
+            blocked["pymemcache"] = None
+            with patch.dict("sys.modules", blocked):
+                if "toggly_cache.memcached" in sys.modules:
+                    del sys.modules["toggly_cache.memcached"]
 
-            with pytest.raises(
-                ImportError, match="pymemcache package is required"
-            ):
                 from toggly_cache.memcached import MemcachedSnapshotProvider
 
-                MemcachedSnapshotProvider(servers=[("localhost", 11211)])
+                with pytest.raises(
+                    ImportError, match="pymemcache package is required"
+                ):
+                    MemcachedSnapshotProvider(servers=[("localhost", 11211)])
         finally:
-            sys.modules.update(
-                {k: v for k, v in pymemcache_modules.items() if v is not None}
-            )
+            sys.modules.update(saved)
 
     def test_make_key(self, mock_memcached, mock_pymemcache):
         """Test key generation."""
@@ -224,16 +220,16 @@ class TestMemcachedSnapshotProvider:
             # Verify JSON data
             saved_data = json.loads(call_args[0][1].decode("utf-8"))
             assert len(saved_data) == 2
-            assert saved_data[0]["featureKey"] == "feature-1"
+            assert saved_data[0]["feature_key"] == "feature-1"
 
     def test_load_success(self, mock_memcached, mock_pymemcache):
         """Test loading definitions from Memcached."""
         data = json.dumps(
             [
                 {
-                    "featureKey": "feature-1",
-                    "featureName": "Feature 1",
-                    "isEnabled": True,
+                    "feature_key": "feature-1",
+                    "filters": [],
+                    "requirement_type": "Any",
                 },
             ]
         )

@@ -6,8 +6,8 @@ import functools
 from typing import Any, Callable, TypeVar
 
 from flask import Response, abort, redirect
-
 from toggly import FeatureRequirement
+
 from toggly_flask.extension import get_client, get_context_from_request
 
 F = TypeVar("F", bound=Callable[..., Any])

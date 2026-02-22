@@ -6,8 +6,8 @@ from typing import Any
 
 from django import template
 from django.http import HttpRequest
-
 from toggly import FeatureRequirement
+
 from toggly_django.utils import get_client, get_context_from_request
 
 register = template.Library()

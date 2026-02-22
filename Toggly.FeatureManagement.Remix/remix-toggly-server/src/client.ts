@@ -16,7 +16,6 @@ import {
   fetchWithTimeout,
   createLogger,
   TogglyNetworkError,
-  TogglyConfigError,
 } from '@ops-ai/remix-toggly-core';
 
 /**
@@ -118,7 +117,11 @@ export class TogglyServerClient {
         );
       }
 
-      this.flags = await response.json();
+      const payload = await response.json();
+      this.flags =
+        payload && typeof payload === 'object'
+          ? (payload as FeatureFlags)
+          : {};
       this.logger.debug(`Fetched ${Object.keys(this.flags).length} flags.`);
 
       // Execute afterRefresh hooks
@@ -144,7 +147,7 @@ export class TogglyServerClient {
    */
   async isEnabled(
     featureKey: string,
-    context?: IdentityContext,
+    _context?: IdentityContext,
     defaultValue = false
   ): Promise<boolean> {
     // Execute beforeEvaluation hooks

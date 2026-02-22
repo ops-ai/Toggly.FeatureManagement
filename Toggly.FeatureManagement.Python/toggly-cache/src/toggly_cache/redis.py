@@ -35,7 +35,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from toggly import FeatureDefinition, SnapshotProvider
+from toggly import FeatureDefinition
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class RedisSnapshotProvider(SnapshotProvider):
+class RedisSnapshotProvider:
     """Redis-based snapshot provider for feature flag definitions.
 
     This provider stores feature flag snapshots in Redis, enabling

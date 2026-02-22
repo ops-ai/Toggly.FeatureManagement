@@ -29,7 +29,7 @@ func TestStart_CallsOnUpdate(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer c.Close(websocket.StatusNormalClosure, "")
+		defer func() { _ = c.Close(websocket.StatusNormalClosure, "") }()
 
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()

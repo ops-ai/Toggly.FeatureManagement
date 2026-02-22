@@ -37,6 +37,7 @@ class HttpResponse:
 
         Raises:
             json.JSONDecodeError: If body is not valid JSON.
+
         """
         return json.loads(self.data.decode("utf-8"))
 
@@ -45,6 +46,7 @@ class HttpResponse:
 
         Returns:
             Response body as string.
+
         """
         return self.data.decode("utf-8")
 
@@ -67,6 +69,7 @@ class HttpClient:
             connect_timeout: Connection timeout in seconds.
             request_timeout: Request timeout in seconds.
             user_agent: User-Agent header value.
+
         """
         self._connect_timeout = connect_timeout
         self._request_timeout = request_timeout
@@ -92,6 +95,7 @@ class HttpClient:
         Raises:
             TogglyNetworkError: If the request fails.
             TogglyTimeoutError: If the request times out.
+
         """
         return self._request("GET", url, headers=headers)
 
@@ -114,6 +118,7 @@ class HttpClient:
         Raises:
             TogglyNetworkError: If the request fails.
             TogglyTimeoutError: If the request times out.
+
         """
         body = json.dumps(data).encode("utf-8") if data else None
         request_headers = {"Content-Type": "application/json"}
@@ -142,6 +147,7 @@ class HttpClient:
         Raises:
             TogglyNetworkError: If the request fails.
             TogglyTimeoutError: If the request times out.
+
         """
         request_headers = {
             "User-Agent": self._user_agent,
@@ -180,21 +186,21 @@ class HttpClient:
                 raise TogglyTimeoutError(
                     f"Request timed out: {url}",
                     cause=e,
-                )
+                ) from e
             raise TogglyNetworkError(
                 f"Network error: {e.reason}",
                 cause=e,
-            )
+            ) from e
         except TimeoutError as e:
             raise TogglyTimeoutError(
                 f"Request timed out: {url}",
                 cause=e,
-            )
+            ) from e
         except Exception as e:
             raise TogglyNetworkError(
                 f"Request failed: {e}",
                 cause=e,
-            )
+            ) from e
 
 
 def build_definitions_url(
@@ -215,6 +221,7 @@ def build_definitions_url(
 
     Returns:
         The full URL for fetching definitions.
+
     """
     if use_signed:
         path = f"/definitions/v2/{app_key}/{environment}"
@@ -235,5 +242,6 @@ def build_jwks_url(base_url: str) -> str:
 
     Returns:
         The full URL for fetching JWKS.
+
     """
     return urljoin(base_url + "/", ".well-known/jwks")

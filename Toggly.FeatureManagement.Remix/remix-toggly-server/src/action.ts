@@ -4,12 +4,9 @@
 
 import type { ActionFunctionArgs } from '@remix-run/server-runtime';
 import { json, redirect } from '@remix-run/server-runtime';
-import {
-  TogglyConfig,
-  FeatureFlags,
-} from '@ops-ai/remix-toggly-core';
+import type { FeatureFlags } from '@ops-ai/remix-toggly-core';
 import { TogglyServerClient, createServerClient } from './client';
-import { TogglyLoaderOptions } from './loader';
+import type { TogglyLoaderOptions } from './loader';
 
 /**
  * Options for feature-gated actions

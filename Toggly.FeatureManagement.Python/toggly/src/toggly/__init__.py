@@ -1,5 +1,4 @@
-"""
-Toggly - Feature flag management SDK for Python.
+"""Toggly - Feature flag management SDK for Python.
 
 A zero-dependency core library for feature flag management with support
 for synchronous and asynchronous APIs.

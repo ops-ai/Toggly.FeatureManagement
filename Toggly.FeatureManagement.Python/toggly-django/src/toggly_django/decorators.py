@@ -6,8 +6,8 @@ import functools
 from typing import Any, Callable, TypeVar
 
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
-
 from toggly import FeatureRequirement
+
 from toggly_django.utils import get_client, get_context_from_request
 
 F = TypeVar("F", bound=Callable[..., Any])

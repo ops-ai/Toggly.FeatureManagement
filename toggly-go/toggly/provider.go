@@ -223,7 +223,7 @@ func (p *definitionsProvider) refreshUnsigned(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotModified {
 		return nil
@@ -273,7 +273,7 @@ func (p *definitionsProvider) refreshSigned(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotModified {
 		return nil
@@ -354,7 +354,7 @@ func (p *definitionsProvider) loadOrFetchJWKS(ctx context.Context) (*definitions
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("jwks fetch failed: %s: %s", resp.Status, string(b))

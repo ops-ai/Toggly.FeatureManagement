@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -39,6 +39,7 @@ class DefinitionsSnapshot:
 
         Returns:
             Dictionary representation of the snapshot.
+
         """
         return {
             "definitions": [d.to_dict() for d in self.definitions],
@@ -57,6 +58,7 @@ class DefinitionsSnapshot:
 
         Returns:
             A DefinitionsSnapshot instance.
+
         """
         definitions = [
             FeatureDefinition.from_dict(d) for d in data.get("definitions", [])
@@ -85,6 +87,7 @@ class JwksSnapshot:
 
         Returns:
             Dictionary representation of the snapshot.
+
         """
         return {
             "keys": [
@@ -111,6 +114,7 @@ class JwksSnapshot:
 
         Returns:
             A JwksSnapshot instance.
+
         """
         keys = [
             JsonWebKey(
@@ -143,6 +147,7 @@ class SnapshotProvider(ABC):
 
         Returns:
             The cached definitions snapshot, or None if not available.
+
         """
         pass
 
@@ -152,6 +157,7 @@ class SnapshotProvider(ABC):
 
         Args:
             snapshot: The definitions snapshot to save.
+
         """
         pass
 
@@ -161,6 +167,7 @@ class SnapshotProvider(ABC):
 
         Returns:
             The cached JWKS snapshot, or None if not available.
+
         """
         pass
 
@@ -170,10 +177,11 @@ class SnapshotProvider(ABC):
 
         Args:
             snapshot: The JWKS snapshot to save.
+
         """
         pass
 
-    def clear(self) -> None:
+    def clear(self) -> None:  # noqa: B027
         """Clear all cached data.
 
         Default implementation does nothing. Override if needed.
@@ -198,6 +206,7 @@ class MemorySnapshotProvider(SnapshotProvider):
 
         Returns:
             The cached definitions snapshot, or None if not available.
+
         """
         with self._lock:
             return self._definitions
@@ -207,6 +216,7 @@ class MemorySnapshotProvider(SnapshotProvider):
 
         Args:
             snapshot: The definitions snapshot to save.
+
         """
         with self._lock:
             self._definitions = snapshot
@@ -216,6 +226,7 @@ class MemorySnapshotProvider(SnapshotProvider):
 
         Returns:
             The cached JWKS snapshot, or None if not available.
+
         """
         with self._lock:
             return self._jwks
@@ -225,6 +236,7 @@ class MemorySnapshotProvider(SnapshotProvider):
 
         Args:
             snapshot: The JWKS snapshot to save.
+
         """
         with self._lock:
             self._jwks = snapshot
@@ -256,6 +268,7 @@ class FileSnapshotProvider(SnapshotProvider):
                       Defaults to system temp directory.
             definitions_filename: Filename for definitions snapshot.
             jwks_filename: Filename for JWKS snapshot.
+
         """
         if directory is None:
             directory = Path(tempfile.gettempdir()) / "toggly"
@@ -272,6 +285,7 @@ class FileSnapshotProvider(SnapshotProvider):
 
         Returns:
             The cached definitions snapshot, or None if not available.
+
         """
         with self._lock:
             return self._load_json(self._definitions_path, DefinitionsSnapshot.from_dict)
@@ -281,6 +295,7 @@ class FileSnapshotProvider(SnapshotProvider):
 
         Args:
             snapshot: The definitions snapshot to save.
+
         """
         with self._lock:
             self._save_json(self._definitions_path, snapshot.to_dict())
@@ -290,6 +305,7 @@ class FileSnapshotProvider(SnapshotProvider):
 
         Returns:
             The cached JWKS snapshot, or None if not available.
+
         """
         with self._lock:
             return self._load_json(self._jwks_path, JwksSnapshot.from_dict)
@@ -299,6 +315,7 @@ class FileSnapshotProvider(SnapshotProvider):
 
         Args:
             snapshot: The JWKS snapshot to save.
+
         """
         with self._lock:
             self._save_json(self._jwks_path, snapshot.to_dict())
@@ -307,10 +324,8 @@ class FileSnapshotProvider(SnapshotProvider):
         """Clear all cached files."""
         with self._lock:
             for path in [self._definitions_path, self._jwks_path]:
-                try:
+                with contextlib.suppress(OSError):
                     path.unlink(missing_ok=True)
-                except OSError:
-                    pass
 
     def _load_json(
         self,
@@ -325,11 +340,12 @@ class FileSnapshotProvider(SnapshotProvider):
 
         Returns:
             Parsed object or None if file doesn't exist.
+
         """
         try:
             if not path.exists():
                 return None
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             return parser(data)
         except (OSError, json.JSONDecodeError, KeyError, TypeError):
@@ -341,6 +357,7 @@ class FileSnapshotProvider(SnapshotProvider):
         Args:
             path: Path to the JSON file.
             data: Data to save.
+
         """
         try:
             # Write to temp file first
@@ -356,10 +373,8 @@ class FileSnapshotProvider(SnapshotProvider):
                 os.replace(temp_path, path)
             except Exception:
                 # Clean up temp file on error
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(temp_path)
-                except OSError:
-                    pass
                 raise
         except OSError:
             pass  # Silently fail - caching is best-effort

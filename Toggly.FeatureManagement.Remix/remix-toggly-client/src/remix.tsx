@@ -2,13 +2,12 @@
  * Remix-specific utilities for Toggly
  */
 
-import React, { type ReactNode } from 'react';
 import { useLoaderData, useRouteLoaderData } from '@remix-run/react';
 import {
-  ServerFeatureContext,
   TOGGLY_LOADER_KEY,
-  TogglyConfig,
 } from '@ops-ai/remix-toggly-core';
+import type { ReactElement } from 'react';
+import type { ServerFeatureContext, TogglyConfig } from '@ops-ai/remix-toggly-core';
 import { TogglyProvider, type TogglyProviderProps } from './context';
 
 /**
@@ -40,7 +39,7 @@ export function RemixTogglyProvider({
   fallbackContext,
   config,
   ...props
-}: RemixTogglyProviderProps): React.ReactElement {
+}: RemixTogglyProviderProps): ReactElement {
   // Get loader data
   let serverContext: ServerFeatureContext | undefined;
 
@@ -149,7 +148,7 @@ export function TogglyScript({
 }: {
   serverContext?: ServerFeatureContext;
   nonce?: string;
-}): React.ReactElement | null {
+}): ReactElement | null {
   if (!serverContext) {
     return null;
   }

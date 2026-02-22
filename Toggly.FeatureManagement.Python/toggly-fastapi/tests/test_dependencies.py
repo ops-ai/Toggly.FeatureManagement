@@ -1,7 +1,5 @@
 """Tests for FastAPI dependencies."""
 
-from __future__ import annotations
-
 import importlib
 import sys
 from unittest.mock import MagicMock, patch
@@ -38,7 +36,7 @@ class TestGetToggly:
                     TogglyClient=MagicMock,
                     TogglyConfig=MagicMock,
                     EvaluationContext=MagicMock,
-                    FeatureRequirement=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
                     get_default_client=MagicMock(return_value=mock_client),
                     set_default_client=MagicMock(),
                     AsyncTogglyClient=MagicMock,
@@ -76,7 +74,7 @@ class TestGetToggly:
                     TogglyClient=MagicMock,
                     TogglyConfig=MagicMock,
                     EvaluationContext=MagicMock,
-                    FeatureRequirement=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
                     get_default_client=MagicMock(return_value=mock_client),
                     set_default_client=MagicMock(),
                     AsyncTogglyClient=MagicMock,
@@ -115,7 +113,7 @@ class TestRequireFeature:
                     TogglyClient=MagicMock,
                     TogglyConfig=MagicMock,
                     EvaluationContext=MagicMock,
-                    FeatureRequirement=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
                     get_default_client=MagicMock(return_value=mock_client),
                     set_default_client=MagicMock(),
                     AsyncTogglyClient=MagicMock,
@@ -156,7 +154,7 @@ class TestRequireFeature:
                     TogglyClient=MagicMock,
                     TogglyConfig=MagicMock,
                     EvaluationContext=MagicMock,
-                    FeatureRequirement=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
                     get_default_client=MagicMock(return_value=mock_client),
                     set_default_client=MagicMock(),
                     AsyncTogglyClient=MagicMock,
@@ -196,7 +194,7 @@ class TestRequireFeature:
                     TogglyClient=MagicMock,
                     TogglyConfig=MagicMock,
                     EvaluationContext=MagicMock,
-                    FeatureRequirement=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
                     get_default_client=MagicMock(return_value=mock_client),
                     set_default_client=MagicMock(),
                     AsyncTogglyClient=MagicMock,
@@ -236,7 +234,7 @@ class TestRequireFeature:
                     TogglyClient=MagicMock,
                     TogglyConfig=MagicMock,
                     EvaluationContext=MagicMock,
-                    FeatureRequirement=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
                     get_default_client=MagicMock(return_value=mock_client),
                     set_default_client=MagicMock(),
                     AsyncTogglyClient=MagicMock,
@@ -367,7 +365,7 @@ class TestFeatureEnabled:
                     TogglyClient=MagicMock,
                     TogglyConfig=MagicMock,
                     EvaluationContext=MagicMock,
-                    FeatureRequirement=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
                     get_default_client=MagicMock(return_value=mock_client),
                     set_default_client=MagicMock(),
                     AsyncTogglyClient=MagicMock,
@@ -404,7 +402,7 @@ class TestFeatureEnabled:
                     TogglyClient=MagicMock,
                     TogglyConfig=MagicMock,
                     EvaluationContext=MagicMock,
-                    FeatureRequirement=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
                     get_default_client=MagicMock(return_value=None),
                     set_default_client=MagicMock(),
                     AsyncTogglyClient=MagicMock,
@@ -582,7 +580,7 @@ class TestGetEvaluationContext:
                     TogglyClient=MagicMock,
                     TogglyConfig=MagicMock,
                     EvaluationContext=MockEvaluationContext,
-                    FeatureRequirement=MagicMock,
+                    FeatureRequirement=MagicMock(ALL="all", ANY="any"),
                     get_default_client=MagicMock(return_value=None),
                     set_default_client=MagicMock(),
                     AsyncTogglyClient=MagicMock,

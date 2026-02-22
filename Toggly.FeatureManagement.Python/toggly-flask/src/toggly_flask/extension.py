@@ -5,8 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 from flask import Flask, g, has_request_context, request
-
-from toggly import EvaluationContext, TogglyClient, TogglyConfig, get_default_client, set_default_client
+from toggly import (
+    EvaluationContext,
+    TogglyClient,
+    TogglyConfig,
+    get_default_client,
+    set_default_client,
+)
 
 
 class Toggly:

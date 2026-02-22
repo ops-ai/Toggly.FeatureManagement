@@ -44,11 +44,11 @@
 //! }
 //! ```
 
-mod guard;
 mod fairing;
+mod guard;
 
-pub use guard::{Feature, FeatureEnabled, FeatureDisabled};
 pub use fairing::TogglyFairing;
+pub use guard::{Feature, FeatureDisabled, FeatureEnabled};
 
 // Re-export core types for convenience
 pub use toggly::{EvalContext, Requirement, TogglyClient, TogglyConfig};

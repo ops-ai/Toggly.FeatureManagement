@@ -12,6 +12,7 @@ class TogglyError(Exception):
         Args:
             message: Error message describing what went wrong.
             cause: Optional underlying exception that caused this error.
+
         """
         super().__init__(message)
         self.message = message
@@ -51,6 +52,7 @@ class TogglyNetworkError(TogglyError):
             message: Error message describing the network issue.
             cause: Optional underlying exception.
             status_code: HTTP status code if applicable.
+
         """
         super().__init__(message, cause)
         self.status_code = status_code

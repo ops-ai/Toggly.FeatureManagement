@@ -6,6 +6,7 @@ import {
   provideToggly,
   getTogglyClient,
   resetToggly,
+  createTogglyPlugin,
 } from '../src/composables/useToggly'
 import { TOGGLY_INJECTION_KEY } from '../src/types'
 
@@ -331,6 +332,39 @@ describe('useToggly', () => {
 
       resetToggly()
       expect(getTogglyClient()).toBeNull()
+    })
+  })
+
+  describe('createTogglyPlugin', () => {
+    it('should create a Vue plugin', () => {
+      const plugin = createTogglyPlugin({ appKey: 'test-key' })
+      expect(plugin).toBeDefined()
+      expect(plugin.install).toBeDefined()
+    })
+
+    it('should provide toggly when installed', () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+
+      const plugin = createTogglyPlugin({ appKey: 'test-key' })
+      const mockApp = {
+        provide: vi.fn(),
+      }
+
+      plugin.install(mockApp as any)
+
+      expect(mockApp.provide).toHaveBeenCalled()
+      expect(getTogglyClient()).not.toBeNull()
+    })
+
+    it('should auto-initialize when appKey is provided', () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+
+      const plugin = createTogglyPlugin({ appKey: 'test-key' })
+      const mockApp = { provide: vi.fn() }
+
+      plugin.install(mockApp as any)
+
+      expect(mockFetch).toHaveBeenCalled()
     })
   })
 })

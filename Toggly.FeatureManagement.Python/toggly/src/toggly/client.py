@@ -7,7 +7,7 @@ import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Callable, Iterator
+from typing import Any, Iterator
 
 from toggly.config import TogglyConfig
 from toggly.context import EvaluationContext
@@ -22,7 +22,7 @@ from toggly.models import (
     FeatureState,
     TogglyInitResponse,
 )
-from toggly.providers import DefinitionsSnapshot, MemorySnapshotProvider, SnapshotProvider
+from toggly.providers import DefinitionsSnapshot, MemorySnapshotProvider
 
 logger = logging.getLogger("toggly")
 
@@ -41,6 +41,7 @@ class TogglyClient:
         >>> client.init()
         >>> if client.is_enabled("new-feature"):
         ...     print("Feature is enabled!")
+
     """
 
     def __init__(
@@ -62,6 +63,7 @@ class TogglyClient:
             environment: Environment name (if not using config).
             feature_defaults: Default feature values (if not using config).
             **kwargs: Additional config parameters.
+
         """
         if config is None:
             config = TogglyConfig(
@@ -99,6 +101,7 @@ class TogglyClient:
 
         Returns:
             True if init() has been called successfully.
+
         """
         return self._is_initialized
 
@@ -108,6 +111,7 @@ class TogglyClient:
 
         Returns:
             The current identity or None.
+
         """
         return self._identity
 
@@ -117,6 +121,7 @@ class TogglyClient:
 
         Returns:
             Dictionary of feature key to enabled state.
+
         """
         with self._lock:
             return dict(self._flags)
@@ -127,6 +132,7 @@ class TogglyClient:
 
         Returns:
             The evaluator registry.
+
         """
         return self._engine.registry
 
@@ -135,6 +141,7 @@ class TogglyClient:
 
         Returns:
             Response containing initialization status and flags.
+
         """
         # Try to load from cache first
         cached = self._load_from_cache()
@@ -172,6 +179,7 @@ class TogglyClient:
 
         Returns:
             Response containing refresh status and updated flags.
+
         """
         if not self._config.app_key:
             return TogglyInitResponse(
@@ -204,6 +212,7 @@ class TogglyClient:
 
         Returns:
             True if the feature is enabled.
+
         """
         if context is None:
             context = EvaluationContext(identity=self._identity)
@@ -232,6 +241,7 @@ class TogglyClient:
 
         Returns:
             True if the feature is disabled.
+
         """
         return not self.is_enabled(feature_key, context, default=not default)
 
@@ -252,6 +262,7 @@ class TogglyClient:
 
         Returns:
             True if the gate passes.
+
         """
         if not feature_keys:
             # Empty list returns True (no requirements to fail)
@@ -276,6 +287,7 @@ class TogglyClient:
 
         Returns:
             FeatureState with details about the feature.
+
         """
         enabled = self.is_enabled(feature_key, context)
         with self._lock:
@@ -302,6 +314,7 @@ class TogglyClient:
 
         Returns:
             Response from refresh (if applicable).
+
         """
         old_identity = self._identity
         self._identity = identity
@@ -331,6 +344,7 @@ class TogglyClient:
 
         Returns:
             DebugInfo with current state details.
+
         """
         with self._lock:
             return DebugInfo(
@@ -372,6 +386,7 @@ class TogglyClient:
 
         Yields:
             True if the feature is enabled.
+
         """
         yield self.is_enabled(feature_key, context)
 
@@ -391,6 +406,7 @@ class TogglyClient:
 
         Raises:
             TogglyNetworkError: If the request fails.
+
         """
         if not self._config.app_key:
             raise TogglyConfigError("app_key is required for fetching definitions")
@@ -426,7 +442,7 @@ class TogglyClient:
         try:
             data = response.json()
         except Exception as e:
-            raise TogglyNetworkError(f"Invalid JSON response: {e}", cause=e)
+            raise TogglyNetworkError(f"Invalid JSON response: {e}", cause=e) from e
 
         # Parse definitions
         definitions = self._parse_definitions(data)
@@ -466,11 +482,16 @@ class TogglyClient:
 
         Returns:
             List of parsed feature definitions.
+
         """
         definitions = []
 
         # Handle both array and object responses
-        items = data if isinstance(data, list) else data.get("features", data.get("definitions", []))
+        items = (
+            data
+            if isinstance(data, list)
+            else data.get("features", data.get("definitions", []))
+        )
 
         for item in items:
             if not isinstance(item, dict):
@@ -507,6 +528,7 @@ class TogglyClient:
 
         Returns:
             Cached snapshot or None.
+
         """
         try:
             return self._snapshot_provider.load_definitions()
@@ -519,6 +541,7 @@ class TogglyClient:
 
         Args:
             snapshot: The snapshot to apply.
+
         """
         with self._lock:
             self._definitions = {d.feature_key: d for d in snapshot.definitions}
@@ -540,6 +563,7 @@ class TogglyClient:
 
         Args:
             old_flags: Previous flag states.
+
         """
         for key, new_value in self._flags.items():
             old_value = old_flags.get(key)

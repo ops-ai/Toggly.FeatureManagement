@@ -20,6 +20,7 @@ def set_default_client(client: Any) -> None:
 
     Args:
         client: The TogglyClient instance to use.
+
     """
     global _default_client
     _default_client = client
@@ -30,6 +31,7 @@ def get_default_client() -> Any:
 
     Returns:
         The default TogglyClient or None.
+
     """
     return _default_client
 
@@ -57,7 +59,7 @@ def feature_flag(
     fallback: Callable[..., Any] | None = None,
     client: Any = None,
 ) -> Callable[[F], F]:
-    """Decorator to conditionally execute a function based on a feature flag.
+    """Conditionally execute a function based on a feature flag.
 
     If the feature is disabled, returns the default value or calls the fallback.
 
@@ -78,6 +80,7 @@ def feature_flag(
 
     Returns:
         Decorated function.
+
     """
 
     def decorator(func: F) -> F:
@@ -132,7 +135,7 @@ def feature_gate(
     fallback: Callable[..., Any] | None = None,
     client: Any = None,
 ) -> Callable[[F], F]:
-    """Decorator to conditionally execute based on multiple feature flags.
+    """Conditionally execute based on multiple feature flags.
 
     Example:
         >>> @feature_gate(["feature-a", "feature-b"], requirement=FeatureRequirement.ALL)
@@ -153,6 +156,7 @@ def feature_gate(
 
     Returns:
         Decorated function.
+
     """
 
     def decorator(func: F) -> F:
@@ -187,6 +191,7 @@ class FeatureFlagContextManager:
         >>> with FeatureFlagContextManager(client, "new-feature") as enabled:
         ...     if enabled:
         ...         do_something()
+
     """
 
     def __init__(
@@ -201,6 +206,7 @@ class FeatureFlagContextManager:
             client: TogglyClient instance.
             feature_key: Feature key to evaluate.
             context: Optional evaluation context.
+
         """
         self._client = client
         self._feature_key = feature_key
@@ -212,6 +218,7 @@ class FeatureFlagContextManager:
 
         Returns:
             True if the feature is enabled.
+
         """
         if self._client:
             self._enabled = self._client.is_enabled(self._feature_key, self._context)
@@ -241,6 +248,7 @@ def feature_context(
 
     Returns:
         A context manager that yields the feature enabled state.
+
     """
     active_client = client or _default_client
     return FeatureFlagContextManager(active_client, feature_key, context)

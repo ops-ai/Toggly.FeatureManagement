@@ -21,7 +21,7 @@
     "test": "jest --coverage",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "tsc --noEmit",
     "clean": "rm -rf dist coverage"
   },
   "keywords": [

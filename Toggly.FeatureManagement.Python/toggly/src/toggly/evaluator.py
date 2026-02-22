@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import struct
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any
@@ -32,6 +30,7 @@ class FilterEvaluator(ABC):
 
         Returns:
             True if the filter passes, False otherwise.
+
         """
         pass
 
@@ -54,6 +53,7 @@ class AlwaysOnEvaluator(FilterEvaluator):
 
         Returns:
             Always True.
+
         """
         return True
 
@@ -80,6 +80,7 @@ class PercentageEvaluator(FilterEvaluator):
 
         Returns:
             True if the user falls within the rollout percentage.
+
         """
         # Get percentage from parameters (support both 'Value' and 'Percentage')
         percentage = filter_.parameters.get("Value") or filter_.parameters.get(
@@ -116,6 +117,7 @@ class PercentageEvaluator(FilterEvaluator):
 
         Returns:
             A bucket value between 0 and 99.99.
+
         """
         # Combine identity and feature key
         hash_input = f"{identity}:{feature_key}"
@@ -135,14 +137,15 @@ class PercentageEvaluator(FilterEvaluator):
 
         Returns:
             32-bit hash value.
-        """
-        FNV_32_PRIME = 0x01000193
-        FNV1_32A_INIT = 0x811C9DC5
 
-        hash_value = FNV1_32A_INIT
+        """
+        fnv_32_prime = 0x01000193
+        fnv1_32a_init = 0x811C9DC5
+
+        hash_value = fnv1_32a_init
         for byte in data:
             hash_value ^= byte
-            hash_value = (hash_value * FNV_32_PRIME) & 0xFFFFFFFF
+            hash_value = (hash_value * fnv_32_prime) & 0xFFFFFFFF
 
         return hash_value
 
@@ -165,6 +168,7 @@ class TimeWindowEvaluator(FilterEvaluator):
 
         Returns:
             True if current time is within the window.
+
         """
         now = datetime.now(timezone.utc)
         params = filter_.parameters
@@ -210,6 +214,7 @@ class TargetingEvaluator(FilterEvaluator):
 
         Returns:
             True if the user/group matches targeting rules.
+
         """
         params = filter_.parameters
 
@@ -220,9 +225,8 @@ class TargetingEvaluator(FilterEvaluator):
 
         # Check groups
         groups = self._get_groups(params)
-        if groups and context.groups:
-            if any(g in groups for g in context.groups):
-                return True
+        if groups and context.groups and any(g in groups for g in context.groups):
+            return True
 
         # Check default rollout percentage
         default_percentage = params.get("DefaultRolloutPercentage") or params.get(
@@ -247,6 +251,7 @@ class TargetingEvaluator(FilterEvaluator):
 
         Returns:
             Set of user identities.
+
         """
         users: set[str] = set()
 
@@ -257,9 +262,8 @@ class TargetingEvaluator(FilterEvaluator):
 
         # Try indexed 'Audience.Users:N' format (Go SDK pattern)
         for key, value in params.items():
-            if key.startswith("Audience.Users:"):
-                if value:
-                    users.add(str(value))
+            if key.startswith("Audience.Users:") and value:
+                users.add(str(value))
 
         return users
 
@@ -271,6 +275,7 @@ class TargetingEvaluator(FilterEvaluator):
 
         Returns:
             Set of group names.
+
         """
         groups: set[str] = set()
 
@@ -281,9 +286,8 @@ class TargetingEvaluator(FilterEvaluator):
 
         # Try indexed 'Audience.Groups:N' format (Go SDK pattern)
         for key, value in params.items():
-            if key.startswith("Audience.Groups:"):
-                if value:
-                    groups.add(str(value))
+            if key.startswith("Audience.Groups:") and value:
+                groups.add(str(value))
 
         return groups
 
@@ -306,6 +310,7 @@ class EvaluatorRegistry:
         Args:
             name: Name of the filter type.
             evaluator: The evaluator instance.
+
         """
         self._evaluators[name] = evaluator
 
@@ -317,6 +322,7 @@ class EvaluatorRegistry:
 
         Returns:
             The evaluator or None if not found.
+
         """
         return self._evaluators.get(name)
 
@@ -335,6 +341,7 @@ class EvaluatorRegistry:
 
         Returns:
             True if the filter passes, False otherwise.
+
         """
         evaluator = self.get(filter_.name)
         if evaluator is None:
@@ -351,6 +358,7 @@ class EvaluationEngine:
 
         Args:
             registry: Custom evaluator registry. Uses default if not provided.
+
         """
         self._registry = registry or EvaluatorRegistry()
 
@@ -372,6 +380,7 @@ class EvaluationEngine:
 
         Returns:
             True if the feature should be enabled.
+
         """
         if not definition.filters:
             # No filters means feature is disabled
@@ -411,6 +420,7 @@ class EvaluationEngine:
 
         Returns:
             True if the gate passes.
+
         """
         if not feature_keys:
             # Empty list returns True (no requirements to fail)
@@ -441,6 +451,7 @@ class EvaluationEngine:
 
         Returns:
             True if the feature is enabled.
+
         """
         if definition is None:
             return False

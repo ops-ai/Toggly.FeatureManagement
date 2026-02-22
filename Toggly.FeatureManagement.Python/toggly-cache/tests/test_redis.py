@@ -23,16 +23,8 @@ class TestRedisSnapshotProvider:
     def sample_definitions(self) -> list[FeatureDefinition]:
         """Create sample feature definitions."""
         return [
-            FeatureDefinition(
-                feature_key="feature-1",
-                feature_name="Feature 1",
-                is_enabled=True,
-            ),
-            FeatureDefinition(
-                feature_key="feature-2",
-                feature_name="Feature 2",
-                is_enabled=False,
-            ),
+            FeatureDefinition(feature_key="feature-1"),
+            FeatureDefinition(feature_key="feature-2"),
         ]
 
     def test_init_with_client(self, mock_redis):
@@ -73,22 +65,23 @@ class TestRedisSnapshotProvider:
         """Test that ImportError is raised if redis is not installed."""
         import sys
 
-        # Temporarily remove redis from modules
-        redis_module = sys.modules.pop("redis", None)
+        saved = {
+            k: sys.modules.pop(k)
+            for k in list(sys.modules)
+            if k == "redis" or k.startswith("redis.") or k == "toggly_cache.redis"
+            if k in sys.modules
+        }
         try:
-            # Force reimport
-            import importlib
+            with patch.dict("sys.modules", {"redis": None}):
+                if "toggly_cache.redis" in sys.modules:
+                    del sys.modules["toggly_cache.redis"]
 
-            if "toggly_cache.redis" in sys.modules:
-                del sys.modules["toggly_cache.redis"]
-
-            with pytest.raises(ImportError, match="redis package is required"):
                 from toggly_cache.redis import RedisSnapshotProvider
 
-                RedisSnapshotProvider(host="localhost")
+                with pytest.raises(ImportError, match="redis package is required"):
+                    RedisSnapshotProvider(host="localhost")
         finally:
-            if redis_module:
-                sys.modules["redis"] = redis_module
+            sys.modules.update(saved)
 
     def test_make_key(self, mock_redis):
         """Test key generation."""
@@ -113,7 +106,7 @@ class TestRedisSnapshotProvider:
             # Verify JSON data
             saved_data = json.loads(call_args[0][1])
             assert len(saved_data) == 2
-            assert saved_data[0]["featureKey"] == "feature-1"
+            assert saved_data[0]["feature_key"] == "feature-1"
 
     def test_save_with_ttl(self, mock_redis, sample_definitions):
         """Test saving with TTL."""
@@ -134,7 +127,7 @@ class TestRedisSnapshotProvider:
         """Test loading definitions from Redis."""
         data = json.dumps(
             [
-                {"featureKey": "feature-1", "featureName": "Feature 1", "isEnabled": True},
+                {"feature_key": "feature-1", "filters": [], "requirement_type": "Any"},
             ]
         )
         mock_redis.get.return_value = data.encode("utf-8")

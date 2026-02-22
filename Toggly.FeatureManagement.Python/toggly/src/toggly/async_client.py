@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator
 
@@ -39,6 +39,7 @@ class AsyncTogglyClient:
         >>> await client.init()
         >>> if await client.is_enabled("new-feature"):
         ...     print("Feature is enabled!")
+
     """
 
     def __init__(
@@ -58,6 +59,7 @@ class AsyncTogglyClient:
             environment: Environment name (if not using config).
             feature_defaults: Default feature values (if not using config).
             **kwargs: Additional config parameters.
+
         """
         if config is None:
             config = TogglyConfig(
@@ -110,6 +112,7 @@ class AsyncTogglyClient:
 
         Returns:
             Response containing initialization status and flags.
+
         """
         # Try to load from cache first
         cached = await self._load_from_cache()
@@ -147,6 +150,7 @@ class AsyncTogglyClient:
 
         Returns:
             Response containing refresh status and updated flags.
+
         """
         if not self._config.app_key:
             return TogglyInitResponse(
@@ -179,6 +183,7 @@ class AsyncTogglyClient:
 
         Returns:
             True if the feature is enabled.
+
         """
         if context is None:
             context = EvaluationContext(identity=self._identity)
@@ -206,6 +211,7 @@ class AsyncTogglyClient:
 
         Returns:
             True if the feature is disabled.
+
         """
         return not await self.is_enabled(feature_key, context, default=not default)
 
@@ -226,6 +232,7 @@ class AsyncTogglyClient:
 
         Returns:
             True if the gate passes.
+
         """
         if context is None:
             context = EvaluationContext(identity=self._identity)
@@ -252,6 +259,7 @@ class AsyncTogglyClient:
 
         Returns:
             FeatureState with details about the feature.
+
         """
         enabled = await self.is_enabled(feature_key, context)
         async with self._lock:
@@ -276,6 +284,7 @@ class AsyncTogglyClient:
 
         Returns:
             Response from refresh (if applicable).
+
         """
         old_identity = self._identity
         self._identity = identity
@@ -321,10 +330,8 @@ class AsyncTogglyClient:
         self._stop_refresh.set()
         if self._refresh_task and not self._refresh_task.done():
             self._refresh_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._refresh_task
-            except asyncio.CancelledError:
-                pass
 
     @asynccontextmanager
     async def feature_context(
@@ -345,6 +352,7 @@ class AsyncTogglyClient:
 
         Yields:
             True if the feature is enabled.
+
         """
         yield await self.is_enabled(feature_key, context)
 
@@ -364,13 +372,15 @@ class AsyncTogglyClient:
 
         Raises:
             TogglyNetworkError: If the request fails.
+
         """
         if not self._config.app_key:
             raise TogglyConfigError("app_key is required for fetching definitions")
 
         # Run blocking HTTP request in executor
-        from toggly.http import HttpClient, build_definitions_url
         import time
+
+        from toggly.http import HttpClient, build_definitions_url
 
         http = HttpClient(
             connect_timeout=self._config.connect_timeout,
@@ -408,7 +418,7 @@ class AsyncTogglyClient:
         try:
             data = response.json()
         except Exception as e:
-            raise TogglyNetworkError(f"Invalid JSON response: {e}", cause=e)
+            raise TogglyNetworkError(f"Invalid JSON response: {e}", cause=e) from e
 
         # Parse definitions
         definitions = self._parse_definitions(data)
@@ -444,7 +454,11 @@ class AsyncTogglyClient:
         """Parse definitions from API response."""
         definitions = []
 
-        items = data if isinstance(data, list) else data.get("features", data.get("definitions", []))
+        items = (
+            data
+            if isinstance(data, list)
+            else data.get("features", data.get("definitions", []))
+        )
 
         for item in items:
             if not isinstance(item, dict):

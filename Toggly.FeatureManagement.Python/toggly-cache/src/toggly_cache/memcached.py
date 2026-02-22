@@ -33,7 +33,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, Sequence
 
-from toggly import FeatureDefinition, SnapshotProvider
+from toggly import FeatureDefinition
 
 if TYPE_CHECKING:
     from pymemcache.client.base import Client
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class MemcachedSnapshotProvider(SnapshotProvider):
+class MemcachedSnapshotProvider:
     """Memcached-based snapshot provider for feature flag definitions.
 
     This provider stores feature flag snapshots in Memcached, enabling

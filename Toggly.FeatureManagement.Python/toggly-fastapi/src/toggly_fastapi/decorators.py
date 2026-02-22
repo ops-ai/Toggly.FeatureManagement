@@ -6,12 +6,10 @@ import functools
 import inspect
 from typing import Any, Callable, Optional, TypeVar
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 from starlette.status import HTTP_403_FORBIDDEN
-
 from toggly import FeatureRequirement
 
-from toggly_fastapi.dependencies import TogglyDep, get_toggly
 from toggly_fastapi.middleware import TogglyRequestHelper
 
 F = TypeVar("F", bound=Callable[..., Any])

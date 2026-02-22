@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Callable, Optional, Union
+from typing import Annotated, Any, Callable, Optional
 
 from fastapi import Depends, HTTPException, Request
 from starlette.status import HTTP_403_FORBIDDEN
-
 from toggly import EvaluationContext, FeatureRequirement, TogglyClient
 
 from toggly_fastapi.middleware import (
@@ -306,7 +305,9 @@ class FeatureGateDependency:
         self.status_code = status_code
         self.detail = detail
 
-    def __call__(self, toggly: TogglyDep) -> dict[str, bool]:
+    def __call__(
+        self, toggly: TogglyRequestHelper = Depends(get_toggly)
+    ) -> dict[str, bool]:
         """Evaluate the feature gate.
 
         Args:

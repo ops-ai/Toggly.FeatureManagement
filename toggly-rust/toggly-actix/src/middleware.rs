@@ -179,10 +179,7 @@ mod tests {
             .negate();
 
         assert!(middleware.negate);
-        assert_eq!(
-            middleware.identity_header,
-            Some("X-User-Id".to_string())
-        );
+        assert_eq!(middleware.identity_header, Some("X-User-Id".to_string()));
     }
 
     #[test]

@@ -124,7 +124,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Prelude module for convenient imports.
 pub mod prelude {
     pub use crate::{
-        EvalContext, EvalContextBuilder, Error, Requirement, Result, TogglyClient, TogglyConfig,
+        Error, EvalContext, EvalContextBuilder, Requirement, Result, TogglyClient, TogglyConfig,
         TogglyConfigBuilder,
     };
 }

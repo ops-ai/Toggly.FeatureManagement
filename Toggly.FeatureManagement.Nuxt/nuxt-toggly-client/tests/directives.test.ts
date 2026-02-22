@@ -245,6 +245,24 @@ describe('vFeatureShow directive', () => {
     expect(el.style.visibility).toBe('hidden')
   })
 
+  it('should update visibility on directive update', async () => {
+    mockFetch.mockResolvedValueOnce(
+      createMockResponse({
+        features: [{ featureKey: 'feature-a', enabled: false }],
+      })
+    )
+
+    const toggly = createToggly({ appKey: 'test-key' })
+    await toggly.init()
+
+    const el = createMockElement()
+    const binding = createMockBinding('feature-a')
+
+    vFeatureShow.updated!(el, binding as any, null as any, null as any)
+
+    expect(el.style.visibility).toBe('hidden')
+  })
+
   it('should set visibility to visible when enabled', async () => {
     mockFetch.mockResolvedValueOnce(
       createMockResponse({
@@ -309,6 +327,24 @@ describe('vFeatureClass directive', () => {
     vFeatureClass.mounted!(el, binding as any, null as any, null as any)
 
     expect(el.classList.remove).toHaveBeenCalledWith('enabled')
+  })
+
+  it('should update class on directive update', async () => {
+    mockFetch.mockResolvedValueOnce(
+      createMockResponse({
+        features: [{ featureKey: 'feature-a', enabled: true }],
+      })
+    )
+
+    const toggly = createToggly({ appKey: 'test-key' })
+    await toggly.init()
+
+    const el = createMockElement()
+    const binding = createMockBinding('feature-a', {}, 'active')
+
+    vFeatureClass.updated!(el, binding as any, null as any, null as any)
+
+    expect(el.classList.add).toHaveBeenCalledWith('active')
   })
 
   it('should warn if no class name argument', async () => {
