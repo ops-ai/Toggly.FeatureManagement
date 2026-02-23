@@ -207,13 +207,23 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         Map<String, FeatureDefinition> features = new HashMap<>();
         Map<String, MetricDefinition> metrics = new HashMap<>();
 
-        // Parse feature_flags array
-        Pattern featurePattern = Pattern.compile(
-                "\"feature_flags\"\\s*:\\s*\\[([^\\]]*(?:\\[[^\\]]*\\][^\\]]*)*)]",
-                Pattern.DOTALL);
-        Matcher featureMatcher = featurePattern.matcher(json);
-        if (featureMatcher.find()) {
-            String featuresJson = featureMatcher.group(1);
+        // Try signed envelope "defs" first, then "feature_flags", then raw array
+        String featuresJson = null;
+        for (String key : new String[]{"defs", "feature_flags"}) {
+            Pattern p = Pattern.compile(
+                    "\"" + key + "\"\\s*:\\s*\\[([^\\]]*(?:\\[[^\\]]*\\][^\\]]*)*)]",
+                    Pattern.DOTALL);
+            Matcher m = p.matcher(json);
+            if (m.find()) {
+                featuresJson = m.group(1);
+                break;
+            }
+        }
+        // Fall back: raw array response (no wrapper key)
+        if (featuresJson == null && json.trim().startsWith("[")) {
+            featuresJson = json.trim().substring(1, json.trim().length() - 1);
+        }
+        if (featuresJson != null) {
             parseFeatures(featuresJson, features);
         }
 

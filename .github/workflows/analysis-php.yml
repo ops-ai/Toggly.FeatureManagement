@@ -107,7 +107,7 @@ jobs:
         with:
           php-version: '8.3'
           tools: composer:v2
-          extensions: mbstring, xml, ctype, json
+          extensions: mbstring, xml, ctype, json, openssl, curl
 
       - name: Install dependencies
         working-directory: Toggly.FeatureManagement.PHP

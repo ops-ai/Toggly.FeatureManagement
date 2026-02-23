@@ -169,9 +169,12 @@ namespace Toggly.FeatureManagement
                             var jsonData = JsonSerializer.Serialize(snapshot.Features, serializerOptions);
                             var dataToVerify = $"{jsonData}|{snapshot.Timestamp}";
                             byte[] hash;
-                            using (var sha256 = SHA256.Create())
+                            using (var sha256Instance = SHA256.Create())
                             {
-                                hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(dataToVerify));
+                                // The definitions signer pre-hashes data before calling
+                                // crypto.subtle.sign which hashes again — double-hash here to match.
+                                var first = sha256Instance.ComputeHash(Encoding.UTF8.GetBytes(dataToVerify));
+                                hash = sha256Instance.ComputeHash(first);
                             }
                             if (!ecdsa!.VerifyHash(hash, signature))
                             {
@@ -321,9 +324,12 @@ namespace Toggly.FeatureManagement
                     
                     var dataBytes = Encoding.UTF8.GetBytes(dataToVerify);
                     byte[] hash;
-                    using (var sha256 = SHA256.Create())
+                    using (var sha256Instance = SHA256.Create())
                     {
-                        hash = sha256.ComputeHash(dataBytes);
+                        // The definitions signer pre-hashes data before calling
+                        // crypto.subtle.sign which hashes again — double-hash here to match.
+                        var first = sha256Instance.ComputeHash(dataBytes);
+                        hash = sha256Instance.ComputeHash(first);
                     }
                     _logger.LogDebug("Hash (hex): {Hash}", BitConverter.ToString(hash).Replace("-", ""));
 

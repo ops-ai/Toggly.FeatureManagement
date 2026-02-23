@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/sha256"
 	"fmt"
+	"math/big"
 	"strconv"
 
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
@@ -29,15 +30,25 @@ func VerifySignedDefinitions(env *definitions.SignedDefinitionsResponse, jwks *d
 	}
 
 	payload := string(env.Defs) + "|" + strconv.FormatInt(env.Timestamp, 10)
-	h := sha256.Sum256([]byte(payload))
+	// The definitions signer pre-hashes data before calling crypto.subtle.sign
+	// which hashes again internally — match that double-hash here.
+	first := sha256.Sum256([]byte(payload))
+	h := sha256.Sum256(first[:])
 
 	sig, err := DecodeB64Std(env.Signature)
 	if err != nil {
 		return fmt.Errorf("decode signature: %w", err)
 	}
 
-	// Azure KeyVault ES256 signatures are DER-encoded (ASN.1) and match .NET ECDsa.VerifyHash.
-	if !ecdsa.VerifyASN1(pub, h[:], sig) {
+	// Web Crypto API produces IEEE P1363 format (raw r||s, 64 bytes for P-256).
+	if len(sig) == 64 {
+		r := new(big.Int).SetBytes(sig[:32])
+		s := new(big.Int).SetBytes(sig[32:])
+		if !ecdsa.Verify(pub, h[:], r, s) {
+			return fmt.Errorf("invalid signature")
+		}
+	} else if !ecdsa.VerifyASN1(pub, h[:], sig) {
+		// Fall back to ASN.1/DER format for Azure KeyVault signatures.
 		return fmt.Errorf("invalid signature")
 	}
 	return nil

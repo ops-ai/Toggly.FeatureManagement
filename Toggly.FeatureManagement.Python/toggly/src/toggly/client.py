@@ -486,12 +486,13 @@ class TogglyClient:
         """
         definitions = []
 
-        # Handle both array and object responses
-        items = (
-            data
-            if isinstance(data, list)
-            else data.get("features", data.get("definitions", []))
-        )
+        # Handle array, signed envelope, and object responses
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            items = data.get("defs", data.get("features", data.get("definitions", [])))
+        else:
+            items = []
 
         for item in items:
             if not isinstance(item, dict):
