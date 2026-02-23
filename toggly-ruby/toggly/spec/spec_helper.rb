@@ -44,7 +44,7 @@ module TestHelpers
   end
 
   def stub_definitions_api(app_key:, environment:, features:, status: 200)
-    url = "https://app.toggly.io/definitions/#{app_key}/#{environment}"
+    url = "https://definitions.toggly.io/definitions/#{app_key}/#{environment}"
 
     if status == 200
       stub_request(:get, url)

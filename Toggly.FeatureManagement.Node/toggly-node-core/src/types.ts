@@ -80,6 +80,7 @@ export interface FeatureDefinition {
  */
 export interface FeatureDefinitionsResponse {
   features?: FeatureDefinition[]
+  defs?: FeatureDefinitions
 }
 
 /**

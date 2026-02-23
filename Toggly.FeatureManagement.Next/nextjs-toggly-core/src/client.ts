@@ -90,7 +90,6 @@ export function createTogglyClient(
       const data = (await response.json()) as
         | FeatureDefinitionsResponse
         | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
-        | { defs?: FeatureDefinitions }
 
       const definitions: FeatureDefinitions = {}
       if (Array.isArray(data)) {
@@ -99,7 +98,7 @@ export function createTogglyClient(
         }
       } else if ('defs' in data && data.defs) {
         Object.assign(definitions, data.defs)
-      } else if (data.features && Array.isArray(data.features)) {
+      } else if ('features' in data && Array.isArray(data.features)) {
         for (const feature of data.features) {
           definitions[feature.featureKey] = feature.enabled
         }

@@ -142,8 +142,9 @@ impl DefinitionsProvider {
 
         let body: serde_json::Value = response.json().await?;
         let parsed_definitions = if config.use_signed_definitions {
-            let signed: SignedDefinitionsResponse = serde_json::from_value(body)
-                .map_err(|e| crate::Error::Provider(format!("Invalid signed definitions payload: {e}")))?;
+            let signed: SignedDefinitionsResponse = serde_json::from_value(body).map_err(|e| {
+                crate::Error::Provider(format!("Invalid signed definitions payload: {e}"))
+            })?;
             Self::parse_definitions_payload(signed.defs)?
         } else {
             Self::parse_definitions_payload(body)?
@@ -166,7 +167,11 @@ impl DefinitionsProvider {
             let mut definitions = Vec::with_capacity(array.len());
             for item in array {
                 let definition = serde_json::from_value::<FeatureDefinition>(item.clone())
-                    .map_err(|e| crate::Error::Provider(format!("Invalid feature definition in array payload: {e}")))?;
+                    .map_err(|e| {
+                        crate::Error::Provider(format!(
+                            "Invalid feature definition in array payload: {e}"
+                        ))
+                    })?;
                 definitions.push(definition);
             }
             return Ok(definitions);
@@ -175,8 +180,14 @@ impl DefinitionsProvider {
         if let Some(obj) = payload.as_object() {
             // Support a single definition object payload.
             if obj.contains_key("featureKey") {
-                let definition = serde_json::from_value::<FeatureDefinition>(serde_json::Value::Object(obj.clone()))
-                    .map_err(|e| crate::Error::Provider(format!("Invalid single feature definition payload: {e}")))?;
+                let definition = serde_json::from_value::<FeatureDefinition>(
+                    serde_json::Value::Object(obj.clone()),
+                )
+                .map_err(|e| {
+                    crate::Error::Provider(format!(
+                        "Invalid single feature definition payload: {e}"
+                    ))
+                })?;
                 return Ok(vec![definition]);
             }
 
@@ -184,7 +195,11 @@ impl DefinitionsProvider {
             let mut definitions = Vec::with_capacity(obj.len());
             for value in obj.values() {
                 let definition = serde_json::from_value::<FeatureDefinition>(value.clone())
-                    .map_err(|e| crate::Error::Provider(format!("Invalid feature definition in map payload: {e}")))?;
+                    .map_err(|e| {
+                        crate::Error::Provider(format!(
+                            "Invalid feature definition in map payload: {e}"
+                        ))
+                    })?;
                 definitions.push(definition);
             }
             return Ok(definitions);

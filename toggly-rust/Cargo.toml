@@ -43,7 +43,7 @@ metrics = "0.22"
 prometheus = "0.13"
 
 # Framework integrations
-actix-web = "4.4"
+actix-web = ">=4.4, <4.13"
 axum = "0.7"
 rocket = "0.5"
 

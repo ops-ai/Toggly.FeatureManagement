@@ -211,6 +211,31 @@ jobs:
         run: ${{ matrix.build-cmd }}
         continue-on-error: true
 
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Toggly.FeatureManagement.Flutter/toggly
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Run smoke test
+        env:
+          TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
+        run: flutter test test/smoke_test.dart
+
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
@@ -264,7 +289,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [analyze, sonar, build-platforms, dependency-check]
+    needs: [analyze, sonar, build-platforms, smoke-test, dependency-check]
     if: always()
     
     steps:

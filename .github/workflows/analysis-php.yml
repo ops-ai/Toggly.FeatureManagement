@@ -94,6 +94,31 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          extensions: mbstring, xml, ctype, json
+
+      - name: Install dependencies
+        working-directory: Toggly.FeatureManagement.PHP
+        run: composer update --prefer-dist --no-progress --no-interaction --prefer-stable
+
+      - name: Run smoke tests
+        working-directory: Toggly.FeatureManagement.PHP
+        env:
+          TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
+        run: vendor/bin/phpunit --filter SmokeTest
+
   sonar:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
@@ -224,7 +249,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [test, sonar, dependency-check]
+    needs: [test, smoke-test, sonar, dependency-check]
     if: always()
     
     steps:

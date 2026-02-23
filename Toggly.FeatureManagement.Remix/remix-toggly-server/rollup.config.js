@@ -23,7 +23,10 @@ const config = [
       commonjs(),
       typescript({
         tsconfig: './tsconfig.json',
-        declaration: false,
+        compilerOptions: {
+          declaration: false,
+          declarationMap: false,
+        },
         outDir: 'dist/esm',
       }),
     ],
@@ -42,7 +45,10 @@ const config = [
       commonjs(),
       typescript({
         tsconfig: './tsconfig.json',
-        declaration: false,
+        compilerOptions: {
+          declaration: false,
+          declarationMap: false,
+        },
         outDir: 'dist/cjs',
       }),
     ],

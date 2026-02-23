@@ -151,7 +151,9 @@ export function createTogglyClient(
         }
       }
 
-      const data = (await response.json()) as FeatureDefinitionsResponse | Array<{ featureKey: string; filters?: Array<{ name?: string }> }> | { defs?: FeatureDefinitions }
+      const data = (await response.json()) as
+        | FeatureDefinitionsResponse
+        | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
       const features: FeatureDefinitions = {}
       if (Array.isArray(data)) {
         for (const definition of data) {
@@ -159,7 +161,7 @@ export function createTogglyClient(
         }
       } else if ('defs' in data && data.defs) {
         Object.assign(features, data.defs)
-      } else if (data.features && Array.isArray(data.features)) {
+      } else if ('features' in data && Array.isArray(data.features)) {
         for (const feature of data.features) {
           features[feature.featureKey] = feature.enabled
         }

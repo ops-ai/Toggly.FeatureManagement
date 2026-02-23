@@ -218,20 +218,33 @@ jobs:
           SONAR_SERVER_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          dotnet sonarscanner begin \
-            /k:"toggly-sdks-dotnet" \
-            "/n:Toggly SDKs - .NET" \
-            /v:"${{ steps.gitversion.outputs.semVer }}" \
-            /d:sonar.host.url="${SONAR_HOST_URL}" \
-            /d:sonar.token="${SONAR_SERVER_TOKEN}" \
-            /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET" \
-            /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
-            /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
-            /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
-            /d:sonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
-            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**" \
-            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**" \
-            /d:sonar.test.inclusions="**/*Tests*.cs"
+          for attempt in 1 2 3; do
+            if dotnet sonarscanner begin \
+              /k:"toggly-sdks-dotnet" \
+              "/n:Toggly SDKs - .NET" \
+              /v:"${{ steps.gitversion.outputs.semVer }}" \
+              /d:sonar.host.url="${SONAR_HOST_URL}" \
+              /d:sonar.token="${SONAR_SERVER_TOKEN}" \
+              /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET" \
+              /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
+              /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
+              /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
+              /d:sonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
+              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**" \
+              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**" \
+              /d:sonar.test.inclusions="**/*Tests*.cs"; then
+              break
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "SonarQube Server scan initialization failed after 3 attempts"
+              exit 1
+            fi
+
+            sleep_seconds=$((attempt * 10))
+            echo "SonarQube Server scan initialization failed (attempt ${attempt}), retrying in ${sleep_seconds}s..."
+            sleep "${sleep_seconds}"
+          done
 
       - name: Build solution (SonarQube Server)
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
@@ -356,3 +369,24 @@ jobs:
 
       - name: CLI Build Summary
         run: echo "✅ CLI build completed successfully" >> $GITHUB_STEP_SUMMARY
+
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore smoke tests
+        run: dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj
+
+      - name: Run smoke tests
+        env:
+          TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
+        run: dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj -c Release --logger "trx;LogFileName=smoke-test-results.trx"

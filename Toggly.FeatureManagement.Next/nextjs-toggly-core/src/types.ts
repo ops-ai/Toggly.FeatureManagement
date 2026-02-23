@@ -108,6 +108,7 @@ export interface FeatureDefinitionsResponse {
     featureKey: string
     enabled: boolean
   }>
+  defs?: FeatureDefinitions
 }
 
 /**

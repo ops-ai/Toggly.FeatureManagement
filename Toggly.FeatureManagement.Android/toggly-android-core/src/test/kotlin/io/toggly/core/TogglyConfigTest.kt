@@ -12,7 +12,7 @@ class TogglyConfigTest {
         val config = TogglyConfig(appKey = "test-key")
 
         assertEquals("test-key", config.appKey)
-        assertEquals("https://client.toggly.io", config.baseUri)
+        assertEquals("https://definitions.toggly.io", config.baseUri)
         assertEquals("Production", config.environment)
         assertTrue(config.featureDefaults.isEmpty())
         assertEquals(180_000L, config.refreshInterval)

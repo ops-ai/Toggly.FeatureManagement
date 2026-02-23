@@ -7,7 +7,7 @@ final class TogglyConfigTests: XCTestCase {
 
         XCTAssertNil(config.appKey)
         XCTAssertEqual(config.environment, "Production")
-        XCTAssertEqual(config.baseURI, "https://client.toggly.io")
+        XCTAssertEqual(config.baseURI, "https://definitions.toggly.io")
         XCTAssertNil(config.identity)
         XCTAssertTrue(config.featureDefaults.isEmpty)
         XCTAssertFalse(config.showFeatureDuringEvaluation)
