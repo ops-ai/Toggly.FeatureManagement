@@ -102,7 +102,11 @@ module Toggly
       @last_modified = response["Last-Modified"]
 
       data = JSON.parse(response.body)
-      features = data["defs"] || data["features"] || data
+      features = if data.is_a?(Hash)
+                   data["defs"] || data["features"] || data
+                 else
+                   data
+                 end
 
       # Handle both array and object formats
       if features.is_a?(Array)

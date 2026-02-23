@@ -51,6 +51,11 @@ class EcdsaSignatureVerifier
                 throw new SignatureVerificationException('Invalid base64 signature');
             }
 
+            // Convert P1363 (raw r||s) to ASN.1/DER format if needed
+            if (strlen($signatureBytes) === 64) {
+                $signatureBytes = $this->p1363ToDer($signatureBytes);
+            }
+
             // Verify signature
             $result = openssl_verify($hash, $signatureBytes, $key, OPENSSL_ALGO_SHA256);
 
@@ -85,5 +90,32 @@ class EcdsaSignatureVerifier
     public function verifySnapshot(string $jsonData, string $signature, string $keyId, int $timestamp): bool
     {
         return $this->verify($jsonData, $signature, $keyId, $timestamp);
+    }
+
+    /**
+     * Convert IEEE P1363 (raw r||s) signature to ASN.1/DER format.
+     * Web Crypto API produces P1363 but OpenSSL expects DER.
+     */
+    private function p1363ToDer(string $p1363): string
+    {
+        $r = substr($p1363, 0, 32);
+        $s = substr($p1363, 32, 32);
+
+        // Trim leading zero bytes but ensure positive (add 0x00 if high bit set)
+        $r = ltrim($r, "\x00");
+        if (ord($r[0]) & 0x80) {
+            $r = "\x00" . $r;
+        }
+        $s = ltrim($s, "\x00");
+        if (ord($s[0]) & 0x80) {
+            $s = "\x00" . $s;
+        }
+
+        // ASN.1 DER: SEQUENCE { INTEGER r, INTEGER s }
+        $rDer = "\x02" . chr(strlen($r)) . $r;
+        $sDer = "\x02" . chr(strlen($s)) . $s;
+        $seq = $rDer . $sDer;
+
+        return "\x30" . chr(strlen($seq)) . $seq;
     }
 }

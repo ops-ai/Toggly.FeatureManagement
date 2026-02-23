@@ -257,7 +257,7 @@ namespace Toggly.FeatureManagement
                 {
                     lock (_metricsServiceLock)
                     {
-                        _metricsService ??= _serviceProvider.GetRequiredService<IMetricsService>();
+                        _metricsService ??= _serviceProvider.GetService<IMetricsService>();
                     }
                 }
                 

@@ -105,7 +105,7 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
       return '';
     }
 
-    let url = `${baseUrl}/${appKey}-${environment}/defs`;
+    let url = `${baseUrl}/${appKey}/${environment}`;
     
     // Add identity parameter if provided
     if (identity) {
@@ -152,7 +152,8 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
         );
       }
 
-      const flags = (await response.json()) as Flags;
+      const payload = await response.json();
+      const flags = (payload && typeof payload === 'object' && 'defs' in payload ? payload.defs : payload) as Flags;
       
       if (isDebug) {
         console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);
