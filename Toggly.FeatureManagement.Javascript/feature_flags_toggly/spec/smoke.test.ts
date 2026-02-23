@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import { Toggly } from '../lib/toggly';
 
 describe('Smoke test', () => {

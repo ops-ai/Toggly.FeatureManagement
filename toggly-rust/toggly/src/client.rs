@@ -318,6 +318,18 @@ impl TogglyClientBuilder {
         self
     }
 
+    /// Enable signed definitions endpoint usage.
+    pub fn use_signed_definitions(mut self, enabled: bool) -> Self {
+        self.config_builder = self.config_builder.use_signed_definitions(enabled);
+        self
+    }
+
+    /// Enable live updates via WebSocket.
+    pub fn enable_live_updates(mut self, enabled: bool) -> Self {
+        self.config_builder = self.config_builder.enable_live_updates(enabled);
+        self
+    }
+
     /// Set the cache TTL.
     pub fn cache_ttl(mut self, ttl: std::time::Duration) -> Self {
         self.config_builder = self.config_builder.cache_ttl(ttl);

@@ -12,8 +12,8 @@ final class SmokeTests: XCTestCase {
             appKey: appKey,
             environment: "Production",
             baseURI: "https://definitions.toggly.io",
-            useSignedDefinitions: true,
-            refreshInterval: 0
+            refreshInterval: 0,
+            useSignedDefinitions: true
         )
 
         let service = TogglyService(config: config)

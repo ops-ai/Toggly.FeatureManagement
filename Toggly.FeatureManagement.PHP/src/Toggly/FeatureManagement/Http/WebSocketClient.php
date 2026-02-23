@@ -12,7 +12,8 @@ use Psr\Log\NullLogger;
 class WebSocketClient
 {
     private ?string $url = null;
-    private ?callable $onUpdate = null;
+    /** @var callable|null */
+    private $onUpdate = null;
     private bool $isRunning = false;
     private LoggerInterface $logger;
     private bool $websocketAvailable = false;

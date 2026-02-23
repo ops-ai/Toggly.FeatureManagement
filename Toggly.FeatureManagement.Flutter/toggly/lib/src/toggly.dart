@@ -69,7 +69,10 @@ class Toggly with WidgetsBindingObserver {
 
   static bool _checkAppVisibility() {
     try {
-      return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+      final state = WidgetsBinding.instance.lifecycleState;
+      // null lifecycleState means the app hasn't received any lifecycle
+      // events yet (common in tests and on app startup) — treat as foreground
+      return state == null || state == AppLifecycleState.resumed;
     } catch (e) {
       // Binding not available (e.g., in tests), assume app is in foreground
       return true;
