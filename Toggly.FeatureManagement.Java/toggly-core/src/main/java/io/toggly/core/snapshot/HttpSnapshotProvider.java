@@ -210,14 +210,8 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         // Try signed envelope "defs" first, then "feature_flags", then raw array
         String featuresJson = null;
         for (String key : new String[]{"defs", "feature_flags"}) {
-            Pattern p = Pattern.compile(
-                    "\"" + key + "\"\\s*:\\s*\\[([^\\]]*(?:\\[[^\\]]*\\][^\\]]*)*)]",
-                    Pattern.DOTALL);
-            Matcher m = p.matcher(json);
-            if (m.find()) {
-                featuresJson = m.group(1);
-                break;
-            }
+            featuresJson = extractArrayByKey(json, key);
+            if (featuresJson != null) break;
         }
         // Fall back: raw array response (no wrapper key)
         if (featuresJson == null && json.trim().startsWith("[")) {
@@ -238,6 +232,39 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         }
 
         return new FeatureSnapshot(features, metrics, Instant.now(), etag);
+    }
+
+    /**
+     * Extracts the content of a JSON array value by key using bracket counting,
+     * which correctly handles nested arrays and objects.
+     */
+    private String extractArrayByKey(String json, String key) {
+        String search = "\"" + key + "\"";
+        int idx = json.indexOf(search);
+        if (idx < 0) return null;
+
+        idx = json.indexOf('[', idx + search.length());
+        if (idx < 0) return null;
+
+        return extractBalancedArray(json, idx);
+    }
+
+    private String extractBalancedArray(String json, int openIdx) {
+        int depth = 0;
+        boolean inString = false;
+        for (int i = openIdx; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
+                inString = !inString;
+            } else if (!inString) {
+                if (c == '[') {
+                    depth++;
+                } else if (c == ']' && --depth == 0) {
+                    return json.substring(openIdx + 1, i);
+                }
+            }
+        }
+        return null;
     }
 
     private void parseFeatures(String json, Map<String, FeatureDefinition> features) {

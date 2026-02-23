@@ -40,7 +40,7 @@ func TestVerifySignedDefinitions_OK(t *testing.T) {
 	ts := int64(1730000000)
 	payload := string(defs) + "|" + strconv.FormatInt(ts, 10)
 
-	sig, err := ecdsa.SignASN1(rand.Reader, priv, sha256Bytes(payload))
+	sig, err := signP1363(priv, doubleHash(payload))
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestVerifySignedDefinitions_AllowedKid(t *testing.T) {
 	defs := []byte(`[]`)
 	ts := int64(1730000000)
 	payload := string(defs) + "|" + strconv.FormatInt(ts, 10)
-	sig, err := ecdsa.SignASN1(rand.Reader, priv, sha256Bytes(payload))
+	sig, err := signP1363(priv, doubleHash(payload))
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -125,13 +125,12 @@ func TestVerifySignedDefinitions_BadSignature(t *testing.T) {
 	defs := []byte(`[]`)
 	ts := int64(1730000000)
 	payload := string(defs) + "|" + strconv.FormatInt(ts, 10)
-	sig, err := ecdsa.SignASN1(rand.Reader, priv, sha256Bytes(payload))
+	sig, err := signP1363(priv, doubleHash(payload))
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
-	if len(sig) > 0 {
-		sig[0] ^= 0xff
-	}
+	// Corrupt the signature
+	sig[0] ^= 0xff
 
 	env := &definitions.SignedDefinitionsResponse{
 		Defs:      defs,
@@ -159,7 +158,20 @@ func computeKid(xBytes, yBytes []byte) string {
 	return strings.ToUpper(hex.EncodeToString(h[:])) + "ES256"
 }
 
-func sha256Bytes(s string) []byte {
-	h := sha256.Sum256([]byte(s))
-	return h[:]
+// doubleHash matches the server's signing behavior: SHA-256(SHA-256(data)).
+func doubleHash(s string) []byte {
+	first := sha256.Sum256([]byte(s))
+	second := sha256.Sum256(first[:])
+	return second[:]
+}
+
+// signP1363 creates a P1363 (raw r||s) signature matching Web Crypto API output.
+func signP1363(priv *ecdsa.PrivateKey, hash []byte) ([]byte, error) {
+	r, s, err := ecdsa.Sign(rand.Reader, priv, hash)
+	if err != nil {
+		return nil, err
+	}
+	rBytes := pad32(r.Bytes())
+	sBytes := pad32(s.Bytes())
+	return append(rBytes, sBytes...), nil
 }

@@ -52,7 +52,6 @@ class TogglyHttpClient
                 $request = $this->requestFactory->createRequest('GET', $url);
                 $request = $request->withHeader('User-Agent', $this->userAgent);
                 $request = $request->withHeader('Accept', 'application/json');
-                $request = $request->withHeader('Accept-Encoding', 'gzip, deflate');
 
                 // Add ETag if we have one
                 if ($this->lastETag !== null) {

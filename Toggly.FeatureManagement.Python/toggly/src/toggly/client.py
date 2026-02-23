@@ -487,10 +487,11 @@ class TogglyClient:
         definitions = []
 
         # Handle array, signed envelope, and object responses
+        items: list[Any]
         if isinstance(data, list):
             items = data
         elif isinstance(data, dict):
-            items = data.get("defs", data.get("features", data.get("definitions", [])))
+            items = data.get("defs") or data.get("features") or data.get("definitions") or []
         else:
             items = []
 
