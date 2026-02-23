@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: [stable, beta, 1.85.0]
+        rust: [stable, beta, 1.88.0]
     defaults:
       run:
         working-directory: toggly-rust
@@ -159,7 +159,7 @@ jobs:
       - name: Install Rust 1.85
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.85.0
+          toolchain: 1.88.0
 
       - name: Check MSRV
         run: cargo check --all-features --workspace

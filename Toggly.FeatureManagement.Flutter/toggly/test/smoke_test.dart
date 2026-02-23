@@ -6,6 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUp(() {
+    // Allow real HTTP requests during smoke tests.
+    // TestWidgetsFlutterBinding overrides HttpClient to return 400 for all
+    // requests by default. Resetting HttpOverrides restores real networking.
+    HttpOverrides.global = null;
+  });
+
   test('loads live evaluated flags', () async {
     final appKey = Platform.environment['TOGGLY_SMOKE_APP_KEY_FRONTEND'];
     if (appKey == null || appKey.isEmpty) {

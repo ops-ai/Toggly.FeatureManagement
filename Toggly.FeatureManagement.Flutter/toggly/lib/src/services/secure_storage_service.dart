@@ -54,8 +54,10 @@ class SecureStorageService with WidgetsBindingObserver {
     _flutterSecureStorage = const FlutterSecureStorage();
     // Register for lifecycle events
     WidgetsBinding.instance.addObserver(this);
-    _isAppInForeground =
-        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    // null lifecycleState means no lifecycle events received yet (common in
+    // tests and on app startup) — treat as foreground
+    final state = WidgetsBinding.instance.lifecycleState;
+    _isAppInForeground = state == null || state == AppLifecycleState.resumed;
   }
 
   @override
