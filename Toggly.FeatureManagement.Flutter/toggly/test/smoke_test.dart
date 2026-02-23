@@ -22,6 +22,7 @@ void main() {
     await Toggly.init(
       appKey: appKey,
       environment: 'Production',
+      identity: 'smoke-test-device',
       useSignedDefinitions: true,
       config: const TogglyConfig(
         baseURI: 'https://definitions.toggly.io',

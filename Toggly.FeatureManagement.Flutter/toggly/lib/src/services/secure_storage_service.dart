@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -78,11 +79,15 @@ class SecureStorageService with WidgetsBindingObserver {
     }
     try {
       await _flutterSecureStorage.write(key: key, value: value);
+    } on MissingPluginException {
+      // Native plugin unavailable (e.g. unit tests) — silently ignore.
+      if (kDebugMode) {
+        print('Secure storage plugin not available, skipping write');
+      }
     } catch (e) {
       if (kDebugMode) {
         print('Error writing to secure storage: $e');
       }
-      // Silently fail in background state
       if (_isAppInForeground) {
         rethrow;
       }
@@ -99,11 +104,16 @@ class SecureStorageService with WidgetsBindingObserver {
     }
     try {
       return await _flutterSecureStorage.read(key: key);
+    } on MissingPluginException {
+      // Native plugin unavailable (e.g. unit tests) — return null.
+      if (kDebugMode) {
+        print('Secure storage plugin not available, skipping read');
+      }
+      return null;
     } catch (e) {
       if (kDebugMode) {
         print('Error reading from secure storage: $e');
       }
-      // Silently fail in background state
       if (_isAppInForeground) {
         rethrow;
       }
@@ -121,11 +131,15 @@ class SecureStorageService with WidgetsBindingObserver {
     }
     try {
       return await _flutterSecureStorage.delete(key: key);
+    } on MissingPluginException {
+      // Native plugin unavailable (e.g. unit tests) — silently ignore.
+      if (kDebugMode) {
+        print('Secure storage plugin not available, skipping delete');
+      }
     } catch (e) {
       if (kDebugMode) {
         print('Error deleting from secure storage: $e');
       }
-      // Silently fail in background state
       if (_isAppInForeground) {
         rethrow;
       }

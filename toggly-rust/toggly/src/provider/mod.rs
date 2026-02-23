@@ -166,6 +166,9 @@ impl DefinitionsProvider {
         if let Some(array) = payload.as_array() {
             let mut definitions = Vec::with_capacity(array.len());
             for item in array {
+                if item.is_null() {
+                    continue;
+                }
                 let definition = serde_json::from_value::<FeatureDefinition>(item.clone())
                     .map_err(|e| {
                         crate::Error::Provider(format!(

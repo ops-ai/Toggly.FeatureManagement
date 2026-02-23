@@ -17,5 +17,6 @@ using System.Runtime.InteropServices;
 
 // Make internal types visible to test assemblies
 [assembly: InternalsVisibleTo("Toggly.FeatureManagement.Tests")]
+[assembly: InternalsVisibleTo("Toggly.FeatureManagement.SmokeTests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
 
