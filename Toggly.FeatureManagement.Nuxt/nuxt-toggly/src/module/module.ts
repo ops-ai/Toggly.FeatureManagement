@@ -27,7 +27,7 @@ export default defineNuxtModule<ModuleOptions>({
     autoImport: true,
     globalComponents: true,
     globalDirectives: true,
-    baseUri: 'https://client.toggly.io',
+    baseUri: 'https://definitions.toggly.io',
     environment: 'Production',
     refreshInterval: 180000,
     showFeatureDuringEvaluation: false,

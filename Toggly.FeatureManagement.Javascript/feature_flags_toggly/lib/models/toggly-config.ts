@@ -2,6 +2,7 @@ import type { Hook } from '@ops-ai/toggly-hooks-types';
 
 export interface TogglyConfig {
   baseURI?: string;
+  verifySignatures?: boolean;
   reloadOnFeatureFlagValidation?: boolean;
   connectTimeout?: number;
   featureFlagsRefreshInterval?: number;

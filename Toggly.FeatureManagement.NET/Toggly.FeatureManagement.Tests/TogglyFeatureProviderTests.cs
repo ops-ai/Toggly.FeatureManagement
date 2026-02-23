@@ -2131,7 +2131,7 @@ public class TogglyFeatureProviderTests : IDisposable
                 ItExpr.IsAny<CancellationToken>())
             .ReturnsAsync((HttpRequestMessage request, CancellationToken _) =>
             {
-                if (request.RequestUri?.PathAndQuery.Contains("definitions/v2") == true)
+                if (request.RequestUri?.PathAndQuery.Contains("definitions-signed") == true)
                 {
                     var response = new HttpResponseMessage(HttpStatusCode.OK)
                     {
@@ -2212,7 +2212,7 @@ public class TogglyFeatureProviderTests : IDisposable
                     timestamp = timestamp
                 };
 
-                if (request.RequestUri?.PathAndQuery.Contains("definitions/v2") == true)
+                if (request.RequestUri?.PathAndQuery.Contains("definitions-signed") == true)
                 {
                     var response = new HttpResponseMessage(HttpStatusCode.OK)
                     {

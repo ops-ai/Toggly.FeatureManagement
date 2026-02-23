@@ -201,7 +201,7 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
             }
 
             $path = $this->settings->useSignedDefinitions
-                ? "definitions/v2/{$this->settings->appKey}/{$this->settings->environment}"
+                ? "definitions-signed/{$this->settings->appKey}/{$this->settings->environment}"
                 : "definitions/{$this->settings->appKey}/{$this->settings->environment}";
 
             $response = $this->httpClient->get($path);

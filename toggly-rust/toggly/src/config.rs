@@ -35,6 +35,9 @@ pub struct TogglyConfig {
     /// Disable background refresh of definitions.
     pub disable_background_refresh: bool,
 
+    /// Whether to fetch signed definitions from `definitions-signed`.
+    pub use_signed_definitions: bool,
+
     /// Enable live updates via WebSocket.
     pub enable_live_updates: bool,
 
@@ -50,7 +53,7 @@ impl Default for TogglyConfig {
         Self {
             app_key: String::new(),
             environment: "Production".to_string(),
-            base_url: "https://app.toggly.io/".to_string(),
+            base_url: "https://definitions.toggly.io/".to_string(),
             definitions_url: "https://definitions.toggly.io/".to_string(),
             app_version: None,
             instance_name: None,
@@ -58,6 +61,7 @@ impl Default for TogglyConfig {
             http_timeout: Duration::from_secs(10),
             enable_undefined_in_dev: false,
             disable_background_refresh: false,
+            use_signed_definitions: false,
             enable_live_updates: false,
             cache_ttl: Duration::from_secs(60),
             cache_max_entries: 10_000,
@@ -89,7 +93,14 @@ impl TogglyConfig {
         } else {
             &self.definitions_url
         };
-        format!("{}/definitions/{}/{}", base, self.app_key, self.environment)
+        if self.use_signed_definitions {
+            format!(
+                "{}/definitions-signed/{}/{}",
+                base, self.app_key, self.environment
+            )
+        } else {
+            format!("{}/definitions/{}/{}", base, self.app_key, self.environment)
+        }
     }
 }
 
@@ -160,6 +171,12 @@ impl TogglyConfigBuilder {
         self
     }
 
+    /// Enable signed definitions endpoint usage.
+    pub fn use_signed_definitions(mut self, enabled: bool) -> Self {
+        self.config.use_signed_definitions = enabled;
+        self
+    }
+
     /// Enable live updates via WebSocket.
     pub fn enable_live_updates(mut self, enabled: bool) -> Self {
         self.config.enable_live_updates = enabled;
@@ -192,7 +209,7 @@ mod tests {
     fn test_default_config() {
         let config = TogglyConfig::default();
         assert_eq!(config.environment, "Production");
-        assert_eq!(config.base_url, "https://app.toggly.io/");
+        assert_eq!(config.base_url, "https://definitions.toggly.io/");
         assert_eq!(config.refresh_interval, Duration::from_secs(300));
     }
 
@@ -228,6 +245,20 @@ mod tests {
         assert_eq!(
             config.definitions_endpoint(),
             "https://definitions.toggly.io/definitions/my-app/production"
+        );
+    }
+
+    #[test]
+    fn test_signed_definitions_endpoint() {
+        let config = TogglyConfig::builder()
+            .app_key("my-app")
+            .environment("production")
+            .use_signed_definitions(true)
+            .build();
+
+        assert_eq!(
+            config.definitions_endpoint(),
+            "https://definitions.toggly.io/definitions-signed/my-app/production"
         );
     }
 }

@@ -7,7 +7,7 @@ RSpec.describe Toggly::Config do
 
       expect(config.app_key).to eq("test")
       expect(config.environment).to eq("Production")
-      expect(config.base_url).to eq("https://app.toggly.io/")
+      expect(config.base_url).to eq("https://definitions.toggly.io/")
       expect(config.refresh_interval).to eq(300)
       expect(config.http_timeout).to eq(10)
     end
@@ -37,7 +37,7 @@ RSpec.describe Toggly::Config do
   describe "#definitions_endpoint" do
     it "builds correct endpoint URL" do
       config = described_class.new(app_key: "my-app", environment: "Production")
-      expect(config.definitions_endpoint).to eq("https://app.toggly.io/definitions/my-app/Production")
+      expect(config.definitions_endpoint).to eq("https://definitions.toggly.io/definitions/my-app/Production")
     end
 
     it "uses definitions_url when set" do

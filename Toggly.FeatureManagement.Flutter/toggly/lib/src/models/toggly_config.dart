@@ -15,10 +15,14 @@ class TogglyConfig {
   /// Whitelist of trusted key IDs
   final List<String>? trustedKeyIds;
 
+  /// Whether signatures should be verified on signed responses.
+  final bool verifySignatures;
+
   const TogglyConfig({
-    this.baseURI = 'https://client.toggly.io',
+    this.baseURI = 'https://definitions.toggly.io',
     this.connectTimeout = 5 * 1000,
     this.featureFlagsRefreshInterval = 3 * 60 * 1000,
     this.trustedKeyIds,
+    this.verifySignatures = false,
   });
 }

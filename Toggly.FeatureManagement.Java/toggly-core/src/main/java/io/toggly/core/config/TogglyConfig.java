@@ -181,7 +181,7 @@ public final class TogglyConfig {
     public static final class Builder {
         private String appKey = "";
         private String environment = "Production";
-        private String baseUrl = "https://client.toggly.io";
+        private String baseUrl = "https://definitions.toggly.io";
         private Duration refreshInterval = Duration.ofMinutes(3);
         private Duration connectTimeout = Duration.ofSeconds(10);
         private Duration readTimeout = Duration.ofSeconds(30);
@@ -224,7 +224,7 @@ public final class TogglyConfig {
          * @return this builder
          */
         public Builder baseUrl(String baseUrl) {
-            this.baseUrl = baseUrl != null ? baseUrl : "https://client.toggly.io";
+            this.baseUrl = baseUrl != null ? baseUrl : "https://definitions.toggly.io";
             return this;
         }
 

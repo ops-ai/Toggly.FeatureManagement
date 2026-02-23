@@ -1,7 +1,7 @@
 //! Feature definitions provider.
 
 use crate::config::TogglyConfig;
-use crate::definitions::FeatureDefinition;
+use crate::definitions::{FeatureDefinition, SignedDefinitionsResponse};
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -141,20 +141,58 @@ impl DefinitionsProvider {
         }
 
         let body: serde_json::Value = response.json().await?;
+        let parsed_definitions = if config.use_signed_definitions {
+            let signed: SignedDefinitionsResponse = serde_json::from_value(body)
+                .map_err(|e| crate::Error::Provider(format!("Invalid signed definitions payload: {e}")))?;
+            Self::parse_definitions_payload(signed.defs)?
+        } else {
+            Self::parse_definitions_payload(body)?
+        };
 
-        // Parse definitions - API returns a map of feature_key -> definition
-        if let Some(obj) = body.as_object() {
-            definitions.clear();
-            for (key, value) in obj {
-                if let Ok(def) = serde_json::from_value::<FeatureDefinition>(value.clone()) {
-                    definitions.insert(key.clone(), def);
-                }
-            }
-            info!(count = definitions.len(), "Loaded feature definitions");
+        definitions.clear();
+        for definition in parsed_definitions {
+            definitions.insert(definition.feature_key.clone(), definition);
         }
+        info!(count = definitions.len(), "Loaded feature definitions");
 
         *last_fetch.write() = Some(Instant::now());
         Ok(())
+    }
+
+    fn parse_definitions_payload(
+        payload: serde_json::Value,
+    ) -> crate::Result<Vec<FeatureDefinition>> {
+        if let Some(array) = payload.as_array() {
+            let mut definitions = Vec::with_capacity(array.len());
+            for item in array {
+                let definition = serde_json::from_value::<FeatureDefinition>(item.clone())
+                    .map_err(|e| crate::Error::Provider(format!("Invalid feature definition in array payload: {e}")))?;
+                definitions.push(definition);
+            }
+            return Ok(definitions);
+        }
+
+        if let Some(obj) = payload.as_object() {
+            // Support a single definition object payload.
+            if obj.contains_key("featureKey") {
+                let definition = serde_json::from_value::<FeatureDefinition>(serde_json::Value::Object(obj.clone()))
+                    .map_err(|e| crate::Error::Provider(format!("Invalid single feature definition payload: {e}")))?;
+                return Ok(vec![definition]);
+            }
+
+            // Support map payloads keyed by feature key.
+            let mut definitions = Vec::with_capacity(obj.len());
+            for value in obj.values() {
+                let definition = serde_json::from_value::<FeatureDefinition>(value.clone())
+                    .map_err(|e| crate::Error::Provider(format!("Invalid feature definition in map payload: {e}")))?;
+                definitions.push(definition);
+            }
+            return Ok(definitions);
+        }
+
+        Err(crate::Error::Provider(
+            "Unsupported definitions payload format".to_string(),
+        ))
     }
 
     /// Get a feature definition by key.

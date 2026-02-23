@@ -39,15 +39,17 @@ const DEFAULT_CONFIG: Required<
     | 'showFeatureDuringEvaluation'
     | 'refreshInterval'
     | 'useSignedDefinitions'
+    | 'verifySignatures'
     | 'connectTimeout'
     | 'requestTimeout'
   >
 > = {
-  baseURI: 'https://client.toggly.io',
+  baseURI: 'https://definitions.toggly.io',
   environment: 'Production',
   showFeatureDuringEvaluation: false,
   refreshInterval: 180000, // 3 minutes
   useSignedDefinitions: false,
+  verifySignatures: false,
   connectTimeout: 10000,
   requestTimeout: 30000,
 };
@@ -324,14 +326,7 @@ export class TogglyService {
       const data = await response.json();
       let flags: FeatureFlags;
 
-      if (this.config.useSignedDefinitions) {
-        // Handle signed definitions
-        flags = data.data as FeatureFlags;
-        // Note: Full signature verification would require crypto libraries
-        // For now, we trust the server response
-      } else {
-        flags = data as FeatureFlags;
-      }
+      flags = (data?.defs ?? data?.data ?? data) as FeatureFlags;
 
       // Track changes
       const previousFlags = this.features;
@@ -389,8 +384,7 @@ export class TogglyService {
    * Build the API URL for fetching feature flags.
    */
   private buildApiUrl(): string {
-    const endpoint = this.config.useSignedDefinitions ? 'signed-defs' : 'defs';
-    let url = `${this.config.baseURI}/${this.config.appKey}-${this.config.environment}/${endpoint}`;
+    let url = `${this.config.baseURI}/evaluated-signed/${this.config.appKey}/${this.config.environment}`;
 
     if (this.identity) {
       url += `?u=${encodeURIComponent(this.identity)}`;

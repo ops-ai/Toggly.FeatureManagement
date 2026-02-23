@@ -84,7 +84,8 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         if (env == null || env.isEmpty()) {
             env = "Production";
         }
-        return baseUrl + "/definitions/" + config.getAppKey() + "/" + env;
+        String endpoint = config.isUseSignedDefinitions() ? "definitions-signed" : "definitions";
+        return baseUrl + "/" + endpoint + "/" + config.getAppKey() + "/" + env;
     }
 
     @Override

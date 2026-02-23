@@ -13,7 +13,7 @@ class TestTogglyConfig:
         config = TogglyConfig(app_key="test-key")
 
         assert config.app_key == "test-key"
-        assert config.base_url == "https://client.toggly.io"
+        assert config.base_url == "https://definitions.toggly.io"
         assert config.environment == "Production"
         assert config.feature_defaults == {}
         assert config.refresh_interval == 180.0

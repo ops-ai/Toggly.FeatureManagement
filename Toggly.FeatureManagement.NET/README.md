@@ -290,7 +290,7 @@ builder.Services.AddTogglyWeb(options =>
 #### How It Works
 
 When signed definitions are enabled:
-1. Feature definitions are fetched from a secure endpoint (`/definitions/v2/`)
+1. Feature definitions are fetched from a secure endpoint (`/definitions-signed/`)
 2. Each response includes:
    - The feature definitions (`defs`)
    - A timestamp (`timestamp`)
@@ -328,7 +328,7 @@ The implementation includes several optimizations:
 If you encounter issues with signed definitions:
 
 1. Ensure your application can access both:
-   - The feature definitions endpoint (`https://app.toggly.io/definitions/v2/`)
+   - The feature definitions endpoint (`https://definitions.toggly.io/definitions-signed/{appKey}/{environment}`)
    - The JWKS endpoint (`https://app.toggly.io/.well-known/jwks`)
 2. Check that your network allows HTTPS connections to these endpoints
 3. Enable debug logging to see detailed verification information:

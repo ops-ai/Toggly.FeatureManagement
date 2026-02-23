@@ -82,7 +82,7 @@ export function createTogglyClient(
       throw new Error('Toggly: appKey is required for API mode')
     }
 
-    let url = `${baseUrl}/${appKey}-${environment}/defs`
+    let url = `${baseUrl}/evaluated-signed/${appKey}/${environment}`
 
     if (config.identity) {
       url += `?u=${encodeURIComponent(config.identity)}`
@@ -151,11 +151,15 @@ export function createTogglyClient(
         }
       }
 
-      const data = (await response.json()) as FeatureDefinitionsResponse
-
-      // Transform array response to record
+      const data = (await response.json()) as FeatureDefinitionsResponse | Array<{ featureKey: string; filters?: Array<{ name?: string }> }> | { defs?: FeatureDefinitions }
       const features: FeatureDefinitions = {}
-      if (data.features && Array.isArray(data.features)) {
+      if (Array.isArray(data)) {
+        for (const definition of data) {
+          features[definition.featureKey] = !!definition.filters?.some((filter) => filter.name === 'AlwaysOn')
+        }
+      } else if ('defs' in data && data.defs) {
+        Object.assign(features, data.defs)
+      } else if (data.features && Array.isArray(data.features)) {
         for (const feature of data.features) {
           features[feature.featureKey] = feature.enabled
         }

@@ -32,7 +32,7 @@ class Toggly:
     Configuration in Flask:
         app.config['TOGGLY_APP_KEY'] = 'your-app-key'
         app.config['TOGGLY_ENVIRONMENT'] = 'Production'
-        app.config['TOGGLY_BASE_URL'] = 'https://client.toggly.io'
+        app.config['TOGGLY_BASE_URL'] = 'https://definitions.toggly.io'
         app.config['TOGGLY_REFRESH_INTERVAL'] = 180.0
         app.config['TOGGLY_FEATURE_DEFAULTS'] = {'my-feature': False}
     """
@@ -66,7 +66,7 @@ class Toggly:
         # Set default config values
         app.config.setdefault("TOGGLY_APP_KEY", None)
         app.config.setdefault("TOGGLY_ENVIRONMENT", "Production")
-        app.config.setdefault("TOGGLY_BASE_URL", "https://client.toggly.io")
+        app.config.setdefault("TOGGLY_BASE_URL", "https://definitions.toggly.io")
         app.config.setdefault("TOGGLY_REFRESH_INTERVAL", 180.0)
         app.config.setdefault("TOGGLY_FEATURE_DEFAULTS", {})
         app.config.setdefault("TOGGLY_USE_SIGNED_DEFINITIONS", False)
@@ -100,7 +100,7 @@ class Toggly:
         config = TogglyConfig(
             app_key=app.config.get("TOGGLY_APP_KEY"),
             environment=app.config.get("TOGGLY_ENVIRONMENT", "Production"),
-            base_url=app.config.get("TOGGLY_BASE_URL", "https://client.toggly.io"),
+            base_url=app.config.get("TOGGLY_BASE_URL", "https://definitions.toggly.io"),
             feature_defaults=app.config.get("TOGGLY_FEATURE_DEFAULTS", {}),
             refresh_interval=app.config.get("TOGGLY_REFRESH_INTERVAL", 180.0),
             use_signed_definitions=app.config.get("TOGGLY_USE_SIGNED_DEFINITIONS", False),

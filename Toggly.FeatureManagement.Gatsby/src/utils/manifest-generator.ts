@@ -53,7 +53,7 @@ export async function generateConfigManifest(
   const sanitizedConfig = {
     appKey: pluginOptions.appKey,
     environment: pluginOptions.environment || 'Production',
-    baseURI: pluginOptions.baseURI || 'https://client.toggly.io',
+    baseURI: pluginOptions.baseURI || 'https://definitions.toggly.io',
   };
   
   try {

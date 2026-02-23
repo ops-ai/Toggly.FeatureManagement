@@ -31,7 +31,7 @@ def configure_toggly(
     *,
     app_key: str | None = None,
     environment: str = "Production",
-    base_url: str = "https://client.toggly.io",
+    base_url: str = "https://definitions.toggly.io",
     feature_defaults: dict[str, bool] | None = None,
     refresh_interval: float = 180.0,
     use_signed_definitions: bool = False,

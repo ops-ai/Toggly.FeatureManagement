@@ -110,7 +110,7 @@ export const pluginOptionsSchema: GatsbyNode['pluginOptionsSchema'] = ({ Joi }) 
       .default('Production')
       .description('Environment name'),
     baseURI: Joi.string()
-      .default('https://client.toggly.io')
+      .default('https://definitions.toggly.io')
       .description('Base URI for Toggly API'),
     flagDefaults: Joi.object()
       .pattern(Joi.string(), Joi.boolean())

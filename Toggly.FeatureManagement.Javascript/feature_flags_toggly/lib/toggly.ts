@@ -10,7 +10,8 @@ export class Toggly {
 
   static init(config: TogglyConfig = {} as TogglyConfig): Promise<{ [key: string]: boolean }> {
     Toggly._config = Object.assign({
-      baseURI: 'https://client.toggly.io',
+      baseURI: 'https://definitions.toggly.io',
+      verifySignatures: false,
       reloadOnFeatureFlagValidation: false,
       connectTimeout: 5 * 1000,
       featureFlagsRefreshInterval: 3 * 60 * 1000,
@@ -79,7 +80,7 @@ export class Toggly {
 
   static fetchFeatureFlags(): Promise<{ [key: string]: boolean }> {
     return new Promise((resolve, reject) => {
-      var url = `${Toggly._config.baseURI}/${Toggly._config.appKey}-${Toggly._config.environment}/defs`;
+      var url = `${Toggly._config.baseURI}/evaluated-signed/${Toggly._config.appKey}/${Toggly._config.environment}`;
 
       if (Toggly.identity) {
         url += `?u=${Toggly.identity}`;
@@ -87,7 +88,8 @@ export class Toggly {
 
       fetch(url)
         .then((response) => response.json())
-        .then((flags) => {
+        .then((payload) => {
+          const flags = (payload && payload.defs) ? payload.defs : payload;
           // Cache flags on successful response
           Toggly.cacheFeatureFlags(flags);
           resolve(flags);

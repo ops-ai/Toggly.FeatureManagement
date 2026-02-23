@@ -10,8 +10,11 @@ import type { Hook } from '@ops-ai/toggly-hooks-types';
   providedIn: 'root',
 })
 export class TogglyOptions implements ITogglyOptions {
-  /** Base URI for the Toggly API (default: https://client.toggly.io) */
+  /** Base URI for the Toggly definitions API (default: https://definitions.toggly.io) */
   baseURI?: string
+
+  /** Whether signatures should be verified on signed responses */
+  verifySignatures?: boolean
 
   /** Your Toggly application key */
   appKey?: string

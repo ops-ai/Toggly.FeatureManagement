@@ -13,6 +13,9 @@ export interface TogglyPluginOptions {
   /** Base URI for Toggly API */
   baseURI?: string;
   
+  /** Whether signatures should be verified on signed responses */
+  verifySignatures?: boolean;
+  
   /** Default flag values when API is unavailable */
   flagDefaults?: Record<string, boolean>;
   

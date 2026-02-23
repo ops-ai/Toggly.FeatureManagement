@@ -256,7 +256,7 @@ func (p *definitionsProvider) refreshUnsigned(ctx context.Context) error {
 }
 
 func (p *definitionsProvider) refreshSigned(ctx context.Context) error {
-	url := fmt.Sprintf("%sdefinitions/v2/%s/%s", p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment)
+	url := fmt.Sprintf("%sdefinitions-signed/%s/%s", p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err

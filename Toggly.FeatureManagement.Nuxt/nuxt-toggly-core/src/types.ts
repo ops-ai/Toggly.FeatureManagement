@@ -6,7 +6,7 @@ export interface TogglyConfig {
   appKey?: string
   /** Environment name (default: 'Production') */
   environment?: string
-  /** Base URI for the Toggly API (default: 'https://client.toggly.io') */
+  /** Base URI for the Toggly API (default: 'https://definitions.toggly.io') */
   baseUri?: string
   /** User identity for targeting and rollouts */
   identity?: string

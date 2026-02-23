@@ -55,7 +55,7 @@ module Toggly
     attr_accessor :logger
 
     # Default values
-    DEFAULT_BASE_URL = "https://app.toggly.io/"
+    DEFAULT_BASE_URL = "https://definitions.toggly.io/"
     DEFAULT_REFRESH_INTERVAL = 300 # 5 minutes
     DEFAULT_HTTP_TIMEOUT = 10 # seconds
     DEFAULT_ENVIRONMENT = "Production"
@@ -83,7 +83,8 @@ module Toggly
     # @return [String]
     def definitions_endpoint
       base = @definitions_url || @base_url
-      "#{normalize_url(base)}definitions/#{@app_key}/#{@environment}"
+      endpoint = @use_signed_definitions ? "definitions-signed" : "definitions"
+      "#{normalize_url(base)}#{endpoint}/#{@app_key}/#{@environment}"
     end
 
     # Validate the configuration

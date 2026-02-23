@@ -20,7 +20,7 @@ export default function togglyIntegration(
   options: TogglyIntegrationOptions = {}
 ): AstroIntegration {
   const config: TogglyConfig = {
-    baseURI: 'https://client.toggly.io',
+    baseURI: 'https://definitions.toggly.io',
     environment: 'Production',
     flagDefaults: {},
     featureFlagsRefreshInterval: 3 * 60 * 1000,

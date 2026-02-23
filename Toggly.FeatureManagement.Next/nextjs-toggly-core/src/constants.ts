@@ -2,7 +2,7 @@
  * Default configuration values
  */
 export const DEFAULT_CONFIG = {
-  baseUri: 'https://client.toggly.io',
+  baseUri: 'https://definitions.toggly.io',
   environment: 'Production',
   refreshInterval: 180000, // 3 minutes
   showFeatureDuringEvaluation: false,
@@ -13,5 +13,5 @@ export const DEFAULT_CONFIG = {
  */
 export const API_ENDPOINTS = {
   definitions: (baseUri: string, appKey: string, environment: string) =>
-    `${baseUri}/${appKey}-${environment}/defs`,
+    `${baseUri}/evaluated-signed/${appKey}/${environment}`,
 } as const

@@ -36,7 +36,7 @@ public class TogglyProperties {
     /**
      * Base URL for Toggly API.
      */
-    private String baseUrl = "https://app.toggly.io";
+    private String baseUrl = "https://definitions.toggly.io";
 
     /**
      * Refresh interval in seconds. 0 or negative disables auto-refresh.

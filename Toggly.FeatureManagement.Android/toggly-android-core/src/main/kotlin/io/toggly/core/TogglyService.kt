@@ -415,10 +415,10 @@ class TogglyService(
                 val body = resp.body?.string()
                     ?: throw TogglyException.InvalidResponse("Empty response body")
 
-                val flags: FeatureFlags = if (config.useSignedDefinitions) {
+                val flags: FeatureFlags = runCatching {
                     val signedResponse = json.decodeFromString<SignedDefinitionsResponse>(body)
-                    signedResponse.data
-                } else {
+                    signedResponse.defs ?: signedResponse.data ?: emptyMap()
+                }.getOrElse {
                     json.decodeFromString<Map<String, Boolean>>(body)
                 }
 
@@ -470,8 +470,7 @@ class TogglyService(
     }
 
     private fun buildApiUrl(): String {
-        val endpoint = if (config.useSignedDefinitions) "signed-defs" else "defs"
-        var url = "${config.baseUri}/${config.appKey}-${config.environment}/$endpoint"
+        var url = "${config.baseUri}/evaluated-signed/${config.appKey}/${config.environment}"
 
         identity?.let { id ->
             url += "?u=${java.net.URLEncoder.encode(id, "UTF-8")}"

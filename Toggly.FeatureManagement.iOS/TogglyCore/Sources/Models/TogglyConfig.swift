@@ -26,6 +26,9 @@ public struct TogglyConfig: Sendable {
     /// Whether to use signed definitions for enhanced security.
     public let useSignedDefinitions: Bool
 
+    /// Whether signatures should be verified on signed responses.
+    public let verifySignatures: Bool
+
     /// Connection timeout in seconds.
     public let connectTimeout: TimeInterval
 
@@ -39,24 +42,26 @@ public struct TogglyConfig: Sendable {
     /// - Parameters:
     ///   - appKey: The application key from the Toggly dashboard.
     ///   - environment: The environment name. Defaults to "Production".
-    ///   - baseURI: Base URI for the Toggly API. Defaults to the Toggly CDN.
+    ///   - baseURI: Base URI for the Toggly definitions API. Defaults to the Toggly definitions worker.
     ///   - identity: User identity for feature targeting.
     ///   - featureDefaults: Default feature flag values.
     ///   - showFeatureDuringEvaluation: Whether to show content during evaluation.
     ///   - refreshInterval: Interval between refreshes in seconds. Defaults to 180.
     ///   - useSignedDefinitions: Whether to use signed definitions.
+    ///   - verifySignatures: Whether signatures should be verified.
     ///   - connectTimeout: Connection timeout in seconds. Defaults to 10.
     ///   - requestTimeout: Request timeout in seconds. Defaults to 30.
     ///   - storage: Custom storage implementation.
     public init(
         appKey: String? = nil,
         environment: String = "Production",
-        baseURI: String = "https://client.toggly.io",
+        baseURI: String = "https://definitions.toggly.io",
         identity: String? = nil,
         featureDefaults: FeatureFlags = [:],
         showFeatureDuringEvaluation: Bool = false,
         refreshInterval: TimeInterval = 180,
         useSignedDefinitions: Bool = false,
+        verifySignatures: Bool = false,
         connectTimeout: TimeInterval = 10,
         requestTimeout: TimeInterval = 30,
         storage: TogglyStorage? = nil
@@ -69,6 +74,7 @@ public struct TogglyConfig: Sendable {
         self.showFeatureDuringEvaluation = showFeatureDuringEvaluation
         self.refreshInterval = refreshInterval
         self.useSignedDefinitions = useSignedDefinitions
+        self.verifySignatures = verifySignatures
         self.connectTimeout = connectTimeout
         self.requestTimeout = requestTimeout
         self.storage = storage

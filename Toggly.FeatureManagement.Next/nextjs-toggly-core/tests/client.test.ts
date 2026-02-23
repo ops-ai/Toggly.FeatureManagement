@@ -30,7 +30,7 @@ describe('createTogglyClient', () => {
     it('should create a client with default config', () => {
       const client = createTogglyClient()
 
-      expect(client.config.baseUri).toBe('https://client.toggly.io')
+      expect(client.config.baseUri).toBe('https://definitions.toggly.io')
       expect(client.config.environment).toBe('Production')
       expect(client.state.initialized).toBe(false)
       expect(client.state.loading).toBe(false)
@@ -45,7 +45,7 @@ describe('createTogglyClient', () => {
 
       expect(client.config.appKey).toBe('test-key')
       expect(client.config.environment).toBe('Development')
-      expect(client.config.baseUri).toBe('https://client.toggly.io')
+      expect(client.config.baseUri).toBe('https://definitions.toggly.io')
     })
 
     it('should initialize with feature defaults before API call', async () => {

@@ -49,7 +49,8 @@ class TogglyClientInstance {
 
   constructor(config: TogglyPluginOptions) {
     this.config = {
-      baseURI: 'https://client.toggly.io',
+      baseURI: 'https://definitions.toggly.io',
+      verifySignatures: false,
       environment: 'Production',
       flagDefaults: {},
       featureFlagsRefreshInterval: 3 * 60 * 1000,
@@ -74,7 +75,7 @@ class TogglyClientInstance {
     }
 
     const baseUrl = baseURI.replace(/\/$/, '');
-    let url = `${baseUrl}/${appKey}-${environment}/defs`;
+    let url = `${baseUrl}/${appKey}/evaluated-signed`;
 
     if (identity) {
       url += `?u=${encodeURIComponent(identity)}`;
@@ -111,7 +112,8 @@ class TogglyClientInstance {
         throw new Error(`Failed to fetch flags: ${response.status} ${response.statusText}`);
       }
 
-      const flags = (await response.json()) as Flags;
+      const payload = (await response.json()) as { defs?: Flags } | Flags;
+      const flags = ('defs' in (payload as Record<string, unknown>) ? (payload as { defs: Flags }).defs : payload) as Flags;
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Fetched flags:', flags);

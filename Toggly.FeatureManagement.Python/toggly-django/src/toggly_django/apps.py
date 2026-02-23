@@ -30,7 +30,7 @@ class TogglyConfig(AppConfig):
         config = BaseTogglyConfig(
             app_key=toggly_settings.get("APP_KEY"),
             environment=toggly_settings.get("ENVIRONMENT", "Production"),
-            base_url=toggly_settings.get("BASE_URL", "https://client.toggly.io"),
+            base_url=toggly_settings.get("BASE_URL", "https://definitions.toggly.io"),
             feature_defaults=toggly_settings.get("FEATURE_DEFAULTS", {}),
             refresh_interval=toggly_settings.get("REFRESH_INTERVAL", 180.0),
             use_signed_definitions=toggly_settings.get("USE_SIGNED_DEFINITIONS", False),

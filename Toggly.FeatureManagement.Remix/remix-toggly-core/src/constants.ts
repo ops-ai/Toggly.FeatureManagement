@@ -3,7 +3,7 @@
  */
 
 /** Default base URL for Toggly API */
-export const DEFAULT_BASE_URL = 'https://client.toggly.io';
+export const DEFAULT_BASE_URL = 'https://definitions.toggly.io';
 
 /** Default environment name */
 export const DEFAULT_ENVIRONMENT = 'Production';

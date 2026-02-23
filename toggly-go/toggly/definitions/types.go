@@ -21,7 +21,7 @@ type FeatureFilter struct {
 
 // FeatureDefinitionModel is the shape returned by /definitions/{appKey}/{env}.
 //
-// It also matches the Defs payload inside the signed response (/definitions/v2).
+// It also matches the Defs payload inside the signed response (/definitions-signed/{appKey}/{env}).
 type FeatureDefinitionModel struct {
 	FeatureKey       string          `json:"featureKey"`
 	Filters          []FeatureFilter `json:"filters"`
@@ -31,7 +31,7 @@ type FeatureDefinitionModel struct {
 	RequirementType  RequirementType `json:"requirementType"`
 }
 
-// SignedDefinitionsResponse is the envelope returned by /definitions/v2/{appKey}/{env}.
+// SignedDefinitionsResponse is the envelope returned by /definitions-signed/{appKey}/{env}.
 //
 // IMPORTANT: Defs is raw JSON bytes so signature verification can use the
 // exact server-signed payload.

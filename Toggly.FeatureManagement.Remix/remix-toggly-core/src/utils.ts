@@ -15,7 +15,7 @@ import type {
 export const DEFAULT_CONFIG: Required<
   Pick<TogglyConfig, 'baseUrl' | 'environment' | 'timeout' | 'debug'>
 > = {
-  baseUrl: 'https://client.toggly.io',
+  baseUrl: 'https://definitions.toggly.io',
   environment: 'Production',
   timeout: 10000,
   debug: false,
@@ -44,7 +44,7 @@ export function buildDefinitionsUrl(
     throw new Error('appKey is required');
   }
 
-  let url = `${baseUrl}/${appKey}-${environment}/defs`;
+  let url = `${baseUrl}/evaluated-signed/${appKey}/${environment}`;
 
   if (identity) {
     url += `?u=${encodeURIComponent(identity)}`;

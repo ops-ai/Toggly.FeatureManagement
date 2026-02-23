@@ -55,8 +55,8 @@ data class TogglyConfig(
     val appKey: String? = null,
     /** Environment name (e.g., "Production", "Staging") */
     val environment: String = "Production",
-    /** Base URI for the Toggly API */
-    val baseUri: String = "https://client.toggly.io",
+    /** Base URI for the Toggly definitions API */
+    val baseUri: String = "https://definitions.toggly.io",
     /** User identity for targeting */
     val identity: String? = null,
     /** Default feature flag values */
@@ -67,6 +67,8 @@ data class TogglyConfig(
     val refreshInterval: Long = 180_000L,
     /** Whether to use signed definitions for enhanced security */
     val useSignedDefinitions: Boolean = false,
+    /** Whether signatures should be verified on signed responses */
+    val verifySignatures: Boolean = false,
     /** Connection timeout in milliseconds */
     val connectTimeout: Long = 10_000L,
     /** Request timeout in milliseconds */
@@ -134,7 +136,8 @@ internal data class TogglyFeatureFlagsCache(
  */
 @Serializable
 internal data class SignedDefinitionsResponse(
-    val data: Map<String, Boolean>
+    val defs: Map<String, Boolean>? = null,
+    val data: Map<String, Boolean>? = null
 )
 
 /**

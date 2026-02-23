@@ -23,7 +23,7 @@ export interface TogglyConfig {
   appKey?: string
   /** Environment name (default: 'Production') */
   environment?: string
-  /** Base URL for Toggly definitions API (default: 'https://client.toggly.io') */
+  /** Base URL for Toggly definitions API (default: 'https://definitions.toggly.io') */
   baseUrl?: string
   /** Default identity for all evaluations */
   identity?: string

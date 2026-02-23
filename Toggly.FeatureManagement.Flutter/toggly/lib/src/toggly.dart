@@ -389,7 +389,7 @@ class Toggly with WidgetsBindingObserver {
       }
 
       final response = await _http.get(
-        '${Toggly._config.baseURI}/${Toggly._appKey}-${Toggly._environment}/${Toggly._useSignedDefinitions ? 'signed-defs' : 'defs'}?u=${Toggly._identity}',
+        '${Toggly._config.baseURI}/evaluated-signed/${Toggly._appKey}/${Toggly._environment}?u=${Toggly._identity}',
         queryParameters: {},
         options: Options(headers: headers),
       );
@@ -403,7 +403,7 @@ class Toggly with WidgetsBindingObserver {
       if (Toggly._useSignedDefinitions) {
         // Parse the response
         final signedResponse = Map<String, dynamic>.from(response.data);
-        flags = Map<String, bool>.from(signedResponse['data']);
+        flags = Map<String, bool>.from(signedResponse['defs'] ?? signedResponse['data'] ?? <String, dynamic>{});
         String signature = signedResponse['signature'];
         int timestamp = signedResponse['timestamp'];
         String keyId = signedResponse['kid'];
@@ -429,27 +429,29 @@ class Toggly with WidgetsBindingObserver {
         }
 
         try {
-          final isValid = await _verifySignature(
-              jsonEncode(signedResponse['data']),
+          final flagsPayload = signedResponse['defs'] ?? signedResponse['data'];
+          if (Toggly._config.verifySignatures) {
+            final isValid = await _verifySignature(
+              jsonEncode(flagsPayload),
               signature,
               timestamp,
               false,
               keyId);
 
-          if (!isValid) {
-            throw Exception('Invalid signature');
-          } else {
+            if (!isValid) {
+              throw Exception('Invalid signature');
+            }
             if (kDebugMode) {
               print('Signature verification successful');
             }
-            _lastChecked = DateTime.now();
-            _lastSynced = DateTime.now();
-            Toggly.cacheFeatureFlags(
-                featureFlags: jsonEncode(signedResponse['data']),
-                timestamp: timestamp,
-                signature: signature,
-                keyId: keyId);
           }
+          _lastChecked = DateTime.now();
+          _lastSynced = DateTime.now();
+          Toggly.cacheFeatureFlags(
+              featureFlags: jsonEncode(flagsPayload),
+              timestamp: timestamp,
+              signature: signature,
+              keyId: keyId);
         } catch (e, stack) {
           if (kDebugMode) {
             print('Signature verification failed: $e');
@@ -471,8 +473,9 @@ class Toggly with WidgetsBindingObserver {
       } else {
         _lastChecked = DateTime.now();
         _lastSynced = DateTime.now();
-        flags = Map<String, bool>.from(response.data);
-        Toggly.cacheFeatureFlags(featureFlags: jsonEncode(response.data));
+        final payload = Map<String, dynamic>.from(response.data);
+        flags = Map<String, bool>.from(payload['defs'] ?? payload);
+        Toggly.cacheFeatureFlags(featureFlags: jsonEncode(payload['defs'] ?? payload));
 
         // Store new ETag if present
         String? newEtag = response.headers['etag']?.first;

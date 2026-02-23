@@ -27,7 +27,7 @@ describe('createTogglyClient', () => {
       const client = createTogglyClient()
 
       expect(client.config.environment).toBe('Production')
-      expect(client.config.baseUrl).toBe('https://client.toggly.io')
+      expect(client.config.baseUrl).toBe('https://definitions.toggly.io')
       expect(client.config.refreshInterval).toBe(180000)
       expect(client.state.initialized).toBe(false)
     })
@@ -42,7 +42,7 @@ describe('createTogglyClient', () => {
       expect(client.config.appKey).toBe('test-app-key')
       expect(client.config.environment).toBe('Development')
       expect(client.config.debug).toBe(true)
-      expect(client.config.baseUrl).toBe('https://client.toggly.io') // Default preserved
+      expect(client.config.baseUrl).toBe('https://definitions.toggly.io') // Default preserved
     })
 
     it('should use feature defaults when no appKey provided', async () => {
@@ -598,7 +598,7 @@ describe('API request', () => {
     await client.init()
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://client.toggly.io/my-app-Staging/defs?u=user-123',
+      'https://definitions.toggly.io/evaluated-signed/my-app/Staging?u=user-123',
       expect.any(Object)
     )
   })

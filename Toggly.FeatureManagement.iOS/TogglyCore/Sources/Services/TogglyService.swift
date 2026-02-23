@@ -355,10 +355,8 @@ public actor TogglyService {
             }
 
             let flags: FeatureFlags
-            if config.useSignedDefinitions {
-                // Handle signed definitions
-                let signedResponse = try JSONDecoder().decode(SignedDefinitionsResponse.self, from: data)
-                flags = signedResponse.data
+            if let signedResponse = try? JSONDecoder().decode(SignedDefinitionsResponse.self, from: data) {
+                flags = signedResponse.defs ?? signedResponse.data ?? [:]
             } else {
                 flags = try JSONDecoder().decode(FeatureFlags.self, from: data)
             }
@@ -402,8 +400,7 @@ public actor TogglyService {
     }
 
     private func buildApiUrl() -> URL {
-        let endpoint = config.useSignedDefinitions ? "signed-defs" : "defs"
-        var urlString = "\(config.baseURI)/\(config.appKey ?? "")-\(config.environment)/\(endpoint)"
+        var urlString = "\(config.baseURI)/evaluated-signed/\(config.appKey ?? "")/\(config.environment)"
 
         if let identity = identity {
             urlString += "?u=\(identity.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? identity)"
@@ -534,7 +531,8 @@ public actor TogglyService {
 // MARK: - Supporting Types
 
 private struct SignedDefinitionsResponse: Codable {
-    let data: FeatureFlags
+    let defs: FeatureFlags?
+    let data: FeatureFlags?
 }
 
 /// Errors that can occur in Toggly operations.

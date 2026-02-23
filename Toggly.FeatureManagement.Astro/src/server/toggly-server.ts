@@ -24,7 +24,7 @@ export class TogglyServer implements TogglyClient {
 
   constructor(config: TogglyConfig, isBuildTime: boolean = false) {
     this.config = {
-      baseURI: 'https://client.toggly.io',
+      baseURI: 'https://definitions.toggly.io',
       environment: 'Production',
       flagDefaults: {},
       featureFlagsRefreshInterval: 3 * 60 * 1000, // 3 minutes
@@ -47,7 +47,7 @@ export class TogglyServer implements TogglyClient {
     }
 
     const baseUrl = baseURI!.replace(/\/$/, '');
-    let url = `${baseUrl}/${appKey}-${environment}/defs`;
+    let url = `${baseUrl}/evaluated-signed/${appKey}/${environment}`;
 
     if (identity) {
       url += `?u=${encodeURIComponent(identity)}`;
@@ -100,7 +100,11 @@ export class TogglyServer implements TogglyClient {
         );
       }
 
-      let flags = (await response.json()) as Flags;
+      const payload = (await response.json()) as { defs?: Flags } | Flags;
+      let flags: Flags = payload;
+      if (typeof payload === 'object' && payload !== null && 'defs' in payload && payload.defs) {
+        flags = payload.defs;
+      }
 
       // If allFeaturesEnabledDuringBuild is true and we're in build time,
       // override all flags to true

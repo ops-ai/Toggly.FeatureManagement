@@ -11,7 +11,7 @@
  * Matches the API structure used in other Toggly SDKs
  */
 export interface TogglyConfig {
-  /** Base URI for the Toggly API (default: 'https://client.toggly.io') */
+  /** Base URI for the Toggly definitions API (default: 'https://definitions.toggly.io') */
   baseURI?: string;
   /** Application key from Toggly */
   appKey?: string;
@@ -78,7 +78,7 @@ interface CachedFlags {
  * @example
  * ```typescript
  * const client = createTogglyClient({
- *   baseURI: 'https://client.toggly.io',
+ *   baseURI: 'https://definitions.toggly.io',
  *   environment: 'Production',
  *   appKey: 'my-app-key',
  *   featureFlagsRefreshInterval: 180000,
@@ -91,7 +91,7 @@ interface CachedFlags {
  */
 export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   const {
-    baseURI = 'https://client.toggly.io',
+    baseURI = 'https://definitions.toggly.io',
     appKey,
     environment = 'Production',
     flagDefaults = {},
@@ -122,7 +122,7 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
       return '';
     }
 
-    let url = `${baseUrl}/${appKey}-${environment}/defs`;
+    let url = `${baseUrl}/${appKey}/evaluated-signed`;
     
     // Add identity parameter if provided
     if (identity) {
@@ -169,7 +169,8 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
         );
       }
 
-      const flags = (await response.json()) as Flags;
+      const payload = (await response.json()) as { defs?: Flags } | Flags;
+      const flags = ('defs' in (payload as Record<string, unknown>) ? (payload as { defs: Flags }).defs : payload) as Flags;
       
       if (isDebug) {
         console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);

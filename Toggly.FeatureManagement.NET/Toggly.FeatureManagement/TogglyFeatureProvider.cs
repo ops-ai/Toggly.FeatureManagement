@@ -283,7 +283,7 @@ namespace Toggly.FeatureManagement
                 var definitionsChanged = false;
                 if (_useSignedDefinitions)
                 {
-                    var newDefinitionsRequest = await httpClient.GetAsync($"definitions/v2/{_appKey}/{_environment}").ConfigureAwait(false);
+                    var newDefinitionsRequest = await httpClient.GetAsync($"definitions-signed/{_appKey}/{_environment}").ConfigureAwait(false);
                     if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
                     {
                         _lastDefinitionsCheck = DateTime.UtcNow;

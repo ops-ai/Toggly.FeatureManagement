@@ -71,14 +71,15 @@ export class TogglyService implements ITogglyService {
     try {
       var url = this._config.customDefinitionsUrl
         ? this._config.customDefinitionsUrl
-        : `${this._config.baseURI ?? 'https://client.toggly.io'}/${this._config.appKey}-${this._config.environment ?? 'Production'}/defs`
+        : `${this._config.baseURI ?? 'https://definitions.toggly.io'}/evaluated-signed/${this._config.appKey}/${this._config.environment ?? 'Production'}`
 
       if (this._config.identity) {
         url += `?u=${this._config.identity}`
       }
 
       const response = await fetch(url)
-      this._features = await response.json()
+      const payload = await response.json()
+      this._features = payload?.defs ?? payload
 
       // Trigger afterRefresh hooks
       if (this._features) {

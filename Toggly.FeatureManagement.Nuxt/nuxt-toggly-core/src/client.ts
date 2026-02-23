@@ -88,11 +88,19 @@ export function createTogglyClient(
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const data: FeatureDefinitionsResponse = await response.json()
+      const data = (await response.json()) as
+        | FeatureDefinitionsResponse
+        | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
+        | { defs?: FeatureDefinitions }
 
-      // Transform API response to FeatureDefinitions
       const definitions: FeatureDefinitions = {}
-      if (data.features && Array.isArray(data.features)) {
+      if (Array.isArray(data)) {
+        for (const definition of data) {
+          definitions[definition.featureKey] = !!definition.filters?.some((filter) => filter.name === 'AlwaysOn')
+        }
+      } else if ('defs' in data && data.defs) {
+        Object.assign(definitions, data.defs)
+      } else if (data.features && Array.isArray(data.features)) {
         for (const feature of data.features) {
           definitions[feature.featureKey] = feature.enabled
         }

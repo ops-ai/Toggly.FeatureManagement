@@ -3,6 +3,7 @@ import { HookExecutor } from './hooks';
 
 export interface TogglyOptions {
   baseURI?: string
+  verifySignatures?: boolean
   appKey?: string
   environment?: string
   identity?: string
@@ -32,7 +33,8 @@ export interface TogglyService {
 
 export class Toggly implements TogglyService {
   private _config: TogglyOptions = {
-    baseURI: 'https://client.toggly.io',
+    baseURI: 'https://definitions.toggly.io',
+    verifySignatures: false,
     showFeatureDuringEvaluation: false,
     hooks: []
   }
@@ -98,14 +100,15 @@ export class Toggly implements TogglyService {
     this._loadingFeatures = true
 
     try {
-      var url = `${this._config.baseURI}/${this._config.appKey}-${this._config.environment}/defs`
+      var url = `${this._config.baseURI}/evaluated-signed/${this._config.appKey}/${this._config.environment}`
 
       if (this._config.identity) {
         url += `?u=${this._config.identity}`
       }
 
       const response = await fetch(url)
-      this._features = await response.json()
+      const payload = await response.json()
+      this._features = payload?.defs ?? payload
       
       // Trigger afterRefresh hooks
       if (this._features) {

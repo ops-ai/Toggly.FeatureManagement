@@ -31,7 +31,7 @@ class TogglyConfig:
     environment: str = "Production"
     """Environment name (e.g., 'Production', 'Staging', 'Development')."""
 
-    base_url: str = "https://client.toggly.io"
+    base_url: str = "https://definitions.toggly.io"
     """Base URL for the Toggly API."""
 
     definitions_url: str | None = None

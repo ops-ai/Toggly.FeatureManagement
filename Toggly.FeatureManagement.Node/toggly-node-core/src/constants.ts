@@ -18,7 +18,7 @@ export const DEFAULT_CONFIG: Required<
   >
 > = {
   environment: 'Production',
-  baseUrl: 'https://client.toggly.io',
+  baseUrl: 'https://definitions.toggly.io',
   refreshInterval: 180000, // 3 minutes
   timeout: 10000, // 10 seconds
   debug: false,

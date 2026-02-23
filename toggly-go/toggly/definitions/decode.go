@@ -17,7 +17,7 @@ func DecodeUnsignedDefinitions(b []byte) ([]FeatureDefinitionModel, error) {
 	return defs, nil
 }
 
-// DecodeSignedDefinitions decodes the signed /definitions/v2 response.
+// DecodeSignedDefinitions decodes the signed /definitions-signed response.
 func DecodeSignedDefinitions(b []byte) (*SignedDefinitionsResponse, error) {
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.UseNumber()

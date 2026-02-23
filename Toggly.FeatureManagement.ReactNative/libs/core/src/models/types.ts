@@ -90,7 +90,7 @@ export interface AppStateProvider {
 export interface TogglyConfig {
   /**
    * Base URI for Toggly API
-   * @default 'https://client.toggly.io'
+   * @default 'https://definitions.toggly.io'
    */
   baseURI?: string;
 
@@ -132,6 +132,12 @@ export interface TogglyConfig {
    * @default false
    */
   useSignedDefinitions?: boolean;
+
+  /**
+   * Verify signatures on signed responses
+   * @default false
+   */
+  verifySignatures?: boolean;
 
   /**
    * List of trusted key IDs for signed definitions

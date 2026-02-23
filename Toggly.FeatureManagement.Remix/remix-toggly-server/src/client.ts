@@ -118,10 +118,14 @@ export class TogglyServerClient {
       }
 
       const payload = await response.json();
-      this.flags =
-        payload && typeof payload === 'object'
-          ? (payload as FeatureFlags)
-          : {};
+      if (payload && typeof payload === 'object' && 'defs' in (payload as Record<string, unknown>)) {
+        this.flags = ((payload as { defs?: FeatureFlags }).defs ?? {}) as FeatureFlags;
+      } else {
+        this.flags =
+          payload && typeof payload === 'object'
+            ? (payload as FeatureFlags)
+            : {};
+      }
       this.logger.debug(`Fetched ${Object.keys(this.flags).length} flags.`);
 
       // Execute afterRefresh hooks

@@ -224,7 +224,7 @@ def build_definitions_url(
 
     """
     if use_signed:
-        path = f"/definitions/v2/{app_key}/{environment}"
+        path = f"/definitions-signed/{app_key}/{environment}"
     else:
         path = f"/definitions/{app_key}/{environment}"
 
