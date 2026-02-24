@@ -223,7 +223,7 @@ jobs:
             smoke-cmd: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --include="projects/ngx-feature-flags-toggly/src/lib/smoke.spec.ts" --include="projects/ngx-feature-flags-toggly/src/lib/smoke-ws.spec.ts"
           - sdk: React
             path: Toggly.FeatureManagement.React
-            smoke-cmd: npx jest src/smoke.spec.ts src/smoke-ws.spec.ts --runInBand
+            smoke-cmd: npx jest src/smoke.spec.ts src/smoke-ws.spec.ts --runInBand --forceExit
           - sdk: Vue
             path: Toggly.FeatureManagement.Vue/vue-feature-flags-toggly
             smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
@@ -235,7 +235,7 @@ jobs:
             smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
           - sdk: JavaScript
             path: Toggly.FeatureManagement.Javascript/feature_flags_toggly
-            smoke-cmd: npx jest spec/smoke.test.ts spec/smoke-ws.test.ts --runInBand
+            smoke-cmd: npx jest spec/smoke.test.ts spec/smoke-ws.test.ts --runInBand --forceExit
           - sdk: Docusaurus
             path: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
             smoke-cmd: npm run build && node smoke.mjs && node smoke-ws.mjs
