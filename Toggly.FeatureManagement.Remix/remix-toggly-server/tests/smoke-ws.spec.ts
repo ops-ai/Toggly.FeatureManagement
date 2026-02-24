@@ -19,11 +19,11 @@ describe('WebSocket smoke test', () => {
 
     // Wait for WebSocket to connect (up to 10 seconds)
     const deadline = Date.now() + 10_000;
-    while (!(client as any).wsConnected && Date.now() < deadline) {
+    while (!client.isWsConnected && Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 200));
     }
 
-    expect((client as any).wsConnected).toBe(true);
+    expect(client.isWsConnected).toBe(true);
     await expect(client.isEnabled('FlagOn')).resolves.toBe(true);
     await expect(client.isDisabled('FlagOff')).resolves.toBe(true);
 

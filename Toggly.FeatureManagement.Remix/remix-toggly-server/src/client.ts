@@ -33,11 +33,9 @@ export class TogglyServerClient {
   private ws: WebSocket | null = null;
   private wsConnected = false;
   private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastFallbackRefresh = 0;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private identity?: string;
 
-  private static readonly FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000; // 20 minutes
   private static readonly WS_RECONNECT_DELAY = 5000; // 5 seconds
 
   constructor(config: TogglyConfig) {
@@ -80,6 +78,13 @@ export class TogglyServerClient {
     }
 
     return false;
+  }
+
+  /**
+   * Whether the WebSocket connection is active
+   */
+  get isWsConnected(): boolean {
+    return this.wsConnected;
   }
 
   /**
@@ -270,7 +275,6 @@ export class TogglyServerClient {
 
       this.ws.on('open', () => {
         this.wsConnected = true;
-        this.lastFallbackRefresh = Date.now();
         this.logger.debug('WebSocket connected');
       });
 
