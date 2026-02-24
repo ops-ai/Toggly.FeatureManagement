@@ -237,10 +237,9 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
 
                 // Verify signature
                 try {
-                    // Get raw JSON for the defs array
-                    $jsonDoc = json_decode($body, true);
-                    $rawDefs = json_encode($jsonDoc['defs'] ?? [], JSON_UNESCAPED_SLASHES);
-                    $dataToVerify = $rawDefs . '|' . $signedResponse->timestamp;
+                    // Extract the raw defs array bytes from the JSON body
+                    // to preserve exact formatting for signature verification
+                    $rawDefs = $this->extractRawDefsJson($body);
 
                     $valid = $this->signatureVerifier->verify(
                         $rawDefs,
@@ -379,6 +378,57 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
     /**
      * Check if feature has AlwaysOn filter
      */
+    /**
+     * Extract the raw JSON bytes for the "defs" array from the response body.
+     * Uses a regex to find "defs" then bracket-counts via a helper.
+     */
+    private function extractRawDefsJson(string $body): string
+    {
+        $pos = strpos($body, '"defs"');
+        if ($pos !== false) {
+            $pos = strpos($body, '[', $pos);
+        }
+        if ($pos === false) {
+            return '[]';
+        }
+
+        return $this->extractBalancedBrackets($body, $pos);
+    }
+
+    /**
+     * Extract a balanced [...] substring starting at $openIdx.
+     */
+    private function extractBalancedBrackets(string $json, int $openIdx): string
+    {
+        $depth = 0;
+        $inString = false;
+        $len = strlen($json);
+        $i = $openIdx;
+
+        while ($i < $len) {
+            $ch = $json[$i];
+
+            if ($ch === '\\' && $inString) {
+                $i += 2; // skip escaped character
+                continue;
+            }
+
+            if ($ch === '"') {
+                $inString = !$inString;
+            } elseif (!$inString) {
+                if ($ch === '[') {
+                    $depth++;
+                } elseif ($ch === ']' && --$depth === 0) {
+                    return substr($json, $openIdx, $i - $openIdx + 1);
+                }
+            }
+
+            $i++;
+        }
+
+        return '[]';
+    }
+
     private function isAlwaysOn(FeatureDefinition $feature): bool
     {
         foreach ($feature->filters as $filter) {
