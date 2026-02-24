@@ -2,7 +2,7 @@ package live
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -10,22 +10,16 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// Start connects to the Toggly live updates channel.
+// Start connects to the Toggly live updates WebSocket channel.
 //
-// It first resolves the WebSocket URL by calling:
-//
-//	GET {baseURL}definitions/live-updates/{appKey}/{envKey}
-//
-// Then connects and calls onUpdate when receiving the text message "update".
+// It connects to wss://{baseURL}/{appKey}/ws and calls onUpdate when receiving
+// a "flags-updated" or "update" message. Ping messages are ignored.
 func Start(ctx context.Context, baseURL, appKey, envKey string, httpClient *http.Client, onUpdate func()) (io.Closer, error) {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
 
-	wsURL, err := resolveWebSocketURL(ctx, httpClient, baseURL, appKey, envKey)
-	if err != nil {
-		return nil, err
-	}
+	wsURL := buildWebSocketURL(baseURL, appKey)
 
 	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
 		HTTPClient: httpClient,
@@ -37,12 +31,11 @@ func Start(ctx context.Context, baseURL, appKey, envKey string, httpClient *http
 	go func() {
 		defer func() { _ = c.Close(websocket.StatusNormalClosure, "") }()
 		for {
-			_, msg, err := c.Read(ctx)
-			if err != nil {
+			_, msg, readErr := c.Read(ctx)
+			if readErr != nil {
 				return
 			}
-			if string(msg) == "update" {
-				// Fire-and-forget like .NET SDK.
+			if shouldTriggerUpdate(msg) {
 				go func() {
 					defer func() { _ = recover() }()
 					onUpdate()
@@ -56,22 +49,23 @@ func Start(ctx context.Context, baseURL, appKey, envKey string, httpClient *http
 	}), nil
 }
 
-func resolveWebSocketURL(ctx context.Context, httpClient *http.Client, baseURL, appKey, envKey string) (string, error) {
-	lookupURL := fmt.Sprintf("%s/definitions/live-updates/%s/%s", strings.TrimRight(baseURL, "/"), appKey, envKey)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, lookupURL, nil)
-	if err != nil {
-		return "", err
+// shouldTriggerUpdate returns true when the message signals a definitions change.
+func shouldTriggerUpdate(msg []byte) bool {
+	var payload struct {
+		Type string `json:"type"`
 	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return "", err
+	if json.Unmarshal(msg, &payload) == nil {
+		return payload.Type == "flags-updated" || payload.Type == "update"
 	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(body)), nil
+	text := string(msg)
+	return text == "update" || text == "flags-updated"
+}
+
+func buildWebSocketURL(baseURL, appKey string) string {
+	base := strings.TrimRight(baseURL, "/")
+	base = strings.Replace(base, "https://", "wss://", 1)
+	base = strings.Replace(base, "http://", "ws://", 1)
+	return base + "/" + appKey + "/ws"
 }
 
 type closerFunc func() error

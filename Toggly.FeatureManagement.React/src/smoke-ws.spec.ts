@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import WebSocket from 'ws';
 
 describe('WebSocket smoke test', () => {

@@ -14,6 +14,7 @@ describe('WebSocket smoke test', () => {
       appKey,
       environment: 'Production',
       baseUrl: 'https://definitions.toggly.io',
+      enableStreaming: true,
       refreshInterval: 0,
       timeout: 15000,
     });
