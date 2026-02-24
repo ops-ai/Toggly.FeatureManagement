@@ -18,11 +18,17 @@ class TogglyConfig {
   /// Whether signatures should be verified on signed responses.
   final bool verifySignatures;
 
+  /// Whether to enable WebSocket-based live updates for feature flags.
+  /// When enabled, a WebSocket connection is maintained to receive
+  /// real-time flag updates, reducing the need for periodic polling.
+  final bool enableLiveUpdates;
+
   const TogglyConfig({
     this.baseURI = 'https://definitions.toggly.io',
     this.connectTimeout = 5 * 1000,
     this.featureFlagsRefreshInterval = 3 * 60 * 1000,
     this.trustedKeyIds,
     this.verifySignatures = false,
+    this.enableLiveUpdates = true,
   });
 }

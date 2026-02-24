@@ -1,5 +1,5 @@
-use futures_util::StreamExt;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use toggly::provider::DefinitionsProvider;
+use toggly::TogglyConfig;
 
 #[tokio::test]
 async fn smoke_websocket_connection() {
@@ -8,35 +8,40 @@ async fn smoke_websocket_connection() {
         _ => return,
     };
 
-    let url = format!("wss://definitions.toggly.io/{}/ws", app_key);
-    let (mut ws_stream, _) =
-        tokio::time::timeout(std::time::Duration::from_secs(10), connect_async(&url))
-            .await
-            .expect("WebSocket connect timed out")
-            .expect("WebSocket connect failed");
+    let config = TogglyConfig::builder()
+        .app_key(app_key)
+        .environment("Production")
+        .definitions_url("https://definitions.toggly.io/")
+        .enable_live_updates(true)
+        .disable_background_refresh(false)
+        .use_signed_definitions(false)
+        .build();
 
+    let mut provider = DefinitionsProvider::new(config).expect("Failed to create provider");
+    provider.initialize().await.expect("Failed to initialize provider");
+
+    // Verify definitions were loaded
+    assert!(!provider.is_empty(), "Provider should have definitions after init");
+    assert!(provider.contains("FlagOn"), "FlagOn should be defined");
+    assert!(provider.contains("FlagOff"), "FlagOff should be defined");
+
+    // Wait for the SDK's built-in WebSocket to connect
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
     loop {
-        let msg = tokio::time::timeout_at(deadline, ws_stream.next())
-            .await
-            .expect("WebSocket read timed out")
-            .expect("WebSocket stream ended")
-            .expect("WebSocket read error");
-
-        if let Message::Text(text) = msg {
-            let parsed: serde_json::Value = serde_json::from_str(&text).expect("Invalid JSON");
-            if parsed["type"] == "ping" {
-                continue;
-            }
-            assert!(
-                parsed["type"] == "definitions" || parsed["type"] == "evaluated",
-                "Expected type=definitions or evaluated, got {}",
-                parsed["type"]
-            );
-            assert!(parsed.get("timestamp").is_some(), "Missing timestamp field");
+        if provider.is_ws_connected() {
             break;
-        } else {
-            panic!("Expected text message, got {:?}", msg);
         }
+        if tokio::time::Instant::now() >= deadline {
+            panic!("SDK WebSocket should be connected within 15 seconds");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
+
+    assert!(provider.is_ws_connected(), "WebSocket should still be connected");
+
+    // Verify definitions are still available after WebSocket connects
+    assert!(provider.contains("FlagOn"), "FlagOn should still be defined");
+    assert!(provider.contains("FlagOff"), "FlagOff should still be defined");
+
+    provider.shutdown();
 }

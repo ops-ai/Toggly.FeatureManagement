@@ -14,4 +14,7 @@ export interface TogglyConfig {
   
   /** Hooks to extend SDK behavior at key lifecycle points */
   hooks?: Hook[];
+
+  /** Enable live updates via WebSocket. Defaults to true if not set. */
+  enableLiveUpdates?: boolean;
 }

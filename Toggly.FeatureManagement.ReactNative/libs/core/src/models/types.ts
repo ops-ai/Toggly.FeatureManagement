@@ -175,6 +175,14 @@ export interface TogglyConfig {
    * @default 30000
    */
   requestTimeout?: number;
+
+  /**
+   * Enable WebSocket-based live updates for real-time flag changes.
+   * Uses React Native's built-in global WebSocket.
+   * When connected, polling is throttled to a 20-minute fallback interval.
+   * @default false
+   */
+  enableLiveUpdates?: boolean;
 }
 
 /**
@@ -249,6 +257,8 @@ export interface TogglyDebugInfo {
   refreshInterval: number;
   /** Whether the sync service is running */
   syncServiceRunning: boolean;
+  /** Whether the WebSocket is currently connected */
+  wsConnected: boolean;
   /** Last time features were checked */
   lastChecked: Date | null;
   /** Last time features were synced */

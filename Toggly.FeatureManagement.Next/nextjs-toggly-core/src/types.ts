@@ -18,6 +18,8 @@ export interface TogglyConfig {
   refreshInterval?: number
   /** Initial hooks to register */
   hooks?: Hook[]
+  /** Enable WebSocket live updates for real-time feature flag changes (browser only, default: true) */
+  enableLiveUpdates?: boolean
 }
 
 /**
@@ -139,6 +141,8 @@ export interface TogglyState {
   error: Error | null
   /** Last refresh timestamp */
   lastRefresh: Date | null
+  /** Whether WebSocket is currently connected */
+  wsConnected: boolean
 }
 
 /**

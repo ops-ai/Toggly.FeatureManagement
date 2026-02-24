@@ -1,15 +1,12 @@
 package io.toggly.core;
 
 import io.toggly.core.config.TogglyConfig;
+import io.toggly.core.snapshot.HttpSnapshotProvider;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.WebSocket;
-import java.util.concurrent.CountDownLatch;
+import java.lang.reflect.Field;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -45,39 +42,44 @@ class SmokeTest {
         String appKey = System.getenv(APP_KEY_ENV);
         Assumptions.assumeTrue(appKey != null && !appKey.isBlank());
 
-        HttpClient client = HttpClient.newHttpClient();
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicReference<String> messageRef = new AtomicReference<>();
+        TogglyConfig config = TogglyConfig.builder()
+                .appKey(appKey)
+                .environment(ENVIRONMENT)
+                .baseUrl(DEFINITIONS_BASE_URL)
+                .enableLiveUpdates(true)
+                .enableAutoRefresh(false)
+                .useSignedDefinitions(false)
+                .build();
 
-        WebSocket ws = client.newWebSocketBuilder()
-                .buildAsync(
-                        URI.create("wss://definitions.toggly.io/" + appKey + "/ws"),
-                        new WebSocket.Listener() {
-                            @Override
-                            public java.util.concurrent.CompletionStage<?> onText(
-                                    WebSocket webSocket, CharSequence data, boolean last) {
-                                String text = data.toString();
-                                if (text.contains("\"ping\"") && !text.contains("\"definitions\"")) {
-                                    webSocket.request(1);
-                                    return null; // skip ping messages
-                                }
-                                messageRef.set(text);
-                                latch.countDown();
-                                return null;
-                            }
-                        })
-                .get(15, TimeUnit.SECONDS);
+        try (TogglyClient client = new TogglyClient(config)) {
+            // Trigger initial fetch which starts the WebSocket connection
+            assertTrue(client.isEnabled("FlagOn"), "FlagOn should be enabled");
+            assertFalse(client.isEnabled("FlagOff"), "FlagOff should be disabled");
 
-        assertTrue(latch.await(15, TimeUnit.SECONDS),
-                "Did not receive initial message within 15 seconds");
+            // Wait for the SDK's built-in WebSocket to connect
+            Field providerField = TogglyClient.class.getDeclaredField("snapshotProvider");
+            providerField.setAccessible(true);
+            Object provider = providerField.get(client);
+            assertNotNull(provider, "Snapshot provider should not be null");
+            assertTrue(provider instanceof HttpSnapshotProvider, "Provider should be HttpSnapshotProvider");
 
-        String msg = messageRef.get();
-        assertNotNull(msg);
-        assertTrue(msg.contains("\"type\""), "Message should contain type field");
-        assertTrue(msg.contains("\"definitions\"") || msg.contains("\"evaluated\""),
-                "Message type should be definitions or evaluated");
+            Field wsField = HttpSnapshotProvider.class.getDeclaredField("wsConnected");
+            wsField.setAccessible(true);
 
-        ws.sendClose(WebSocket.NORMAL_CLOSURE, "").join();
+            boolean connected = false;
+            for (int i = 0; i < 30; i++) {
+                if (wsField.getBoolean(provider)) {
+                    connected = true;
+                    break;
+                }
+                TimeUnit.MILLISECONDS.sleep(500);
+            }
+            assertTrue(connected, "SDK WebSocket should be connected within 15 seconds");
+
+            // Verify flags still work after WebSocket is connected
+            assertTrue(client.isEnabled("FlagOn"));
+            assertFalse(client.isEnabled("FlagOff"));
+        }
     }
 
     @Test

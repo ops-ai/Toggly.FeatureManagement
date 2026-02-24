@@ -33,6 +33,9 @@ module Toggly
     # @return [Boolean] Disable background refresh
     attr_accessor :disable_background_refresh
 
+    # @return [Boolean] Enable WebSocket live updates (default: true)
+    attr_accessor :enable_live_updates
+
     # @return [String] Application version
     attr_accessor :app_version
 
@@ -69,6 +72,7 @@ module Toggly
       @http_timeout = options[:http_timeout] || DEFAULT_HTTP_TIMEOUT
       @enable_undefined_in_dev = options[:enable_undefined_in_dev] || false
       @disable_background_refresh = options[:disable_background_refresh] || false
+      @enable_live_updates = options.fetch(:enable_live_updates, true)
       @app_version = options[:app_version]
       @instance_name = options[:instance_name]
       @defaults = options[:defaults] || {}
@@ -117,6 +121,7 @@ module Toggly
         http_timeout: @http_timeout,
         enable_undefined_in_dev: @enable_undefined_in_dev,
         disable_background_refresh: @disable_background_refresh,
+        enable_live_updates: @enable_live_updates,
         app_version: @app_version,
         instance_name: @instance_name,
         use_signed_definitions: @use_signed_definitions

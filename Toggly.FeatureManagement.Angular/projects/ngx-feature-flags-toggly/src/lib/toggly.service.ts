@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core'
+import { Injectable, NgZone, OnDestroy } from '@angular/core'
 import { ITogglyService } from './models'
 import { TogglyOptions } from './toggly-options'
 import { HookExecutor } from './hooks'
@@ -7,14 +7,24 @@ import type { Hook } from '@ops-ai/toggly-hooks-types'
 @Injectable({
   providedIn: 'root',
 })
-export class TogglyService implements ITogglyService {
+export class TogglyService implements ITogglyService, OnDestroy {
   private _features: { [key: string]: boolean } | null = null
   private _loadingFeatures: boolean = false
   private _hookExecutor = new HookExecutor()
 
+  private _ws: WebSocket | null = null
+  private _wsConnected = false
+  private _wsReconnectTimer: any = null
+  private _lastFallbackRefresh = 0
+  private readonly FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
+  private readonly WS_RECONNECT_DELAY = 5000
+
   shouldShowFeatureDuringEvaluation: boolean = false
 
-  constructor(private readonly _config: TogglyOptions) {
+  constructor(
+    private readonly _config: TogglyOptions,
+    private readonly _ngZone: NgZone,
+  ) {
     if (!this._config.customDefinitionsUrl) {
       if (!this._config.appKey) {
         if (this._config.featureDefaults) {
@@ -61,10 +71,19 @@ export class TogglyService implements ITogglyService {
       })
     }
 
-    // Features already loaded
+    // Features already loaded — apply polling throttle when WS is connected
     if (this._features !== null) {
-      return this._features
+      if (this._wsConnected) {
+        const now = Date.now()
+        if (now - this._lastFallbackRefresh < this.FALLBACK_REFRESH_INTERVAL) {
+          return this._features
+        }
+      } else {
+        return this._features
+      }
     }
+
+    const isInitialLoad = this._features === null
 
     this._loadingFeatures = true
 
@@ -80,10 +99,16 @@ export class TogglyService implements ITogglyService {
       const response = await fetch(url)
       const payload = await response.json()
       this._features = payload?.defs ?? payload
+      this._lastFallbackRefresh = Date.now()
 
       // Trigger afterRefresh hooks
       if (this._features) {
         this._hookExecutor.executeAfterRefresh(this._features)
+      }
+
+      // Start WebSocket after the initial feature load
+      if (isInitialLoad) {
+        this.startWebSocket()
       }
     } catch (error) {
       this._features = this._config.featureDefaults ?? {}
@@ -177,5 +202,81 @@ export class TogglyService implements ITogglyService {
    */
   removeHook(name: string): boolean {
     return this._hookExecutor.removeHook(name)
+  }
+
+  private startWebSocket(): void {
+    if (!this._config.appKey) {
+      return
+    }
+
+    const baseURI = this._config.baseURI ?? 'https://definitions.toggly.io'
+    const wsUrl = baseURI.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://') +
+      `/${this._config.appKey}/ws`
+
+    try {
+      this._ws = new WebSocket(wsUrl)
+    } catch (error) {
+      console.warn('Toggly --- Failed to create WebSocket connection', error)
+      return
+    }
+
+    this._ws.onopen = () => {
+      this._ngZone.run(() => {
+        this._wsConnected = true
+      })
+    }
+
+    this._ws.onmessage = (event: MessageEvent) => {
+      this._ngZone.run(() => {
+        try {
+          const data = JSON.parse(event.data)
+
+          if (data.type === 'ping') {
+            return
+          }
+
+          if (data.type === 'flags-updated' || data.type === 'update') {
+            this._features = null
+            this._loadFeatures()
+          }
+        } catch (error) {
+          console.warn('Toggly --- Failed to parse WebSocket message', error)
+        }
+      })
+    }
+
+    this._ws.onclose = () => {
+      this._ngZone.run(() => {
+        this._wsConnected = false
+        this._ws = null
+
+        this._wsReconnectTimer = setTimeout(() => {
+          this.startWebSocket()
+        }, this.WS_RECONNECT_DELAY)
+      })
+    }
+
+    this._ws.onerror = (error: Event) => {
+      console.warn('Toggly --- WebSocket error', error)
+    }
+  }
+
+  private stopWebSocket(): void {
+    if (this._wsReconnectTimer) {
+      clearTimeout(this._wsReconnectTimer)
+      this._wsReconnectTimer = null
+    }
+
+    if (this._ws) {
+      this._ws.onclose = null
+      this._ws.close()
+      this._ws = null
+    }
+
+    this._wsConnected = false
+  }
+
+  ngOnDestroy(): void {
+    this.stopWebSocket()
   }
 }

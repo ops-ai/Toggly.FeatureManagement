@@ -56,6 +56,9 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
     private ?int $lastFallbackPoll = null;
     private int $fallbackInterval;
 
+    /** Fallback poll interval when WebSocket is connected (20 minutes) */
+    private const WS_FALLBACK_INTERVAL = 1200;
+
     public function __construct(
         TogglySettings $settings,
         TogglyHttpClient $httpClient,
@@ -69,7 +72,7 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
         $this->featureStateService = $featureStateService;
         $this->logger = $logger ?? new NullLogger();
         $this->webSocketClient = new WebSocketClient($this->logger);
-        $this->fallbackInterval = max($settings->refreshInterval * 4, 600);
+        $this->fallbackInterval = self::WS_FALLBACK_INTERVAL;
 
         // Initialize security components if signed definitions are enabled
         if ($settings->useSignedDefinitions) {
@@ -324,6 +327,10 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
      */
     private function tryConnectWebSocket(): void
     {
+        if (!$this->settings->enableLiveUpdates) {
+            return;
+        }
+
         if (!$this->webSocketClient->isAvailable() || $this->webSocketClient->isRunning()) {
             return;
         }
@@ -517,6 +524,28 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
     }
 
     /**
+     * Process pending WebSocket messages (non-blocking).
+     *
+     * In long-running processes call this periodically (e.g. every loop
+     * iteration, or on a timer) so that incoming update signals are consumed
+     * promptly.  In short-lived PHP-FPM requests this is a no-op.
+     */
+    public function tick(): void
+    {
+        if ($this->webSocketClient->isRunning() || $this->webSocketClient->isAvailable()) {
+            $this->webSocketClient->tick();
+        }
+    }
+
+    /**
+     * Gracefully shut down the provider, closing the WebSocket connection.
+     */
+    public function shutdown(): void
+    {
+        $this->webSocketClient->disconnect();
+    }
+
+    /**
      * Get debug information
      */
     public function getDebugInfo(): array
@@ -530,6 +559,9 @@ class FeatureProvider implements FeatureProviderInterface, SecureFeatureProvider
             'last_error_time' => $this->lastErrorTime,
             'last_refresh' => $this->lastRefresh,
             'websocket_running' => $this->webSocketClient->isRunning(),
+            'websocket_available' => $this->webSocketClient->isAvailable(),
+            'live_updates_enabled' => $this->settings->enableLiveUpdates,
+            'fallback_interval' => $this->fallbackInterval,
             'loaded' => $this->loaded,
         ];
     }

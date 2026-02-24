@@ -17,6 +17,7 @@ import {
   createLogger,
   TogglyNetworkError,
 } from '@ops-ai/remix-toggly-core';
+import WebSocket from 'ws';
 
 /**
  * Server-side Toggly client for fetching and evaluating feature flags
@@ -27,6 +28,17 @@ export class TogglyServerClient {
   private flags: FeatureFlags = {};
   private hooks: TogglyHook[] = [];
   private initialized = false;
+
+  // WebSocket live updates
+  private ws: WebSocket | null = null;
+  private wsConnected = false;
+  private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastFallbackRefresh = 0;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private identity?: string;
+
+  private static readonly FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000; // 20 minutes
+  private static readonly WS_RECONNECT_DELAY = 5000; // 5 seconds
 
   constructor(config: TogglyConfig) {
     this.config = mergeConfig(config);
@@ -79,6 +91,8 @@ export class TogglyServerClient {
       return this.flags;
     }
 
+    this.identity = identity;
+
     // Execute beforeIdentify hooks if identity provided
     if (identity) {
       await this.executeBeforeIdentify(identity);
@@ -91,6 +105,9 @@ export class TogglyServerClient {
     if (identity) {
       await this.executeAfterIdentify(identity);
     }
+
+    // Start WebSocket live updates
+    this.startWebSocket();
 
     return this.flags;
   }
@@ -218,6 +235,125 @@ export class TogglyServerClient {
       environment: this.config.environment,
       fetchedAt: Date.now(),
     };
+  }
+
+  // WebSocket live updates
+
+  /**
+   * Build the WebSocket URL for live updates
+   */
+  private buildWebSocketUrl(): string {
+    const baseUrl = this.config.baseUrl ?? 'https://definitions.toggly.io';
+    const wsUrl = baseUrl
+      .replace(/^https:\/\//, 'wss://')
+      .replace(/^http:\/\//, 'ws://');
+    return `${wsUrl.replace(/\/$/, '')}/${this.config.appKey}/ws`;
+  }
+
+  /**
+   * Start WebSocket connection for live updates
+   */
+  private startWebSocket(): void {
+    if (!this.config.appKey) {
+      return;
+    }
+
+    if (this.ws) {
+      return;
+    }
+
+    const wsUrl = this.buildWebSocketUrl();
+    this.logger.debug(`WebSocket connecting to: ${wsUrl}`);
+
+    try {
+      this.ws = new WebSocket(wsUrl);
+
+      this.ws.on('open', () => {
+        this.wsConnected = true;
+        this.lastFallbackRefresh = Date.now();
+        this.logger.debug('WebSocket connected');
+      });
+
+      this.ws.on('message', (data: Buffer) => {
+        const text = data.toString();
+        try {
+          const msg = JSON.parse(text);
+          if (msg.type === 'ping') {
+            return;
+          }
+          if (msg.type === 'flags-updated' || msg.type === 'update') {
+            this.logger.debug('WebSocket: definitions updated, refreshing');
+            this.fetchFlags(this.identity).catch((error) => {
+              this.logger.error('WebSocket-triggered refresh failed:', error);
+            });
+          }
+        } catch {
+          // Non-JSON message - check for plain text signals
+          if (text === 'update' || text === 'flags-updated') {
+            this.fetchFlags(this.identity).catch((error) => {
+              this.logger.error('WebSocket-triggered refresh failed:', error);
+            });
+          }
+        }
+      });
+
+      this.ws.on('close', () => {
+        this.wsConnected = false;
+        this.ws = null;
+        this.logger.debug('WebSocket disconnected, reconnecting in 5s');
+        this.scheduleReconnect();
+      });
+
+      this.ws.on('error', (error) => {
+        this.logger.error('WebSocket error:', error.message);
+        // close event will fire after error, triggering reconnect
+      });
+    } catch (error) {
+      this.logger.error('Failed to create WebSocket:', error);
+      this.ws = null;
+      this.scheduleReconnect();
+    }
+  }
+
+  /**
+   * Schedule WebSocket reconnection
+   */
+  private scheduleReconnect(): void {
+    if (this.wsReconnectTimer) {
+      return;
+    }
+    this.wsReconnectTimer = setTimeout(() => {
+      this.wsReconnectTimer = null;
+      this.startWebSocket();
+    }, TogglyServerClient.WS_RECONNECT_DELAY);
+  }
+
+  /**
+   * Stop WebSocket connection and cleanup
+   */
+  private stopWebSocket(): void {
+    if (this.wsReconnectTimer) {
+      clearTimeout(this.wsReconnectTimer);
+      this.wsReconnectTimer = null;
+    }
+    if (this.ws) {
+      this.ws.removeAllListeners();
+      this.ws.close();
+      this.ws = null;
+      this.wsConnected = false;
+    }
+  }
+
+  /**
+   * Close the client and cleanup all resources
+   */
+  close(): void {
+    this.stopWebSocket();
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+    this.logger.debug('TogglyServerClient closed');
   }
 
   // Hook execution methods

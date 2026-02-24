@@ -24,7 +24,12 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
   
   // Set the service in the store
   togglyServiceStore.set(toggly)
-  
+
+  // Wire up flag updates to the Svelte store (used by WebSocket and refreshFlags)
+  toggly.onFlagsUpdated = (flags) => {
+    togglyFlagsStore.set(flags)
+  }
+
   // Load features and update the flags store
   try {
     const flags = await toggly._loadFeatures()
@@ -37,10 +42,21 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
     togglyFlagsStore.set({})
   }
 
+  // Start WebSocket for live updates
+  toggly.startWebSocket()
+
   // Set up periodic refresh if refresh interval is configured
+  // When WebSocket is connected, polling is throttled to a 20-minute fallback
   const refreshInterval = config.featureFlagsRefreshInterval ?? 3 * 60 * 1000
   if (refreshInterval > 0 && config.appKey) {
     setInterval(async () => {
+      // Throttle polling when WebSocket is connected (20-min fallback)
+      if (toggly._wsConnected && (Date.now() - toggly._lastFallbackRefresh) < 20 * 60 * 1000) {
+        return
+      }
+
+      toggly._lastFallbackRefresh = Date.now()
+
       try {
         await toggly.refreshFlags()
         const flags = await toggly._loadFeatures()

@@ -11,6 +11,8 @@ export interface TogglyOptions {
   showFeatureDuringEvaluation?: boolean
   /** Hooks to extend SDK behavior at key lifecycle points */
   hooks?: Hook[]
+  /** Enable WebSocket live updates (defaults to true when appKey is set) */
+  enableLiveUpdates?: boolean
 }
 
 export interface TogglyService {
@@ -41,6 +43,14 @@ export class Toggly implements TogglyService {
   private _features: { [key: string]: boolean } | null = null
   private _loadingFeatures: boolean = false
   private _hookExecutor = new HookExecutor()
+
+  _ws: WebSocket | null = null
+  _wsConnected: boolean = false
+  _wsReconnectTimer: any = null
+  _lastFallbackRefresh: number = 0
+
+  static readonly FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
+  static readonly WS_RECONNECT_DELAY = 5000
 
   shouldShowFeatureDuringEvaluation: boolean = false
 
@@ -94,10 +104,21 @@ export class Toggly implements TogglyService {
 
     // Features already loaded
     if (this._features !== null) {
+      // When WebSocket is connected, throttle HTTP refreshes to fallback interval
+      if (this._wsConnected) {
+        const now = Date.now()
+        if (now - this._lastFallbackRefresh < Toggly.FALLBACK_REFRESH_INTERVAL) {
+          return this._features
+        }
+        this._lastFallbackRefresh = now
+      }
+
       return this._features
     }
 
     this._loadingFeatures = true
+
+    const isInitialLoad = this._ws === null && !this._wsConnected
 
     try {
       var url = `${this._config.baseURI}/evaluated-signed/${this._config.appKey}/${this._config.environment}`
@@ -109,7 +130,7 @@ export class Toggly implements TogglyService {
       const response = await fetch(url)
       const payload = await response.json()
       this._features = payload?.defs ?? payload
-      
+
       // Trigger afterRefresh hooks
       if (this._features) {
         this._hookExecutor.executeAfterRefresh(this._features)
@@ -121,6 +142,11 @@ export class Toggly implements TogglyService {
       )
     } finally {
       this._loadingFeatures = false
+    }
+
+    // Start WebSocket live updates after initial feature load
+    if (isInitialLoad) {
+      this.startWebSocket()
     }
 
     return this._features
@@ -191,6 +217,96 @@ export class Toggly implements TogglyService {
     const result = await this._evaluateFeatureGate([featureKey], 'all', true)
     await this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
     return result
+  }
+
+  startWebSocket = () => {
+    if (!this._config.appKey) {
+      return
+    }
+
+    if (this._config.enableLiveUpdates === false) {
+      return
+    }
+
+    this.stopWebSocket()
+
+    const wsUrl = this._config.baseURI!
+      .replace('https://', 'wss://')
+      .replace('http://', 'ws://') + `/${this._config.appKey}/ws`
+
+    const ws = new WebSocket(wsUrl)
+
+    ws.onopen = () => {
+      this._wsConnected = true
+      this._lastFallbackRefresh = Date.now()
+    }
+
+    ws.onmessage = (event) => {
+      const data = event.data
+
+      if (typeof data === 'string') {
+        // Handle plain text messages
+        if (data === 'update' || data === 'flags-updated') {
+          this._refreshFeatures()
+          return
+        }
+
+        // Try to parse as JSON
+        try {
+          const message = JSON.parse(data)
+          if (message.type === 'ping') {
+            return
+          }
+          if (message.type === 'flags-updated' || message.type === 'update') {
+            this._refreshFeatures()
+          }
+        } catch (e) {
+          // Unrecognized message, ignore
+        }
+      }
+    }
+
+    ws.onclose = () => {
+      this._wsConnected = false
+      this._ws = null
+
+      this._wsReconnectTimer = setTimeout(() => {
+        this.startWebSocket()
+      }, Toggly.WS_RECONNECT_DELAY)
+    }
+
+    ws.onerror = (error) => {
+      console.error('[Toggly] WebSocket error:', error)
+    }
+
+    this._ws = ws
+  }
+
+  stopWebSocket = () => {
+    if (this._wsReconnectTimer) {
+      clearTimeout(this._wsReconnectTimer)
+      this._wsReconnectTimer = null
+    }
+
+    if (this._ws) {
+      this._ws.onopen = null
+      this._ws.onmessage = null
+      this._ws.onclose = null
+      this._ws.onerror = null
+      this._ws.close()
+      this._ws = null
+    }
+
+    this._wsConnected = false
+  }
+
+  /**
+   * Force-refresh features from the API (bypasses the loaded cache).
+   * Used by WebSocket handlers to pull fresh definitions on update signals.
+   */
+  private _refreshFeatures = async () => {
+    this._features = null
+    await this._loadFeatures()
   }
 
   /**

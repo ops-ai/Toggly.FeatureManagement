@@ -12,7 +12,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
+import java.net.http.HttpClient;
+import java.net.http.WebSocket;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -20,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -39,12 +43,18 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private static final Logger LOGGER = Logger.getLogger(HttpSnapshotProvider.class.getName());
     private static final int CONNECT_TIMEOUT_MS = 10_000;
     private static final int READ_TIMEOUT_MS = 30_000;
+    private static final long FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000L;
+    private static final long WS_RECONNECT_DELAY = 5000L;
 
     private final TogglyConfig config;
     private final String definitionsUrl;
     private final AtomicReference<FeatureSnapshot> currentSnapshot;
     private final AtomicReference<String> lastEtag;
     private final ScheduledExecutorService scheduler;
+
+    private java.net.http.WebSocket webSocket;
+    private volatile boolean wsConnected = false;
+    private volatile long lastFallbackRefresh = 0;
 
     /**
      * Creates an HTTP snapshot provider.
@@ -59,17 +69,20 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
         // Start background refresh if interval is configured
         long intervalSeconds = config.getRefreshIntervalSeconds();
-        if (intervalSeconds > 0) {
+        boolean needsScheduler = intervalSeconds > 0 || config.isEnableLiveUpdates();
+        if (needsScheduler) {
             this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "toggly-refresh");
                 t.setDaemon(true);
                 return t;
             });
-            scheduler.scheduleWithFixedDelay(
-                    this::refreshSilently,
-                    intervalSeconds,
-                    intervalSeconds,
-                    TimeUnit.SECONDS);
+            if (intervalSeconds > 0) {
+                scheduler.scheduleWithFixedDelay(
+                        this::refreshSilently,
+                        intervalSeconds,
+                        intervalSeconds,
+                        TimeUnit.SECONDS);
+            }
         } else {
             this.scheduler = null;
         }
@@ -113,6 +126,12 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             FeatureSnapshot newSnapshot = fetchDefinitions();
             if (newSnapshot != null) {
                 currentSnapshot.set(newSnapshot);
+
+                // Start WebSocket after first successful refresh
+                if (config.isEnableLiveUpdates() && !wsConnected && webSocket == null) {
+                    startWebSocket();
+                }
+
                 return newSnapshot;
             }
         } catch (Exception e) {
@@ -128,6 +147,16 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
     private void refreshSilently() {
         try {
+            // When WebSocket is connected, skip polling unless fallback interval has elapsed
+            if (wsConnected) {
+                long elapsed = System.currentTimeMillis() - lastFallbackRefresh;
+                if (elapsed < FALLBACK_REFRESH_INTERVAL) {
+                    LOGGER.log(Level.FINE, "Skipping scheduled refresh — WebSocket is connected");
+                    return;
+                }
+                LOGGER.log(Level.FINE, "Fallback refresh interval elapsed, refreshing via HTTP");
+                lastFallbackRefresh = System.currentTimeMillis();
+            }
             refresh();
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Background refresh failed", e);
@@ -431,8 +460,118 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         return matcher.find() ? matcher.group(1) : null;
     }
 
+    // ========== WebSocket Live Updates ==========
+
+    private void startWebSocket() {
+        String baseUrl = config.getBaseUrl();
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        String wsUrl = baseUrl
+                .replace("https://", "wss://")
+                .replace("http://", "ws://")
+                + "/" + config.getAppKey() + "/ws";
+
+        LOGGER.log(Level.INFO, "Connecting WebSocket to {0}", wsUrl);
+
+        HttpClient client = HttpClient.newHttpClient();
+        client.newWebSocketBuilder()
+                .buildAsync(URI.create(wsUrl), new WebSocket.Listener() {
+
+                    private final StringBuilder messageBuffer = new StringBuilder();
+
+                    @Override
+                    public void onOpen(WebSocket ws) {
+                        LOGGER.log(Level.INFO, "WebSocket connected");
+                        webSocket = ws;
+                        wsConnected = true;
+                        lastFallbackRefresh = System.currentTimeMillis();
+                        ws.request(1);
+                    }
+
+                    @Override
+                    public CompletionStage<?> onText(WebSocket ws, CharSequence data, boolean last) {
+                        messageBuffer.append(data);
+                        if (last) {
+                            String message = messageBuffer.toString();
+                            messageBuffer.setLength(0);
+                            handleWebSocketMessage(message);
+                        }
+                        ws.request(1);
+                        return null;
+                    }
+
+                    @Override
+                    public CompletionStage<?> onClose(WebSocket ws, int statusCode, String reason) {
+                        LOGGER.log(Level.INFO, "WebSocket closed: {0} {1}",
+                                new Object[]{statusCode, reason});
+                        wsConnected = false;
+                        webSocket = null;
+                        scheduleReconnect();
+                        return null;
+                    }
+
+                    @Override
+                    public void onError(WebSocket ws, Throwable error) {
+                        LOGGER.log(Level.WARNING, "WebSocket error", error);
+                        wsConnected = false;
+                        webSocket = null;
+                        scheduleReconnect();
+                    }
+                })
+                .exceptionally(ex -> {
+                    LOGGER.log(Level.WARNING, "WebSocket connection failed", ex);
+                    wsConnected = false;
+                    webSocket = null;
+                    scheduleReconnect();
+                    return null;
+                });
+    }
+
+    private void handleWebSocketMessage(String message) {
+        try {
+            // Simple JSON field extraction — check for message type
+            String type = extractStringValue(message, "type");
+            if (type == null) {
+                type = extractStringValue(message, "event");
+            }
+
+            if ("ping".equalsIgnoreCase(type)) {
+                LOGGER.log(Level.FINE, "WebSocket ping received");
+                return;
+            }
+
+            if ("flags-updated".equalsIgnoreCase(type) || "update".equalsIgnoreCase(type)) {
+                LOGGER.log(Level.INFO, "WebSocket received update notification, refreshing definitions");
+                refreshSilently();
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error handling WebSocket message", e);
+        }
+    }
+
+    private void scheduleReconnect() {
+        if (scheduler != null && !scheduler.isShutdown() && config.isEnableLiveUpdates()) {
+            LOGGER.log(Level.INFO, "Scheduling WebSocket reconnect in {0}ms", WS_RECONNECT_DELAY);
+            scheduler.schedule(this::startWebSocket, WS_RECONNECT_DELAY, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void stopWebSocket() {
+        if (webSocket != null) {
+            try {
+                webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "");
+            } catch (Exception e) {
+                LOGGER.log(Level.FINE, "Error closing WebSocket", e);
+            }
+            webSocket = null;
+            wsConnected = false;
+        }
+    }
+
     @Override
     public void close() {
+        stopWebSocket();
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdown();
             try {

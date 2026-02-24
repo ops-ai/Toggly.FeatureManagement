@@ -10,7 +10,7 @@ import type {
 } from './types'
 import { HookExecutor } from './hooks'
 import { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
-import { generateUUID, evaluateGate } from './utils'
+import { generateUUID, evaluateGate, isBrowser } from './utils'
 
 /**
  * Create a new Toggly client instance
@@ -21,6 +21,14 @@ export function createTogglyClient(
   const hookExecutor = new HookExecutor()
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let destroyed = false
+
+  // WebSocket live updates
+  let ws: WebSocket | null = null
+  let wsConnected = false
+  let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let lastFallbackRefresh = 0
+  const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
+  const WS_RECONNECT_DELAY = 5000
 
   // Merge with defaults
   const config: Required<
@@ -45,6 +53,7 @@ export function createTogglyClient(
     features: { ...config.featureDefaults },
     error: null,
     lastRefresh: null,
+    wsConnected: false,
   }
 
   // Register initial hooks
@@ -121,6 +130,15 @@ export function createTogglyClient(
 
     refreshIntervalId = setInterval(async () => {
       if (!destroyed) {
+        // When WebSocket is connected, only do fallback refreshes at a longer interval
+        if (wsConnected) {
+          const now = Date.now()
+          if (now - lastFallbackRefresh < FALLBACK_REFRESH_INTERVAL) {
+            return
+          }
+          lastFallbackRefresh = now
+        }
+
         try {
           await client.refresh()
         } catch {
@@ -128,6 +146,103 @@ export function createTogglyClient(
         }
       }
     }, config.refreshInterval)
+  }
+
+  /**
+   * Build the WebSocket URL from the base URI
+   */
+  function buildWebSocketUrl(): string {
+    const wsScheme = config.baseUri.replace(/^https?/, (m) =>
+      m === 'https' ? 'wss' : 'ws'
+    )
+    const base = wsScheme.replace(/\/+$/, '')
+    return `${base}/${config.appKey}/ws`
+  }
+
+  /**
+   * Start a WebSocket connection for live feature flag updates (browser only)
+   */
+  function startWebSocket(): void {
+    if (!isBrowser() || !config.appKey || config.enableLiveUpdates === false) {
+      return
+    }
+
+    // Clean up any existing connection
+    stopWebSocket()
+
+    try {
+      const url = buildWebSocketUrl()
+      ws = new WebSocket(url)
+
+      ws.onopen = () => {
+        wsConnected = true
+        state.wsConnected = true
+      }
+
+      ws.onmessage = (event: MessageEvent) => {
+        try {
+          const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+          const messageType = data?.type ?? data?.event
+
+          if (messageType === 'flags-updated' || messageType === 'update') {
+            client.refresh().catch(() => {
+              // Error already logged in refresh()
+            })
+          }
+        } catch {
+          // If the message isn't JSON, treat any message as a refresh signal
+          client.refresh().catch(() => {
+            // Error already logged in refresh()
+          })
+        }
+      }
+
+      ws.onclose = () => {
+        wsConnected = false
+        state.wsConnected = false
+        ws = null
+
+        // Schedule reconnect if not destroyed
+        if (!destroyed && config.enableLiveUpdates !== false) {
+          wsReconnectTimer = setTimeout(() => {
+            wsReconnectTimer = null
+            startWebSocket()
+          }, WS_RECONNECT_DELAY)
+        }
+      }
+
+      ws.onerror = () => {
+        // onclose will fire after onerror, which handles reconnect
+        wsConnected = false
+        state.wsConnected = false
+      }
+    } catch (error) {
+      console.error('[Toggly] Failed to create WebSocket connection:', error)
+      wsConnected = false
+      state.wsConnected = false
+    }
+  }
+
+  /**
+   * Stop the WebSocket connection and cancel any pending reconnect
+   */
+  function stopWebSocket(): void {
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer)
+      wsReconnectTimer = null
+    }
+
+    if (ws) {
+      ws.onopen = null
+      ws.onmessage = null
+      ws.onclose = null
+      ws.onerror = null
+      ws.close()
+      ws = null
+    }
+
+    wsConnected = false
+    state.wsConnected = false
   }
 
   /**
@@ -191,6 +306,9 @@ export function createTogglyClient(
 
         // Start auto-refresh
         startRefreshInterval()
+
+        // Start WebSocket for live updates (browser only)
+        startWebSocket()
 
         return state.features
       } catch (error) {
@@ -333,6 +451,7 @@ export function createTogglyClient(
 
     destroy(): void {
       destroyed = true
+      stopWebSocket()
       stopRefreshInterval()
       hookExecutor.clearHooks()
     },

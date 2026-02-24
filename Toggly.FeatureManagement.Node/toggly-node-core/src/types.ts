@@ -98,6 +98,7 @@ export interface TogglyState {
   error: Error | null
   lastRefresh: number | null
   etag: string | null
+  wsConnected: boolean
 }
 
 /**

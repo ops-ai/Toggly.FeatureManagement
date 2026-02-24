@@ -38,6 +38,9 @@ public struct TogglyConfig: Sendable {
     /// Custom storage implementation for caching.
     public let storage: TogglyStorage?
 
+    /// Whether to enable WebSocket live updates for real-time flag changes.
+    public let enableLiveUpdates: Bool
+
     /// Creates a new Toggly configuration.
     /// - Parameters:
     ///   - appKey: The application key from the Toggly dashboard.
@@ -52,6 +55,7 @@ public struct TogglyConfig: Sendable {
     ///   - connectTimeout: Connection timeout in seconds. Defaults to 10.
     ///   - requestTimeout: Request timeout in seconds. Defaults to 30.
     ///   - storage: Custom storage implementation.
+    ///   - enableLiveUpdates: Whether to enable WebSocket live updates. Defaults to true.
     public init(
         appKey: String? = nil,
         environment: String = "Production",
@@ -64,7 +68,8 @@ public struct TogglyConfig: Sendable {
         verifySignatures: Bool = false,
         connectTimeout: TimeInterval = 10,
         requestTimeout: TimeInterval = 30,
-        storage: TogglyStorage? = nil
+        storage: TogglyStorage? = nil,
+        enableLiveUpdates: Bool = true
     ) {
         self.appKey = appKey
         self.environment = environment
@@ -78,5 +83,6 @@ public struct TogglyConfig: Sendable {
         self.connectTimeout = connectTimeout
         self.requestTimeout = requestTimeout
         self.storage = storage
+        self.enableLiveUpdates = enableLiveUpdates
     }
 }

@@ -44,7 +44,8 @@
   },
   "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement#readme",
   "dependencies": {
-    "@ops-ai/remix-toggly-core": "file:../remix-toggly-core"
+    "@ops-ai/remix-toggly-core": "file:../remix-toggly-core",
+    "ws": "^8.0.0"
   },
   "peerDependencies": {
     "@remix-run/node": ">=2.0.0",

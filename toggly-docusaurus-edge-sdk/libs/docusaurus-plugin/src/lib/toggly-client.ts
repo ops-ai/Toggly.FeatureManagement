@@ -59,6 +59,18 @@ export interface TogglyClient {
    * @returns Promise that resolves when flags have been refreshed
    */
   refreshFlags(): Promise<void>;
+
+  /**
+   * Start a WebSocket connection for live flag updates.
+   * Only works in browser environments (requires window and WebSocket).
+   * Automatically reconnects on close with a 5-second delay.
+   */
+  startWebSocket(): void;
+
+  /**
+   * Stop the WebSocket connection and clean up reconnect timers.
+   */
+  stopWebSocket(): void;
 }
 
 interface CachedFlags {
@@ -95,6 +107,15 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     throw new Error('fetch is not available. Please provide a fetch implementation via config.fetch');
   }
 
+  // WebSocket live-update support
+  const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000; // 20 minutes
+  const WS_RECONNECT_DELAY = 5000; // 5 seconds
+
+  let _ws: WebSocket | null = null;
+  let _wsConnected = false;
+  let _wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let _lastFallbackRefresh = 0;
+
   let cache: CachedFlags | null = null;
 
   const getApiUrl = (): string => {
@@ -118,7 +139,9 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   const isCacheValid = (): boolean => {
     if (!cache) return false;
     const age = Date.now() - cache.timestamp;
-    return age < featureFlagsRefreshInterval;
+    // When WebSocket is connected, use a longer fallback interval for polling
+    const interval = _wsConnected ? FALLBACK_REFRESH_INTERVAL : featureFlagsRefreshInterval;
+    return age < interval;
   };
 
   const fetchFlags = async (): Promise<Flags> => {
@@ -221,9 +244,121 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     return flagDefaults[key] ?? false;
   };
 
+  const startWebSocket = (): void => {
+    // Only run in browser environments
+    if (typeof window === 'undefined' || typeof WebSocket === 'undefined') {
+      if (isDebug) {
+        console.log('Toggly.ws - skipped (not a browser environment)');
+      }
+      return;
+    }
+
+    if (!appKey) {
+      if (isDebug) {
+        console.log('Toggly.ws - skipped (no appKey)');
+      }
+      return;
+    }
+
+    // Build WebSocket URL from baseURI: https:// -> wss://, http:// -> ws://
+    const wsUrl = baseURI
+      .replace(/^https:\/\//, 'wss://')
+      .replace(/^http:\/\//, 'ws://')
+      .replace(/\/$/, '') + `/${appKey}/ws`;
+
+    if (isDebug) {
+      console.log(`Toggly.ws - connecting to ${wsUrl}`);
+    }
+
+    try {
+      _ws = new WebSocket(wsUrl);
+
+      _ws.onopen = () => {
+        _wsConnected = true;
+        _lastFallbackRefresh = Date.now();
+        if (isDebug) {
+          console.log('Toggly.ws - connected');
+        }
+      };
+
+      _ws.onmessage = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (isDebug) {
+            console.log(`Toggly.ws - message: ${JSON.stringify(data)}`);
+          }
+
+          // Skip ping messages
+          if (data.type === 'ping') {
+            return;
+          }
+
+          // On flags-updated or update messages, refresh flags from the API
+          if (data.type === 'flags-updated' || data.type === 'update') {
+            if (isDebug) {
+              console.log('Toggly.ws - flags updated, refreshing');
+            }
+            void refreshFlags();
+          }
+        } catch {
+          // Ignore malformed messages
+          if (isDebug) {
+            console.log('Toggly.ws - failed to parse message');
+          }
+        }
+      };
+
+      _ws.onerror = (event: Event) => {
+        if (isDebug) {
+          console.log('Toggly.ws - error', event);
+        }
+      };
+
+      _ws.onclose = () => {
+        _wsConnected = false;
+        _ws = null;
+        if (isDebug) {
+          console.log(`Toggly.ws - closed, reconnecting in ${WS_RECONNECT_DELAY}ms`);
+        }
+
+        // Reconnect after delay
+        _wsReconnectTimer = setTimeout(() => {
+          _wsReconnectTimer = null;
+          startWebSocket();
+        }, WS_RECONNECT_DELAY);
+      };
+    } catch (error) {
+      if (isDebug) {
+        console.log('Toggly.ws - failed to connect', error);
+      }
+    }
+  };
+
+  const stopWebSocket = (): void => {
+    if (_wsReconnectTimer !== null) {
+      clearTimeout(_wsReconnectTimer);
+      _wsReconnectTimer = null;
+    }
+
+    if (_ws) {
+      // Remove onclose handler to prevent auto-reconnect
+      _ws.onclose = null;
+      _ws.close();
+      _ws = null;
+    }
+
+    _wsConnected = false;
+
+    if (isDebug) {
+      console.log('Toggly.ws - stopped');
+    }
+  };
+
   return {
     getFlags,
     getFlag,
     refreshFlags,
+    startWebSocket,
+    stopWebSocket,
   };
 }

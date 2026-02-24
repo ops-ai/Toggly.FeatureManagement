@@ -4,10 +4,17 @@ use crate::config::TogglyConfig;
 use crate::definitions::{FeatureDefinition, SignedDefinitionsResponse};
 use dashmap::DashMap;
 use parking_lot::RwLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::watch;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
+
+/// Fallback refresh interval when WebSocket is connected (20 minutes).
+const WS_FALLBACK_REFRESH_SECS: u64 = 20 * 60;
+
+/// Delay before attempting WebSocket reconnection (5 seconds).
+const WS_RECONNECT_DELAY_SECS: u64 = 5;
 
 /// Provider for fetching and caching feature definitions.
 pub struct DefinitionsProvider {
@@ -17,6 +24,8 @@ pub struct DefinitionsProvider {
     last_fetch: Arc<RwLock<Option<Instant>>>,
     etag: Arc<RwLock<Option<String>>>,
     shutdown_tx: Option<watch::Sender<bool>>,
+    ws_connected: Arc<AtomicBool>,
+    last_fallback_refresh: Arc<RwLock<Instant>>,
 }
 
 impl DefinitionsProvider {
@@ -33,6 +42,8 @@ impl DefinitionsProvider {
             last_fetch: Arc::new(RwLock::new(None)),
             etag: Arc::new(RwLock::new(None)),
             shutdown_tx: None,
+            ws_connected: Arc::new(AtomicBool::new(false)),
+            last_fallback_refresh: Arc::new(RwLock::new(Instant::now())),
         })
     }
 
@@ -48,6 +59,19 @@ impl DefinitionsProvider {
         Ok(())
     }
 
+    /// Build the WebSocket URL from the definitions URL.
+    fn build_ws_url(config: &TogglyConfig) -> String {
+        let base = if config.definitions_url.ends_with('/') {
+            &config.definitions_url[..config.definitions_url.len() - 1]
+        } else {
+            &config.definitions_url
+        };
+        let ws_base = base
+            .replace("https://", "wss://")
+            .replace("http://", "ws://");
+        format!("{}/{}/ws", ws_base, config.app_key)
+    }
+
     /// Start background refresh task.
     fn start_background_refresh(&mut self) {
         let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
@@ -59,6 +83,98 @@ impl DefinitionsProvider {
         let config = self.config.clone();
         let http_client = self.http_client.clone();
         let refresh_interval = config.refresh_interval;
+        let ws_connected = Arc::clone(&self.ws_connected);
+        let last_fallback_refresh = Arc::clone(&self.last_fallback_refresh);
+
+        // Spawn WebSocket live updates task if enabled
+        if config.enable_live_updates {
+            let ws_definitions = Arc::clone(&definitions);
+            let ws_last_fetch = Arc::clone(&last_fetch);
+            let ws_etag = Arc::clone(&etag);
+            let ws_config = config.clone();
+            let ws_http_client = http_client.clone();
+            let ws_connected_flag = Arc::clone(&ws_connected);
+            let ws_last_fallback = Arc::clone(&last_fallback_refresh);
+            let mut ws_shutdown_rx = shutdown_rx.clone();
+
+            tokio::spawn(async move {
+                let ws_url = Self::build_ws_url(&ws_config);
+                info!(url = %ws_url, "Starting WebSocket live updates");
+
+                loop {
+                    // Check for shutdown before attempting connection
+                    if *ws_shutdown_rx.borrow() {
+                        debug!("WebSocket task shutting down");
+                        break;
+                    }
+
+                    debug!(url = %ws_url, "Connecting WebSocket");
+                    match tokio_tungstenite::connect_async(&ws_url).await {
+                        Ok((ws_stream, _response)) => {
+                            ws_connected_flag.store(true, Ordering::SeqCst);
+                            *ws_last_fallback.write() = Instant::now();
+                            info!("WebSocket connected");
+
+                            use futures_util::StreamExt;
+                            let (_, mut read) = ws_stream.split();
+
+                            loop {
+                                tokio::select! {
+                                    msg = read.next() => {
+                                        match msg {
+                                            Some(Ok(message)) => {
+                                                if let tokio_tungstenite::tungstenite::Message::Text(text) = message {
+                                                    Self::handle_ws_message(
+                                                        &text,
+                                                        &ws_http_client,
+                                                        &ws_config,
+                                                        &ws_definitions,
+                                                        &ws_last_fetch,
+                                                        &ws_etag,
+                                                    ).await;
+                                                }
+                                            }
+                                            Some(Err(e)) => {
+                                                error!(error = %e, "WebSocket error");
+                                                break;
+                                            }
+                                            None => {
+                                                debug!("WebSocket stream ended");
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    _ = ws_shutdown_rx.changed() => {
+                                        if *ws_shutdown_rx.borrow() {
+                                            debug!("WebSocket task shutting down");
+                                            ws_connected_flag.store(false, Ordering::SeqCst);
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+
+                            ws_connected_flag.store(false, Ordering::SeqCst);
+                        }
+                        Err(e) => {
+                            error!(error = %e, "WebSocket connection failed");
+                        }
+                    }
+
+                    // Reconnect after delay, unless shutting down
+                    debug!("WebSocket disconnected, reconnecting in {}s", WS_RECONNECT_DELAY_SECS);
+                    tokio::select! {
+                        _ = tokio::time::sleep(Duration::from_secs(WS_RECONNECT_DELAY_SECS)) => {}
+                        _ = ws_shutdown_rx.changed() => {
+                            if *ws_shutdown_rx.borrow() {
+                                debug!("WebSocket task shutting down during reconnect delay");
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(refresh_interval);
@@ -66,6 +182,18 @@ impl DefinitionsProvider {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
+                        // When WebSocket is connected, throttle HTTP polls to fallback interval
+                        if ws_connected.load(Ordering::SeqCst) {
+                            let elapsed = last_fallback_refresh.read().elapsed();
+                            if elapsed < Duration::from_secs(WS_FALLBACK_REFRESH_SECS) {
+                                debug!("WebSocket connected, skipping poll (fallback in {}s)",
+                                    WS_FALLBACK_REFRESH_SECS - elapsed.as_secs());
+                                continue;
+                            }
+                            *last_fallback_refresh.write() = Instant::now();
+                            debug!("WebSocket connected, performing fallback refresh");
+                        }
+
                         if let Err(e) = Self::fetch_definitions_impl(
                             &http_client,
                             &config,
@@ -85,6 +213,45 @@ impl DefinitionsProvider {
                 }
             }
         });
+    }
+
+    /// Handle an incoming WebSocket text message.
+    async fn handle_ws_message(
+        text: &str,
+        http_client: &reqwest::Client,
+        config: &TogglyConfig,
+        definitions: &DashMap<String, FeatureDefinition>,
+        last_fetch: &RwLock<Option<Instant>>,
+        etag: &RwLock<Option<String>>,
+    ) {
+        // Try parsing as JSON first
+        if let Ok(msg) = serde_json::from_str::<serde_json::Value>(text) {
+            if let Some(msg_type) = msg.get("type").and_then(|t| t.as_str()) {
+                if msg_type == "ping" {
+                    return;
+                }
+                if msg_type == "flags-updated" || msg_type == "update" {
+                    debug!("WebSocket: definitions updated, refreshing");
+                    if let Err(e) =
+                        Self::fetch_definitions_impl(http_client, config, definitions, last_fetch, etag).await
+                    {
+                        error!(error = %e, "WebSocket-triggered refresh failed");
+                    }
+                }
+                return;
+            }
+        }
+
+        // Non-JSON message — check for plain text signals
+        let trimmed = text.trim();
+        if trimmed == "update" || trimmed == "flags-updated" {
+            debug!("WebSocket: plain text update signal, refreshing");
+            if let Err(e) =
+                Self::fetch_definitions_impl(http_client, config, definitions, last_fetch, etag).await
+            {
+                error!(error = %e, "WebSocket-triggered refresh failed");
+            }
+        }
     }
 
     /// Fetch definitions from the API.
@@ -251,6 +418,11 @@ impl DefinitionsProvider {
         self.last_fetch.read().map(|t| t.elapsed())
     }
 
+    /// Check if the WebSocket connection is active.
+    pub fn is_ws_connected(&self) -> bool {
+        self.ws_connected.load(Ordering::SeqCst)
+    }
+
     /// Shutdown the provider.
     pub fn shutdown(&mut self) {
         if let Some(tx) = self.shutdown_tx.take() {
@@ -270,6 +442,7 @@ impl std::fmt::Debug for DefinitionsProvider {
         f.debug_struct("DefinitionsProvider")
             .field("definitions_count", &self.definitions.len())
             .field("last_fetch", &self.last_fetch.read())
+            .field("ws_connected", &self.ws_connected.load(Ordering::SeqCst))
             .finish()
     }
 }
@@ -287,5 +460,41 @@ mod tests {
 
         let provider = DefinitionsProvider::new(config).unwrap();
         assert!(provider.is_empty());
+        assert!(!provider.is_ws_connected());
+    }
+
+    #[test]
+    fn test_build_ws_url() {
+        let config = TogglyConfig::builder()
+            .app_key("my-app")
+            .environment("production")
+            .build();
+
+        let url = DefinitionsProvider::build_ws_url(&config);
+        assert_eq!(url, "wss://definitions.toggly.io/my-app/ws");
+    }
+
+    #[test]
+    fn test_build_ws_url_with_trailing_slash() {
+        let config = TogglyConfig::builder()
+            .app_key("my-app")
+            .environment("production")
+            .definitions_url("https://custom.example.com/")
+            .build();
+
+        let url = DefinitionsProvider::build_ws_url(&config);
+        assert_eq!(url, "wss://custom.example.com/my-app/ws");
+    }
+
+    #[test]
+    fn test_build_ws_url_http() {
+        let config = TogglyConfig::builder()
+            .app_key("my-app")
+            .environment("production")
+            .definitions_url("http://localhost:8080")
+            .build();
+
+        let url = DefinitionsProvider::build_ws_url(&config);
+        assert_eq!(url, "ws://localhost:8080/my-app/ws");
     }
 }

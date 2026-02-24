@@ -140,10 +140,17 @@ importers:
         version: 3.2.4(@types/node@22.19.11)
 
   toggly-node-core:
+    dependencies:
+      ws:
+        specifier: ^8.0.0
+        version: 8.19.0
     devDependencies:
       '@types/node':
         specifier: ^20.17.12
         version: 20.19.33
+      '@types/ws':
+        specifier: ^8.0.0
+        version: 8.18.1
       '@vitest/coverage-v8':
         specifier: ^3.0.4
         version: 3.2.4(vitest@3.2.4(@types/node@20.19.33))

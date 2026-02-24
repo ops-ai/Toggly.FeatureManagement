@@ -21,6 +21,14 @@ export function createTogglyClient(
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let destroyed = false
 
+  // WebSocket live updates
+  let ws: WebSocket | null = null
+  let wsConnected = false
+  let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let lastFallbackRefresh = 0
+  const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
+  const WS_RECONNECT_DELAY = 5000
+
   // Merge with defaults
   const config: Required<
     Pick<
@@ -114,6 +122,84 @@ export function createTogglyClient(
   }
 
   /**
+   * Build the WebSocket URL from the configured base URI
+   */
+  function buildWebSocketUrl(): string {
+    const base = config.baseUri
+      .replace(/^https:\/\//, 'wss://')
+      .replace(/^http:\/\//, 'ws://')
+      .replace(/\/$/, '')
+    return `${base}/${config.appKey}/ws`
+  }
+
+  /**
+   * Start WebSocket connection for live flag updates (browser only)
+   */
+  function startWebSocket(): void {
+    if (typeof window === 'undefined') return
+    if (!config.appKey) return
+    if (!config.enableLiveUpdates) return
+    if (ws) return
+
+    try {
+      const url = buildWebSocketUrl()
+      ws = new WebSocket(url)
+
+      ws.onopen = () => {
+        wsConnected = true
+        lastFallbackRefresh = Date.now()
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'ping') return
+          if (data.type === 'flags-updated' || data.type === 'update') {
+            client.refresh().catch(() => {
+              // Error already logged in refresh()
+            })
+          }
+        } catch {
+          // Ignore malformed messages
+        }
+      }
+
+      ws.onclose = () => {
+        wsConnected = false
+        ws = null
+        if (!destroyed) {
+          wsReconnectTimer = setTimeout(() => {
+            wsReconnectTimer = null
+            startWebSocket()
+          }, WS_RECONNECT_DELAY)
+        }
+      }
+
+      ws.onerror = (event) => {
+        console.error('[Toggly] WebSocket error:', event)
+      }
+    } catch (error) {
+      console.error('[Toggly] Failed to create WebSocket:', error)
+    }
+  }
+
+  /**
+   * Stop WebSocket connection and cancel any pending reconnect
+   */
+  function stopWebSocket(): void {
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer)
+      wsReconnectTimer = null
+    }
+    if (ws) {
+      ws.onclose = null
+      ws.close()
+      ws = null
+    }
+    wsConnected = false
+  }
+
+  /**
    * Start the auto-refresh interval
    */
   function startRefreshInterval(): void {
@@ -123,6 +209,15 @@ export function createTogglyClient(
 
     refreshIntervalId = setInterval(async () => {
       if (!destroyed) {
+        // When WebSocket is connected, only do fallback refresh every 20 minutes
+        if (wsConnected) {
+          const now = Date.now()
+          if (now - lastFallbackRefresh < FALLBACK_REFRESH_INTERVAL) {
+            return
+          }
+          lastFallbackRefresh = now
+        }
+
         try {
           await client.refresh()
         } catch {
@@ -193,6 +288,9 @@ export function createTogglyClient(
 
         // Start auto-refresh
         startRefreshInterval()
+
+        // Start WebSocket for live updates
+        startWebSocket()
 
         return state.features
       } catch (error) {
@@ -335,6 +433,7 @@ export function createTogglyClient(
 
     destroy(): void {
       destroyed = true
+      stopWebSocket()
       stopRefreshInterval()
       hookExecutor.clearHooks()
     },

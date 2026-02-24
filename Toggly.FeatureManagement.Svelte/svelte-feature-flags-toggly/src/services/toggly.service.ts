@@ -10,6 +10,8 @@ export interface TogglyOptions {
   featureDefaults?: { [key: string]: boolean }
   showFeatureDuringEvaluation?: boolean
   featureFlagsRefreshInterval?: number
+  /** Enable live updates via WebSocket (default: true) */
+  enableLiveUpdates?: boolean
   /** Hooks to extend SDK behavior at key lifecycle points */
   hooks?: Hook[]
 }
@@ -31,6 +33,8 @@ export interface TogglyService {
   isFeatureOn: (featureKey: string) => Promise<boolean>
   isFeatureOff: (featureKey: string) => Promise<boolean>
   refreshFlags: () => Promise<void>
+  startWebSocket: () => void
+  stopWebSocket: () => void
   addHook: (hook: Hook) => void
   removeHook: (name: string) => boolean
 }
@@ -47,6 +51,15 @@ export class Toggly implements TogglyService {
   private _loadingFeatures: boolean = false
   private _lastFetchTime: number = 0
   private _hookExecutor = new HookExecutor()
+
+  _ws: WebSocket | null = null
+  _wsConnected: boolean = false
+  _wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+  _lastFallbackRefresh: number = 0
+  private _fallbackRefreshInterval: number = 20 * 60 * 1000
+
+  /** Callback invoked after flags are refreshed (used by createToggly to update the store) */
+  onFlagsUpdated: ((flags: { [key: string]: boolean }) => void) | null = null
 
   shouldShowFeatureDuringEvaluation: boolean = false
 
@@ -215,7 +228,10 @@ export class Toggly implements TogglyService {
 
   refreshFlags = async (): Promise<void> => {
     this._lastFetchTime = 0 // Force refresh
-    await this._loadFeatures()
+    const flags = await this._loadFeatures()
+    if (flags && this.onFlagsUpdated) {
+      this.onFlagsUpdated(flags)
+    }
   }
 
   /**
@@ -231,6 +247,87 @@ export class Toggly implements TogglyService {
    */
   removeHook(name: string): boolean {
     return this._hookExecutor.removeHook(name)
+  }
+
+  startWebSocket() {
+    if (!this._config.appKey) {
+      return
+    }
+
+    if (this._config.enableLiveUpdates === false) {
+      return
+    }
+
+    this.stopWebSocket()
+
+    const wsUrl = (this._config.baseURI ?? '')
+      .replace('https://', 'wss://')
+      .replace('http://', 'ws://') + `/${this._config.appKey}/ws`
+
+    const ws = new WebSocket(wsUrl)
+
+    ws.onopen = () => {
+      this._wsConnected = true
+      this._lastFallbackRefresh = Date.now()
+    }
+
+    ws.onmessage = (event) => {
+      const data = event.data
+
+      if (typeof data === 'string') {
+        // Handle plain text messages
+        if (data === 'update' || data === 'flags-updated') {
+          this.refreshFlags()
+          return
+        }
+
+        // Try to parse as JSON
+        try {
+          const message = JSON.parse(data)
+          if (message.type === 'ping') {
+            return
+          }
+          if (message.type === 'flags-updated' || message.type === 'update') {
+            this.refreshFlags()
+          }
+        } catch {
+          // Unrecognized message, ignore
+        }
+      }
+    }
+
+    ws.onclose = () => {
+      this._wsConnected = false
+      this._ws = null
+
+      this._wsReconnectTimer = setTimeout(() => {
+        this.startWebSocket()
+      }, 5000)
+    }
+
+    ws.onerror = (error) => {
+      console.error('[Toggly] WebSocket error:', error)
+    }
+
+    this._ws = ws
+  }
+
+  stopWebSocket() {
+    if (this._wsReconnectTimer) {
+      clearTimeout(this._wsReconnectTimer)
+      this._wsReconnectTimer = null
+    }
+
+    if (this._ws) {
+      this._ws.onopen = null
+      this._ws.onmessage = null
+      this._ws.onclose = null
+      this._ws.onerror = null
+      this._ws.close()
+      this._ws = null
+    }
+
+    this._wsConnected = false
   }
 }
 

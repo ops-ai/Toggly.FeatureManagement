@@ -38,6 +38,7 @@ export const INITIAL_STATE: TogglyState = {
   error: null,
   lastRefresh: null,
   etag: null,
+  wsConnected: false,
 }
 
 /**

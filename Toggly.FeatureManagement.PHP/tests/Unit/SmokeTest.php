@@ -133,7 +133,7 @@ class SmokeTest extends TestCase
         $this->assertFalse($this->isAlwaysOn($flagOff));
     }
 
-    private function createProvider(bool $useSignedDefinitions): FeatureProvider
+    private function createProvider(bool $useSignedDefinitions, bool $enableLiveUpdates = false): FeatureProvider
     {
         $appKey = getenv('TOGGLY_SMOKE_APP_KEY_BACKEND');
         if (empty($appKey)) {
@@ -146,6 +146,7 @@ class SmokeTest extends TestCase
             'base_url' => 'https://definitions.toggly.io/',
             'use_signed_definitions' => $useSignedDefinitions,
             'refresh_interval' => 300,
+            'enable_live_updates' => $enableLiveUpdates,
         ]);
 
         $httpClient = new TogglyHttpClient(
@@ -163,128 +164,42 @@ class SmokeTest extends TestCase
 
     public function testSmokeWebSocketConnection(): void
     {
-        $appKey = getenv('TOGGLY_SMOKE_APP_KEY_BACKEND');
-        if (empty($appKey)) {
-            $this->markTestSkipped('TOGGLY_SMOKE_APP_KEY_BACKEND is not set');
-        }
+        $provider = $this->createProvider(false, true);
+        $provider->refreshFeatures(true);
 
-        try {
-            $host = 'definitions.toggly.io';
-            $path = "/{$appKey}/ws";
-            $key = base64_encode(random_bytes(16));
+        $flagOn = $provider->getFeatureDefinition('FlagOn');
+        $flagOff = $provider->getFeatureDefinition('FlagOff');
 
-            $context = stream_context_create(['ssl' => [
-                'verify_peer' => true,
-                'verify_peer_name' => true,
-            ]]);
+        $this->assertNotNull($flagOn, 'FlagOn should be defined');
+        $this->assertNotNull($flagOff, 'FlagOff should be defined');
+        $this->assertTrue($this->isAlwaysOn($flagOn), 'FlagOn should be AlwaysOn');
+        $this->assertFalse($this->isAlwaysOn($flagOff), 'FlagOff should not be AlwaysOn');
 
-            $socket = @stream_socket_client(
-                "ssl://{$host}:443",
-                $errno,
-                $errstr,
-                15,
-                STREAM_CLIENT_CONNECT,
-                $context
-            );
+        // Check if WebSocket connected via the SDK's built-in mechanism
+        $debug = $provider->getDebugInfo();
+        $this->assertTrue($debug['live_updates_enabled'], 'Live updates should be enabled');
 
-            if ($socket === false) {
-                fwrite(STDERR, "Warning: WebSocket smoke test skipped - connection failed: {$errstr}\n");
-                return;
-            }
-
-            $request = "GET {$path} HTTP/1.1\r\n" .
-                "Host: {$host}\r\n" .
-                "Upgrade: websocket\r\n" .
-                "Connection: Upgrade\r\n" .
-                "Sec-WebSocket-Key: {$key}\r\n" .
-                "Sec-WebSocket-Version: 13\r\n\r\n";
-
-            fwrite($socket, $request);
-            stream_set_timeout($socket, 15);
-
-            $response = '';
-            while (($line = fgets($socket)) !== false) {
-                $response .= $line;
-                if ($line === "\r\n") {
+        // If WebSocket is available in this environment, verify it connected
+        if ($debug['websocket_available']) {
+            $connected = false;
+            for ($i = 0; $i < 30; $i++) {
+                $provider->tick();
+                $debug = $provider->getDebugInfo();
+                if ($debug['websocket_running']) {
+                    $connected = true;
                     break;
                 }
+                usleep(500_000);
             }
 
-            $this->assertStringContainsString('101', $response, 'Expected 101 Switching Protocols');
+            $this->assertTrue($connected, 'SDK WebSocket should be running within 15 seconds');
 
-            $found = false;
-            for ($attempt = 0; $attempt < 5; $attempt++) {
-                $frame = $this->readWebSocketFrame($socket);
-                if ($frame === null) {
-                    break;
-                }
-
-                $parsed = json_decode($frame, true);
-                if ($parsed !== null && isset($parsed['type']) && $parsed['type'] === 'ping') {
-                    continue;
-                }
-
-                $this->assertNotNull($parsed, 'Failed to parse WebSocket message as JSON');
-                $this->assertContains($parsed['type'], ['definitions', 'evaluated'],
-                    'Message type should be definitions or evaluated');
-                $this->assertArrayHasKey('timestamp', $parsed, 'Message should contain timestamp');
-                $found = true;
-                break;
-            }
-
-            if (!$found) {
-                fwrite(STDERR, "Warning: WebSocket smoke test - no definitions message received\n");
-            }
-
-            fclose($socket);
-        } catch (\Throwable $e) {
-            // WebSocket connections may timeout due to Cloudflare Workers cold starts
-            fwrite(STDERR, "Warning: WebSocket smoke test skipped: {$e->getMessage()}\n");
-        }
-    }
-
-    private function readWebSocketFrame($socket): ?string
-    {
-        $header = fread($socket, 2);
-        if ($header === false || strlen($header) < 2) return null;
-
-        $opcode = ord($header[0]) & 0x0F;
-        $masked = (ord($header[1]) & 0x80) !== 0;
-        $payloadLen = ord($header[1]) & 0x7F;
-
-        if ($payloadLen === 126) {
-            $ext = fread($socket, 2);
-            if ($ext === false) return null;
-            $payloadLen = unpack('n', $ext)[1];
-        } elseif ($payloadLen === 127) {
-            $ext = fread($socket, 8);
-            if ($ext === false) return null;
-            $payloadLen = unpack('J', $ext)[1];
+            // Verify definitions still available after WebSocket connects
+            $this->assertNotNull($provider->getFeatureDefinition('FlagOn'));
+            $this->assertNotNull($provider->getFeatureDefinition('FlagOff'));
         }
 
-        $maskKey = '';
-        if ($masked) {
-            $maskKey = fread($socket, 4);
-            if ($maskKey === false) return null;
-        }
-
-        $payload = '';
-        $remaining = $payloadLen;
-        while ($remaining > 0) {
-            $chunk = fread($socket, min($remaining, 8192));
-            if ($chunk === false) return null;
-            $payload .= $chunk;
-            $remaining -= strlen($chunk);
-        }
-
-        if ($masked) {
-            for ($i = 0; $i < strlen($payload); $i++) {
-                $payload[$i] = chr(ord($payload[$i]) ^ ord($maskKey[$i % 4]));
-            }
-        }
-
-        if ($opcode === 1) return $payload; // text frame
-        return null;
+        $provider->shutdown();
     }
 
     private function isAlwaysOn($featureDefinition): bool

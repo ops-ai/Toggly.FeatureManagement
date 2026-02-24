@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Iterator
+
+try:
+    import websocket
+
+    HAS_WEBSOCKET = True
+except ImportError:
+    HAS_WEBSOCKET = False
 
 from toggly.config import TogglyConfig
 from toggly.context import EvaluationContext
@@ -43,6 +51,9 @@ class TogglyClient:
         ...     print("Feature is enabled!")
 
     """
+
+    _FALLBACK_REFRESH_INTERVAL = 20 * 60  # 20 minutes in seconds
+    _WS_RECONNECT_DELAY = 5  # seconds
 
     def __init__(
         self,
@@ -94,6 +105,13 @@ class TogglyClient:
         # Background refresh
         self._refresh_thread: threading.Thread | None = None
         self._stop_refresh = threading.Event()
+
+        # WebSocket live updates
+        self._ws: Any = None
+        self._ws_connected = False
+        self._ws_thread: threading.Thread | None = None
+        self._last_fallback_refresh: float = 0.0
+        self._ws_stop_event = threading.Event()
 
     @property
     def is_initialized(self) -> bool:
@@ -154,6 +172,7 @@ class TogglyClient:
                 response = self._fetch_definitions()
                 self._is_initialized = True
                 self._start_background_refresh()
+                self._start_websocket()
                 return response
             except TogglyNetworkError as e:
                 self._last_error = str(e)
@@ -162,6 +181,7 @@ class TogglyClient:
         # Fall back to cached or defaults
         self._is_initialized = True
         self._start_background_refresh()
+        self._start_websocket()
 
         if cached:
             return TogglyInitResponse(
@@ -366,6 +386,7 @@ class TogglyClient:
         self._stop_refresh.set()
         if self._refresh_thread and self._refresh_thread.is_alive():
             self._refresh_thread.join(timeout=5.0)
+        self._stop_websocket()
 
     @contextmanager
     def feature_context(
@@ -587,8 +608,20 @@ class TogglyClient:
 
         def refresh_loop() -> None:
             while not self._stop_refresh.wait(self._config.refresh_interval):
+                # When WebSocket is connected and fallback interval hasn't elapsed, skip
+                if (
+                    self._ws_connected
+                    and (time.time() - self._last_fallback_refresh)
+                    < self._FALLBACK_REFRESH_INTERVAL
+                ):
+                    logger.debug(
+                        "Skipping background refresh: WebSocket connected"
+                    )
+                    continue
                 try:
                     self.refresh()
+                    if self._ws_connected:
+                        self._last_fallback_refresh = time.time()
                 except Exception as e:
                     logger.warning(f"Background refresh failed: {e}")
 
@@ -598,3 +631,108 @@ class TogglyClient:
             name="toggly-refresh",
         )
         self._refresh_thread.start()
+
+    def _start_websocket(self) -> None:
+        """Start WebSocket connection for live updates."""
+        if not self._config.enable_live_updates:
+            return
+        if not self._config.app_key:
+            return
+
+        if not HAS_WEBSOCKET:
+            logger.debug(
+                "websocket-client package not installed; skipping live updates. "
+                "Install with: pip install toggly[websocket]"
+            )
+            return
+
+        # Build WebSocket URL from base_url
+        ws_url = self._config.base_url.replace("https://", "wss://").replace(
+            "http://", "ws://"
+        )
+        ws_url = f"{ws_url}/{self._config.app_key}/ws"
+
+        self._ws_stop_event.clear()
+
+        def ws_thread_loop() -> None:
+            while not self._ws_stop_event.is_set():
+                try:
+                    ws_app = websocket.WebSocketApp(
+                        ws_url,
+                        on_open=self._on_ws_open,
+                        on_message=self._on_ws_message,
+                        on_close=self._on_ws_close,
+                        on_error=self._on_ws_error,
+                    )
+                    self._ws = ws_app
+                    ws_app.run_forever()
+                except Exception as e:
+                    logger.warning(f"WebSocket connection error: {e}")
+                finally:
+                    self._ws_connected = False
+
+                if self._ws_stop_event.is_set():
+                    break
+
+                logger.debug(
+                    f"WebSocket disconnected, reconnecting in "
+                    f"{self._WS_RECONNECT_DELAY}s..."
+                )
+                self._ws_stop_event.wait(self._WS_RECONNECT_DELAY)
+
+        self._ws_thread = threading.Thread(
+            target=ws_thread_loop,
+            daemon=True,
+            name="toggly-websocket",
+        )
+        self._ws_thread.start()
+
+    def _stop_websocket(self) -> None:
+        """Stop WebSocket connection."""
+        self._ws_stop_event.set()
+        if self._ws is not None:
+            try:
+                self._ws.close()
+            except Exception:
+                pass
+        if self._ws_thread is not None and self._ws_thread.is_alive():
+            self._ws_thread.join(timeout=5.0)
+        self._ws = None
+        self._ws_connected = False
+
+    def _on_ws_open(self, ws: Any) -> None:
+        """Handle WebSocket connection open."""
+        self._ws_connected = True
+        self._last_fallback_refresh = time.time()
+        logger.debug("WebSocket connected for live updates")
+
+    def _on_ws_message(self, ws: Any, message: str) -> None:
+        """Handle incoming WebSocket message."""
+        try:
+            data = json.loads(message)
+        except (json.JSONDecodeError, TypeError):
+            logger.debug(f"Ignoring non-JSON WebSocket message: {message!r}")
+            return
+
+        msg_type = data.get("type", "")
+
+        if msg_type == "ping":
+            return
+
+        if msg_type in ("flags-updated", "update"):
+            logger.debug(f"Received live update ({msg_type}), refreshing definitions")
+            try:
+                self.refresh()
+            except Exception as e:
+                logger.warning(f"Refresh after WebSocket update failed: {e}")
+
+    def _on_ws_close(self, ws: Any, close_status_code: Any, close_msg: Any) -> None:
+        """Handle WebSocket connection close."""
+        self._ws_connected = False
+        logger.debug(
+            f"WebSocket closed (status={close_status_code}, msg={close_msg})"
+        )
+
+    def _on_ws_error(self, ws: Any, error: Any) -> None:
+        """Handle WebSocket error."""
+        logger.warning(f"WebSocket error: {error}")

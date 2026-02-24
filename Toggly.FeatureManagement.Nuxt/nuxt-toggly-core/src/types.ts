@@ -18,6 +18,8 @@ export interface TogglyConfig {
   refreshInterval?: number
   /** Initial hooks to register */
   hooks?: Hook[]
+  /** Enable WebSocket live updates for real-time flag changes (browser only, default: false) */
+  enableLiveUpdates?: boolean
 }
 
 /**

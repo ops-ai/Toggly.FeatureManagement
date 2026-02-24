@@ -24,4 +24,8 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   # Zero runtime dependencies for core gem
+
+  # Optional: enables WebSocket live updates for real-time flag changes
+  spec.metadata["optional_dependencies"] = "websocket-client-simple"
+  spec.add_development_dependency "websocket-client-simple", "~> 0.8"
 end

@@ -43,7 +43,11 @@ module Toggly
       @closed = false
 
       @engine = EvaluationEngine.new(logger: @config.logger)
-      @provider = DefinitionsProvider.new(config: @config, logger: @config.logger)
+      @provider = DefinitionsProvider.new(
+        config: @config,
+        logger: @config.logger,
+        on_definitions_updated: -> { refresh }
+      )
 
       @refresh_thread = nil
 
@@ -147,6 +151,7 @@ module Toggly
     # Close the client and stop background refresh
     def close
       @closed = true
+      @provider.stop_websocket
       @refresh_thread&.kill
       @refresh_thread = nil
     end
@@ -215,11 +220,25 @@ module Toggly
           sleep(@config.refresh_interval)
           break if @closed
 
+          # When WebSocket is connected, skip HTTP refresh unless
+          # the fallback interval has elapsed
+          next if @provider.should_skip_refresh?
+
           refresh
         end
       end
 
       @refresh_thread.abort_on_exception = false
+
+      # Start WebSocket live updates after background refresh is set up
+      start_live_updates
+    end
+
+    def start_live_updates
+      return unless @config.enable_live_updates
+      return if @config.offline_mode?
+
+      @provider.start_websocket
     end
 
     def load_snapshot

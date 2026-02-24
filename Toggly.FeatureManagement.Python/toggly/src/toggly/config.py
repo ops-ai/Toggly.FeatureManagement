@@ -73,6 +73,9 @@ class TogglyConfig:
     state_change_handlers: list[StateChangeHandler] = field(default_factory=list)
     """Callbacks invoked when feature states change."""
 
+    enable_live_updates: bool = True
+    """Enable WebSocket-based live updates for near-instant flag changes."""
+
     debug: bool = False
     """Enable debug logging."""
 
@@ -189,6 +192,7 @@ class TogglyConfig:
             state_change_handlers=changes.get(
                 "state_change_handlers", self.state_change_handlers.copy()
             ),
+            enable_live_updates=changes.get("enable_live_updates", self.enable_live_updates),
             debug=changes.get("debug", self.debug),
         )
 
@@ -207,5 +211,6 @@ class TogglyConfig:
             "use_signed_definitions": self.use_signed_definitions,
             "enable_usage_tracking": self.enable_usage_tracking,
             "enable_metrics": self.enable_metrics,
+            "enable_live_updates": self.enable_live_updates,
             "debug": self.debug,
         }

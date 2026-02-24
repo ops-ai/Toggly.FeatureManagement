@@ -22,6 +22,15 @@ public actor TogglyService {
     private var networkState: NetworkState?
     private var appState: AppStateType = .active
 
+    // MARK: - WebSocket
+
+    private var webSocketTask: URLSessionWebSocketTask?
+    private var wsConnected = false
+    private var lastFallbackRefresh: Date = .distantPast
+    private let fallbackRefreshInterval: TimeInterval = 20 * 60
+    private let wsReconnectDelay: TimeInterval = 5
+    private var wsListenTask: Task<Void, Never>?
+
     // MARK: - Event Handling
 
     private var eventListeners: [UUID: TogglyEventListener] = [:]
@@ -83,6 +92,11 @@ public actor TogglyService {
         // Perform initial refresh
         let response = await refresh()
 
+        // Start WebSocket for live updates after successful first refresh
+        if config.enableLiveUpdates && response.status != .defaults {
+            startWebSocket()
+        }
+
         isInitialized = true
         emitEvent(.initialized(response))
 
@@ -119,6 +133,7 @@ public actor TogglyService {
 
     /// Dispose the service and clean up resources.
     public func dispose() {
+        stopWebSocket()
         stopRefreshTimer()
         eventListeners.removeAll()
         stateChangeHandlers.removeAll()
@@ -479,6 +494,16 @@ public actor TogglyService {
                 guard !Task.isCancelled else { break }
 
                 if await self?.appState == .active {
+                    // When WebSocket is connected, only do fallback refresh every 20 minutes
+                    if let self = self, await self.wsConnected {
+                        let now = Date()
+                        let lastFallback = await self.lastFallbackRefresh
+                        let interval = await self.fallbackRefreshInterval
+                        if now.timeIntervalSince(lastFallback) < interval {
+                            continue
+                        }
+                        await self.setLastFallbackRefresh(now)
+                    }
                     await self?.refresh()
                 }
             }
@@ -488,6 +513,101 @@ public actor TogglyService {
     private func stopRefreshTimer() {
         refreshTask?.cancel()
         refreshTask = nil
+    }
+
+    private func setLastFallbackRefresh(_ date: Date) {
+        lastFallbackRefresh = date
+    }
+
+    // MARK: - WebSocket
+
+    private func startWebSocket() {
+        stopWebSocket()
+
+        guard let appKey = config.appKey else { return }
+
+        let wsBaseURI = config.baseURI
+            .replacingOccurrences(of: "https://", with: "wss://")
+            .replacingOccurrences(of: "http://", with: "ws://")
+        let wsURLString = "\(wsBaseURI)/\(appKey)/ws"
+
+        guard let url = URL(string: wsURLString) else { return }
+
+        let task = URLSession.shared.webSocketTask(with: url)
+        webSocketTask = task
+        task.resume()
+        wsConnected = true
+
+        wsListenTask = Task { [weak self] in
+            await self?.receiveMessage()
+        }
+    }
+
+    private func stopWebSocket() {
+        wsListenTask?.cancel()
+        wsListenTask = nil
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        wsConnected = false
+    }
+
+    private func receiveMessage() {
+        guard let webSocketTask = webSocketTask else { return }
+
+        webSocketTask.receive { [weak self] result in
+            Task { [weak self] in
+                guard let self = self else { return }
+
+                switch result {
+                case .success(let message):
+                    switch message {
+                    case .string(let text):
+                        await self.handleWebSocketMessage(text)
+                    case .data(let data):
+                        if let text = String(data: data, encoding: .utf8) {
+                            await self.handleWebSocketMessage(text)
+                        }
+                    @unknown default:
+                        break
+                    }
+                    // Continue receiving
+                    await self.receiveMessage()
+
+                case .failure:
+                    await self.handleWebSocketDisconnect()
+                }
+            }
+        }
+    }
+
+    private func handleWebSocketMessage(_ text: String) async {
+        guard let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = json["type"] as? String else {
+            return
+        }
+
+        // Skip ping messages
+        if type == "ping" { return }
+
+        // Refresh on flags-updated or update messages
+        if type == "flags-updated" || type == "update" {
+            await refresh()
+        }
+    }
+
+    private func handleWebSocketDisconnect() async {
+        wsConnected = false
+        webSocketTask = nil
+
+        // Schedule reconnect after delay
+        guard !Task.isCancelled else { return }
+
+        try? await Task.sleep(nanoseconds: UInt64(wsReconnectDelay) * 1_000_000_000)
+
+        guard !Task.isCancelled, appState == .active else { return }
+
+        startWebSocket()
     }
 
     private func emitEvent(_ event: TogglyEvent) {

@@ -8,6 +8,12 @@ export class Toggly {
   private static _refreshInterval: number | undefined;
   private static _hookExecutor = new HookExecutor();
 
+  static _ws: WebSocket | null = null;
+  static _wsConnected: boolean = false;
+  static _wsReconnectTimer: any = null;
+  static _lastFallbackRefresh: number = 0;
+  static _fallbackRefreshInterval: number = 20 * 60 * 1000;
+
   static init(config: TogglyConfig = {} as TogglyConfig): Promise<{ [key: string]: boolean }> {
     Toggly._config = Object.assign({
       baseURI: 'https://definitions.toggly.io',
@@ -32,6 +38,7 @@ export class Toggly {
 
     Toggly.clearFeatureFlagsCache();
     Toggly.startRefreshInterval();
+    Toggly.startWebSocket();
 
     return Toggly.refresh();
   }
@@ -205,16 +212,110 @@ export class Toggly {
     return Toggly._hookExecutor.removeHook(name);
   }
 
+  static startWebSocket() {
+    if (!Toggly._config.appKey) {
+      return;
+    }
+
+    if (Toggly._config.enableLiveUpdates === false) {
+      return;
+    }
+
+    Toggly.stopWebSocket();
+
+    const wsUrl = Toggly._config.baseURI.replace('https://', 'wss://').replace('http://', 'ws://') + `/${Toggly._config.appKey}/ws`;
+
+    if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket connecting to ${wsUrl}`); }
+
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      Toggly._wsConnected = true;
+      Toggly._lastFallbackRefresh = Date.now();
+      if (Toggly._config.isDebug) { console.log('[Toggly] WebSocket connected'); }
+    };
+
+    ws.onmessage = (event) => {
+      const data = event.data;
+
+      if (typeof data === 'string') {
+        // Handle plain text messages
+        if (data === 'update' || data === 'flags-updated') {
+          if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received text: ${data}`); }
+          Toggly.refresh();
+          return;
+        }
+
+        // Try to parse as JSON
+        try {
+          const message = JSON.parse(data);
+          if (message.type === 'ping') {
+            return;
+          }
+          if (message.type === 'flags-updated' || message.type === 'update') {
+            if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received: ${message.type}`); }
+            Toggly.refresh();
+          }
+        } catch (e) {
+          if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received unrecognized message: ${data}`); }
+        }
+      }
+    };
+
+    ws.onclose = () => {
+      Toggly._wsConnected = false;
+      Toggly._ws = null;
+      if (Toggly._config.isDebug) { console.log('[Toggly] WebSocket closed, reconnecting in 5s'); }
+
+      Toggly._wsReconnectTimer = setTimeout(() => {
+        Toggly.startWebSocket();
+      }, 5000);
+    };
+
+    ws.onerror = (error) => {
+      console.error('[Toggly] WebSocket error:', error);
+    };
+
+    Toggly._ws = ws;
+  }
+
+  static stopWebSocket() {
+    if (Toggly._wsReconnectTimer) {
+      clearTimeout(Toggly._wsReconnectTimer);
+      Toggly._wsReconnectTimer = null;
+    }
+
+    if (Toggly._ws) {
+      Toggly._ws.onopen = null;
+      Toggly._ws.onmessage = null;
+      Toggly._ws.onclose = null;
+      Toggly._ws.onerror = null;
+      Toggly._ws.close();
+      Toggly._ws = null;
+    }
+
+    Toggly._wsConnected = false;
+  }
+
   static cancelRefreshInterval() {
     window.clearInterval(Toggly._refreshInterval);
     Toggly._refreshInterval = undefined;
+    Toggly.stopWebSocket();
   }
 
   static startRefreshInterval() {
     Toggly.cancelRefreshInterval();
 
     if (Toggly._config.appKey && Toggly._config.featureFlagsRefreshInterval > 0) {
-      Toggly._refreshInterval = window.setInterval(() => Toggly.refresh(), Toggly._config.featureFlagsRefreshInterval);
+      Toggly._refreshInterval = window.setInterval(() => {
+        if (Toggly._wsConnected && (Date.now() - Toggly._lastFallbackRefresh) < Toggly._fallbackRefreshInterval) {
+          if (Toggly._config.isDebug) { console.log('[Toggly] Skipping interval refresh, WebSocket is connected'); }
+          return;
+        }
+
+        Toggly._lastFallbackRefresh = Date.now();
+        Toggly.refresh();
+      }, Toggly._config.featureFlagsRefreshInterval);
     }
   }
 }

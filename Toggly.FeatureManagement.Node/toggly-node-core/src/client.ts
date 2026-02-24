@@ -21,6 +21,7 @@ import {
   deepMerge,
   createLogger,
 } from './utils.js'
+import WebSocket from 'ws'
 
 /**
  * Create a new Toggly client
@@ -67,7 +68,15 @@ export function createTogglyClient(
   // Refresh interval timer
   let refreshTimer: NodeJS.Timeout | null = null
 
-  // Streaming event source (for SSE)
+  // WebSocket live updates
+  let ws: WebSocket | null = null
+  let wsConnected = false
+  let wsReconnectTimer: NodeJS.Timeout | null = null
+  let lastFallbackRefresh = 0
+  const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000 // 20 minutes
+  const WS_RECONNECT_DELAY = 5000 // 5 seconds
+
+  // Streaming event source (for SSE) - legacy, kept for backward compat
   let streamingAbortController: AbortController | null = null
 
   /**
@@ -253,6 +262,14 @@ export function createTogglyClient(
     }
 
     refreshTimer = setInterval(() => {
+      // When WebSocket is connected, throttle HTTP polls to fallback interval
+      if (wsConnected) {
+        const now = Date.now()
+        if (now - lastFallbackRefresh < FALLBACK_REFRESH_INTERVAL) {
+          return
+        }
+        lastFallbackRefresh = now
+      }
       refresh().catch((error) => {
         logger.error('Background refresh failed:', error)
       })
@@ -273,29 +290,114 @@ export function createTogglyClient(
   }
 
   /**
-   * Start SSE streaming for real-time updates
+   * Build the WebSocket URL for live updates
    */
-  async function startStreaming(): Promise<void> {
-    if (!config.enableStreaming || !config.streamingUrl) {
+  function buildWebSocketUrl(): string {
+    if (config.streamingUrl) {
+      return config.streamingUrl
+    }
+    const baseUrl = (config.baseUrl ?? DEFAULT_CONFIG.baseUrl)!
+    const wsUrl = baseUrl.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://')
+    return `${wsUrl.replace(/\/$/, '')}/${config.appKey}/ws`
+  }
+
+  /**
+   * Start WebSocket connection for live updates
+   */
+  function startStreaming(): void {
+    if (!config.appKey) {
       return
     }
 
-    streamingAbortController = new AbortController()
+    // enableStreaming defaults to true when appKey is set
+    if (config.enableStreaming === false) {
+      return
+    }
+
+    if (ws) {
+      return
+    }
+
+    const wsUrl = buildWebSocketUrl()
+    logger.debug('Connecting WebSocket to:', wsUrl)
 
     try {
-      // Note: Node.js doesn't have native EventSource
-      // This is a placeholder for SSE implementation
-      // In production, use a library like 'eventsource' or 'undici'
-      logger.debug('Streaming not yet implemented for Node.js')
+      ws = new WebSocket(wsUrl)
+
+      ws.on('open', () => {
+        wsConnected = true
+        lastFallbackRefresh = Date.now()
+        logger.debug('WebSocket connected')
+      })
+
+      ws.on('message', (data: Buffer) => {
+        const text = data.toString()
+        try {
+          const msg = JSON.parse(text)
+          if (msg.type === 'ping') {
+            return
+          }
+          if (msg.type === 'flags-updated' || msg.type === 'update') {
+            logger.debug('WebSocket: definitions updated, refreshing')
+            refresh().catch((error) => {
+              logger.error('WebSocket-triggered refresh failed:', error)
+            })
+          }
+        } catch {
+          // Non-JSON message — check for plain text signals
+          if (text === 'update' || text === 'flags-updated') {
+            refresh().catch((error) => {
+              logger.error('WebSocket-triggered refresh failed:', error)
+            })
+          }
+        }
+      })
+
+      ws.on('close', () => {
+        wsConnected = false
+        ws = null
+        logger.debug('WebSocket disconnected, reconnecting in 5s')
+        scheduleReconnect()
+      })
+
+      ws.on('error', (error) => {
+        logger.error('WebSocket error:', error.message)
+        // close event will fire after error, triggering reconnect
+      })
     } catch (error) {
-      logger.error('Failed to start streaming:', error)
+      logger.error('Failed to create WebSocket:', error)
+      ws = null
+      scheduleReconnect()
     }
   }
 
   /**
-   * Stop SSE streaming
+   * Schedule WebSocket reconnection
+   */
+  function scheduleReconnect(): void {
+    if (wsReconnectTimer) {
+      return
+    }
+    wsReconnectTimer = setTimeout(() => {
+      wsReconnectTimer = null
+      startStreaming()
+    }, WS_RECONNECT_DELAY)
+  }
+
+  /**
+   * Stop WebSocket connection
    */
   function stopStreaming(): void {
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer)
+      wsReconnectTimer = null
+    }
+    if (ws) {
+      ws.removeAllListeners()
+      ws.close()
+      ws = null
+      wsConnected = false
+    }
     if (streamingAbortController) {
       streamingAbortController.abort()
       streamingAbortController = null
@@ -344,10 +446,8 @@ export function createTogglyClient(
     // Start background refresh
     startRefreshInterval()
 
-    // Start streaming if enabled
-    if (config.enableStreaming) {
-      await startStreaming()
-    }
+    // Start WebSocket live updates (always-on unless explicitly disabled)
+    startStreaming()
 
     logger.debug('Toggly client initialized')
 
@@ -478,7 +578,7 @@ export function createTogglyClient(
   // Build and return client
   return {
     get state(): TogglyState {
-      return { ...state }
+      return { ...state, wsConnected }
     },
     get config(): TogglyServerConfig {
       return { ...config }

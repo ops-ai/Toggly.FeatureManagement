@@ -30,36 +30,38 @@ RSpec.describe "Toggly smoke tests" do
     end
   end
 
-  it "connects via WebSocket and receives definitions" do
-    require "websocket-client-simple"
-    require "json"
+  it "connects via the SDK's built-in WebSocket and receives definitions" do
+    client = Toggly::Client.new(
+      app_key: app_key,
+      environment: "Production",
+      base_url: "https://definitions.toggly.io/",
+      use_signed_definitions: false,
+      enable_live_updates: true,
+      disable_background_refresh: false
+    )
 
-    received = nil
-    error = nil
-    ws = WebSocket::Client::Simple.connect("wss://definitions.toggly.io/#{app_key}/ws")
+    expect(client.wait_for_ready(timeout: 30)).to be(true)
+    expect(client.enabled?("FlagOn")).to be(true)
+    expect(client.enabled?("FlagOff")).to be(false)
 
-    ws.on :message do |msg|
-      parsed = JSON.parse(msg.data) rescue nil
-      next if parsed && parsed["type"] == "ping"
-      received = msg.data
-      ws.close
+    # Wait for the SDK's built-in WebSocket to connect
+    provider = client.instance_variable_get(:@provider)
+    connected = false
+    30.times do
+      if provider.ws_connected
+        connected = true
+        break
+      end
+      sleep 0.5
     end
 
-    ws.on :error do |e|
-      error = e
-      ws.close
-    end
+    expect(connected).to be(true), "SDK WebSocket should be connected within 15 seconds"
 
-    15.times do
-      break if received || error
-      sleep 1
-    end
+    # Verify flags still work after WebSocket is connected
+    expect(client.enabled?("FlagOn")).to be(true)
+    expect(client.enabled?("FlagOff")).to be(false)
 
-    expect(error).to be_nil
-    expect(received).not_to be_nil
-    parsed = JSON.parse(received)
-    expect(%w[definitions evaluated]).to include(parsed["type"])
-    expect(parsed).to have_key("timestamp")
+    client.close
   end
 
   it "validates signed definitions for FlagOn and FlagOff" do

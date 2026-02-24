@@ -47,29 +47,36 @@ def test_smoke_signed_definitions() -> None:
 
 
 def test_smoke_websocket_connection() -> None:
-    """Verify WebSocket connection to Toggly definitions endpoint."""
+    """Verify the SDK's built-in WebSocket connects and flags are available."""
+    import time
+
     app_key = _require_app_key()
-    import json
+    client = TogglyClient(
+        TogglyConfig(
+            app_key=app_key,
+            environment=SMOKE_ENVIRONMENT,
+            base_url="https://definitions.toggly.io",
+            use_signed_definitions=False,
+            enable_live_updates=True,
+            disable_background_refresh=False,
+            refresh_interval=300,
+        )
+    )
+    response = client.init()
 
-    try:
-        from websockets.sync.client import connect as ws_connect  # type: ignore[import-untyped]
-    except ImportError:
-        import pytest
+    assert response.error is None
+    assert client.is_enabled(FLAG_ON) is True
+    assert client.is_enabled(FLAG_OFF) is False
 
-        pytest.skip("websockets package not installed")
-
-    with ws_connect(
-        f"wss://definitions.toggly.io/{app_key}/ws",
-        close_timeout=5,
-    ) as ws:
-        for _ in range(5):
-            message = ws.recv(timeout=15)
-            assert isinstance(message, str)
-            parsed = json.loads(message)
-            if parsed.get("type") == "ping":
-                continue
-            assert parsed["type"] in ("definitions", "evaluated")
-            assert "timestamp" in parsed
+    # Wait for the SDK's built-in WebSocket to connect
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if client._ws_connected:
             break
-        else:
-            raise AssertionError("Never received definitions/evaluated message")
+        time.sleep(0.5)
+
+    assert client._ws_connected, "SDK WebSocket should be connected within 15 seconds"
+
+    # Verify flags still work after WebSocket is connected
+    assert client.is_enabled(FLAG_ON) is True
+    assert client.is_enabled(FLAG_OFF) is False

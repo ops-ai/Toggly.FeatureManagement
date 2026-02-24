@@ -9,6 +9,7 @@ import {
   useCallback,
   useMemo,
   useEffect,
+  useRef,
   type ReactElement,
   type ReactNode,
 } from 'react';
@@ -320,7 +321,22 @@ export function TogglyProvider({
     [logger]
   );
 
-  // Set up refresh interval
+  // WebSocket live updates
+  const wsRef = useRef<WebSocket | null>(null);
+  const wsReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wsConnectedRef = useRef(false);
+  const lastFallbackRefreshRef = useRef(0);
+
+  const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000; // 20 minutes
+  const WS_RECONNECT_DELAY = 5000; // 5 seconds
+
+  // Stable ref for refresh so WebSocket handlers always call the latest version
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
+
+  // Set up refresh interval with WebSocket throttling
   useEffect(() => {
     if (!enableRefresh || !mergedConfig?.appKey) {
       return;
@@ -329,6 +345,14 @@ export function TogglyProvider({
     logger.debug(`Setting up refresh interval: ${refreshInterval}ms`);
 
     const intervalId = setInterval(() => {
+      // When WebSocket is connected, throttle HTTP polls to fallback interval
+      if (wsConnectedRef.current) {
+        const now = Date.now();
+        if (now - lastFallbackRefreshRef.current < FALLBACK_REFRESH_INTERVAL) {
+          return;
+        }
+        lastFallbackRefreshRef.current = now;
+      }
       refresh();
     }, refreshInterval);
 
@@ -336,6 +360,109 @@ export function TogglyProvider({
       clearInterval(intervalId);
     };
   }, [enableRefresh, refreshInterval, refresh, mergedConfig?.appKey, logger]);
+
+  // Set up WebSocket connection for live updates
+  useEffect(() => {
+    if (!mergedConfig?.appKey || !mergedConfig?.baseUrl) {
+      return;
+    }
+
+    // Only run in browser
+    if (typeof WebSocket === 'undefined') {
+      return;
+    }
+
+    function buildWebSocketUrl(): string {
+      const baseUrl = mergedConfig!.baseUrl!;
+      const wsUrl = baseUrl
+        .replace(/^https:\/\//, 'wss://')
+        .replace(/^http:\/\//, 'ws://');
+      return `${wsUrl.replace(/\/$/, '')}/${mergedConfig!.appKey}/ws`;
+    }
+
+    function connect(): void {
+      if (wsRef.current) {
+        return;
+      }
+
+      const wsUrl = buildWebSocketUrl();
+      logger.debug(`WebSocket connecting to: ${wsUrl}`);
+
+      try {
+        const socket = new WebSocket(wsUrl);
+        wsRef.current = socket;
+
+        socket.onopen = () => {
+          wsConnectedRef.current = true;
+          lastFallbackRefreshRef.current = Date.now();
+          logger.debug('WebSocket connected');
+        };
+
+        socket.onmessage = (event: MessageEvent) => {
+          const text = typeof event.data === 'string' ? event.data : '';
+          try {
+            const msg = JSON.parse(text);
+            if (msg.type === 'ping') {
+              return;
+            }
+            if (msg.type === 'flags-updated' || msg.type === 'update') {
+              logger.debug('WebSocket: definitions updated, refreshing');
+              refreshRef.current();
+            }
+          } catch {
+            // Non-JSON message - check for plain text signals
+            if (text === 'update' || text === 'flags-updated') {
+              refreshRef.current();
+            }
+          }
+        };
+
+        socket.onclose = () => {
+          wsConnectedRef.current = false;
+          wsRef.current = null;
+          logger.debug('WebSocket disconnected, reconnecting in 5s');
+          scheduleReconnect();
+        };
+
+        socket.onerror = () => {
+          logger.warn('WebSocket error');
+          // close event will fire after error, triggering reconnect
+        };
+      } catch (error) {
+        logger.warn('Failed to create WebSocket:', error);
+        wsRef.current = null;
+        scheduleReconnect();
+      }
+    }
+
+    function scheduleReconnect(): void {
+      if (wsReconnectTimerRef.current) {
+        return;
+      }
+      wsReconnectTimerRef.current = setTimeout(() => {
+        wsReconnectTimerRef.current = null;
+        connect();
+      }, WS_RECONNECT_DELAY);
+    }
+
+    connect();
+
+    return () => {
+      if (wsReconnectTimerRef.current) {
+        clearTimeout(wsReconnectTimerRef.current);
+        wsReconnectTimerRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onopen = null;
+        wsRef.current.close();
+        wsRef.current = null;
+        wsConnectedRef.current = false;
+      }
+    };
+  }, [mergedConfig?.appKey, mergedConfig?.baseUrl, logger]);
 
   // Initialize on mount if no server context
   useEffect(() => {

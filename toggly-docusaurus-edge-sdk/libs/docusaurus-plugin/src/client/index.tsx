@@ -9,9 +9,11 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
+  useRef,
   ReactNode,
 } from 'react';
-import { createTogglyClient, type TogglyConfig, type Flags } from '../lib/toggly-client';
+import { createTogglyClient, type TogglyClient, type TogglyConfig, type Flags } from '../lib/toggly-client';
 
 export interface TogglyProviderProps {
   config: TogglyConfig;
@@ -71,7 +73,13 @@ export function TogglyProvider({
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
+  // Keep a ref to the latest flags so the polling interval can detect changes
+  const flagsRef = useRef<Flags>(flags);
+  flagsRef.current = flags;
+
   useEffect(() => {
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
     // Initialize client and load flags
     client
       .getFlags()
@@ -83,6 +91,28 @@ export function TogglyProvider({
         setError(err);
         setIsReady(true); // Still mark as ready even on error
       });
+
+    // Start WebSocket for live updates
+    client.startWebSocket();
+
+    // Poll periodically so React state picks up refreshes triggered by WebSocket
+    pollTimer = setInterval(() => {
+      client.getFlags().then((latest: Flags) => {
+        // Only update state when flags actually changed
+        if (JSON.stringify(latest) !== JSON.stringify(flagsRef.current)) {
+          setFlags(latest);
+        }
+      }).catch(() => {
+        // Silently ignore polling errors
+      });
+    }, config.featureFlagsRefreshInterval ?? 3 * 60 * 1000);
+
+    return () => {
+      client.stopWebSocket();
+      if (pollTimer) {
+        clearInterval(pollTimer);
+      }
+    };
   }, [client]);
 
   const getFlag = async (key: string, defaultValue?: boolean): Promise<boolean> => {

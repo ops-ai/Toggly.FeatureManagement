@@ -53,6 +53,13 @@ class TogglySettings
      */
     public int $refreshInterval = 300;
 
+    /**
+     * Enable live updates via WebSocket (default: true)
+     * Only effective in long-running processes (CLI, Laravel Octane, ReactPHP, etc.)
+     * Automatically disabled in PHP-FPM / traditional request-per-process environments
+     */
+    public bool $enableLiveUpdates = true;
+
     public function __construct(array $config = [])
     {
         if (isset($config['app_key'])) {
@@ -83,6 +90,9 @@ class TogglySettings
         }
         if (isset($config['refresh_interval'])) {
             $this->refreshInterval = (int)$config['refresh_interval'];
+        }
+        if (isset($config['enable_live_updates'])) {
+            $this->enableLiveUpdates = (bool)$config['enable_live_updates'];
         }
     }
 

@@ -9,6 +9,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import org.json.JSONObject
 import java.security.MessageDigest
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -37,6 +41,11 @@ class TogglyService(
     private var isInitialized = false
     private var networkState: NetworkState? = null
     private var appState: AppStateType = AppStateType.ACTIVE
+
+    // WebSocket state
+    private var webSocket: WebSocket? = null
+    private var wsConnected = false
+    private var lastFallbackRefresh = 0L
 
     // Event handling
     private val _events = MutableSharedFlow<TogglyEvent>(replay = 0, extraBufferCapacity = 64)
@@ -117,6 +126,11 @@ class TogglyService(
 
         isInitialized = true
         emitEvent(TogglyEvent.Initialized(response))
+
+        // Start WebSocket for live updates after successful initialization
+        if (config.enableLiveUpdates) {
+            startWebSocket()
+        }
 
         response
     }
@@ -367,6 +381,7 @@ class TogglyService(
      * Dispose the service and clean up resources.
      */
     fun dispose() {
+        stopWebSocket()
         stopRefreshTimer()
         stateChangeHandlers.clear()
         features = null
@@ -542,6 +557,14 @@ class TogglyService(
                 while (isActive) {
                     delay(config.refreshInterval)
                     if (appState == AppStateType.ACTIVE) {
+                        // When WebSocket is connected, only refresh as a fallback every 20 minutes
+                        if (wsConnected) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastFallbackRefresh < FALLBACK_REFRESH_INTERVAL) {
+                                continue
+                            }
+                            lastFallbackRefresh = now
+                        }
                         refresh()
                     }
                 }
@@ -588,6 +611,80 @@ class TogglyService(
             // Fallback to simple hash
             identity.hashCode().toString(16).takeLast(8)
         }
+    }
+
+    private fun startWebSocket() {
+        if (!config.enableLiveUpdates || config.appKey == null) return
+
+        stopWebSocket()
+
+        val wsUrl = config.baseUri
+            .replace("https://", "wss://")
+            .replace("http://", "ws://") + "/${config.appKey}/ws"
+
+        val request = Request.Builder()
+            .url(wsUrl)
+            .build()
+
+        val listener = object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                wsConnected = true
+                lastFallbackRefresh = System.currentTimeMillis()
+            }
+
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                try {
+                    val json = JSONObject(text)
+                    val type = json.optString("type", "")
+
+                    if (type == "ping") return
+
+                    if (type == "flags-updated" || type == "update") {
+                        CoroutineScope(Dispatchers.Default).launch {
+                            refresh()
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignore malformed messages
+                }
+            }
+
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                wsConnected = false
+                this@TogglyService.webSocket = null
+                scheduleReconnect()
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                wsConnected = false
+                this@TogglyService.webSocket = null
+                scheduleReconnect()
+            }
+        }
+
+        webSocket = httpClient.newWebSocket(request, listener)
+    }
+
+    private fun stopWebSocket() {
+        webSocket?.close(1000, "Client closing")
+        webSocket = null
+        wsConnected = false
+    }
+
+    private fun scheduleReconnect() {
+        if (!config.enableLiveUpdates || config.appKey == null) return
+
+        CoroutineScope(Dispatchers.Default).launch {
+            delay(WS_RECONNECT_DELAY)
+            if (!wsConnected && isInitialized && appState == AppStateType.ACTIVE) {
+                startWebSocket()
+            }
+        }
+    }
+
+    companion object {
+        private const val FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000L
+        private const val WS_RECONNECT_DELAY = 5000L
     }
 }
 

@@ -74,7 +74,9 @@ data class TogglyConfig(
     /** Request timeout in milliseconds */
     val requestTimeout: Long = 30_000L,
     /** Custom storage implementation */
-    val storage: TogglyStorage? = null
+    val storage: TogglyStorage? = null,
+    /** Whether to enable live updates via WebSocket */
+    val enableLiveUpdates: Boolean = true
 )
 
 /**

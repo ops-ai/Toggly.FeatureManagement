@@ -29,6 +29,7 @@ public final class TogglyConfig {
     private final boolean enableUsageTracking;
     private final boolean useSignedDefinitions;
     private final boolean debug;
+    private final boolean enableLiveUpdates;
     private final Map<String, Boolean> featureDefaults;
     private final String identity;
     private final boolean defaultFeatureState;
@@ -44,6 +45,7 @@ public final class TogglyConfig {
         this.enableUsageTracking = builder.enableUsageTracking;
         this.useSignedDefinitions = builder.useSignedDefinitions;
         this.debug = builder.debug;
+        this.enableLiveUpdates = builder.enableLiveUpdates;
         this.featureDefaults = Collections.unmodifiableMap(new HashMap<>(builder.featureDefaults));
         this.identity = builder.identity;
         this.defaultFeatureState = builder.defaultFeatureState;
@@ -118,6 +120,15 @@ public final class TogglyConfig {
         return debug;
     }
 
+    /**
+     * Returns whether WebSocket live updates are enabled.
+     *
+     * @return true if live updates are enabled
+     */
+    public boolean isEnableLiveUpdates() {
+        return enableLiveUpdates;
+    }
+
     public Map<String, Boolean> getFeatureDefaults() {
         return featureDefaults;
     }
@@ -170,6 +181,7 @@ public final class TogglyConfig {
                 .enableUsageTracking(enableUsageTracking)
                 .useSignedDefinitions(useSignedDefinitions)
                 .debug(debug)
+                .enableLiveUpdates(enableLiveUpdates)
                 .featureDefaults(featureDefaults)
                 .identity(identity)
                 .defaultFeatureState(defaultFeatureState);
@@ -189,6 +201,7 @@ public final class TogglyConfig {
         private boolean enableUsageTracking = true;
         private boolean useSignedDefinitions = false;
         private boolean debug = false;
+        private boolean enableLiveUpdates = true;
         private Map<String, Boolean> featureDefaults = new HashMap<>();
         private String identity;
         private boolean defaultFeatureState = false;
@@ -317,6 +330,20 @@ public final class TogglyConfig {
         }
 
         /**
+         * Enables or disables WebSocket live updates.
+         *
+         * <p>When enabled, the SDK maintains a WebSocket connection to receive
+         * real-time feature flag updates instead of relying solely on polling.</p>
+         *
+         * @param enableLiveUpdates true to enable live updates (default: true)
+         * @return this builder
+         */
+        public Builder enableLiveUpdates(boolean enableLiveUpdates) {
+            this.enableLiveUpdates = enableLiveUpdates;
+            return this;
+        }
+
+        /**
          * Sets the default feature flag values.
          *
          * @param featureDefaults map of feature key to default value
@@ -391,6 +418,7 @@ public final class TogglyConfig {
                 enableUsageTracking == that.enableUsageTracking &&
                 useSignedDefinitions == that.useSignedDefinitions &&
                 debug == that.debug &&
+                enableLiveUpdates == that.enableLiveUpdates &&
                 Objects.equals(appKey, that.appKey) &&
                 Objects.equals(environment, that.environment) &&
                 Objects.equals(baseUrl, that.baseUrl) &&
@@ -403,7 +431,7 @@ public final class TogglyConfig {
     public int hashCode() {
         return Objects.hash(appKey, environment, baseUrl, refreshInterval,
                 enableAutoRefresh, enableUsageTracking, useSignedDefinitions,
-                debug, featureDefaults, identity);
+                debug, enableLiveUpdates, featureDefaults, identity);
     }
 
     @Override
@@ -417,6 +445,7 @@ public final class TogglyConfig {
                 ", enableUsageTracking=" + enableUsageTracking +
                 ", useSignedDefinitions=" + useSignedDefinitions +
                 ", debug=" + debug +
+                ", enableLiveUpdates=" + enableLiveUpdates +
                 ", featureDefaults=" + featureDefaults.size() + " entries" +
                 ", identity='" + (identity != null ? "***" : "null") + '\'' +
                 '}';

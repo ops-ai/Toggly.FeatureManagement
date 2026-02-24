@@ -144,7 +144,14 @@ class Toggly with WidgetsBindingObserver {
 
     Toggly.startTimers();
 
-    return await Toggly.refresh();
+    final result = await Toggly.refresh();
+
+    // Start WebSocket for live updates after a successful first refresh
+    if (Toggly._config.enableLiveUpdates && Toggly._appKey != null) {
+      Toggly._startWebSocket();
+    }
+
+    return result;
   }
 
   /// Refreshes the feature flag values.
@@ -884,6 +891,26 @@ class Toggly with WidgetsBindingObserver {
                 'Toggly.syncFeatureFlags - every ${Toggly._config.featureFlagsRefreshInterval / 1000}s');
           }
 
+          // When WebSocket is connected, skip refresh unless the fallback
+          // interval has elapsed to ensure flags stay reasonably fresh.
+          if (Toggly._sync.wsConnected) {
+            final elapsed =
+                DateTime.now().difference(Toggly._sync.lastFallbackRefresh);
+            if (elapsed < SyncService.fallbackRefreshInterval) {
+              if (kDebugMode) {
+                print(
+                    'Toggly: Skipping refresh — WebSocket connected and fallback interval not elapsed');
+              }
+              return;
+            }
+            // Fallback interval elapsed, update timestamp and proceed
+            Toggly._sync.lastFallbackRefresh = DateTime.now();
+            if (kDebugMode) {
+              print(
+                  'Toggly: Fallback refresh interval elapsed, refreshing despite active WebSocket');
+            }
+          }
+
           // Only refresh if app is in foreground
           if (_checkAppVisibility()) {
             await Toggly.refresh();
@@ -895,8 +922,24 @@ class Toggly with WidgetsBindingObserver {
     }
   }
 
-  /// Cancels the registered timers.
+  /// Starts the WebSocket connection for live feature flag updates.
+  static void _startWebSocket() {
+    Toggly._sync.onFlagsUpdated = () async {
+      if (kDebugMode) {
+        print('Toggly: WebSocket triggered refresh');
+      }
+      await Toggly.refresh();
+    };
+
+    Toggly._sync.startWebSocket(
+      baseURI: Toggly._config.baseURI,
+      appKey: Toggly._appKey!,
+    );
+  }
+
+  /// Cancels the registered timers and stops the WebSocket connection.
   static void cancelTimers() {
     Toggly._sync.refreshFeatureFlagsTimer?.cancel();
+    Toggly._sync.stopWebSocket();
   }
 }

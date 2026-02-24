@@ -2,13 +2,9 @@ package toggly
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 	"time"
-
-	"nhooyr.io/websocket"
 )
 
 const (
@@ -67,38 +63,54 @@ func TestSmoke_WebSocket(t *testing.T) {
 		t.Skip("TOGGLY_SMOKE_APP_KEY_BACKEND is not set")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	conn, _, err := websocket.Dial(ctx, fmt.Sprintf("wss://definitions.toggly.io/%s/ws", appKey), nil)
+	client, err := NewClient(Config{
+		AppKey:            appKey,
+		Environment:       smokeEnvName,
+		DefinitionsURL:    "https://definitions.toggly.io/",
+		EnableLiveUpdates: true,
+		RefreshInterval:   30 * time.Second,
+		HTTPTimeout:       10 * time.Second,
+	})
 	if err != nil {
-		t.Fatalf("WebSocket dial failed: %v", err)
+		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	defer func() { _ = client.Close() }()
 
-	for {
-		_, msg, err := conn.Read(ctx)
-		if err != nil {
-			t.Fatalf("WebSocket read failed: %v", err)
-		}
+	// Verify flags are available after initial fetch
+	assertSmokeFlags(t, client)
 
-		var payload struct {
-			Type      string          `json:"type"`
-			Data      json.RawMessage `json:"data"`
-			Timestamp int64           `json:"timestamp"`
+	// Wait for the SDK's built-in WebSocket to connect
+	deadline := time.Now().Add(15 * time.Second)
+	var connected bool
+	for time.Now().Before(deadline) {
+		info := client.ProviderDebugInfo()
+		if info.LiveUpdatesRunning {
+			connected = true
+			break
 		}
-		if err := json.Unmarshal(msg, &payload); err != nil {
-			t.Fatalf("JSON unmarshal failed: %v", err)
-		}
+		time.Sleep(500 * time.Millisecond)
+	}
 
-		if payload.Type == "ping" {
-			continue
-		}
+	if !connected {
+		t.Fatal("SDK WebSocket should be running within 15 seconds")
+	}
 
-		if payload.Type != "definitions" {
-			t.Fatalf("expected type=definitions, got %s", payload.Type)
-		}
-		break
+	// Verify flags still work after WebSocket is connected
+	ctx := context.Background()
+	on, err := client.IsEnabled(ctx, flagOn, Context{})
+	if err != nil {
+		t.Fatalf("IsEnabled(FlagOn) failed: %v", err)
+	}
+	if !on {
+		t.Fatal("FlagOn should be enabled after WebSocket connected")
+	}
+
+	off, err := client.IsEnabled(ctx, flagOff, Context{})
+	if err != nil {
+		t.Fatalf("IsEnabled(FlagOff) failed: %v", err)
+	}
+	if off {
+		t.Fatal("FlagOff should be disabled after WebSocket connected")
 	}
 }
 

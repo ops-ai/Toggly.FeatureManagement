@@ -29,6 +29,16 @@ const STORAGE_KEYS = {
 } as const;
 
 /**
+ * Fallback polling interval when WebSocket is connected (20 minutes)
+ */
+const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000;
+
+/**
+ * Delay before attempting to reconnect a dropped WebSocket (5 seconds)
+ */
+const WS_RECONNECT_DELAY = 5000;
+
+/**
  * Default configuration values
  */
 const DEFAULT_CONFIG: Required<
@@ -42,6 +52,7 @@ const DEFAULT_CONFIG: Required<
     | 'verifySignatures'
     | 'connectTimeout'
     | 'requestTimeout'
+    | 'enableLiveUpdates'
   >
 > = {
   baseURI: 'https://definitions.toggly.io',
@@ -52,6 +63,7 @@ const DEFAULT_CONFIG: Required<
   verifySignatures: false,
   connectTimeout: 10000,
   requestTimeout: 30000,
+  enableLiveUpdates: false,
 };
 
 /**
@@ -109,6 +121,7 @@ export class TogglyService {
       | 'useSignedDefinitions'
       | 'connectTimeout'
       | 'requestTimeout'
+      | 'enableLiveUpdates'
     >
   > &
     TogglyConfig;
@@ -131,6 +144,12 @@ export class TogglyService {
   private stateChangeHandlers: Set<FeatureStateChangeHandler> = new Set();
   private networkUnsubscribe: (() => void) | null = null;
   private appStateUnsubscribe: (() => void) | null = null;
+
+  // WebSocket live-update state
+  private _ws: WebSocket | null = null;
+  private _wsConnected = false;
+  private _wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private _lastFallbackRefresh = 0;
 
   /**
    * Whether to show feature content during initial evaluation
@@ -232,6 +251,11 @@ export class TogglyService {
 
     this.isInitialized = true;
     this.eventEmitter.emit('initialized', response);
+
+    // Start WebSocket live updates after successful initialization
+    if (this.config.enableLiveUpdates) {
+      this.startWebSocket();
+    }
 
     return response;
   }
@@ -592,6 +616,101 @@ export class TogglyService {
   }
 
   /**
+   * Start a WebSocket connection for real-time flag updates.
+   * Uses the global WebSocket provided by the React Native runtime.
+   */
+  private startWebSocket(): void {
+    if (!this.config.appKey || !this.config.enableLiveUpdates) {
+      return;
+    }
+
+    this.stopWebSocket();
+
+    const baseUri = this.config.baseURI.replace(/\/$/, '');
+    const wsUrl = baseUri
+      .replace(/^https:\/\//i, 'wss://')
+      .replace(/^http:\/\//i, 'ws://');
+    const url = `${wsUrl}/${this.config.appKey}/ws`;
+
+    try {
+      const ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        this._wsConnected = true;
+        this._lastFallbackRefresh = Date.now();
+      };
+
+      ws.onmessage = (event: MessageEvent) => {
+        try {
+          const message = JSON.parse(
+            typeof event.data === 'string' ? event.data : ''
+          );
+          const type: string | undefined = message?.type;
+
+          if (type === 'ping') {
+            return;
+          }
+
+          if (type === 'flags-updated' || type === 'update') {
+            this.refresh();
+          }
+        } catch {
+          // Ignore malformed messages
+        }
+      };
+
+      ws.onclose = () => {
+        this._wsConnected = false;
+        this._ws = null;
+        this.scheduleWsReconnect();
+      };
+
+      ws.onerror = (err: Event) => {
+        console.error('[Toggly] WebSocket error:', err);
+      };
+
+      this._ws = ws;
+    } catch (error) {
+      console.error('[Toggly] Failed to create WebSocket:', error);
+      this.scheduleWsReconnect();
+    }
+  }
+
+  /**
+   * Schedule a WebSocket reconnection attempt after a delay.
+   */
+  private scheduleWsReconnect(): void {
+    if (this._wsReconnectTimer) {
+      clearTimeout(this._wsReconnectTimer);
+    }
+    this._wsReconnectTimer = setTimeout(() => {
+      this._wsReconnectTimer = null;
+      if (this.config.enableLiveUpdates && this.appState === 'active') {
+        this.startWebSocket();
+      }
+    }, WS_RECONNECT_DELAY);
+  }
+
+  /**
+   * Stop the WebSocket connection and cancel any pending reconnect.
+   */
+  private stopWebSocket(): void {
+    if (this._wsReconnectTimer) {
+      clearTimeout(this._wsReconnectTimer);
+      this._wsReconnectTimer = null;
+    }
+    if (this._ws) {
+      this._ws.onopen = null;
+      this._ws.onmessage = null;
+      this._ws.onclose = null;
+      this._ws.onerror = null;
+      this._ws.close();
+      this._ws = null;
+    }
+    this._wsConnected = false;
+  }
+
+  /**
    * Start the automatic refresh timer.
    */
   private startRefreshTimer(): void {
@@ -599,9 +718,20 @@ export class TogglyService {
 
     if (this.config.appKey && this.config.refreshInterval > 0) {
       this.refreshTimer = setInterval(() => {
-        if (this.appState === 'active') {
-          this.refresh();
+        if (this.appState !== 'active') {
+          return;
         }
+
+        // When WebSocket is connected, only poll as a fallback safety net
+        if (this._wsConnected) {
+          const elapsed = Date.now() - this._lastFallbackRefresh;
+          if (elapsed < FALLBACK_REFRESH_INTERVAL) {
+            return;
+          }
+          this._lastFallbackRefresh = Date.now();
+        }
+
+        this.refresh();
       }, this.config.refreshInterval);
     }
   }
@@ -700,6 +830,7 @@ export class TogglyService {
       isAppInForeground: this.appState === 'active',
       refreshInterval: this.config.refreshInterval,
       syncServiceRunning: this.refreshTimer !== null,
+      wsConnected: this._wsConnected,
       lastChecked: this.lastChecked,
       lastSynced: this.lastSynced,
       eTag: this.eTag,
@@ -713,6 +844,7 @@ export class TogglyService {
    * Dispose the service and clean up resources.
    */
   dispose(): void {
+    this.stopWebSocket();
     this.stopRefreshTimer();
     this.networkUnsubscribe?.();
     this.appStateUnsubscribe?.();
