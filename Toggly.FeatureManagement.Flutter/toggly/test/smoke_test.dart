@@ -72,7 +72,7 @@ void main() {
           },
         );
         final parsed = await completer.future.timeout(
-          const Duration(seconds: 30),
+          const Duration(seconds: 20),
         );
         await subscription.cancel();
         expect(parsed['type'], anyOf('definitions', 'evaluated'));
@@ -85,5 +85,5 @@ void main() {
       // ignore: avoid_print
       print('Warning: WebSocket smoke test skipped due to connection issue: $e');
     }
-  });
+  }, timeout: const Timeout(Duration(seconds: 60)));
 }
