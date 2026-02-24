@@ -115,6 +115,7 @@ jobs:
   smoke-test:
     name: Smoke Test
     runs-on: macos-15
+    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -127,6 +128,7 @@ jobs:
         run: swift package resolve
 
       - name: Run smoke tests
+        timeout-minutes: 2
         working-directory: ${{ env.SDK_ROOT }}
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}

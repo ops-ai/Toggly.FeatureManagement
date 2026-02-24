@@ -213,6 +213,7 @@ jobs:
   smoke-test:
     name: Smoke Test ${{ matrix.sdk }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
@@ -255,6 +256,7 @@ jobs:
         run: npm ci || npm install
 
       - name: Run smoke test
+        timeout-minutes: 2
         working-directory: ${{ matrix.path }}
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
@@ -263,6 +265,7 @@ jobs:
   smoke-test-node-server:
     name: Smoke Test Node Server Core
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout code
@@ -287,6 +290,7 @@ jobs:
         run: pnpm -r build
 
       - name: Run node-core smoke test
+        timeout-minutes: 2
         working-directory: Toggly.FeatureManagement.Node/toggly-node-core
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}

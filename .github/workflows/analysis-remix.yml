@@ -108,6 +108,7 @@ jobs:
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout code
@@ -123,12 +124,14 @@ jobs:
         run: npm ci && npm run build
 
       - name: Run server smoke test
+        timeout-minutes: 2
         working-directory: ${{ env.SDK_ROOT }}/remix-toggly-server
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
         run: npm ci && npx jest tests/smoke.spec.ts tests/smoke-ws.spec.ts --runInBand --forceExit
 
       - name: Run client smoke test
+        timeout-minutes: 2
         working-directory: ${{ env.SDK_ROOT }}/remix-toggly-client
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}

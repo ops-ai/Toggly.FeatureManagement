@@ -147,6 +147,7 @@ jobs:
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout code
@@ -173,6 +174,7 @@ jobs:
         run: pnpm build
 
       - name: Run smoke test
+        timeout-minutes: 2
         working-directory: ${{ env.SDK_ROOT }}/nextjs-toggly-core
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}

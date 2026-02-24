@@ -97,6 +97,7 @@ jobs:
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout code
@@ -114,6 +115,7 @@ jobs:
         run: composer update --prefer-dist --no-progress --no-interaction --prefer-stable
 
       - name: Run smoke tests
+        timeout-minutes: 2
         working-directory: Toggly.FeatureManagement.PHP
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}

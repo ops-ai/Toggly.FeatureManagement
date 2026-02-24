@@ -73,6 +73,7 @@ jobs:
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     defaults:
       run:
         working-directory: toggly-rust
@@ -87,6 +88,7 @@ jobs:
           toolchain: stable
 
       - name: Run smoke tests
+        timeout-minutes: 2
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
         run: cargo test -p toggly --test smoke --test smoke_ws

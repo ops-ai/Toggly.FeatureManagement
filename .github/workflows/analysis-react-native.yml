@@ -243,6 +243,7 @@ jobs:
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -259,6 +260,7 @@ jobs:
         run: npm ci || npm install
 
       - name: Run core smoke test
+        timeout-minutes: 2
         working-directory: Toggly.FeatureManagement.ReactNative/libs/core
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}

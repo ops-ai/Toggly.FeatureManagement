@@ -214,6 +214,7 @@ jobs:
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     defaults:
       run:
         working-directory: Toggly.FeatureManagement.Flutter/toggly
@@ -232,6 +233,7 @@ jobs:
         run: flutter pub get
 
       - name: Run smoke test
+        timeout-minutes: 2
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
         run: flutter test test/smoke_test.dart
