@@ -65,11 +65,22 @@ module Toggly
     def self.from_hash(hash)
       hash = symbolize_keys(hash)
 
+      # Map API "filters" to internal "rules" format
+      rules = hash[:rules] || hash[:filters] || []
+
+      # In Toggly's model, features are enabled based on filter evaluation.
+      # If the API doesn't send "enabled", derive it from whether filters exist.
+      enabled = if hash.key?(:enabled)
+                  hash[:enabled]
+                else
+                  !rules.empty?
+                end
+
       new(
         feature_key: hash[:featureKey] || hash[:feature_key],
         feature_type: hash[:featureType] || hash[:feature_type] || "Release",
-        enabled: hash[:enabled],
-        rules: hash[:rules] || [],
+        enabled: enabled,
+        rules: rules,
         metadata: hash[:metadata] || {},
         description: hash[:description],
         created_at: hash[:createdAt] || hash[:created_at],
