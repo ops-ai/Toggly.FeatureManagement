@@ -150,7 +150,7 @@ class JwkManager
         $hash = sha1($kidInput, true);
 
         // Convert to hex and append algorithm
-        return bin2hex($hash) . 'ES256';
+        return strtoupper(bin2hex($hash)) . 'ES256';
     }
 
     /**
