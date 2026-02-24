@@ -14,8 +14,9 @@ const timeout = setTimeout(() => {
 }, 10_000);
 
 ws.on('message', (data) => {
-  clearTimeout(timeout);
   const parsed = JSON.parse(data.toString());
+  if (parsed.type === 'ping') return; // skip ping messages
+  clearTimeout(timeout);
   if (!parsed.type) {
     throw new Error(`Missing type field in message: ${data}`);
   }

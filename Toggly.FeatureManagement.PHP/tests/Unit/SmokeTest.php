@@ -169,16 +169,27 @@ class SmokeTest extends TestCase
         }
 
         $client = new \WebSocket\Client("wss://definitions.toggly.io/{$appKey}/ws", [
-            'timeout' => 10,
+            'timeout' => 30,
         ]);
 
-        $message = $client->receive();
-        $parsed = json_decode($message, true);
+        $found = false;
+        for ($i = 0; $i < 5; $i++) {
+            $message = $client->receive();
+            $parsed = json_decode($message, true);
 
-        $this->assertNotNull($parsed, 'Failed to parse WebSocket message as JSON');
-        $this->assertContains($parsed['type'], ['definitions', 'evaluated'],
-            'Message type should be definitions or evaluated');
-        $this->assertArrayHasKey('timestamp', $parsed, 'Message should contain timestamp');
+            if ($parsed !== null && isset($parsed['type']) && $parsed['type'] === 'ping') {
+                continue;
+            }
+
+            $this->assertNotNull($parsed, 'Failed to parse WebSocket message as JSON');
+            $this->assertContains($parsed['type'], ['definitions', 'evaluated'],
+                'Message type should be definitions or evaluated');
+            $this->assertArrayHasKey('timestamp', $parsed, 'Message should contain timestamp');
+            $found = true;
+            break;
+        }
+
+        $this->assertTrue($found, 'Never received a definitions/evaluated message');
 
         $client->close();
     }

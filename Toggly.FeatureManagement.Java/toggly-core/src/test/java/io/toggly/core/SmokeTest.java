@@ -56,15 +56,20 @@ class SmokeTest {
                             @Override
                             public java.util.concurrent.CompletionStage<?> onText(
                                     WebSocket webSocket, CharSequence data, boolean last) {
-                                messageRef.set(data.toString());
+                                String text = data.toString();
+                                if (text.contains("\"ping\"") && !text.contains("\"definitions\"")) {
+                                    webSocket.request(1);
+                                    return null; // skip ping messages
+                                }
+                                messageRef.set(text);
                                 latch.countDown();
                                 return null;
                             }
                         })
-                .get(10, TimeUnit.SECONDS);
+                .get(15, TimeUnit.SECONDS);
 
-        assertTrue(latch.await(10, TimeUnit.SECONDS),
-                "Did not receive initial message within 10 seconds");
+        assertTrue(latch.await(15, TimeUnit.SECONDS),
+                "Did not receive initial message within 15 seconds");
 
         String msg = messageRef.get();
         assertNotNull(msg);

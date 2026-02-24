@@ -13,12 +13,17 @@ describe('WebSocket smoke test', () => {
     const message = await new Promise<string>((resolve, reject) => {
       const timeout = setTimeout(() => {
         ws.close();
-        reject(new Error('WebSocket timed out after 10 seconds'));
-      }, 10_000);
+        reject(new Error('WebSocket timed out after 15 seconds'));
+      }, 15_000);
 
       ws.on('message', (data: Buffer) => {
+        const text = data.toString();
+        try {
+          const msg = JSON.parse(text);
+          if (msg.type === 'ping') return; // skip ping messages
+        } catch { /* not JSON, resolve anyway */ }
         clearTimeout(timeout);
-        resolve(data.toString());
+        resolve(text);
       });
       ws.on('error', (err: Error) => {
         clearTimeout(timeout);
@@ -31,5 +36,5 @@ describe('WebSocket smoke test', () => {
     expect(parsed).toHaveProperty('timestamp');
 
     ws.close();
-  });
+  }, 20_000);
 });

@@ -63,7 +63,7 @@ public class FeatureSmokeTests
         }
 
         using var ws = new ClientWebSocket();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         await ws.ConnectAsync(
             new Uri($"wss://definitions.toggly.io/{appKey}/ws"),
@@ -72,16 +72,23 @@ public class FeatureSmokeTests
         Assert.Equal(WebSocketState.Open, ws.State);
 
         var buffer = new byte[65536];
-        var result = await ws.ReceiveAsync(buffer, cts.Token);
+        while (!cts.Token.IsCancellationRequested)
+        {
+            var result = await ws.ReceiveAsync(buffer, cts.Token);
+            Assert.Equal(WebSocketMessageType.Text, result.MessageType);
 
-        Assert.Equal(WebSocketMessageType.Text, result.MessageType);
+            var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+            using var doc = JsonDocument.Parse(json);
+            Assert.True(doc.RootElement.TryGetProperty("type", out var typeProp));
 
-        var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-        using var doc = JsonDocument.Parse(json);
-        Assert.True(doc.RootElement.TryGetProperty("type", out var typeProp));
-        Assert.Equal("definitions", typeProp.GetString());
-        Assert.True(doc.RootElement.TryGetProperty("data", out _));
-        Assert.True(doc.RootElement.TryGetProperty("timestamp", out _));
+            if (typeProp.GetString() == "ping")
+                continue;
+
+            Assert.Equal("definitions", typeProp.GetString());
+            Assert.True(doc.RootElement.TryGetProperty("data", out _));
+            Assert.True(doc.RootElement.TryGetProperty("timestamp", out _));
+            break;
+        }
 
         await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
     }

@@ -55,12 +55,17 @@ class SmokeTest {
             .build()
 
         val latch = CountDownLatch(1)
-        var receivedMessage: String? = null
+        var definitionsMessage: String? = null
         var error: Throwable? = null
 
         val ws = client.newWebSocket(request, object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) {
-                receivedMessage = text
+                val json = JSONObject(text)
+                val type = json.optString("type", "")
+                if (type == "ping") {
+                    return // skip ping messages, wait for definitions
+                }
+                definitionsMessage = text
                 latch.countDown()
             }
 
@@ -70,13 +75,13 @@ class SmokeTest {
             }
         })
 
-        assertTrue("WebSocket timed out after 10 seconds", latch.await(10, TimeUnit.SECONDS))
+        assertTrue("WebSocket timed out after 15 seconds", latch.await(15, TimeUnit.SECONDS))
 
         if (error != null) {
             throw AssertionError("WebSocket connection error", error)
         }
 
-        val json = JSONObject(receivedMessage!!)
+        val json = JSONObject(definitionsMessage!!)
         val type = json.getString("type")
         assertTrue(
             "Expected type to be 'definitions' or 'evaluated', got '$type'",

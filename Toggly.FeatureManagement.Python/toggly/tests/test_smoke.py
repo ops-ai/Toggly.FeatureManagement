@@ -62,8 +62,14 @@ def test_smoke_websocket_connection() -> None:
         f"wss://definitions.toggly.io/{app_key}/ws",
         close_timeout=5,
     ) as ws:
-        message = ws.recv(timeout=10)
-        assert isinstance(message, str)
-        parsed = json.loads(message)
-        assert parsed["type"] in ("definitions", "evaluated")
-        assert "timestamp" in parsed
+        for _ in range(5):
+            message = ws.recv(timeout=15)
+            assert isinstance(message, str)
+            parsed = json.loads(message)
+            if parsed.get("type") == "ping":
+                continue
+            assert parsed["type"] in ("definitions", "evaluated")
+            assert "timestamp" in parsed
+            break
+        else:
+            raise AssertionError("Never received definitions/evaluated message")

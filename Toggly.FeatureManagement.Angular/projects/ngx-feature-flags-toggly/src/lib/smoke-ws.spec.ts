@@ -10,11 +10,12 @@ describe('WebSocket smoke test', () => {
     const timeout = setTimeout(() => {
       ws.close();
       done.fail('WebSocket timed out after 10 seconds');
-    }, 10_000);
+    }, 15_000);
 
     ws.onmessage = (event: MessageEvent) => {
-      clearTimeout(timeout);
       const parsed = JSON.parse(event.data);
+      if (parsed.type === 'ping') return; // skip ping messages
+      clearTimeout(timeout);
       expect(['definitions', 'evaluated']).toContain(parsed.type);
       expect(parsed.timestamp).toBeDefined();
       ws.close();
@@ -25,5 +26,5 @@ describe('WebSocket smoke test', () => {
       clearTimeout(timeout);
       done.fail('WebSocket connection error');
     };
-  });
+  }, 20_000);
 });

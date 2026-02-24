@@ -67,7 +67,7 @@ func TestSmoke_WebSocket(t *testing.T) {
 		t.Skip("TOGGLY_SMOKE_APP_KEY_BACKEND is not set")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	conn, _, err := websocket.Dial(ctx, fmt.Sprintf("wss://definitions.toggly.io/%s/ws", appKey), nil)
@@ -76,22 +76,29 @@ func TestSmoke_WebSocket(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	_, msg, err := conn.Read(ctx)
-	if err != nil {
-		t.Fatalf("WebSocket read failed: %v", err)
-	}
+	for {
+		_, msg, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("WebSocket read failed: %v", err)
+		}
 
-	var payload struct {
-		Type      string          `json:"type"`
-		Data      json.RawMessage `json:"data"`
-		Timestamp int64           `json:"timestamp"`
-	}
-	if err := json.Unmarshal(msg, &payload); err != nil {
-		t.Fatalf("JSON unmarshal failed: %v", err)
-	}
+		var payload struct {
+			Type      string          `json:"type"`
+			Data      json.RawMessage `json:"data"`
+			Timestamp int64           `json:"timestamp"`
+		}
+		if err := json.Unmarshal(msg, &payload); err != nil {
+			t.Fatalf("JSON unmarshal failed: %v", err)
+		}
 
-	if payload.Type != "definitions" {
-		t.Fatalf("expected type=definitions, got %s", payload.Type)
+		if payload.Type == "ping" {
+			continue
+		}
+
+		if payload.Type != "definitions" {
+			t.Fatalf("expected type=definitions, got %s", payload.Type)
+		}
+		break
 	}
 }
 

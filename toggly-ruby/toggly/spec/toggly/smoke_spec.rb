@@ -39,6 +39,8 @@ RSpec.describe "Toggly smoke tests" do
     ws = WebSocket::Client::Simple.connect("wss://definitions.toggly.io/#{app_key}/ws")
 
     ws.on :message do |msg|
+      parsed = JSON.parse(msg.data) rescue nil
+      next if parsed && parsed["type"] == "ping"
       received = msg.data
       ws.close
     end
@@ -48,7 +50,7 @@ RSpec.describe "Toggly smoke tests" do
       ws.close
     end
 
-    10.times do
+    15.times do
       break if received || error
       sleep 1
     end

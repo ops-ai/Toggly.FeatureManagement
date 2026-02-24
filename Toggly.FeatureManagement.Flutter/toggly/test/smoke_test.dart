@@ -50,12 +50,15 @@ void main() {
     );
 
     try {
-      final message = await ws.first.timeout(
-        const Duration(seconds: 10),
-      );
-      final parsed = jsonDecode(message as String) as Map<String, dynamic>;
-      expect(parsed['type'], anyOf('definitions', 'evaluated'));
-      expect(parsed.containsKey('timestamp'), true);
+      await for (final message in ws.timeout(const Duration(seconds: 15))) {
+        final parsed = jsonDecode(message as String) as Map<String, dynamic>;
+        if (parsed['type'] == 'ping') {
+          continue;
+        }
+        expect(parsed['type'], anyOf('definitions', 'evaluated'));
+        expect(parsed.containsKey('timestamp'), true);
+        break;
+      }
     } finally {
       await ws.close();
     }
