@@ -219,25 +219,25 @@ jobs:
         include:
           - sdk: Angular
             path: Toggly.FeatureManagement.Angular
-            smoke-cmd: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --include="projects/ngx-feature-flags-toggly/src/lib/smoke.spec.ts"
+            smoke-cmd: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --include="projects/ngx-feature-flags-toggly/src/lib/smoke.spec.ts" --include="projects/ngx-feature-flags-toggly/src/lib/smoke-ws.spec.ts"
           - sdk: React
             path: Toggly.FeatureManagement.React
-            smoke-cmd: npx jest src/smoke.spec.ts --runInBand
+            smoke-cmd: npx jest src/smoke.spec.ts src/smoke-ws.spec.ts --runInBand
           - sdk: Vue
             path: Toggly.FeatureManagement.Vue/vue-feature-flags-toggly
-            smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts
+            smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
           - sdk: Svelte
             path: Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly
-            smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts
+            smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
           - sdk: Astro
             path: Toggly.FeatureManagement.Astro
-            smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts
+            smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
           - sdk: JavaScript
             path: Toggly.FeatureManagement.Javascript/feature_flags_toggly
-            smoke-cmd: npx jest spec/smoke.test.ts --runInBand
+            smoke-cmd: npx jest spec/smoke.test.ts spec/smoke-ws.test.ts --runInBand
           - sdk: Docusaurus
             path: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
-            smoke-cmd: npm run build && node smoke.mjs
+            smoke-cmd: npm run build && node smoke.mjs && node smoke-ws.mjs
 
     steps:
       - name: Checkout code
@@ -290,7 +290,7 @@ jobs:
         working-directory: Toggly.FeatureManagement.Node/toggly-node-core
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
-        run: pnpm vitest run tests/smoke.test.ts
+        run: pnpm vitest run tests/smoke.test.ts tests/smoke-ws.test.ts
 
   sonar:
     name: SonarQube Analysis

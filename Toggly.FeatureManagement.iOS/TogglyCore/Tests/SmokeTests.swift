@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import TogglyCore
 
@@ -24,5 +25,51 @@ final class SmokeTests: XCTestCase {
 
         XCTAssertTrue(isFlagOn)
         XCTAssertTrue(isFlagOff)
+    }
+
+    func testWebSocketConnectsAndReceivesDefinitions() async throws {
+        guard let appKey = ProcessInfo.processInfo.environment["TOGGLY_SMOKE_APP_KEY_FRONTEND"],
+              !appKey.isEmpty else {
+            throw XCTSkip("TOGGLY_SMOKE_APP_KEY_FRONTEND is not set")
+        }
+
+        let url = URL(string: "wss://definitions.toggly.io/\(appKey)/ws")!
+        let session = URLSession(configuration: .default)
+        let task = session.webSocketTask(with: url)
+        task.resume()
+
+        let message: URLSessionWebSocketTask.Message
+        do {
+            message = try await withThrowingTaskGroup(of: URLSessionWebSocketTask.Message.self) { group in
+                group.addTask {
+                    try await task.receive()
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 10_000_000_000)
+                    throw URLError(.timedOut)
+                }
+                let result = try await group.next()!
+                group.cancelAll()
+                return result
+            }
+        } catch {
+            task.cancel(with: .goingAway, reason: nil)
+            throw error
+        }
+
+        guard case .string(let text) = message else {
+            task.cancel(with: .goingAway, reason: nil)
+            XCTFail("Expected string message from WebSocket")
+            return
+        }
+
+        let data = Data(text.utf8)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let type = json["type"] as? String
+        XCTAssertTrue(type == "definitions" || type == "evaluated",
+                       "Expected type to be 'definitions' or 'evaluated', got '\(type ?? "nil")'")
+        XCTAssertNotNil(json["timestamp"], "Expected 'timestamp' field in message")
+
+        task.cancel(with: .goingAway, reason: nil)
     }
 }

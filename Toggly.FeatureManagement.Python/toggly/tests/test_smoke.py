@@ -44,3 +44,26 @@ def test_smoke_unsigned_definitions() -> None:
 
 def test_smoke_signed_definitions() -> None:
     _run_smoke(use_signed_definitions=True)
+
+
+def test_smoke_websocket_connection() -> None:
+    """Verify WebSocket connection to Toggly definitions endpoint."""
+    app_key = _require_app_key()
+    import json
+
+    try:
+        from websockets.sync.client import connect as ws_connect  # type: ignore[import-untyped]
+    except ImportError:
+        import pytest
+
+        pytest.skip("websockets package not installed")
+
+    with ws_connect(
+        f"wss://definitions.toggly.io/{app_key}/ws",
+        close_timeout=5,
+    ) as ws:
+        message = ws.recv(timeout=10)
+        assert isinstance(message, str)
+        parsed = json.loads(message)
+        assert parsed["type"] in ("definitions", "evaluated")
+        assert "timestamp" in parsed

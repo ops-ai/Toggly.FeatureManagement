@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:feature_flags_toggly/feature_flags_toggly.dart';
@@ -36,5 +37,27 @@ void main() {
 
     expect(flagOn, true);
     expect(flagOff, false);
+  });
+
+  test('WebSocket connects and receives initial message', () async {
+    final appKey = Platform.environment['TOGGLY_SMOKE_APP_KEY_FRONTEND'];
+    if (appKey == null || appKey.isEmpty) {
+      return;
+    }
+
+    final ws = await WebSocket.connect(
+      'wss://definitions.toggly.io/$appKey/ws',
+    );
+
+    try {
+      final message = await ws.first.timeout(
+        const Duration(seconds: 10),
+      );
+      final parsed = jsonDecode(message as String) as Map<String, dynamic>;
+      expect(parsed['type'], anyOf('definitions', 'evaluated'));
+      expect(parsed.containsKey('timestamp'), true);
+    } finally {
+      await ws.close();
+    }
   });
 }

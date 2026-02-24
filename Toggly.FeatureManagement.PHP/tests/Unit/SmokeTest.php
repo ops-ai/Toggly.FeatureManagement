@@ -161,6 +161,28 @@ class SmokeTest extends TestCase
         );
     }
 
+    public function testSmokeWebSocketConnection(): void
+    {
+        $appKey = getenv('TOGGLY_SMOKE_APP_KEY_BACKEND');
+        if (empty($appKey)) {
+            $this->markTestSkipped('TOGGLY_SMOKE_APP_KEY_BACKEND is not set');
+        }
+
+        $client = new \WebSocket\Client("wss://definitions.toggly.io/{$appKey}/ws", [
+            'timeout' => 10,
+        ]);
+
+        $message = $client->receive();
+        $parsed = json_decode($message, true);
+
+        $this->assertNotNull($parsed, 'Failed to parse WebSocket message as JSON');
+        $this->assertContains($parsed['type'], ['definitions', 'evaluated'],
+            'Message type should be definitions or evaluated');
+        $this->assertArrayHasKey('timestamp', $parsed, 'Message should contain timestamp');
+
+        $client->close();
+    }
+
     private function isAlwaysOn($featureDefinition): bool
     {
         foreach ($featureDefinition->filters as $filter) {

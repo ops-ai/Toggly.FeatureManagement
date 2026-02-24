@@ -30,6 +30,36 @@ RSpec.describe "Toggly smoke tests" do
     end
   end
 
+  it "connects via WebSocket and receives definitions" do
+    require "websocket-client-simple"
+    require "json"
+
+    received = nil
+    error = nil
+    ws = WebSocket::Client::Simple.connect("wss://definitions.toggly.io/#{app_key}/ws")
+
+    ws.on :message do |msg|
+      received = msg.data
+      ws.close
+    end
+
+    ws.on :error do |e|
+      error = e
+      ws.close
+    end
+
+    10.times do
+      break if received || error
+      sleep 1
+    end
+
+    expect(error).to be_nil
+    expect(received).not_to be_nil
+    parsed = JSON.parse(received)
+    expect(%w[definitions evaluated]).to include(parsed["type"])
+    expect(parsed).to have_key("timestamp")
+  end
+
   it "validates signed definitions for FlagOn and FlagOff" do
     client = Toggly::Client.new(
       app_key: app_key,

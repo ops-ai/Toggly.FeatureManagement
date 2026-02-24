@@ -262,7 +262,7 @@ jobs:
         working-directory: Toggly.FeatureManagement.ReactNative/libs/core
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
-        run: npx jest tests/smoke.test.ts --runInBand
+        run: npx jest tests/smoke.test.ts tests/smoke-ws.test.ts --runInBand
 
   summary:
     name: Analysis Summary

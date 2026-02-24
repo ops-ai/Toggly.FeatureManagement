@@ -89,7 +89,7 @@ jobs:
       - name: Run smoke tests
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
-        run: cargo test -p toggly --test smoke
+        run: cargo test -p toggly --test smoke --test smoke_ws
 
   coverage:
     name: Coverage

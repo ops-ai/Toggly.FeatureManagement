@@ -35,7 +35,8 @@
     "require-dev": {
         "illuminate/cache": "^11.47",
         "illuminate/contracts": "^11.0",
-        "phpunit/phpunit": "^9.0|^10.0"
+        "phpunit/phpunit": "^9.0|^10.0",
+        "textalk/websocket": "^1.6"
     },
     "suggest": {
         "react/socket": "For WebSocket support",

@@ -16,7 +16,9 @@
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
-    "typescript": "^5.7.3"
+    "@types/ws": "^8.0.0",
+    "typescript": "^5.7.3",
+    "ws": "^8.0.0"
   },
   "engines": {
     "node": ">=18.0.0"

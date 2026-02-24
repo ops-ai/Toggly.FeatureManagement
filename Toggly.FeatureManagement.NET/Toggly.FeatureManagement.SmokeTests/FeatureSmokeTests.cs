@@ -1,3 +1,6 @@
+using System.Net.WebSockets;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -48,6 +51,39 @@ public class FeatureSmokeTests
             serviceProvider);
 
         await AssertFlagsEventuallyAsync(provider);
+    }
+
+    [Fact]
+    public async Task WebSocket_Connects_And_Receives_Definitions()
+    {
+        var appKey = Environment.GetEnvironmentVariable("TOGGLY_SMOKE_APP_KEY_BACKEND");
+        if (string.IsNullOrWhiteSpace(appKey))
+        {
+            return;
+        }
+
+        using var ws = new ClientWebSocket();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        await ws.ConnectAsync(
+            new Uri($"wss://definitions.toggly.io/{appKey}/ws"),
+            cts.Token);
+
+        Assert.Equal(WebSocketState.Open, ws.State);
+
+        var buffer = new byte[65536];
+        var result = await ws.ReceiveAsync(buffer, cts.Token);
+
+        Assert.Equal(WebSocketMessageType.Text, result.MessageType);
+
+        var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+        using var doc = JsonDocument.Parse(json);
+        Assert.True(doc.RootElement.TryGetProperty("type", out var typeProp));
+        Assert.Equal("definitions", typeProp.GetString());
+        Assert.True(doc.RootElement.TryGetProperty("data", out _));
+        Assert.True(doc.RootElement.TryGetProperty("timestamp", out _));
+
+        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
     }
 
     private static async Task AssertFlagsEventuallyAsync(TogglyFeatureProvider provider)

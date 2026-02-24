@@ -12,4 +12,5 @@ group :development, :test do
   gem "rubocop-rspec", "~> 2.24", require: false
   gem "yard", "~> 0.9", require: false
   gem "rake", "~> 13.0"
+  gem "websocket-client-simple", "~> 0.8"
 end
