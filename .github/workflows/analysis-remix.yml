@@ -126,13 +126,13 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}/remix-toggly-server
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
-        run: npm ci && npx jest tests/smoke.spec.ts tests/smoke-ws.spec.ts --runInBand
+        run: npm ci && npx jest tests/smoke.spec.ts tests/smoke-ws.spec.ts --runInBand --forceExit
 
       - name: Run client smoke test
         working-directory: ${{ env.SDK_ROOT }}/remix-toggly-client
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
-        run: npm ci && npx jest tests/smoke.spec.tsx tests/smoke-ws.spec.ts --runInBand
+        run: npm ci && npx jest tests/smoke.spec.tsx tests/smoke-ws.spec.ts --runInBand --forceExit
 
   sonar:
     name: SonarQube Analysis
