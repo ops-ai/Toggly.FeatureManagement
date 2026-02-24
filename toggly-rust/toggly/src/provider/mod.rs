@@ -162,7 +162,10 @@ impl DefinitionsProvider {
                     }
 
                     // Reconnect after delay, unless shutting down
-                    debug!("WebSocket disconnected, reconnecting in {}s", WS_RECONNECT_DELAY_SECS);
+                    debug!(
+                        "WebSocket disconnected, reconnecting in {}s",
+                        WS_RECONNECT_DELAY_SECS
+                    );
                     tokio::select! {
                         _ = tokio::time::sleep(Duration::from_secs(WS_RECONNECT_DELAY_SECS)) => {}
                         _ = ws_shutdown_rx.changed() => {
@@ -232,8 +235,14 @@ impl DefinitionsProvider {
                 }
                 if msg_type == "flags-updated" || msg_type == "update" {
                     debug!("WebSocket: definitions updated, refreshing");
-                    if let Err(e) =
-                        Self::fetch_definitions_impl(http_client, config, definitions, last_fetch, etag).await
+                    if let Err(e) = Self::fetch_definitions_impl(
+                        http_client,
+                        config,
+                        definitions,
+                        last_fetch,
+                        etag,
+                    )
+                    .await
                     {
                         error!(error = %e, "WebSocket-triggered refresh failed");
                     }
@@ -247,7 +256,8 @@ impl DefinitionsProvider {
         if trimmed == "update" || trimmed == "flags-updated" {
             debug!("WebSocket: plain text update signal, refreshing");
             if let Err(e) =
-                Self::fetch_definitions_impl(http_client, config, definitions, last_fetch, etag).await
+                Self::fetch_definitions_impl(http_client, config, definitions, last_fetch, etag)
+                    .await
             {
                 error!(error = %e, "WebSocket-triggered refresh failed");
             }

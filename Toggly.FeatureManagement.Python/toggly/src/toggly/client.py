@@ -6,7 +6,7 @@ import json
 import logging
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from typing import Any, Iterator
 
@@ -691,10 +691,8 @@ class TogglyClient:
         """Stop WebSocket connection."""
         self._ws_stop_event.set()
         if self._ws is not None:
-            try:
+            with suppress(Exception):
                 self._ws.close()
-            except Exception:
-                pass
         if self._ws_thread is not None and self._ws_thread.is_alive():
             self._ws_thread.join(timeout=5.0)
         self._ws = None

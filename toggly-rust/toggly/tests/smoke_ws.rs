@@ -18,10 +18,16 @@ async fn smoke_websocket_connection() {
         .build();
 
     let mut provider = DefinitionsProvider::new(config).expect("Failed to create provider");
-    provider.initialize().await.expect("Failed to initialize provider");
+    provider
+        .initialize()
+        .await
+        .expect("Failed to initialize provider");
 
     // Verify definitions were loaded
-    assert!(!provider.is_empty(), "Provider should have definitions after init");
+    assert!(
+        !provider.is_empty(),
+        "Provider should have definitions after init"
+    );
     assert!(provider.contains("FlagOn"), "FlagOn should be defined");
     assert!(provider.contains("FlagOff"), "FlagOff should be defined");
 
@@ -37,11 +43,20 @@ async fn smoke_websocket_connection() {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
-    assert!(provider.is_ws_connected(), "WebSocket should still be connected");
+    assert!(
+        provider.is_ws_connected(),
+        "WebSocket should still be connected"
+    );
 
     // Verify definitions are still available after WebSocket connects
-    assert!(provider.contains("FlagOn"), "FlagOn should still be defined");
-    assert!(provider.contains("FlagOff"), "FlagOff should still be defined");
+    assert!(
+        provider.contains("FlagOn"),
+        "FlagOn should still be defined"
+    );
+    assert!(
+        provider.contains("FlagOff"),
+        "FlagOff should still be defined"
+    );
 
     provider.shutdown();
 }
