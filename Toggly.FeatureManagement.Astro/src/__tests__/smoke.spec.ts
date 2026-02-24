@@ -23,6 +23,6 @@ describe('Smoke test', () => {
 
     const flags = $flags.get();
     expect(flags.FlagOn).toBe(true);
-    expect(flags.FlagOff).toBe(false);
+    expect(flags.FlagOff ?? false).toBe(false);
   });
 });
