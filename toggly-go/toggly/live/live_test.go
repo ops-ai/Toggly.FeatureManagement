@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -15,16 +14,9 @@ func TestStart_CallsOnUpdate(t *testing.T) {
 	updated := make(chan struct{}, 1)
 
 	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
 
-	wsURL := strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws"
-
-	mux.HandleFunc("/definitions/live-updates/app/env", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(wsURL))
-	})
-
-	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	// The new live.Start() connects directly to {baseURL}/{appKey}/ws
+	mux.HandleFunc("/app/ws", func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			return
@@ -33,13 +25,16 @@ func TestStart_CallsOnUpdate(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		_ = c.Write(ctx, websocket.MessageText, []byte("update"))
+		_ = c.Write(ctx, websocket.MessageText, []byte(`{"type":"flags-updated"}`))
 	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	closer, err := Start(ctx, srv.URL+"/", "app", "env", srv.Client(), func() {
+	closer, err := Start(ctx, srv.URL, "app", "env", srv.Client(), func() {
 		select {
 		case updated <- struct{}{}:
 		default:

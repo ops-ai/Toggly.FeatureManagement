@@ -97,6 +97,9 @@ importers:
       '@types/node':
         specifier: ^22.13.1
         version: 22.19.11
+      '@types/ws':
+        specifier: ^8.5.14
+        version: 8.18.1
       '@vitest/coverage-v8':
         specifier: ^3.0.4
         version: 3.2.4(vitest@3.2.4(@types/node@22.19.11)(happy-dom@20.0.2)(jiti@2.6.1)(terser@5.46.0)(yaml@2.8.2))
@@ -112,6 +115,9 @@ importers:
       vitest:
         specifier: ^3.0.4
         version: 3.2.4(@types/node@22.19.11)(happy-dom@20.0.2)(jiti@2.6.1)(terser@5.46.0)(yaml@2.8.2)
+      ws:
+        specifier: ^8.18.0
+        version: 8.19.0
 
   nuxt-toggly-server:
     dependencies:
