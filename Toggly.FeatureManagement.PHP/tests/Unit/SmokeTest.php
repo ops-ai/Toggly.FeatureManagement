@@ -168,15 +168,50 @@ class SmokeTest extends TestCase
             $this->markTestSkipped('TOGGLY_SMOKE_APP_KEY_BACKEND is not set');
         }
 
-        $client = new \WebSocket\Client("wss://definitions.toggly.io/{$appKey}/ws", [
-            'timeout' => 30,
-        ]);
+        $host = 'definitions.toggly.io';
+        $path = "/{$appKey}/ws";
+        $key = base64_encode(random_bytes(16));
+
+        $context = stream_context_create(['ssl' => [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+        ]]);
+
+        $socket = @stream_socket_client(
+            "ssl://{$host}:443",
+            $errno,
+            $errstr,
+            15,
+            STREAM_CLIENT_CONNECT,
+            $context
+        );
+
+        $this->assertNotFalse($socket, "Could not connect: {$errstr} ({$errno})");
+
+        $request = "GET {$path} HTTP/1.1\r\n" .
+            "Host: {$host}\r\n" .
+            "Upgrade: websocket\r\n" .
+            "Connection: Upgrade\r\n" .
+            "Sec-WebSocket-Key: {$key}\r\n" .
+            "Sec-WebSocket-Version: 13\r\n\r\n";
+
+        fwrite($socket, $request);
+        stream_set_timeout($socket, 15);
+
+        $response = '';
+        while (($line = fgets($socket)) !== false) {
+            $response .= $line;
+            if ($line === "\r\n") break;
+        }
+
+        $this->assertStringContainsString('101', $response, 'Expected 101 Switching Protocols');
 
         $found = false;
-        for ($i = 0; $i < 5; $i++) {
-            $message = $client->receive();
-            $parsed = json_decode($message, true);
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $frame = $this->readWebSocketFrame($socket);
+            if ($frame === null) break;
 
+            $parsed = json_decode($frame, true);
             if ($parsed !== null && isset($parsed['type']) && $parsed['type'] === 'ping') {
                 continue;
             }
@@ -191,7 +226,51 @@ class SmokeTest extends TestCase
 
         $this->assertTrue($found, 'Never received a definitions/evaluated message');
 
-        $client->close();
+        fclose($socket);
+    }
+
+    private function readWebSocketFrame($socket): ?string
+    {
+        $header = fread($socket, 2);
+        if ($header === false || strlen($header) < 2) return null;
+
+        $opcode = ord($header[0]) & 0x0F;
+        $masked = (ord($header[1]) & 0x80) !== 0;
+        $payloadLen = ord($header[1]) & 0x7F;
+
+        if ($payloadLen === 126) {
+            $ext = fread($socket, 2);
+            if ($ext === false) return null;
+            $payloadLen = unpack('n', $ext)[1];
+        } elseif ($payloadLen === 127) {
+            $ext = fread($socket, 8);
+            if ($ext === false) return null;
+            $payloadLen = unpack('J', $ext)[1];
+        }
+
+        $maskKey = '';
+        if ($masked) {
+            $maskKey = fread($socket, 4);
+            if ($maskKey === false) return null;
+        }
+
+        $payload = '';
+        $remaining = $payloadLen;
+        while ($remaining > 0) {
+            $chunk = fread($socket, min($remaining, 8192));
+            if ($chunk === false) return null;
+            $payload .= $chunk;
+            $remaining -= strlen($chunk);
+        }
+
+        if ($masked) {
+            for ($i = 0; $i < strlen($payload); $i++) {
+                $payload[$i] = chr(ord($payload[$i]) ^ ord($maskKey[$i % 4]));
+            }
+        }
+
+        if ($opcode === 1) return $payload; // text frame
+        return null;
     }
 
     private function isAlwaysOn($featureDefinition): bool

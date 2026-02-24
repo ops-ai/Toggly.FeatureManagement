@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -50,15 +51,31 @@ void main() {
     );
 
     try {
-      await for (final message in ws.timeout(const Duration(seconds: 15))) {
-        final parsed = jsonDecode(message as String) as Map<String, dynamic>;
-        if (parsed['type'] == 'ping') {
-          continue;
-        }
-        expect(parsed['type'], anyOf('definitions', 'evaluated'));
-        expect(parsed.containsKey('timestamp'), true);
-        break;
-      }
+      final completer = Completer<Map<String, dynamic>>();
+      final subscription = ws.listen(
+        (data) {
+          if (completer.isCompleted) return;
+          final parsed = jsonDecode(data as String) as Map<String, dynamic>;
+          if (parsed['type'] == 'ping') return;
+          completer.complete(parsed);
+        },
+        onError: (Object error) {
+          if (!completer.isCompleted) {
+            completer.completeError(error);
+          }
+        },
+        onDone: () {
+          if (!completer.isCompleted) {
+            completer.completeError(StateError('WebSocket closed'));
+          }
+        },
+      );
+      final parsed = await completer.future.timeout(
+        const Duration(seconds: 30),
+      );
+      await subscription.cancel();
+      expect(parsed['type'], anyOf('definitions', 'evaluated'));
+      expect(parsed.containsKey('timestamp'), true);
     } finally {
       await ws.close();
     }

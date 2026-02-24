@@ -47,7 +47,8 @@ class SmokeTest {
         }
 
         val client = OkHttpClient.Builder()
-            .readTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
             .build()
 
         val request = Request.Builder()
@@ -75,7 +76,7 @@ class SmokeTest {
             }
         })
 
-        assertTrue("WebSocket timed out after 15 seconds", latch.await(15, TimeUnit.SECONDS))
+        assertTrue("WebSocket timed out after 30 seconds", latch.await(30, TimeUnit.SECONDS))
 
         if (error != null) {
             throw AssertionError("WebSocket connection error", error)
