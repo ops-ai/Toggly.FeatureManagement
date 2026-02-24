@@ -74,6 +74,7 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}/toggly
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
+          DISABLE_SIMPLECOV: "true"
         run: bundle exec rspec spec/toggly/smoke_spec.rb --format documentation
 
   test-rails:

@@ -4,7 +4,7 @@ require "simplecov"
 SimpleCov.start do
   add_filter "/spec/"
   enable_coverage :branch
-  minimum_coverage line: 80, branch: 60
+  minimum_coverage line: 80, branch: 60 unless ENV["DISABLE_SIMPLECOV"]
 end
 
 require "toggly"
