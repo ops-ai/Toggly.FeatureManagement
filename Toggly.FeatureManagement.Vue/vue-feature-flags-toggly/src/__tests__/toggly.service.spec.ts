@@ -381,4 +381,164 @@ describe('Toggly Service', () => {
       expect(off2).toBeTruthy();
     });
   });
+
+  // ─── WebSocket live updates ───────────────────────
+  describe('WebSocket live updates', () => {
+    let mockWsInstances: any[];
+    const savedWebSocket = (globalThis as any).WebSocket;
+
+    beforeEach(() => {
+      mockWsInstances = [];
+      const MockWs = class {
+        url: string;
+        onopen: (() => void) | null = null;
+        onmessage: ((e: { data: string }) => void) | null = null;
+        onclose: (() => void) | null = null;
+        onerror: ((e: any) => void) | null = null;
+        closeCalled = false;
+        constructor(url: string) {
+          this.url = url;
+          mockWsInstances.push(this);
+        }
+        close() { this.closeCalled = true; }
+      };
+      (globalThis as any).WebSocket = MockWs;
+    });
+
+    afterEach(() => {
+      (globalThis as any).WebSocket = savedWebSocket;
+      vi.useRealTimers();
+    });
+
+    function createWsService(config: any = {}) {
+      const s = new Toggly();
+      s.init(config);
+      return s;
+    }
+
+    it('should not start WebSocket when no appKey', () => {
+      const s = createWsService({ featureDefaults: { F1: true } });
+      s.startWebSocket();
+      expect(mockWsInstances).toHaveLength(0);
+    });
+
+    it('should not start WebSocket when enableLiveUpdates is false', () => {
+      const s = createWsService({ appKey: 'k', environment: 'Prod', enableLiveUpdates: false });
+      s.startWebSocket();
+      expect(mockWsInstances).toHaveLength(0);
+    });
+
+    it('should build wss:// URL from https:// baseURI', () => {
+      const s = createWsService({ appKey: 'mykey', environment: 'Prod' });
+      s.startWebSocket();
+      expect(mockWsInstances).toHaveLength(1);
+      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws');
+    });
+
+    it('should build ws:// URL from http:// baseURI', () => {
+      const s = createWsService({ appKey: 'mykey', baseURI: 'http://local.test', environment: 'Prod' });
+      s.startWebSocket();
+      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws');
+    });
+
+    it('should set _wsConnected on onopen', () => {
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onopen!();
+      expect(s._wsConnected).toBe(true);
+    });
+
+    it('should refresh features on JSON flags-updated message', () => {
+      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: true }) });
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'flags-updated' }) });
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should refresh features on JSON update message', () => {
+      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: true }) });
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) });
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should ignore JSON ping message', () => {
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'ping' }) });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should ignore unknown JSON message type', () => {
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'unknown' }) });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should refresh features on plain text "update"', () => {
+      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: true }) });
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onmessage!({ data: 'update' });
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should refresh features on plain text "flags-updated"', () => {
+      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: true }) });
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onmessage!({ data: 'flags-updated' });
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should ignore unrecognized plain text messages', () => {
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onmessage!({ data: 'heartbeat' });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should log error on onerror', () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      const err = new Event('error');
+      mockWsInstances[0].onerror!(err);
+      expect(errSpy).toHaveBeenCalledWith('[Toggly] WebSocket error:', err);
+    });
+
+    it('should schedule reconnect on onclose', () => {
+      vi.useFakeTimers();
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onclose!();
+      expect(s._wsConnected).toBe(false);
+      vi.runAllTimers();
+      expect(mockWsInstances).toHaveLength(2);
+    });
+
+    it('should close WebSocket on stopWebSocket', () => {
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      const ws = mockWsInstances[0];
+      s.stopWebSocket();
+      expect(ws.closeCalled).toBe(true);
+      expect(s._wsConnected).toBe(false);
+    });
+
+    it('should cancel reconnect timer on stopWebSocket', () => {
+      vi.useFakeTimers();
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onclose!();
+      expect(s._wsReconnectTimer).not.toBeNull();
+      s.stopWebSocket();
+      expect(s._wsReconnectTimer).toBeNull();
+      vi.runAllTimers();
+      expect(mockWsInstances).toHaveLength(1);
+    });
+  });
 });

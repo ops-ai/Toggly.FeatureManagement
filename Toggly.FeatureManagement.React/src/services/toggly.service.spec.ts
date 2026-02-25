@@ -695,4 +695,174 @@ describe('Toggly Service', () => {
       expect(results[3]).toBeTruthy(); // F2 off (negate false → truthy)
     });
   });
+
+  // ───────────────────────────────────────────────
+  // WebSocket live updates
+  // ───────────────────────────────────────────────
+  describe('WebSocket live updates', () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = [];
+      url: string;
+      onopen: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: ((error: Event) => void) | null = null;
+      closeCalled = false;
+
+      constructor(url: string) {
+        this.url = url;
+        MockWebSocket.instances.push(this);
+      }
+
+      close() {
+        this.closeCalled = true;
+      }
+    }
+
+    beforeEach(() => {
+      MockWebSocket.instances = [];
+      (global as any).WebSocket = MockWebSocket;
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+      delete (global as any).WebSocket;
+    });
+
+    it('should not start WebSocket when no appKey', () => {
+      const service = new Toggly({ featureDefaults: { F1: true } });
+      service.startWebSocket();
+      expect(MockWebSocket.instances).toHaveLength(0);
+    });
+
+    it('should not start WebSocket when enableLiveUpdates is false', () => {
+      const service = new Toggly({ appKey: 'key', environment: 'Test', enableLiveUpdates: false });
+      service.startWebSocket();
+      expect(MockWebSocket.instances).toHaveLength(0);
+    });
+
+    it('should create WebSocket with wss:// URL', () => {
+      const service = new Toggly({ appKey: 'my-key', environment: 'Production', featureDefaults: {} });
+      service.startWebSocket();
+      expect(MockWebSocket.instances).toHaveLength(1);
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws');
+    });
+
+    it('should create ws:// URL for http:// baseURI', () => {
+      const service = new Toggly({ appKey: 'k', baseURI: 'http://local', featureDefaults: {} });
+      service.startWebSocket();
+      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws');
+    });
+
+    it('should set _wsConnected=true on open', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: {} });
+      service.startWebSocket();
+      MockWebSocket.instances[0].onopen?.();
+      expect(service._wsConnected).toBe(true);
+    });
+
+    it('should handle flags-updated JSON message by resetting features', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      (service as any)._features = { F1: true };
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'flags-updated' }) });
+      expect((service as any)._features).toBeNull();
+    });
+
+    it('should handle update JSON message by resetting features', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      (service as any)._features = { F1: true };
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'update' }) });
+      expect((service as any)._features).toBeNull();
+    });
+
+    it('should ignore ping JSON message', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      (service as any)._features = { F1: true };
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'ping' }) });
+      expect((service as any)._features).toEqual({ F1: true });
+    });
+
+    it('should ignore unknown JSON message type', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      (service as any)._features = { F1: true };
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'unknown' }) });
+      expect((service as any)._features).toEqual({ F1: true });
+    });
+
+    it('should handle plain text update message', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      (service as any)._features = { F1: true };
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({ data: 'update' });
+      expect((service as any)._features).toBeNull();
+    });
+
+    it('should handle plain text flags-updated message', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      (service as any)._features = { F1: true };
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({ data: 'flags-updated' });
+      expect((service as any)._features).toBeNull();
+    });
+
+    it('should ignore unrecognized plain text', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      (service as any)._features = { F1: true };
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({ data: 'hello' });
+      expect((service as any)._features).toEqual({ F1: true });
+    });
+
+    it('should log error on WebSocket onerror', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: {} });
+      service.startWebSocket();
+      MockWebSocket.instances[0].onerror?.(new Event('error'));
+      expect(console.error).toHaveBeenCalledWith('[Toggly] WebSocket error:', expect.anything());
+    });
+
+    it('should schedule reconnect on close', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: {} });
+      service.startWebSocket();
+      MockWebSocket.instances[0].onclose?.();
+      expect(service._wsConnected).toBe(false);
+      expect(service._ws).toBeNull();
+      jest.runAllTimers();
+      expect(MockWebSocket.instances).toHaveLength(2);
+    });
+
+    it('should stopWebSocket: close ws and clear state', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: {} });
+      service.startWebSocket();
+      const ws = MockWebSocket.instances[0];
+      service.stopWebSocket();
+      expect(ws.closeCalled).toBe(true);
+      expect(service._wsConnected).toBe(false);
+      expect(service._ws).toBeNull();
+    });
+
+    it('should stopWebSocket: cancel pending reconnect timer', () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: {} });
+      service.startWebSocket();
+      MockWebSocket.instances[0].onclose?.(); // sets reconnect timer
+      service.stopWebSocket(); // should cancel the timer
+      jest.runAllTimers();
+      expect(MockWebSocket.instances).toHaveLength(1); // no new WS after cancel
+    });
+
+    it('should throttle HTTP when WS connected and refresh was recent', async () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      (service as any)._features = { F1: true };
+      service._wsConnected = true;
+      service._lastFallbackRefresh = Date.now();
+      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: false }) });
+
+      await service._loadFeatures();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
 });

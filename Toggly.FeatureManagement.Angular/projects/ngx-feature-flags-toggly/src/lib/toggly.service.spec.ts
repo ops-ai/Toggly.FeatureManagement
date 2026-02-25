@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { TogglyService } from './toggly.service';
 import { TogglyOptions } from './toggly-options';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
@@ -443,5 +443,183 @@ describe('TogglyService', () => {
       await service.isFeatureOn('F1');
       expect(fetchSpy).toHaveBeenCalledWith('https://definitions.toggly.io/evaluated-signed/key/Production');
     });
+  });
+
+  // ─── WebSocket Live Updates ───────────────────────────
+  describe('WebSocket live updates', () => {
+    let mockWs: any;
+    let wsMockCalls: any[];
+    const OrigWebSocket = (globalThis as any).WebSocket;
+
+    function installWsMock() {
+      wsMockCalls = [];
+      (globalThis as any).WebSocket = function(url: string) {
+        mockWs = {
+          url,
+          onopen: null as any,
+          onmessage: null as any,
+          onclose: null as any,
+          onerror: null as any,
+          closeSpy: jasmine.createSpy('close'),
+          close() { this.closeSpy(); },
+        };
+        wsMockCalls.push(mockWs);
+        return mockWs;
+      };
+    }
+
+    beforeEach(() => {
+      mockWs = undefined;
+      wsMockCalls = [];
+      spyOn(console, 'warn');
+      spyOn(console, 'error');
+      installWsMock();
+    });
+
+    afterEach(() => {
+      (globalThis as any).WebSocket = OrigWebSocket;
+    });
+
+    async function createWsService(baseURI?: string) {
+      TestBed.resetTestingModule();
+      spyOn(globalThis, 'fetch').and.resolveTo(
+        { json: () => Promise.resolve({ F1: true }) } as any
+      );
+      const config: any = { appKey: 'key', environment: 'Test' };
+      if (baseURI) config.baseURI = baseURI;
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot(config)],
+      });
+      const service = TestBed.inject(TogglyService);
+      await service.isFeatureOn('F1');
+      return service;
+    }
+
+    it('should not start WebSocket when no appKey', async () => {
+      TestBed.resetTestingModule();
+      spyOn(globalThis, 'fetch').and.callFake(() => Promise.reject(new Error('no net')));
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ featureDefaults: { F1: true } })],
+      });
+      const service = TestBed.inject(TogglyService);
+      await service.isFeatureOn('F1');
+      expect(wsMockCalls.length).toBe(0);
+    });
+
+    it('should start WebSocket after successful feature load', async () => {
+      await createWsService();
+      expect(mockWs).toBeDefined();
+      expect(mockWs.url).toContain('key/ws');
+    });
+
+    it('should use wss:// for https:// baseURI', async () => {
+      await createWsService('https://custom.io');
+      expect(mockWs.url).toBe('wss://custom.io/key/ws');
+    });
+
+    it('should use ws:// for http:// baseURI', async () => {
+      await createWsService('http://local');
+      expect(mockWs.url).toBe('ws://local/key/ws');
+    });
+
+    it('should handle WebSocket constructor throw', async () => {
+      (globalThis as any).WebSocket = function() { throw new Error('WS not supported'); };
+      TestBed.resetTestingModule();
+      spyOn(globalThis, 'fetch').and.resolveTo(
+        { json: () => Promise.resolve({ F1: true }) } as any
+      );
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Test' })],
+      });
+      const service = TestBed.inject(TogglyService);
+      await service.isFeatureOn('F1');
+      expect(console.warn).toHaveBeenCalledWith(
+        jasmine.stringContaining('Failed to create WebSocket'),
+        jasmine.anything()
+      );
+    });
+
+    it('should set _wsConnected=true on ws open', async () => {
+      const service = await createWsService();
+      mockWs.onopen();
+      expect((service as any)._wsConnected).toBe(true);
+    });
+
+    it('should reload features on flags-updated message', async () => {
+      const service = await createWsService();
+      const fetchSpy = (globalThis.fetch as jasmine.Spy);
+      const callsBefore = fetchSpy.calls.count();
+      mockWs.onmessage({ data: JSON.stringify({ type: 'flags-updated' }) });
+      await Promise.resolve();
+      expect(fetchSpy.calls.count()).toBeGreaterThanOrEqual(callsBefore);
+    });
+
+    it('should reload features on update message', async () => {
+      const service = await createWsService();
+      const fetchSpy = (globalThis.fetch as jasmine.Spy);
+      const callsBefore = fetchSpy.calls.count();
+      mockWs.onmessage({ data: JSON.stringify({ type: 'update' }) });
+      await Promise.resolve();
+      expect(fetchSpy.calls.count()).toBeGreaterThanOrEqual(callsBefore);
+    });
+
+    it('should ignore ping message', async () => {
+      const service = await createWsService();
+      const fetchSpy = (globalThis.fetch as jasmine.Spy);
+      const callsBefore = fetchSpy.calls.count();
+      mockWs.onmessage({ data: JSON.stringify({ type: 'ping' }) });
+      await Promise.resolve();
+      expect(fetchSpy.calls.count()).toBe(callsBefore);
+    });
+
+    it('should warn on malformed WS message', async () => {
+      await createWsService();
+      mockWs.onmessage({ data: 'not-json' });
+      expect(console.warn).toHaveBeenCalledWith(
+        jasmine.stringContaining('Failed to parse WebSocket message'),
+        jasmine.anything()
+      );
+    });
+
+    it('should log warn on WebSocket error', async () => {
+      await createWsService();
+      mockWs.onerror(new Event('error'));
+      expect(console.warn).toHaveBeenCalledWith(
+        jasmine.stringContaining('WebSocket error'),
+        jasmine.anything()
+      );
+    });
+
+    it('should reset _wsConnected and _ws on close', async () => {
+      const service = await createWsService();
+      mockWs.onclose();
+      expect((service as any)._wsConnected).toBe(false);
+      expect((service as any)._ws).toBeNull();
+    });
+
+    it('should schedule reconnect on ws close', fakeAsync(async () => {
+      const service = await createWsService();
+      const firstWs = mockWs;
+      mockWs.onclose();
+      tick(6000);
+      expect(wsMockCalls.length).toBeGreaterThan(1);
+      expect(wsMockCalls[wsMockCalls.length - 1]).not.toBe(firstWs);
+    }));
+
+    it('should call ngOnDestroy to clean up WS', async () => {
+      const service = await createWsService();
+      service.ngOnDestroy();
+      expect(mockWs.closeSpy).toHaveBeenCalled();
+      expect((service as any)._wsConnected).toBe(false);
+    });
+
+    it('should cancel pending reconnect timer on ngOnDestroy', fakeAsync(async () => {
+      const service = await createWsService();
+      mockWs.onclose(); // schedules reconnect
+      service.ngOnDestroy(); // should cancel the timer
+      const wsCountAfterDestroy = wsMockCalls.length;
+      tick(6000);
+      expect(wsMockCalls.length).toBe(wsCountAfterDestroy); // no new WS
+    }));
   });
 });
