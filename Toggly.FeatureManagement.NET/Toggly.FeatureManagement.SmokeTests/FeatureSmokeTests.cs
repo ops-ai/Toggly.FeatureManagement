@@ -62,11 +62,10 @@ public class FeatureSmokeTests
             return;
         }
 
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var ws = new ClientWebSocket();
         try
         {
-            using var ws = new ClientWebSocket();
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-
             await ws.ConnectAsync(
                 new Uri($"wss://definitions.toggly.io/{appKey}/ws"),
                 cts.Token);
@@ -92,11 +91,16 @@ public class FeatureSmokeTests
                 break;
             }
 
-            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+            using var closeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, closeCts.Token);
         }
-        catch (Exception ex) when (ex is OperationCanceledException or System.Net.WebSockets.WebSocketException or IOException)
+        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or IOException)
         {
             // WebSocket connections to Cloudflare Workers may timeout due to cold starts
+        }
+        finally
+        {
+            ws.Dispose();
         }
     }
 
