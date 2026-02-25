@@ -14,6 +14,17 @@ import type { ActionFunctionArgs } from '@remix-run/server-runtime';
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
+// Mock WebSocket to prevent real connections in unit tests
+jest.mock('ws', () => {
+  return jest.fn().mockImplementation(() => ({
+    on: jest.fn(),
+    close: jest.fn(),
+    removeAllListeners: jest.fn(),
+    send: jest.fn(),
+    readyState: 1,
+  }));
+});
+
 describe('createFeatureGatedAction', () => {
   const defaultOptions: FeatureGatedActionOptions = {
     appKey: 'test-app-key',

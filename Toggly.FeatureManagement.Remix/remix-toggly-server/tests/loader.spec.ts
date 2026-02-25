@@ -14,6 +14,17 @@ import { HEADERS, STORAGE_KEYS, TOGGLY_LOADER_KEY } from '@ops-ai/remix-toggly-c
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
+// Mock WebSocket to prevent real connections in unit tests
+jest.mock('ws', () => {
+  return jest.fn().mockImplementation(() => ({
+    on: jest.fn(),
+    close: jest.fn(),
+    removeAllListeners: jest.fn(),
+    send: jest.fn(),
+    readyState: 1,
+  }));
+});
+
 describe('createTogglyLoader', () => {
   const defaultOptions: TogglyLoaderOptions = {
     appKey: 'test-app-key',
