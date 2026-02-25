@@ -196,6 +196,37 @@ describe('createTogglyLoader', () => {
 
       expect(result.identity).toBe('user@example.com');
     });
+
+    it('should return raw cookie value when percent-decoding fails', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const loader = createTogglyLoader(defaultOptions);
+      // %xx is invalid percent-encoding, causing decodeURIComponent to throw
+      const request = createMockRequest({
+        cookies: `${STORAGE_KEYS.IDENTITY}=user%xxid`,
+      });
+      const result = await loader.load(createMockLoaderArgs(request));
+
+      expect(result.identity).toBe('user%xxid');
+    });
+
+    it('should return undefined identity when cookie header has no identity key', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const loader = createTogglyLoader(defaultOptions);
+      const request = createMockRequest({
+        cookies: 'sessionId=abc123; theme=dark',
+      });
+      const result = await loader.load(createMockLoaderArgs(request));
+
+      expect(result.identity).toBeUndefined();
+    });
   });
 
   describe('getLoaderData', () => {
@@ -321,6 +352,20 @@ describe('createTogglyLoader', () => {
       const result = await loader.evaluateGate(['feature1'], 'all', true);
 
       expect(result).toBe(false);
+    });
+
+    it('should default to "all" requirement when not specified', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true, feature2: true }),
+      });
+
+      const loader = createTogglyLoader(defaultOptions);
+      await loader.load(createMockLoaderArgs(createMockRequest()));
+
+      const result = await loader.evaluateGate(['feature1', 'feature2']);
+
+      expect(result).toBe(true);
     });
   });
 
