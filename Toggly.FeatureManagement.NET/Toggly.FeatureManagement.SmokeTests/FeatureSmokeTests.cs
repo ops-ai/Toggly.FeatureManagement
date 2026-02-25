@@ -1,6 +1,3 @@
-using System.Net.WebSockets;
-using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,10 +17,7 @@ public class FeatureSmokeTests
     public async Task FlagOn_True_And_FlagOff_False(bool useSignedDefinitions)
     {
         var appKey = Environment.GetEnvironmentVariable("TOGGLY_SMOKE_APP_KEY_BACKEND");
-        if (string.IsNullOrWhiteSpace(appKey))
-        {
-            return;
-        }
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(appKey), "TOGGLY_SMOKE_APP_KEY_BACKEND not configured");
 
         var settings = Options.Create(new TogglySettings
         {
@@ -54,54 +48,54 @@ public class FeatureSmokeTests
     }
 
     [Fact]
-    public async Task WebSocket_Connects_And_Receives_Definitions()
+    public async Task WebSocket_Connects_Via_Library()
     {
         var appKey = Environment.GetEnvironmentVariable("TOGGLY_SMOKE_APP_KEY_BACKEND");
-        if (string.IsNullOrWhiteSpace(appKey))
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(appKey), "TOGGLY_SMOKE_APP_KEY_BACKEND not configured");
+
+        var settings = Options.Create(new TogglySettings
         {
-            return;
-        }
+            AppKey = appKey,
+            Environment = SmokeEnvironment,
+            DefinitionsBaseUrl = DefinitionsBaseUrl
+        });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var ws = new ClientWebSocket();
-        try
+        var services = new ServiceCollection();
+        services.AddHttpClient("toggly", httpClient =>
         {
-            await ws.ConnectAsync(
-                new Uri($"wss://definitions.toggly.io/{appKey}/ws"),
-                cts.Token);
+            httpClient.BaseAddress = new Uri(DefinitionsBaseUrl);
+        });
+        services.AddSingleton<IFeatureStateInternalService, TogglyFeatureStateService>();
+        var serviceProvider = services.BuildServiceProvider();
+        var httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
+        var environment = new SmokeHostEnvironment();
 
-            Assert.Equal(WebSocketState.Open, ws.State);
+        using var provider = new TogglyFeatureProvider(
+            settings,
+            environment,
+            NullLoggerFactory.Instance,
+            httpClientFactory,
+            serviceProvider);
 
-            var buffer = new byte[65536];
-            while (!cts.Token.IsCancellationRequested)
+        var debugProvider = (IFeatureProviderDebug)provider;
+        var timeoutAt = DateTime.UtcNow.AddSeconds(30);
+
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            var info = debugProvider.GetDebugInfo();
+            if (info.Loaded && info.WebsocketClientRunning)
             {
-                var result = await ws.ReceiveAsync(buffer, cts.Token);
-                Assert.Equal(WebSocketMessageType.Text, result.MessageType);
-
-                var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                using var doc = JsonDocument.Parse(json);
-                Assert.True(doc.RootElement.TryGetProperty("type", out var typeProp));
-
-                if (typeProp.GetString() == "ping")
-                    continue;
-
-                Assert.Equal("definitions", typeProp.GetString());
-                Assert.True(doc.RootElement.TryGetProperty("data", out _));
-                Assert.True(doc.RootElement.TryGetProperty("timestamp", out _));
-                break;
+                Assert.NotNull(info.Definitions);
+                Assert.NotEmpty(info.Definitions);
+                return;
             }
 
-            using var closeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, closeCts.Token);
+            await Task.Delay(500, TestContext.Current.CancellationToken);
         }
-        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or IOException)
-        {
-            // WebSocket connections to Cloudflare Workers may timeout due to cold starts
-        }
-        finally
-        {
-            ws.Dispose();
-        }
+
+        var finalInfo = debugProvider.GetDebugInfo();
+        Assert.True(finalInfo.Loaded, $"Provider failed to load definitions within timeout. LastError: {finalInfo.LastError}");
+        Assert.True(finalInfo.WebsocketClientRunning, $"WebSocket did not connect within timeout. LastError: {finalInfo.LastError}");
     }
 
     private static async Task AssertFlagsEventuallyAsync(TogglyFeatureProvider provider)
