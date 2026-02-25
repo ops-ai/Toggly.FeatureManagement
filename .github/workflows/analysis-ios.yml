@@ -61,8 +61,11 @@ jobs:
             -format lcov \
             -ignore-filename-regex '.build|Tests' \
             2>/dev/null \
+            | sed "s|${GITHUB_WORKSPACE}/${SDK_ROOT}/||g" \
             | sed "s|${GITHUB_WORKSPACE}/||g" \
             > coverage.lcov || true
+          echo "=== LCOV SF lines (first 20) ==="
+          grep '^SF:' coverage.lcov | head -20 || true
 
       - name: Upload coverage to Codecov
         if: matrix.xcode == '16.2'
@@ -201,12 +204,25 @@ jobs:
           path: ${{ env.SDK_ROOT }}/sonar-reports/
         continue-on-error: true
 
+      - name: Debug coverage report
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          echo "=== Files in sonar-reports ==="
+          ls -la sonar-reports/ || true
+          echo "=== LCOV SF lines ==="
+          grep '^SF:' sonar-reports/coverage.lcov | head -20 || true
+        continue-on-error: true
+
       - name: Convert LCOV to Cobertura XML
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           pip install lcov_cobertura 2>/dev/null
           if [ -f sonar-reports/coverage.lcov ]; then
-            lcov_cobertura sonar-reports/coverage.lcov -o sonar-reports/coverage.xml
+            lcov_cobertura sonar-reports/coverage.lcov -b . -o sonar-reports/coverage.xml
+            echo "=== Cobertura filename attributes ==="
+            grep 'filename=' sonar-reports/coverage.xml | head -20 || true
+          else
+            echo "WARNING: coverage.lcov not found in sonar-reports/"
           fi
         continue-on-error: true
 
