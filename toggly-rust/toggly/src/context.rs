@@ -34,7 +34,7 @@ impl EvalContext {
 
     /// Check if the context has an identity.
     pub fn has_identity(&self) -> bool {
-        self.identity.as_ref().map_or(false, |id| !id.is_empty())
+        self.identity.as_ref().is_some_and(|id| !id.is_empty())
     }
 
     /// Get a trait value.

@@ -1,10 +1,19 @@
 import WebSocket from 'ws';
 
-const appKey = (globalThis as any).__karma__?.config?.smokeAppKey || '';
+describe('WebSocket smoke test', () => {
+  let appKey: string;
 
-(appKey ? describe : xdescribe)('WebSocket smoke test', () => {
+  beforeAll(() => {
+    appKey = (globalThis as any).__karma__?.config?.smokeAppKey || '';
+  });
+
   it('connects and receives initial definitions message', async () => {
-    const ws = new WebSocket(`wss://definitions.toggly.io/${appKey!}/ws`);
+    if (!appKey) {
+      pending('TOGGLY_SMOKE_APP_KEY_FRONTEND not configured');
+      return;
+    }
+
+    const ws = new WebSocket(`wss://definitions.toggly.io/${appKey}/ws`);
 
     const message = await new Promise<string>((resolve, reject) => {
       const timeout = setTimeout(() => {
