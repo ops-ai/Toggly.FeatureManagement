@@ -51,6 +51,12 @@ describe('createFeatureGatedAction', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('without required features', () => {
@@ -333,6 +339,12 @@ describe('createTogglyAction', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('getClient', () => {
@@ -511,6 +523,12 @@ describe('requireFeature', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should create a higher-order function for feature-gated actions', async () => {

@@ -78,7 +78,7 @@ describe('Toggly Core', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('my-app-Staging/defs')
+        expect.stringContaining('evaluated-signed/my-app/Staging')
       );
     });
 
@@ -95,7 +95,7 @@ describe('Toggly Core', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('https://custom.api.com/key-Staging/defs')
+        expect.stringContaining('https://custom.api.com/evaluated-signed/key/Staging')
       );
     });
 
@@ -110,7 +110,7 @@ describe('Toggly Core', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('key-Production/defs')
+        expect.stringContaining('evaluated-signed/key/Production')
       );
     });
 

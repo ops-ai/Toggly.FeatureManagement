@@ -59,6 +59,12 @@ describe('createTogglyLoader', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('getClient', () => {
@@ -345,6 +351,12 @@ describe('getFeatureFlags', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should get feature flags for a request', async () => {
@@ -372,6 +384,12 @@ describe('isFeatureEnabled', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should check if feature is enabled for a request', async () => {

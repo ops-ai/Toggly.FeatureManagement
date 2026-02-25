@@ -34,6 +34,12 @@ describe('TogglyServerClient', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('constructor', () => {
@@ -50,10 +56,12 @@ describe('TogglyServerClient', () => {
     });
 
     it('should warn when no appKey and no featureDefaults', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
       new TogglyServerClient({});
-      // Warning is logged internally
-      warnSpy.mockRestore();
+
+      expect(console.warn).toHaveBeenCalledWith(
+        '[Toggly]',
+        'No appKey provided and no featureDefaults set. All features will be disabled.'
+      );
     });
   });
 
@@ -125,6 +133,11 @@ describe('TogglyServerClient', () => {
       const result = await client.fetchFlags();
 
       expect(result).toEqual(featureDefaults);
+      expect(console.warn).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Failed to fetch flags, using featureDefaults.',
+        expect.any(Error)
+      );
     });
 
     it('should handle non-ok responses', async () => {
@@ -143,6 +156,11 @@ describe('TogglyServerClient', () => {
       const result = await client.fetchFlags();
 
       expect(result).toEqual(featureDefaults);
+      expect(console.warn).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Failed to fetch flags, using featureDefaults.',
+        expect.any(Error)
+      );
     });
   });
 
@@ -345,8 +363,7 @@ describe('TogglyServerClient', () => {
 
       client.addHook(hook);
 
-      // Hook is registered (no direct way to verify, but won't throw)
-      expect(true).toBe(true);
+      expect(client.removeHook('test-hook')).toBe(true);
     });
 
     it('should not add duplicate hooks', () => {
@@ -356,8 +373,10 @@ describe('TogglyServerClient', () => {
       client.addHook(hook);
       client.addHook(hook);
 
-      // Should only be registered once (warning logged)
-      expect(true).toBe(true);
+      expect(console.warn).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Hook "test-hook" already registered. Skipping.'
+      );
     });
 
     it('should remove a hook', () => {
@@ -478,6 +497,11 @@ describe('TogglyServerClient', () => {
       const result = await client.isEnabled('feature1');
 
       expect(result).toBe(true);
+      expect(console.error).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Error in hook "error-hook.beforeEvaluation":',
+        expect.any(Error)
+      );
     });
   });
 });
