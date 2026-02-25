@@ -208,15 +208,16 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
         with:
+          projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
             -Dsonar.projectKey=toggly-sdks-ios
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - iOS"
-            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources
+            -Dsonar.tests=TogglyCore/Tests,TogglyCombine/Tests,TogglySwiftUI/Tests,TogglyUIKit/Tests
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
-            -Dsonar.test.inclusions=**/Tests/**
-            -Dsonar.swift.coverage.reportPaths=coverage-artifacts/coverage.lcov
-            -Dsonar.swift.swiftlint.report=swiftlint-artifacts/swiftlint-report.txt
+            -Dsonar.swift.coverage.reportPaths=../coverage-artifacts/coverage.lcov
+            -Dsonar.swift.swiftlint.report=../swiftlint-artifacts/swiftlint-report.txt
         continue-on-error: true
 
       - name: SonarQube Server Scan
@@ -225,15 +226,18 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
+          projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
             -Dsonar.projectKey=toggly-sdks-ios
             -Dsonar.projectName="Toggly SDKs - iOS"
-            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.language=swift
+            -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources
+            -Dsonar.tests=TogglyCore/Tests,TogglyCombine/Tests,TogglySwiftUI/Tests,TogglyUIKit/Tests
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
-            -Dsonar.test.inclusions=**/Tests/**
-            -Dsonar.swift.coverage.reportPaths=coverage-artifacts/coverage.lcov
-            -Dsonar.swift.swiftlint.report=swiftlint-artifacts/swiftlint-report.txt
-            -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
+            -Dsonar.swift.file.suffixes=swift
+            -Dsonar.swift.coverage.reportPaths=../coverage-artifacts/coverage.lcov
+            -Dsonar.swift.swiftlint.report=../swiftlint-artifacts/swiftlint-report.txt
+            -Dsonar.dependencyCheck.reportPath=../dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
   build-platforms:
