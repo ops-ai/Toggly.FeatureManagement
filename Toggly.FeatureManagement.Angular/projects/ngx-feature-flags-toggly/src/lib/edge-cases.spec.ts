@@ -110,9 +110,7 @@ describe('Edge Cases & Error Handling', () => {
     let service: TogglyService;
 
     beforeEach(() => {
-      mockFetch.and.returnValue(
-        Promise.reject(new Error('no network'))
-      );
+      mockFetch.and.callFake(() => Promise.reject(new Error('no network')));
       service = createService({
         featureDefaults: {
           '': true,
@@ -157,9 +155,7 @@ describe('Edge Cases & Error Handling', () => {
     let service: TogglyService;
 
     beforeEach(() => {
-      mockFetch.and.returnValue(
-        Promise.reject(new Error('no network'))
-      );
+      mockFetch.and.callFake(() => Promise.reject(new Error('no network')));
       service = createService({
         featureDefaults: { F1: true, F2: false, F3: true },
       });
@@ -206,7 +202,7 @@ describe('Edge Cases & Error Handling', () => {
     });
 
     it('should handle appKey without environment', () => {
-      mockFetch.and.returnValue(Promise.reject(new Error('no net')));
+      mockFetch.and.callFake(() => Promise.reject(new Error('no net')));
       const service = createService({ appKey: 'test-key' });
       expect(service).toBeTruthy();
       expect(console.warn).toHaveBeenCalledWith(
@@ -278,7 +274,7 @@ describe('Edge Cases & Error Handling', () => {
     }
 
     it('should handle hook that throws during evaluation', async () => {
-      mockFetch.and.returnValue(Promise.reject(new Error('no net')));
+      mockFetch.and.callFake(() => Promise.reject(new Error('no net')));
       const service = createService({
         featureDefaults: { F1: true },
         hooks: [createTestHook('error-hook', {

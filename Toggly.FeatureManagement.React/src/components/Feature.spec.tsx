@@ -29,9 +29,15 @@ describe('Feature Component', () => {
   let service: Toggly;
 
   beforeEach(() => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
     service = new Toggly({
       featureDefaults: { Enabled: true, Disabled: false, A: true, B: true, C: false },
     });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('Basic rendering', () => {
