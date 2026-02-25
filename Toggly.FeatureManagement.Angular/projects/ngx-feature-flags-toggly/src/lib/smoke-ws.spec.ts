@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 
-const appKey = (globalThis as any).process?.env?.TOGGLY_SMOKE_APP_KEY_FRONTEND;
+const appKey = (globalThis as any).__karma__?.config?.smokeAppKey || '';
 
 (appKey ? describe : xdescribe)('WebSocket smoke test', () => {
   it('connects and receives initial definitions message', async () => {

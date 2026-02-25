@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
 import { TogglyService } from './toggly.service';
 
-const appKey = (globalThis as any).process?.env?.TOGGLY_SMOKE_APP_KEY_FRONTEND;
+const appKey = (globalThis as any).__karma__?.config?.smokeAppKey || '';
 
 (appKey ? describe : xdescribe)('Smoke test', () => {
   it('loads live evaluated flags', async () => {
