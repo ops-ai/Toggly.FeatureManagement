@@ -502,8 +502,15 @@ namespace Toggly.FeatureManagement
                         });
                         newWebSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
 
-                        using var wsCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                        await newWebSocketClient.StartOrFail().WaitAsync(wsCts.Token).ConfigureAwait(false);
+                        var wsConnectTask = newWebSocketClient.StartOrFail();
+                        var completed = await Task.WhenAny(wsConnectTask, Task.Delay(TimeSpan.FromSeconds(10))).ConfigureAwait(false);
+                        if (completed != wsConnectTask)
+                        {
+                            _logger.LogWarning("WebSocket connection timed out after 10 seconds — disposing client");
+                            try { newWebSocketClient.Dispose(); } catch { /* best-effort cleanup */ }
+                            throw new TimeoutException("WebSocket connection timed out after 10 seconds");
+                        }
+                        await wsConnectTask.ConfigureAwait(false); // propagate any exception
                         _webSocketConnected = true;
                         _lastFallbackRefresh = DateTime.UtcNow;
 
