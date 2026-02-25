@@ -33,6 +33,8 @@ describe('TogglyService Hooks', () => {
   };
 
   beforeEach(() => {
+    spyOn(console, 'warn').and.callFake(() => {});
+    spyOn(console, 'error').and.callFake(() => {});
     beforeEvalCalls = [];
     afterEvalCalls = [];
     beforeIdentifyCalls = [];
