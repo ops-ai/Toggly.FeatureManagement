@@ -36,21 +36,17 @@ const fetchViaHttps = (url: string): Promise<MockFetchResponse> =>
     req.on('error', reject);
   });
 
-describe('Smoke test', () => {
-  const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
+const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
+(appKey ? describe : describe.skip)('Smoke test', () => {
   it('loads live evaluated flags', async () => {
-    if (!appKey) {
-      return;
-    }
-
     const originalFetch = global.fetch;
     (global.fetch as unknown as jest.Mock).mockImplementation((url: string) =>
       fetchViaHttps(url)
     );
 
     const service = new TogglyService({
-      appKey,
+      appKey: appKey!,
       environment: 'Production',
       baseURI: 'https://definitions.toggly.io',
       refreshInterval: 0,

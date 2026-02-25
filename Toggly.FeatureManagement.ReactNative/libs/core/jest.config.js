@@ -8,6 +8,7 @@ module.exports = {
     'src/**/*.ts',
     '!src/**/*.d.ts',
     '!src/**/index.ts',
+    '!src/models/types.ts',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
@@ -28,5 +29,6 @@ module.exports = {
     }],
   },
   coverageProvider: 'v8',
+  forceExit: true,
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
 };

@@ -3,10 +3,15 @@ import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
 import { TogglyService } from './toggly.service';
 
 describe('Smoke test', () => {
-  const appKey = (globalThis as any).process?.env?.TOGGLY_SMOKE_APP_KEY_FRONTEND;
+  let appKey: string;
+
+  beforeAll(() => {
+    appKey = (globalThis as any).__karma__?.config?.smokeAppKey || '';
+  });
 
   it('loads live evaluated flags', async () => {
     if (!appKey) {
+      pending('TOGGLY_SMOKE_APP_KEY_FRONTEND not configured');
       return;
     }
 

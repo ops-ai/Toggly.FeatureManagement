@@ -18,7 +18,8 @@
   ],
   "scripts": {
     "build": "rollup -c",
-    "test": "jest --coverage",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",

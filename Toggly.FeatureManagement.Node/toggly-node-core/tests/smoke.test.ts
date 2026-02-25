@@ -1,16 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { createTogglyClient } from '../src/client.js';
 
-describe('Smoke test', () => {
-  const appKey = process.env.TOGGLY_SMOKE_APP_KEY_BACKEND;
+const appKey = process.env.TOGGLY_SMOKE_APP_KEY_BACKEND;
 
+describe.skipIf(!appKey)('Smoke test', () => {
   it('loads live evaluated flags', async () => {
-    if (!appKey) {
-      return;
-    }
-
     const client = createTogglyClient({
-      appKey,
+      appKey: appKey!,
       environment: 'Production',
       baseUrl: 'https://definitions.toggly.io',
       refreshInterval: 0,

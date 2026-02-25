@@ -7,7 +7,10 @@ const DEFINITIONS_URL: &str = "https://definitions.toggly.io/";
 async fn smoke_unsigned_definitions() -> toggly::Result<()> {
     let app_key = match std::env::var("TOGGLY_SMOKE_APP_KEY_BACKEND") {
         Ok(v) if !v.is_empty() => v,
-        _ => return Ok(()),
+        _ => {
+            eprintln!("SKIPPED: TOGGLY_SMOKE_APP_KEY_BACKEND not configured");
+            return Ok(());
+        }
     };
 
     let client = TogglyClient::builder()
@@ -33,7 +36,10 @@ async fn smoke_unsigned_definitions() -> toggly::Result<()> {
 async fn smoke_signed_definitions() -> toggly::Result<()> {
     let app_key = match std::env::var("TOGGLY_SMOKE_APP_KEY_BACKEND") {
         Ok(v) if !v.is_empty() => v,
-        _ => return Ok(()),
+        _ => {
+            eprintln!("SKIPPED: TOGGLY_SMOKE_APP_KEY_BACKEND not configured");
+            return Ok(());
+        }
     };
 
     let client = TogglyClient::builder()

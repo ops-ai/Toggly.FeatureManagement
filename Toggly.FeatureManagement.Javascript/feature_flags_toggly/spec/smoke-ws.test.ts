@@ -1,14 +1,10 @@
 import WebSocket = require('ws');
 
-describe('WebSocket smoke test', () => {
-  const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
+const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
+(appKey ? describe : describe.skip)('WebSocket smoke test', () => {
   it('connects and receives initial definitions message', async () => {
-    if (!appKey) {
-      return;
-    }
-
-    const ws = new WebSocket(`wss://definitions.toggly.io/${appKey}/ws`);
+    const ws = new WebSocket(`wss://definitions.toggly.io/${appKey!}/ws`);
 
     const message = await new Promise<string>((resolve, reject) => {
       const timeout = setTimeout(() => {
