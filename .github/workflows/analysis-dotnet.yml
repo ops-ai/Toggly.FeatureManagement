@@ -415,4 +415,4 @@ jobs:
         timeout-minutes: 2
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
-        run: dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj -c Release --logger "trx;LogFileName=smoke-test-results.trx"
+        run: dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj -c Release --logger "trx;LogFileName=smoke-test-results.trx" --blame-hang-timeout 60s --blame-hang-dump-type none

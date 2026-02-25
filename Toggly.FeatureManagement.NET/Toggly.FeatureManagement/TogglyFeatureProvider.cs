@@ -502,7 +502,8 @@ namespace Toggly.FeatureManagement
                         });
                         newWebSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
 
-                        await newWebSocketClient.StartOrFail().ConfigureAwait(false);
+                        using var wsCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                        await newWebSocketClient.StartOrFail().WaitAsync(wsCts.Token).ConfigureAwait(false);
                         _webSocketConnected = true;
                         _lastFallbackRefresh = DateTime.UtcNow;
 
