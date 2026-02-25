@@ -1,6 +1,7 @@
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
 if (!appKey) {
+  console.warn('SKIPPED: TOGGLY_SMOKE_APP_KEY_FRONTEND not configured');
   process.exit(0);
 }
 

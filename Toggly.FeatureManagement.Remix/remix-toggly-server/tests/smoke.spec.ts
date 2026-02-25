@@ -1,15 +1,11 @@
 import { TogglyServerClient } from '../src/client';
 
-describe('Smoke test', () => {
-  const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
+const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
+(appKey ? describe : describe.skip)('Smoke test', () => {
   it('loads live evaluated flags', async () => {
-    if (!appKey) {
-      return;
-    }
-
     const client = new TogglyServerClient({
-      appKey,
+      appKey: appKey!,
       environment: 'Production',
       baseUrl: 'https://definitions.toggly.io',
       timeout: 15000,

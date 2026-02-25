@@ -2,16 +2,12 @@
 import { describe, it, expect } from 'vitest';
 import { createTogglyClient } from '../src/client.js';
 
-describe('WebSocket smoke test', () => {
-  const appKey = process.env.TOGGLY_SMOKE_APP_KEY_BACKEND;
+const appKey = process.env.TOGGLY_SMOKE_APP_KEY_BACKEND;
 
+describe.skipIf(!appKey)('WebSocket smoke test', () => {
   it('connects via WebSocket and receives live updates', async () => {
-    if (!appKey) {
-      return;
-    }
-
     const client = createTogglyClient({
-      appKey,
+      appKey: appKey!,
       environment: 'Production',
       baseUrl: 'https://definitions.toggly.io',
       enableStreaming: true,

@@ -1,15 +1,11 @@
 import Toggly from './services/toggly.service';
 
-describe('Smoke test', () => {
-  const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
+const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
+(appKey ? describe : describe.skip)('Smoke test', () => {
   test('loads live evaluated flags', async () => {
-    if (!appKey) {
-      return;
-    }
-
     const service = new Toggly({
-      appKey,
+      appKey: appKey!,
       environment: 'Production',
       baseURI: 'https://definitions.toggly.io',
     });

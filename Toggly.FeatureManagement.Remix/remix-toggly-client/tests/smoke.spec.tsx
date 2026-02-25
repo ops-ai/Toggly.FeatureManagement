@@ -38,15 +38,11 @@ function fetchLiveFlags(appKey: string): Promise<Record<string, boolean>> {
   });
 }
 
-describe('Smoke test', () => {
-  const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
+const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
+(appKey ? describe : describe.skip)('Smoke test', () => {
   it('evaluates live flags through client context', async () => {
-    if (!appKey) {
-      return;
-    }
-
-    const flags = await fetchLiveFlags(appKey);
+    const flags = await fetchLiveFlags(appKey!);
     const serverContext: ServerFeatureContext = {
       flags,
       appKey,
