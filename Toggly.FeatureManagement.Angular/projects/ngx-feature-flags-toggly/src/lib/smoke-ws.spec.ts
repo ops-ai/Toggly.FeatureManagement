@@ -1,5 +1,3 @@
-import WebSocket from 'ws';
-
 describe('WebSocket smoke test', () => {
   let appKey: string;
 
@@ -21,19 +19,19 @@ describe('WebSocket smoke test', () => {
         reject(new Error('WebSocket timed out after 15 seconds'));
       }, 15_000);
 
-      ws.on('message', (data: Buffer) => {
-        const text = data.toString();
+      ws.onmessage = (event: MessageEvent) => {
+        const text = typeof event.data === 'string' ? event.data : '';
         try {
           const msg = JSON.parse(text);
           if (msg.type === 'ping') return;
         } catch { /* not JSON, resolve anyway */ }
         clearTimeout(timeout);
         resolve(text);
-      });
-      ws.on('error', (err: Error) => {
+      };
+      ws.onerror = () => {
         clearTimeout(timeout);
-        reject(err);
-      });
+        reject(new Error('WebSocket error'));
+      };
     });
 
     const parsed = JSON.parse(message);
