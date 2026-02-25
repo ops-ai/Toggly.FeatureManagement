@@ -184,21 +184,30 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ios-coverage
-          path: coverage-artifacts/
+          path: ${{ env.SDK_ROOT }}/sonar-reports/
         continue-on-error: true
 
       - name: Download SwiftLint report
         uses: actions/download-artifact@v4
         with:
           name: ios-swiftlint
-          path: swiftlint-artifacts/
+          path: ${{ env.SDK_ROOT }}/sonar-reports/
         continue-on-error: true
 
       - name: Download Dependency Check report
         uses: actions/download-artifact@v4
         with:
           name: dependency-check-report-ios
-          path: dependency-check-reports/
+          path: ${{ env.SDK_ROOT }}/sonar-reports/
+        continue-on-error: true
+
+      - name: Convert LCOV to Cobertura XML
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          pip install lcov_cobertura 2>/dev/null
+          if [ -f sonar-reports/coverage.lcov ]; then
+            lcov_cobertura sonar-reports/coverage.lcov -o sonar-reports/coverage.xml
+          fi
         continue-on-error: true
 
       - name: SonarCloud Scan
@@ -216,8 +225,8 @@ jobs:
             -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources
             -Dsonar.tests=TogglyCore/Tests,TogglyCombine/Tests,TogglySwiftUI/Tests,TogglyUIKit/Tests
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
-            -Dsonar.swift.coverage.reportPaths=../coverage-artifacts/coverage.lcov
-            -Dsonar.swift.swiftlint.report=../swiftlint-artifacts/swiftlint-report.txt
+            -Dsonar.swift.coverage.reportPaths=sonar-reports/coverage.lcov
+            -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
         continue-on-error: true
 
       - name: SonarQube Server Scan
@@ -235,9 +244,9 @@ jobs:
             -Dsonar.tests=TogglyCore/Tests,TogglyCombine/Tests,TogglySwiftUI/Tests,TogglyUIKit/Tests
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
             -Dsonar.swift.file.suffixes=swift
-            -Dsonar.swift.coverage.reportPaths=../coverage-artifacts/coverage.lcov
-            -Dsonar.swift.swiftlint.report=../swiftlint-artifacts/swiftlint-report.txt
-            -Dsonar.dependencyCheck.reportPath=../dependency-check-reports/dependency-check-report.xml
+            -Dsonar.swift.coverage.reportPattern=sonar-reports/coverage*.xml
+            -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
+            -Dsonar.dependencyCheck.reportPath=sonar-reports/dependency-check-report.xml
         continue-on-error: true
 
   build-platforms:
