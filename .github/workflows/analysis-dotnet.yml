@@ -71,6 +71,8 @@ jobs:
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Storage.Dapper.Tests/Toggly.Storage.Dapper.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Storage.EntityFramework.Tests/Toggly.Storage.EntityFramework.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj
+          dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj
+          dotnet restore Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj
         continue-on-error: true
 
       # ── SonarCloud ──────────────────────────────────────────────────────────
@@ -107,6 +109,8 @@ jobs:
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.Dapper.Tests/Toggly.Storage.Dapper.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.EntityFramework.Tests/Toggly.Storage.EntityFramework.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj -c Release
+          dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj -c Release
+          dotnet build Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj -c Release
         continue-on-error: true
 
       - name: Run core tests
@@ -186,6 +190,26 @@ jobs:
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --logger "trx;LogFileName=mongodb-test-results.trx" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+
+      - name: Run RavenDB storage tests
+        run: |
+          dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj \
+            --no-build -c Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=ravendb-test-results.trx" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+
+      - name: Run SystemMetrics tests
+        run: |
+          dotnet test Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj \
+            --no-build -c Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=systemmetrics-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
         continue-on-error: true
 

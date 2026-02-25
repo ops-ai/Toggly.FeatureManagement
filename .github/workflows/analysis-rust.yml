@@ -206,6 +206,47 @@ jobs:
           path: ${{ env.SDK_ROOT }}/
         continue-on-error: true
 
+      - name: Convert LCOV to SonarQube generic coverage format
+        run: |
+          python3 -c "
+          import re, sys
+          lcov_file = '${{ env.SDK_ROOT }}/lcov.info'
+          output_file = '${{ env.SDK_ROOT }}/coverage-sonar.xml'
+          try:
+              with open(lcov_file) as f:
+                  content = f.read()
+          except FileNotFoundError:
+              print('No lcov.info found, skipping conversion')
+              sys.exit(0)
+
+          files = {}
+          current_file = None
+          for line in content.split('\n'):
+              if line.startswith('SF:'):
+                  current_file = line[3:]
+                  files[current_file] = {}
+              elif line.startswith('DA:') and current_file:
+                  parts = line[3:].split(',')
+                  if len(parts) >= 2:
+                      line_num = parts[0]
+                      hits = parts[1]
+                      files[current_file][line_num] = hits == '0'
+              elif line == 'end_of_record':
+                  current_file = None
+
+          with open(output_file, 'w') as f:
+              f.write('<coverage version=\"1\">\n')
+              for filepath, lines in files.items():
+                  f.write(f'  <file path=\"{filepath}\">\n')
+                  for line_num, not_covered in sorted(lines.items(), key=lambda x: int(x[0])):
+                      covered = 'false' if not_covered else 'true'
+                      f.write(f'    <lineToCover lineNumber=\"{line_num}\" covered=\"{covered}\"/>\n')
+                  f.write('  </file>\n')
+              f.write('</coverage>\n')
+          print(f'Converted {len(files)} files to SonarQube generic coverage format')
+          "
+        continue-on-error: true
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v6.0.0
         env:
@@ -222,6 +263,7 @@ jobs:
             -Dsonar.exclusions=**/target/**,**/examples/**,**/*_test.rs
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*_test.rs,**/tests/**
+            -Dsonar.coverageReportPaths=coverage-sonar.xml
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -245,6 +287,7 @@ jobs:
             -Dsonar.exclusions=**/target/**,**/examples/**,**/*_test.rs
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*_test.rs,**/tests/**
+            -Dsonar.coverageReportPaths=coverage-sonar.xml
             -Dsonar.dependencyCheck.reportPath=../dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 

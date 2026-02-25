@@ -223,6 +223,7 @@ jobs:
             -Dsonar.exclusions=**/vendor/**,**/spec/**,**/test/**,**/coverage/**,**/*.gemspec
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**
+            -Dsonar.ruby.coverage.reportPaths=coverage-artifacts/.resultset.json
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -245,6 +246,7 @@ jobs:
             -Dsonar.exclusions=**/vendor/**,**/spec/**,**/test/**,**/coverage/**,**/*.gemspec
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**
+            -Dsonar.ruby.coverage.reportPaths=coverage-artifacts/.resultset.json
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
