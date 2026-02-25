@@ -16,9 +16,11 @@
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
   },
+  "type": "module",
   "packageManager": "pnpm@9.15.4",
   "devDependencies": {
     "@types/ws": "^8.0.0",
+    "typescript-eslint": "^8.0.0",
     "ws": "^8.0.0"
   }
 }
