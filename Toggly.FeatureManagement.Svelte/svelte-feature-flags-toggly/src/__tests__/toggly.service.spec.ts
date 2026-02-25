@@ -94,7 +94,7 @@ describe('Toggly Service', () => {
       const features = await toggly._loadFeatures();
       expect(features).toEqual({ F1: true, F2: false });
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://client.toggly.io/test-key-Production/defs'
+        'https://definitions.toggly.io/evaluated-signed/test-key/Production'
       );
     });
 
@@ -106,7 +106,7 @@ describe('Toggly Service', () => {
       });
       await toggly._loadFeatures();
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://client.toggly.io/test-key-Staging/defs?u=user-123'
+        'https://definitions.toggly.io/evaluated-signed/test-key/Staging?u=user-123'
       );
     });
 
@@ -118,7 +118,7 @@ describe('Toggly Service', () => {
       });
       await toggly._loadFeatures();
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://custom.api.io/test-key-Dev/defs'
+        'https://custom.api.io/evaluated-signed/test-key/Dev'
       );
     });
 

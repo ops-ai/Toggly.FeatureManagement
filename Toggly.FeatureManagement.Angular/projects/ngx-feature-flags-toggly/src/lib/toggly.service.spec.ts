@@ -135,7 +135,7 @@ describe('TogglyService', () => {
       const service = TestBed.inject(TogglyService);
       const result = await service.isFeatureOn('ApiFlag');
       expect(result).toBe(true);
-      expect(fetchSpy).toHaveBeenCalledWith('https://client.toggly.io/key-Production/defs');
+      expect(fetchSpy).toHaveBeenCalledWith('https://definitions.toggly.io/evaluated-signed/key/Production');
     });
 
     it('should include identity in API URL', async () => {
@@ -147,7 +147,7 @@ describe('TogglyService', () => {
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');
-      expect(fetchSpy).toHaveBeenCalledWith('https://client.toggly.io/key-Production/defs?u=user-1');
+      expect(fetchSpy).toHaveBeenCalledWith('https://definitions.toggly.io/evaluated-signed/key/Production?u=user-1');
     });
 
     it('should use custom baseURI', async () => {
@@ -159,7 +159,7 @@ describe('TogglyService', () => {
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');
-      expect(fetchSpy).toHaveBeenCalledWith('https://custom.api/key-Staging/defs');
+      expect(fetchSpy).toHaveBeenCalledWith('https://custom.api/evaluated-signed/key/Staging');
     });
 
     it('should use customDefinitionsUrl when set', async () => {
@@ -441,7 +441,7 @@ describe('TogglyService', () => {
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');
-      expect(fetchSpy).toHaveBeenCalledWith('https://client.toggly.io/key-Production/defs');
+      expect(fetchSpy).toHaveBeenCalledWith('https://definitions.toggly.io/evaluated-signed/key/Production');
     });
   });
 });

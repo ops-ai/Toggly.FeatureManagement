@@ -128,7 +128,6 @@ jobs:
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}
         run: ${{ matrix.test-cmd }}
-        continue-on-error: true
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4

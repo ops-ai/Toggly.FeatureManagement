@@ -42,7 +42,7 @@ describe('createTogglyClient', () => {
     expect(flags).toEqual(mockFlags);
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://client.toggly.io/test-app-Production/defs',
+      'https://client.toggly.io/test-app/evaluated-signed',
       expect.objectContaining({
         method: 'GET',
         headers: {
@@ -300,7 +300,7 @@ describe('createTogglyClient', () => {
     await client.getFlags();
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://client.toggly.io/test-app-Production/defs?u=user-123',
+      'https://client.toggly.io/test-app/evaluated-signed?u=user-123',
       expect.any(Object)
     );
   });
@@ -319,7 +319,7 @@ describe('createTogglyClient', () => {
     await client.getFlags();
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://client.toggly.io/test-app-Production/defs',
+      'https://client.toggly.io/test-app/evaluated-signed',
       expect.any(Object)
     );
   });
@@ -339,7 +339,7 @@ describe('createTogglyClient', () => {
     await client.getFlags();
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://client.toggly.io/test-app-Production/defs',
+      'https://definitions.toggly.io/test-app/evaluated-signed',
       expect.any(Object)
     );
   });

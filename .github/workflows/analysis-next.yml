@@ -62,7 +62,6 @@ jobs:
       - name: Run tests
         working-directory: ${{ env.SDK_ROOT }}
         run: pnpm test
-        continue-on-error: true
 
   lint:
     name: Lint

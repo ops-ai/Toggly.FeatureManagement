@@ -131,7 +131,7 @@ describe('Toggly Service', () => {
       const features = await service._loadFeatures();
       expect(features).toEqual({ ApiFlag: true });
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://client.toggly.io/test-key-Production/defs'
+        'https://definitions.toggly.io/evaluated-signed/test-key/Production'
       );
     });
 
@@ -148,7 +148,7 @@ describe('Toggly Service', () => {
 
       await service._loadFeatures();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://client.toggly.io/test-key-Production/defs?u=user-123'
+        'https://definitions.toggly.io/evaluated-signed/test-key/Production?u=user-123'
       );
     });
 
@@ -165,7 +165,7 @@ describe('Toggly Service', () => {
 
       await service._loadFeatures();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://custom.api.com/test-key-Staging/defs'
+        'https://custom.api.com/evaluated-signed/test-key/Staging'
       );
     });
 

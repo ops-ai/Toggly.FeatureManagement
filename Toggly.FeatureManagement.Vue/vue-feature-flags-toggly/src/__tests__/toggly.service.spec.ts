@@ -109,7 +109,7 @@ describe('Toggly Service', () => {
 
       const features = await service._loadFeatures();
       expect(features).toEqual({ ApiFlag: true });
-      expect(mockFetch).toHaveBeenCalledWith('https://client.toggly.io/key-Production/defs');
+      expect(mockFetch).toHaveBeenCalledWith('https://definitions.toggly.io/evaluated-signed/key/Production');
     });
 
     it('should include identity in API URL', async () => {
@@ -119,7 +119,7 @@ describe('Toggly Service', () => {
 
       await service._loadFeatures();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://client.toggly.io/key-Production/defs?u=user-1'
+        'https://definitions.toggly.io/evaluated-signed/key/Production?u=user-1'
       );
     });
 
@@ -129,7 +129,7 @@ describe('Toggly Service', () => {
       service.init({ baseURI: 'https://custom.api', appKey: 'key', environment: 'Staging' });
 
       await service._loadFeatures();
-      expect(mockFetch).toHaveBeenCalledWith('https://custom.api/key-Staging/defs');
+      expect(mockFetch).toHaveBeenCalledWith('https://custom.api/evaluated-signed/key/Staging');
     });
 
     it('should fall back to featureDefaults on error', async () => {

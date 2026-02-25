@@ -67,7 +67,6 @@ jobs:
       - name: Run tests with coverage
         working-directory: ${{ env.SDK_ROOT }}/${{ matrix.package }}
         run: npm run test:coverage
-        continue-on-error: true
 
       - name: Upload coverage (Node 20 only)
         if: matrix.node-version == '20.x'

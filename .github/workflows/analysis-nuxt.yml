@@ -66,7 +66,6 @@ jobs:
 
       - name: Run tests with coverage
         run: pnpm --filter @ops-ai/${{ matrix.package }} test:coverage
-        continue-on-error: true
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4

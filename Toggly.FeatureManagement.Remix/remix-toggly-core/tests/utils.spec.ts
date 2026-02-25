@@ -66,7 +66,7 @@ describe('utils', () => {
 
       const url = buildDefinitionsUrl(config);
 
-      expect(url).toBe('https://client.toggly.io/my-app-Production/defs');
+      expect(url).toBe('https://definitions.toggly.io/evaluated-signed/my-app/Production');
     });
 
     it('should build URL with identity', () => {
@@ -77,7 +77,7 @@ describe('utils', () => {
 
       const url = buildDefinitionsUrl(config, 'user-123');
 
-      expect(url).toBe('https://client.toggly.io/my-app-Production/defs?u=user-123');
+      expect(url).toBe('https://definitions.toggly.io/evaluated-signed/my-app/Production?u=user-123');
     });
 
     it('should encode identity in URL', () => {
@@ -88,7 +88,7 @@ describe('utils', () => {
 
       const url = buildDefinitionsUrl(config, 'user@example.com');
 
-      expect(url).toBe('https://client.toggly.io/my-app-Production/defs?u=user%40example.com');
+      expect(url).toBe('https://definitions.toggly.io/evaluated-signed/my-app/Production?u=user%40example.com');
     });
 
     it('should use custom base URL', () => {
@@ -100,7 +100,7 @@ describe('utils', () => {
 
       const url = buildDefinitionsUrl(config);
 
-      expect(url).toBe('https://custom.api.com/my-app-Staging/defs');
+      expect(url).toBe('https://custom.api.com/evaluated-signed/my-app/Staging');
     });
 
     it('should throw error without appKey', () => {
