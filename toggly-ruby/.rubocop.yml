@@ -12,8 +12,8 @@ Naming/FileName:
   Exclude:
     - '**/lib/toggly-rails.rb'
 
-# These methods have inherent complexity due to protocol/evaluation logic.
-# Complexity thresholds are relaxed to avoid forcing premature refactoring.
+# These cops have inherent complexity due to protocol/evaluation logic.
+# Thresholds are relaxed to avoid forcing premature refactoring.
 Metrics/CyclomaticComplexity:
   Max: 30
 
@@ -22,3 +22,9 @@ Metrics/PerceivedComplexity:
 
 Metrics/MethodLength:
   Max: 60
+
+Metrics/ClassLength:
+  Max: 250
+
+Metrics/AbcSize:
+  Max: 50
