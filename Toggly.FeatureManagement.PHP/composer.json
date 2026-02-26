@@ -35,6 +35,7 @@
     "require-dev": {
         "illuminate/cache": "^11.47",
         "illuminate/contracts": "^11.0",
+        "mongodb/mongodb": "^1.15",
         "phpunit/phpunit": "^9.0|^10.0",
         "textalk/websocket": "^1.6"
     },

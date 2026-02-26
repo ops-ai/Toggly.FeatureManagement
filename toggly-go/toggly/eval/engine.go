@@ -127,4 +127,3 @@ func asBool(params map[string]any, key string) (bool, bool) {
 		return false, false
 	}
 }
-

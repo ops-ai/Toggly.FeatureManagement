@@ -55,7 +55,7 @@ jobs:
       - name: Install dependencies
         working-directory: Toggly.FeatureManagement.PHP
         run: composer update --prefer-dist --no-progress --no-interaction --prefer-stable
-      
+
       - name: Validate composer.json
         working-directory: Toggly.FeatureManagement.PHP
         run: composer validate --strict
