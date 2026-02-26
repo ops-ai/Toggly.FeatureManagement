@@ -2,8 +2,9 @@ import { Toggly } from '../lib/toggly';
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
-(appKey ? describe : describe.skip)('Smoke test', () => {
+describe('Smoke test', () => {
   beforeAll(async () => {
+    if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_FRONTEND is not configured — set this env var to run smoke tests');
     await Toggly.init({
       appKey: appKey!,
       environment: 'Production',

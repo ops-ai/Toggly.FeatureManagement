@@ -4,8 +4,9 @@ import { createTogglyClient } from '../src/client.js';
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_BACKEND;
 
-describe.skipIf(!appKey)('WebSocket smoke test', () => {
+describe('WebSocket smoke test', () => {
   it('connects via WebSocket and receives live updates', async () => {
+    if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_BACKEND is not configured — set this env var to run smoke tests');
     const client = createTogglyClient({
       appKey: appKey!,
       environment: 'Production',

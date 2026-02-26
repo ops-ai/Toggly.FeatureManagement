@@ -4,8 +4,9 @@ import WebSocket from 'ws';
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
-describe.skipIf(!appKey)('WebSocket smoke test', () => {
+describe('WebSocket smoke test', () => {
   it('connects and receives initial definitions message', async () => {
+    if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_FRONTEND is not configured — set this env var to run smoke tests');
     const ws = new WebSocket(`wss://definitions.toggly.io/${appKey!}/ws`);
 
     const message = await new Promise<string>((resolve, reject) => {
