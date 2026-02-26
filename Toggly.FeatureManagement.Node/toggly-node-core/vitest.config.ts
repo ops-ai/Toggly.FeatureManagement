@@ -1,10 +1,11 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, configDefaults } from 'vitest/config'
 
 export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    exclude: [...configDefaults.exclude, '**/smoke*.test.ts', '**/smoke*.spec.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],
