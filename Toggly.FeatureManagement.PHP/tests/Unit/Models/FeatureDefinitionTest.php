@@ -14,47 +14,40 @@ class FeatureDefinitionTest extends TestCase
     {
         $data = [
             'featureKey' => 'test-feature',
-            'enabled' => true,
-            'requiresContext' => false,
             'filters' => []
         ];
 
-        $definition = FeatureDefinition::fromArray($data);
-        
+        $definition = new FeatureDefinition($data);
+
         $this->assertInstanceOf(FeatureDefinition::class, $definition);
-        $this->assertEquals('test-feature', $definition->getFeatureKey());
-        $this->assertTrue($definition->isEnabled());
+        $this->assertEquals('test-feature', $definition->featureKey);
     }
 
     public function testFeatureDefinitionWithFilters(): void
     {
         $data = [
             'featureKey' => 'filtered-feature',
-            'enabled' => true,
-            'requiresContext' => true,
             'filters' => [
-                ['type' => 'UserClaims', 'settings' => ['role' => 'admin']]
+                ['name' => 'AlwaysOn', 'parameters' => []]
             ]
         ];
 
-        $definition = FeatureDefinition::fromArray($data);
-        
-        $this->assertTrue($definition->requiresContext());
-        $this->assertNotEmpty($definition->getFilters());
-        $this->assertCount(1, $definition->getFilters());
+        $definition = new FeatureDefinition($data);
+
+        $this->assertNotEmpty($definition->filters);
+        $this->assertCount(1, $definition->filters);
     }
 
-    public function testDisabledFeature(): void
+    public function testFeatureDefinitionSecuredFeature(): void
     {
         $data = [
-            'featureKey' => 'disabled-feature',
-            'enabled' => false,
-            'requiresContext' => false,
+            'featureKey' => 'secured-feature',
+            'securedFeature' => true,
             'filters' => []
         ];
 
-        $definition = FeatureDefinition::fromArray($data);
-        
-        $this->assertFalse($definition->isEnabled());
+        $definition = new FeatureDefinition($data);
+
+        $this->assertTrue($definition->securedFeature);
     }
 }
