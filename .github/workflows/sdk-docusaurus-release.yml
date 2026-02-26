@@ -98,6 +98,12 @@ jobs:
             echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
       - name: Build
         run: npm run build
 

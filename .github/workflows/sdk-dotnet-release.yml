@@ -61,6 +61,7 @@ jobs:
             6.0.x
             8.0.x
             9.0.x
+            10.0.x
 
       - name: Restore dependencies
         working-directory: ${{ env.SDK_ROOT }}
@@ -73,7 +74,6 @@ jobs:
       - name: Run tests
         working-directory: ${{ env.SDK_ROOT }}
         run: dotnet test Toggly.FeatureManagement.sln -c Release --no-build
-        continue-on-error: true
 
   publish:
     needs: build-and-test
@@ -132,6 +132,7 @@ jobs:
             6.0.x
             8.0.x
             9.0.x
+            10.0.x
 
       - name: Restore dependencies
         if: steps.should_publish.outputs.publish == 'true'
@@ -220,7 +221,7 @@ jobs:
 
             ### Requirements
 
-            - .NET Standard 2.1 / .NET Core 3.1 / .NET 5.0–9.0
+            - .NET Standard 2.1 / .NET Core 3.1 / .NET 5.0–10.0
           prerelease: ${{ github.event.inputs.prerelease }}
           generate_release_notes: true
         env:
