@@ -33,10 +33,9 @@ module Toggly
 
       def extract_identity(user)
         return nil unless user
+        return unless @config.identity_method && user.respond_to?(@config.identity_method)
 
-        if @config.identity_method && user.respond_to?(@config.identity_method)
-          user.public_send(@config.identity_method)&.to_s
-        end
+        user.public_send(@config.identity_method)&.to_s
       end
 
       def extract_groups(user)
