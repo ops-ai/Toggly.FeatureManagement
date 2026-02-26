@@ -183,5 +183,6 @@ module Toggly
 
       hash.transform_keys { |k| k.is_a?(String) ? k.to_sym : k }
     end
+    private_class_method :symbolize_keys
   end
 end

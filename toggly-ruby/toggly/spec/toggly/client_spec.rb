@@ -95,7 +95,6 @@ RSpec.describe Toggly::Client do
 
       it "evaluates targeting rules" do
         beta_context = Toggly::Context.new(identity: "user-1", groups: ["beta"])
-        standard_context = Toggly::Context.new(identity: "user-2", groups: ["standard"])
 
         expect(client.enabled?("targeted-feature", context: beta_context)).to be true
         # Non-matching group falls through to default (enabled since feature.enabled=true)
@@ -243,7 +242,7 @@ RSpec.describe Toggly::Client do
     it "saves and loads from snapshot" do
       memory_provider = Toggly::SnapshotProviders::Memory.new
 
-      client = described_class.new(
+      _client = described_class.new(
         app_key: app_key,
         environment: environment,
         disable_background_refresh: true,

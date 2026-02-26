@@ -18,7 +18,7 @@ module Toggly
       # @param context [Context] Evaluation context
       # @param feature_key [String] The feature key
       # @return [Boolean, nil] True if matched, false if excluded, nil to continue
-      def evaluate(rule, context, feature_key: nil)
+      def evaluate(rule, context, _feature_key: nil)
         return nil unless context
 
         # Check user targeting

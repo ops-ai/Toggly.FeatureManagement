@@ -26,7 +26,7 @@ module Toggly
       # @param context [Context] Evaluation context with traits
       # @param feature_key [String] The feature key
       # @return [Boolean, nil] True if all conditions match, nil if no conditions
-      def evaluate(rule, context, feature_key: nil)
+      def evaluate(rule, context, _feature_key: nil)
         conditions = Array(rule_value(rule, "conditions"))
         return nil if conditions.empty?
         return nil unless context

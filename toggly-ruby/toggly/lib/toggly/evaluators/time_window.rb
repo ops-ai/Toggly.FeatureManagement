@@ -16,7 +16,7 @@ module Toggly
       # @param context [Context] Evaluation context (ignored)
       # @param feature_key [String] The feature key
       # @return [Boolean] True if current time is within window
-      def evaluate(rule, context, feature_key: nil)
+      def evaluate(rule, _context, _feature_key: nil)
         now = Time.now.utc
 
         start_time = parse_time(

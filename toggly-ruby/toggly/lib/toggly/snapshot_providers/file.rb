@@ -14,6 +14,7 @@ module Toggly
 
       # @param path [String] Path to the snapshot file
       def initialize(path:)
+        super()
         @path = path
         @mutex = Mutex.new
       end
@@ -64,7 +65,7 @@ module Toggly
       # Clear the snapshot file
       def clear
         @mutex.synchronize do
-          ::File.delete(@path) if ::File.exist?(@path)
+          FileUtils.rm_f(@path)
         end
       rescue StandardError => e
         raise SnapshotError, "Failed to clear snapshot: #{e.message}"

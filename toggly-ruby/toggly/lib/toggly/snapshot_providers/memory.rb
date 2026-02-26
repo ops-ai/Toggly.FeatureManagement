@@ -7,6 +7,7 @@ module Toggly
     # Useful for testing or when persistence is not needed.
     class Memory < Base
       def initialize
+        super()
         @data = nil
         @mutex = Mutex.new
       end

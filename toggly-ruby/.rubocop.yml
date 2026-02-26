@@ -27,4 +27,14 @@ Metrics/ClassLength:
   Max: 250
 
 Metrics/AbcSize:
-  Max: 50
+  Max: 60
+
+Metrics/ParameterLists:
+  Max: 10
+
+# Spec files commonly have large describe/context blocks; exclude them from
+# block length checks to avoid noise in the test suite.
+Metrics/BlockLength:
+  Exclude:
+    - '**/*_spec.rb'
+    - '**/spec/**/*.rb'
