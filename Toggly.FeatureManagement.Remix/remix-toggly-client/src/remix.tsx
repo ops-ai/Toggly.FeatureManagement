@@ -2,7 +2,10 @@
  * Remix-specific utilities for Toggly
  */
 
-import { useLoaderData, useRouteLoaderData, type SerializeFrom } from '@remix-run/react';
+import { useLoaderData, useRouteLoaderData } from '@remix-run/react';
+
+// SerializeFrom was removed in Remix v2 — define a compatible alias
+type SerializeFrom<T> = T;
 import {
   TOGGLY_LOADER_KEY,
 } from '@ops-ai/remix-toggly-core';
