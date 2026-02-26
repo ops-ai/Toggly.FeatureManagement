@@ -48,7 +48,13 @@ steps:
     packageType: 'sdk'
     version: 9.x
     performMultiLevelLookup: true
-    includePreviewVersions: true # Required for preview versions
+
+- task: UseDotNet@2
+  inputs:
+    packageType: 'sdk'
+    version: 10.x
+    performMultiLevelLookup: true
+    includePreviewVersions: true
 
 - task: DotNetCoreCLI@2
   displayName: 'dotnet build'
