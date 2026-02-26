@@ -36,6 +36,7 @@ module Toggly
       # @param key_prefix [String] Prefix for Redis keys
       # @param ttl [Integer, nil] TTL in seconds (nil = no expiration)
       def initialize(redis:, key_prefix: "toggly", ttl: nil)
+        super()
         @redis = redis
         @key_prefix = key_prefix
         @ttl = ttl
@@ -96,7 +97,7 @@ module Toggly
       def exists?
         result = with_redis { |redis| redis.exists?(snapshot_key) }
         # Handle both Redis 4.x (returns Integer) and 5.x (returns Boolean)
-        result.is_a?(Integer) ? result > 0 : result
+        result.is_a?(Integer) ? result.positive? : result
       rescue StandardError
         false
       end
@@ -106,7 +107,7 @@ module Toggly
       # @return [Integer, nil] Remaining TTL in seconds, or nil if no TTL
       def remaining_ttl
         ttl = with_redis { |redis| redis.ttl(snapshot_key) }
-        return nil if ttl.nil? || ttl < 0
+        return nil if ttl.nil? || ttl.negative?
 
         ttl
       rescue StandardError

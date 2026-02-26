@@ -11,6 +11,7 @@ Style/StringLiteralsInInterpolation:
 Naming/FileName:
   Exclude:
     - '**/lib/toggly-rails.rb'
+    - '**/lib/toggly-cache.rb'
 
 # These cops have inherent complexity due to protocol/evaluation logic.
 # Thresholds are relaxed to avoid forcing premature refactoring.
