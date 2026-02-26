@@ -20,7 +20,7 @@ RSpec.describe Toggly::Context do
     end
 
     it "converts groups to strings" do
-      context = described_class.new(groups: [:admin, :user])
+      context = described_class.new(groups: %i[admin user])
       expect(context.groups).to eq(%w[admin user])
     end
 

@@ -50,7 +50,7 @@ module Toggly
     )
       @feature_key = feature_key.to_s
       @feature_type = validate_type(feature_type)
-      @enabled = !!enabled
+      @enabled = enabled ? true : false
       @rules = Array(rules)
       @metadata = metadata || {}
       @description = description

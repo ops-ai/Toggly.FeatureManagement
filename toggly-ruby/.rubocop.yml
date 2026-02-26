@@ -38,3 +38,13 @@ Metrics/BlockLength:
   Exclude:
     - '**/*_spec.rb'
     - '**/spec/**/*.rb'
+
+# Evaluator interface methods (evaluate) return booleans but follow a
+# consistent naming convention that doesn't use the ? suffix.
+Naming/PredicateMethod:
+  Enabled: false
+
+# Keyword arguments that are part of a public interface but unused in
+# specific implementations (e.g., feature_key in base evaluators).
+Lint/UnusedMethodArgument:
+  AllowUnusedKeywordArguments: true

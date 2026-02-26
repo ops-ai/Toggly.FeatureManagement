@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe "Toggly smoke tests" do
-  let(:app_key) { ENV["TOGGLY_SMOKE_APP_KEY_BACKEND"] }
+  let(:app_key) { ENV.fetch("TOGGLY_SMOKE_APP_KEY_BACKEND", nil) }
 
   before do
     skip "TOGGLY_SMOKE_APP_KEY_BACKEND is not set" if app_key.nil? || app_key.empty?
