@@ -61,6 +61,7 @@ jobs:
             6.0.x
             8.0.x
             9.0.x
+            10.0.x
 
       - name: Restore dependencies
         working-directory: ${{ env.SDK_ROOT }}
@@ -132,6 +133,11 @@ jobs:
             6.0.x
             8.0.x
             9.0.x
+            10.0.x
+
+      - name: Install NuGetKeyVaultSignTool
+        if: steps.should_publish.outputs.publish == 'true'
+        run: dotnet tool install --global NuGetKeyVaultSignTool
 
       - name: Restore dependencies
         if: steps.should_publish.outputs.publish == 'true'
@@ -149,6 +155,26 @@ jobs:
             -p:ContinuousIntegrationBuild=true \
             --output ./nupkgs
 
+      - name: Sign NuGet packages
+        if: steps.should_publish.outputs.publish == 'true'
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          NuGetKeyVaultSignTool sign ./nupkgs/*.nupkg \
+            --file-digest sha256 \
+            --timestamp-rfc3161 http://timestamp.globalsign.com/tsa/r6advanced1 \
+            --timestamp-digest sha256 \
+            --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
+            --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
+            --azure-key-vault-tenant-id "$AZURE_KEY_VAULT_TENANT_ID" \
+            --azure-key-vault-client-secret "$AZURE_KEY_VAULT_CLIENT_SECRET" \
+            --azure-key-vault-certificate "$AZURE_KEY_VAULT_CERTIFICATE"
+        env:
+          AZURE_KEY_VAULT_URL: ${{ secrets.NUGET_SIGN_VAULT_URL }}
+          AZURE_KEY_VAULT_CLIENT_ID: ${{ secrets.NUGET_SIGN_CLIENT_ID }}
+          AZURE_KEY_VAULT_CLIENT_SECRET: ${{ secrets.NUGET_SIGN_CLIENT_SECRET }}
+          AZURE_KEY_VAULT_TENANT_ID: ${{ secrets.NUGET_SIGN_TENANT_ID }}
+          AZURE_KEY_VAULT_CERTIFICATE: ${{ secrets.NUGET_SIGN_CERTIFICATE }}
+
       - name: Publish to NuGet
         if: steps.should_publish.outputs.publish == 'true'
         working-directory: ${{ env.SDK_ROOT }}
@@ -157,7 +183,6 @@ jobs:
             --api-key ${{ secrets.NUGET_API_KEY }} \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
-        continue-on-error: true
 
   release:
     needs: publish
