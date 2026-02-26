@@ -41,12 +41,9 @@ module Toggly
 
       def extract_groups(user)
         return [] unless user && @config.groups_method
+        return [] unless user.respond_to?(@config.groups_method)
 
-        if user.respond_to?(@config.groups_method)
-          Array(user.public_send(@config.groups_method)).map(&:to_s)
-        else
-          []
-        end
+        Array(user.public_send(@config.groups_method)).map(&:to_s)
       end
 
       def extract_traits(request, user)
@@ -61,12 +58,10 @@ module Toggly
 
         # Add custom trait extractors
         @config.trait_extractors.each do |name, extractor|
-          begin
-            value = extractor.call(request, user)
-            traits[name.to_s] = value unless value.nil?
-          rescue StandardError
-            # Ignore errors in trait extraction
-          end
+          value = extractor.call(request, user)
+          traits[name.to_s] = value unless value.nil?
+        rescue StandardError
+          # Ignore errors in trait extraction
         end
 
         traits

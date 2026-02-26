@@ -7,7 +7,7 @@ require_relative "toggly/rails/context_builder"
 require_relative "toggly/rails/middleware"
 require_relative "toggly/rails/controller_concern"
 require_relative "toggly/rails/view_helpers"
-require_relative "toggly/rails/railtie" if defined?(::Rails::Railtie)
+require_relative "toggly/rails/railtie" if defined?(Rails::Railtie)
 
 module Toggly
   # Rails integration for Toggly feature flags.

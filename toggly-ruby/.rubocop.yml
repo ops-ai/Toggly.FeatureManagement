@@ -38,6 +38,13 @@ Metrics/BlockLength:
   Exclude:
     - '**/*_spec.rb'
     - '**/spec/**/*.rb'
+    - '**/*.rake'
+
+Metrics/BlockNesting:
+  Max: 4
+
+Layout/LineLength:
+  Max: 160
 
 # Evaluator interface methods (evaluate) return booleans but follow a
 # consistent naming convention that doesn't use the ? suffix.
@@ -48,3 +55,9 @@ Naming/PredicateMethod:
 # specific implementations (e.g., feature_key in base evaluators).
 Lint/UnusedMethodArgument:
   AllowUnusedKeywordArguments: true
+
+# OpenStruct is acceptable in test helpers and specs.
+Style/OpenStructUse:
+  Exclude:
+    - '**/spec/**/*.rb'
+    - '**/spec_helper.rb'
