@@ -36,7 +36,7 @@ jobs:
           php-version: ${{ matrix.php-version }}
           coverage: xdebug
           tools: composer:v2
-          extensions: mbstring, xml, ctype, json
+          extensions: mbstring, xml, ctype, json, mongodb
       
       - name: Get Composer cache directory
         id: composer-cache
@@ -73,7 +73,6 @@ jobs:
       - name: Run PHPUnit tests with coverage
         working-directory: Toggly.FeatureManagement.PHP
         run: vendor/bin/phpunit --coverage-clover=coverage.xml --log-junit=test-results.xml --coverage-text
-        continue-on-error: true
       
       - name: Upload coverage (PHP 8.3 only)
         if: matrix.php-version == '8.3'

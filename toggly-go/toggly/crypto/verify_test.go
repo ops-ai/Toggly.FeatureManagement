@@ -21,8 +21,8 @@ func TestVerifySignedDefinitions_OK(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	xBytes := pad32(priv.PublicKey.X.Bytes())
-	yBytes := pad32(priv.PublicKey.Y.Bytes())
+	xBytes := pad32(priv.X.Bytes())
+	yBytes := pad32(priv.Y.Bytes())
 	kid := computeKid(xBytes, yBytes)
 
 	jwk := definitions.JWK{
@@ -63,8 +63,8 @@ func TestVerifySignedDefinitions_AllowedKid(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	xBytes := pad32(priv.PublicKey.X.Bytes())
-	yBytes := pad32(priv.PublicKey.Y.Bytes())
+	xBytes := pad32(priv.X.Bytes())
+	yBytes := pad32(priv.Y.Bytes())
 	kid := computeKid(xBytes, yBytes)
 
 	jwk := definitions.JWK{
@@ -107,8 +107,8 @@ func TestVerifySignedDefinitions_BadSignature(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	xBytes := pad32(priv.PublicKey.X.Bytes())
-	yBytes := pad32(priv.PublicKey.Y.Bytes())
+	xBytes := pad32(priv.X.Bytes())
+	yBytes := pad32(priv.Y.Bytes())
 	kid := computeKid(xBytes, yBytes)
 
 	jwk := definitions.JWK{

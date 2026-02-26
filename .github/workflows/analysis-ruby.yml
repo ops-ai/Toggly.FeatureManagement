@@ -169,7 +169,6 @@ jobs:
       - name: Run RuboCop on toggly
         working-directory: ${{ env.SDK_ROOT }}/toggly
         run: bundle exec rubocop --parallel
-        continue-on-error: true
 
       - name: Install toggly-rails dependencies
         working-directory: ${{ env.SDK_ROOT }}/toggly-rails
@@ -178,7 +177,6 @@ jobs:
       - name: Run RuboCop on toggly-rails
         working-directory: ${{ env.SDK_ROOT }}/toggly-rails
         run: bundle exec rubocop --parallel
-        continue-on-error: true
 
       - name: Install toggly-cache dependencies
         working-directory: ${{ env.SDK_ROOT }}/toggly-cache
@@ -187,7 +185,6 @@ jobs:
       - name: Run RuboCop on toggly-cache
         working-directory: ${{ env.SDK_ROOT }}/toggly-cache
         run: bundle exec rubocop --parallel
-        continue-on-error: true
 
   sonar:
     name: SonarQube Analysis

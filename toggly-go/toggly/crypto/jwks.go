@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/sha1"
@@ -47,12 +48,18 @@ func ValidateAndParseES256Key(jwk definitions.JWK, allowedKid map[string]struct{
 		return nil, fmt.Errorf("invalid kid: expected %q, got %q", computed, jwk.Kid)
 	}
 
+	// Use crypto/ecdh to validate the point is on P-256 (replaces deprecated elliptic.Curve.IsOnCurve).
+	uncompressed := make([]byte, 1+len(xBytes)+len(yBytes))
+	uncompressed[0] = 0x04
+	copy(uncompressed[1:], xBytes)
+	copy(uncompressed[1+len(xBytes):], yBytes)
+	if _, err := ecdh.P256().NewPublicKey(uncompressed); err != nil {
+		return nil, fmt.Errorf("point not on P-256: %w", err)
+	}
+
 	curve := elliptic.P256()
 	x := new(big.Int).SetBytes(xBytes)
 	y := new(big.Int).SetBytes(yBytes)
-	if !curve.IsOnCurve(x, y) {
-		return nil, fmt.Errorf("point not on P-256")
-	}
 
 	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
 }

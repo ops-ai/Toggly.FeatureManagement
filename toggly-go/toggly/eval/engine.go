@@ -2,7 +2,6 @@ package eval
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"strconv"
 	"time"
@@ -129,10 +128,3 @@ func asBool(params map[string]any, key string) (bool, bool) {
 	}
 }
 
-func required(params map[string]any, key string) (any, error) {
-	v, ok := params[key]
-	if !ok {
-		return nil, fmt.Errorf("missing parameter %q", key)
-	}
-	return v, nil
-}
