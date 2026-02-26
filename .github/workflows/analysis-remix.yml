@@ -58,7 +58,6 @@ jobs:
       - name: Type check
         working-directory: ${{ env.SDK_ROOT }}/${{ matrix.package }}
         run: npm run typecheck
-        continue-on-error: true
 
       - name: Build
         working-directory: ${{ env.SDK_ROOT }}/${{ matrix.package }}
@@ -67,7 +66,6 @@ jobs:
       - name: Run tests with coverage
         working-directory: ${{ env.SDK_ROOT }}/${{ matrix.package }}
         run: npm run test:coverage
-        continue-on-error: true
 
       - name: Upload coverage (Node 20 only)
         if: matrix.node-version == '20.x'
@@ -127,7 +125,7 @@ jobs:
         timeout-minutes: 2
         working-directory: ${{ env.SDK_ROOT }}/remix-toggly-server
         env:
-          TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
+          TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
         run: npm ci && npx jest tests/smoke.spec.ts tests/smoke-ws.spec.ts --runInBand --forceExit
 
       - name: Run client smoke test

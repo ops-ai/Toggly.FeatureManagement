@@ -112,12 +112,10 @@ jobs:
       - name: Build package (if needed)
         working-directory: ${{ matrix.path }}
         run: npm run build || echo "No build script configured"
-        continue-on-error: true
 
       - name: Run TypeScript type check
         working-directory: ${{ matrix.path }}
         run: npm run typecheck || echo "No typecheck script configured"
-        continue-on-error: true
 
       - name: Run linter
         if: matrix.has-lint == true
@@ -141,22 +139,18 @@ jobs:
           if-no-files-found: ignore
 
   test-node-server:
-    name: Test Node.js Server ${{ matrix.package }}
+    name: Test Node.js Server ${{ matrix.config.package }} (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - package: Core
-            dir: toggly-node-core
-          - package: Express
-            dir: toggly-express
-          - package: Fastify
-            dir: toggly-fastify
-          - package: Hono
-            dir: toggly-hono
-          - package: Koa
-            dir: toggly-koa
+        node-version: ['18.x', '20.x', '22.x']
+        config:
+          - { package: Core, dir: toggly-node-core }
+          - { package: Express, dir: toggly-express }
+          - { package: Fastify, dir: toggly-fastify }
+          - { package: Hono, dir: toggly-hono }
+          - { package: Koa, dir: toggly-koa }
 
     steps:
       - name: Checkout code
@@ -167,7 +161,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: ${{ matrix.node-version }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -195,17 +189,17 @@ jobs:
         run: pnpm -r build
 
       - name: Run tests with coverage
-        working-directory: Toggly.FeatureManagement.Node/${{ matrix.dir }}
+        working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: pnpm test:coverage
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && matrix.node-version == '20.x'
         with:
-          name: coverage-Node-${{ matrix.package }}
+          name: coverage-Node-${{ matrix.config.package }}
           path: |
-            Toggly.FeatureManagement.Node/${{ matrix.dir }}/coverage/
-            Toggly.FeatureManagement.Node/${{ matrix.dir }}/coverage/lcov.info
+            Toggly.FeatureManagement.Node/${{ matrix.config.dir }}/coverage/
+            Toggly.FeatureManagement.Node/${{ matrix.config.dir }}/coverage/lcov.info
           retention-days: 7
           if-no-files-found: ignore
 

@@ -107,6 +107,9 @@ jobs:
       - name: Build library
         run: npm run build-lib
 
+      - name: Run tests
+        run: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless
+
       - name: Publish to npm
         working-directory: Toggly.FeatureManagement.Angular/dist/ngx-feature-flags-toggly
         run: npm publish --provenance --access public

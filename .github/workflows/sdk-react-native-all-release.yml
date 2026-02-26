@@ -122,12 +122,30 @@ jobs:
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add ${{ env.SDK_ROOT }}/core/package.json ${{ env.SDK_ROOT }}/core/package-lock.json
           git commit -S -m "Bumped @ops-ai/react-native-toggly-core to ${{ steps.version.outputs.new_version }} [skip ci]"
-          git pull --rebase --autostash origin develop
-          git push origin develop
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
+              sleep 2
+            fi
+          done
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
 
   # Build and publish dependent packages in parallel after core
   publish-react-native:
-    if: ${{ (github.event.inputs.packages == 'all' || github.event.inputs.packages == 'react-native') && always() }}
+    if: ${{ (github.event.inputs.packages == 'all' || github.event.inputs.packages == 'react-native') && (needs.publish-core.result == 'success' || needs.publish-core.result == 'skipped') }}
     needs: [publish-core]
     runs-on: ubuntu-latest
     environment: npm-publish
@@ -220,11 +238,29 @@ jobs:
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add ${{ env.SDK_ROOT }}/react-native/package.json ${{ env.SDK_ROOT }}/react-native/package-lock.json
           git commit -S -m "Bumped @ops-ai/react-native-toggly to ${{ steps.version.outputs.new_version }} [skip ci]"
-          git pull --rebase --autostash origin develop
-          git push origin develop
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
+              sleep 2
+            fi
+          done
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
 
   publish-storage-async:
-    if: ${{ (github.event.inputs.packages == 'all' || github.event.inputs.packages == 'storage-async') && always() }}
+    if: ${{ (github.event.inputs.packages == 'all' || github.event.inputs.packages == 'storage-async') && (needs.publish-core.result == 'success' || needs.publish-core.result == 'skipped') }}
     needs: [publish-core]
     runs-on: ubuntu-latest
     environment: npm-publish
@@ -317,11 +353,29 @@ jobs:
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add ${{ env.SDK_ROOT }}/storage-async/package.json ${{ env.SDK_ROOT }}/storage-async/package-lock.json
           git commit -S -m "Bumped @ops-ai/react-native-toggly-storage-async to ${{ steps.version.outputs.new_version }} [skip ci]"
-          git pull --rebase --autostash origin develop
-          git push origin develop
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
+              sleep 2
+            fi
+          done
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
 
   publish-storage-mmkv:
-    if: ${{ (github.event.inputs.packages == 'all' || github.event.inputs.packages == 'storage-mmkv') && always() }}
+    if: ${{ (github.event.inputs.packages == 'all' || github.event.inputs.packages == 'storage-mmkv') && (needs.publish-core.result == 'success' || needs.publish-core.result == 'skipped') }}
     needs: [publish-core]
     runs-on: ubuntu-latest
     environment: npm-publish
@@ -414,8 +468,26 @@ jobs:
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add ${{ env.SDK_ROOT }}/storage-mmkv/package.json ${{ env.SDK_ROOT }}/storage-mmkv/package-lock.json
           git commit -S -m "Bumped @ops-ai/react-native-toggly-storage-mmkv to ${{ steps.version.outputs.new_version }} [skip ci]"
-          git pull --rebase --autostash origin develop
-          git push origin develop
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
+              sleep 2
+            fi
+          done
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
 
   # Summary job
   summary:

@@ -68,12 +68,10 @@ jobs:
       - name: Build package
         working-directory: ${{ matrix.path }}
         run: npm run build || echo "No build script configured"
-        continue-on-error: true
 
       - name: Run TypeScript type check
         working-directory: ${{ matrix.path }}
         run: npm run typecheck || echo "No typecheck script configured"
-        continue-on-error: true
 
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}
