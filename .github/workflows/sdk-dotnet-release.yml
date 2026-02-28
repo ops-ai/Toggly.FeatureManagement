@@ -186,12 +186,23 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}
         run: dotnet restore ${{ matrix.project }}/${{ matrix.project }}.csproj
 
+      - name: Build project for packing
+        if: steps.should_publish.outputs.publish == 'true'
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          dotnet build ${{ matrix.project }}/${{ matrix.project }}.csproj \
+            -c Release \
+            --no-restore \
+            -p:Version=${{ needs.validate.outputs.version }}
+
       - name: Pack NuGet package
         if: steps.should_publish.outputs.publish == 'true'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           dotnet pack ${{ matrix.project }}/${{ matrix.project }}.csproj \
             -c Release \
+            --no-build \
+            --no-restore \
             -p:Version=${{ needs.validate.outputs.version }} \
             -p:PackageVersion=${{ needs.validate.outputs.version }} \
             -p:ContinuousIntegrationBuild=true \
