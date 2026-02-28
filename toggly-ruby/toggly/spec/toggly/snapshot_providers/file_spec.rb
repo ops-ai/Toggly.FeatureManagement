@@ -34,7 +34,7 @@ RSpec.describe Toggly::SnapshotProviders::File do
       provider.save(definitions)
 
       # Read raw file to verify JSON
-      content = ::File.read(temp_file.path)
+      content = File.read(temp_file.path)
       data = JSON.parse(content)
 
       expect(data["definitions"]).to be_an(Array)
@@ -69,7 +69,7 @@ RSpec.describe Toggly::SnapshotProviders::File do
 
   describe "error handling" do
     it "raises SnapshotError on invalid JSON" do
-      ::File.write(temp_file.path, "invalid json")
+      File.write(temp_file.path, "invalid json")
 
       expect { provider.load }.to raise_error(Toggly::SnapshotError, /parse/)
     end
@@ -84,8 +84,8 @@ RSpec.describe Toggly::SnapshotProviders::File do
       # This tests that if write fails, original file is preserved
       provider.save(definitions)
 
-      expect(::File.exist?(temp_file.path)).to be true
-      expect(::File.exist?("#{temp_file.path}.tmp")).to be false
+      expect(File.exist?(temp_file.path)).to be true
+      expect(File.exist?("#{temp_file.path}.tmp")).to be false
     end
   end
 end

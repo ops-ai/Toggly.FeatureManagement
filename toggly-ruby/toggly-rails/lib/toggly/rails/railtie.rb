@@ -27,17 +27,15 @@ module Toggly
 
       # Configure Toggly after Rails initializers have run
       config.after_initialize do
-        if Toggly::Rails.configuration.nil?
-          # Auto-configure if credentials are present
-          if defined?(::Rails) && ::Rails.application
-            credentials = ::Rails.application.credentials
-            if credentials.respond_to?(:toggly) && credentials.toggly
-              Toggly::Rails.configure do |config|
-                config.app_key = credentials.toggly[:app_key]
-                config.environment = credentials.toggly[:environment] || (::Rails.env.production? ? "Production" : "Staging")
-              end
-            end
-          end
+        next unless Toggly::Rails.configuration.nil?
+        next unless defined?(::Rails) && ::Rails.application
+
+        credentials = ::Rails.application.credentials
+        next unless credentials.respond_to?(:toggly) && credentials.toggly
+
+        Toggly::Rails.configure do |config|
+          config.app_key = credentials.toggly[:app_key]
+          config.environment = credentials.toggly[:environment] || (::Rails.env.production? ? "Production" : "Staging")
         end
       end
 

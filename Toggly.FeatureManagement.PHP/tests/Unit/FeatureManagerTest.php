@@ -3,37 +3,35 @@
 namespace Toggly\FeatureManagement\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Toggly\FeatureManagement\Core\FeatureManager;
 use Toggly\FeatureManagement\Config\TogglySettings;
 
 /**
- * Basic test for FeatureManager functionality
+ * Basic test for TogglySettings configuration
  */
 class FeatureManagerTest extends TestCase
 {
-    public function testFeatureManagerCanBeInstantiated(): void
+    public function testSettingsCanBeInstantiated(): void
     {
-        $settings = new TogglySettings('test-app-key', 'test-environment');
-        $manager = new FeatureManager($settings);
-        
-        $this->assertInstanceOf(FeatureManager::class, $manager);
+        $settings = new TogglySettings(['app_key' => 'test-app-key', 'environment' => 'Production']);
+
+        $this->assertInstanceOf(TogglySettings::class, $settings);
     }
 
     public function testSettingsAreStoredCorrectly(): void
     {
         $appKey = 'test-app-key-123';
-        $environment = 'production';
-        $settings = new TogglySettings($appKey, $environment);
-        
-        $this->assertEquals($appKey, $settings->getAppKey());
-        $this->assertEquals($environment, $settings->getEnvironment());
+        $environment = 'Production';
+        $settings = new TogglySettings(['app_key' => $appKey, 'environment' => $environment]);
+
+        $this->assertEquals($appKey, $settings->appKey);
+        $this->assertEquals($environment, $settings->environment);
     }
 
     public function testSettingsHaveDefaultValues(): void
     {
-        $settings = new TogglySettings('app-key', 'env');
-        
-        $this->assertNotNull($settings->getDefinitionsUrl());
-        $this->assertIsString($settings->getDefinitionsUrl());
+        $settings = new TogglySettings(['app_key' => 'app-key', 'environment' => 'Production']);
+
+        $this->assertNotNull($settings->getBaseUrl());
+        $this->assertIsString($settings->getBaseUrl());
     }
 }

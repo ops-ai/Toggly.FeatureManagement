@@ -40,8 +40,9 @@ function fetchLiveFlags(appKey: string): Promise<Record<string, boolean>> {
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
-(appKey ? describe : describe.skip)('Smoke test', () => {
+describe('Smoke test', () => {
   it('evaluates live flags through client context', async () => {
+    if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_FRONTEND is not configured — set this env var to run smoke tests');
     const flags = await fetchLiveFlags(appKey!);
     const serverContext: ServerFeatureContext = {
       flags,

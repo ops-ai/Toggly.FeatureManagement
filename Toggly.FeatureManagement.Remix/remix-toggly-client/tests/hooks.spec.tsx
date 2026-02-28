@@ -185,6 +185,22 @@ describe('useFeatureGate', () => {
 
     expect(result.current).toBe(false);
   });
+
+  it('should default to "all" requirement when not specified', () => {
+    const serverContext: ServerFeatureContext = {
+      flags: { feature1: true, feature2: false },
+      fetchedAt: Date.now(),
+    };
+
+    // Called without requirement arg — uses default 'all'
+    const { result } = renderHook(
+      () => useFeatureGate(['feature1', 'feature2']),
+      { wrapper: createWrapper(serverContext) }
+    );
+
+    // 'all' requires both true — feature2 is false, so result is false
+    expect(result.current).toBe(false);
+  });
 });
 
 describe('useFeatureFlags', () => {
@@ -358,6 +374,24 @@ describe('useFeatureRender', () => {
 
     render(<>{result.current}</>);
     expect(screen.getByText('Enabled')).toBeInTheDocument();
+  });
+
+  it('should return disabled element when feature is disabled', () => {
+    const serverContext: ServerFeatureContext = {
+      flags: { feature1: false },
+      fetchedAt: Date.now(),
+    };
+
+    const EnabledComponent = () => <div>Enabled</div>;
+    const DisabledComponent = () => <div>Disabled</div>;
+
+    const { result } = renderHook(
+      () => useFeatureRender('feature1', <EnabledComponent />, <DisabledComponent />),
+      { wrapper: createWrapper(serverContext) }
+    );
+
+    render(<>{result.current}</>);
+    expect(screen.getByText('Disabled')).toBeInTheDocument();
   });
 });
 

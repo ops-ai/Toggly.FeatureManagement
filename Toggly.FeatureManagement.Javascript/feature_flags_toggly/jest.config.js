@@ -16,4 +16,5 @@ module.exports = {
       lines: 90,
     },
   },
+  testPathIgnorePatterns: ['/node_modules/', '.*smoke.*\\.spec\\.ts$', '.*smoke.*\\.test\\.ts$'],
 };

@@ -50,10 +50,8 @@ module Toggly
         yield
       ensure
         # Restore original definitions
-        if Toggly.client
-          Toggly.client.instance_variable_get(:@mutex).synchronize do
-            Toggly.client.instance_variable_set(:@definitions, original_definitions)
-          end
+        Toggly.client&.instance_variable_get(:@mutex)&.synchronize do
+          Toggly.client.instance_variable_set(:@definitions, original_definitions)
         end
       end
 
@@ -75,10 +73,8 @@ module Toggly
 
         yield
       ensure
-        if Toggly.client
-          Toggly.client.instance_variable_get(:@mutex).synchronize do
-            Toggly.client.instance_variable_set(:@definitions, original_definitions)
-          end
+        Toggly.client&.instance_variable_get(:@mutex)&.synchronize do
+          Toggly.client.instance_variable_set(:@definitions, original_definitions)
         end
       end
 
@@ -106,19 +102,21 @@ module Toggly
         #
         # @example
         #   expect(:new_feature).to be_feature_enabled
-        RSpec::Matchers.define :be_feature_enabled do
-          match do |feature_key|
-            Toggly.enabled?(feature_key)
-          end
+        if defined?(RSpec::Matchers)
+          RSpec::Matchers.define :be_feature_enabled do
+            match do |feature_key|
+              Toggly.enabled?(feature_key)
+            end
 
-          failure_message do |feature_key|
-            "expected feature '#{feature_key}' to be enabled"
-          end
+            failure_message do |feature_key|
+              "expected feature '#{feature_key}' to be enabled"
+            end
 
-          failure_message_when_negated do |feature_key|
-            "expected feature '#{feature_key}' to be disabled"
+            failure_message_when_negated do |feature_key|
+              "expected feature '#{feature_key}' to be disabled"
+            end
           end
-        end if defined?(RSpec::Matchers)
+        end
       end
 
       # Minitest helpers

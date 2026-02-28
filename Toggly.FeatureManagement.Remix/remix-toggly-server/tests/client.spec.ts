@@ -14,6 +14,28 @@ import {
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
+// Capture WS event handlers so tests can simulate WS events
+let wsHandlers: Record<string, (...args: any[]) => void> = {};
+let wsInstance: any = null;
+
+// Mock WebSocket to prevent real connections in unit tests
+jest.mock('ws', () => {
+  return jest.fn().mockImplementation(() => {
+    wsHandlers = {};
+    const instance = {
+      on: jest.fn((event: string, handler: (...args: any[]) => void) => {
+        wsHandlers[event] = handler;
+      }),
+      close: jest.fn(),
+      removeAllListeners: jest.fn(),
+      send: jest.fn(),
+      readyState: 1, // OPEN
+    };
+    wsInstance = instance;
+    return instance;
+  });
+});
+
 describe('TogglyServerClient', () => {
   const defaultConfig: TogglyConfig = {
     appKey: 'test-app-key',
@@ -23,6 +45,14 @@ describe('TogglyServerClient', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    wsHandlers = {};
+    wsInstance = null;
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('constructor', () => {
@@ -39,10 +69,12 @@ describe('TogglyServerClient', () => {
     });
 
     it('should warn when no appKey and no featureDefaults', () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
       new TogglyServerClient({});
-      // Warning is logged internally
-      warnSpy.mockRestore();
+
+      expect(console.warn).toHaveBeenCalledWith(
+        '[Toggly]',
+        'No appKey provided and no featureDefaults set. All features will be disabled.'
+      );
     });
   });
 
@@ -114,6 +146,11 @@ describe('TogglyServerClient', () => {
       const result = await client.fetchFlags();
 
       expect(result).toEqual(featureDefaults);
+      expect(console.warn).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Failed to fetch flags, using featureDefaults.',
+        expect.any(Error)
+      );
     });
 
     it('should handle non-ok responses', async () => {
@@ -132,6 +169,24 @@ describe('TogglyServerClient', () => {
       const result = await client.fetchFlags();
 
       expect(result).toEqual(featureDefaults);
+      expect(console.warn).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Failed to fetch flags, using featureDefaults.',
+        expect.any(Error)
+      );
+    });
+
+    it('should extract flags from defs property in response', async () => {
+      const flags: FeatureFlags = { feature1: true, feature2: false };
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ defs: flags }),
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      const result = await client.fetchFlags();
+
+      expect(result).toEqual(flags);
     });
   });
 
@@ -334,8 +389,7 @@ describe('TogglyServerClient', () => {
 
       client.addHook(hook);
 
-      // Hook is registered (no direct way to verify, but won't throw)
-      expect(true).toBe(true);
+      expect(client.removeHook('test-hook')).toBe(true);
     });
 
     it('should not add duplicate hooks', () => {
@@ -345,8 +399,10 @@ describe('TogglyServerClient', () => {
       client.addHook(hook);
       client.addHook(hook);
 
-      // Should only be registered once (warning logged)
-      expect(true).toBe(true);
+      expect(console.warn).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Hook "test-hook" already registered. Skipping.'
+      );
     });
 
     it('should remove a hook', () => {
@@ -467,6 +523,401 @@ describe('TogglyServerClient', () => {
       const result = await client.isEnabled('feature1');
 
       expect(result).toBe(true);
+      expect(console.error).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Error in hook "error-hook.beforeEvaluation":',
+        expect.any(Error)
+      );
+    });
+
+    it('should handle afterEvaluation hook errors gracefully', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true }),
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      const hook: TogglyHook = {
+        getMetadata: () => ({ name: 'after-error-hook' }),
+        afterEvaluation: jest.fn().mockRejectedValue(new Error('After hook error')),
+      };
+      client.addHook(hook);
+
+      await client.init();
+      const result = await client.isEnabled('feature1');
+
+      expect(result).toBe(true);
+      expect(console.error).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Error in hook "after-error-hook.afterEvaluation":',
+        expect.any(Error)
+      );
+    });
+
+    it('should handle beforeIdentify hook errors gracefully', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      const hook: TogglyHook = {
+        getMetadata: () => ({ name: 'identify-error-hook' }),
+        beforeIdentify: jest.fn().mockRejectedValue(new Error('Before identify error')),
+      };
+      client.addHook(hook);
+
+      await client.init('user-123');
+
+      expect(console.error).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Error in hook "identify-error-hook.beforeIdentify":',
+        expect.any(Error)
+      );
+    });
+
+    it('should handle afterIdentify hook errors gracefully', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      const hook: TogglyHook = {
+        getMetadata: () => ({ name: 'after-identify-error-hook' }),
+        afterIdentify: jest.fn().mockRejectedValue(new Error('After identify error')),
+      };
+      client.addHook(hook);
+
+      await client.init('user-123');
+
+      expect(console.error).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Error in hook "after-identify-error-hook.afterIdentify":',
+        expect.any(Error)
+      );
+    });
+
+    it('should handle afterRefresh hook errors gracefully', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true }),
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      const hook: TogglyHook = {
+        getMetadata: () => ({ name: 'refresh-error-hook' }),
+        afterRefresh: jest.fn().mockRejectedValue(new Error('Refresh hook error')),
+      };
+      client.addHook(hook);
+
+      await client.init();
+
+      expect(console.error).toHaveBeenCalledWith(
+        '[Toggly]',
+        'Error in hook "refresh-error-hook.afterRefresh":',
+        expect.any(Error)
+      );
+    });
+
+    it('should skip hook methods that are not defined', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true }),
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      const minimalHook: TogglyHook = {
+        getMetadata: () => ({ name: 'minimal-hook' }),
+        // No optional methods: beforeEvaluation, afterEvaluation, beforeIdentify, afterIdentify, afterRefresh
+      };
+      client.addHook(minimalHook);
+
+      // Should complete without errors when optional hook methods are absent
+      await client.init('user-123');
+      const result = await client.isEnabled('feature1');
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('isWsConnected', () => {
+    it('should return false before init', () => {
+      const client = new TogglyServerClient(defaultConfig);
+      expect(client.isWsConnected).toBe(false);
+    });
+  });
+
+  describe('WebSocket behavior', () => {
+    const initClient = async (flags: FeatureFlags = { feature1: true }) => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(flags),
+      });
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init();
+      return client;
+    };
+
+    it('should set isWsConnected to true when open event fires', async () => {
+      const client = await initClient();
+
+      expect(client.isWsConnected).toBe(false);
+      wsHandlers['open']?.();
+      expect(client.isWsConnected).toBe(true);
+
+      client.close();
+    });
+
+    it('should refresh flags when flags-updated JSON message is received', async () => {
+      const client = await initClient();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: false }),
+      });
+
+      wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'flags-updated' })));
+      // Allow fire-and-forget fetchFlags to complete
+      await new Promise((r) => setImmediate(r));
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      client.close();
+    });
+
+    it('should refresh flags when update JSON message is received', async () => {
+      const client = await initClient();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: false }),
+      });
+
+      wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'update' })));
+      await new Promise((r) => setImmediate(r));
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      client.close();
+    });
+
+    it('should ignore ping JSON messages', async () => {
+      const client = await initClient();
+
+      wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'ping' })));
+      await new Promise((r) => setImmediate(r));
+
+      // Only the initial fetch, no refresh triggered
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      client.close();
+    });
+
+    it('should refresh flags on plain text "update" message', async () => {
+      const client = await initClient();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      wsHandlers['message']?.(Buffer.from('update'));
+      await new Promise((r) => setImmediate(r));
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      client.close();
+    });
+
+    it('should refresh flags on plain text "flags-updated" message', async () => {
+      const client = await initClient();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      wsHandlers['message']?.(Buffer.from('flags-updated'));
+      await new Promise((r) => setImmediate(r));
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      client.close();
+    });
+
+    it('should ignore unknown plain text messages', async () => {
+      const client = await initClient();
+
+      wsHandlers['message']?.(Buffer.from('heartbeat'));
+      await new Promise((r) => setImmediate(r));
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      client.close();
+    });
+
+    it('should schedule reconnect and reset wsConnected on close event', async () => {
+      jest.useFakeTimers();
+      const client = await initClient();
+
+      wsHandlers['open']?.();
+      expect(client.isWsConnected).toBe(true);
+
+      wsHandlers['close']?.();
+      expect(client.isWsConnected).toBe(false);
+
+      jest.useRealTimers();
+      client.close();
+    });
+
+    it('should log error on WebSocket error event', async () => {
+      const client = await initClient();
+
+      wsHandlers['error']?.(new Error('Connection refused'));
+
+      expect(console.error).toHaveBeenCalled();
+      client.close();
+    });
+
+    it('should not start WebSocket when no appKey is provided', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+      const client = new TogglyServerClient({
+        featureDefaults: { feature1: true },
+      });
+      await client.init();
+
+      // wsInstance should be null since no appKey was provided
+      expect(wsInstance).toBeNull();
+    });
+
+    it('should not create a second WebSocket if one already exists', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true }),
+      });
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init();
+
+      const firstWsInstance = wsInstance;
+      // Call startWebSocket again directly while this.ws is still set
+      (client as any).startWebSocket();
+
+      // wsInstance should be unchanged - no new WS created
+      expect(wsInstance).toBe(firstWsInstance);
+      client.close();
+    });
+
+    it('should log error and schedule reconnect when WebSocket constructor throws', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+      const client = new TogglyServerClient(defaultConfig);
+
+      // Make the WS constructor throw on the NEXT call (after init's first WS creation)
+      const MockWs = require('ws') as jest.Mock;
+      // First call (during init) will succeed with the default mock
+      await client.init();
+      client.close(); // clean up first WS
+
+      jest.useFakeTimers();
+      // Make the next WS constructor throw
+      MockWs.mockImplementationOnce(() => {
+        throw new Error('WS constructor failed');
+      });
+
+      // Trigger startWebSocket by firing the close-then-reconnect cycle
+      (client as any).ws = null;
+      (client as any).wsReconnectTimer = null;
+      (client as any).startWebSocket();
+
+      expect(console.error).toHaveBeenCalled();
+      // A reconnect should be scheduled
+      expect((client as any).wsReconnectTimer).not.toBeNull();
+
+      jest.useRealTimers();
+    });
+
+    it('should fire reconnect timer callback and restart WebSocket', async () => {
+      jest.useFakeTimers();
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init();
+
+      // Trigger close → scheduleReconnect sets a 5s timer
+      wsHandlers['close']?.();
+      expect((client as any).wsReconnectTimer).not.toBeNull();
+
+      // Advance past reconnect delay → timer fires, startWebSocket runs again
+      jest.advanceTimersByTime(6000);
+      expect((client as any).wsReconnectTimer).toBeNull();
+
+      jest.useRealTimers();
+      client.close();
+    });
+
+    it('should not schedule a second reconnect timer if one is already pending', async () => {
+      jest.useFakeTimers();
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init();
+
+      // First close fires scheduleReconnect → timer set
+      wsHandlers['close']?.();
+      const firstTimer = (client as any).wsReconnectTimer;
+      expect(firstTimer).not.toBeNull();
+
+      // Second call to scheduleReconnect while timer is pending should be a no-op
+      (client as any).scheduleReconnect();
+      expect((client as any).wsReconnectTimer).toBe(firstTimer);
+
+      jest.useRealTimers();
+      client.close();
+    });
+  });
+
+  describe('close', () => {
+    it('should close WebSocket and cleanup on close()', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true }),
+      });
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init();
+
+      client.close();
+
+      expect(wsInstance.close).toHaveBeenCalled();
+      expect(wsInstance.removeAllListeners).toHaveBeenCalled();
+    });
+
+    it('should clear refresh timer on close()', async () => {
+      const client = new TogglyServerClient(defaultConfig);
+      // Simulate a refresh timer being set (normally set by polling logic)
+      (client as any).refreshTimer = setInterval(() => {}, 99999);
+
+      client.close();
+
+      expect((client as any).refreshTimer).toBeNull();
+    });
+
+    it('should cancel pending reconnect timer on close()', async () => {
+      jest.useFakeTimers();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init();
+
+      // Trigger a reconnect schedule
+      wsHandlers['close']?.();
+      // wsReconnectTimer should be set now
+      expect((client as any).wsReconnectTimer).not.toBeNull();
+
+      client.close();
+      expect((client as any).wsReconnectTimer).toBeNull();
+
+      jest.useRealTimers();
     });
   });
 });

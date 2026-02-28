@@ -101,9 +101,7 @@ module Toggly
         return Toggly::Context.anonymous unless config
 
         # Use custom context builder if provided
-        if config.context_builder
-          return config.context_builder.call(request, toggly_current_user)
-        end
+        return config.context_builder.call(request, toggly_current_user) if config.context_builder
 
         # Use default context builder
         builder = ContextBuilder.new(config)

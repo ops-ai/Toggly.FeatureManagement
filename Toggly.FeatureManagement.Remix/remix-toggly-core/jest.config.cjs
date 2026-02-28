@@ -25,6 +25,7 @@ const config = {
       tsconfig: 'tsconfig.json',
     }],
   },
+  testPathIgnorePatterns: ['/node_modules/', '.*smoke.*\\.spec\\.ts$', '.*smoke.*\\.test\\.ts$'],
   verbose: true,
 };
 

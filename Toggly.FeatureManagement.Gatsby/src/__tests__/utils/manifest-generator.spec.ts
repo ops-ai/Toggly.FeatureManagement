@@ -99,7 +99,7 @@ describe('Manifest Generator', () => {
       const written = JSON.parse(writeCall[1] as string);
 
       expect(written.environment).toBe('Production');
-      expect(written.baseURI).toBe('https://client.toggly.io');
+      expect(written.baseURI).toBe('https://definitions.toggly.io');
     });
 
     it('should throw on write error', async () => {

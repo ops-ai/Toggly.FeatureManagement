@@ -1,0 +1,64 @@
+AllCops:
+  NewCops: enable
+  SuggestExtensions: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: double_quotes
+
+Naming/FileName:
+  Exclude:
+    - '**/lib/toggly-rails.rb'
+    - '**/lib/toggly-cache.rb'
+
+# These cops have inherent complexity due to protocol/evaluation logic.
+# Thresholds are relaxed to avoid forcing premature refactoring.
+Metrics/CyclomaticComplexity:
+  Max: 30
+
+Metrics/PerceivedComplexity:
+  Max: 30
+
+Metrics/MethodLength:
+  Max: 60
+
+Metrics/ClassLength:
+  Max: 250
+
+Metrics/AbcSize:
+  Max: 60
+
+Metrics/ParameterLists:
+  Max: 10
+
+# Spec files commonly have large describe/context blocks; exclude them from
+# block length checks to avoid noise in the test suite.
+Metrics/BlockLength:
+  Exclude:
+    - '**/*_spec.rb'
+    - '**/spec/**/*.rb'
+    - '**/*.rake'
+
+Metrics/BlockNesting:
+  Max: 4
+
+Layout/LineLength:
+  Max: 160
+
+# Evaluator interface methods (evaluate) return booleans but follow a
+# consistent naming convention that doesn't use the ? suffix.
+Naming/PredicateMethod:
+  Enabled: false
+
+# Keyword arguments that are part of a public interface but unused in
+# specific implementations (e.g., feature_key in base evaluators).
+Lint/UnusedMethodArgument:
+  AllowUnusedKeywordArguments: true
+
+# OpenStruct is acceptable in test helpers and specs.
+Style/OpenStructUse:
+  Exclude:
+    - '**/spec/**/*.rb'
+    - '**/spec_helper.rb'

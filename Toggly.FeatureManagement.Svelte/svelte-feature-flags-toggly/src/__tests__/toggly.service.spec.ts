@@ -94,7 +94,7 @@ describe('Toggly Service', () => {
       const features = await toggly._loadFeatures();
       expect(features).toEqual({ F1: true, F2: false });
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://client.toggly.io/test-key-Production/defs'
+        'https://definitions.toggly.io/evaluated-signed/test-key/Production'
       );
     });
 
@@ -106,7 +106,7 @@ describe('Toggly Service', () => {
       });
       await toggly._loadFeatures();
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://client.toggly.io/test-key-Staging/defs?u=user-123'
+        'https://definitions.toggly.io/evaluated-signed/test-key/Staging?u=user-123'
       );
     });
 
@@ -118,7 +118,7 @@ describe('Toggly Service', () => {
       });
       await toggly._loadFeatures();
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://custom.api.io/test-key-Dev/defs'
+        'https://custom.api.io/evaluated-signed/test-key/Dev'
       );
     });
 
@@ -433,6 +433,168 @@ describe('Toggly Service', () => {
       const toggly = new Toggly({ featureDefaults: { F1: true } });
       // Should not throw
       expect(toggly).toBeTruthy();
+    });
+  });
+
+  // ─── WebSocket live updates ───────────────────────
+  describe('WebSocket live updates', () => {
+    let mockWsInstances: any[];
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockWsInstances = [];
+      const MockWs = class {
+        url: string;
+        onopen: (() => void) | null = null;
+        onmessage: ((e: { data: string }) => void) | null = null;
+        onclose: (() => void) | null = null;
+        onerror: ((e: any) => void) | null = null;
+        closeCalled = false;
+        constructor(url: string) {
+          this.url = url;
+          mockWsInstances.push(this);
+        }
+        close() { this.closeCalled = true; }
+      };
+      vi.stubGlobal('WebSocket', MockWs);
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        json: () => Promise.resolve({ F1: true }),
+      } as Response);
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    });
+
+    it('should not start WebSocket when no appKey', () => {
+      const s = new Toggly({ featureDefaults: { F1: true } });
+      s.startWebSocket();
+      expect(mockWsInstances).toHaveLength(0);
+    });
+
+    it('should not start WebSocket when enableLiveUpdates is false', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod', enableLiveUpdates: false });
+      s.startWebSocket();
+      expect(mockWsInstances).toHaveLength(0);
+    });
+
+    it('should build wss:// URL from https:// baseURI', () => {
+      const s = new Toggly({ appKey: 'mykey', environment: 'Prod' });
+      s.startWebSocket();
+      expect(mockWsInstances).toHaveLength(1);
+      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws');
+    });
+
+    it('should build ws:// URL from http:// baseURI', () => {
+      const s = new Toggly({ appKey: 'mykey', baseURI: 'http://local.test', environment: 'Prod' });
+      s.startWebSocket();
+      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws');
+    });
+
+    it('should set _wsConnected on onopen', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onopen!();
+      expect(s._wsConnected).toBe(true);
+    });
+
+    it('should refresh features on JSON flags-updated message', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      fetchSpy.mockClear();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'flags-updated' }) });
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    it('should refresh features on JSON update message', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      fetchSpy.mockClear();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) });
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    it('should ignore JSON ping message', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      fetchSpy.mockClear();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'ping' }) });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('should ignore unknown JSON message type', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      fetchSpy.mockClear();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'unknown' }) });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('should refresh features on plain text "update"', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      fetchSpy.mockClear();
+      mockWsInstances[0].onmessage!({ data: 'update' });
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    it('should refresh features on plain text "flags-updated"', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      fetchSpy.mockClear();
+      mockWsInstances[0].onmessage!({ data: 'flags-updated' });
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    it('should ignore unrecognized plain text messages', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      fetchSpy.mockClear();
+      mockWsInstances[0].onmessage!({ data: 'heartbeat' });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('should log error on onerror', () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      const err = new Event('error');
+      mockWsInstances[0].onerror!(err);
+      expect(errSpy).toHaveBeenCalledWith('[Toggly] WebSocket error:', err);
+    });
+
+    it('should schedule reconnect on onclose', () => {
+      vi.useFakeTimers();
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onclose!();
+      expect(s._wsConnected).toBe(false);
+      vi.runAllTimers();
+      expect(mockWsInstances).toHaveLength(2);
+    });
+
+    it('should close WebSocket on stopWebSocket', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      const ws = mockWsInstances[0];
+      s.stopWebSocket();
+      expect(ws.closeCalled).toBe(true);
+      expect(s._wsConnected).toBe(false);
+    });
+
+    it('should cancel reconnect timer on stopWebSocket', () => {
+      vi.useFakeTimers();
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onclose!();
+      expect(s._wsReconnectTimer).not.toBeNull();
+      s.stopWebSocket();
+      expect(s._wsReconnectTimer).toBeNull();
+      vi.runAllTimers();
+      expect(mockWsInstances).toHaveLength(1);
     });
   });
 });

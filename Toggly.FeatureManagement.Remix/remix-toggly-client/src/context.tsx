@@ -213,7 +213,7 @@ export function TogglyProvider({
 
   // Identify user
   const identify = useCallback(
-    async (newIdentity: string, context?: IdentityContext): Promise<void> => {
+    async (newIdentity: string, _context?: IdentityContext): Promise<void> => {
       logger.debug(`Identifying user: ${newIdentity}`);
 
       // Execute beforeIdentify hooks

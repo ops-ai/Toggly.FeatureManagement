@@ -66,7 +66,6 @@ jobs:
 
       - name: Run tests with coverage
         run: pnpm --filter @ops-ai/${{ matrix.package }} test:coverage
-        continue-on-error: true
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -108,7 +107,7 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}/nuxt-toggly-core
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
-        run: pnpm vitest run tests/smoke.test.ts tests/smoke-ws.test.ts
+        run: pnpm vitest run --config vitest.smoke.config.ts tests/smoke.test.ts tests/smoke-ws.test.ts
 
   sonar:
     name: SonarQube Analysis

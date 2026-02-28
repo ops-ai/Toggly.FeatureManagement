@@ -22,14 +22,20 @@ describe('TogglyService Hooks', () => {
   };
 
   beforeEach(() => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
     beforeEvalCalls = [];
     afterEvalCalls = [];
     afterRefreshCalls = 0;
-    
+
     service = new Toggly({
       featureDefaults: { Feature1: true, Feature2: false },
       hooks: [testHook]
     });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('Hook Registration', () => {

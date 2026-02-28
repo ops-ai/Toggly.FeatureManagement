@@ -4,12 +4,13 @@ import { initTogglyClient, $flags, __resetClient } from '../client/store.js';
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
-describe.skipIf(!appKey)('Smoke test', () => {
+describe('Smoke test', () => {
   beforeEach(() => {
     __resetClient();
   });
 
   it('loads live evaluated flags', async () => {
+    if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_FRONTEND is not configured — set this env var to run smoke tests');
     await initTogglyClient({
       appKey: appKey!,
       environment: 'Production',

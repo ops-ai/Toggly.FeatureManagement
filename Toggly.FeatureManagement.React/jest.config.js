@@ -35,4 +35,5 @@ export default {
     '**/src/**/*.spec.ts',
     '**/src/**/*.spec.tsx',
   ],
+  testPathIgnorePatterns: ['/node_modules/', '.*smoke.*\\.spec\\.ts$', '.*smoke.*\\.spec\\.tsx$', '.*smoke.*\\.test\\.ts$', '.*smoke.*\\.test\\.tsx$'],
 };

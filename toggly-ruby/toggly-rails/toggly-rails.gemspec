@@ -23,6 +23,6 @@ Gem::Specification.new do |spec|
   spec.files = Dir.glob("lib/**/*") + %w[README.md LICENSE CHANGELOG.md]
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "toggly", "~> 0.1"
   spec.add_dependency "railties", ">= 7.0"
+  spec.add_dependency "toggly", "~> 0.1"
 end

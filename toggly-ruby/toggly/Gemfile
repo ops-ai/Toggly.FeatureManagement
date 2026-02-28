@@ -5,12 +5,12 @@ source "https://rubygems.org"
 gemspec
 
 group :development, :test do
+  gem "rake", "~> 13.0"
   gem "rspec", "~> 3.12"
-  gem "webmock", "~> 3.18"
-  gem "simplecov", "~> 0.22", require: false
   gem "rubocop", "~> 1.56", require: false
   gem "rubocop-rspec", "~> 2.24", require: false
-  gem "yard", "~> 0.9", require: false
-  gem "rake", "~> 13.0"
+  gem "simplecov", "~> 0.22", require: false
+  gem "webmock", "~> 3.18"
   gem "websocket-client-simple", "~> 0.8"
+  gem "yard", "~> 0.9", require: false
 end

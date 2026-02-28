@@ -14,6 +14,17 @@ import { HEADERS, STORAGE_KEYS, TOGGLY_LOADER_KEY } from '@ops-ai/remix-toggly-c
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
+// Mock WebSocket to prevent real connections in unit tests
+jest.mock('ws', () => {
+  return jest.fn().mockImplementation(() => ({
+    on: jest.fn(),
+    close: jest.fn(),
+    removeAllListeners: jest.fn(),
+    send: jest.fn(),
+    readyState: 1,
+  }));
+});
+
 describe('createTogglyLoader', () => {
   const defaultOptions: TogglyLoaderOptions = {
     appKey: 'test-app-key',
@@ -48,6 +59,12 @@ describe('createTogglyLoader', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('getClient', () => {
@@ -179,6 +196,37 @@ describe('createTogglyLoader', () => {
 
       expect(result.identity).toBe('user@example.com');
     });
+
+    it('should return raw cookie value when percent-decoding fails', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const loader = createTogglyLoader(defaultOptions);
+      // %xx is invalid percent-encoding, causing decodeURIComponent to throw
+      const request = createMockRequest({
+        cookies: `${STORAGE_KEYS.IDENTITY}=user%xxid`,
+      });
+      const result = await loader.load(createMockLoaderArgs(request));
+
+      expect(result.identity).toBe('user%xxid');
+    });
+
+    it('should return undefined identity when cookie header has no identity key', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const loader = createTogglyLoader(defaultOptions);
+      const request = createMockRequest({
+        cookies: 'sessionId=abc123; theme=dark',
+      });
+      const result = await loader.load(createMockLoaderArgs(request));
+
+      expect(result.identity).toBeUndefined();
+    });
   });
 
   describe('getLoaderData', () => {
@@ -305,6 +353,20 @@ describe('createTogglyLoader', () => {
 
       expect(result).toBe(false);
     });
+
+    it('should default to "all" requirement when not specified', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true, feature2: true }),
+      });
+
+      const loader = createTogglyLoader(defaultOptions);
+      await loader.load(createMockLoaderArgs(createMockRequest()));
+
+      const result = await loader.evaluateGate(['feature1', 'feature2']);
+
+      expect(result).toBe(true);
+    });
   });
 
   describe('getFlags', () => {
@@ -334,6 +396,12 @@ describe('getFeatureFlags', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should get feature flags for a request', async () => {
@@ -361,6 +429,12 @@ describe('isFeatureEnabled', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should check if feature is enabled for a request', async () => {

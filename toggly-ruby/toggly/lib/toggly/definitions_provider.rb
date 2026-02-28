@@ -57,11 +57,11 @@ module Toggly
       response = http.request(request)
       handle_response(response)
     rescue Net::OpenTimeout, Net::ReadTimeout => e
-      raise NetworkError.new("Request timeout: #{e.message}")
+      raise NetworkError, "Request timeout: #{e.message}"
     rescue SocketError, Errno::ECONNREFUSED => e
-      raise NetworkError.new("Connection failed: #{e.message}")
+      raise NetworkError, "Connection failed: #{e.message}"
     rescue StandardError => e
-      raise NetworkError.new("Request failed: #{e.message}")
+      raise NetworkError, "Request failed: #{e.message}"
     end
 
     # Reset cached headers (force full fetch next time)
@@ -129,10 +129,10 @@ module Toggly
         @ws = nil
       end
 
-      if @ws_thread
-        @ws_thread.kill
-        @ws_thread = nil
-      end
+      return unless @ws_thread
+
+      @ws_thread.kill
+      @ws_thread = nil
     end
 
     private
@@ -243,26 +243,22 @@ module Toggly
       end
 
       @ws.on :message do |msg|
-        begin
-          text = msg.data.to_s
-          data = JSON.parse(text)
-          msg_type = data["type"]
+        text = msg.data.to_s
+        data = JSON.parse(text)
+        msg_type = data["type"]
 
-          if msg_type == "ping"
-            next
-          end
+        next if msg_type == "ping"
 
-          if msg_type == "flags-updated" || msg_type == "update"
-            provider.send(:log_debug, "WebSocket: definitions updated, refreshing")
-            provider.instance_variable_get(:@on_definitions_updated)&.call
-          end
-        rescue JSON::ParserError
-          # Non-JSON message - check for plain text signals
-          plain = msg.data.to_s.strip
-          if plain == "update" || plain == "flags-updated"
-            provider.send(:log_debug, "WebSocket: definitions updated (plain text), refreshing")
-            provider.instance_variable_get(:@on_definitions_updated)&.call
-          end
+        if %w[flags-updated update].include?(msg_type)
+          provider.send(:log_debug, "WebSocket: definitions updated, refreshing")
+          provider.instance_variable_get(:@on_definitions_updated)&.call
+        end
+      rescue JSON::ParserError
+        # Non-JSON message - check for plain text signals
+        plain = msg.data.to_s.strip
+        if %w[update flags-updated].include?(plain)
+          provider.send(:log_debug, "WebSocket: definitions updated (plain text), refreshing")
+          provider.instance_variable_get(:@on_definitions_updated)&.call
         end
       end
 

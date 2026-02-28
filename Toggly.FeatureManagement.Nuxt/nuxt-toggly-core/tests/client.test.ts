@@ -618,6 +618,309 @@ describe('createTogglyClient', () => {
     })
   })
 
+  describe('destroyed client behaviour', () => {
+    it('refresh() should throw when client is destroyed', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({ features: [{ featureKey: 'f', enabled: true }] })
+      )
+      const client = createTogglyClient({ appKey: 'test-key', refreshInterval: 0 })
+      await client.init()
+      client.destroy()
+
+      await expect(client.refresh()).rejects.toThrow('[Toggly] Client has been destroyed')
+    })
+
+    it('isFeatureOn() should return featureDefaults value when destroyed', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({ features: [{ featureKey: 'f', enabled: true }] })
+      )
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        featureDefaults: { f: false },
+      })
+      await client.init()
+      client.destroy()
+
+      expect(await client.isFeatureOn('f')).toBe(false)
+    })
+
+    it('setIdentity() should return early when destroyed', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({ features: [] })
+      )
+      const client = createTogglyClient({ appKey: 'test-key', refreshInterval: 0 })
+      await client.init()
+      client.destroy()
+
+      // Should not throw and should not call fetch again
+      const callsBefore = mockFetch.mock.calls.length
+      await client.setIdentity('user-123')
+      expect(mockFetch.mock.calls.length).toBe(callsBefore)
+    })
+  })
+
+  describe('identity setter', () => {
+    it('should update identity via property setter', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({ appKey: 'test-key', refreshInterval: 0 })
+      await client.init()
+
+      client.identity = 'new-user'
+      expect(client.identity).toBe('new-user')
+
+      client.destroy()
+    })
+
+    it('should set identity to undefined via property setter', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        identity: 'existing-user',
+      })
+      await client.init()
+
+      client.identity = undefined
+      expect(client.identity).toBeUndefined()
+
+      client.destroy()
+    })
+  })
+
+  describe('WebSocket live updates', () => {
+    let mockWsInstances: any[]
+    const savedWindow = (globalThis as any).window
+
+    beforeEach(() => {
+      mockWsInstances = []
+      const MockWs = class {
+        url: string
+        onopen: (() => void) | null = null
+        onmessage: ((e: { data: string }) => void) | null = null
+        onclose: (() => void) | null = null
+        onerror: ((e: any) => void) | null = null
+        closeCalled = false
+        constructor(url: string) {
+          this.url = url
+          mockWsInstances.push(this)
+        }
+        close() { this.closeCalled = true }
+      }
+      ;(globalThis as any).window = {}
+      ;(globalThis as any).WebSocket = MockWs
+    })
+
+    afterEach(() => {
+      ;(globalThis as any).window = savedWindow
+      delete (globalThis as any).WebSocket
+    })
+
+    it('should not start WebSocket when enableLiveUpdates is false', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: false,
+      })
+      await client.init()
+      expect(mockWsInstances).toHaveLength(0)
+      client.destroy()
+    })
+
+    it('should not start WebSocket when no appKey', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({ refreshInterval: 0, enableLiveUpdates: true })
+      await client.init()
+      expect(mockWsInstances).toHaveLength(0)
+      client.destroy()
+    })
+
+    it('should start WebSocket when enableLiveUpdates is true', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+      })
+      await client.init()
+      expect(mockWsInstances).toHaveLength(1)
+      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/test-key/ws')
+      client.destroy()
+    })
+
+    it('should build ws:// URL from http:// baseUri', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'mykey',
+        baseUri: 'http://local.test',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+      })
+      await client.init()
+      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws')
+      client.destroy()
+    })
+
+    it('should set wsConnected on onopen', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+      })
+      await client.init()
+      mockWsInstances[0].onopen!()
+      // no assertion on internal state — just verify it doesn't throw
+      client.destroy()
+    })
+
+    it('should refresh on flags-updated message', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+      })
+      await client.init()
+      const callsBefore = mockFetch.mock.calls.length
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'flags-updated' }) })
+      expect(mockFetch.mock.calls.length).toBeGreaterThan(callsBefore)
+      client.destroy()
+    })
+
+    it('should refresh on update message', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+      })
+      await client.init()
+      const callsBefore = mockFetch.mock.calls.length
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) })
+      expect(mockFetch.mock.calls.length).toBeGreaterThan(callsBefore)
+      client.destroy()
+    })
+
+    it('should ignore ping message', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+      })
+      await client.init()
+      const callsBefore = mockFetch.mock.calls.length
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'ping' }) })
+      expect(mockFetch.mock.calls.length).toBe(callsBefore)
+      client.destroy()
+    })
+
+    it('should ignore malformed JSON message', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+      })
+      await client.init()
+      expect(() => {
+        mockWsInstances[0].onmessage!({ data: 'not-json' })
+      }).not.toThrow()
+      client.destroy()
+    })
+
+    it('should log error on onerror', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+      })
+      await client.init()
+      const err = new Event('error')
+      mockWsInstances[0].onerror!(err)
+      expect(errSpy).toHaveBeenCalledWith('[Toggly] WebSocket error:', err)
+      client.destroy()
+    })
+
+    it('should schedule reconnect on onclose', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+      })
+      await client.init()
+      mockWsInstances[0].onclose!()
+      vi.runAllTimers()
+      expect(mockWsInstances).toHaveLength(2)
+      client.destroy()
+    })
+
+    it('should stop WebSocket on destroy', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+      })
+      await client.init()
+      const ws = mockWsInstances[0]
+      client.destroy()
+      expect(ws.closeCalled).toBe(true)
+    })
+  })
+
+  describe('wsConnected throttle in refresh interval', () => {
+    it('should skip fallback refresh when wsConnected and within throttle window', async () => {
+      let mockWsInstances: any[] = []
+      const MockWs = class {
+        url: string
+        onopen: (() => void) | null = null
+        onmessage: ((e: { data: string }) => void) | null = null
+        onclose: (() => void) | null = null
+        onerror: ((e: any) => void) | null = null
+        constructor(url: string) {
+          this.url = url
+          mockWsInstances.push(this)
+        }
+        close() {}
+      }
+      ;(globalThis as any).window = {}
+      ;(globalThis as any).WebSocket = MockWs
+
+      try {
+        mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+        const client = createTogglyClient({
+          appKey: 'test-key',
+          refreshInterval: 100,
+          enableLiveUpdates: true,
+        })
+        await client.init()
+
+        // Fire onopen to mark wsConnected = true and set lastFallbackRefresh = now
+        mockWsInstances[0].onopen!()
+
+        const callsAfterInit = mockFetch.mock.calls.length
+
+        // Advance time by one refresh interval — should be throttled because wsConnected
+        await vi.advanceTimersByTimeAsync(100)
+
+        // Fetch should NOT have been called again (within throttle window)
+        expect(mockFetch.mock.calls.length).toBe(callsAfterInit)
+
+        client.destroy()
+      } finally {
+        ;(globalThis as any).window = undefined
+        delete (globalThis as any).WebSocket
+      }
+    })
+  })
+
   describe('HTTP error handling', () => {
     it('should handle non-ok responses', async () => {
       // Simulate HTTP 404 by throwing in the response's json() method

@@ -14,7 +14,7 @@ module Toggly
       # @param context [Context] The evaluation context (ignored)
       # @param feature_key [String] The feature key
       # @return [Boolean] Always returns true
-      def evaluate(rule, context, feature_key: nil)
+      def evaluate(_rule, _context, feature_key: nil)
         true
       end
     end

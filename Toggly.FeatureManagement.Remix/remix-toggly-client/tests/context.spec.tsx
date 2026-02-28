@@ -432,6 +432,28 @@ describe('TogglyProvider', () => {
 
       // Should only be added once (warning logged)
     });
+
+    it('should return false when removing a non-existent hook', () => {
+      const serverContext: ServerFeatureContext = {
+        flags: {},
+        fetchedAt: Date.now(),
+      };
+
+      let capturedContext: TogglyContextValue | undefined;
+
+      render(
+        <TogglyProvider serverContext={serverContext}>
+          <TestConsumer onContext={(ctx) => (capturedContext = ctx)} />
+        </TogglyProvider>
+      );
+
+      let result: boolean | undefined;
+      act(() => {
+        result = capturedContext?.removeHook('non-existent-hook');
+      });
+
+      expect(result).toBe(false);
+    });
   });
 
   describe('onFlagsChange callback', () => {
@@ -510,8 +532,18 @@ describe('TogglyProvider', () => {
   });
 
   describe('hook execution', () => {
+    beforeEach(() => {
+      jest.spyOn(console, 'warn').mockImplementation(() => {});
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     it('should execute beforeIdentify and afterIdentify hooks', async () => {
-      mockFetch.mockResolvedValueOnce({
+      // Persistent mock: identify() fetches flags internally and may cause re-renders
+      mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ feature1: true }),
       });
@@ -547,12 +579,15 @@ describe('TogglyProvider', () => {
         await capturedContext?.identify('user-123');
       });
 
-      expect(beforeIdentify).toHaveBeenCalledWith('user-123', undefined);
-      expect(afterIdentify).toHaveBeenCalled();
+      // beforeIdentify is called with (identity) — one argument
+      expect(beforeIdentify).toHaveBeenCalledWith('user-123');
+      // afterIdentify is called with (identity, undefined) — two arguments
+      expect(afterIdentify).toHaveBeenCalledWith('user-123', undefined);
     });
 
     it('should handle beforeIdentify hook errors gracefully', async () => {
-      mockFetch.mockResolvedValueOnce({
+      // Persistent mock for identify-triggered fetch
+      mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ feature1: true }),
       });
@@ -562,7 +597,8 @@ describe('TogglyProvider', () => {
         fetchedAt: Date.now(),
       };
 
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+      // Re-spy on error specifically so we can assert on it (outer beforeEach spy is overridden)
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
       let capturedContext: TogglyContextValue | undefined;
 
@@ -589,11 +625,11 @@ describe('TogglyProvider', () => {
       });
 
       expect(errorSpy).toHaveBeenCalled();
-      errorSpy.mockRestore();
     });
 
     it('should handle afterIdentify hook errors gracefully', async () => {
-      mockFetch.mockResolvedValueOnce({
+      // Persistent mock for identify-triggered fetch
+      mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ feature1: true }),
       });
@@ -603,7 +639,7 @@ describe('TogglyProvider', () => {
         fetchedAt: Date.now(),
       };
 
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
       let capturedContext: TogglyContextValue | undefined;
 
@@ -630,7 +666,6 @@ describe('TogglyProvider', () => {
       });
 
       expect(errorSpy).toHaveBeenCalled();
-      errorSpy.mockRestore();
     });
 
     it('should execute afterRefresh hooks', async () => {
@@ -681,7 +716,7 @@ describe('TogglyProvider', () => {
         fetchedAt: Date.now(),
       };
 
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
       let capturedContext: TogglyContextValue | undefined;
 
@@ -708,7 +743,7 @@ describe('TogglyProvider', () => {
       });
 
       expect(errorSpy).toHaveBeenCalled();
-      errorSpy.mockRestore();
+      // Cleanup handled by outer afterEach(() => jest.restoreAllMocks())
     });
   });
 
@@ -793,6 +828,432 @@ describe('TogglyProvider', () => {
 
       // Should keep existing flags when no appKey
       expect(capturedContext?.flags).toEqual({ feature1: true });
+    });
+  });
+
+  describe('WebSocket live updates', () => {
+    // Controllable WebSocket mock for browser environment
+    class MockWebSocket {
+      static instances: MockWebSocket[] = [];
+      url: string;
+      onopen: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      closeCalled = false;
+
+      constructor(url: string) {
+        this.url = url;
+        MockWebSocket.instances.push(this);
+      }
+
+      simulateOpen() { this.onopen?.(); }
+      simulateMessage(data: string) { this.onmessage?.({ data }); }
+      simulateClose() { this.onclose?.(); }
+      simulateError() { this.onerror?.(); }
+      close() { this.closeCalled = true; }
+    }
+
+    const wsConfig = { appKey: 'test-key', baseUrl: 'https://definitions.toggly.io' };
+    const serverContext: ServerFeatureContext = { flags: {}, fetchedAt: Date.now() };
+
+    beforeEach(() => {
+      MockWebSocket.instances = [];
+      (global as any).WebSocket = MockWebSocket;
+      jest.spyOn(console, 'warn').mockImplementation(() => {});
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true }),
+      });
+    });
+
+    afterEach(() => {
+      delete (global as any).WebSocket;
+      jest.restoreAllMocks();
+    });
+
+    it('should connect to WebSocket on mount', async () => {
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      expect(MockWebSocket.instances).toHaveLength(1);
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/test-key/ws');
+    });
+
+    it('should build ws:// URL from http:// baseUrl', async () => {
+      render(
+        <TogglyProvider serverContext={serverContext} config={{ appKey: 'test-key', baseUrl: 'http://localhost:3000' }}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      expect(MockWebSocket.instances[0].url).toBe('ws://localhost:3000/test-key/ws');
+    });
+
+    it('should not connect when no appKey provided', async () => {
+      render(
+        <TogglyProvider serverContext={serverContext}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      expect(MockWebSocket.instances).toHaveLength(0);
+    });
+
+    it('should not connect when WebSocket is not available in the environment', async () => {
+      // Override: make WebSocket undefined to simulate non-browser / old env
+      (global as any).WebSocket = undefined;
+
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      expect(MockWebSocket.instances).toHaveLength(0);
+    });
+
+    it('should set wsConnected state on open event', async () => {
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      const ws = MockWebSocket.instances[0];
+
+      act(() => {
+        ws.simulateOpen();
+      });
+
+      expect(MockWebSocket.instances).toHaveLength(1);
+    });
+
+    it('should refresh flags on flags-updated JSON message', async () => {
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      mockFetch.mockClear();
+      const ws = MockWebSocket.instances[0];
+
+      await act(async () => {
+        ws.simulateMessage(JSON.stringify({ type: 'flags-updated' }));
+      });
+
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should refresh flags on update JSON message', async () => {
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      mockFetch.mockClear();
+      const ws = MockWebSocket.instances[0];
+
+      await act(async () => {
+        ws.simulateMessage(JSON.stringify({ type: 'update' }));
+      });
+
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should ignore ping JSON messages', async () => {
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      mockFetch.mockClear();
+      const ws = MockWebSocket.instances[0];
+
+      act(() => {
+        ws.simulateMessage(JSON.stringify({ type: 'ping' }));
+      });
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should refresh flags on plain text "update" message', async () => {
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      mockFetch.mockClear();
+      const ws = MockWebSocket.instances[0];
+
+      await act(async () => {
+        ws.simulateMessage('update');
+      });
+
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should refresh flags on plain text "flags-updated" message', async () => {
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      mockFetch.mockClear();
+      const ws = MockWebSocket.instances[0];
+
+      await act(async () => {
+        ws.simulateMessage('flags-updated');
+      });
+
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should ignore unknown plain text messages', async () => {
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      mockFetch.mockClear();
+      const ws = MockWebSocket.instances[0];
+
+      act(() => {
+        ws.simulateMessage('some-unknown-message');
+      });
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should log warn on WebSocket error', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      const ws = MockWebSocket.instances[0];
+
+      act(() => {
+        ws.simulateError();
+      });
+
+      expect(warnSpy).toHaveBeenCalled();
+    });
+
+    it('should schedule reconnect after close and create new WebSocket', async () => {
+      jest.useFakeTimers();
+
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      expect(MockWebSocket.instances).toHaveLength(1);
+      const ws = MockWebSocket.instances[0];
+
+      act(() => {
+        ws.simulateClose();
+      });
+
+      // Advance past the 5s reconnect delay
+      await act(async () => {
+        jest.advanceTimersByTime(6000);
+      });
+
+      expect(MockWebSocket.instances).toHaveLength(2);
+
+      jest.useRealTimers();
+    });
+
+    it('should log warn and schedule reconnect when WebSocket constructor throws', async () => {
+      jest.useFakeTimers();
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      (global as any).WebSocket = () => {
+        throw new Error('Connection failed');
+      };
+
+      render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      expect(warnSpy).toHaveBeenCalled();
+
+      // After reconnect delay, it should try again (and fail again)
+      await act(async () => {
+        jest.advanceTimersByTime(6000);
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+
+      jest.useRealTimers();
+    });
+
+    it('should clean up open WebSocket on unmount', async () => {
+      const { unmount } = render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      const ws = MockWebSocket.instances[0];
+
+      unmount();
+
+      expect(ws.closeCalled).toBe(true);
+    });
+
+    it('should cancel pending reconnect timer on unmount', async () => {
+      jest.useFakeTimers();
+
+      const { unmount } = render(
+        <TogglyProvider serverContext={serverContext} config={wsConfig}>
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      const ws = MockWebSocket.instances[0];
+
+      // Trigger close to start the reconnect timer
+      act(() => {
+        ws.simulateClose();
+      });
+
+      // Unmount before timer fires — should cancel the pending reconnect
+      unmount();
+
+      // Advance time: the reconnect timer should NOT fire (it was cancelled)
+      await act(async () => {
+        jest.advanceTimersByTime(10000);
+      });
+
+      // No new WebSocket should have been created
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      jest.useRealTimers();
+    });
+
+    it('should throttle HTTP refresh when WebSocket is connected', async () => {
+      jest.useFakeTimers();
+
+      render(
+        <TogglyProvider
+          serverContext={serverContext}
+          config={wsConfig}
+          enableRefresh={true}
+          refreshInterval={1000}
+        >
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      const ws = MockWebSocket.instances[0];
+
+      // Open WS — sets wsConnectedRef=true and lastFallbackRefreshRef=Date.now()
+      act(() => {
+        ws.simulateOpen();
+      });
+
+      mockFetch.mockClear();
+
+      // Advance by refresh interval (< 20 min fallback threshold)
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+
+      // No HTTP fetch because WS connected and within fallback interval
+      expect(mockFetch).not.toHaveBeenCalled();
+
+      jest.useRealTimers();
+    });
+
+    it('should do fallback HTTP refresh when WebSocket connected but fallback interval elapsed', async () => {
+      jest.useFakeTimers();
+
+      render(
+        <TogglyProvider
+          serverContext={serverContext}
+          config={wsConfig}
+          enableRefresh={true}
+          refreshInterval={1000}
+        >
+          <TestConsumer />
+        </TogglyProvider>
+      );
+
+      await act(async () => {});
+
+      const ws = MockWebSocket.instances[0];
+
+      // Open WS — records lastFallbackRefreshRef at current fake time
+      act(() => {
+        ws.simulateOpen();
+      });
+
+      // Advance system time past the 20-minute fallback interval
+      jest.setSystemTime(Date.now() + 21 * 60 * 1000);
+
+      mockFetch.mockClear();
+
+      // Advance timer to trigger the refresh interval callback
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+
+      // Fetch SHOULD be called (fallback refresh after >20 min)
+      expect(mockFetch).toHaveBeenCalled();
+
+      jest.useRealTimers();
     });
   });
 });

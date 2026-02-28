@@ -28,7 +28,7 @@ func Dial(baseURL, appKey, env, instance string) (*Client, error) {
 		return nil, err
 	}
 	creds := credentials.NewTLS(&tls.Config{})
-	conn, err := grpc.Dial(target, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return nil, err
 	}

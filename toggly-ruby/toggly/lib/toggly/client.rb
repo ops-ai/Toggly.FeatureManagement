@@ -183,9 +183,7 @@ module Toggly
 
     def initialize_definitions
       # Try to load from snapshot first
-      if @config.snapshot_provider
-        load_snapshot
-      end
+      load_snapshot if @config.snapshot_provider
 
       # Initialize with defaults if in offline mode
       if @config.offline_mode?

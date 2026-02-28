@@ -1,9 +1,10 @@
 import { TogglyServerClient } from '../src/client';
 
-const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
+const appKey = process.env.TOGGLY_SMOKE_APP_KEY_BACKEND;
 
-(appKey ? describe : describe.skip)('WebSocket smoke test', () => {
+describe('WebSocket smoke test', () => {
   it('connects via WebSocket and receives live updates', async () => {
+    if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_BACKEND is not configured — set this env var to run smoke tests');
     const client = new TogglyServerClient({
       appKey: appKey!,
       environment: 'Production',

@@ -50,7 +50,7 @@ module Toggly
     )
       @feature_key = feature_key.to_s
       @feature_type = validate_type(feature_type)
-      @enabled = !!enabled
+      @enabled = enabled ? true : false
       @rules = Array(rules)
       @metadata = metadata || {}
       @description = description
@@ -183,5 +183,6 @@ module Toggly
 
       hash.transform_keys { |k| k.is_a?(String) ? k.to_sym : k }
     end
+    private_class_method :symbolize_keys
   end
 end

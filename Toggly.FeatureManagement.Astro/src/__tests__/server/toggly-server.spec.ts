@@ -89,7 +89,7 @@ describe('TogglyServer', () => {
 
       await server.getFlags();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://client.toggly.io/my-key-Staging/defs',
+        'https://client.toggly.io/evaluated-signed/my-key/Staging',
         expect.objectContaining({ method: 'GET' })
       );
     });
@@ -105,7 +105,7 @@ describe('TogglyServer', () => {
 
       await server.getFlags();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://client.toggly.io/my-key-Production/defs?u=user-123',
+        'https://definitions.toggly.io/evaluated-signed/my-key/Production?u=user-123',
         expect.anything()
       );
     });
@@ -137,7 +137,7 @@ describe('TogglyServer', () => {
 
       await server.getFlags();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://client.toggly.io/my-key-Production/defs',
+        'https://client.toggly.io/evaluated-signed/my-key/Production',
         expect.anything()
       );
     });

@@ -14,6 +14,17 @@ import type { ActionFunctionArgs } from '@remix-run/server-runtime';
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
+// Mock WebSocket to prevent real connections in unit tests
+jest.mock('ws', () => {
+  return jest.fn().mockImplementation(() => ({
+    on: jest.fn(),
+    close: jest.fn(),
+    removeAllListeners: jest.fn(),
+    send: jest.fn(),
+    readyState: 1,
+  }));
+});
+
 describe('createFeatureGatedAction', () => {
   const defaultOptions: FeatureGatedActionOptions = {
     appKey: 'test-app-key',
@@ -40,6 +51,12 @@ describe('createFeatureGatedAction', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('without required features', () => {
@@ -322,6 +339,12 @@ describe('createTogglyAction', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('getClient', () => {
@@ -500,6 +523,12 @@ describe('requireFeature', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should create a higher-order function for feature-gated actions', async () => {

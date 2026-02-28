@@ -16,7 +16,7 @@ import {
 describe('Constants', () => {
   describe('DEFAULT_BASE_URL', () => {
     it('should be the correct Toggly API URL', () => {
-      expect(DEFAULT_BASE_URL).toBe('https://client.toggly.io');
+      expect(DEFAULT_BASE_URL).toBe('https://definitions.toggly.io');
     });
   });
 

@@ -31,4 +31,5 @@ module.exports = {
   coverageProvider: 'v8',
   forceExit: true,
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  testPathIgnorePatterns: ['/node_modules/', '.*smoke.*\\.spec\\.ts$', '.*smoke.*\\.test\\.ts$'],
 };

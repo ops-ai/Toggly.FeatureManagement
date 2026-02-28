@@ -268,6 +268,20 @@ describe('RemixTogglyProvider', () => {
 
     expect(screen.getByTestId('child')).toHaveTextContent('Hello');
   });
+
+  it('should render with no config and no server context', () => {
+    // Neither config nor serverContext provided — covers the false branch of
+    // `config ?? (serverContext ? { appKey, environment } : undefined)`
+    mockUseLoaderData.mockReturnValue({});
+
+    render(
+      <RemixTogglyProvider>
+        <div data-testid="child">Hello</div>
+      </RemixTogglyProvider>
+    );
+
+    expect(screen.getByTestId('child')).toHaveTextContent('Hello');
+  });
 });
 
 describe('useTogglyLoaderData', () => {

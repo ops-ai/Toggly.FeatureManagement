@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Hook, EvaluationSeriesData, IdentitySeriesData } from '@ops-ai/toggly-hooks-types';
 import { Toggly } from '../plugins/toggly.service';
 
@@ -32,17 +32,23 @@ describe('TogglyService Hooks', () => {
   };
 
   beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     beforeEvalCalls = [];
     afterEvalCalls = [];
     beforeIdentifyCalls = [];
     afterIdentifyCalls = [];
     afterRefreshCalls = 0;
-    
+
     service = new Toggly();
     service.init({
       featureDefaults: { Feature1: true, Feature2: false },
       hooks: [testHook]
     });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('Hook Registration', () => {

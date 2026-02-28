@@ -112,12 +112,10 @@ jobs:
       - name: Build package (if needed)
         working-directory: ${{ matrix.path }}
         run: npm run build || echo "No build script configured"
-        continue-on-error: true
 
       - name: Run TypeScript type check
         working-directory: ${{ matrix.path }}
         run: npm run typecheck || echo "No typecheck script configured"
-        continue-on-error: true
 
       - name: Run linter
         if: matrix.has-lint == true
@@ -128,7 +126,6 @@ jobs:
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}
         run: ${{ matrix.test-cmd }}
-        continue-on-error: true
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -142,22 +139,18 @@ jobs:
           if-no-files-found: ignore
 
   test-node-server:
-    name: Test Node.js Server ${{ matrix.package }}
+    name: Test Node.js Server ${{ matrix.config.package }} (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - package: Core
-            dir: toggly-node-core
-          - package: Express
-            dir: toggly-express
-          - package: Fastify
-            dir: toggly-fastify
-          - package: Hono
-            dir: toggly-hono
-          - package: Koa
-            dir: toggly-koa
+        node-version: ['18.x', '20.x', '22.x']
+        config:
+          - { package: Core, dir: toggly-node-core }
+          - { package: Express, dir: toggly-express }
+          - { package: Fastify, dir: toggly-fastify }
+          - { package: Hono, dir: toggly-hono }
+          - { package: Koa, dir: toggly-koa }
 
     steps:
       - name: Checkout code
@@ -168,7 +161,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: ${{ matrix.node-version }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -196,17 +189,17 @@ jobs:
         run: pnpm -r build
 
       - name: Run tests with coverage
-        working-directory: Toggly.FeatureManagement.Node/${{ matrix.dir }}
+        working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: pnpm test:coverage
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && matrix.node-version == '20.x'
         with:
-          name: coverage-Node-${{ matrix.package }}
+          name: coverage-Node-${{ matrix.config.package }}
           path: |
-            Toggly.FeatureManagement.Node/${{ matrix.dir }}/coverage/
-            Toggly.FeatureManagement.Node/${{ matrix.dir }}/coverage/lcov.info
+            Toggly.FeatureManagement.Node/${{ matrix.config.dir }}/coverage/
+            Toggly.FeatureManagement.Node/${{ matrix.config.dir }}/coverage/lcov.info
           retention-days: 7
           if-no-files-found: ignore
 
@@ -223,19 +216,19 @@ jobs:
             smoke-cmd: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --include="projects/ngx-feature-flags-toggly/src/lib/smoke.spec.ts" --include="projects/ngx-feature-flags-toggly/src/lib/smoke-ws.spec.ts"
           - sdk: React
             path: Toggly.FeatureManagement.React
-            smoke-cmd: npx jest src/smoke.spec.ts src/smoke-ws.spec.ts --runInBand --forceExit
+            smoke-cmd: npx jest src/smoke.spec.ts src/smoke-ws.spec.ts --runInBand --forceExit --testPathIgnorePatterns='/node_modules/'
           - sdk: Vue
             path: Toggly.FeatureManagement.Vue/vue-feature-flags-toggly
-            smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
+            smoke-cmd: npx vitest run --config vitest.smoke.config.ts src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
           - sdk: Svelte
             path: Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly
-            smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
+            smoke-cmd: npx vitest run --config vitest.smoke.config.ts src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
           - sdk: Astro
             path: Toggly.FeatureManagement.Astro
-            smoke-cmd: npx vitest run src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
+            smoke-cmd: npx vitest run --config vitest.smoke.config.ts src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts
           - sdk: JavaScript
             path: Toggly.FeatureManagement.Javascript/feature_flags_toggly
-            smoke-cmd: npx jest spec/smoke.test.ts spec/smoke-ws.test.ts --runInBand --forceExit
+            smoke-cmd: npx jest spec/smoke.test.ts spec/smoke-ws.test.ts --runInBand --forceExit --testPathIgnorePatterns='/node_modules/'
           - sdk: Docusaurus
             path: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
             smoke-cmd: npm run build && node smoke.mjs && node smoke-ws.mjs
@@ -294,7 +287,7 @@ jobs:
         working-directory: Toggly.FeatureManagement.Node/toggly-node-core
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
-        run: pnpm vitest run tests/smoke.test.ts tests/smoke-ws.test.ts
+        run: pnpm vitest run --config vitest.smoke.config.ts tests/smoke.test.ts tests/smoke-ws.test.ts
 
   sonar:
     name: SonarQube Analysis

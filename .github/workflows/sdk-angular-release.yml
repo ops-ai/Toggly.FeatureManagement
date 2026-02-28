@@ -104,8 +104,14 @@ jobs:
             echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Lint
+        run: npm run lint
+
       - name: Build library
         run: npm run build-lib
+
+      - name: Run tests
+        run: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless
 
       - name: Publish to npm
         working-directory: Toggly.FeatureManagement.Angular/dist/ngx-feature-flags-toggly

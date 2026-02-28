@@ -1,0 +1,14 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - staticcheck
+    - unused
+  exclusions:
+    rules:
+      # nhooyr.io/websocket is deprecated in favour of github.com/coder/websocket.
+      # Migrating requires updating go.mod + go.sum; suppress until the dependency
+      # is upgraded in a dedicated PR.
+      - linters: [staticcheck]
+        text: "coder now maintains this library"

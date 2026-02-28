@@ -68,17 +68,14 @@ jobs:
       - name: Build package
         working-directory: ${{ matrix.path }}
         run: npm run build || echo "No build script configured"
-        continue-on-error: true
 
       - name: Run TypeScript type check
         working-directory: ${{ matrix.path }}
         run: npm run typecheck || echo "No typecheck script configured"
-        continue-on-error: true
 
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}
         run: ${{ matrix.test-cmd }}
-        continue-on-error: true
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -264,7 +261,7 @@ jobs:
         working-directory: Toggly.FeatureManagement.ReactNative/libs/core
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
-        run: npx jest tests/smoke.test.ts tests/smoke-ws.test.ts --runInBand --forceExit
+        run: npx jest tests/smoke.test.ts tests/smoke-ws.test.ts --runInBand --forceExit --testPathIgnorePatterns='/node_modules/'
 
   summary:
     name: Analysis Summary

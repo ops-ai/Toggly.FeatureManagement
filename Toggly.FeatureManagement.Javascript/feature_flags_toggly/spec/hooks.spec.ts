@@ -1,6 +1,7 @@
 import { Hook, EvaluationSeriesData, IdentitySeriesData } from '@ops-ai/toggly-hooks-types';
 import { FeatureRequirement } from '../lib/models';
 import { Toggly } from '../lib/toggly';
+import { HookExecutor } from '../lib/hooks';
 
 describe('Toggly Hooks', () => {
   let beforeEvalCalls: EvaluationSeriesData[] = [];
@@ -31,11 +32,17 @@ describe('Toggly Hooks', () => {
   };
 
   beforeEach(() => {
+    (Toggly as any)._hookExecutor = new HookExecutor();
     beforeEvalCalls = [];
     afterEvalCalls = [];
     beforeIdentifyCalls = [];
     afterIdentifyCalls = [];
     afterRefreshCalls = 0;
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('Hook Registration', () => {
@@ -335,6 +342,14 @@ describe('Toggly Hooks', () => {
   });
 
   describe('Hook Error Isolation', () => {
+    beforeEach(() => {
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     test('should not fail evaluation when hook throws error', (done) => {
       const errorHook: Hook = {
         getMetadata: () => ({ name: 'ErrorHook', version: '1.0.0' }),

@@ -131,7 +131,7 @@ module Toggly
     #
     # @return [String]
     def cache_key
-      "#{@identity}:#{@groups.sort.join(',')}:#{traits_cache_key}"
+      "#{@identity}:#{@groups.sort.join(",")}:#{traits_cache_key}"
     end
 
     private

@@ -21,7 +21,7 @@ func newTestSQLiteDB(t *testing.T) *sql.DB {
 
 func TestSQLiteProvider_LoadDefinitions_WhenEmpty(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
 	snap, err := provider.LoadDefinitions(context.Background())
@@ -36,7 +36,7 @@ func TestSQLiteProvider_LoadDefinitions_WhenEmpty(t *testing.T) {
 
 func TestSQLiteProvider_SaveAndLoadDefinitions(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
 	ctx := context.Background()
@@ -98,7 +98,7 @@ func TestSQLiteProvider_SaveAndLoadDefinitions(t *testing.T) {
 
 func TestSQLiteProvider_SaveDefinitions_Updates(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
 	ctx := context.Background()
@@ -148,7 +148,7 @@ func TestSQLiteProvider_SaveDefinitions_Updates(t *testing.T) {
 
 func TestSQLiteProvider_LoadJWKS_WhenEmpty(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
 	snap, err := provider.LoadJWKS(context.Background())
@@ -163,7 +163,7 @@ func TestSQLiteProvider_LoadJWKS_WhenEmpty(t *testing.T) {
 
 func TestSQLiteProvider_SaveAndLoadJWKS(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
 	ctx := context.Background()
@@ -215,7 +215,7 @@ func TestSQLiteProvider_SaveAndLoadJWKS(t *testing.T) {
 
 func TestSQLiteProvider_SaveJWKS_Updates(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
 	ctx := context.Background()
@@ -256,7 +256,7 @@ func TestSQLiteProvider_SaveJWKS_Updates(t *testing.T) {
 
 func TestSQLiteProvider_CustomOptions(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{
 		DB:              db,
@@ -288,7 +288,7 @@ func TestSQLiteProvider_CustomOptions(t *testing.T) {
 
 func TestSQLiteProvider_DefaultOptions(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
 
@@ -306,14 +306,14 @@ func TestSQLiteProvider_DefaultOptions(t *testing.T) {
 
 func TestSQLiteProvider_ImplementsInterface(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	var _ Provider = NewSQLiteProvider(SQLiteOptions{DB: db})
 }
 
 func TestSQLiteProvider_RoundTrip(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
 	ctx := context.Background()
@@ -362,7 +362,7 @@ func TestSQLiteProvider_RoundTrip(t *testing.T) {
 
 func TestSQLiteProvider_EmptyDefinitions(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
 	ctx := context.Background()
@@ -390,7 +390,7 @@ func TestSQLiteProvider_EmptyDefinitions(t *testing.T) {
 
 func TestSQLiteProvider_ComplexFilters(t *testing.T) {
 	db := newTestSQLiteDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
 	ctx := context.Background()

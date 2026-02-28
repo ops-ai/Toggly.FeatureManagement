@@ -38,8 +38,9 @@ const fetchViaHttps = (url: string): Promise<MockFetchResponse> =>
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
-(appKey ? describe : describe.skip)('Smoke test', () => {
+describe('Smoke test', () => {
   it('loads live evaluated flags', async () => {
+    if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_FRONTEND is not configured — set this env var to run smoke tests');
     const originalFetch = global.fetch;
     (global.fetch as unknown as jest.Mock).mockImplementation((url: string) =>
       fetchViaHttps(url)

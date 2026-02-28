@@ -8,11 +8,11 @@ module Toggly
     # like context builders and middleware settings.
     class Configuration
       # Core configuration options (delegated to Toggly::Config)
-      attr_accessor :app_key, :environment, :base_url, :definitions_url
-      attr_accessor :refresh_interval, :http_timeout
-      attr_accessor :enable_undefined_in_dev, :disable_background_refresh
-      attr_accessor :app_version, :instance_name, :defaults
-      attr_accessor :snapshot_provider, :use_signed_definitions, :allowed_key_ids
+      attr_accessor :app_key, :environment, :base_url, :definitions_url,
+                    :refresh_interval, :http_timeout,
+                    :enable_undefined_in_dev, :disable_background_refresh,
+                    :app_version, :instance_name, :defaults,
+                    :snapshot_provider, :use_signed_definitions, :allowed_key_ids
 
       # Rails-specific options
 

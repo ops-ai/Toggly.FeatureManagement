@@ -10,6 +10,7 @@ module Toggly
       # @param key_prefix [String] Cache key prefix
       # @param expires_in [Integer, nil] Cache expiration in seconds (nil = no expiration)
       def initialize(key_prefix: "toggly", expires_in: nil)
+        super()
         @key_prefix = key_prefix
         @expires_in = expires_in
       end
