@@ -244,10 +244,10 @@ jobs:
         run: |
           mkdir -p coverage
           for pkg in core rails cache; do
-            resultset=$(find coverage-artifacts/$pkg -name ".resultset.json" 2>/dev/null | head -1)
-            if [ -n "$resultset" ]; then
-              cp "$resultset" "coverage/$pkg-resultset.json"
-              echo "Found coverage for $pkg: $resultset"
+            json=$(find coverage-artifacts/$pkg -name "coverage.json" 2>/dev/null | head -1)
+            if [ -n "$json" ]; then
+              cp "$json" "coverage/$pkg-coverage.json"
+              echo "Found coverage for $pkg: $json"
             else
               echo "No coverage found for $pkg"
             fi
@@ -271,7 +271,7 @@ jobs:
             -Dsonar.exclusions=**/vendor/**,**/spec/**,**/test/**,**/coverage/**,**/*.gemspec
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**
-            -Dsonar.ruby.coverage.reportPaths=coverage/core-resultset.json,coverage/rails-resultset.json,coverage/cache-resultset.json
+            -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -294,7 +294,7 @@ jobs:
             -Dsonar.exclusions=**/vendor/**,**/spec/**,**/test/**,**/coverage/**,**/*.gemspec
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**
-            -Dsonar.ruby.coverage.reportPaths=coverage/core-resultset.json,coverage/rails-resultset.json,coverage/cache-resultset.json
+            -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 

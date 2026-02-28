@@ -1,7 +1,12 @@
 # frozen_string_literal: true
 
 require "simplecov"
+require "simplecov_json_formatter"
 SimpleCov.start do
+  formatter SimpleCov::Formatter::MultiFormatter.new([
+    SimpleCov::Formatter::HTMLFormatter,
+    SimpleCov::Formatter::JSONFormatter
+  ])
   add_filter "/spec/"
   enable_coverage :branch
   minimum_coverage line: 80, branch: 50
