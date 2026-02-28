@@ -3,10 +3,15 @@ name: Flutter SDK - Build & Publish
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to release (e.g., 1.1.16)'
-        required: true
-        type: string
+      bump_type:
+        description: 'Version bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
       prerelease:
         description: 'Is this a pre-release?'
         required: false
@@ -22,21 +27,59 @@ env:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      bump_type: ${{ steps.version.outputs.bump_type }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Validate version format
+      - name: Determine version from bump type
+        id: version
         run: |
-          if [[ ! "${{ github.event.inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "Invalid version format. Expected: X.Y.Z or X.Y.Z-suffix"
-            exit 1
+          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+
+          LATEST_TAG=$(git tag -l "flutter-sdk-v*" --sort=-version:refname | head -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            CURRENT_VERSION="0.0.0"
+          else
+            CURRENT_VERSION="${LATEST_TAG#flutter-sdk-v}"
           fi
+
+          BASE_VERSION="${CURRENT_VERSION%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+
+          case "$BUMP_TYPE" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+            *)
+              echo "Invalid bump type: $BUMP_TYPE"
+              exit 1
+              ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+          echo "New version: $NEW_VERSION"
 
       - name: Check if tag exists
         run: |
-          if git rev-parse "flutter-sdk-v${{ github.event.inputs.version }}" >/dev/null 2>&1; then
-            echo "Tag flutter-sdk-v${{ github.event.inputs.version }} already exists"
+          if git rev-parse "flutter-sdk-v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag flutter-sdk-v${{ steps.version.outputs.version }} already exists"
             exit 1
           fi
 
@@ -68,7 +111,7 @@ jobs:
         continue-on-error: true
 
   publish:
-    needs: build-and-test
+    needs: [build-and-test, validate]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -95,8 +138,8 @@ jobs:
       - name: Update version in pubspec.yaml
         working-directory: ${{ env.SDK_ROOT }}
         run: |
-          sed -i "s/^version: .*/version: ${{ github.event.inputs.version }}/" pubspec.yaml
-          echo "Updated pubspec.yaml to version ${{ github.event.inputs.version }}"
+          sed -i "s/^version: .*/version: ${{ needs.validate.outputs.version }}/" pubspec.yaml
+          echo "Updated pubspec.yaml to version ${{ needs.validate.outputs.version }}"
 
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
@@ -120,7 +163,7 @@ jobs:
       - name: Commit version update
         run: |
           git add ${{ env.SDK_ROOT }}/pubspec.yaml
-          git commit -S -m "Released Flutter SDK v${{ github.event.inputs.version }} [skip ci]" || echo "No changes to commit"
+          git commit -S -m "Released Flutter SDK v${{ needs.validate.outputs.version }} (${{ needs.validate.outputs.bump_type }}) [skip ci]" || echo "No changes to commit"
 
           MAX_RETRIES=3
           RETRY_COUNT=0
@@ -145,16 +188,16 @@ jobs:
 
       - name: Create and push tag
         run: |
-          git tag -s -m "Flutter SDK v${{ github.event.inputs.version }}" "flutter-sdk-v${{ github.event.inputs.version }}"
-          git push origin "flutter-sdk-v${{ github.event.inputs.version }}"
+          git tag -s -m "Flutter SDK v${{ needs.validate.outputs.version }}" "flutter-sdk-v${{ needs.validate.outputs.version }}"
+          git push origin "flutter-sdk-v${{ needs.validate.outputs.version }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: flutter-sdk-v${{ github.event.inputs.version }}
-          name: Flutter SDK v${{ github.event.inputs.version }}
+          tag_name: flutter-sdk-v${{ needs.validate.outputs.version }}
+          name: Flutter SDK v${{ needs.validate.outputs.version }}
           body: |
-            ## Flutter SDK v${{ github.event.inputs.version }}
+            ## Flutter SDK v${{ needs.validate.outputs.version }}
 
             ### Installation
 
@@ -162,7 +205,7 @@ jobs:
 
             ```yaml
             dependencies:
-              feature_flags_toggly: ^${{ github.event.inputs.version }}
+              feature_flags_toggly: ^${{ needs.validate.outputs.version }}
             ```
 
             Or install via command line:
@@ -186,7 +229,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   summary:
-    needs: publish
+    needs: [publish, validate]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -196,8 +239,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tag | flutter-sdk-v${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bump type | ${{ needs.validate.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | flutter-sdk-v${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Package | feature_flags_toggly |" >> $GITHUB_STEP_SUMMARY
           echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

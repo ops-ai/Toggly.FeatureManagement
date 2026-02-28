@@ -3,10 +3,15 @@ name: Go SDK - Release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to release (e.g., 1.0.0)'
-        required: true
-        type: string
+      bump_type:
+        description: 'Version bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
       prerelease:
         description: 'Is this a pre-release?'
         required: false
@@ -22,21 +27,59 @@ env:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      bump_type: ${{ steps.version.outputs.bump_type }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Validate version format
+      - name: Determine version from bump type
+        id: version
         run: |
-          if [[ ! "${{ github.event.inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "Invalid version format. Expected: X.Y.Z or X.Y.Z-suffix"
-            exit 1
+          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+
+          LATEST_TAG=$(git tag -l "toggly-go/v*" --sort=-version:refname | head -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            CURRENT_VERSION="0.0.0"
+          else
+            CURRENT_VERSION="${LATEST_TAG#toggly-go/v}"
           fi
+
+          BASE_VERSION="${CURRENT_VERSION%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+
+          case "$BUMP_TYPE" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+            *)
+              echo "Invalid bump type: $BUMP_TYPE"
+              exit 1
+              ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+          echo "New version: $NEW_VERSION"
 
       - name: Check if tag exists
         run: |
-          if git rev-parse "toggly-go/v${{ github.event.inputs.version }}" >/dev/null 2>&1; then
-            echo "Tag toggly-go/v${{ github.event.inputs.version }} already exists"
+          if git rev-parse "toggly-go/v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag toggly-go/v${{ steps.version.outputs.version }} already exists"
             exit 1
           fi
 
@@ -80,7 +123,7 @@ jobs:
         continue-on-error: true
 
   release:
-    needs: build-and-test
+    needs: [build-and-test, validate]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -106,27 +149,27 @@ jobs:
       - name: Create and push tag
         run: |
           # Go modules in subdirectories use <subdir>/vX.Y.Z tag format
-          git tag -s -m "Go SDK v${{ github.event.inputs.version }}" "toggly-go/v${{ github.event.inputs.version }}"
-          git push origin "toggly-go/v${{ github.event.inputs.version }}"
+          git tag -s -m "Go SDK v${{ needs.validate.outputs.version }}" "toggly-go/v${{ needs.validate.outputs.version }}"
+          git push origin "toggly-go/v${{ needs.validate.outputs.version }}"
 
       - name: Request Go module proxy update
         run: |
           GOPROXY=https://proxy.golang.org GO111MODULE=on \
-            go list -m github.com/ops-ai/Toggly.FeatureManagement/toggly-go@v${{ github.event.inputs.version }} || true
+            go list -m github.com/ops-ai/Toggly.FeatureManagement/toggly-go@v${{ needs.validate.outputs.version }} || true
         continue-on-error: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: toggly-go/v${{ github.event.inputs.version }}
-          name: Go SDK v${{ github.event.inputs.version }}
+          tag_name: toggly-go/v${{ needs.validate.outputs.version }}
+          name: Go SDK v${{ needs.validate.outputs.version }}
           body: |
-            ## Go SDK v${{ github.event.inputs.version }}
+            ## Go SDK v${{ needs.validate.outputs.version }}
 
             ### Installation
 
             ```bash
-            go get github.com/ops-ai/Toggly.FeatureManagement/toggly-go@v${{ github.event.inputs.version }}
+            go get github.com/ops-ai/Toggly.FeatureManagement/toggly-go@v${{ needs.validate.outputs.version }}
             ```
 
             ### Features
@@ -150,7 +193,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   summary:
-    needs: release
+    needs: [release, validate]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -160,8 +203,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tag | toggly-go/v${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bump type | ${{ needs.validate.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | toggly-go/v${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Module | github.com/ops-ai/Toggly.FeatureManagement/toggly-go |" >> $GITHUB_STEP_SUMMARY
           echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

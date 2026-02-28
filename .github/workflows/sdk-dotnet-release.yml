@@ -3,10 +3,15 @@ name: .NET SDKs - Build & Publish
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to release (e.g., 2.0.0)'
-        required: true
-        type: string
+      bump_type:
+        description: 'Version bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
       packages:
         description: 'Packages to release (comma-separated or "all")'
         required: false
@@ -29,21 +34,59 @@ env:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      bump_type: ${{ steps.version.outputs.bump_type }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Validate version format
+      - name: Determine version from bump type
+        id: version
         run: |
-          if [[ ! "${{ github.event.inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "Invalid version format. Expected: X.Y.Z or X.Y.Z-suffix"
-            exit 1
+          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+
+          LATEST_TAG=$(git tag -l "dotnet-sdk-v*" --sort=-version:refname | head -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            CURRENT_VERSION="0.0.0"
+          else
+            CURRENT_VERSION="${LATEST_TAG#dotnet-sdk-v}"
           fi
+
+          BASE_VERSION="${CURRENT_VERSION%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+
+          case "$BUMP_TYPE" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+            *)
+              echo "Invalid bump type: $BUMP_TYPE"
+              exit 1
+              ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+          echo "New version: $NEW_VERSION"
 
       - name: Check if tag exists
         run: |
-          if git rev-parse "dotnet-sdk-v${{ github.event.inputs.version }}" >/dev/null 2>&1; then
-            echo "Tag dotnet-sdk-v${{ github.event.inputs.version }} already exists"
+          if git rev-parse "dotnet-sdk-v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag dotnet-sdk-v${{ steps.version.outputs.version }} already exists"
             exit 1
           fi
 
@@ -69,14 +112,14 @@ jobs:
 
       - name: Build solution
         working-directory: ${{ env.SDK_ROOT }}
-        run: dotnet build Toggly.FeatureManagement.sln -c Release --no-restore -p:Version=${{ github.event.inputs.version }}
+        run: dotnet build Toggly.FeatureManagement.sln -c Release --no-restore -p:Version=${{ needs.validate.outputs.version }}
 
       - name: Run tests
         working-directory: ${{ env.SDK_ROOT }}
         run: dotnet test Toggly.FeatureManagement.sln -c Release --no-build
 
   publish:
-    needs: build-and-test
+    needs: [build-and-test, validate]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -149,8 +192,8 @@ jobs:
         run: |
           dotnet pack ${{ matrix.project }}/${{ matrix.project }}.csproj \
             -c Release \
-            -p:Version=${{ github.event.inputs.version }} \
-            -p:PackageVersion=${{ github.event.inputs.version }} \
+            -p:Version=${{ needs.validate.outputs.version }} \
+            -p:PackageVersion=${{ needs.validate.outputs.version }} \
             -p:ContinuousIntegrationBuild=true \
             --output ./nupkgs
 
@@ -178,13 +221,13 @@ jobs:
         if: steps.should_publish.outputs.publish == 'true'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
-          dotnet nuget push ./nupkgs/${{ matrix.project }}.${{ github.event.inputs.version }}.nupkg \
+          dotnet nuget push ./nupkgs/${{ matrix.project }}.${{ needs.validate.outputs.version }}.nupkg \
             --api-key ${{ secrets.NUGET_API_KEY }} \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
 
   release:
-    needs: publish
+    needs: [publish, validate]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -209,21 +252,21 @@ jobs:
 
       - name: Create and push tag
         run: |
-          git tag -s -m ".NET SDK v${{ github.event.inputs.version }}" "dotnet-sdk-v${{ github.event.inputs.version }}"
-          git push origin "dotnet-sdk-v${{ github.event.inputs.version }}"
+          git tag -s -m ".NET SDK v${{ needs.validate.outputs.version }}" "dotnet-sdk-v${{ needs.validate.outputs.version }}"
+          git push origin "dotnet-sdk-v${{ needs.validate.outputs.version }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: dotnet-sdk-v${{ github.event.inputs.version }}
-          name: .NET SDK v${{ github.event.inputs.version }}
+          tag_name: dotnet-sdk-v${{ needs.validate.outputs.version }}
+          name: .NET SDK v${{ needs.validate.outputs.version }}
           body: |
-            ## .NET SDK v${{ github.event.inputs.version }}
+            ## .NET SDK v${{ needs.validate.outputs.version }}
 
             ### Installation
 
             ```bash
-            dotnet add package Toggly.FeatureManagement --version ${{ github.event.inputs.version }}
+            dotnet add package Toggly.FeatureManagement --version ${{ needs.validate.outputs.version }}
             ```
 
             ### NuGet Packages
@@ -251,7 +294,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   summary:
-    needs: [publish, release]
+    needs: [publish, release, validate]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -261,8 +304,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tag | dotnet-sdk-v${{ github.event.inputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bump type | ${{ needs.validate.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | dotnet-sdk-v${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Packages | ${{ github.event.inputs.packages || 'all' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
