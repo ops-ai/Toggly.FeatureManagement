@@ -52,6 +52,7 @@ jobs:
         with:
           name: ruby-coverage-core
           path: ${{ env.SDK_ROOT }}/toggly/coverage/
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: ignore
 
@@ -119,6 +120,7 @@ jobs:
         with:
           name: ruby-coverage-rails
           path: ${{ env.SDK_ROOT }}/toggly-rails/coverage/
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: ignore
 
@@ -167,6 +169,7 @@ jobs:
         with:
           name: ruby-coverage-cache
           path: ${{ env.SDK_ROOT }}/toggly-cache/coverage/
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: ignore
 
