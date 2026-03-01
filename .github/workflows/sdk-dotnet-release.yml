@@ -208,7 +208,24 @@ jobs:
             -p:ContinuousIntegrationBuild=true \
             --output ./nupkgs
 
+      - name: Import signing CA certificate chain
+        if: steps.should_publish.outputs.publish == 'true'
+        run: |
+          if [ -z "$NUGET_SIGN_CA_CHAIN_B64" ]; then
+            echo "Missing required secret: NUGET_SIGN_CA_CHAIN_B64"
+            echo "Provide a base64-encoded PEM/CER chain (root + intermediates) used by the signing certificate."
+            exit 1
+          fi
+
+          CERT_PATH="/usr/local/share/ca-certificates/toggly-nuget-signing-chain.crt"
+          echo "$NUGET_SIGN_CA_CHAIN_B64" | base64 --decode | sudo tee "$CERT_PATH" >/dev/null
+          sudo chmod 644 "$CERT_PATH"
+          sudo update-ca-certificates
+        env:
+          NUGET_SIGN_CA_CHAIN_B64: ${{ secrets.NUGET_SIGN_CA_CHAIN_B64 }}
+
       - name: Sign NuGet packages
+        id: sign_packages
         if: steps.should_publish.outputs.publish == 'true'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
