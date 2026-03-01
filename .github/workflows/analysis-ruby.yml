@@ -256,20 +256,16 @@ jobs:
           ls -la coverage/ || echo "No coverage files found"
         continue-on-error: true
 
-      - name: Convert coverage format for SonarQube
+      - name: Debug coverage file contents
         run: |
           for pkg in core rails cache; do
             file="coverage/${pkg}-coverage.json"
             if [ -f "$file" ]; then
-              tmp=$(mktemp)
-              # Convert {lines: [...], branches: {...}} per-file values to flat arrays,
-              # which is the format the SonarQube Ruby sensor parses correctly.
-              jq '.coverage |= with_entries(.value |= if type == "object" and has("lines") then .lines else . end)' \
-                "$file" > "$tmp" && mv "$tmp" "$file"
-              echo "Converted ${pkg} coverage format"
-              first=$(jq -r '.coverage | keys[0]' "$file")
-              echo "  Sample path: $first"
-              echo "  Sample lines (first 5): $(jq -c '.coverage[.coverage | keys[0]][:5]' "$file")"
+              echo "=== ${pkg} coverage ==="
+              first_key=$(jq -r '.coverage | keys[0]' "$file")
+              echo "  First path: $first_key"
+              echo "  First value type: $(jq -r '.coverage[.coverage | keys[0]] | type' "$file")"
+              jq -c '.coverage[.coverage | keys[0]] | if type == "object" then {lines: .lines[:5], branches_keys: (.branches | keys)} else .[:5] end' "$file"
             else
               echo "No coverage file for ${pkg}"
             fi
