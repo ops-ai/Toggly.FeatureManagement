@@ -256,22 +256,6 @@ jobs:
           ls -la coverage/ || echo "No coverage files found"
         continue-on-error: true
 
-      - name: Debug coverage file contents
-        run: |
-          for pkg in core rails cache; do
-            file="coverage/${pkg}-coverage.json"
-            if [ -f "$file" ]; then
-              echo "=== ${pkg} coverage ==="
-              first_key=$(jq -r '.coverage | keys[0]' "$file")
-              echo "  First path: $first_key"
-              echo "  First value type: $(jq -r '.coverage[.coverage | keys[0]] | type' "$file")"
-              jq -c '.coverage[.coverage | keys[0]] | if type == "object" then {lines: .lines[:5], branches_keys: (.branches | keys)} else .[:5] end' "$file"
-            else
-              echo "No coverage file for ${pkg}"
-            fi
-          done
-        continue-on-error: true
-
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v6.0.0
         env:
@@ -288,7 +272,6 @@ jobs:
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**
             -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
-            -Dsonar.verbose=true
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -313,7 +296,6 @@ jobs:
             -Dsonar.test.inclusions=**/spec/**,**/test/**
             -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
-            -Dsonar.verbose=true
         continue-on-error: true
 
   dependency-check:
