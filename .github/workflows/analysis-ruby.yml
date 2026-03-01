@@ -256,19 +256,20 @@ jobs:
           ls -la coverage/ || echo "No coverage files found"
         continue-on-error: true
 
-      - name: Normalize coverage paths
+      - name: Convert coverage format for SonarQube
         run: |
-          workspace="${GITHUB_WORKSPACE}/"
           for pkg in core rails cache; do
             file="coverage/${pkg}-coverage.json"
             if [ -f "$file" ]; then
               tmp=$(mktemp)
-              jq --arg prefix "$workspace" \
-                '.coverage |= with_entries(.key |= if startswith($prefix) then .[$prefix|length:] else . end)' \
+              # Convert {lines: [...], branches: {...}} per-file values to flat arrays,
+              # which is the format the SonarQube Ruby sensor parses correctly.
+              jq '.coverage |= with_entries(.value |= if type == "object" and has("lines") then .lines else . end)' \
                 "$file" > "$tmp" && mv "$tmp" "$file"
-              echo "Normalized ${pkg} coverage paths"
+              echo "Converted ${pkg} coverage format"
               first=$(jq -r '.coverage | keys[0]' "$file")
-              echo "  Sample: $first"
+              echo "  Sample path: $first"
+              echo "  Sample lines (first 5): $(jq -c '.coverage[.coverage | keys[0]][:5]' "$file")"
             else
               echo "No coverage file for ${pkg}"
             fi
