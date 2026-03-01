@@ -34,6 +34,8 @@ namespace Toggly.FeatureManagement
 
         private readonly string _environment;
 
+        private string SanitizedAppKey => _appKey.Length > 6 ? $"***{_appKey[^6..]}" : "***";
+
         private volatile EntityTagHeaderValue? _lastETag = null;
 
         private readonly ConcurrentDictionary<string, FeatureDefinition> _definitions = new ConcurrentDictionary<string, FeatureDefinition>();
@@ -102,8 +104,20 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
-            _timer = new Timer(TimerCallback, null, TimeSpan.Zero, _refreshInterval);
             Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyVersionAttribute>()?.Version}";
+
+            var definitionsUrl = togglySettings.Value.DefinitionsBaseUrl ?? "https://definitions.toggly.io/";
+            var definitionsPath = _useSignedDefinitions ? "definitions-signed" : "definitions";
+
+            if (string.IsNullOrWhiteSpace(_appKey))
+                _logger.LogError("Toggly AppKey is not configured. Feature flags will not work. Set the AppKey in your Toggly configuration");
+            else if (string.IsNullOrWhiteSpace(_environment))
+                _logger.LogError("Toggly Environment is not configured. Feature flags will not work. Set the Environment in your Toggly configuration");
+            else
+                _logger.LogInformation("Toggly initialized — DefinitionsUrl: {DefinitionsUrl}{DefinitionsPath}/{AppKey}/{Environment}, Signed: {UseSigned}",
+                    definitionsUrl, definitionsPath, SanitizedAppKey, _environment, _useSignedDefinitions);
+
+            _timer = new Timer(TimerCallback, null, TimeSpan.Zero, _refreshInterval);
         }
 
         private void TimerCallback(object? state)
@@ -225,6 +239,7 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
+            HttpClient? httpClient = null;
             try
             {
                 // Ensure initial load happens only once (singleton, but multiple threads could call this)
@@ -260,8 +275,8 @@ namespace Toggly.FeatureManagement
                         _metricsService ??= _serviceProvider.GetService<IMetricsService>();
                     }
                 }
-                
-                using var httpClient = _clientFactory.CreateClient("toggly");
+
+                httpClient = _clientFactory.CreateClient("toggly");
 #if NETCOREAPP3_1_OR_GREATER
                 httpClient.DefaultRequestVersion = HttpVersion.Version20;
 #endif
@@ -286,14 +301,19 @@ namespace Toggly.FeatureManagement
                 var definitionsChanged = false;
                 if (_useSignedDefinitions)
                 {
-                    var newDefinitionsRequest = await httpClient.GetAsync($"definitions-signed/{_appKey}/{_environment}").ConfigureAwait(false);
+                    var requestPath = $"definitions-signed/{_appKey}/{_environment}";
+                    var newDefinitionsRequest = await httpClient.GetAsync(requestPath).ConfigureAwait(false);
                     if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
                     {
                         _lastDefinitionsCheck = DateTime.UtcNow;
                         return;
                     }
 
-                    newDefinitionsRequest.EnsureSuccessStatusCode();
+                    if (!newDefinitionsRequest.IsSuccessStatusCode)
+                    {
+                        await HandleDefinitionsRequestError(newDefinitionsRequest, requestPath).ConfigureAwait(false);
+                        return;
+                    }
 
                     // Get the raw JSON string first
                     var rawJson = await newDefinitionsRequest.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -370,14 +390,19 @@ namespace Toggly.FeatureManagement
                 }
                 else
                 {
-                    var newDefinitionsRequest = await httpClient.GetAsync($"definitions/{_appKey}/{_environment}").ConfigureAwait(false);
+                    var requestPath = $"definitions/{_appKey}/{_environment}";
+                    var newDefinitionsRequest = await httpClient.GetAsync(requestPath).ConfigureAwait(false);
                     if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
                     {
                         _lastDefinitionsCheck = DateTime.UtcNow;
                         return;
                     }
 
-                    newDefinitionsRequest.EnsureSuccessStatusCode();
+                    if (!newDefinitionsRequest.IsSuccessStatusCode)
+                    {
+                        await HandleDefinitionsRequestError(newDefinitionsRequest, requestPath).ConfigureAwait(false);
+                        return;
+                    }
 
                     newDefinitions = await newDefinitionsRequest.Content.ReadFromJsonAsync<List<FeatureDefinitionModel>>().ConfigureAwait(false);
                     if (newDefinitions == null)
@@ -465,7 +490,7 @@ namespace Toggly.FeatureManagement
                     try
                     {
                         var baseUri = new Uri(_settings.Value.DefinitionsBaseUrl ?? "https://definitions.toggly.io/");
-                        var wsBuilder = new UriBuilder(new Uri(baseUri, $"{_appKey}/ws"))
+                        var wsBuilder = new UriBuilder(new Uri(baseUri, $"{_appKey}/{_environment}/ws"))
                         {
                             Scheme = baseUri.Scheme == Uri.UriSchemeHttps ? "wss" : "ws",
                             Port = baseUri.IsDefaultPort ? -1 : baseUri.Port
@@ -475,9 +500,34 @@ namespace Toggly.FeatureManagement
                         var newWebSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
                         newWebSocketClient.MessageReceived.Subscribe(msg =>
                         {
-                            if (msg.Text == "update" || msg.Text == "flags-updated")
+                            if (string.IsNullOrEmpty(msg.Text)) return;
+
+                            var shouldRefresh = false;
+                            var text = msg.Text.Trim();
+
+                            if (text == "update" || text == "flags-updated")
                             {
-                                // Fire and forget, but log errors
+                                shouldRefresh = true;
+                            }
+                            else if (text.StartsWith("{"))
+                            {
+                                try
+                                {
+                                    using var doc = JsonDocument.Parse(text);
+                                    if (doc.RootElement.TryGetProperty("type", out var typeProp))
+                                    {
+                                        var type = typeProp.GetString();
+                                        shouldRefresh = type == "update" || type == "flags-updated" || type == "definitions";
+                                    }
+                                }
+                                catch
+                                {
+                                    // Not valid JSON — ignore
+                                }
+                            }
+
+                            if (shouldRefresh)
+                            {
                                 _ = Task.Run(async () =>
                                 {
                                     try
@@ -530,9 +580,26 @@ namespace Toggly.FeatureManagement
                 _lastRefresh = DateTime.UtcNow;
                 _lastDefinitionsCheck = DateTime.UtcNow;
             }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "HTTP error refreshing feature definitions from {BaseUrl} for AppKey={AppKey}, Environment={Environment}. " +
+                    "Verify your Toggly configuration: ensure the AppKey is a valid Backend-type key and the Environment name matches exactly",
+                    httpClient?.BaseAddress, SanitizedAppKey, _environment);
+                _lastError = ex.Message;
+                _lastErrorTime = DateTime.UtcNow;
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                _logger.LogError(ex, "Timeout refreshing feature definitions from {BaseUrl} for AppKey={AppKey}, Environment={Environment}. " +
+                    "The definitions service may be temporarily unavailable",
+                    httpClient?.BaseAddress, SanitizedAppKey, _environment);
+                _lastError = ex.Message;
+                _lastErrorTime = DateTime.UtcNow;
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error refreshing features list");
+                _logger.LogError(ex, "Unexpected error refreshing feature definitions for AppKey={AppKey}, Environment={Environment}",
+                    SanitizedAppKey, _environment);
                 _lastError = ex.Message;
                 _lastErrorTime = DateTime.UtcNow;
             }
@@ -547,6 +614,57 @@ namespace Toggly.FeatureManagement
                     // Semaphore was disposed during execution (e.g., during application shutdown), ignore
                 }
             }
+        }
+
+        private async Task HandleDefinitionsRequestError(HttpResponseMessage response, string requestPath)
+        {
+            var statusCode = (int)response.StatusCode;
+            var responseBody = string.Empty;
+            try
+            {
+                responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                // Best effort — response body may not be readable
+            }
+
+            var rawUrl = $"{response.RequestMessage?.RequestUri ?? new Uri(requestPath, UriKind.RelativeOrAbsolute)}";
+            var sanitizedUrl = rawUrl.Replace(_appKey, SanitizedAppKey);
+            var message = response.StatusCode switch
+            {
+                HttpStatusCode.Forbidden =>
+                    $"Access denied (403) fetching definitions from {sanitizedUrl}. " +
+                    (responseBody.Contains("does not match", StringComparison.OrdinalIgnoreCase)
+                        ? $"The Environment \"{_environment}\" does not match the environment mapped to your AppKey. Verify the Environment name is correct and matches the app key configuration in your Toggly dashboard."
+                        : $"This usually means you are using a Frontend/Mobile app key with the .NET SDK. The .NET SDK requires a Backend-type app key. " +
+                          "Check your AppKey type in the Toggly dashboard under App Settings > App Keys.") +
+                    (!string.IsNullOrEmpty(responseBody) ? $" Server response: {responseBody}" : string.Empty),
+
+                HttpStatusCode.NotFound =>
+                    $"Definitions not found (404) at {sanitizedUrl}. " +
+                    $"Verify that AppKey \"{SanitizedAppKey}\" exists and Environment \"{_environment}\" is correct. " +
+                    "Check your app key in the Toggly dashboard under App Settings > App Keys." +
+                    (!string.IsNullOrEmpty(responseBody) ? $" Server response: {responseBody}" : string.Empty),
+
+                HttpStatusCode.Unauthorized =>
+                    $"Authentication failed (401) fetching definitions from {sanitizedUrl}. " +
+                    "Verify your AppKey is valid and has not been revoked." +
+                    (!string.IsNullOrEmpty(responseBody) ? $" Server response: {responseBody}" : string.Empty),
+
+                HttpStatusCode.BadRequest =>
+                    $"Bad request (400) fetching definitions from {sanitizedUrl}. " +
+                    (!string.IsNullOrEmpty(responseBody) ? $"Server response: {responseBody}" : "The request was malformed."),
+
+                _ =>
+                    $"HTTP {statusCode} ({response.StatusCode}) fetching definitions from {sanitizedUrl} " +
+                    $"for AppKey={SanitizedAppKey}, Environment={_environment}." +
+                    (!string.IsNullOrEmpty(responseBody) ? $" Server response: {responseBody}" : string.Empty)
+            };
+
+            _logger.LogError("Error refreshing feature definitions: {ErrorMessage}", message);
+            _lastError = message;
+            _lastErrorTime = DateTime.UtcNow;
         }
 
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _keyFetchSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
@@ -646,7 +764,14 @@ namespace Toggly.FeatureManagement
                         
                 // Fetch JWKS
                 var jwksResponse = await httpClient.GetAsync(".well-known/jwks").ConfigureAwait(false);
-                jwksResponse.EnsureSuccessStatusCode();
+                if (!jwksResponse.IsSuccessStatusCode)
+                {
+                    var body = string.Empty;
+                    try { body = await jwksResponse.Content.ReadAsStringAsync().ConfigureAwait(false); } catch { }
+                    _logger.LogError("Failed to fetch JWKS from {Url}: HTTP {StatusCode}. {ResponseBody}",
+                        jwksResponse.RequestMessage?.RequestUri, (int)jwksResponse.StatusCode, body);
+                    return null;
+                }
                 var jwks = await jwksResponse.Content.ReadFromJsonAsync<JsonWebKeySet>().ConfigureAwait(false);
                 if (jwks == null)
                 {
@@ -820,7 +945,7 @@ namespace Toggly.FeatureManagement
             // Minor race conditions acceptable for debug info (singleton, infrequent updates)
             return new FeatureProviderDebugInfo
             {
-                AppKey = _appKey,
+                AppKey = SanitizedAppKey,
                 Environment = _environment,
                 Definitions = _definitions,
                 Experiments = _experiments,
