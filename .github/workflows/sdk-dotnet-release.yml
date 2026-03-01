@@ -47,15 +47,23 @@ jobs:
         id: version
         run: |
           BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+          MINIMUM_BASE_VERSION="3.0.4"
 
           LATEST_TAG=$(git tag -l "dotnet-sdk-v*" --sort=-version:refname | head -n 1)
           if [ -z "$LATEST_TAG" ]; then
-            CURRENT_VERSION="0.0.0"
+            CURRENT_VERSION="$MINIMUM_BASE_VERSION"
           else
             CURRENT_VERSION="${LATEST_TAG#dotnet-sdk-v}"
           fi
 
           BASE_VERSION="${CURRENT_VERSION%%-*}"
+          # Ensure release bumping never starts below the already published baseline.
+          HIGHEST_BASE_VERSION=$(printf '%s\n%s\n' "$BASE_VERSION" "$MINIMUM_BASE_VERSION" | sort -V | tail -n 1)
+          if [ "$HIGHEST_BASE_VERSION" != "$BASE_VERSION" ]; then
+            CURRENT_VERSION="$MINIMUM_BASE_VERSION"
+            BASE_VERSION="$MINIMUM_BASE_VERSION"
+          fi
+
           IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
 
           case "$BUMP_TYPE" in
