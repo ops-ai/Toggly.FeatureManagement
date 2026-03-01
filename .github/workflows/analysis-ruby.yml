@@ -243,11 +243,33 @@ jobs:
       - name: Organize coverage files
         run: |
           mkdir -p coverage
+          workspace="${GITHUB_WORKSPACE}/"
           for pkg in core rails cache; do
             json=$(find coverage-artifacts/$pkg -name "coverage.json" 2>/dev/null | head -1)
             if [ -n "$json" ]; then
-              cp "$json" "coverage/$pkg-coverage.json"
-              echo "Found coverage for $pkg: $json"
+              python3 - <<PYEOF
+import json, sys
+
+with open("$json") as f:
+    data = json.load(f)
+
+# Normalize absolute paths to relative by stripping workspace prefix
+prefix = "$workspace"
+new_coverage = {}
+for path, cov in data.get("coverage", {}).items():
+    if path.startswith(prefix):
+        path = path[len(prefix):]
+    new_coverage[path] = cov
+data["coverage"] = new_coverage
+
+with open("coverage/${pkg}-coverage.json", "w") as f:
+    json.dump(data, f)
+
+print(f"Processed {pkg}: {len(new_coverage)} files, stripped prefix: {prefix}")
+first = next(iter(new_coverage), None)
+if first:
+    print(f"  Sample path: {first}")
+PYEOF
             else
               echo "No coverage found for $pkg"
             fi
@@ -272,6 +294,7 @@ jobs:
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**
             -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
+            -Dsonar.verbose=true
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -296,6 +319,7 @@ jobs:
             -Dsonar.test.inclusions=**/spec/**,**/test/**
             -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
+            -Dsonar.verbose=true
         continue-on-error: true
 
   dependency-check:
