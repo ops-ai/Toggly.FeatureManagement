@@ -61,20 +61,20 @@ jobs:
           # If release tagging was skipped in a previous run, recover from the
           # latest published NuGet version so bumping does not reset to baseline.
           NUGET_BASE_VERSION=$(python3 - <<'PY'
-import json
-import urllib.request
-import re
+          import json
+          import urllib.request
+          import re
 
-url = 'https://api.nuget.org/v3-flatcontainer/toggly.featuremanagement/index.json'
-pattern = re.compile(r'^\d+\.\d+\.\d+$')
-try:
-    with urllib.request.urlopen(url, timeout=10) as resp:
-        payload = json.loads(resp.read().decode('utf-8'))
-    versions = [v for v in payload.get('versions', []) if pattern.match(v)]
-    print(versions[-1] if versions else '')
-except Exception:
-    print('')
-PY
+          url = 'https://api.nuget.org/v3-flatcontainer/toggly.featuremanagement/index.json'
+          pattern = re.compile(r'^\d+\.\d+\.\d+$')
+          try:
+              with urllib.request.urlopen(url, timeout=10) as resp:
+                  payload = json.loads(resp.read().decode('utf-8'))
+              versions = [v for v in payload.get('versions', []) if pattern.match(v)]
+              print(versions[-1] if versions else '')
+          except Exception:
+              print('')
+          PY
           )
 
           BASE_VERSION="$TAG_BASE_VERSION"
