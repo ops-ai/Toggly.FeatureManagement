@@ -216,9 +216,12 @@ jobs:
         run: |
           mkdir -p coverage
           for pkg in nextjs-toggly-core nextjs-toggly-server nextjs-toggly-client nextjs-toggly-edge; do
-            lcov_file="coverage-artifacts/${{ env.SDK_ROOT }}/$pkg/coverage/lcov.info"
+            lcov_file="coverage-artifacts/$pkg/coverage/lcov.info"
             if [ -f "$lcov_file" ]; then
               sed "s|SF:|SF:${{ env.SDK_ROOT }}/$pkg/|g" "$lcov_file" > "coverage/$pkg-lcov.info"
+              echo "Found coverage for $pkg"
+            else
+              echo "No coverage found for $pkg (tried: $lcov_file)"
             fi
           done
           echo "Coverage files:"
