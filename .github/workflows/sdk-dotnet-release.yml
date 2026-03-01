@@ -47,7 +47,7 @@ jobs:
         id: version
         run: |
           BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          MINIMUM_BASE_VERSION="3.0.4"
+          MINIMUM_BASE_VERSION="3.1.0"
 
           LATEST_TAG=$(git tag -l "dotnet-sdk-v*" --sort=-version:refname | head -n 1)
           if [ -z "$LATEST_TAG" ]; then
