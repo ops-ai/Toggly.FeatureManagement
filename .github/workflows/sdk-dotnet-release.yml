@@ -294,7 +294,15 @@ jobs:
         if: steps.should_publish.outputs.publish == 'true'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
-          dotnet nuget push ./nupkgs/${{ matrix.project }}.${{ needs.validate.outputs.version }}.nupkg \
+          PACKAGE_TO_PUSH=$(ls ./nupkgs/*.${{ needs.validate.outputs.version }}.nupkg 2>/dev/null | head -n 1)
+          if [ -z "$PACKAGE_TO_PUSH" ]; then
+            echo "No .nupkg found for version ${{ needs.validate.outputs.version }} in ./nupkgs"
+            ls -la ./nupkgs || true
+            exit 1
+          fi
+
+          echo "Pushing package: $PACKAGE_TO_PUSH"
+          dotnet nuget push "$PACKAGE_TO_PUSH" \
             --api-key ${{ secrets.NUGET_API_KEY }} \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
