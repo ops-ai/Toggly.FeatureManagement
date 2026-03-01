@@ -213,13 +213,50 @@ jobs:
         run: |
           if [ -z "$NUGET_SIGN_CA_CHAIN_B64" ]; then
             echo "Missing required secret: NUGET_SIGN_CA_CHAIN_B64"
-            echo "Provide a base64-encoded PEM/CER chain (root + intermediates) used by the signing certificate."
+            echo "Provide PEM text or base64-encoded PEM/CER chain (root + intermediates) used by the signing certificate."
             exit 1
           fi
 
-          CERT_PATH="/usr/local/share/ca-certificates/toggly-nuget-signing-chain.crt"
-          echo "$NUGET_SIGN_CA_CHAIN_B64" | base64 --decode | sudo tee "$CERT_PATH" >/dev/null
-          sudo chmod 644 "$CERT_PATH"
+          # Support both raw PEM and base64-encoded content in the secret.
+          RAW_CHAIN_PATH="/tmp/toggly-signing-chain-input.pem"
+          if [[ "$NUGET_SIGN_CA_CHAIN_B64" == *"BEGIN CERTIFICATE"* ]]; then
+            printf '%s\n' "$NUGET_SIGN_CA_CHAIN_B64" > "$RAW_CHAIN_PATH"
+          elif printf '%s' "$NUGET_SIGN_CA_CHAIN_B64" | base64 --decode > "$RAW_CHAIN_PATH" 2>/tmp/toggly-ca-b64.err; then
+            echo "Decoded CA chain from base64 secret"
+          else
+            echo "Failed to parse NUGET_SIGN_CA_CHAIN_B64 as base64."
+            cat /tmp/toggly-ca-b64.err
+            exit 1
+          fi
+
+          # Convert DER to PEM when only a single DER cert is provided.
+          if ! grep -q "BEGIN CERTIFICATE" "$RAW_CHAIN_PATH"; then
+            if ! openssl x509 -inform DER -in "$RAW_CHAIN_PATH" -out "$RAW_CHAIN_PATH" 2>/dev/null; then
+              echo "The provided CA chain is neither PEM nor DER certificate content."
+              exit 1
+            fi
+          fi
+
+          # Split a PEM bundle into one-cert-per-file for update-ca-certificates.
+          rm -f /tmp/toggly-signing-ca-*.crt
+          awk '
+            /-----BEGIN CERTIFICATE-----/ { cert++; out=sprintf("/tmp/toggly-signing-ca-%02d.crt", cert) }
+            cert > 0 { print > out }
+            /-----END CERTIFICATE-----/ { close(out) }
+          ' "$RAW_CHAIN_PATH"
+
+          CERT_COUNT=$(ls /tmp/toggly-signing-ca-*.crt 2>/dev/null | wc -l)
+          if [ "$CERT_COUNT" -eq 0 ]; then
+            echo "No valid certificates found in provided CA chain."
+            exit 1
+          fi
+
+          sudo rm -f /usr/local/share/ca-certificates/toggly-signing-ca-*.crt
+          for cert in /tmp/toggly-signing-ca-*.crt; do
+            sudo cp "$cert" "/usr/local/share/ca-certificates/$(basename "$cert")"
+            sudo chmod 644 "/usr/local/share/ca-certificates/$(basename "$cert")"
+          done
+
           sudo update-ca-certificates
         env:
           NUGET_SIGN_CA_CHAIN_B64: ${{ secrets.NUGET_SIGN_CA_CHAIN_B64 }}
