@@ -51,18 +51,39 @@ jobs:
 
           LATEST_TAG=$(git tag -l "dotnet-sdk-v*" --sort=-version:refname | head -n 1)
           if [ -z "$LATEST_TAG" ]; then
-            CURRENT_VERSION="$MINIMUM_BASE_VERSION"
+            TAG_BASE_VERSION="$MINIMUM_BASE_VERSION"
           else
-            CURRENT_VERSION="${LATEST_TAG#dotnet-sdk-v}"
+            TAG_BASE_VERSION="${LATEST_TAG#dotnet-sdk-v}"
           fi
 
-          BASE_VERSION="${CURRENT_VERSION%%-*}"
-          # Ensure release bumping never starts below the already published baseline.
-          HIGHEST_BASE_VERSION=$(printf '%s\n%s\n' "$BASE_VERSION" "$MINIMUM_BASE_VERSION" | sort -V | tail -n 1)
-          if [ "$HIGHEST_BASE_VERSION" != "$BASE_VERSION" ]; then
-            CURRENT_VERSION="$MINIMUM_BASE_VERSION"
-            BASE_VERSION="$MINIMUM_BASE_VERSION"
+          TAG_BASE_VERSION="${TAG_BASE_VERSION%%-*}"
+
+          # If release tagging was skipped in a previous run, recover from the
+          # latest published NuGet version so bumping does not reset to baseline.
+          NUGET_BASE_VERSION=$(python3 - <<'PY'
+import json
+import urllib.request
+import re
+
+url = 'https://api.nuget.org/v3-flatcontainer/toggly.featuremanagement/index.json'
+pattern = re.compile(r'^\d+\.\d+\.\d+$')
+try:
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        payload = json.loads(resp.read().decode('utf-8'))
+    versions = [v for v in payload.get('versions', []) if pattern.match(v)]
+    print(versions[-1] if versions else '')
+except Exception:
+    print('')
+PY
+          )
+
+          BASE_VERSION="$TAG_BASE_VERSION"
+          if [ -n "$NUGET_BASE_VERSION" ]; then
+            BASE_VERSION=$(printf '%s\n%s\n' "$BASE_VERSION" "$NUGET_BASE_VERSION" | sort -V | tail -n 1)
           fi
+          BASE_VERSION=$(printf '%s\n%s\n' "$BASE_VERSION" "$MINIMUM_BASE_VERSION" | sort -V | tail -n 1)
+
+          CURRENT_VERSION="$BASE_VERSION"
 
           IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
 
