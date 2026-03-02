@@ -31,6 +31,15 @@
             "karmaConfig": "projects/ngx-feature-flags-toggly/karma.conf.js",
             "polyfills": ["zone.js", "zone.js/testing"]
           }
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": [
+              "projects/ngx-feature-flags-toggly/**/*.ts",
+              "projects/ngx-feature-flags-toggly/**/*.html"
+            ]
+          }
         }
       }
     },

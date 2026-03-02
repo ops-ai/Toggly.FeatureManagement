@@ -88,7 +88,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
     this._loadingFeatures = true
 
     try {
-      var url = this._config.customDefinitionsUrl
+      let url = this._config.customDefinitionsUrl
         ? this._config.customDefinitionsUrl
         : `${this._config.baseURI ?? 'https://definitions.toggly.io'}/evaluated-signed/${this._config.appKey}/${this._config.environment ?? 'Production'}`
 
@@ -137,7 +137,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
       return true
     }
 
-    var isEnabled: boolean
+    let isEnabled: boolean
 
     if (requirement === 'any') {
       isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
