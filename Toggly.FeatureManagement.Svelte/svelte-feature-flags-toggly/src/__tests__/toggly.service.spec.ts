@@ -439,7 +439,7 @@ describe('Toggly Service', () => {
   // ─── WebSocket live updates ───────────────────────
   describe('WebSocket live updates', () => {
     let mockWsInstances: any[];
-    let fetchSpy: ReturnType<typeof vi.spyOn>;
+    let fetchSpy: any;
 
     beforeEach(() => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
