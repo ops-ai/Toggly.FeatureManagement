@@ -372,7 +372,7 @@ public class TogglyFeatureProviderTests : IDisposable
 
         // Assert
         debugInfo.Should().NotBeNull();
-        debugInfo.AppKey.Should().Be("my-app-key");
+        debugInfo.AppKey.Should().Be("***pp-key");
         debugInfo.Environment.Should().Be("staging");
         debugInfo.Definitions.Should().NotBeNull();
         debugInfo.Experiments.Should().NotBeNull();
