@@ -100,10 +100,12 @@ export class TogglyServer implements TogglyClient {
         );
       }
 
-      const payload = (await response.json()) as { defs?: Flags } | Flags;
-      let flags: Flags = payload;
-      if (typeof payload === 'object' && payload !== null && 'defs' in payload && payload.defs) {
-        flags = payload.defs;
+      const payload = await response.json();
+      let flags: Flags;
+      if (typeof payload === 'object' && payload !== null && 'defs' in payload && typeof payload.defs === 'object') {
+        flags = payload.defs as Flags;
+      } else {
+        flags = payload as Flags;
       }
 
       // If allFeaturesEnabledDuringBuild is true and we're in build time,
