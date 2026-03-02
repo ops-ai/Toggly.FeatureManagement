@@ -1,4 +1,4 @@
-name: JavaScript SDK - Build & Publish
+name: Next.js SDK - Build & Publish
 
 on:
   workflow_dispatch:
@@ -12,10 +12,18 @@ on:
           - patch
           - minor
           - major
+      packages:
+        description: 'Packages to publish (comma-separated, or "all")'
+        required: false
+        default: 'all'
+        type: string
 
 permissions:
   contents: write
   id-token: write
+
+env:
+  SDK_ROOT: Toggly.FeatureManagement.Next
 
 jobs:
   build-and-publish:
@@ -23,7 +31,7 @@ jobs:
     environment: npm-publish
     defaults:
       run:
-        working-directory: Toggly.FeatureManagement.Javascript/feature_flags_toggly
+        working-directory: ${{ env.SDK_ROOT }}
 
     steps:
       - name: Checkout code
@@ -46,16 +54,20 @@ jobs:
           node-version: 'lts/*'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Check if version was manually bumped
         id: check_version
         run: |
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          CURRENT_VERSION=$(node -p "require('./nextjs-toggly-core/package.json').version")
 
-          cd $GITHUB_WORKSPACE
-          PREVIOUS_VERSION=$(git show HEAD~1:Toggly.FeatureManagement.Javascript/feature_flags_toggly/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
+          PREVIOUS_VERSION=$(git show HEAD~1:${{ env.SDK_ROOT }}/nextjs-toggly-core/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
 
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
@@ -75,8 +87,24 @@ jobs:
           BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
           echo "Bumping $BUMP_TYPE version..."
 
-          NEW_VERSION=$(npm version $BUMP_TYPE --no-git-tag-version)
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          CURRENT_VERSION=$(node -p "require('./nextjs-toggly-core/package.json').version")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+          case "$BUMP_TYPE" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+          for pkg in nextjs-toggly-core nextjs-toggly-server nextjs-toggly-client nextjs-toggly-edge; do
+            cd "$pkg"
+            npm version "$NEW_VERSION" --no-git-tag-version
+            cd ..
+          done
+
+          echo "new_version=v$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Bumped to version $NEW_VERSION"
 
       - name: Set version output (manual bump)
@@ -94,14 +122,33 @@ jobs:
             echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Type check
+        run: pnpm typecheck
+
       - name: Build
-        run: npm run build
+        run: pnpm build
 
       - name: Run tests
-        run: npm test
+        run: pnpm test
 
-      - name: Publish to npm
-        run: npm publish --provenance --access public || npm publish --access public
+      - name: Determine packages to publish
+        id: packages
+        run: |
+          INPUT="${{ github.event.inputs.packages || 'all' }}"
+          if [ "$INPUT" == "all" ]; then
+            echo "list=nextjs-toggly-core nextjs-toggly-server nextjs-toggly-client nextjs-toggly-edge" >> $GITHUB_OUTPUT
+          else
+            echo "list=$(echo "$INPUT" | tr ',' ' ')" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish packages to npm
+        run: |
+          for pkg in ${{ steps.packages.outputs.list }}; do
+            echo "Publishing $pkg..."
+            cd "$pkg"
+            (npm publish --provenance --access public || npm publish --access public)
+            cd ..
+          done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -112,11 +159,13 @@ jobs:
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
 
-          git add Toggly.FeatureManagement.Javascript/feature_flags_toggly/package.json
-          git add Toggly.FeatureManagement.Javascript/feature_flags_toggly/package-lock.json
+          git add ${{ env.SDK_ROOT }}/nextjs-toggly-core/package.json \
+                  ${{ env.SDK_ROOT }}/nextjs-toggly-server/package.json \
+                  ${{ env.SDK_ROOT }}/nextjs-toggly-client/package.json \
+                  ${{ env.SDK_ROOT }}/nextjs-toggly-edge/package.json
 
           BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          git commit -S -m "Bumped JavaScript SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
+          git commit -S -m "Bumped Next.js SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
 
           MAX_RETRIES=3
           RETRY_COUNT=0
@@ -139,14 +188,3 @@ jobs:
 
           echo "Failed to push after $MAX_RETRIES attempts"
           exit 1
-
-      - name: Publish summary
-        if: always()
-        run: |
-          echo "## JavaScript SDK Release" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version**: ${{ steps.version.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Package**: @ops-ai/feature-flags-toggly" >> $GITHUB_STEP_SUMMARY
-          echo "**Bump Type**: ${{ github.event.inputs.bump_type || 'patch' }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[View on NPM](https://www.npmjs.com/package/@ops-ai/feature-flags-toggly)" >> $GITHUB_STEP_SUMMARY

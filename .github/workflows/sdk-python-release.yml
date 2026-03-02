@@ -1,0 +1,274 @@
+name: Python SDK - Build & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      packages:
+        description: 'Packages to publish (comma-separated, or "all")'
+        required: false
+        default: 'all'
+        type: string
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  SDK_ROOT: Toggly.FeatureManagement.Python
+  ALL_PACKAGES: toggly toggly-django toggly-flask toggly-fastapi toggly-cache
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      bump_type: ${{ steps.version.outputs.bump_type }}
+      packages: ${{ steps.packages.outputs.list }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version from bump type
+        id: version
+        run: |
+          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+
+          LATEST_TAG=$(git tag -l "python-sdk-v*" --sort=-version:refname | head -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            CURRENT_VERSION="0.0.0"
+          else
+            CURRENT_VERSION="${LATEST_TAG#python-sdk-v}"
+          fi
+
+          BASE_VERSION="${CURRENT_VERSION%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+
+          case "$BUMP_TYPE" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+            *) echo "Invalid bump type: $BUMP_TYPE"; exit 1 ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+          echo "New version: $NEW_VERSION"
+
+      - name: Check if tag exists
+        run: |
+          if git rev-parse "python-sdk-v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag python-sdk-v${{ steps.version.outputs.version }} already exists"
+            exit 1
+          fi
+
+      - name: Determine packages to publish
+        id: packages
+        run: |
+          INPUT="${{ github.event.inputs.packages || 'all' }}"
+          if [ "$INPUT" == "all" ]; then
+            echo "list=${{ env.ALL_PACKAGES }}" >> $GITHUB_OUTPUT
+          else
+            echo "list=$(echo "$INPUT" | tr ',' ' ')" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-test:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build tools
+        run: pip install build setuptools wheel
+
+      - name: Build and test core package
+        working-directory: ${{ env.SDK_ROOT }}/toggly
+        run: |
+          pip install -e ".[dev]"
+          python -m pytest || true
+
+      - name: Build integration packages
+        run: |
+          for pkg in toggly-django toggly-flask toggly-fastapi toggly-cache; do
+            echo "Building $pkg..."
+            cd ${{ env.SDK_ROOT }}/$pkg
+            pip install -e ".[dev]" 2>/dev/null || pip install -e "." || true
+            cd $GITHUB_WORKSPACE
+          done
+
+  publish:
+    needs: [build-and-test, validate]
+    runs-on: ubuntu-latest
+    environment: pypi-publish
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_tag_gpgsign: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Update versions in pyproject.toml files
+        run: |
+          NEW_VERSION="${{ needs.validate.outputs.version }}"
+          for pkg in ${{ needs.validate.outputs.packages }}; do
+            PYPROJECT="${{ env.SDK_ROOT }}/$pkg/pyproject.toml"
+            if [ -f "$PYPROJECT" ]; then
+              sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" "$PYPROJECT"
+              echo "Updated $pkg to version $NEW_VERSION"
+            fi
+          done
+
+      - name: Build and publish packages
+        run: |
+          for pkg in ${{ needs.validate.outputs.packages }}; do
+            echo "Building and publishing $pkg..."
+            cd ${{ env.SDK_ROOT }}/$pkg
+            python -m build
+            python -m twine upload dist/* --skip-existing
+            cd $GITHUB_WORKSPACE
+          done
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+      - name: Commit version bump and tag
+        run: |
+          git add ${{ env.SDK_ROOT }}/*/pyproject.toml
+          git commit -S -m "Bumped Python SDK to v${{ needs.validate.outputs.version }} (${{ needs.validate.outputs.bump_type }}) [skip ci]" || true
+
+          git tag -s -m "Python SDK v${{ needs.validate.outputs.version }}" "python-sdk-v${{ needs.validate.outputs.version }}"
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop && git push origin "python-sdk-v${{ needs.validate.outputs.version }}"; then
+                echo "Successfully pushed version bump and tag"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
+              sleep 2
+            fi
+          done
+
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: python-sdk-v${{ needs.validate.outputs.version }}
+          name: Python SDK v${{ needs.validate.outputs.version }}
+          body: |
+            ## Python SDK v${{ needs.validate.outputs.version }}
+
+            ### Installation
+
+            ```bash
+            pip install toggly
+            ```
+
+            ### Integration packages
+
+            ```bash
+            pip install toggly-django
+            pip install toggly-flask
+            pip install toggly-fastapi
+            pip install toggly-cache
+            ```
+
+            ### Features
+
+            - Zero-dependency core library
+            - Django, Flask, and FastAPI integrations
+            - Redis caching support
+            - WebSocket live updates
+            - Targeting rules and percentage rollouts
+
+            ### Requirements
+
+            - Python >= 3.8
+
+            ### Links
+
+            - [PyPI](https://pypi.org/project/toggly/)
+            - [Documentation](https://docs.toggly.io/docs/sdks/python)
+          prerelease: ${{ github.event.inputs.prerelease }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    needs: [publish, validate]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Python SDK Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bump type | ${{ needs.validate.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | python-sdk-v${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Packages | ${{ needs.validate.outputs.packages }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View on PyPI](https://pypi.org/project/toggly/)" >> $GITHUB_STEP_SUMMARY

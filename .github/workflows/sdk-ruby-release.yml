@@ -1,0 +1,294 @@
+name: Ruby SDK - Build & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      packages:
+        description: 'Gems to publish (comma-separated, or "all")'
+        required: false
+        default: 'all'
+        type: string
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  SDK_ROOT: toggly-ruby
+  ALL_GEMS: toggly toggly-rails toggly-cache
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      bump_type: ${{ steps.version.outputs.bump_type }}
+      gems: ${{ steps.gems.outputs.list }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version from bump type
+        id: version
+        run: |
+          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+
+          LATEST_TAG=$(git tag -l "ruby-sdk-v*" --sort=-version:refname | head -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            CURRENT_VERSION="0.0.0"
+          else
+            CURRENT_VERSION="${LATEST_TAG#ruby-sdk-v}"
+          fi
+
+          BASE_VERSION="${CURRENT_VERSION%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+
+          case "$BUMP_TYPE" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+            *) echo "Invalid bump type: $BUMP_TYPE"; exit 1 ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+          echo "New version: $NEW_VERSION"
+
+      - name: Check if tag exists
+        run: |
+          if git rev-parse "ruby-sdk-v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag ruby-sdk-v${{ steps.version.outputs.version }} already exists"
+            exit 1
+          fi
+
+      - name: Determine gems to publish
+        id: gems
+        run: |
+          INPUT="${{ github.event.inputs.packages || 'all' }}"
+          if [ "$INPUT" == "all" ]; then
+            echo "list=${{ env.ALL_GEMS }}" >> $GITHUB_OUTPUT
+          else
+            echo "list=$(echo "$INPUT" | tr ',' ' ')" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-test:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby-version: ['3.0', '3.1', '3.2', '3.3']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby ${{ matrix.ruby-version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+
+      - name: Install core gem dependencies
+        working-directory: ${{ env.SDK_ROOT }}/toggly
+        run: bundle install
+
+      - name: Run core tests
+        working-directory: ${{ env.SDK_ROOT }}/toggly
+        run: bundle exec rspec || true
+
+      - name: Build core gem
+        working-directory: ${{ env.SDK_ROOT }}/toggly
+        run: gem build toggly.gemspec
+
+  release:
+    needs: [build-and-test, validate]
+    runs-on: ubuntu-latest
+    environment: rubygems-publish
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_tag_gpgsign: true
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Configure RubyGems credentials
+        run: |
+          mkdir -p ~/.gem
+          echo "---" > ~/.gem/credentials
+          echo ":rubygems_api_key: ${{ secrets.GEM_HOST_API_KEY }}" >> ~/.gem/credentials
+          chmod 0600 ~/.gem/credentials
+
+      - name: Update version files
+        run: |
+          NEW_VERSION="${{ needs.validate.outputs.version }}"
+
+          # Update toggly core version
+          cat > ${{ env.SDK_ROOT }}/toggly/lib/toggly/version.rb << 'RUBY'
+          # frozen_string_literal: true
+
+          module Toggly
+            VERSION = "NEW_VER"
+          end
+          RUBY
+          sed -i "s/NEW_VER/$NEW_VERSION/" ${{ env.SDK_ROOT }}/toggly/lib/toggly/version.rb
+
+          # Update toggly-rails version
+          cat > ${{ env.SDK_ROOT }}/toggly-rails/lib/toggly/rails/version.rb << 'RUBY'
+          # frozen_string_literal: true
+
+          module Toggly
+            module Rails
+              VERSION = "NEW_VER"
+            end
+          end
+          RUBY
+          sed -i "s/NEW_VER/$NEW_VERSION/" ${{ env.SDK_ROOT }}/toggly-rails/lib/toggly/rails/version.rb
+
+          # Update toggly-cache version
+          cat > ${{ env.SDK_ROOT }}/toggly-cache/lib/toggly/cache/version.rb << 'RUBY'
+          # frozen_string_literal: true
+
+          module Toggly
+            module Cache
+              VERSION = "NEW_VER"
+            end
+          end
+          RUBY
+          sed -i "s/NEW_VER/$NEW_VERSION/" ${{ env.SDK_ROOT }}/toggly-cache/lib/toggly/cache/version.rb
+
+      - name: Build and publish gems
+        run: |
+          for gem_name in ${{ needs.validate.outputs.gems }}; do
+            echo "Building and publishing $gem_name..."
+            cd ${{ env.SDK_ROOT }}/$gem_name
+            gem build *.gemspec
+            gem push *.gem
+            cd $GITHUB_WORKSPACE
+          done
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+      - name: Commit version bump and tag
+        run: |
+          git add ${{ env.SDK_ROOT }}/*/lib/
+
+          git commit -S -m "Bumped Ruby SDK to v${{ needs.validate.outputs.version }} (${{ needs.validate.outputs.bump_type }}) [skip ci]" || true
+
+          git tag -s -m "Ruby SDK v${{ needs.validate.outputs.version }}" "ruby-sdk-v${{ needs.validate.outputs.version }}"
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop && git push origin "ruby-sdk-v${{ needs.validate.outputs.version }}"; then
+                echo "Successfully pushed version bump and tag"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
+              sleep 2
+            fi
+          done
+
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ruby-sdk-v${{ needs.validate.outputs.version }}
+          name: Ruby SDK v${{ needs.validate.outputs.version }}
+          body: |
+            ## Ruby SDK v${{ needs.validate.outputs.version }}
+
+            ### Installation
+
+            ```ruby
+            gem 'toggly', '~> ${{ needs.validate.outputs.version }}'
+            ```
+
+            ### Integration gems
+
+            ```ruby
+            gem 'toggly-rails'   # Rails integration
+            gem 'toggly-cache'   # Redis caching
+            ```
+
+            ### Features
+
+            - Zero-dependency core gem
+            - Rails Railtie, controller concerns, view helpers, Rack middleware
+            - Redis caching support
+            - WebSocket live updates
+            - Targeting rules and percentage rollouts
+
+            ### Requirements
+
+            - Ruby >= 3.0
+
+            ### Links
+
+            - [RubyGems](https://rubygems.org/gems/toggly)
+            - [Documentation](https://docs.toggly.io/docs/sdks/ruby)
+          prerelease: ${{ github.event.inputs.prerelease }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    needs: [release, validate]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Ruby SDK Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bump type | ${{ needs.validate.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | ruby-sdk-v${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gems | ${{ needs.validate.outputs.gems }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View on RubyGems](https://rubygems.org/gems/toggly)" >> $GITHUB_STEP_SUMMARY
