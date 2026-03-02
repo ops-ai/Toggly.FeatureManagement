@@ -36,6 +36,7 @@ export class TogglyServer implements TogglyServerClient {
     this.config = {
       baseURI: 'https://definitions.toggly.io',
       environment: 'Production',
+      verifySignatures: false,
       flagDefaults: {},
       featureFlagsRefreshInterval: 3 * 60 * 1000, // 3 minutes
       isDebug: false,
@@ -109,10 +110,12 @@ export class TogglyServer implements TogglyServerClient {
         );
       }
 
-      const payload = (await response.json()) as { defs?: Flags } | Flags;
-      let flags: Flags = payload;
-      if (typeof payload === 'object' && payload !== null && 'defs' in payload && payload.defs) {
-        flags = payload.defs;
+      const payload = (await response.json()) as Record<string, unknown>;
+      let flags: Flags;
+      if (payload.defs && typeof payload.defs === 'object') {
+        flags = payload.defs as Flags;
+      } else {
+        flags = payload as unknown as Flags;
       }
 
       // If allFeaturesEnabledDuringBuild is true and we're in build time,

@@ -162,7 +162,7 @@ describe('TogglyServer', () => {
 
       await server.getFlags();
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://api.toggly.io/my-key-Staging/defs',
+        'https://api.toggly.io/evaluated-signed/my-key/Staging',
         expect.any(Object)
       );
     });

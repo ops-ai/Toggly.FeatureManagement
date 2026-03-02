@@ -201,7 +201,7 @@ describe('Client Store', () => {
       });
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://api.toggly.io/my-key-Staging/defs',
+        'https://api.toggly.io/my-key/evaluated-signed',
         expect.any(Object)
       );
     });
