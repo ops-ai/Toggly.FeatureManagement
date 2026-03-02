@@ -15,7 +15,7 @@
     "types": ["astro/client", "node"],
     "jsx": "react-jsx"
   },
-  "include": ["src/**/*", "examples/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"]
 }
 
