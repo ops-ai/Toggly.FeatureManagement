@@ -150,7 +150,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install build tools
-        run: pip install build twine
+        run: pip install build
 
       - name: Update versions in pyproject.toml files
         run: |
@@ -163,18 +163,48 @@ jobs:
             fi
           done
 
-      - name: Build and publish packages
+      - name: Build packages
         run: |
           for pkg in ${{ needs.validate.outputs.packages }}; do
-            echo "Building and publishing $pkg..."
+            echo "Building $pkg..."
             cd ${{ env.SDK_ROOT }}/$pkg
             python -m build
-            python -m twine upload dist/* --skip-existing
             cd $GITHUB_WORKSPACE
           done
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Publish packages to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ env.SDK_ROOT }}/toggly/dist/
+          skip-existing: true
+
+      - name: Publish toggly-django to PyPI
+        if: contains(needs.validate.outputs.packages, 'toggly-django')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ env.SDK_ROOT }}/toggly-django/dist/
+          skip-existing: true
+
+      - name: Publish toggly-flask to PyPI
+        if: contains(needs.validate.outputs.packages, 'toggly-flask')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ env.SDK_ROOT }}/toggly-flask/dist/
+          skip-existing: true
+
+      - name: Publish toggly-fastapi to PyPI
+        if: contains(needs.validate.outputs.packages, 'toggly-fastapi')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ env.SDK_ROOT }}/toggly-fastapi/dist/
+          skip-existing: true
+
+      - name: Publish toggly-cache to PyPI
+        if: contains(needs.validate.outputs.packages, 'toggly-cache')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ env.SDK_ROOT }}/toggly-cache/dist/
+          skip-existing: true
 
       - name: Configure git
         run: |
