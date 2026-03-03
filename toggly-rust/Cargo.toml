@@ -55,5 +55,5 @@ tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 
 # Workspace crates
-toggly = { path = "toggly" }
-toggly-macros = { path = "toggly-macros" }
+toggly = { version = "0.1.0", path = "toggly" }
+toggly-macros = { version = "0.1.0", path = "toggly-macros" }

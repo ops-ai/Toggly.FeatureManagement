@@ -164,6 +164,8 @@ jobs:
         run: |
           NEW_VERSION="${{ needs.validate.outputs.version }}"
           sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" ${{ env.SDK_ROOT }}/Cargo.toml
+          sed -i "s/^toggly = { version = \".*\", path = \"toggly\" }/toggly = { version = \"$NEW_VERSION\", path = \"toggly\" }/" ${{ env.SDK_ROOT }}/Cargo.toml
+          sed -i "s/^toggly-macros = { version = \".*\", path = \"toggly-macros\" }/toggly-macros = { version = \"$NEW_VERSION\", path = \"toggly-macros\" }/" ${{ env.SDK_ROOT }}/Cargo.toml
           echo "Updated workspace version to $NEW_VERSION"
 
       - name: Publish crates to crates.io
