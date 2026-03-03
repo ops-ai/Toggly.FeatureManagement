@@ -3,6 +3,12 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@ops-ai/nuxt-toggly-core": ["../nuxt-toggly-core/src/index.ts"],
+      "@ops-ai/nuxt-toggly-client": ["../nuxt-toggly-client/src/index.ts"],
+      "@ops-ai/nuxt-toggly-server": ["../nuxt-toggly-server/src/index.ts"]
+    },
     "lib": ["ES2022", "DOM"],
     "strict": true,
     "esModuleInterop": true,
