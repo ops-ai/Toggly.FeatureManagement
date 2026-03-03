@@ -147,7 +147,17 @@ jobs:
           for pkg in ${{ steps.packages.outputs.list }}; do
             echo "Publishing $pkg..."
             cd "$pkg"
-            (npm publish --provenance --access public || npm publish --access public)
+
+            PACKAGE_NAME=$(node -p "require('./package.json').name")
+            PACKAGE_VERSION=$(node -p "require('./package.json').version")
+
+            if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
+              echo "Skipping ${PACKAGE_NAME}@${PACKAGE_VERSION} (already published)"
+              cd ..
+              continue
+            fi
+
+            (pnpm publish --access public --no-git-checks --provenance || pnpm publish --access public --no-git-checks)
             cd ..
           done
         env:
