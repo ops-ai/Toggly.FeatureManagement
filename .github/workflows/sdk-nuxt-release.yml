@@ -1,0 +1,191 @@
+name: Nuxt SDK - Build & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      packages:
+        description: 'Packages to publish (comma-separated, or "all")'
+        required: false
+        default: 'all'
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  SDK_ROOT: Toggly.FeatureManagement.Nuxt
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    defaults:
+      run:
+        working-directory: ${{ env.SDK_ROOT }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check if version was manually bumped
+        id: check_version
+        run: |
+          CURRENT_VERSION=$(node -p "require('./nuxt-toggly-core/package.json').version")
+          PREVIOUS_VERSION=$(git show HEAD~1:${{ env.SDK_ROOT }}/nuxt-toggly-core/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
+
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "manually_bumped=true" >> $GITHUB_OUTPUT
+            echo "Version was manually bumped from $PREVIOUS_VERSION to $CURRENT_VERSION"
+          else
+            echo "manually_bumped=false" >> $GITHUB_OUTPUT
+            echo "No manual version bump detected"
+          fi
+
+      - name: Bump version (if not manually bumped)
+        id: auto_version
+        if: steps.check_version.outputs.manually_bumped == 'false'
+        run: |
+          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+          echo "Bumping $BUMP_TYPE version..."
+
+          CURRENT_VERSION=$(node -p "require('./nuxt-toggly-core/package.json').version")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+          case "$BUMP_TYPE" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+          for pkg in nuxt-toggly-core nuxt-toggly-server nuxt-toggly-client nuxt-toggly; do
+            cd "$pkg"
+            npm version "$NEW_VERSION" --no-git-tag-version
+            cd ..
+          done
+
+          echo "new_version=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumped to version $NEW_VERSION"
+
+      - name: Set version output (manual bump)
+        id: manual_version
+        if: steps.check_version.outputs.manually_bumped == 'true'
+        run: |
+          echo "new_version=v${{ steps.check_version.outputs.current_version }}" >> $GITHUB_OUTPUT
+
+      - name: Set final version
+        id: version
+        run: |
+          if [ "${{ steps.check_version.outputs.manually_bumped }}" == "true" ]; then
+            echo "new_version=${{ steps.manual_version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          else
+            echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Determine packages to publish
+        id: packages
+        run: |
+          INPUT="${{ github.event.inputs.packages || 'all' }}"
+          if [ "$INPUT" == "all" ]; then
+            echo "list=nuxt-toggly-core nuxt-toggly-server nuxt-toggly-client nuxt-toggly" >> $GITHUB_OUTPUT
+          else
+            echo "list=$(echo "$INPUT" | tr ',' ' ')" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish packages to npm
+        run: |
+          for pkg in ${{ steps.packages.outputs.list }}; do
+            echo "Publishing $pkg..."
+            cd "$pkg"
+            (npm publish --provenance --access public || npm publish --access public)
+            cd ..
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Commit version bump
+        if: steps.check_version.outputs.manually_bumped == 'false'
+        run: |
+          cd $GITHUB_WORKSPACE
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+          git add ${{ env.SDK_ROOT }}/nuxt-toggly-core/package.json \
+                  ${{ env.SDK_ROOT }}/nuxt-toggly-server/package.json \
+                  ${{ env.SDK_ROOT }}/nuxt-toggly-client/package.json \
+                  ${{ env.SDK_ROOT }}/nuxt-toggly/package.json
+
+          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+          git commit -S -m "Bumped Nuxt SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
+              sleep 2
+            fi
+          done
+
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
