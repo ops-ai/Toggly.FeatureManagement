@@ -6,6 +6,7 @@ import type {
   FeatureRequirement,
   Hook,
   FeatureDefinitionsResponse,
+  EvaluationSeriesData,
 } from './types'
 import { HookExecutor } from './hooks'
 import { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
@@ -29,23 +30,21 @@ export function createTogglyClient(
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
   const WS_RECONNECT_DELAY = 5000
 
-  // Merge with defaults
+  // Merge with defaults while preserving a deep merge for featureDefaults.
   const config: Required<
     Pick<
       TogglyConfig,
       'baseUri' | 'environment' | 'refreshInterval' | 'showFeatureDuringEvaluation'
     >
   > &
-    TogglyConfig = deepMerge(
-    {
-      baseUri: DEFAULT_CONFIG.baseUri,
-      environment: DEFAULT_CONFIG.environment,
-      refreshInterval: DEFAULT_CONFIG.refreshInterval,
-      showFeatureDuringEvaluation: DEFAULT_CONFIG.showFeatureDuringEvaluation,
-      featureDefaults: {},
-    },
-    initialConfig
-  )
+    TogglyConfig = {
+    ...DEFAULT_CONFIG,
+    ...initialConfig,
+    featureDefaults: deepMerge(
+      {},
+      initialConfig.featureDefaults ?? {}
+    ) as FeatureDefinitions,
+  }
 
   // Initialize state
   const state: TogglyState = {
@@ -108,7 +107,7 @@ export function createTogglyClient(
         }
       } else if ('defs' in data && data.defs) {
         Object.assign(definitions, data.defs)
-      } else if (data.features && Array.isArray(data.features)) {
+      } else if ('features' in data && Array.isArray(data.features)) {
         for (const feature of data.features) {
           definitions[feature.featureKey] = feature.enabled
         }
@@ -136,7 +135,7 @@ export function createTogglyClient(
    * Start WebSocket connection for live flag updates (browser only)
    */
   function startWebSocket(): void {
-    if (typeof window === 'undefined') return
+    if (typeof WebSocket === 'undefined') return
     if (!config.appKey) return
     if (!config.enableLiveUpdates) return
     if (ws) return
@@ -378,7 +377,7 @@ export function createTogglyClient(
       // Execute before hooks for each key
       const dataMaps: Array<{
         key: string
-        dataMap: Map<string, unknown>
+        dataMap: Map<string, void | EvaluationSeriesData>
       }> = []
 
       for (const key of featureKeys) {

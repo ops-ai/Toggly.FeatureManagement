@@ -77,11 +77,11 @@ export function defineFeatureMiddleware(
  * })
  * ```
  */
-export function defineFeatureHandler<T>(
+export function defineFeatureHandler(
   featureKey: string | string[],
-  handler: EventHandler<T>,
+  handler: EventHandler,
   options: Omit<FeatureMiddlewareOptions, 'featureKey'> = {}
-): EventHandler<T> {
+): EventHandler {
   const {
     requirement = 'all',
     negate = false,

@@ -23,7 +23,7 @@
     "dev:build": "nuxi build playground",
     "dev:prepare": "nuxt-module-build build --stub && nuxi prepare playground",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "nuxi typecheck playground"
   },
   "keywords": [
     "nuxt",
