@@ -357,9 +357,6 @@ mod tests {
         let _builder = TogglyClient::builder()
             .app_key("test")
             .environment("staging");
-
-        // Can't actually build without a running server, but we can test the builder
-        assert!(true);
     }
 
     #[tokio::test]

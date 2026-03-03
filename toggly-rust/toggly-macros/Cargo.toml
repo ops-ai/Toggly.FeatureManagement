@@ -23,6 +23,5 @@ syn = { version = "2.0", features = ["full", "extra-traits"] }
 darling = "0.20"
 
 [dev-dependencies]
-toggly = { workspace = true }
 tokio = { workspace = true }
 trybuild = "1.0"

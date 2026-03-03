@@ -121,7 +121,6 @@ jobs:
       - name: Check formatting
         working-directory: ${{ env.SDK_ROOT }}
         run: cargo fmt --all -- --check
-        continue-on-error: true
 
       - name: Build workspace
         working-directory: ${{ env.SDK_ROOT }}
@@ -130,12 +129,10 @@ jobs:
       - name: Run clippy
         working-directory: ${{ env.SDK_ROOT }}
         run: cargo clippy --workspace --all-targets -- -D warnings
-        continue-on-error: true
 
       - name: Run tests
         working-directory: ${{ env.SDK_ROOT }}
         run: cargo test --workspace
-        continue-on-error: true
 
   release:
     needs: [build-and-test, validate]
@@ -174,9 +171,17 @@ jobs:
           NEW_VERSION="${{ needs.validate.outputs.version }}"
 
           for crate in ${{ needs.validate.outputs.crates }}; do
-            if curl -fsSL "https://crates.io/api/v1/crates/$crate/$NEW_VERSION" >/dev/null; then
+            STATUS_CODE=$(curl -sS -o /tmp/cratesio-version-check.json -w "%{http_code}" \
+              -H "User-Agent: toggly-rust-release-workflow" \
+              "https://crates.io/api/v1/crates/$crate/$NEW_VERSION")
+
+            if [ "$STATUS_CODE" = "200" ]; then
               echo "Skipping $crate@$NEW_VERSION (already published)"
               continue
+            fi
+            if [ "$STATUS_CODE" != "404" ]; then
+              echo "Warning: crates.io version check returned HTTP $STATUS_CODE for $crate@$NEW_VERSION"
+              echo "Proceeding with publish attempt."
             fi
 
             echo "Publishing $crate@$NEW_VERSION..."
