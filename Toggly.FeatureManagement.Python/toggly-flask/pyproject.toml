@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toggly-flask"
-version = "0.1.0"
+version = "0.0.1"
 description = "Flask integration for Toggly feature flag management"
 readme = "README.md"
 license = {text = "MIT"}
