@@ -171,8 +171,15 @@ jobs:
       - name: Publish crates to crates.io
         working-directory: ${{ env.SDK_ROOT }}
         run: |
+          NEW_VERSION="${{ needs.validate.outputs.version }}"
+
           for crate in ${{ needs.validate.outputs.crates }}; do
-            echo "Publishing $crate..."
+            if curl -fsSL "https://crates.io/api/v1/crates/$crate/$NEW_VERSION" >/dev/null; then
+              echo "Skipping $crate@$NEW_VERSION (already published)"
+              continue
+            fi
+
+            echo "Publishing $crate@$NEW_VERSION..."
             cargo publish -p "$crate" --allow-dirty
             # crates.io needs time to index before dependents can be published
             echo "Waiting for crates.io index to update..."
