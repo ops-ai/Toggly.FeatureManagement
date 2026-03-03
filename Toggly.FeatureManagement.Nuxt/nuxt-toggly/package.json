@@ -39,11 +39,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ops-ai/toggly-sdks.git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
     "directory": "Toggly.FeatureManagement.Nuxt/nuxt-toggly"
   },
   "bugs": {
-    "url": "https://github.com/ops-ai/toggly-sdks/issues"
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
   "homepage": "https://toggly.io",
   "dependencies": {
