@@ -157,8 +157,47 @@ jobs:
               continue
             fi
 
-            (pnpm publish --access public --no-git-checks --provenance || pnpm publish --access public --no-git-checks)
+            # Wait for internal dependencies to be visible before publishing the umbrella package.
+            if [ "$pkg" = "nuxt-toggly" ]; then
+              for dep in @ops-ai/nuxt-toggly-core @ops-ai/nuxt-toggly-server @ops-ai/nuxt-toggly-client; do
+                echo "Waiting for $dep@$PACKAGE_VERSION to be available..."
+                DEP_RETRY=0
+                until npm view "${dep}@${PACKAGE_VERSION}" version >/dev/null 2>&1; do
+                  DEP_RETRY=$((DEP_RETRY + 1))
+                  if [ $DEP_RETRY -ge 10 ]; then
+                    echo "Timed out waiting for ${dep}@${PACKAGE_VERSION}"
+                    exit 1
+                  fi
+                  sleep 6
+                done
+              done
+            fi
+
+            PUBLISH_SUCCESS=false
+            for attempt in 1 2 3; do
+              echo "Publish attempt $attempt for ${PACKAGE_NAME}@${PACKAGE_VERSION}"
+              if pnpm publish --access public --no-git-checks --provenance; then
+                PUBLISH_SUCCESS=true
+                break
+              fi
+              if pnpm publish --access public --no-git-checks; then
+                PUBLISH_SUCCESS=true
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                sleep 6
+              fi
+            done
+
+            if [ "$PUBLISH_SUCCESS" != "true" ]; then
+              echo "Failed publishing ${PACKAGE_NAME}@${PACKAGE_VERSION} after retries"
+              exit 1
+            fi
+
             cd ..
+
+            # Give npm registry a moment before next package checks/publish.
+            sleep 3
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
