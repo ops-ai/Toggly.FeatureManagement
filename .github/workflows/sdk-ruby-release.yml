@@ -107,7 +107,12 @@ jobs:
 
       - name: Install core gem dependencies
         working-directory: ${{ env.SDK_ROOT }}/toggly
-        run: bundle install
+        run: |
+          # Use a fresh resolution per Ruby version in CI.
+          # The committed lockfile may contain gems/bundler versions that are
+          # valid on newer Rubies but incompatible with older matrix targets.
+          rm -f Gemfile.lock
+          bundle install
 
       - name: Run core tests
         working-directory: ${{ env.SDK_ROOT }}/toggly
