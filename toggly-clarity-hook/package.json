@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-clarity-hook",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Microsoft Clarity hook for Toggly Feature Flags SDK. Automatically pushes feature flag data to Clarity session recordings.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
