@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Feature flags for Nuxt 3 - composables, components, directives, and server utilities",
   "type": "module",
   "main": "./dist/module.cjs",

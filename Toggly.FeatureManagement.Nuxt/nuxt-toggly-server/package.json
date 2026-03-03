@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Server-side feature flag utilities for Nuxt with Nitro support",
   "type": "module",
   "main": "./dist/index.cjs",
