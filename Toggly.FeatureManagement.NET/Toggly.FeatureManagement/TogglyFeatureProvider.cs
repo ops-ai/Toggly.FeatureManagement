@@ -50,8 +50,6 @@ namespace Toggly.FeatureManagement
 
         private readonly Timer _timer;
         private readonly TimeSpan _refreshInterval = new TimeSpan(0, 5, 0);
-        private readonly TimeSpan _fallbackRefreshInterval = new TimeSpan(0, 20, 0);
-        private DateTime _lastFallbackRefresh = DateTime.MinValue;
         private volatile bool _webSocketConnected = false;
 
         private readonly string Version;
@@ -122,20 +120,12 @@ namespace Toggly.FeatureManagement
 
         private void TimerCallback(object? state)
         {
-            // Fire and forget with proper error handling
             _ = Task.Run(async () =>
             {
                 try
                 {
                     if (_webSocketConnected)
-                    {
-                        var now = DateTime.UtcNow;
-                        if (now - _lastFallbackRefresh < _fallbackRefreshInterval)
-                        {
-                            return;
-                        }
-                        _lastFallbackRefresh = now;
-                    }
+                        return;
 
                     await RefreshFeatures(_refreshInterval.Ticks).ConfigureAwait(false);
                 }
@@ -298,7 +288,6 @@ namespace Toggly.FeatureManagement
                 }
 
                 List<FeatureDefinitionModel>? newDefinitions;
-                var definitionsChanged = false;
                 if (_useSignedDefinitions)
                 {
                     var requestPath = $"definitions-signed/{_appKey}/{_environment}";
@@ -383,7 +372,6 @@ namespace Toggly.FeatureManagement
                         _logger.LogWarning("Response did not include ETag header");
                     }
                     Interlocked.Exchange(ref _lastDefinitionsTimestamp, signedDefinitionsResponse.Timestamp);
-                    definitionsChanged = true;
 
                     if (_snapshotProvider != null)
                         await _snapshotProvider.SaveSnapshotAsync(newDefinitions, signedDefinitionsResponse.Signature, signedDefinitionsResponse.Kid, signedDefinitionsResponse.Timestamp).ConfigureAwait(false);
@@ -423,55 +411,9 @@ namespace Toggly.FeatureManagement
                     }
                     if (_snapshotProvider != null)
                         await _snapshotProvider.SaveSnapshotAsync(newDefinitions).ConfigureAwait(false);
-                    definitionsChanged = true;
                 }
 
-                foreach (var featureDefinition in newDefinitions)
-                {
-                    var newDefinition = new FeatureDefinition
-                    {
-                        Name = featureDefinition.FeatureKey,
-                        EnabledFor = featureDefinition.Filters.Select(featureFilter =>
-                            new FeatureFilterConfiguration
-                            {
-                                Name = featureFilter.Name,
-                                Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters?.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)) ?? Enumerable.Empty<KeyValuePair<string, string?>>()).Build()
-                            })
-                    };
-                    if (featureDefinition.SecuredFeature) _secureFeatures.Add(featureDefinition.FeatureKey);
-                    else _secureFeatures.TryRemove(featureDefinition.FeatureKey);
-                    _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
-                    _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
-                }
-                // Update experiments more efficiently
-                var activeExperiments = newDefinitions
-                    .Where(t => t.Metrics != null)
-                    .SelectMany(t => t.Metrics!)
-                    .Distinct()
-                    .ToList();
-                
-                // Build new experiments dictionary
-                var newExperiments = new Dictionary<string, ConcurrentHashSet<string>>();
-                foreach (var activeExperiment in activeExperiments)
-                {
-                    var featureKeys = newDefinitions
-                        .Where(t => t.Metrics != null && t.Metrics.Contains(activeExperiment))
-                        .Select(t => t.FeatureKey)
-                        .ToList();
-                    newExperiments[activeExperiment] = new ConcurrentHashSet<string>(featureKeys);
-                }
-                
-                // Atomically replace experiments dictionary
-                _experiments.Clear();
-                foreach (var kvp in newExperiments)
-                {
-                    _experiments.TryAdd(kvp.Key, kvp.Value);
-                }
-
-                if (definitionsChanged)
-                {
-                    _featureStateService.NotifyDefinitionsChanged();
-                }
+                ApplyNewDefinitions(newDefinitions);
                 
                 _loaded = true;
                 
@@ -502,43 +444,45 @@ namespace Toggly.FeatureManagement
                         {
                             if (string.IsNullOrEmpty(msg.Text)) return;
 
-                            var shouldRefresh = false;
                             var text = msg.Text.Trim();
 
                             if (text == "update" || text == "flags-updated")
                             {
-                                shouldRefresh = true;
-                            }
-                            else if (text.StartsWith("{"))
-                            {
-                                try
-                                {
-                                    using var doc = JsonDocument.Parse(text);
-                                    if (doc.RootElement.TryGetProperty("type", out var typeProp))
-                                    {
-                                        var type = typeProp.GetString();
-                                        shouldRefresh = type == "update" || type == "flags-updated" || type == "definitions";
-                                    }
-                                }
-                                catch
-                                {
-                                    // Not valid JSON — ignore
-                                }
+                                TriggerHttpRefresh();
+                                return;
                             }
 
-                            if (shouldRefresh)
+                            if (!text.StartsWith("{")) return;
+
+                            try
                             {
-                                _ = Task.Run(async () =>
+                                using var doc = JsonDocument.Parse(text);
+                                if (!doc.RootElement.TryGetProperty("type", out var typeProp)) return;
+                                var type = typeProp.GetString();
+
+                                if (type == "definitions" && !_useSignedDefinitions
+                                    && doc.RootElement.TryGetProperty("data", out var dataElement))
                                 {
-                                    try
+                                    var definitions = JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
+                                        dataElement.GetRawText(),
+                                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                    if (definitions != null)
                                     {
-                                        await RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
+                                        ApplyNewDefinitions(definitions);
+                                        _loaded = true;
+                                        _lastRefresh = DateTime.UtcNow;
+                                        _lastDefinitionsCheck = DateTime.UtcNow;
+                                        _logger.LogDebug("Applied definitions directly from WebSocket message");
                                     }
-                                    catch (Exception ex)
-                                    {
-                                        _logger.LogError(ex, "Error refreshing features from websocket message");
-                                    }
-                                });
+                                }
+                                else if (type == "update" || type == "flags-updated" || type == "definitions")
+                                {
+                                    TriggerHttpRefresh();
+                                }
+                            }
+                            catch
+                            {
+                                // Not valid JSON — ignore
                             }
                         });
                         newWebSocketClient.DisconnectionHappened.Subscribe(info =>
@@ -562,7 +506,6 @@ namespace Toggly.FeatureManagement
                         }
                         await wsConnectTask.ConfigureAwait(false); // propagate any exception
                         _webSocketConnected = true;
-                        _lastFallbackRefresh = DateTime.UtcNow;
 
                         // Only assign if successfully started
                         lock (_webSocketLock)
@@ -614,6 +557,67 @@ namespace Toggly.FeatureManagement
                     // Semaphore was disposed during execution (e.g., during application shutdown), ignore
                 }
             }
+        }
+
+        private void ApplyNewDefinitions(List<FeatureDefinitionModel> newDefinitions)
+        {
+            foreach (var featureDefinition in newDefinitions)
+            {
+                var newDefinition = new FeatureDefinition
+                {
+                    Name = featureDefinition.FeatureKey,
+                    EnabledFor = featureDefinition.Filters.Select(featureFilter =>
+                        new FeatureFilterConfiguration
+                        {
+                            Name = featureFilter.Name,
+                            Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters?.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)) ?? Enumerable.Empty<KeyValuePair<string, string?>>()).Build()
+                        }),
+                    RequirementType = featureDefinition.RequirementType
+                };
+                if (featureDefinition.SecuredFeature) _secureFeatures.Add(featureDefinition.FeatureKey);
+                else _secureFeatures.TryRemove(featureDefinition.FeatureKey);
+                _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
+                _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
+            }
+
+            var activeExperiments = newDefinitions
+                .Where(t => t.Metrics != null)
+                .SelectMany(t => t.Metrics!)
+                .Distinct()
+                .ToList();
+
+            var newExperiments = new Dictionary<string, ConcurrentHashSet<string>>();
+            foreach (var activeExperiment in activeExperiments)
+            {
+                var featureKeys = newDefinitions
+                    .Where(t => t.Metrics != null && t.Metrics.Contains(activeExperiment))
+                    .Select(t => t.FeatureKey)
+                    .ToList();
+                newExperiments[activeExperiment] = new ConcurrentHashSet<string>(featureKeys);
+            }
+
+            _experiments.Clear();
+            foreach (var kvp in newExperiments)
+            {
+                _experiments.TryAdd(kvp.Key, kvp.Value);
+            }
+
+            _featureStateService.NotifyDefinitionsChanged();
+        }
+
+        private void TriggerHttpRefresh()
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error refreshing features from websocket notification");
+                }
+            });
         }
 
         private async Task HandleDefinitionsRequestError(HttpResponseMessage response, string requestPath)
