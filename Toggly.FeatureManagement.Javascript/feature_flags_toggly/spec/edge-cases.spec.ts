@@ -395,13 +395,14 @@ describe('Edge Cases & Error Handling', () => {
 
   // ─── Storage Edge Cases ──────────────────────
   describe('Storage Edge Cases', () => {
-    it('should handle localStorage with corrupted JSON', async () => {
+    it('should handle localStorage with corrupted JSON gracefully', async () => {
       localStorage.setItem(
-        StorageKeys.togglyFeatureFlagsKey.toString(),
+        StorageKeys.flagsCacheKey('test-key', 'Production'),
         'not-valid-json{{'
       );
 
-      expect(() => Toggly.featureFlagsValue).toThrow();
+      await Toggly.init({ appKey: 'test-key' });
+      expect(Toggly.featureFlagsValue).toEqual({});
     });
 
     it('should handle localStorage cleared externally between operations', async () => {

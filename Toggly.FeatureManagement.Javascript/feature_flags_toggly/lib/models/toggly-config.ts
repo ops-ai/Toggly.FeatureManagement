@@ -17,4 +17,7 @@ export interface TogglyConfig {
 
   /** Enable live updates via WebSocket. Defaults to true if not set. */
   enableLiveUpdates?: boolean;
+
+  /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
+  persistCache?: boolean;
 }

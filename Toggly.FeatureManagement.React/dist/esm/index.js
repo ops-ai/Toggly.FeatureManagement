@@ -34,14 +34,14 @@ var l=Symbol.for("react.element"),n=Symbol.for("react.portal"),p=Symbol.for("rea
 	function R(a,b,e,d,c){var k=typeof a;if("undefined"===k||"boolean"===k)a=null;var h=!1;if(null===a)h=!0;else switch(k){case "string":case "number":h=!0;break;case "object":switch(a.$$typeof){case l:case n:h=!0;}}if(h)return h=a,c=c(h),a=""===d?"."+Q(h,0):d,I(c)?(e="",null!=a&&(e=a.replace(P,"$&/")+"/"),R(c,b,e,"",function(a){return a})):null!=c&&(O(c)&&(c=N(c,e+(!c.key||h&&h.key===c.key?"":(""+c.key).replace(P,"$&/")+"/")+a)),b.push(c)),1;h=0;d=""===d?".":d+":";if(I(a))for(var g=0;g<a.length;g++){k=
 	a[g];var f=d+Q(k,g);h+=R(k,b,e,f,c);}else if(f=A(a),"function"===typeof f)for(a=f.call(a),g=0;!(k=a.next()).done;)k=k.value,f=d+Q(k,g++),h+=R(k,b,e,f,c);else if("object"===k)throw b=String(a),Error("Objects are not valid as a React child (found: "+("[object Object]"===b?"object with keys {"+Object.keys(a).join(", ")+"}":b)+"). If you meant to render a collection of children, use an array instead.");return h}
 	function S(a,b,e){if(null==a)return a;var d=[],c=0;R(a,d,"","",function(a){return b.call(e,a,c++)});return d}function T(a){if(-1===a._status){var b=a._result;b=b();b.then(function(b){if(0===a._status||-1===a._status)a._status=1,a._result=b;},function(b){if(0===a._status||-1===a._status)a._status=2,a._result=b;});-1===a._status&&(a._status=0,a._result=b);}if(1===a._status)return a._result.default;throw a._result;}
-	var U={current:null},V={transition:null},W={ReactCurrentDispatcher:U,ReactCurrentBatchConfig:V,ReactCurrentOwner:K};react_production_min.Children={map:S,forEach:function(a,b,e){S(a,function(){b.apply(this,arguments);},e);},count:function(a){var b=0;S(a,function(){b++;});return b},toArray:function(a){return S(a,function(a){return a})||[]},only:function(a){if(!O(a))throw Error("React.Children.only expected to receive a single React element child.");return a}};react_production_min.Component=E;react_production_min.Fragment=p;
-	react_production_min.Profiler=r;react_production_min.PureComponent=G;react_production_min.StrictMode=q;react_production_min.Suspense=w;react_production_min.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED=W;
+	var U={current:null},V={transition:null},W={ReactCurrentDispatcher:U,ReactCurrentBatchConfig:V,ReactCurrentOwner:K};function X(){throw Error("act(...) is not supported in production builds of React.");}
+	react_production_min.Children={map:S,forEach:function(a,b,e){S(a,function(){b.apply(this,arguments);},e);},count:function(a){var b=0;S(a,function(){b++;});return b},toArray:function(a){return S(a,function(a){return a})||[]},only:function(a){if(!O(a))throw Error("React.Children.only expected to receive a single React element child.");return a}};react_production_min.Component=E;react_production_min.Fragment=p;react_production_min.Profiler=r;react_production_min.PureComponent=G;react_production_min.StrictMode=q;react_production_min.Suspense=w;
+	react_production_min.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED=W;react_production_min.act=X;
 	react_production_min.cloneElement=function(a,b,e){if(null===a||void 0===a)throw Error("React.cloneElement(...): The argument must be a React element, but you passed "+a+".");var d=C({},a.props),c=a.key,k=a.ref,h=a._owner;if(null!=b){void 0!==b.ref&&(k=b.ref,h=K.current);void 0!==b.key&&(c=""+b.key);if(a.type&&a.type.defaultProps)var g=a.type.defaultProps;for(f in b)J.call(b,f)&&!L.hasOwnProperty(f)&&(d[f]=void 0===b[f]&&void 0!==g?g[f]:b[f]);}var f=arguments.length-2;if(1===f)d.children=e;else if(1<f){g=Array(f);
 	for(var m=0;m<f;m++)g[m]=arguments[m+2];d.children=g;}return {$$typeof:l,type:a.type,key:c,ref:k,props:d,_owner:h}};react_production_min.createContext=function(a){a={$$typeof:u,_currentValue:a,_currentValue2:a,_threadCount:0,Provider:null,Consumer:null,_defaultValue:null,_globalName:null};a.Provider={$$typeof:t,_context:a};return a.Consumer=a};react_production_min.createElement=M;react_production_min.createFactory=function(a){var b=M.bind(null,a);b.type=a;return b};react_production_min.createRef=function(){return {current:null}};
-	react_production_min.forwardRef=function(a){return {$$typeof:v,render:a}};react_production_min.isValidElement=O;react_production_min.lazy=function(a){return {$$typeof:y,_payload:{_status:-1,_result:a},_init:T}};react_production_min.memo=function(a,b){return {$$typeof:x,type:a,compare:void 0===b?null:b}};react_production_min.startTransition=function(a){var b=V.transition;V.transition={};try{a();}finally{V.transition=b;}};react_production_min.unstable_act=function(){throw Error("act(...) is not supported in production builds of React.");};
-	react_production_min.useCallback=function(a,b){return U.current.useCallback(a,b)};react_production_min.useContext=function(a){return U.current.useContext(a)};react_production_min.useDebugValue=function(){};react_production_min.useDeferredValue=function(a){return U.current.useDeferredValue(a)};react_production_min.useEffect=function(a,b){return U.current.useEffect(a,b)};react_production_min.useId=function(){return U.current.useId()};react_production_min.useImperativeHandle=function(a,b,e){return U.current.useImperativeHandle(a,b,e)};
-	react_production_min.useInsertionEffect=function(a,b){return U.current.useInsertionEffect(a,b)};react_production_min.useLayoutEffect=function(a,b){return U.current.useLayoutEffect(a,b)};react_production_min.useMemo=function(a,b){return U.current.useMemo(a,b)};react_production_min.useReducer=function(a,b,e){return U.current.useReducer(a,b,e)};react_production_min.useRef=function(a){return U.current.useRef(a)};react_production_min.useState=function(a){return U.current.useState(a)};react_production_min.useSyncExternalStore=function(a,b,e){return U.current.useSyncExternalStore(a,b,e)};
-	react_production_min.useTransition=function(){return U.current.useTransition()};react_production_min.version="18.2.0";
+	react_production_min.forwardRef=function(a){return {$$typeof:v,render:a}};react_production_min.isValidElement=O;react_production_min.lazy=function(a){return {$$typeof:y,_payload:{_status:-1,_result:a},_init:T}};react_production_min.memo=function(a,b){return {$$typeof:x,type:a,compare:void 0===b?null:b}};react_production_min.startTransition=function(a){var b=V.transition;V.transition={};try{a();}finally{V.transition=b;}};react_production_min.unstable_act=X;react_production_min.useCallback=function(a,b){return U.current.useCallback(a,b)};react_production_min.useContext=function(a){return U.current.useContext(a)};
+	react_production_min.useDebugValue=function(){};react_production_min.useDeferredValue=function(a){return U.current.useDeferredValue(a)};react_production_min.useEffect=function(a,b){return U.current.useEffect(a,b)};react_production_min.useId=function(){return U.current.useId()};react_production_min.useImperativeHandle=function(a,b,e){return U.current.useImperativeHandle(a,b,e)};react_production_min.useInsertionEffect=function(a,b){return U.current.useInsertionEffect(a,b)};react_production_min.useLayoutEffect=function(a,b){return U.current.useLayoutEffect(a,b)};
+	react_production_min.useMemo=function(a,b){return U.current.useMemo(a,b)};react_production_min.useReducer=function(a,b,e){return U.current.useReducer(a,b,e)};react_production_min.useRef=function(a){return U.current.useRef(a)};react_production_min.useState=function(a){return U.current.useState(a)};react_production_min.useSyncExternalStore=function(a,b,e){return U.current.useSyncExternalStore(a,b,e)};react_production_min.useTransition=function(){return U.current.useTransition()};react_production_min.version="18.3.1";
 	return react_production_min;
 }
 
@@ -79,7 +79,7 @@ function requireReact_development () {
 		) {
 		  __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(new Error());
 		}
-		          var ReactVersion = '18.2.0';
+		          var ReactVersion = '18.3.1';
 
 		// ATTENTION
 		// When adding new symbols to this file,
@@ -2755,6 +2755,7 @@ function requireReact_development () {
 		exports.StrictMode = REACT_STRICT_MODE_TYPE;
 		exports.Suspense = REACT_SUSPENSE_TYPE;
 		exports.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = ReactSharedInternals;
+		exports.act = act;
 		exports.cloneElement = cloneElement$1;
 		exports.createContext = createContext;
 		exports.createElement = createElement$1;
@@ -2882,23 +2883,267 @@ function __generator(thisArg, body) {
     }
 }
 
+/**
+ * Internal class that manages hook registration and execution
+ */
+var HookExecutor = /** @class */ (function () {
+    function HookExecutor() {
+        this.hooks = [];
+    }
+    /**
+     * Register a new hook
+     */
+    HookExecutor.prototype.addHook = function (hook) {
+        var metadata = hook.getMetadata();
+        // Check for duplicate hook names
+        var existingHook = this.hooks.find(function (h) { return h.getMetadata().name === metadata.name; });
+        if (existingHook) {
+            console.warn("[Toggly] Hook with name \"".concat(metadata.name, "\" already registered. Skipping."));
+            return;
+        }
+        this.hooks.push(hook);
+    };
+    /**
+     * Remove a hook by name
+     * @returns true if hook was found and removed, false otherwise
+     */
+    HookExecutor.prototype.removeHook = function (name) {
+        var index = this.hooks.findIndex(function (h) { return h.getMetadata().name === name; });
+        if (index > -1) {
+            this.hooks.splice(index, 1);
+            return true;
+        }
+        return false;
+    };
+    /**
+     * Execute beforeEvaluation hooks in registration order (FIFO)
+     * Collects data from each hook to pass to afterEvaluation
+     */
+    HookExecutor.prototype.executeBeforeEvaluation = function (flagKey, defaultValue) {
+        return __awaiter(this, void 0, void 0, function () {
+            var dataMap, _i, _a, hook, data, error_1;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        dataMap = new Map();
+                        _i = 0, _a = this.hooks;
+                        _b.label = 1;
+                    case 1:
+                        if (!(_i < _a.length)) return [3 /*break*/, 6];
+                        hook = _a[_i];
+                        if (!hook.beforeEvaluation) return [3 /*break*/, 5];
+                        _b.label = 2;
+                    case 2:
+                        _b.trys.push([2, 4, , 5]);
+                        return [4 /*yield*/, hook.beforeEvaluation(flagKey, defaultValue)];
+                    case 3:
+                        data = _b.sent();
+                        dataMap.set(hook.getMetadata().name, data);
+                        return [3 /*break*/, 5];
+                    case 4:
+                        error_1 = _b.sent();
+                        console.error("[Toggly] Error in hook \"".concat(hook.getMetadata().name, ".beforeEvaluation\":"), error_1);
+                        return [3 /*break*/, 5];
+                    case 5:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 6: return [2 /*return*/, dataMap];
+                }
+            });
+        });
+    };
+    /**
+     * Execute afterEvaluation hooks in reverse order (LIFO)
+     * Passes data from corresponding beforeEvaluation
+     */
+    HookExecutor.prototype.executeAfterEvaluation = function (flagKey, dataMap, result) {
+        return __awaiter(this, void 0, void 0, function () {
+            var i, hook, data, error_2;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        i = this.hooks.length - 1;
+                        _a.label = 1;
+                    case 1:
+                        if (!(i >= 0)) return [3 /*break*/, 6];
+                        hook = this.hooks[i];
+                        if (!hook.afterEvaluation) return [3 /*break*/, 5];
+                        _a.label = 2;
+                    case 2:
+                        _a.trys.push([2, 4, , 5]);
+                        data = dataMap.get(hook.getMetadata().name);
+                        return [4 /*yield*/, hook.afterEvaluation(flagKey, data, result)];
+                    case 3:
+                        _a.sent();
+                        return [3 /*break*/, 5];
+                    case 4:
+                        error_2 = _a.sent();
+                        console.error("[Toggly] Error in hook \"".concat(hook.getMetadata().name, ".afterEvaluation\":"), error_2);
+                        return [3 /*break*/, 5];
+                    case 5:
+                        i--;
+                        return [3 /*break*/, 1];
+                    case 6: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Execute beforeIdentify hooks in registration order (FIFO)
+     */
+    HookExecutor.prototype.executeBeforeIdentify = function (identity) {
+        return __awaiter(this, void 0, void 0, function () {
+            var dataMap, _i, _a, hook, data, error_3;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        dataMap = new Map();
+                        _i = 0, _a = this.hooks;
+                        _b.label = 1;
+                    case 1:
+                        if (!(_i < _a.length)) return [3 /*break*/, 6];
+                        hook = _a[_i];
+                        if (!hook.beforeIdentify) return [3 /*break*/, 5];
+                        _b.label = 2;
+                    case 2:
+                        _b.trys.push([2, 4, , 5]);
+                        return [4 /*yield*/, hook.beforeIdentify(identity)];
+                    case 3:
+                        data = _b.sent();
+                        dataMap.set(hook.getMetadata().name, data);
+                        return [3 /*break*/, 5];
+                    case 4:
+                        error_3 = _b.sent();
+                        console.error("[Toggly] Error in hook \"".concat(hook.getMetadata().name, ".beforeIdentify\":"), error_3);
+                        return [3 /*break*/, 5];
+                    case 5:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 6: return [2 /*return*/, dataMap];
+                }
+            });
+        });
+    };
+    /**
+     * Execute afterIdentify hooks in reverse order (LIFO)
+     */
+    HookExecutor.prototype.executeAfterIdentify = function (identity, dataMap) {
+        return __awaiter(this, void 0, void 0, function () {
+            var i, hook, data, error_4;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        i = this.hooks.length - 1;
+                        _a.label = 1;
+                    case 1:
+                        if (!(i >= 0)) return [3 /*break*/, 6];
+                        hook = this.hooks[i];
+                        if (!hook.afterIdentify) return [3 /*break*/, 5];
+                        _a.label = 2;
+                    case 2:
+                        _a.trys.push([2, 4, , 5]);
+                        data = dataMap.get(hook.getMetadata().name);
+                        return [4 /*yield*/, hook.afterIdentify(identity, data)];
+                    case 3:
+                        _a.sent();
+                        return [3 /*break*/, 5];
+                    case 4:
+                        error_4 = _a.sent();
+                        console.error("[Toggly] Error in hook \"".concat(hook.getMetadata().name, ".afterIdentify\":"), error_4);
+                        return [3 /*break*/, 5];
+                    case 5:
+                        i--;
+                        return [3 /*break*/, 1];
+                    case 6: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Execute afterRefresh hooks in registration order (FIFO)
+     */
+    HookExecutor.prototype.executeAfterRefresh = function (flags) {
+        return __awaiter(this, void 0, void 0, function () {
+            var _i, _a, hook, error_5;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _i = 0, _a = this.hooks;
+                        _b.label = 1;
+                    case 1:
+                        if (!(_i < _a.length)) return [3 /*break*/, 6];
+                        hook = _a[_i];
+                        if (!hook.afterRefresh) return [3 /*break*/, 5];
+                        _b.label = 2;
+                    case 2:
+                        _b.trys.push([2, 4, , 5]);
+                        return [4 /*yield*/, hook.afterRefresh(flags)];
+                    case 3:
+                        _b.sent();
+                        return [3 /*break*/, 5];
+                    case 4:
+                        error_5 = _b.sent();
+                        console.error("[Toggly] Error in hook \"".concat(hook.getMetadata().name, ".afterRefresh\":"), error_5);
+                        return [3 /*break*/, 5];
+                    case 5:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 6: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    return HookExecutor;
+}());
+
+var canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+var CACHE_PREFIX = 'toggly:flags:';
+function getCacheKey(appKey, environment) {
+    return "".concat(CACHE_PREFIX).concat(appKey, ":").concat(environment);
+}
+function readCachedFlags(appKey, environment) {
+    if (!canUseStorage)
+        return null;
+    try {
+        var raw = localStorage.getItem(getCacheKey(appKey, environment));
+        return raw ? JSON.parse(raw) : null;
+    }
+    catch (_a) {
+        return null;
+    }
+}
+function writeCachedFlags(appKey, environment, flags) {
+    if (!canUseStorage)
+        return;
+    try {
+        localStorage.setItem(getCacheKey(appKey, environment), JSON.stringify(flags));
+    }
+    catch ( /* storage full or unavailable */_a) { /* storage full or unavailable */ }
+}
 var Toggly = /** @class */ (function () {
     function Toggly(config) {
         var _this = this;
-        var _a;
+        var _a, _b, _c;
         this._config = {
-            baseURI: 'https://client.toggly.io',
+            baseURI: 'https://definitions.toggly.io',
+            verifySignatures: false,
             showFeatureDuringEvaluation: false,
+            hooks: []
         };
         this._features = null;
         this._loadingFeatures = false;
+        this._hookExecutor = new HookExecutor();
+        this._ws = null;
+        this._wsConnected = false;
+        this._wsReconnectTimer = null;
+        this._lastFallbackRefresh = 0;
         this.shouldShowFeatureDuringEvaluation = false;
         this._loadFeatures = function () { return __awaiter(_this, void 0, void 0, function () {
-            var url, response, _a;
+            var now, isInitialLoad, url, response, payload, cached;
             var _this = this;
-            var _b;
-            return __generator(this, function (_c) {
-                switch (_c.label) {
+            var _a, _b, _c, _d, _e, _f;
+            return __generator(this, function (_g) {
+                switch (_g.label) {
                     case 0:
                         if (!this._loadingFeatures) return [3 /*break*/, 2];
                         return [4 /*yield*/, new Promise(function (resolve) {
@@ -2913,38 +3158,62 @@ var Toggly = /** @class */ (function () {
                                 checkIfApiCallFinished();
                             })];
                     case 1:
-                        _c.sent();
-                        _c.label = 2;
+                        _g.sent();
+                        _g.label = 2;
                     case 2:
                         // Features already loaded
                         if (this._features !== null) {
+                            // When WebSocket is connected, throttle HTTP refreshes to fallback interval
+                            if (this._wsConnected) {
+                                now = Date.now();
+                                if (now - this._lastFallbackRefresh < Toggly.FALLBACK_REFRESH_INTERVAL) {
+                                    return [2 /*return*/, this._features];
+                                }
+                                this._lastFallbackRefresh = now;
+                            }
                             return [2 /*return*/, this._features];
                         }
                         this._loadingFeatures = true;
-                        _c.label = 3;
+                        isInitialLoad = this._ws === null && !this._wsConnected;
+                        _g.label = 3;
                     case 3:
-                        _c.trys.push([3, 6, 7, 8]);
-                        url = "".concat(this._config.baseURI, "/").concat(this._config.appKey, "-").concat(this._config.environment, "/defs");
+                        _g.trys.push([3, 6, 7, 8]);
+                        url = "".concat(this._config.baseURI, "/evaluated-signed/").concat(this._config.appKey, "/").concat(this._config.environment);
                         if (this._config.identity) {
                             url += "?u=".concat(this._config.identity);
                         }
                         return [4 /*yield*/, fetch(url)];
                     case 4:
-                        response = _c.sent();
-                        _a = this;
+                        response = _g.sent();
                         return [4 /*yield*/, response.json()];
                     case 5:
-                        _a._features = _c.sent();
+                        payload = _g.sent();
+                        this._features = (_a = payload === null || payload === void 0 ? void 0 : payload.defs) !== null && _a !== void 0 ? _a : payload;
+                        if (this._features && this._canPersist) {
+                            writeCachedFlags((_b = this._config.appKey) !== null && _b !== void 0 ? _b : '', (_c = this._config.environment) !== null && _c !== void 0 ? _c : 'Production', this._features);
+                        }
+                        // Trigger afterRefresh hooks
+                        if (this._features) {
+                            this._hookExecutor.executeAfterRefresh(this._features);
+                        }
                         return [3 /*break*/, 8];
                     case 6:
-                        _c.sent();
-                        this._features = (_b = this._config.featureDefaults) !== null && _b !== void 0 ? _b : {};
-                        console.warn('Toggly --- Using feature defaults as features could not be loaded from the Toggly API');
+                        _g.sent();
+                        cached = this._canPersist
+                            ? readCachedFlags((_d = this._config.appKey) !== null && _d !== void 0 ? _d : '', (_e = this._config.environment) !== null && _e !== void 0 ? _e : 'Production')
+                            : null;
+                        this._features = (_f = cached !== null && cached !== void 0 ? cached : this._config.featureDefaults) !== null && _f !== void 0 ? _f : {};
+                        console.warn('Toggly --- Using cached/default features as features could not be loaded from the Toggly API');
                         return [3 /*break*/, 8];
                     case 7:
                         this._loadingFeatures = false;
                         return [7 /*endfinally*/];
-                    case 8: return [2 /*return*/, this._features];
+                    case 8:
+                        // Start WebSocket live updates after initial feature load
+                        if (isInitialLoad) {
+                            this.startWebSocket();
+                        }
+                        return [2 /*return*/, this._features];
                 }
             });
         }); };
@@ -3002,27 +3271,145 @@ var Toggly = /** @class */ (function () {
             if (requirement === void 0) { requirement = 'all'; }
             if (negate === void 0) { negate = false; }
             return __awaiter(_this, void 0, void 0, function () {
+                var dataMap, result;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
-                        case 0: return [4 /*yield*/, this._evaluateFeatureGate(featureKeys, requirement, negate)];
-                        case 1: return [2 /*return*/, _a.sent()];
+                        case 0:
+                            if (!(featureKeys.length > 0)) return [3 /*break*/, 4];
+                            return [4 /*yield*/, this._hookExecutor.executeBeforeEvaluation(featureKeys[0])];
+                        case 1:
+                            dataMap = _a.sent();
+                            return [4 /*yield*/, this._evaluateFeatureGate(featureKeys, requirement, negate)];
+                        case 2:
+                            result = _a.sent();
+                            return [4 /*yield*/, this._hookExecutor.executeAfterEvaluation(featureKeys[0], dataMap, result)];
+                        case 3:
+                            _a.sent();
+                            return [2 /*return*/, result];
+                        case 4: return [4 /*yield*/, this._evaluateFeatureGate(featureKeys, requirement, negate)];
+                        case 5: return [2 /*return*/, _a.sent()];
                     }
                 });
             });
         };
         this.isFeatureOn = function (featureKey) { return __awaiter(_this, void 0, void 0, function () {
+            var dataMap, result;
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0: return [4 /*yield*/, this._evaluateFeatureGate([featureKey])];
-                    case 1: return [2 /*return*/, _a.sent()];
+                    case 0: return [4 /*yield*/, this._hookExecutor.executeBeforeEvaluation(featureKey)];
+                    case 1:
+                        dataMap = _a.sent();
+                        return [4 /*yield*/, this._evaluateFeatureGate([featureKey])];
+                    case 2:
+                        result = _a.sent();
+                        return [4 /*yield*/, this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)];
+                    case 3:
+                        _a.sent();
+                        return [2 /*return*/, result];
                 }
             });
         }); };
         this.isFeatureOff = function (featureKey) { return __awaiter(_this, void 0, void 0, function () {
+            var dataMap, result;
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0: return [4 /*yield*/, this._evaluateFeatureGate([featureKey], 'all', true)];
-                    case 1: return [2 /*return*/, _a.sent()];
+                    case 0: return [4 /*yield*/, this._hookExecutor.executeBeforeEvaluation(featureKey)];
+                    case 1:
+                        dataMap = _a.sent();
+                        return [4 /*yield*/, this._evaluateFeatureGate([featureKey], 'all', true)];
+                    case 2:
+                        result = _a.sent();
+                        return [4 /*yield*/, this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)];
+                    case 3:
+                        _a.sent();
+                        return [2 /*return*/, result];
+                }
+            });
+        }); };
+        this.startWebSocket = function () {
+            if (!_this._config.appKey) {
+                return;
+            }
+            if (_this._config.enableLiveUpdates === false) {
+                return;
+            }
+            _this.stopWebSocket();
+            var wsUrl = _this._config.baseURI
+                .replace('https://', 'wss://')
+                .replace('http://', 'ws://') + "/".concat(_this._config.appKey, "/ws");
+            var ws = new WebSocket(wsUrl);
+            ws.onopen = function () {
+                _this._wsConnected = true;
+                _this._lastFallbackRefresh = Date.now();
+            };
+            ws.onmessage = function (event) {
+                var data = event.data;
+                if (typeof data === 'string') {
+                    // Handle plain text messages
+                    if (data === 'update' || data === 'flags-updated') {
+                        _this._refreshFeatures();
+                        return;
+                    }
+                    // Try to parse as JSON
+                    try {
+                        var message = JSON.parse(data);
+                        if (message.type === 'ping') {
+                            return;
+                        }
+                        if (message.type === 'flags-updated' || message.type === 'update') {
+                            _this._refreshFeatures();
+                        }
+                    }
+                    catch (e) {
+                        // Unrecognized message, ignore
+                    }
+                }
+            };
+            ws.onclose = function () {
+                _this._wsConnected = false;
+                _this._ws = null;
+                _this._wsReconnectTimer = setTimeout(function () {
+                    _this.startWebSocket();
+                }, Toggly.WS_RECONNECT_DELAY);
+            };
+            ws.onerror = function (error) {
+                console.error('[Toggly] WebSocket error:', error);
+            };
+            _this._ws = ws;
+        };
+        this.stopWebSocket = function () {
+            if (_this._wsReconnectTimer) {
+                clearTimeout(_this._wsReconnectTimer);
+                _this._wsReconnectTimer = null;
+            }
+            if (_this._ws) {
+                _this._ws.onopen = null;
+                _this._ws.onmessage = null;
+                _this._ws.onclose = null;
+                _this._ws.onerror = null;
+                _this._ws.close();
+                _this._ws = null;
+            }
+            _this._wsConnected = false;
+        };
+        /**
+         * Force-refresh features from the API (bypasses the loaded cache).
+         * Used by WebSocket handlers to pull fresh definitions on update signals.
+         */
+        this._refreshFeatures = function () { return __awaiter(_this, void 0, void 0, function () {
+            var flags;
+            var _a, _b;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        this._features = null;
+                        return [4 /*yield*/, this._loadFeatures()];
+                    case 1:
+                        flags = _c.sent();
+                        if (flags && this._canPersist) {
+                            writeCachedFlags((_a = this._config.appKey) !== null && _a !== void 0 ? _a : '', (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production', flags);
+                        }
+                        return [2 /*return*/];
                 }
             });
         }); };
@@ -3043,7 +3430,40 @@ var Toggly = /** @class */ (function () {
         }
         this._config = Object.assign({}, this._config, config);
         this.shouldShowFeatureDuringEvaluation = this._config.showFeatureDuringEvaluation;
+        // Register initial hooks
+        if (this._config.hooks) {
+            this._config.hooks.forEach(function (hook) { return _this._hookExecutor.addHook(hook); });
+        }
+        // Seed in-memory features from localStorage cache for instant availability
+        if (this._features === null && this._canPersist) {
+            var cached = readCachedFlags((_b = this._config.appKey) !== null && _b !== void 0 ? _b : '', (_c = this._config.environment) !== null && _c !== void 0 ? _c : 'Production');
+            if (cached) {
+                this._features = cached;
+            }
+        }
     }
+    Object.defineProperty(Toggly.prototype, "_canPersist", {
+        get: function () {
+            return this._config.persistCache !== false && canUseStorage;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    /**
+     * Add a hook dynamically
+     */
+    Toggly.prototype.addHook = function (hook) {
+        this._hookExecutor.addHook(hook);
+    };
+    /**
+     * Remove a hook by name
+     * @returns true if hook was found and removed, false otherwise
+     */
+    Toggly.prototype.removeHook = function (name) {
+        return this._hookExecutor.removeHook(name);
+    };
+    Toggly.FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000;
+    Toggly.WS_RECONNECT_DELAY = 5000;
     return Toggly;
 }());
 

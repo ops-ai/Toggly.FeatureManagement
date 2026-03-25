@@ -1,4 +1,8 @@
-export enum StorageKeys {
-  togglyIdentityKey,
-  togglyFeatureFlagsKey,
-}
+const CACHE_PREFIX = 'toggly:';
+
+export const StorageKeys = {
+  identityKey: `${CACHE_PREFIX}identity`,
+  flagsCacheKey(appKey: string, environment: string): string {
+    return `${CACHE_PREFIX}flags:${appKey}:${environment}`;
+  },
+};

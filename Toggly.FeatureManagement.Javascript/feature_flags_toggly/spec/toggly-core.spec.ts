@@ -122,7 +122,7 @@ describe('Toggly Core', () => {
 
     it('should not overwrite existing identity', async () => {
       localStorage.setItem(
-        StorageKeys.togglyIdentityKey.toString(),
+        StorageKeys.identityKey,
         'existing-user'
       );
 
@@ -131,17 +131,17 @@ describe('Toggly Core', () => {
       expect(Toggly.identity).toBe('existing-user');
     });
 
-    it('should clear feature flags cache on init', async () => {
+    it('should preserve cached flags on init for stale-while-revalidate', async () => {
       localStorage.setItem(
-        StorageKeys.togglyFeatureFlagsKey.toString(),
+        StorageKeys.flagsCacheKey('test-app-key', 'Production'),
         JSON.stringify({ OldFlag: true })
       );
 
-      await Toggly.init({ flagDefaults: { F1: true } });
+      await Toggly.init({ appKey: 'test-app-key', flagDefaults: { F1: true } });
 
       expect(
-        localStorage.getItem(StorageKeys.togglyFeatureFlagsKey.toString())
-      ).toBeNull();
+        localStorage.getItem(StorageKeys.flagsCacheKey('test-app-key', 'Production'))
+      ).not.toBeNull();
     });
 
     it('should register hooks from config', (done) => {
@@ -369,7 +369,7 @@ describe('Toggly Core', () => {
   describe('Feature Loading', () => {
     it('should include identity as query param in fetch URL', async () => {
       localStorage.setItem(
-        StorageKeys.togglyIdentityKey.toString(),
+        StorageKeys.identityKey,
         'user-42'
       );
 
@@ -414,7 +414,7 @@ describe('Toggly Core', () => {
       });
 
       const cached = JSON.parse(
-        localStorage.getItem(StorageKeys.togglyFeatureFlagsKey.toString())!
+        localStorage.getItem(StorageKeys.flagsCacheKey('test-app-key', 'Production'))!
       );
       expect(cached).toEqual({ F1: true, F2: false });
     });
@@ -566,28 +566,28 @@ describe('Toggly Core', () => {
       Toggly.cacheFeatureFlags({ X: true, Y: false });
 
       const stored = JSON.parse(
-        localStorage.getItem(StorageKeys.togglyFeatureFlagsKey.toString())!
+        localStorage.getItem(StorageKeys.flagsCacheKey('test-app-key', 'Production'))!
       );
       expect(stored).toEqual({ X: true, Y: false });
     });
 
     it('should remove flags cache via clearFeatureFlagsCache', () => {
       localStorage.setItem(
-        StorageKeys.togglyFeatureFlagsKey.toString(),
+        StorageKeys.flagsCacheKey('test-app-key', 'Production'),
         JSON.stringify({ X: true })
       );
 
       Toggly.clearFeatureFlagsCache();
 
       expect(
-        localStorage.getItem(StorageKeys.togglyFeatureFlagsKey.toString())
+        localStorage.getItem(StorageKeys.flagsCacheKey('test-app-key', 'Production'))
       ).toBeNull();
     });
 
     it('should handle null/missing localStorage for featureFlagsValue', async () => {
       await Toggly.init({ flagDefaults: { F1: true } });
 
-      localStorage.removeItem(StorageKeys.togglyFeatureFlagsKey.toString());
+      localStorage.removeItem(StorageKeys.flagsCacheKey('test-app-key', 'Production'));
 
       expect(Toggly.featureFlagsValue).toEqual({ F1: true });
     });
@@ -603,7 +603,7 @@ describe('Toggly Core', () => {
 
     it('should read identity from localStorage', () => {
       localStorage.setItem(
-        StorageKeys.togglyIdentityKey.toString(),
+        StorageKeys.identityKey,
         'user-42'
       );
       expect(Toggly.identity).toBe('user-42');
@@ -612,7 +612,7 @@ describe('Toggly Core', () => {
     it('should write identity to localStorage', () => {
       Toggly.identity = 'new-user';
       expect(
-        localStorage.getItem(StorageKeys.togglyIdentityKey.toString())
+        localStorage.getItem(StorageKeys.identityKey)
       ).toBe('new-user');
     });
 
@@ -620,7 +620,7 @@ describe('Toggly Core', () => {
       Toggly.identity = 'temp-user';
       Toggly.clearIdentity();
       expect(
-        localStorage.getItem(StorageKeys.togglyIdentityKey.toString())
+        localStorage.getItem(StorageKeys.identityKey)
       ).toBeNull();
     });
 
@@ -684,7 +684,7 @@ describe('Toggly Core', () => {
     });
 
     it('should not trigger identity hooks when no identity to clear', (done) => {
-      localStorage.removeItem(StorageKeys.togglyIdentityKey.toString());
+      localStorage.removeItem(StorageKeys.identityKey);
 
       const hookCalls: string[] = [];
       const hook: Hook = {
@@ -766,7 +766,7 @@ describe('Toggly Core', () => {
       setTimeout(() => {
         try {
           expect(
-            localStorage.getItem(StorageKeys.togglyIdentityKey.toString())
+            localStorage.getItem(StorageKeys.identityKey)
           ).toBeNull();
           errorSpy.mockRestore();
           Toggly.removeHook('ErrClearHook');
@@ -1386,9 +1386,9 @@ describe('Toggly Core', () => {
       expect(FeatureRequirement.any).toBe(1);
     });
 
-    it('should export StorageKeys enum with correct values', () => {
-      expect(StorageKeys.togglyIdentityKey).toBe(0);
-      expect(StorageKeys.togglyFeatureFlagsKey).toBe(1);
+    it('should export StorageKeys with correct values', () => {
+      expect(StorageKeys.identityKey).toBe('toggly:identity');
+      expect(StorageKeys.flagsCacheKey('myApp', 'Production')).toBe('toggly:flags:myApp:Production');
     });
 
     it('should construct TogglyInitResponse with status', () => {

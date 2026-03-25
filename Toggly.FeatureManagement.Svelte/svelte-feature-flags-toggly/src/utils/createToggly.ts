@@ -30,7 +30,14 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
     togglyFlagsStore.set(flags)
   }
 
-  // Load features and update the flags store
+  // Seed the Svelte store from localStorage cache for instant rendering
+  // The Toggly constructor already seeds _features, so expose them immediately
+  const cachedFeatures = await toggly._featuresLoaded()
+  if (cachedFeatures) {
+    togglyFlagsStore.set(cachedFeatures)
+  }
+
+  // Load fresh features from the API and update the flags store
   try {
     const flags = await toggly._loadFeatures()
     if (flags) {
@@ -38,7 +45,6 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
     }
   } catch (error) {
     console.error('Toggly initialization error:', error)
-    // Set empty flags on error, defaults will be used
     togglyFlagsStore.set({})
   }
 

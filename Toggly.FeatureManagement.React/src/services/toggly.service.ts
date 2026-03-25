@@ -1,6 +1,28 @@
 import type { Hook } from '@ops-ai/toggly-hooks-types';
 import { HookExecutor } from './hooks';
 
+const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+const CACHE_PREFIX = 'toggly:flags:'
+
+function getCacheKey(appKey: string, environment: string): string {
+  return `${CACHE_PREFIX}${appKey}:${environment}`
+}
+
+function readCachedFlags(appKey: string, environment: string): { [key: string]: boolean } | null {
+  if (!canUseStorage) return null
+  try {
+    const raw = localStorage.getItem(getCacheKey(appKey, environment))
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function writeCachedFlags(appKey: string, environment: string, flags: { [key: string]: boolean }): void {
+  if (!canUseStorage) return
+  try {
+    localStorage.setItem(getCacheKey(appKey, environment), JSON.stringify(flags))
+  } catch { /* storage full or unavailable */ }
+}
+
 export interface TogglyOptions {
   baseURI?: string
   verifySignatures?: boolean
@@ -13,6 +35,8 @@ export interface TogglyOptions {
   hooks?: Hook[]
   /** Enable WebSocket live updates (defaults to true when appKey is set) */
   enableLiveUpdates?: boolean
+  /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
+  persistCache?: boolean
 }
 
 export interface TogglyService {
@@ -85,6 +109,18 @@ export class Toggly implements TogglyService {
     if (this._config.hooks) {
       this._config.hooks.forEach(hook => this._hookExecutor.addHook(hook))
     }
+
+    // Seed in-memory features from localStorage cache for instant availability
+    if (this._features === null && this._canPersist) {
+      const cached = readCachedFlags(this._config.appKey ?? '', this._config.environment ?? 'Production')
+      if (cached) {
+        this._features = cached
+      }
+    }
+  }
+
+  private get _canPersist(): boolean {
+    return this._config.persistCache !== false && canUseStorage
   }
 
   _loadFeatures = async () => {
@@ -131,14 +167,21 @@ export class Toggly implements TogglyService {
       const payload = await response.json()
       this._features = payload?.defs ?? payload
 
+      if (this._features && this._canPersist) {
+        writeCachedFlags(this._config.appKey ?? '', this._config.environment ?? 'Production', this._features)
+      }
+
       // Trigger afterRefresh hooks
       if (this._features) {
         this._hookExecutor.executeAfterRefresh(this._features)
       }
     } catch (error) {
-      this._features = this._config.featureDefaults ?? {}
+      const cached = this._canPersist
+        ? readCachedFlags(this._config.appKey ?? '', this._config.environment ?? 'Production')
+        : null
+      this._features = cached ?? this._config.featureDefaults ?? {}
       console.warn(
-        'Toggly --- Using feature defaults as features could not be loaded from the Toggly API',
+        'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',
       )
     } finally {
       this._loadingFeatures = false
@@ -306,7 +349,10 @@ export class Toggly implements TogglyService {
    */
   private _refreshFeatures = async () => {
     this._features = null
-    await this._loadFeatures()
+    const flags = await this._loadFeatures()
+    if (flags && this._canPersist) {
+      writeCachedFlags(this._config.appKey ?? '', this._config.environment ?? 'Production', flags)
+    }
   }
 
   /**

@@ -10,6 +10,8 @@ export interface ITogglyOptions {
   customDefinitionsUrl?: string
   /** Hooks to extend SDK behavior at key lifecycle points */
   hooks?: Hook[]
+  /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
+  persistCache?: boolean
 }
 
 export interface ITogglyService {

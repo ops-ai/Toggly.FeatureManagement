@@ -58,6 +58,7 @@ namespace Toggly.FeatureManagement
 
         private volatile WebsocketClient? _webSocketClient = null;
         private readonly object _webSocketLock = new object();
+        private Timer? _wsPingTimer = null;
 
         private readonly IFeatureStateInternalService _featureStateService;
 
@@ -446,6 +447,8 @@ namespace Toggly.FeatureManagement
 
                             var text = msg.Text.Trim();
 
+                            if (text == "pong") return;
+
                             if (text == "update" || text == "flags-updated")
                             {
                                 TriggerHttpRefresh();
@@ -513,6 +516,22 @@ namespace Toggly.FeatureManagement
                             _webSocketClient?.Dispose();
                             _webSocketClient = newWebSocketClient;
                         }
+
+                        // Send text "ping" every 30s to keep the connection alive through proxies/NATs.
+                        // The DO's setWebSocketAutoResponse auto-replies "pong" without waking from hibernation.
+                        _wsPingTimer?.Dispose();
+                        _wsPingTimer = new Timer(_ =>
+                        {
+                            try
+                            {
+                                lock (_webSocketLock)
+                                {
+                                    if (_webSocketClient?.IsRunning == true)
+                                        _webSocketClient.Send("ping");
+                                }
+                            }
+                            catch { /* connection may be closed — will reconnect */ }
+                        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
                     }
                     catch (Exception ex)
                     {
@@ -902,6 +921,7 @@ namespace Toggly.FeatureManagement
         public void Dispose()
         {
             _timer?.Dispose();
+            _wsPingTimer?.Dispose();
             
             lock (_webSocketLock)
             {

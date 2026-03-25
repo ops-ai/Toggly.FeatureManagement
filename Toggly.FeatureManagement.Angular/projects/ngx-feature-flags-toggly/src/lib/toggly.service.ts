@@ -1,8 +1,15 @@
-import { Injectable, NgZone, OnDestroy } from '@angular/core'
+import { Injectable, Inject, NgZone, OnDestroy, PLATFORM_ID } from '@angular/core'
+import { isPlatformBrowser } from '@angular/common'
 import { ITogglyService } from './models'
 import { TogglyOptions } from './toggly-options'
 import { HookExecutor } from './hooks'
 import type { Hook } from '@ops-ai/toggly-hooks-types'
+
+const CACHE_PREFIX = 'toggly:flags:'
+
+function getCacheKey(appKey: string, environment: string): string {
+  return `${CACHE_PREFIX}${appKey}:${environment}`
+}
 
 @Injectable({
   providedIn: 'root',
@@ -11,6 +18,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private _features: { [key: string]: boolean } | null = null
   private _loadingFeatures: boolean = false
   private _hookExecutor = new HookExecutor()
+  private _isBrowser: boolean
 
   private _ws: WebSocket | null = null
   private _wsConnected = false
@@ -21,10 +29,21 @@ export class TogglyService implements ITogglyService, OnDestroy {
 
   shouldShowFeatureDuringEvaluation: boolean = false
 
+  private get _canPersist(): boolean {
+    return this._isBrowser && this._config.persistCache !== false
+  }
+
+  private get _cacheKey(): string {
+    return getCacheKey(this._config.appKey ?? '', this._config.environment ?? 'Production')
+  }
+
   constructor(
     private readonly _config: TogglyOptions,
     private readonly _ngZone: NgZone,
+    @Inject(PLATFORM_ID) platformId: Object,
   ) {
+    this._isBrowser = isPlatformBrowser(platformId)
+
     if (!this._config.customDefinitionsUrl) {
       if (!this._config.appKey) {
         if (this._config.featureDefaults) {
@@ -54,6 +73,29 @@ export class TogglyService implements ITogglyService, OnDestroy {
     if (this._config.hooks) {
       this._config.hooks.forEach(hook => this._hookExecutor.addHook(hook))
     }
+
+    // Seed in-memory features from localStorage cache for instant availability
+    if (this._features === null && this._canPersist) {
+      const cached = this._readCachedFlags()
+      if (cached) {
+        this._features = cached
+      }
+    }
+  }
+
+  private _readCachedFlags(): { [key: string]: boolean } | null {
+    if (!this._canPersist) return null
+    try {
+      const raw = localStorage.getItem(this._cacheKey)
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  }
+
+  private _writeCachedFlags(flags: { [key: string]: boolean }): void {
+    if (!this._canPersist) return
+    try {
+      localStorage.setItem(this._cacheKey, JSON.stringify(flags))
+    } catch { /* storage full or unavailable */ }
   }
 
   private _loadFeatures = async () => {
@@ -101,8 +143,8 @@ export class TogglyService implements ITogglyService, OnDestroy {
       this._features = payload?.defs ?? payload
       this._lastFallbackRefresh = Date.now()
 
-      // Trigger afterRefresh hooks
       if (this._features) {
+        this._writeCachedFlags(this._features)
         this._hookExecutor.executeAfterRefresh(this._features)
       }
 
@@ -111,9 +153,10 @@ export class TogglyService implements ITogglyService, OnDestroy {
         this.startWebSocket()
       }
     } catch (error) {
-      this._features = this._config.featureDefaults ?? {}
+      const cached = this._readCachedFlags()
+      this._features = cached ?? this._config.featureDefaults ?? {}
       console.warn(
-        'Toggly --- Using feature defaults as features could not be loaded from the Toggly API',
+        'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',
       )
     } finally {
       this._loadingFeatures = false
@@ -237,7 +280,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
 
           if (data.type === 'flags-updated' || data.type === 'update') {
             this._features = null
-            this._loadFeatures()
+            this._loadFeatures().then(flags => {
+              if (flags) this._writeCachedFlags(flags)
+            })
           }
         } catch (error) {
           console.warn('Toggly --- Failed to parse WebSocket message', error)
