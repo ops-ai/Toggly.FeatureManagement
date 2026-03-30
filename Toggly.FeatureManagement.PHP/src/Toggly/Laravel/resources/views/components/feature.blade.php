@@ -1,3 +1,0 @@
-@if($isEnabled)
-    {{ $slot }}
-@endif
