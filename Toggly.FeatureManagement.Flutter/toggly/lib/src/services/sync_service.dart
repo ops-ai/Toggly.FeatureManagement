@@ -19,12 +19,6 @@ class SyncService {
   /// Timer used to schedule reconnection attempts after disconnect.
   Timer? _wsReconnectTimer;
 
-  /// Timestamp of the last fallback refresh performed while WebSocket is connected.
-  DateTime lastFallbackRefresh = DateTime(0);
-
-  /// Interval between fallback refreshes when WebSocket is connected.
-  static const Duration fallbackRefreshInterval = Duration(minutes: 20);
-
   /// Delay before attempting to reconnect after a WebSocket disconnect.
   static const Duration wsReconnectDelay = Duration(seconds: 5);
 
@@ -54,7 +48,6 @@ class SyncService {
     WebSocket.connect(wsUrl).then((socket) {
       _ws = socket;
       wsConnected = true;
-      lastFallbackRefresh = DateTime.now();
 
       if (kDebugMode) {
         print('Toggly: WebSocket connected');
