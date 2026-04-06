@@ -13,6 +13,13 @@ type DefinitionsSnapshot struct {
 	Signature string
 	Kid       string
 	Timestamp int64
+
+	// VariantDefs is set when definitions came from evaluated-variants-signed.
+	// Omitempty keeps JSON backward compatible with older snapshots.
+	VariantDefs      map[string]definitions.EvaluatedVariantDef `json:"variantDefs,omitempty"`
+	VariantSignature string                                     `json:"variantSignature,omitempty"`
+	VariantKid       string                                     `json:"variantKid,omitempty"`
+	VariantTimestamp int64                                      `json:"variantTimestamp,omitempty"`
 }
 
 // JWKSnap stores cached JWKS.

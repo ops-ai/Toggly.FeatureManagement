@@ -1,5 +1,7 @@
 """Tests for TogglyClient."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from toggly import (
@@ -367,3 +369,51 @@ class TestTogglyClientRegistry:
         client.registry.register("Custom", custom_evaluator)
 
         assert client.registry.get("Custom") is custom_evaluator
+
+
+class TestTogglyClientVariants:
+    """Tests for variant mode (evaluated-variants-signed)."""
+
+    def test_fetch_variants_and_get_variant(self) -> None:
+        """HTTP fetch fills variant defs, flags, and get_variant accessors."""
+        config = TogglyConfig(
+            app_key="app-k",
+            environment="Production",
+            enable_variants=True,
+            identity="user-1",
+            disable_background_refresh=True,
+            enable_live_updates=False,
+        )
+        client = TogglyClient(config)
+        try:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {}
+            mock_response.json.return_value = {
+                "defs": {
+                    "f1": {"enabled": True, "variant": "a", "configurationValue": 42},
+                    "f2": {"enabled": False, "variant": None, "configurationValue": None},
+                },
+                "signature": "sig",
+                "timestamp": 1,
+                "kid": "kid1",
+            }
+            with patch.object(client._http, "get", return_value=mock_response):
+                client.init()
+
+            assert client.is_enabled("f1") is True
+            assert client.is_enabled("f2") is False
+            v = client.get_variant("f1")
+            assert v is not None
+            assert v.name == "a"
+            assert v.configuration_value == 42
+            assert client.get_variant_value("f1") == 42
+            assert client.get_variant("f2") is None
+        finally:
+            client.close()
+
+    def test_get_variant_none_when_disabled(self) -> None:
+        """Variant helpers return None when enable_variants is False."""
+        client = TogglyClient(TogglyConfig(enable_variants=False))
+        assert client.get_variant("any") is None
+        assert client.get_variant_value("any") is None

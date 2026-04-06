@@ -103,3 +103,18 @@ func TestPercentageEvaluator_DeterministicIdentityOnly(t *testing.T) {
 		t.Fatalf("expected identity-only consistency across feature keys, got %v vs %v", a, c)
 	}
 }
+
+func TestAlwaysOnAlwaysOffEvaluators(t *testing.T) {
+	on := AlwaysOnEvaluator{}
+	off := AlwaysOffEvaluator{}
+	ctx := Context{Identity: "u"}
+
+	v, err := on.Evaluate("f", nil, ctx)
+	if err != nil || !v {
+		t.Fatalf("AlwaysOn: got %v err %v", v, err)
+	}
+	v, err = off.Evaluate("f", nil, ctx)
+	if err != nil || v {
+		t.Fatalf("AlwaysOff: got %v err %v", v, err)
+	}
+}

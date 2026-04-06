@@ -83,6 +83,7 @@ describe('Toggly Service', () => {
     let fetchSpy: any;
 
     beforeEach(() => {
+      localStorage.clear();
       fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
         json: () => Promise.resolve({ F1: true, F2: false }),
       } as Response);
@@ -144,7 +145,7 @@ describe('Toggly Service', () => {
       const features = await toggly._loadFeatures();
       expect(features).toEqual({ F1: false });
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Using feature defaults or cached')
+        expect.stringContaining('Using cached/default features')
       );
     });
 
@@ -229,6 +230,110 @@ describe('Toggly Service', () => {
       // Call refreshFlags to force reload
       await toggly.refreshFlags();
       expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ─── Variants (enableVariants) ──────────────────────────
+  describe('Variants (enableVariants)', () => {
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it('should fetch evaluated-variants-signed when enableVariants is true', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        json: () =>
+          Promise.resolve({
+            defs: {
+              V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+            },
+          }),
+      } as Response);
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const toggly = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+      });
+
+      await toggly._loadFeatures();
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://definitions.toggly.io/evaluated-variants-signed/test-key/Production',
+      );
+      expect(toggly.getVariant('V')).toEqual({ name: 'A', configurationValue: { x: 1 } });
+      expect(toggly.getVariantValue('V')).toEqual({ x: 1 });
+    });
+
+    it('should pass userId query when enableVariants and identity are set', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        json: () => Promise.resolve({ defs: {} }),
+      } as Response);
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const toggly = new Toggly({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+        identity: 'user@x',
+      });
+
+      await toggly._loadFeatures();
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('userId=user%40x'),
+      );
+    });
+
+    it('getVariant returns null when enableVariants is false', () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const toggly = new Toggly({
+        featureDefaults: { F: true },
+      });
+      expect(toggly.getVariant('F')).toBeNull();
+      expect(toggly.getVariantValue('F')).toBeNull();
+      expect(toggly.getVariantDefinitions()).toBeNull();
+    });
+
+    it('should persist variants under toggly:variants cache key', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        json: () =>
+          Promise.resolve({
+            defs: { V: { enabled: true, variant: 'B' } },
+          }),
+      } as Response);
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const appKey = 'cache-key';
+      const env = 'Production';
+      localStorage.removeItem(`toggly:variants:${appKey}:${env}`);
+
+      const toggly = new Toggly({
+        appKey,
+        environment: env,
+        enableVariants: true,
+      });
+      await toggly._loadFeatures();
+
+      const raw = localStorage.getItem(`toggly:variants:${appKey}:${env}`);
+      expect(raw).toBeTruthy();
+      expect(JSON.parse(raw!)).toEqual({ V: { enabled: true, variant: 'B' } });
+    });
+
+    it('falls back to cached variants on API error when enableVariants', async () => {
+      const appKey = 'test-key';
+      const env = 'Production';
+      const defs = { V: { enabled: true, variant: 'cached' } };
+      localStorage.setItem(`toggly:variants:${appKey}:${env}`, JSON.stringify(defs));
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network'));
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const toggly = new Toggly({
+        appKey,
+        environment: env,
+        enableVariants: true,
+      });
+      await toggly._loadFeatures();
+
+      expect(toggly.getVariant('V')).toEqual({ name: 'cached', configurationValue: undefined });
     });
   });
 

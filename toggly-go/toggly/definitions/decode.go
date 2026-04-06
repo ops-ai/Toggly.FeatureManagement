@@ -35,3 +35,21 @@ func DecodeSignedDefinitions(b []byte) (*SignedDefinitionsResponse, error) {
 func DecodeSignedDefsPayload(raw json.RawMessage) ([]FeatureDefinitionModel, error) {
 	return DecodeUnsignedDefinitions(raw)
 }
+
+// DecodeEvaluatedVariantDefsMap decodes evaluated-variants-signed `defs` object
+// (map of feature key → evaluated variant).
+func DecodeEvaluatedVariantDefsMap(raw json.RawMessage) (map[string]EvaluatedVariantDef, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("decode evaluated variant defs: empty defs")
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var m map[string]EvaluatedVariantDef
+	if err := dec.Decode(&m); err != nil {
+		return nil, fmt.Errorf("decode evaluated variant defs: %w", err)
+	}
+	if m == nil {
+		m = map[string]EvaluatedVariantDef{}
+	}
+	return m, nil
+}

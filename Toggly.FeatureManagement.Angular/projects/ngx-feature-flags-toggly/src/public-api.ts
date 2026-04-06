@@ -13,6 +13,7 @@ export * from './lib/toggly.service'
 export * from './lib/feature.component'
 export * from './lib/feature-template.directive'
 export * from './lib/feature.directive'
+export * from './lib/feature-variant.directive'
 
 // Guards (functional + class-based for backward compatibility)
 export * from './lib/feature.guard'

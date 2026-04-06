@@ -23,6 +23,10 @@ class TogglyConfig {
   /// real-time flag updates, reducing the need for periodic polling.
   final bool enableLiveUpdates;
 
+  /// When true, fetches signed variant assignments from the Client API and
+  /// exposes variant lookup APIs on `Toggly`.
+  final bool enableVariants;
+
   const TogglyConfig({
     this.baseURI = 'https://definitions.toggly.io',
     this.connectTimeout = 5 * 1000,
@@ -30,5 +34,6 @@ class TogglyConfig {
     this.trustedKeyIds,
     this.verifySignatures = false,
     this.enableLiveUpdates = true,
+    this.enableVariants = false,
   });
 }

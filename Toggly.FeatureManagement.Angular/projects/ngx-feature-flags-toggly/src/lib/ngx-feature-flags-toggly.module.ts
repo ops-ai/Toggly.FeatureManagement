@@ -3,6 +3,7 @@ import { FeatureComponent } from './feature.component'
 import { TogglyOptions } from './toggly-options'
 import { FeatureTemplateDirective } from './feature-template.directive'
 import { FeatureFlagDirective } from './feature.directive'
+import { FeatureVariantDirective } from './feature-variant.directive'
 import { FeatureFlagGuard } from './feature.guard'
 
 /**
@@ -28,6 +29,7 @@ import { FeatureFlagGuard } from './feature.guard'
  * import {
  *   FeatureComponent,
  *   FeatureFlagDirective,
+ *   FeatureVariantDirective,
  *   FeatureTemplateDirective,
  *   provideToggly
  * } from '@ops-ai/ngx-feature-flags-toggly';
@@ -45,12 +47,14 @@ import { FeatureFlagGuard } from './feature.guard'
     FeatureComponent,
     FeatureTemplateDirective,
     FeatureFlagDirective,
+    FeatureVariantDirective,
   ],
   providers: [FeatureFlagGuard],
   exports: [
     FeatureComponent,
     FeatureTemplateDirective,
     FeatureFlagDirective,
+    FeatureVariantDirective,
   ],
 })
 export class NgxFeatureFlagsTogglyModule {

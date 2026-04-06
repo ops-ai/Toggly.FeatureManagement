@@ -1,5 +1,5 @@
 import { Toggly, type TogglyOptions } from '../services/toggly.service'
-import { togglyServiceStore, togglyFlagsStore } from '../stores/toggly.store'
+import { togglyServiceStore, togglyFlagsStore, togglyVariantsStore } from '../stores/toggly.store'
 
 /**
  * Initialize Toggly with the provided configuration
@@ -30,11 +30,22 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
     togglyFlagsStore.set(flags)
   }
 
+  toggly.onVariantsUpdated = (defs) => {
+    togglyVariantsStore.set(defs)
+  }
+
+  if (!config.enableVariants) {
+    togglyVariantsStore.set({})
+  }
+
   // Seed the Svelte store from localStorage cache for instant rendering
   // The Toggly constructor already seeds _features, so expose them immediately
   const cachedFeatures = await toggly._featuresLoaded()
   if (cachedFeatures) {
     togglyFlagsStore.set(cachedFeatures)
+  }
+  if (config.enableVariants) {
+    togglyVariantsStore.set(toggly.getVariantDefinitions() ?? {})
   }
 
   // Load fresh features from the API and update the flags store
@@ -43,9 +54,15 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
     if (flags) {
       togglyFlagsStore.set(flags)
     }
+    if (config.enableVariants) {
+      togglyVariantsStore.set(toggly.getVariantDefinitions() ?? {})
+    }
   } catch (error) {
     console.error('Toggly initialization error:', error)
     togglyFlagsStore.set({})
+    if (config.enableVariants) {
+      togglyVariantsStore.set(toggly.getVariantDefinitions() ?? {})
+    }
   }
 
   // Start WebSocket for live updates

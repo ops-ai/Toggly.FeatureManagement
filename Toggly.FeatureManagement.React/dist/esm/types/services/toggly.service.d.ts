@@ -1,4 +1,6 @@
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { VariantResult } from './variant.types';
+export type { EvaluatedVariantDef, VariantResult } from './variant.types';
 export interface TogglyOptions {
     baseURI?: string;
     verifySignatures?: boolean;
@@ -15,6 +17,11 @@ export interface TogglyOptions {
     enableLiveUpdates?: boolean;
     /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
     persistCache?: boolean;
+    /**
+     * Use /evaluated-variants-signed and expose {@link Toggly.getVariant} / {@link Toggly.getVariantValue}.
+     * Matches @ops-ai/feature-flags-toggly when enableVariants is true.
+     */
+    enableVariants?: boolean;
 }
 export interface TogglyService {
     shouldShowFeatureDuringEvaluation: boolean;
@@ -28,12 +35,17 @@ export interface TogglyService {
     evaluateFeatureGate: (featureKeys: string[], requirement: string, negate: boolean) => Promise<boolean>;
     isFeatureOn: (featureKey: string) => Promise<boolean>;
     isFeatureOff: (featureKey: string) => Promise<boolean>;
+    getVariant: (featureKey: string) => VariantResult | null;
+    getVariantValue: (featureKey: string) => unknown | null;
+    subscribeFeaturesRefresh: (listener: () => void) => () => void;
 }
 export declare class Toggly implements TogglyService {
     private _config;
     private _features;
+    private _variants;
     private _loadingFeatures;
     private _hookExecutor;
+    private _featuresRefreshListeners;
     _ws: WebSocket | null;
     _wsConnected: boolean;
     _wsReconnectTimer: any;
@@ -53,6 +65,20 @@ export declare class Toggly implements TogglyService {
     evaluateFeatureGate: (featureKeys: string[], requirement?: string, negate?: boolean) => Promise<boolean>;
     isFeatureOn: (featureKey: string) => Promise<boolean>;
     isFeatureOff: (featureKey: string) => Promise<boolean>;
+    /**
+     * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants} and loaded data).
+     */
+    getVariant(featureKey: string): VariantResult | null;
+    /**
+     * Configuration payload for the assigned variant, if any.
+     */
+    getVariantValue(featureKey: string): unknown | null;
+    /**
+     * Subscribe to feature (and variant) data updates after HTTP refresh or WebSocket-driven reload.
+     * @returns Unsubscribe function.
+     */
+    subscribeFeaturesRefresh(listener: () => void): () => void;
+    private notifyFeaturesRefresh;
     startWebSocket: () => void;
     stopWebSocket: () => void;
     /**

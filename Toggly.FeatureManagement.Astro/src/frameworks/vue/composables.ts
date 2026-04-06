@@ -4,7 +4,8 @@
 
 import { computed, type Ref } from 'vue';
 import { useStore } from '@nanostores/vue';
-import { $flags, $isReady } from '../../client/store.js';
+import { $flags, $isReady, $variants } from '../../client/store.js';
+import type { VariantResult } from '../../types/index.js';
 
 /**
  * Hook to check if a feature flag is enabled
@@ -93,6 +94,23 @@ export function useFeatureGate(
   });
 
   return { enabled, isReady };
+}
+
+/**
+ * Composable for the current variant assignment of a feature (requires enableVariants in config).
+ */
+export function useVariant(featureKey: string): Readonly<Ref<VariantResult | null>> {
+  const variants = useStore($variants);
+  return computed(() => {
+    const entry = variants.value[featureKey];
+    if (!entry?.variant) {
+      return null;
+    }
+    return {
+      name: entry.variant,
+      configurationValue: entry.configurationValue,
+    };
+  });
 }
 
 

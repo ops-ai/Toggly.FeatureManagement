@@ -7,6 +7,9 @@ func DefaultRegistry() *Registry {
 	// Deterministic on.
 	r.Register("AlwaysOn", AlwaysOnEvaluator{})
 
+	// Deterministic off.
+	r.Register("AlwaysOff", AlwaysOffEvaluator{})
+
 	// Percentage rollout.
 	r.Register("Percentage", PercentageEvaluator{})
 

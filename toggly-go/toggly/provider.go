@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -24,6 +25,12 @@ type definitionsProvider struct {
 	etag      string
 	lastTS    int64
 	secure    map[string]struct{}
+
+	// Evaluated variants (evaluated-variants-signed); separate ETag / timestamp from definitions.
+	variantsByKey map[string]definitions.EvaluatedVariantDef
+	variantEtag   string
+	variantLastTS int64
+	variantID     string
 
 	lastErr     string
 	lastErrTime *time.Time
@@ -51,6 +58,8 @@ func newDefinitionsProvider(cfg Config, snap snapshot.Provider) *definitionsProv
 		snap:             snap,
 		defsByKey:        map[string]definitions.FeatureDefinitionModel{},
 		secure:           map[string]struct{}{},
+		variantsByKey:    map[string]definitions.EvaluatedVariantDef{},
+		variantID:        cfg.VariantIdentity,
 		stop:             make(chan struct{}),
 		fallbackInterval: 20 * time.Minute,
 	}
@@ -152,6 +161,31 @@ func (p *definitionsProvider) isSecure(featureKey string) bool {
 	return ok
 }
 
+func (p *definitionsProvider) setVariantIdentity(identity string) {
+	p.mu.Lock()
+	if p.variantID != identity {
+		p.variantID = identity
+		p.variantEtag = ""
+	}
+	p.mu.Unlock()
+}
+
+func (p *definitionsProvider) getVariantIdentity() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.variantID
+}
+
+func (p *definitionsProvider) getVariant(featureKey string) *VariantResult {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	e, ok := p.variantsByKey[featureKey]
+	if !ok || e.Variant == "" {
+		return nil
+	}
+	return &VariantResult{Name: e.Variant, ConfigurationValue: e.ConfigurationValue}
+}
+
 func (p *definitionsProvider) refresh(ctx context.Context, timeout time.Duration) error {
 	// load snapshot once on first refresh attempt
 	p.mu.RLock()
@@ -165,9 +199,12 @@ func (p *definitionsProvider) refresh(ctx context.Context, timeout time.Duration
 	defer cancel()
 
 	var err error
-	if p.cfg.UseSignedDefinitions {
+	switch {
+	case p.cfg.EnableVariants:
+		err = p.refreshEvaluatedVariants(ctx)
+	case p.cfg.UseSignedDefinitions:
 		err = p.refreshSigned(ctx)
-	} else {
+	default:
 		err = p.refreshUnsigned(ctx)
 	}
 
@@ -197,12 +234,24 @@ func (p *definitionsProvider) loadSnapshot(ctx context.Context) error {
 		return err
 	}
 
-	p.applyDefinitions(snapDefs.Defs)
-	p.mu.Lock()
-	if snapDefs.Timestamp > 0 {
-		p.lastTS = snapDefs.Timestamp
+	if p.cfg.EnableVariants && len(snapDefs.VariantDefs) > 0 {
+		p.applyVariantDefinitions(snapDefs.VariantDefs)
+		p.mu.Lock()
+		if snapDefs.VariantTimestamp > 0 {
+			p.variantLastTS = snapDefs.VariantTimestamp
+		}
+		p.mu.Unlock()
+		return nil
 	}
-	p.mu.Unlock()
+
+	if len(snapDefs.Defs) > 0 {
+		p.applyDefinitions(snapDefs.Defs)
+		p.mu.Lock()
+		if snapDefs.Timestamp > 0 {
+			p.lastTS = snapDefs.Timestamp
+		}
+		p.mu.Unlock()
+	}
 	return nil
 }
 
@@ -251,6 +300,104 @@ func (p *definitionsProvider) refreshUnsigned(ctx context.Context) error {
 
 	if p.snap != nil {
 		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{Defs: defs})
+	}
+	return nil
+}
+
+func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) error {
+	reqURL := fmt.Sprintf("%sevaluated-variants-signed/%s/%s", p.cfg.DefinitionsURL, url.PathEscape(p.cfg.AppKey), url.PathEscape(p.cfg.Environment))
+	if id := p.getVariantIdentity(); id != "" {
+		reqURL += "?userId=" + url.QueryEscape(id)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return err
+	}
+	p.mu.RLock()
+	etag := p.variantEtag
+	currentTS := p.variantLastTS
+	p.mu.RUnlock()
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
+
+	resp, err := p.hc.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotModified {
+		return nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("evaluated-variants-signed refresh failed: %s: %s", resp.Status, string(b))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	env, err := definitions.DecodeSignedDefinitions(body)
+	if err != nil {
+		return err
+	}
+
+	if env.Timestamp < currentTS && currentTS > 0 {
+		return nil
+	}
+
+	if p.cfg.UseSignedDefinitions && env.Signature != "" && env.Kid != "" {
+		jwks, err := p.loadOrFetchJWKS(ctx)
+		if err != nil {
+			return err
+		}
+		if err := crypto.VerifySignedDefinitions(env, jwks, p.cfg.AllowedKeyIDs); err != nil {
+			return err
+		}
+	}
+
+	variantMap, err := definitions.DecodeEvaluatedVariantDefsMap(env.Defs)
+	if err != nil {
+		return err
+	}
+
+	p.applyVariantDefinitions(variantMap)
+
+	defsSlice := make([]definitions.FeatureDefinitionModel, 0, len(variantMap))
+	p.mu.RLock()
+	for k := range variantMap {
+		if def, ok := p.defsByKey[k]; ok {
+			defsSlice = append(defsSlice, def)
+		}
+	}
+	p.mu.RUnlock()
+
+	if newETag := resp.Header.Get("ETag"); newETag != "" {
+		p.mu.Lock()
+		p.variantEtag = newETag
+		p.variantLastTS = env.Timestamp
+		p.mu.Unlock()
+	} else {
+		p.mu.Lock()
+		p.variantLastTS = env.Timestamp
+		p.mu.Unlock()
+	}
+
+	if p.snap != nil {
+		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{
+			Defs:               defsSlice,
+			Signature:          env.Signature,
+			Kid:                env.Kid,
+			Timestamp:          env.Timestamp,
+			VariantDefs:        variantMap,
+			VariantSignature:   env.Signature,
+			VariantKid:         env.Kid,
+			VariantTimestamp:   env.Timestamp,
+		})
 	}
 	return nil
 }
@@ -404,6 +551,34 @@ func (p *definitionsProvider) applyDefinitions(defs []definitions.FeatureDefinit
 	}
 	p.mu.Lock()
 	p.defsByKey = byKey
+	p.secure = secure
+	p.variantsByKey = map[string]definitions.EvaluatedVariantDef{}
+	p.mu.Unlock()
+}
+
+func (p *definitionsProvider) applyVariantDefinitions(variants map[string]definitions.EvaluatedVariantDef) {
+	byKey := make(map[string]definitions.EvaluatedVariantDef, len(variants))
+	defsByKey := make(map[string]definitions.FeatureDefinitionModel, len(variants))
+	secure := make(map[string]struct{})
+
+	for key, row := range variants {
+		byKey[key] = row
+		var filters []definitions.FeatureFilter
+		if row.Enabled {
+			filters = []definitions.FeatureFilter{{Name: "AlwaysOn", Parameters: map[string]any{}}}
+		} else {
+			filters = []definitions.FeatureFilter{{Name: "AlwaysOff", Parameters: map[string]any{}}}
+		}
+		defsByKey[key] = definitions.FeatureDefinitionModel{
+			FeatureKey:      key,
+			Filters:         filters,
+			RequirementType: definitions.RequirementAny,
+		}
+	}
+
+	p.mu.Lock()
+	p.variantsByKey = byKey
+	p.defsByKey = defsByKey
 	p.secure = secure
 	p.mu.Unlock()
 }

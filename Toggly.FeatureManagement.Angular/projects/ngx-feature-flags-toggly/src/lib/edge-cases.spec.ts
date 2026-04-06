@@ -7,6 +7,7 @@ describe('Edge Cases & Error Handling', () => {
   let mockFetch: jasmine.Spy;
 
   beforeEach(() => {
+    localStorage.clear()
     mockFetch = spyOn(globalThis, 'fetch');
     spyOn(console, 'warn');
     spyOn(console, 'error');

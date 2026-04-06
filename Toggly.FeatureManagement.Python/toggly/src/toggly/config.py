@@ -49,6 +49,9 @@ class TogglyConfig:
     use_signed_definitions: bool = False
     """Whether to verify definition signatures."""
 
+    enable_variants: bool = False
+    """When True, fetch evaluated variants from ``/evaluated-variants-signed/...``."""
+
     allowed_key_ids: list[str] | None = None
     """List of allowed signing key IDs. None allows all keys."""
 
@@ -180,6 +183,7 @@ class TogglyConfig:
             use_signed_definitions=changes.get(
                 "use_signed_definitions", self.use_signed_definitions
             ),
+            enable_variants=changes.get("enable_variants", self.enable_variants),
             allowed_key_ids=changes.get("allowed_key_ids", self.allowed_key_ids),
             connect_timeout=changes.get("connect_timeout", self.connect_timeout),
             request_timeout=changes.get("request_timeout", self.request_timeout),
@@ -209,6 +213,7 @@ class TogglyConfig:
             "base_url": self.base_url,
             "refresh_interval": self.refresh_interval,
             "use_signed_definitions": self.use_signed_definitions,
+            "enable_variants": self.enable_variants,
             "enable_usage_tracking": self.enable_usage_tracking,
             "enable_metrics": self.enable_metrics,
             "enable_live_updates": self.enable_live_updates,

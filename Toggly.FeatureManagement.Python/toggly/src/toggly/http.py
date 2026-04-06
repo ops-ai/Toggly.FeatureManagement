@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 from toggly.exceptions import TogglyNetworkError, TogglyTimeoutError
 
@@ -229,7 +229,32 @@ def build_definitions_url(
         path = f"/definitions/{app_key}/{environment}"
 
     if identity:
-        path = f"{path}?identity={urllib.parse.quote(identity)}"
+        path = f"{path}?identity={quote(identity, safe='')}"
+
+    return urljoin(base_url + "/", path.lstrip("/"))
+
+
+def build_evaluated_variants_url(
+    base_url: str,
+    app_key: str,
+    environment: str,
+    identity: str | None = None,
+) -> str:
+    """Build the URL for fetching signed evaluated feature variants.
+
+    Args:
+        base_url: Base API URL.
+        app_key: Application key.
+        environment: Environment name.
+        identity: Optional user identity (sent as ``userId`` query parameter).
+
+    Returns:
+        The full URL for fetching evaluated variants.
+
+    """
+    path = f"/evaluated-variants-signed/{app_key}/{environment}"
+    if identity:
+        path = f"{path}?userId={quote(identity, safe='')}"
 
     return urljoin(base_url + "/", path.lstrip("/"))
 

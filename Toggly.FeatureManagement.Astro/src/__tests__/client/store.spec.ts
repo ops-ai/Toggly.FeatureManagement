@@ -5,11 +5,14 @@ import {
   setIdentity,
   clearIdentity,
   stopRefreshInterval,
+  getVariant,
+  getVariantValue,
   $flags,
   $isReady,
   $error,
   $flag,
   $gate,
+  $variant,
   __resetClient,
 } from '../../client/store.js';
 
@@ -17,11 +20,11 @@ import {
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-function createMockResponse(flags: Record<string, boolean>) {
+function createMockResponse(body: unknown) {
   return {
     ok: true,
     status: 200,
-    json: () => Promise.resolve(flags),
+    json: () => Promise.resolve(body),
   };
 }
 
@@ -139,6 +142,49 @@ describe('Client Store', () => {
       vi.advanceTimersByTime(10000);
       // No fetch should be called
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should fetch evaluated-variants-signed when enableVariants is true', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          defs: {
+            V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+          },
+          signature: 's',
+          timestamp: 1,
+          kid: 'k',
+        })
+      );
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://definitions.toggly.io/evaluated-variants-signed/test-key/Production',
+        expect.anything()
+      );
+      expect($flags.get().V).toBe(true);
+      expect(getVariant('V')).toEqual({ name: 'A', configurationValue: { x: 1 } });
+      expect(getVariantValue('V')).toEqual({ x: 1 });
+      expect($variant('V').get()).toEqual({ name: 'A', configurationValue: { x: 1 } });
+    });
+
+    it('getVariant returns null when enableVariants is false', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ defs: { F: true } }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: false,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(getVariant('F')).toBeNull();
+      expect(getVariantValue('F')).toBeNull();
     });
   });
 

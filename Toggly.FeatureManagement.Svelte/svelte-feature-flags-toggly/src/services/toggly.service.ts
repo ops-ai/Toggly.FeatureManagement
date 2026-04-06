@@ -1,11 +1,25 @@
 import type { Hook } from '@ops-ai/toggly-hooks-types';
 import { HookExecutor } from './hooks';
+import type { EvaluatedVariantDef, VariantResult } from './variant.types';
 
 const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 const CACHE_PREFIX = 'toggly:flags:'
+const VARIANTS_CACHE_PREFIX = 'toggly:variants:'
 
 function getCacheKey(appKey: string, environment: string): string {
   return `${CACHE_PREFIX}${appKey}:${environment}`
+}
+
+function getVariantsCacheKey(appKey: string, environment: string): string {
+  return `${VARIANTS_CACHE_PREFIX}${appKey}:${environment}`
+}
+
+function variantDefsToFlags(defs: { [key: string]: EvaluatedVariantDef }): { [key: string]: boolean } {
+  const out: { [key: string]: boolean } = {}
+  for (const key of Object.keys(defs)) {
+    out[key] = defs[key]?.enabled === true
+  }
+  return out
 }
 
 function readCachedFlags(appKey: string, environment: string): { [key: string]: boolean } | null {
@@ -20,6 +34,25 @@ function writeCachedFlags(appKey: string, environment: string, flags: { [key: st
   if (!canUseStorage) return
   try {
     localStorage.setItem(getCacheKey(appKey, environment), JSON.stringify(flags))
+  } catch { /* storage full or unavailable */ }
+}
+
+function readCachedVariants(appKey: string, environment: string): { [key: string]: EvaluatedVariantDef } | null {
+  if (!canUseStorage) return null
+  try {
+    const raw = localStorage.getItem(getVariantsCacheKey(appKey, environment))
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function writeCachedVariants(
+  appKey: string,
+  environment: string,
+  variants: { [key: string]: EvaluatedVariantDef },
+): void {
+  if (!canUseStorage) return
+  try {
+    localStorage.setItem(getVariantsCacheKey(appKey, environment), JSON.stringify(variants))
   } catch { /* storage full or unavailable */ }
 }
 
@@ -38,6 +71,10 @@ export interface TogglyOptions {
   hooks?: Hook[]
   /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
   persistCache?: boolean
+  /**
+   * When true, fetches from /evaluated-variants-signed and exposes {@link Toggly.getVariant} / {@link Toggly.getVariantValue}.
+   */
+  enableVariants?: boolean
 }
 
 export interface TogglyService {
@@ -61,6 +98,10 @@ export interface TogglyService {
   stopWebSocket: () => void
   addHook: (hook: Hook) => void
   removeHook: (name: string) => boolean
+  getVariant: (featureKey: string) => VariantResult | null
+  getVariantValue: (featureKey: string) => unknown | null
+  /** Variant defs map when {@link TogglyOptions.enableVariants} is true; otherwise null. */
+  getVariantDefinitions: () => { [key: string]: EvaluatedVariantDef } | null
 }
 
 export class Toggly implements TogglyService {
@@ -72,6 +113,7 @@ export class Toggly implements TogglyService {
     hooks: []
   }
   private _features: { [key: string]: boolean } | null = null
+  private _variants: { [key: string]: EvaluatedVariantDef } | null = null
   private _loadingFeatures: boolean = false
   private _lastFetchTime: number = 0
   private _hookExecutor = new HookExecutor()
@@ -84,6 +126,9 @@ export class Toggly implements TogglyService {
 
   /** Callback invoked after flags are refreshed (used by createToggly to update the store) */
   onFlagsUpdated: ((flags: { [key: string]: boolean }) => void) | null = null
+
+  /** Callback invoked when variant defs change (used by createToggly when enableVariants is true) */
+  onVariantsUpdated: ((defs: { [key: string]: EvaluatedVariantDef }) => void) | null = null
 
   shouldShowFeatureDuringEvaluation: boolean = false
 
@@ -118,11 +163,22 @@ export class Toggly implements TogglyService {
       this._config.hooks.forEach(hook => this._hookExecutor.addHook(hook))
     }
 
-    // Seed in-memory features from localStorage cache for instant availability
-    if (this._features === null && this._canPersist) {
-      const cached = readCachedFlags(this._config.appKey ?? '', this._config.environment ?? 'Production')
-      if (cached) {
-        this._features = cached
+    // Seed in-memory features (and variants) from localStorage for instant availability
+    if (this._features === null && this._canPersist && this._config.appKey) {
+      const appKey = this._config.appKey
+      const env = this._config.environment ?? 'Production'
+      if (this._config.enableVariants) {
+        const vCached = readCachedVariants(appKey, env)
+        if (vCached) {
+          this._variants = vCached
+          this._features = variantDefsToFlags(vCached)
+        }
+      }
+      if (this._features === null) {
+        const cached = readCachedFlags(appKey, env)
+        if (cached) {
+          this._features = cached
+        }
       }
     }
   }
@@ -155,43 +211,76 @@ export class Toggly implements TogglyService {
       return this._features
     }
 
-    // Features already loaded and cache is valid
-    if (this._features !== null && cacheAge < refreshInterval) {
-      return this._features
-    }
-
     this._loadingFeatures = true
 
-    try {
-      var url = `${this._config.baseURI}/evaluated-signed/${this._config.appKey}/${this._config.environment}`
+    const appKey = this._config.appKey ?? ''
+    const env = this._config.environment ?? 'Production'
 
-      if (this._config.identity) {
-        url += `?u=${this._config.identity}`
+    try {
+      let url: string
+      if (this._config.enableVariants) {
+        url = `${this._config.baseURI}/evaluated-variants-signed/${this._config.appKey}/${this._config.environment}`
+        if (this._config.identity) {
+          url += `?${new URLSearchParams({ userId: this._config.identity }).toString()}`
+        }
+      } else {
+        url = `${this._config.baseURI}/evaluated-signed/${this._config.appKey}/${this._config.environment}`
+        if (this._config.identity) {
+          url += `?u=${this._config.identity}`
+        }
       }
 
       const response = await fetch(url)
       const payload = await response.json()
-      this._features = payload?.defs ?? payload
       this._lastFetchTime = Date.now()
 
-      if (this._features && this._canPersist) {
-        writeCachedFlags(this._config.appKey ?? '', this._config.environment ?? 'Production', this._features)
+      if (this._config.enableVariants) {
+        const rawDefs = payload?.defs ?? payload
+        const defs =
+          rawDefs && typeof rawDefs === 'object' && !Array.isArray(rawDefs)
+            ? (rawDefs as { [key: string]: EvaluatedVariantDef })
+            : {}
+        this._variants = defs
+        this._features = variantDefsToFlags(defs)
+        if (this._features && this._canPersist) {
+          writeCachedVariants(appKey, env, defs)
+          writeCachedFlags(appKey, env, this._features)
+        }
+      } else {
+        this._variants = null
+        this._features = payload?.defs ?? payload
+        if (this._features && this._canPersist) {
+          writeCachedFlags(appKey, env, this._features)
+        }
       }
-      
-      // Trigger afterRefresh hooks
+
       if (this._features) {
         this._hookExecutor.executeAfterRefresh(this._features)
       }
     } catch (error) {
-      if (this._features === null) {
-        const cached = this._canPersist
-          ? readCachedFlags(this._config.appKey ?? '', this._config.environment ?? 'Production')
-          : null
-        this._features = cached ?? this._config.featureDefaults ?? {}
+      if (this._config.enableVariants) {
+        const vCached = this._canPersist ? readCachedVariants(appKey, env) : null
+        if (vCached) {
+          this._variants = vCached
+          this._features = variantDefsToFlags(vCached)
+        } else if (this._features === null) {
+          this._variants = null
+          const cached = this._canPersist ? readCachedFlags(appKey, env) : null
+          this._features = cached ?? this._config.featureDefaults ?? {}
+        }
+      } else {
+        if (this._features === null) {
+          this._variants = null
+          const cached = this._canPersist ? readCachedFlags(appKey, env) : null
+          this._features = cached ?? this._config.featureDefaults ?? {}
+        }
       }
       console.warn(
         'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',
       )
+      if (this._features) {
+        this._hookExecutor.executeAfterRefresh(this._features)
+      }
     } finally {
       this._loadingFeatures = false
     }
@@ -268,16 +357,60 @@ export class Toggly implements TogglyService {
     return result
   }
 
+  /**
+   * Current variant assignment for a feature (requires enableVariants and loaded data).
+   */
+  getVariant(featureKey: string): VariantResult | null {
+    if (!this._config.enableVariants) {
+      return null
+    }
+    const variants = this._variants
+    if (!variants) {
+      return null
+    }
+    const entry = variants[featureKey]
+    if (!entry || !entry.variant) {
+      return null
+    }
+    return {
+      name: entry.variant,
+      configurationValue: entry.configurationValue,
+    }
+  }
+
+  /**
+   * Configuration payload for the assigned variant, if any.
+   */
+  getVariantValue(featureKey: string): unknown | null {
+    const variant = this.getVariant(featureKey)
+    return variant?.configurationValue ?? null
+  }
+
+  getVariantDefinitions(): { [key: string]: EvaluatedVariantDef } | null {
+    if (!this._config.enableVariants) {
+      return null
+    }
+    return this._variants
+  }
+
   refreshFlags = async (): Promise<void> => {
     this._lastFetchTime = 0 // Force refresh
     const flags = await this._loadFeatures()
     if (flags) {
       if (this._canPersist) {
-        writeCachedFlags(this._config.appKey ?? '', this._config.environment ?? 'Production', flags)
+        const ak = this._config.appKey ?? ''
+        const env = this._config.environment ?? 'Production'
+        writeCachedFlags(ak, env, flags)
+        if (this._config.enableVariants && this._variants) {
+          writeCachedVariants(ak, env, this._variants)
+        }
       }
       if (this.onFlagsUpdated) {
         this.onFlagsUpdated(flags)
       }
+    }
+    if (this._config.enableVariants && this.onVariantsUpdated) {
+      this.onVariantsUpdated(this._variants ?? {})
     }
   }
 

@@ -5,6 +5,9 @@ import Feature from './Feature';
 import { Provider } from '../contexts/toggly.context';
 import { Toggly, TogglyService } from '../services';
 
+const mockFetch = jest.fn();
+(global as any).fetch = mockFetch;
+
 // Helper: wrap Feature in a context provider with a Toggly service
 function renderFeature(
   service: TogglyService,
@@ -14,6 +17,7 @@ function renderFeature(
     requirement?: string;
     negate?: boolean;
     children?: React.ReactNode;
+    variant?: string;
   }
 ) {
   return render(
@@ -29,6 +33,8 @@ describe('Feature Component', () => {
   let service: Toggly;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
     service = new Toggly({
@@ -155,6 +161,68 @@ describe('Feature Component', () => {
         featureKey: 'A',
         featureKeys: ['C'],
         requirement: 'all',
+      });
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+
+      expect(screen.queryByTestId('content')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('variant prop', () => {
+    it('renders when gate passes and variant matches', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            defs: {
+              Rollout: { enabled: true, variant: 'B' },
+            },
+          }),
+      });
+
+      const variantService = new Toggly({
+        appKey: 'app',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      await variantService._loadFeatures();
+
+      renderFeature(variantService, {
+        featureKey: 'Rollout',
+        variant: 'B',
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('content')).toBeInTheDocument();
+      });
+    });
+
+    it('hides when variant does not match', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            defs: {
+              Rollout: { enabled: true, variant: 'A' },
+            },
+          }),
+      });
+
+      const variantService = new Toggly({
+        appKey: 'app',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      await variantService._loadFeatures();
+
+      renderFeature(variantService, {
+        featureKey: 'Rollout',
+        variant: 'B',
       });
 
       await act(async () => {

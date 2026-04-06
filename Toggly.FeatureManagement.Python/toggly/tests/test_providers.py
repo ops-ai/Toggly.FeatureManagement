@@ -6,12 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from toggly import FeatureDefinition, FeatureFilter, JsonWebKey, JsonWebKeySet
+from toggly import EvaluatedVariantDef, FeatureDefinition, FeatureFilter, JsonWebKey, JsonWebKeySet
 from toggly.providers import (
     DefinitionsSnapshot,
     FileSnapshotProvider,
     JwksSnapshot,
     MemorySnapshotProvider,
+    VariantsSnapshot,
 )
 
 
@@ -119,6 +120,45 @@ class TestDefinitionsSnapshot:
         assert result.timestamp == original.timestamp
 
 
+class TestVariantsSnapshot:
+    """Tests for VariantsSnapshot."""
+
+    def test_from_dict_kid_and_signature(self) -> None:
+        """Load from API-shaped JSON (kid, camelCase defs)."""
+        data = {
+            "defs": {
+                "f1": {"enabled": True, "variant": "v1", "configurationValue": 99},
+            },
+            "signature": "sig",
+            "timestamp": 1000,
+            "kid": "k1",
+            "etag": "e1",
+        }
+        snap = VariantsSnapshot.from_dict(data)
+        assert snap.defs["f1"].enabled is True
+        assert snap.defs["f1"].variant == "v1"
+        assert snap.defs["f1"].configuration_value == 99
+        assert snap.signature == "sig"
+        assert snap.key_id == "k1"
+        assert snap.timestamp == 1000
+        assert snap.etag == "e1"
+
+    def test_roundtrip(self) -> None:
+        """to_dict / from_dict preserves data."""
+        original = VariantsSnapshot(
+            defs={"x": EvaluatedVariantDef(enabled=False, variant="a", configuration_value=None)},
+            signature="s",
+            key_id="kid",
+            timestamp=1,
+            etag="et",
+        )
+        restored = VariantsSnapshot.from_dict(original.to_dict())
+        assert restored.defs["x"].enabled is False
+        assert restored.defs["x"].variant == "a"
+        assert restored.signature == "s"
+        assert restored.key_id == "kid"
+
+
 class TestJwksSnapshot:
     """Tests for JwksSnapshot."""
 
@@ -177,6 +217,7 @@ class TestMemorySnapshotProvider:
 
         assert provider.load_definitions() is None
         assert provider.load_jwks() is None
+        assert provider.load_variants() is None
 
     def test_save_and_load_definitions(self) -> None:
         """Test save and load definitions."""
@@ -208,16 +249,29 @@ class TestMemorySnapshotProvider:
         assert loaded is not None
         assert loaded.jwks.keys[0].kid == "key-1"
 
+    def test_save_and_load_variants(self) -> None:
+        """Test save and load evaluated variants."""
+        provider = MemorySnapshotProvider()
+        snap = VariantsSnapshot(
+            defs={"feat": EvaluatedVariantDef(enabled=True, variant="b", configuration_value={})},
+        )
+        provider.save_variants(snap)
+        loaded = provider.load_variants()
+        assert loaded is not None
+        assert loaded.defs["feat"].variant == "b"
+
     def test_clear(self) -> None:
         """Test clear removes all data."""
         provider = MemorySnapshotProvider()
         provider.save_definitions(DefinitionsSnapshot())
         provider.save_jwks(JwksSnapshot())
+        provider.save_variants(VariantsSnapshot())
 
         provider.clear()
 
         assert provider.load_definitions() is None
         assert provider.load_jwks() is None
+        assert provider.load_variants() is None
 
     def test_overwrite(self) -> None:
         """Test saving overwrites previous data."""
@@ -245,6 +299,7 @@ class TestFileSnapshotProvider:
 
             assert provider.load_definitions() is None
             assert provider.load_jwks() is None
+            assert provider.load_variants() is None
 
     def test_save_and_load_definitions(self) -> None:
         """Test save and load definitions to file."""
@@ -285,17 +340,33 @@ class TestFileSnapshotProvider:
             assert loaded.jwks.keys[0].kid == "key-1"
             assert loaded.timestamp == 1234567890
 
+    def test_save_and_load_variants(self) -> None:
+        """Test save and load variants to file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            provider = FileSnapshotProvider(directory=tmpdir)
+            snap = VariantsSnapshot(
+                defs={"k": EvaluatedVariantDef(enabled=True, variant="x", configuration_value=1)},
+                etag="e",
+            )
+            provider.save_variants(snap)
+            loaded = provider.load_variants()
+            assert loaded is not None
+            assert loaded.defs["k"].configuration_value == 1
+            assert loaded.etag == "e"
+
     def test_clear_removes_files(self) -> None:
         """Test clear removes cache files."""
         with tempfile.TemporaryDirectory() as tmpdir:
             provider = FileSnapshotProvider(directory=tmpdir)
             provider.save_definitions(DefinitionsSnapshot())
             provider.save_jwks(JwksSnapshot())
+            provider.save_variants(VariantsSnapshot())
 
             provider.clear()
 
             assert provider.load_definitions() is None
             assert provider.load_jwks() is None
+            assert provider.load_variants() is None
 
     def test_custom_filenames(self) -> None:
         """Test custom filenames."""

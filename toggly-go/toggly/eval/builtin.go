@@ -14,6 +14,14 @@ func (AlwaysOnEvaluator) Evaluate(featureKey string, params map[string]any, ctx 
 	return true, nil
 }
 
+// AlwaysOffEvaluator implements the AlwaysOff filter (e.g. synthesized from evaluated variants).
+type AlwaysOffEvaluator struct{}
+
+func (AlwaysOffEvaluator) Evaluate(featureKey string, params map[string]any, ctx Context) (bool, error) {
+	_, _, _ = featureKey, params, ctx
+	return false, nil
+}
+
 // PercentageEvaluator implements Percentage.
 type PercentageEvaluator struct{}
 

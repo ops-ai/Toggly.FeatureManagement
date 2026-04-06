@@ -11,6 +11,8 @@ import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 import 'package:rxdart/rxdart.dart';
 
+import 'models/variant_result.dart';
+
 /// Static class providing feature flags support.
 ///
 /// Allows enabling and disabling of features easily. Can be used with or without Toggly.io.
@@ -35,6 +37,11 @@ class Toggly with WidgetsBindingObserver {
 
   // Add new static field for in-memory JWKs cache
   static Map<String, dynamic>? _inMemoryJwks;
+
+  /// Parsed `defs` map from the last successful variants response (feature key → payload).
+  static Map<String, dynamic>? _inMemoryVariantDefs;
+
+  static String? _variantsETag;
 
   static final Toggly _instance = Toggly._internal();
 
@@ -64,6 +71,8 @@ class Toggly with WidgetsBindingObserver {
       'lastSynced': _lastSynced?.toString(),
       'eTag': _eTag,
       'lastError': _lastError,
+      'enableVariants': Toggly._config.enableVariants.toString(),
+      'variantsETag': _variantsETag,
     };
   }
 
@@ -190,6 +199,10 @@ class Toggly with WidgetsBindingObserver {
 
     // Try to fetch flags from the API
     final status = await Toggly.fetchFeatureFlags();
+
+    if (Toggly._config.enableVariants && Toggly._appKey != null) {
+      await Toggly.fetchEvaluatedVariants();
+    }
 
     return TogglyInitResponse(
       status: status,
@@ -331,8 +344,10 @@ class Toggly with WidgetsBindingObserver {
   /// Clears the feature flags cache.
   static Future clearFeatureFlagsCache() async {
     _inMemoryFlags = null;
+    _inMemoryVariantDefs = null;
     _featureFlagsSubject?.add({});
     _eTag = null;
+    _variantsETag = null;
 
     // Skip secure storage operations if app is backgrounded
     if (!_checkAppVisibility()) {
@@ -348,7 +363,11 @@ class Toggly with WidgetsBindingObserver {
     await _storage.delete(
       key: SecureStorageKeys.featureFlagsCache.toString() + hashedIdentity,
     );
+    await _storage.delete(
+      key: SecureStorageKeys.variantsCache.toString() + hashedIdentity,
+    );
     await _storage.delete(key: SecureStorageKeys.etag.toString());
+    await _storage.delete(key: SecureStorageKeys.etagVariants.toString());
   }
 
   static Future checkAndClearFeatureFlagsCache() async {
@@ -376,6 +395,18 @@ class Toggly with WidgetsBindingObserver {
 
     if (Toggly._identity != flagsCache.identity) {
       await clearFeatureFlagsCache();
+      return;
+    }
+
+    String? variantsCacheStr = await _storage.get(
+        key: SecureStorageKeys.variantsCache.toString() + hashedIdentity);
+    if (variantsCacheStr != null) {
+      final variantsCache = TogglyVariantsCache.fromJson(
+        jsonDecode(variantsCacheStr),
+      );
+      if (Toggly._identity != variantsCache.identity) {
+        await clearVariantCache();
+      }
     }
   }
 
@@ -523,6 +554,282 @@ class Toggly with WidgetsBindingObserver {
 
       return TogglyLoadFeatureFlagsResponse.defaults;
     }
+  }
+
+  /// Fetches signed variant assignments from the Client API.
+  static Future<void> fetchEvaluatedVariants() async {
+    if (!Toggly._config.enableVariants || Toggly._appKey == null) {
+      return;
+    }
+    if (!_checkAppVisibility()) {
+      return;
+    }
+    try {
+      final headers = <String, dynamic>{};
+      final etag = _variantsETag ??
+          await _storage.get(key: SecureStorageKeys.etagVariants.toString());
+      if (etag != null) {
+        headers['If-None-Match'] = etag;
+      }
+
+      final response = await _http.get(
+        '${Toggly._config.baseURI}/evaluated-variants-signed/${Toggly._appKey}/${Toggly._environment}',
+        queryParameters: <String, dynamic>{'userId': Toggly._identity},
+        options: Options(headers: headers),
+      );
+
+      if (kDebugMode) {
+        print('Toggly variants raw response: ${response.data}');
+      }
+
+      final signedResponse = Map<String, dynamic>.from(response.data);
+      final defsPayload =
+          signedResponse['defs'] ?? signedResponse['data'] ?? <String, dynamic>{};
+      final defs = defsPayload is Map
+          ? Map<String, dynamic>.from(defsPayload as Map)
+          : <String, dynamic>{};
+
+      final signature = signedResponse['signature'] as String?;
+      final timestamp = signedResponse['timestamp'] as int?;
+      final keyId = signedResponse['kid'] as String?;
+      if (signature == null || timestamp == null || keyId == null) {
+        throw Exception('Variants response missing signature metadata');
+      }
+
+      final hashedIdentity =
+          sha256.convert(utf8.encode(Toggly._identity)).toString();
+
+      final existingVariantsCache = await _storage.get(
+          key: SecureStorageKeys.variantsCache.toString() + hashedIdentity);
+
+      if (existingVariantsCache != null) {
+        final existing = TogglyVariantsCache.fromJson(
+          jsonDecode(existingVariantsCache),
+        );
+        if (existing.timestamp != null && timestamp <= existing.timestamp!) {
+          throw Exception(
+              'New variants timestamp must be greater than existing timestamp');
+        }
+      }
+
+      final payloadForSign = jsonEncode(defsPayload is Map ? defsPayload : defs);
+      if (Toggly._config.verifySignatures) {
+        final isValid = await _verifySignature(
+          payloadForSign,
+          signature,
+          timestamp,
+          false,
+          keyId,
+        );
+        if (!isValid) {
+          throw Exception('Invalid variants signature');
+        }
+        if (kDebugMode) {
+          print('Toggly variants signature verification successful');
+        }
+      }
+
+      _lastChecked = DateTime.now();
+      _lastSynced = DateTime.now();
+      await _persistVariantsCache(
+        variantsJson: jsonEncode(defs),
+        timestamp: timestamp,
+        signature: signature,
+        keyId: keyId,
+      );
+
+      final newEtag = response.headers['etag']?.first;
+      if (newEtag != null) {
+        _variantsETag = newEtag;
+        await _storage.set(
+          key: SecureStorageKeys.etagVariants.toString(),
+          value: newEtag,
+        );
+      }
+
+      if (kDebugMode) {
+        print('Toggly.fetchEvaluatedVariants — ${jsonEncode(defs)}');
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 304) {
+        _lastChecked = DateTime.now();
+        final cached = await _readVerifiedVariantDefsFromCache();
+        _inMemoryVariantDefs = cached;
+      } else if (e.response?.statusCode == 403) {
+        await clearVariantCache();
+        await _storage.delete(key: SecureStorageKeys.jwks.toString());
+      } else {
+        if (kDebugMode) {
+          print('Toggly.fetchEvaluatedVariants error: $e');
+        }
+      }
+    } catch (e, stack) {
+      if (kDebugMode) {
+        print('Toggly.fetchEvaluatedVariants error: $e');
+        print('Stack trace: $stack');
+      }
+      _lastError = 'Variants fetch failed';
+    }
+  }
+
+  static Future<void> _persistVariantsCache({
+    required String variantsJson,
+    required int timestamp,
+    required String signature,
+    required String keyId,
+  }) async {
+    _inMemoryVariantDefs = Map<String, dynamic>.from(jsonDecode(variantsJson));
+
+    if (!_checkAppVisibility()) {
+      if (kDebugMode) {
+        print('Skipping variants secure storage cache as app is not in foreground');
+      }
+      return;
+    }
+
+    final hashedIdentity =
+        sha256.convert(utf8.encode(Toggly._identity)).toString();
+
+    await _storage.set(
+      key: SecureStorageKeys.variantsCache.toString() + hashedIdentity,
+      value: jsonEncode(TogglyVariantsCache(
+        identity: Toggly._identity,
+        variants: variantsJson,
+        timestamp: timestamp,
+        signature: signature,
+        keyId: keyId,
+      )),
+    );
+  }
+
+  /// Drops variant cache from memory and secure storage for the current identity.
+  static Future<void> clearVariantCache() async {
+    _inMemoryVariantDefs = null;
+    _variantsETag = null;
+
+    if (!_checkAppVisibility()) {
+      if (kDebugMode) {
+        print('Skipping variant cache clear as app is not in foreground');
+      }
+      return;
+    }
+
+    final hashedIdentity =
+        sha256.convert(utf8.encode(Toggly._identity)).toString();
+
+    await _storage.delete(
+      key: SecureStorageKeys.variantsCache.toString() + hashedIdentity,
+    );
+    await _storage.delete(key: SecureStorageKeys.etagVariants.toString());
+  }
+
+  static Future<Map<String, dynamic>> _readVerifiedVariantDefsFromCache() async {
+    try {
+      if (!_checkAppVisibility()) {
+        return {};
+      }
+      final hashedIdentity =
+          sha256.convert(utf8.encode(Toggly._identity)).toString();
+      final cache = await _storage.get(
+          key: SecureStorageKeys.variantsCache.toString() + hashedIdentity);
+      if (cache == null) {
+        return {};
+      }
+      final vc = TogglyVariantsCache.fromJson(jsonDecode(cache));
+      if (vc.identity != Toggly._identity) {
+        return {};
+      }
+
+      final mustVerify =
+          Toggly._useSignedDefinitions || Toggly._config.verifySignatures;
+      if (mustVerify) {
+        if (vc.timestamp == null || vc.signature == null || vc.keyId == null) {
+          throw Exception('Variants cache missing signature metadata');
+        }
+        final isValid = await _verifySignature(
+          vc.variants,
+          vc.signature!,
+          vc.timestamp!,
+          true,
+          vc.keyId!,
+        );
+        if (!isValid) {
+          _lastError = 'Invalid variants signature';
+          throw Exception('Invalid variants signature');
+        }
+      }
+
+      return Map<String, dynamic>.from(jsonDecode(vc.variants));
+    } catch (_) {
+      await clearVariantCache();
+      return {};
+    }
+  }
+
+  /// Variant definitions map (feature key → server payload), from memory or verified cache.
+  static Future<Map<String, dynamic>> cachedVariantDefinitions() async {
+    if (!Toggly._config.enableVariants) {
+      return {};
+    }
+    try {
+      if (_inMemoryVariantDefs != null) {
+        return _inMemoryVariantDefs!;
+      }
+      if (!_checkAppVisibility()) {
+        return {};
+      }
+      final defs = await _readVerifiedVariantDefsFromCache();
+      _inMemoryVariantDefs = defs;
+      return defs;
+    } catch (_) {
+      if (kDebugMode) {
+        print('Error loading cached variant definitions');
+      }
+      return {};
+    }
+  }
+
+  static VariantResult _variantResultFromDef(dynamic raw) {
+    if (raw is! Map) {
+      return const VariantResult(
+        enabled: false,
+        name: null,
+        configurationValue: null,
+      );
+    }
+    final m = Map<String, dynamic>.from(raw);
+    return VariantResult(
+      enabled: m['enabled'] == true,
+      name: m['variant'] as String?,
+      configurationValue: m['configurationValue'],
+    );
+  }
+
+  /// Returns variant assignment for [featureKey].
+  static Future<VariantResult> getVariant(String featureKey) async {
+    if (!Toggly._config.enableVariants) {
+      return const VariantResult(
+        enabled: false,
+        name: null,
+        configurationValue: null,
+      );
+    }
+    final defs = await cachedVariantDefinitions();
+    final raw = defs[featureKey];
+    if (raw == null) {
+      return const VariantResult(
+        enabled: false,
+        name: null,
+        configurationValue: null,
+      );
+    }
+    return _variantResultFromDef(raw);
+  }
+
+  /// Returns [VariantResult.configurationValue] for [featureKey], or null if none.
+  static Future<dynamic> getVariantValue(String featureKey) async {
+    final r = await getVariant(featureKey);
+    return r.configurationValue;
   }
 
   /// Fetches and caches JWKs from the server
@@ -858,6 +1165,8 @@ class Toggly with WidgetsBindingObserver {
   static void dispose() {
     cancelTimers();
     _inMemoryFlags = null;
+    _inMemoryVariantDefs = null;
+    _variantsETag = null;
     _inMemoryJwks = null; // Clear JWKs cache
     _featureFlagsSubject?.close();
     _featureFlagsSubject = null;
@@ -891,24 +1200,15 @@ class Toggly with WidgetsBindingObserver {
                 'Toggly.syncFeatureFlags - every ${Toggly._config.featureFlagsRefreshInterval / 1000}s');
           }
 
-          // When WebSocket is connected, skip refresh unless the fallback
-          // interval has elapsed to ensure flags stay reasonably fresh.
+          // When WebSocket is connected, skip polling entirely — live
+          // updates are handled by the WebSocket. Polling resumes
+          // automatically once the connection drops.
           if (Toggly._sync.wsConnected) {
-            final elapsed =
-                DateTime.now().difference(Toggly._sync.lastFallbackRefresh);
-            if (elapsed < SyncService.fallbackRefreshInterval) {
-              if (kDebugMode) {
-                print(
-                    'Toggly: Skipping refresh — WebSocket connected and fallback interval not elapsed');
-              }
-              return;
-            }
-            // Fallback interval elapsed, update timestamp and proceed
-            Toggly._sync.lastFallbackRefresh = DateTime.now();
             if (kDebugMode) {
               print(
-                  'Toggly: Fallback refresh interval elapsed, refreshing despite active WebSocket');
+                  'Toggly: Skipping poll refresh — WebSocket is connected');
             }
+            return;
           }
 
           // Only refresh if app is in foreground

@@ -31,6 +31,7 @@ from toggly.exceptions import (
 )
 from toggly.models import (
     DebugInfo,
+    EvaluatedVariantDef,
     FeatureDefinition,
     FeatureFilter,
     FeatureState,
@@ -38,6 +39,7 @@ from toggly.models import (
     JsonWebKeySet,
     NetworkState,
     TogglyInitResponse,
+    VariantResult,
 )
 from toggly.providers import (
     DefinitionsSnapshot,
@@ -45,6 +47,7 @@ from toggly.providers import (
     JwksSnapshot,
     MemorySnapshotProvider,
     SnapshotProvider,
+    VariantsSnapshot,
 )
 
 __version__ = "0.1.0"
@@ -81,6 +84,8 @@ __all__ = [
     "FeatureDefinition",
     "FeatureFilter",
     "FeatureState",
+    "EvaluatedVariantDef",
+    "VariantResult",
     "TogglyInitResponse",
     "DebugInfo",
     "NetworkState",
@@ -91,5 +96,6 @@ __all__ = [
     "MemorySnapshotProvider",
     "FileSnapshotProvider",
     "DefinitionsSnapshot",
+    "VariantsSnapshot",
     "JwksSnapshot",
 ]

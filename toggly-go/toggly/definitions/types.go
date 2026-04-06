@@ -42,6 +42,14 @@ type SignedDefinitionsResponse struct {
 	Kid       string          `json:"kid"`
 }
 
+// EvaluatedVariantDef is one feature entry inside evaluated-variants-signed `defs`
+// (object keyed by feature key).
+type EvaluatedVariantDef struct {
+	Enabled            bool        `json:"enabled"`
+	Variant            string      `json:"variant"`
+	ConfigurationValue interface{} `json:"configurationValue"`
+}
+
 // JWKSet is the shape returned by /.well-known/jwks.
 type JWKSet struct {
 	Keys []JWK `json:"keys"`

@@ -4,10 +4,21 @@ import (
 	"context"
 	"errors"
 
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/eval"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage"
 )
+
+// VariantResult is the assigned variant for a feature from evaluated-variants-signed.
+type VariantResult struct {
+	Name                 string
+	ConfigurationValue interface{}
+}
+
+// EvaluatedVariantDef is the raw evaluated entry from evaluated-variants-signed `defs`
+// (alias of definitions.EvaluatedVariantDef).
+type EvaluatedVariantDef = definitions.EvaluatedVariantDef
 
 // Client is the main entrypoint for evaluating feature flags.
 //
@@ -64,6 +75,34 @@ func NewClient(cfg Config) (*Client, error) {
 		p.start()
 	}
 	return c, nil
+}
+
+// SetVariantIdentity updates the userId query parameter for evaluated-variants-signed
+// refreshes when Config.EnableVariants is true. Changing identity clears the variant ETag
+// so the next refresh fetches fresh data.
+func (c *Client) SetVariantIdentity(identity string) {
+	if c == nil || c.provider == nil {
+		return
+	}
+	c.provider.setVariantIdentity(identity)
+}
+
+// GetVariant returns the assigned variant for a feature, or nil if none or unknown key.
+// Requires Config.EnableVariants and a non-empty variant name in the server response.
+func (c *Client) GetVariant(featureKey string) *VariantResult {
+	if c == nil || c.provider == nil {
+		return nil
+	}
+	return c.provider.getVariant(featureKey)
+}
+
+// GetVariantValue returns the configuration value for the assigned variant, or nil.
+func (c *Client) GetVariantValue(featureKey string) interface{} {
+	v := c.GetVariant(featureKey)
+	if v == nil {
+		return nil
+	}
+	return v.ConfigurationValue
 }
 
 // Close stops background refresh (if enabled) and closes optional gRPC clients.

@@ -35,6 +35,7 @@ def configure_toggly(
     feature_defaults: dict[str, bool] | None = None,
     refresh_interval: float = 180.0,
     use_signed_definitions: bool = False,
+    enable_variants: bool = False,
     connect_timeout: float = 10.0,
     request_timeout: float = 30.0,
     enable_usage_tracking: bool = True,
@@ -53,6 +54,7 @@ def configure_toggly(
         feature_defaults: Default feature values.
         refresh_interval: Interval in seconds for background refresh.
         use_signed_definitions: Whether to use signed definitions.
+        enable_variants: Whether to fetch evaluated variants from the variants endpoint.
         connect_timeout: Connection timeout in seconds.
         request_timeout: Request timeout in seconds.
         enable_usage_tracking: Whether to track feature usage.
@@ -92,6 +94,7 @@ def configure_toggly(
         feature_defaults=feature_defaults or {},
         refresh_interval=refresh_interval,
         use_signed_definitions=use_signed_definitions,
+        enable_variants=enable_variants,
         connect_timeout=connect_timeout,
         request_timeout=request_timeout,
         enable_usage_tracking=enable_usage_tracking,

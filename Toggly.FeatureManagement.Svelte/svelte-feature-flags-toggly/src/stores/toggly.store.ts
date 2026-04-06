@@ -1,5 +1,6 @@
 import { writable, derived, get } from 'svelte/store'
 import type { TogglyService } from '../services/toggly.service'
+import type { EvaluatedVariantDef, VariantResult } from '../services/variant.types'
 
 /**
  * Store for the Toggly service instance
@@ -10,6 +11,11 @@ export const togglyServiceStore = writable<TogglyService | null>(null)
  * Store for feature flags (key-value pairs)
  */
 export const togglyFlagsStore = writable<{ [key: string]: boolean }>({})
+
+/**
+ * Store for variant definitions (from /evaluated-variants-signed) when enableVariants is true
+ */
+export const togglyVariantsStore = writable<{ [key: string]: EvaluatedVariantDef }>({})
 
 /**
  * Get the Toggly service instance from the store
@@ -30,6 +36,36 @@ export function getTogglyService(): TogglyService {
  */
 export function createFeatureStore(featureKey: string) {
   return derived(togglyFlagsStore, ($flags) => $flags[featureKey] ?? false)
+}
+
+/**
+ * Derived store for a feature's variant assignment (name + configurationValue).
+ * Returns null when the feature has no variant or variants are disabled.
+ */
+export function createVariantStore(featureKey: string) {
+  return derived(togglyVariantsStore, ($defs): VariantResult | null => {
+    const entry = $defs[featureKey]
+    if (!entry?.variant) {
+      return null
+    }
+    return {
+      name: entry.variant,
+      configurationValue: entry.configurationValue,
+    }
+  })
+}
+
+/**
+ * Derived store for a feature's variant configuration value only.
+ */
+export function createVariantValueStore(featureKey: string) {
+  return derived(togglyVariantsStore, ($defs): unknown | null => {
+    const entry = $defs[featureKey]
+    if (!entry?.variant) {
+      return null
+    }
+    return entry.configurationValue ?? null
+  })
 }
 
 /**

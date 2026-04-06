@@ -6,14 +6,20 @@
  */
 
 import { atom, computed, type ReadableAtom } from 'nanostores';
-import type { TogglyConfig, Flags } from '../types/index.js';
+import type { TogglyConfig, Flags, VariantResult, EvaluatedVariantDef } from '../types/index.js';
 import type { Hook } from '@ops-ai/toggly-hooks-types';
 import { HookExecutor } from './hooks.js';
+import { parseVariantDefsPayload, variantDefsToFlags } from '../variant-helpers.js';
 
 /**
  * Atom containing all feature flags
  */
 export const $flags = atom<Flags>({});
+
+/**
+ * Atom containing evaluated variant definitions (empty when enableVariants is false)
+ */
+export const $variants = atom<Record<string, EvaluatedVariantDef>>({});
 
 /**
  * Atom indicating if flags are loaded and ready
@@ -36,6 +42,7 @@ let clientInstance: TogglyClientInstance | null = null;
 class TogglyClientInstance {
   private config: TogglyConfig;
   private cache: Flags | null = null;
+  private variantCache: Record<string, EvaluatedVariantDef> | null = null;
   private refreshInterval: NodeJS.Timeout | null = null;
   public hookExecutor = new HookExecutor();
 
@@ -48,6 +55,7 @@ class TogglyClientInstance {
       featureFlagsRefreshInterval: 3 * 60 * 1000,
       isDebug: false,
       connectTimeout: 5 * 1000,
+      enableVariants: false,
       hooks: [],
       ...config,
     };
@@ -59,30 +67,41 @@ class TogglyClientInstance {
   }
 
   private getApiUrl(): string {
-    const { baseURI, appKey, environment, identity } = this.config;
+    const { baseURI, appKey, environment, identity, enableVariants } = this.config;
 
     if (!appKey) {
       return '';
     }
 
     const baseUrl = baseURI!.replace(/\/$/, '');
-    let url = `${baseUrl}/evaluated-signed/${appKey}/${environment}`;
+    const path = enableVariants
+      ? `/evaluated-variants-signed/${appKey}/${environment}`
+      : `/evaluated-signed/${appKey}/${environment}`;
+    let url = `${baseUrl}${path}`;
 
     if (identity) {
-      url += `?u=${encodeURIComponent(identity)}`;
+      if (enableVariants) {
+        url += `?${new URLSearchParams({ userId: identity }).toString()}`;
+      } else {
+        url += `?u=${encodeURIComponent(identity)}`;
+      }
     }
 
     return url;
   }
 
-  async fetchFlags(): Promise<Flags> {
+  async fetchFlags(): Promise<{ flags: Flags; variantDefs: Record<string, EvaluatedVariantDef> | null }> {
     const url = this.getApiUrl();
+    const enableVariants = this.config.enableVariants === true;
 
     if (!url || !this.config.appKey) {
       if (this.config.isDebug) {
         console.log('[Toggly Client] Using flag defaults (no appKey):', this.config.flagDefaults);
       }
-      return { ...this.config.flagDefaults! };
+      return {
+        flags: { ...this.config.flagDefaults! },
+        variantDefs: enableVariants ? {} : null,
+      };
     }
 
     try {
@@ -104,14 +123,29 @@ class TogglyClientInstance {
         throw new Error(`Failed to fetch flags: ${response.status} ${response.statusText}`);
       }
 
-      const payload = (await response.json()) as { defs?: Flags } | Flags;
-      const flags = ('defs' in (payload as Record<string, unknown>) ? (payload as { defs: Flags }).defs : payload) as Flags;
+      const payload = await response.json();
+      let flags: Flags;
+      let variantDefs: Record<string, EvaluatedVariantDef> | null;
+
+      if (enableVariants) {
+        variantDefs = parseVariantDefsPayload(payload);
+        flags = variantDefsToFlags(variantDefs);
+      } else {
+        const asRecord = payload as Record<string, unknown>;
+        flags = (
+          'defs' in asRecord ? (asRecord.defs as Flags) : (payload as Flags)
+        ) as Flags;
+        variantDefs = null;
+      }
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Fetched flags:', flags);
+        if (enableVariants && variantDefs) {
+          console.log('[Toggly Client] Fetched variant defs:', variantDefs);
+        }
       }
 
-      return flags;
+      return { flags, variantDefs };
     } catch (error) {
       if (this.config.isDebug) {
         console.error('[Toggly Client] Error fetching flags:', error);
@@ -122,22 +156,30 @@ class TogglyClientInstance {
         if (this.config.isDebug) {
           console.log('[Toggly Client] Using cached flags');
         }
-        return { ...this.cache };
+        return {
+          flags: { ...this.cache },
+          variantDefs: this.variantCache,
+        };
       }
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Using flag defaults');
       }
 
-      return { ...this.config.flagDefaults! };
+      return {
+        flags: { ...this.config.flagDefaults! },
+        variantDefs: enableVariants ? {} : null,
+      };
     }
   }
 
   async init(): Promise<void> {
     try {
-      const flags = await this.fetchFlags();
+      const { flags, variantDefs } = await this.fetchFlags();
       this.cache = flags;
+      this.variantCache = variantDefs;
       $flags.set(flags);
+      $variants.set(variantDefs ?? {});
       $isReady.set(true);
       $error.set(null);
       
@@ -160,9 +202,11 @@ class TogglyClientInstance {
 
   async refresh(): Promise<void> {
     try {
-      const flags = await this.fetchFlags();
+      const { flags, variantDefs } = await this.fetchFlags();
       this.cache = flags;
+      this.variantCache = variantDefs;
       $flags.set(flags);
+      $variants.set(variantDefs ?? {});
       
       // Trigger afterRefresh hooks
       await this.hookExecutor.executeAfterRefresh(flags);
@@ -210,6 +254,24 @@ class TogglyClientInstance {
   clearIdentity(): void {
     this.config.identity = undefined;
     this.refresh(); // Refresh without identity
+  }
+
+  resolveVariant(featureKey: string): VariantResult | null {
+    if (!this.config.enableVariants) {
+      return null;
+    }
+    const defs = this.variantCache;
+    if (!defs) {
+      return null;
+    }
+    const entry = defs[featureKey];
+    if (!entry?.variant) {
+      return null;
+    }
+    return {
+      name: entry.variant,
+      configurationValue: entry.configurationValue,
+    };
   }
 }
 
@@ -285,8 +347,27 @@ export function __resetClient(): void {
   }
   clientInstance = null;
   $flags.set({});
+  $variants.set({});
   $isReady.set(false);
   $error.set(null);
+}
+
+/**
+ * Current variant assignment for a feature (requires enableVariants in config).
+ */
+export function getVariant(featureKey: string): VariantResult | null {
+  if (!clientInstance) {
+    return null;
+  }
+  return clientInstance.resolveVariant(featureKey);
+}
+
+/**
+ * Configuration payload for the assigned variant, if any.
+ */
+export function getVariantValue(featureKey: string): unknown | null {
+  const variant = getVariant(featureKey);
+  return variant?.configurationValue ?? null;
 }
 
 /**
@@ -327,6 +408,22 @@ export function $gate(
     }
 
     return negate ? !isEnabled : isEnabled;
+  });
+}
+
+/**
+ * Reactive variant assignment for a feature (null when disabled, missing, or no variant name).
+ */
+export function $variant(featureKey: string): ReadableAtom<VariantResult | null> {
+  return computed($variants, (defs) => {
+    const entry = defs[featureKey];
+    if (!entry?.variant) {
+      return null;
+    }
+    return {
+      name: entry.variant,
+      configurationValue: entry.configurationValue,
+    };
   });
 }
 

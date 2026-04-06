@@ -4,7 +4,7 @@
  * Note: Feature.vue is distributed as source and will be compiled by your Astro project
  */
 
-export { useFeatureFlag, useFeatureGate } from './composables.js';
+export { useFeatureFlag, useFeatureGate, useVariant } from './composables.js';
 
 // Re-export type for documentation
 export interface FeatureProps {

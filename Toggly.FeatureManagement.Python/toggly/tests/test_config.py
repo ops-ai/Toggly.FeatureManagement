@@ -18,6 +18,7 @@ class TestTogglyConfig:
         assert config.feature_defaults == {}
         assert config.refresh_interval == 180.0
         assert config.use_signed_definitions is False
+        assert config.enable_variants is False
 
     def test_config_with_all_parameters(self) -> None:
         """Test config creation with all parameters."""
@@ -30,6 +31,7 @@ class TestTogglyConfig:
             feature_defaults=feature_defaults,
             refresh_interval=30.0,
             use_signed_definitions=True,
+            enable_variants=True,
             connect_timeout=5.0,
             request_timeout=15.0,
         )
@@ -41,6 +43,7 @@ class TestTogglyConfig:
         assert config.feature_defaults == feature_defaults
         assert config.refresh_interval == 30.0
         assert config.use_signed_definitions is True
+        assert config.enable_variants is True
         assert config.connect_timeout == 5.0
         assert config.request_timeout == 15.0
 
@@ -119,10 +122,11 @@ class TestTogglyConfig:
 
     def test_config_to_dict_masks_app_key(self) -> None:
         """Test to_dict masks the app key."""
-        config = TogglyConfig(app_key="secret-key")
+        config = TogglyConfig(app_key="secret-key", enable_variants=True)
         config_dict = config.to_dict()
 
         assert config_dict["app_key"] == "***"
+        assert config_dict["enable_variants"] is True
 
     def test_config_to_dict_shows_none_for_missing_app_key(self) -> None:
         """Test to_dict shows None for missing app key."""

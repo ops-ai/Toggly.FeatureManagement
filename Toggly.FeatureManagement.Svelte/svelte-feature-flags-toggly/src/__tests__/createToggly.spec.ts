@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { get } from 'svelte/store';
 import { createToggly } from '../utils/createToggly';
-import { togglyServiceStore, togglyFlagsStore } from '../stores/toggly.store';
+import { togglyServiceStore, togglyFlagsStore, togglyVariantsStore } from '../stores/toggly.store';
 
 describe('createToggly', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     togglyServiceStore.set(null);
     togglyFlagsStore.set({});
+    togglyVariantsStore.set({});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -46,6 +47,32 @@ describe('createToggly', () => {
     expect(fetchSpy).toHaveBeenCalled();
     const flags = get(togglyFlagsStore);
     expect(flags).toEqual({ F1: true, F2: true });
+  });
+
+  it('should load variants and populate togglyVariantsStore when enableVariants', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          defs: {
+            V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+          },
+        }),
+    } as Response);
+
+    await createToggly({
+      appKey: 'test-key',
+      environment: 'Production',
+      enableVariants: true,
+      enableLiveUpdates: false,
+    });
+
+    const variants = get(togglyVariantsStore);
+    expect(variants.V).toEqual({
+      enabled: true,
+      variant: 'A',
+      configurationValue: { x: 1 },
+    });
+    expect(get(togglyFlagsStore)).toEqual({ V: true });
   });
 
   it('should set empty flags on load error', async () => {

@@ -8,6 +8,7 @@ vi.stubGlobal('fetch', mockFetch);
 describe('Toggly Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -539,6 +540,151 @@ describe('Toggly Service', () => {
       expect(s._wsReconnectTimer).toBeNull();
       vi.runAllTimers();
       expect(mockWsInstances).toHaveLength(1);
+    });
+  });
+
+  // ─── Variants ─────────────────────────────────
+  describe('Variants', () => {
+    it('should fetch evaluated-variants-signed when enableVariants is true', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            defs: {
+              V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+            },
+          }),
+      });
+      const service = new Toggly();
+      service.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      await service._loadFeatures();
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://definitions.toggly.io/evaluated-variants-signed/test-key/Production',
+      );
+      expect(service.getVariant('V')).toEqual({ name: 'A', configurationValue: { x: 1 } });
+      expect(service.getVariantValue('V')).toEqual({ x: 1 });
+      expect(await service.isFeatureOn('V')).toBe(true);
+    });
+
+    it('should pass userId query when enableVariants and identity are set', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ defs: {} }),
+      });
+      const service = new Toggly();
+      service.init({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+        identity: 'user@x',
+        enableLiveUpdates: false,
+      });
+
+      await service._loadFeatures();
+      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('userId=user%40x'));
+    });
+
+    it('getVariant returns null when enableVariants is false', () => {
+      const service = new Toggly();
+      service.init({ featureDefaults: { F: true } });
+      expect(service.getVariant('F')).toBeNull();
+      expect(service.getVariantValue('F')).toBeNull();
+    });
+
+    it('falls back to cached variants on API error when enableVariants', async () => {
+      const appKey = 'test-key';
+      const env = 'Production';
+      const defs = { V: { enabled: true, variant: 'cached' } };
+      localStorage.setItem(`toggly:variants:${appKey}:${env}`, JSON.stringify(defs));
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+
+      const service = new Toggly();
+      service.init({
+        appKey,
+        environment: env,
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      await service._loadFeatures();
+      expect(service.getVariant('V')).toEqual({
+        name: 'cached',
+        configurationValue: undefined,
+      });
+      localStorage.removeItem(`toggly:variants:${appKey}:${env}`);
+    });
+
+    it('getVariant returns null when enabled but no variant name on def', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ defs: { V: { enabled: true } } }),
+      });
+      const service = new Toggly();
+      service.init({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      await service._loadFeatures();
+      expect(service.getVariant('V')).toBeNull();
+    });
+
+    it('subscribeFeaturesRefresh runs after successful load', async () => {
+      mockFetch.mockResolvedValueOnce({ json: () => Promise.resolve({ F1: true }) });
+      const service = new Toggly();
+      service.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableLiveUpdates: false,
+      });
+
+      const fn = vi.fn();
+      service.subscribeFeaturesRefresh(fn);
+      await service._loadFeatures();
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('subscribeFeaturesRefresh can be unsubscribed', async () => {
+      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: true }) });
+      const service = new Toggly();
+      service.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableLiveUpdates: false,
+      });
+
+      const fn = vi.fn();
+      const unsub = service.subscribeFeaturesRefresh(fn);
+      await service._loadFeatures();
+      expect(fn).toHaveBeenCalledTimes(1);
+      unsub();
+      await (service as any)._refreshFeatures();
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('subscribeFeaturesRefresh continues when a listener throws', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce({ json: () => Promise.resolve({ F1: true }) });
+      const service = new Toggly();
+      service.init({
+        appKey: 't',
+        environment: 'Production',
+        enableLiveUpdates: false,
+      });
+
+      const ok = vi.fn();
+      service.subscribeFeaturesRefresh(() => {
+        throw new Error('bad listener');
+      });
+      service.subscribeFeaturesRefresh(ok);
+      await service._loadFeatures();
+      expect(ok).toHaveBeenCalledTimes(1);
+      expect(errSpy).toHaveBeenCalled();
     });
   });
 });

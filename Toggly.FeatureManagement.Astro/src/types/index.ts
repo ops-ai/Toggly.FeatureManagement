@@ -34,8 +34,30 @@ export interface TogglyConfig {
    * (default: false)
    */
   allFeaturesEnabledDuringBuild?: boolean;
+  /**
+   * When true, fetches from /evaluated-variants-signed and exposes variant APIs on the server client
+   * and on the client store module.
+   */
+  enableVariants?: boolean;
   /** Hooks to extend SDK behavior at key lifecycle points */
   hooks?: Hook[];
+}
+
+/**
+ * Assigned variant for a feature (from evaluated-variants-signed).
+ */
+export interface VariantResult {
+  name: string;
+  configurationValue?: unknown;
+}
+
+/**
+ * Raw evaluated entry from /evaluated-variants-signed `defs`.
+ */
+export interface EvaluatedVariantDef {
+  enabled: boolean;
+  variant?: string;
+  configurationValue?: unknown;
 }
 
 /**
@@ -79,6 +101,16 @@ export interface TogglyClient {
    * @returns Promise that resolves when flags have been refreshed
    */
   refreshFlags(): Promise<void>;
+
+  /**
+   * Current variant assignment for a feature (requires {@link TogglyConfig.enableVariants}).
+   */
+  getVariant(featureKey: string): Promise<VariantResult | null>;
+
+  /**
+   * Configuration payload for the assigned variant, if any.
+   */
+  getVariantValue(featureKey: string): Promise<unknown | null>;
 }
 
 /**

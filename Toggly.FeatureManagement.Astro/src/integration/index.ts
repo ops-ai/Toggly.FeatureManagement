@@ -27,6 +27,7 @@ export default function togglyIntegration(
     isDebug: false,
     connectTimeout: 5 * 1000,
     allFeaturesEnabledDuringBuild: false,
+    enableVariants: false,
     ...options,
   };
 

@@ -15,12 +15,18 @@ from toggly.evaluator import EvaluationEngine, EvaluatorRegistry
 from toggly.exceptions import TogglyConfigError, TogglyNetworkError
 from toggly.models import (
     DebugInfo,
+    EvaluatedVariantDef,
     FeatureDefinition,
     FeatureFilter,
     FeatureState,
     TogglyInitResponse,
+    VariantResult,
 )
-from toggly.providers import DefinitionsSnapshot, MemorySnapshotProvider
+from toggly.providers import (
+    DefinitionsSnapshot,
+    MemorySnapshotProvider,
+    VariantsSnapshot,
+)
 
 logger = logging.getLogger("toggly")
 
@@ -71,6 +77,7 @@ class AsyncTogglyClient:
 
         self._config = config
         self._definitions: dict[str, FeatureDefinition] = {}
+        self._variant_defs: dict[str, EvaluatedVariantDef] = {}
         self._flags: dict[str, bool] = dict(config.feature_defaults)
         self._identity = config.identity
         self._is_initialized = False
@@ -115,14 +122,25 @@ class AsyncTogglyClient:
 
         """
         # Try to load from cache first
-        cached = await self._load_from_cache()
-        if cached:
-            await self._apply_snapshot(cached)
+        cached: DefinitionsSnapshot | None = None
+        cached_variants: VariantsSnapshot | None = None
+        if self._config.enable_variants:
+            cached_variants = await self._load_variants_from_cache()
+            if cached_variants:
+                await self._apply_variants_snapshot(cached_variants)
+        else:
+            cached = await self._load_from_cache()
+            if cached:
+                await self._apply_snapshot(cached)
 
         # Try to fetch from server if we have an app key
         if self._config.app_key:
             try:
-                response = await self._fetch_definitions()
+                response = (
+                    await self._fetch_variants()
+                    if self._config.enable_variants
+                    else await self._fetch_definitions()
+                )
                 self._is_initialized = True
                 self._start_background_refresh()
                 return response
@@ -134,7 +152,13 @@ class AsyncTogglyClient:
         self._is_initialized = True
         self._start_background_refresh()
 
-        if cached:
+        if self._config.enable_variants:
+            if cached_variants:
+                return TogglyInitResponse(
+                    status=LoadStatus.CACHED,
+                    flags=dict(self._flags),
+                )
+        elif cached:
             return TogglyInitResponse(
                 status=LoadStatus.CACHED,
                 flags=dict(self._flags),
@@ -159,6 +183,8 @@ class AsyncTogglyClient:
             )
 
         try:
+            if self._config.enable_variants:
+                return await self._fetch_variants()
             return await self._fetch_definitions()
         except TogglyNetworkError as e:
             self._last_error = str(e)
@@ -189,6 +215,11 @@ class AsyncTogglyClient:
             context = EvaluationContext(identity=self._identity)
 
         async with self._lock:
+            if self._config.enable_variants:
+                variant_entry = self._variant_defs.get(feature_key)
+                if variant_entry is not None:
+                    return variant_entry.enabled
+
             definition = self._definitions.get(feature_key)
 
             if definition is None:
@@ -237,14 +268,36 @@ class AsyncTogglyClient:
         if context is None:
             context = EvaluationContext(identity=self._identity)
 
+        if not feature_keys:
+            result = True
+        elif requirement == FeatureRequirement.ALL:
+            results = [await self.is_enabled(key, context) for key in feature_keys]
+            result = all(results)
+        else:
+            results = [await self.is_enabled(key, context) for key in feature_keys]
+            result = any(results)
+
+        return not result if negate else result
+
+    async def get_variant(self, feature_key: str) -> VariantResult | None:
+        """Return the assigned variant when ``enable_variants`` is True."""
         async with self._lock:
-            return self._engine.evaluate_gate(
-                self._definitions,
-                feature_keys,
-                context,
-                requirement,
-                negate,
+            if not self._config.enable_variants:
+                return None
+            entry = self._variant_defs.get(feature_key)
+            if entry is None or not entry.variant:
+                return None
+            return VariantResult(
+                name=entry.variant,
+                configuration_value=entry.configuration_value,
             )
+
+    async def get_variant_value(self, feature_key: str) -> Any:
+        """Return configuration value for the assigned variant, if any."""
+        variant = await self.get_variant(feature_key)
+        if variant is None:
+            return None
+        return variant.configuration_value
 
     async def get_feature_state(
         self,
@@ -321,7 +374,11 @@ class AsyncTogglyClient:
             last_refresh=self._last_refresh,
             last_error=self._last_error,
             etag=self._etag,
-            feature_count=len(self._definitions),
+            feature_count=(
+                len(self._variant_defs)
+                if self._config.enable_variants
+                else len(self._definitions)
+            ),
             is_initialized=self._is_initialized,
         )
 
@@ -426,6 +483,7 @@ class AsyncTogglyClient:
         # Update state
         async with self._lock:
             old_flags = dict(self._flags)
+            self._variant_defs = {}
             self._definitions = {d.feature_key: d for d in definitions}
             self._update_flags()
             self._last_refresh = datetime.now(timezone.utc)
@@ -449,6 +507,107 @@ class AsyncTogglyClient:
             etag=self._etag,
             timestamp=datetime.now(timezone.utc),
         )
+
+    async def _fetch_variants(self) -> TogglyInitResponse:
+        """Fetch evaluated variants from the signed variants endpoint."""
+        if not self._config.app_key:
+            raise TogglyConfigError("app_key is required for fetching variants")
+
+        import time
+
+        from toggly.http import HttpClient, build_evaluated_variants_url
+
+        http = HttpClient(
+            connect_timeout=self._config.connect_timeout,
+            request_timeout=self._config.request_timeout,
+        )
+
+        url = build_evaluated_variants_url(
+            self._config.base_url,
+            self._config.app_key,
+            self._config.environment,
+            identity=self._identity,
+        )
+
+        headers: dict[str, str] = {}
+        if self._etag:
+            headers["If-None-Match"] = self._etag
+
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(None, lambda: http.get(url, headers=headers))
+
+        if response.status_code == 304:
+            self._last_refresh = datetime.now(timezone.utc)
+            return TogglyInitResponse(
+                status=LoadStatus.CACHED,
+                flags=dict(self._flags),
+            )
+
+        if response.status_code != 200:
+            raise TogglyNetworkError(
+                f"Failed to fetch evaluated variants: HTTP {response.status_code}",
+                status_code=response.status_code,
+            )
+
+        try:
+            data = response.json()
+        except Exception as e:
+            raise TogglyNetworkError(f"Invalid JSON response: {e}", cause=e) from e
+
+        defs, signature, timestamp, kid = self._parse_variants_payload(data)
+
+        async with self._lock:
+            old_flags = dict(self._flags)
+            self._variant_defs = defs
+            self._definitions = {}
+            self._flags = dict(self._config.feature_defaults)
+            for key, vd in defs.items():
+                self._flags[key] = vd.enabled
+            self._last_refresh = datetime.now(timezone.utc)
+            self._etag = response.headers.get("ETag")
+            self._notify_changes(old_flags)
+
+        snapshot = VariantsSnapshot(
+            defs=defs,
+            signature=signature,
+            key_id=kid,
+            timestamp=timestamp,
+            etag=self._etag,
+        )
+        self._snapshot_provider.save_variants(snapshot)
+
+        return TogglyInitResponse(
+            status=LoadStatus.FETCHED,
+            flags=dict(self._flags),
+            etag=self._etag,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    def _parse_variants_payload(
+        self, data: Any
+    ) -> tuple[dict[str, EvaluatedVariantDef], str | None, int | None, str | None]:
+        """Parse evaluated-variants-signed JSON body."""
+        if not isinstance(data, dict):
+            return {}, None, None, None
+        raw_defs = data.get("defs")
+        if not isinstance(raw_defs, dict):
+            raw_defs = {}
+        defs: dict[str, EvaluatedVariantDef] = {}
+        for key, value in raw_defs.items():
+            if isinstance(value, dict):
+                defs[key] = EvaluatedVariantDef.from_dict(value)
+        raw_sig = data.get("signature")
+        signature = raw_sig if isinstance(raw_sig, str) else None
+        ts = data.get("timestamp")
+        if isinstance(ts, int):
+            timestamp = ts
+        elif isinstance(ts, float):
+            timestamp = int(ts)
+        else:
+            timestamp = None
+        raw_kid = data.get("kid")
+        kid = raw_kid if isinstance(raw_kid, str) else None
+        return defs, signature, timestamp, kid
 
     def _parse_definitions(self, data: Any) -> list[FeatureDefinition]:
         """Parse definitions from API response."""
@@ -501,8 +660,27 @@ class AsyncTogglyClient:
     async def _apply_snapshot(self, snapshot: DefinitionsSnapshot) -> None:
         """Apply a snapshot to the current state."""
         async with self._lock:
+            self._variant_defs = {}
             self._definitions = {d.feature_key: d for d in snapshot.definitions}
             self._update_flags()
+            self._etag = snapshot.etag
+
+    async def _load_variants_from_cache(self) -> VariantsSnapshot | None:
+        """Load evaluated variants from cache."""
+        try:
+            return self._snapshot_provider.load_variants()
+        except Exception as e:
+            logger.warning(f"Failed to load variants from cache: {e}")
+            return None
+
+    async def _apply_variants_snapshot(self, snapshot: VariantsSnapshot) -> None:
+        """Apply a variants snapshot to in-memory state."""
+        async with self._lock:
+            self._variant_defs = dict(snapshot.defs)
+            self._definitions = {}
+            self._flags = dict(self._config.feature_defaults)
+            for key, vd in snapshot.defs.items():
+                self._flags[key] = vd.enabled
             self._etag = snapshot.etag
 
     def _update_flags(self) -> None:

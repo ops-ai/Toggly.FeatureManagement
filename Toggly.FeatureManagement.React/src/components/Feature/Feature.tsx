@@ -4,43 +4,81 @@ import { context } from '../../contexts'
 type FeatureProps = {
   featureKey?: string
   featureKeys?: string[]
+  /** When set (with {@link featureKey}), children render only if the assigned variant name matches. */
+  variant?: string
   requirement?: string
   negate?: boolean
   children: React.ReactNode
 }
 
-class Feature extends React.Component<
-  FeatureProps,
-  { gate: string[]; shouldShow: boolean }
-> {
+class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
   static contextType = context
   context!: React.ContextType<typeof context>
+  private unsubscribeRefresh: (() => void) | undefined
 
   constructor(props: FeatureProps) {
     super(props)
+    this.state = { shouldShow: false }
+  }
 
-    var gate = []
-    if (props.featureKey) {
-      gate.push(props.featureKey)
+  private buildGate(): string[] {
+    var gate: string[] = []
+    if (this.props.featureKey) {
+      gate.push(this.props.featureKey)
     }
-
-    if (props.featureKeys) {
-      gate = gate.concat(props.featureKeys as string[])
+    if (this.props.featureKeys) {
+      gate = gate.concat(this.props.featureKeys as string[])
     }
+    return gate
+  }
 
-    this.state = { gate, shouldShow: false }
+  private applyVariantFilter(isEnabled: boolean): boolean {
+    const { variant, featureKey } = this.props
+    if (!isEnabled || variant == null || variant === '') {
+      return isEnabled
+    }
+    if (!featureKey) {
+      return false
+    }
+    const assigned = this.context.toggly?.getVariant(featureKey)
+    return assigned?.name === variant
+  }
+
+  private runGate = () => {
+    const gate = this.buildGate()
+    if (gate.length === 0 || !this.context.toggly) {
+      return
+    }
+    this.context.toggly
+      .evaluateFeatureGate(gate, this.props.requirement ?? 'all', this.props.negate ?? false)
+      .then((isEnabled) => this.setState({ shouldShow: this.applyVariantFilter(isEnabled) }))
   }
 
   componentDidMount() {
-    this.state.gate.length > 0
-      ? this.context
-          .toggly!.evaluateFeatureGate(
-            this.state.gate,
-            this.props.requirement ?? 'all',
-            this.props.negate ?? false,
-          )
-          .then((isEnabled) => this.setState({ shouldShow: isEnabled }))
-      : true
+    const gate = this.buildGate()
+    if (gate.length > 0 && this.context.toggly) {
+      this.runGate()
+      this.unsubscribeRefresh = this.context.toggly.subscribeFeaturesRefresh(this.runGate)
+    }
+  }
+
+  componentDidUpdate(prevProps: FeatureProps) {
+    const gateChanged =
+      prevProps.featureKey !== this.props.featureKey ||
+      prevProps.featureKeys !== this.props.featureKeys
+    if (
+      gateChanged ||
+      prevProps.requirement !== this.props.requirement ||
+      prevProps.negate !== this.props.negate ||
+      prevProps.variant !== this.props.variant
+    ) {
+      this.runGate()
+    }
+  }
+
+  componentWillUnmount() {
+    this.unsubscribeRefresh?.()
+    this.unsubscribeRefresh = undefined
   }
 
   render() {

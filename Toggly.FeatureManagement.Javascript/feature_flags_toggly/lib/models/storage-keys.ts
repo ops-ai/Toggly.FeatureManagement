@@ -5,4 +5,7 @@ export const StorageKeys = {
   flagsCacheKey(appKey: string, environment: string): string {
     return `${CACHE_PREFIX}flags:${appKey}:${environment}`;
   },
+  variantsCacheKey(appKey: string, environment: string): string {
+    return `${CACHE_PREFIX}variants:${appKey}:${environment}`;
+  },
 };

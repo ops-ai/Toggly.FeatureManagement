@@ -54,5 +54,17 @@ void main() {
 
       expect(negateGateValue, false);
     });
+
+    test('getVariant returns disabled when enableVariants is false', () async {
+      Toggly.dispose();
+      await Toggly.init(
+        flagDefaults: {'TrueFeatureKey': true},
+        config: const TogglyConfig(enableVariants: false),
+      );
+      final v = await Toggly.getVariant('TrueFeatureKey');
+      expect(v.enabled, false);
+      expect(v.name, isNull);
+      expect(await Toggly.getVariantValue('TrueFeatureKey'), isNull);
+    });
   });
 }

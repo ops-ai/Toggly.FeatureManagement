@@ -16,6 +16,9 @@ class Feature extends StatefulWidget {
     required this.featureKeys,
     this.requirement = FeatureRequirement.all,
     this.negate = false,
+    /// When set, requires [featureKeys.first] to resolve to this variant name
+    /// (and [Toggly] must be initialized with `enableVariants: true`).
+    this.variant,
   })  : assert(child != null || children != null,
             'Either child or children must be provided'),
         assert(child == null || children == null,
@@ -28,6 +31,9 @@ class Feature extends StatefulWidget {
   final FeatureRequirement requirement;
   final bool negate;
 
+  /// Optional variant name that must match the first feature key's assignment.
+  final String? variant;
+
   @override
   FeatureState createState() => FeatureState();
 }
@@ -37,14 +43,29 @@ class FeatureState extends State<Feature> {
 
   bool? previousResult;
 
+  Future<bool> _resolveVisible() async {
+    final gate = await Toggly.evaluateFeatureGate(
+      widget.featureKeys,
+      requirement: widget.requirement,
+      negate: widget.negate,
+    );
+    if (!gate) {
+      return false;
+    }
+    if (widget.variant == null) {
+      return true;
+    }
+    if (widget.featureKeys.isEmpty) {
+      return false;
+    }
+    final vr = await Toggly.getVariant(widget.featureKeys.first);
+    return vr.enabled && vr.name == widget.variant;
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
-      future: Toggly.evaluateFeatureGate(
-        widget.featureKeys,
-        requirement: widget.requirement,
-        negate: widget.negate,
-      ),
+      future: _resolveVisible(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {
           previousResult = snapshot.data;

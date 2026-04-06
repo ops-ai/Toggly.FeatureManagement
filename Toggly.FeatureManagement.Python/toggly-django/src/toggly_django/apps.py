@@ -34,6 +34,7 @@ class TogglyConfig(AppConfig):
             feature_defaults=toggly_settings.get("FEATURE_DEFAULTS", {}),
             refresh_interval=toggly_settings.get("REFRESH_INTERVAL", 180.0),
             use_signed_definitions=toggly_settings.get("USE_SIGNED_DEFINITIONS", False),
+            enable_variants=toggly_settings.get("ENABLE_VARIANTS", False),
             connect_timeout=toggly_settings.get("CONNECT_TIMEOUT", 10.0),
             request_timeout=toggly_settings.get("REQUEST_TIMEOUT", 30.0),
             enable_usage_tracking=toggly_settings.get("ENABLE_USAGE_TRACKING", True),

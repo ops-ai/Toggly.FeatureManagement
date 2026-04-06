@@ -22,6 +22,15 @@ type Config struct {
 	UseSignedDefinitions bool
 	AllowedKeyIDs        map[string]struct{}
 
+	// EnableVariants loads evaluated feature variants from evaluated-variants-signed
+	// (server-side evaluation) instead of definitions or definitions-signed.
+	// When true, UseSignedDefinitions controls whether responses are signature-verified.
+	EnableVariants bool
+
+	// VariantIdentity is sent as the userId query parameter for evaluated-variants-signed.
+	// For per-request identity (e.g. HTTP servers), use Client.SetVariantIdentity.
+	VariantIdentity string
+
 	AppVersion   string
 	InstanceName string
 

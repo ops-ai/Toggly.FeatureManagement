@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ref, type Ref } from 'vue';
-import { $flags, $isReady, __resetClient } from '../../client/store.js';
+import { $flags, $isReady, $variants, __resetClient } from '../../client/store.js';
 
 // Mock @nanostores/vue to return reactive vue refs
 vi.mock('@nanostores/vue', () => ({
   useStore: vi.fn((store: any) => ref(store.get())),
 }));
 
-import { useFeatureFlag, useFeatureGate } from '../../frameworks/vue/composables.js';
+import { useFeatureFlag, useFeatureGate, useVariant } from '../../frameworks/vue/composables.js';
 import { useStore } from '@nanostores/vue';
 
 // Helper to get the inner value from a Ref
@@ -23,6 +23,7 @@ describe('Vue Framework Adapter - Composables', () => {
   beforeEach(() => {
     __resetClient();
     $flags.set({});
+    $variants.set({});
     $isReady.set(false);
     vi.clearAllMocks();
     resetMock();
@@ -109,6 +110,25 @@ describe('Vue Framework Adapter - Composables', () => {
 
       const { enabled: e2 } = useFeatureGate(['F3'], 'all', true);
       expect(getValue(e2)).toBe(true);
+    });
+  });
+
+  describe('useVariant', () => {
+    it('should return variant when defs include variant name', () => {
+      $variants.set({
+        V: { enabled: true, variant: 'B', configurationValue: 42 },
+      });
+      resetMock();
+
+      const v = useVariant('V');
+      expect(v.value).toEqual({ name: 'B', configurationValue: 42 });
+    });
+
+    it('should return null when variant name missing', () => {
+      $variants.set({ V: { enabled: true, configurationValue: 'x' } });
+      resetMock();
+
+      expect(useVariant('V').value).toBeNull();
     });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { $flags, $isReady, __resetClient } from '../../client/store.js';
+import { $flags, $isReady, $variants, __resetClient } from '../../client/store.js';
 
 // Mock svelte/store's derived to use a simple implementation
 vi.mock('svelte/store', () => ({
@@ -22,12 +22,13 @@ vi.mock('svelte/store', () => ({
   }),
 }));
 
-import { featureFlag, featureGate, flags, isReady } from '../../frameworks/svelte/stores.js';
+import { featureFlag, featureGate, featureVariant, flags, isReady, variants } from '../../frameworks/svelte/stores.js';
 
 describe('Svelte Framework Adapter - Stores', () => {
   beforeEach(() => {
     __resetClient();
     $flags.set({});
+    $variants.set({});
     $isReady.set(false);
   });
 
@@ -38,6 +39,10 @@ describe('Svelte Framework Adapter - Stores', () => {
 
     it('should export isReady store', () => {
       expect(isReady).toBeDefined();
+    });
+
+    it('should export variants store', () => {
+      expect(variants).toBeDefined();
     });
   });
 
@@ -126,6 +131,22 @@ describe('Svelte Framework Adapter - Stores', () => {
       });
 
       expect(value).toBe(true);
+    });
+  });
+
+  describe('featureVariant', () => {
+    it('should return variant when defs include variant name', () => {
+      $variants.set({
+        V: { enabled: true, variant: 'B', configurationValue: 42 },
+      });
+
+      const store = featureVariant('V');
+      expect(store.get()).toEqual({ name: 'B', configurationValue: 42 });
+    });
+
+    it('should return null when variant name missing', () => {
+      $variants.set({ V: { enabled: true, configurationValue: 'x' } });
+      expect(featureVariant('V').get()).toBeNull();
     });
   });
 });

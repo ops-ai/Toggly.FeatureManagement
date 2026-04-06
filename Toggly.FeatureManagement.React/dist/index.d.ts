@@ -3,6 +3,22 @@ import * as React from 'react';
 import React__default, { ReactNode } from 'react';
 import { Hook } from '@ops-ai/toggly-hooks-types';
 
+/**
+ * Assigned variant for a feature (aligned with @ops-ai/feature-flags-toggly).
+ */
+interface VariantResult {
+    name: string;
+    configurationValue?: unknown;
+}
+/**
+ * Raw evaluated entry from /evaluated-variants-signed `defs`.
+ */
+interface EvaluatedVariantDef {
+    enabled: boolean;
+    variant?: string;
+    configurationValue?: unknown;
+}
+
 interface TogglyOptions {
     baseURI?: string;
     verifySignatures?: boolean;
@@ -19,6 +35,11 @@ interface TogglyOptions {
     enableLiveUpdates?: boolean;
     /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
     persistCache?: boolean;
+    /**
+     * Use /evaluated-variants-signed and expose {@link Toggly.getVariant} / {@link Toggly.getVariantValue}.
+     * Matches @ops-ai/feature-flags-toggly when enableVariants is true.
+     */
+    enableVariants?: boolean;
 }
 interface TogglyService {
     shouldShowFeatureDuringEvaluation: boolean;
@@ -32,12 +53,17 @@ interface TogglyService {
     evaluateFeatureGate: (featureKeys: string[], requirement: string, negate: boolean) => Promise<boolean>;
     isFeatureOn: (featureKey: string) => Promise<boolean>;
     isFeatureOff: (featureKey: string) => Promise<boolean>;
+    getVariant: (featureKey: string) => VariantResult | null;
+    getVariantValue: (featureKey: string) => unknown | null;
+    subscribeFeaturesRefresh: (listener: () => void) => () => void;
 }
 declare class Toggly implements TogglyService {
     private _config;
     private _features;
+    private _variants;
     private _loadingFeatures;
     private _hookExecutor;
+    private _featuresRefreshListeners;
     _ws: WebSocket | null;
     _wsConnected: boolean;
     _wsReconnectTimer: any;
@@ -57,6 +83,20 @@ declare class Toggly implements TogglyService {
     evaluateFeatureGate: (featureKeys: string[], requirement?: string, negate?: boolean) => Promise<boolean>;
     isFeatureOn: (featureKey: string) => Promise<boolean>;
     isFeatureOff: (featureKey: string) => Promise<boolean>;
+    /**
+     * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants} and loaded data).
+     */
+    getVariant(featureKey: string): VariantResult | null;
+    /**
+     * Configuration payload for the assigned variant, if any.
+     */
+    getVariantValue(featureKey: string): unknown | null;
+    /**
+     * Subscribe to feature (and variant) data updates after HTTP refresh or WebSocket-driven reload.
+     * @returns Unsubscribe function.
+     */
+    subscribeFeaturesRefresh(listener: () => void): () => void;
+    private notifyFeaturesRefresh;
     startWebSocket: () => void;
     stopWebSocket: () => void;
     /**
@@ -85,18 +125,25 @@ declare const Consumer: React.Consumer<TogglyContext>;
 type FeatureProps = {
     featureKey?: string;
     featureKeys?: string[];
+    /** When set (with {@link featureKey}), children render only if the assigned variant name matches. */
+    variant?: string;
     requirement?: string;
     negate?: boolean;
     children: React__default.ReactNode;
 };
 declare class Feature extends React__default.Component<FeatureProps, {
-    gate: string[];
     shouldShow: boolean;
 }> {
     static contextType: React__default.Context<TogglyContext>;
     context: React__default.ContextType<typeof context>;
+    private unsubscribeRefresh;
     constructor(props: FeatureProps);
+    private buildGate;
+    private applyVariantFilter;
+    private runGate;
     componentDidMount(): void;
+    componentDidUpdate(prevProps: FeatureProps): void;
+    componentWillUnmount(): void;
     render(): React__default.ReactNode;
 }
 
@@ -104,4 +151,10 @@ declare function createTogglyProvider(config: TogglyOptions): Promise<({ childre
     children: ReactNode;
 }) => JSX.Element>;
 
-export { Consumer, Feature, Provider, Toggly, TogglyContext, TogglyOptions, TogglyService, context, createTogglyProvider };
+/**
+ * Subscribes to the current {@link VariantResult} for a feature when variants are enabled on the service.
+ * Re-renders after feature definitions refresh (HTTP load or WebSocket update).
+ */
+declare function useVariant(featureKey: string): VariantResult | null;
+
+export { Consumer, EvaluatedVariantDef, Feature, Provider, Toggly, TogglyContext, TogglyOptions, TogglyService, VariantResult, context, createTogglyProvider, useVariant };

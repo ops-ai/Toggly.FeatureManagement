@@ -5,7 +5,8 @@
  */
 
 import { derived } from 'svelte/store';
-import { $flags, $isReady } from '../../client/store.js';
+import { $flags, $isReady, $variants } from '../../client/store.js';
+import type { VariantResult } from '../../types/index.js';
 
 /**
  * Create a derived store for a specific feature flag
@@ -82,7 +83,23 @@ export function featureGate(
   });
 }
 
+/**
+ * Derived store for the current variant assignment of a feature (requires enableVariants in config).
+ */
+export function featureVariant(featureKey: string) {
+  return derived($variants, ($variants): VariantResult | null => {
+    const entry = $variants[featureKey];
+    if (!entry?.variant) {
+      return null;
+    }
+    return {
+      name: entry.variant,
+      configurationValue: entry.configurationValue,
+    };
+  });
+}
+
 // Re-export base stores for direct use
-export { $flags as flags, $isReady as isReady };
+export { $flags as flags, $isReady as isReady, $variants as variants };
 
 

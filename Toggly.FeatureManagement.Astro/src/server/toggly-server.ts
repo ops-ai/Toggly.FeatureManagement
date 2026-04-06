@@ -6,10 +6,18 @@
  * This is a complete, embedded Toggly client implementation.
  */
 
-import type { TogglyConfig, Flags, TogglyClient } from '../types/index.js';
+import type {
+  TogglyConfig,
+  Flags,
+  TogglyClient,
+  VariantResult,
+  EvaluatedVariantDef,
+} from '../types/index.js';
+import { parseVariantDefsPayload, variantDefsToFlags } from '../variant-helpers.js';
 
 interface CachedFlags {
   flags: Flags;
+  variantDefs: Record<string, EvaluatedVariantDef> | null;
   timestamp: number;
 }
 
@@ -19,7 +27,8 @@ interface CachedFlags {
 export class TogglyServer implements TogglyClient {
   private config: TogglyConfig;
   private cache: CachedFlags | null = null;
-  private fetchPromise: Promise<Flags> | null = null;
+  private fetchPromise: Promise<{ flags: Flags; variantDefs: Record<string, EvaluatedVariantDef> | null }> | null =
+    null;
   private isBuildTime: boolean = false;
 
   constructor(config: TogglyConfig, isBuildTime: boolean = false) {
@@ -31,26 +40,34 @@ export class TogglyServer implements TogglyClient {
       isDebug: false,
       connectTimeout: 5 * 1000, // 5 seconds
       allFeaturesEnabledDuringBuild: false,
+      enableVariants: false,
       ...config,
     };
     this.isBuildTime = isBuildTime;
   }
 
   /**
-   * Get API URL for fetching flags
+   * Get API URL for fetching flags (or variants when enableVariants is true)
    */
   private getApiUrl(): string {
-    const { baseURI, appKey, environment, identity } = this.config;
+    const { baseURI, appKey, environment, identity, enableVariants } = this.config;
 
     if (!appKey) {
       return '';
     }
 
     const baseUrl = baseURI!.replace(/\/$/, '');
-    let url = `${baseUrl}/evaluated-signed/${appKey}/${environment}`;
+    const path = enableVariants
+      ? `/evaluated-variants-signed/${appKey}/${environment}`
+      : `/evaluated-signed/${appKey}/${environment}`;
+    let url = `${baseUrl}${path}`;
 
     if (identity) {
-      url += `?u=${encodeURIComponent(identity)}`;
+      if (enableVariants) {
+        url += `?${new URLSearchParams({ userId: identity }).toString()}`;
+      } else {
+        url += `?u=${encodeURIComponent(identity)}`;
+      }
     }
 
     return url;
@@ -66,17 +83,21 @@ export class TogglyServer implements TogglyClient {
   }
 
   /**
-   * Fetch flags from Toggly API
+   * Fetch flags (and optional variant defs) from Toggly API
    */
-  private async fetchFlags(): Promise<Flags> {
+  private async fetchFlags(): Promise<{ flags: Flags; variantDefs: Record<string, EvaluatedVariantDef> | null }> {
     const url = this.getApiUrl();
+    const enableVariants = this.config.enableVariants === true;
 
     // If no appKey, return flagDefaults
     if (!url || !this.config.appKey) {
       if (this.config.isDebug) {
         console.log('[Toggly Server] Using flag defaults (no appKey):', this.config.flagDefaults);
       }
-      return { ...this.config.flagDefaults! };
+      return {
+        flags: { ...this.config.flagDefaults! },
+        variantDefs: enableVariants ? {} : null,
+      };
     }
 
     try {
@@ -102,10 +123,17 @@ export class TogglyServer implements TogglyClient {
 
       const payload = await response.json();
       let flags: Flags;
-      if (typeof payload === 'object' && payload !== null && 'defs' in payload && typeof payload.defs === 'object') {
+      let variantDefs: Record<string, EvaluatedVariantDef> | null;
+
+      if (enableVariants) {
+        variantDefs = parseVariantDefsPayload(payload);
+        flags = variantDefsToFlags(variantDefs);
+      } else if (typeof payload === 'object' && payload !== null && 'defs' in payload && typeof payload.defs === 'object') {
         flags = payload.defs as Flags;
+        variantDefs = null;
       } else {
         flags = payload as Flags;
+        variantDefs = null;
       }
 
       // If allFeaturesEnabledDuringBuild is true and we're in build time,
@@ -122,9 +150,12 @@ export class TogglyServer implements TogglyClient {
 
       if (this.config.isDebug) {
         console.log('[Toggly Server] Fetched flags:', flags);
+        if (enableVariants && variantDefs) {
+          console.log('[Toggly Server] Fetched variant defs:', variantDefs);
+        }
       }
 
-      return flags;
+      return { flags, variantDefs };
     } catch (error) {
       if (this.config.isDebug) {
         console.error('[Toggly Server] Error fetching flags:', error);
@@ -135,14 +166,20 @@ export class TogglyServer implements TogglyClient {
         if (this.config.isDebug) {
           console.log('[Toggly Server] Using cached flags:', this.cache.flags);
         }
-        return { ...this.cache.flags };
+        return {
+          flags: { ...this.cache.flags },
+          variantDefs: this.cache.variantDefs,
+        };
       }
 
       if (this.config.isDebug) {
         console.log('[Toggly Server] Using flag defaults:', this.config.flagDefaults);
       }
 
-      return { ...this.config.flagDefaults! };
+      return {
+        flags: { ...this.config.flagDefaults! },
+        variantDefs: enableVariants ? {} : null,
+      };
     }
   }
 
@@ -163,9 +200,10 @@ export class TogglyServer implements TogglyClient {
     this.fetchPromise = this.fetchFlags();
 
     try {
-      const flags = await this.fetchPromise;
+      const { flags, variantDefs } = await this.fetchPromise;
       this.cache = {
         flags,
+        variantDefs,
         timestamp: Date.now(),
       };
     } finally {
@@ -232,6 +270,40 @@ export class TogglyServer implements TogglyClient {
     }
 
     return negate ? !isEnabled : isEnabled;
+  }
+
+  /**
+   * Current variant assignment for a feature (requires enableVariants).
+   */
+  async getVariant(featureKey: string): Promise<VariantResult | null> {
+    if (!this.config.enableVariants) {
+      return null;
+    }
+
+    await this.getFlags();
+
+    const defs = this.cache?.variantDefs;
+    if (!defs) {
+      return null;
+    }
+
+    const entry = defs[featureKey];
+    if (!entry?.variant) {
+      return null;
+    }
+
+    return {
+      name: entry.variant,
+      configurationValue: entry.configurationValue,
+    };
+  }
+
+  /**
+   * Configuration payload for the assigned variant, if any.
+   */
+  async getVariantValue(featureKey: string): Promise<unknown | null> {
+    const variant = await this.getVariant(featureKey);
+    return variant?.configurationValue ?? null;
   }
 }
 

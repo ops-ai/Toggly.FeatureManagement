@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Toggly.FeatureManagement.Data
@@ -36,6 +37,16 @@ namespace Toggly.FeatureManagement.Data
         /// </summary>
         [JsonConverter(typeof(JsonStringEnumConverter))]
         public RequirementType RequirementType { get; set; } = RequirementType.Any;
+
+        /// <summary>
+        /// Named variants (Microsoft Feature Management schema); used by <see cref="IVariantFeatureManager"/>.
+        /// </summary>
+        public List<VariantDefinition>? Variants { get; set; }
+
+        /// <summary>
+        /// Variant allocation rules (Microsoft Feature Management schema).
+        /// </summary>
+        public AllocationDefinition? Allocation { get; set; }
 
         /// <summary>
         /// Equality comparer
@@ -157,5 +168,84 @@ namespace Toggly.FeatureManagement.Data
     public class AlwaysOnFilter : FeatureFilter
     {
 
+    }
+
+    /// <summary>
+    /// Deserialized variant definition; mirrors <see cref="Microsoft.FeatureManagement.VariantDefinition"/>.
+    /// </summary>
+    public class VariantDefinition
+    {
+        /// <summary>Name of the variant.</summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>JSON configuration payload for this variant.</summary>
+        public JsonElement ConfigurationValue { get; set; }
+
+        /// <summary>Optional enabled/disabled override when this variant is assigned.</summary>
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public StatusOverride StatusOverride { get; set; } = StatusOverride.None;
+    }
+
+    /// <summary>
+    /// Deserialized allocation; mirrors <see cref="Microsoft.FeatureManagement.Allocation"/>.
+    /// </summary>
+    public class AllocationDefinition
+    {
+        /// <summary>Default variant when the feature is enabled and no rule matches.</summary>
+        public string? DefaultWhenEnabled { get; set; }
+
+        /// <summary>Default variant when the feature is disabled.</summary>
+        public string? DefaultWhenDisabled { get; set; }
+
+        /// <summary>Per-user variant assignments.</summary>
+        public List<UserAllocationDefinition>? User { get; set; }
+
+        /// <summary>Per-group variant assignments.</summary>
+        public List<GroupAllocationDefinition>? Group { get; set; }
+
+        /// <summary>Percentile-based assignments.</summary>
+        public List<PercentileAllocationDefinition>? Percentile { get; set; }
+
+        /// <summary>Seed for consistent percentile hashing across features.</summary>
+        public string? Seed { get; set; }
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="Microsoft.FeatureManagement.UserAllocation"/>.
+    /// </summary>
+    public class UserAllocationDefinition
+    {
+        /// <summary>Variant name to assign.</summary>
+        public string? Variant { get; set; }
+
+        /// <summary>User identifiers receiving this variant.</summary>
+        public List<string>? Users { get; set; }
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="Microsoft.FeatureManagement.GroupAllocation"/>.
+    /// </summary>
+    public class GroupAllocationDefinition
+    {
+        /// <summary>Variant name to assign.</summary>
+        public string? Variant { get; set; }
+
+        /// <summary>Group names receiving this variant.</summary>
+        public List<string>? Groups { get; set; }
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="Microsoft.FeatureManagement.PercentileAllocation"/>.
+    /// </summary>
+    public class PercentileAllocationDefinition
+    {
+        /// <summary>Variant name to assign.</summary>
+        public string? Variant { get; set; }
+
+        /// <summary>Inclusive lower bound (0–100).</summary>
+        public double From { get; set; }
+
+        /// <summary>Exclusive upper bound (0–100).</summary>
+        public double To { get; set; }
     }
 }

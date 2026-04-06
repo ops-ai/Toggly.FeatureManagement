@@ -33,11 +33,15 @@ export {
   setIdentity,
   clearIdentity,
   stopRefreshInterval,
+  getVariant,
+  getVariantValue,
   $flags,
+  $variants,
   $isReady,
   $error,
   $flag,
   $gate,
+  $variant,
 } from './client/store.js';
 
 // Types
@@ -45,6 +49,8 @@ export type {
   TogglyConfig,
   Flags,
   TogglyClient,
+  VariantResult,
+  EvaluatedVariantDef,
   PageFeatureMapping,
   FeatureProps,
   FeatureClientProps,

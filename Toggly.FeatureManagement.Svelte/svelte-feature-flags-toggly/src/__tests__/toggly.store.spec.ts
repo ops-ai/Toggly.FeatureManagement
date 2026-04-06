@@ -3,8 +3,11 @@ import { get } from 'svelte/store';
 import {
   togglyServiceStore,
   togglyFlagsStore,
+  togglyVariantsStore,
   getTogglyService,
   createFeatureStore,
+  createVariantStore,
+  createVariantValueStore,
   isFeatureOn,
   isFeatureOff,
   evaluateFeatureGate,
@@ -16,6 +19,7 @@ describe('Toggly Store', () => {
     // Reset stores between tests
     togglyServiceStore.set(null);
     togglyFlagsStore.set({});
+    togglyVariantsStore.set({});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
@@ -82,6 +86,31 @@ describe('Toggly Store', () => {
 
       togglyFlagsStore.set({ F1: false });
       expect(get(f1Store)).toBe(false);
+    });
+  });
+
+  // ─── togglyVariantsStore & createVariantStore ──────────────────────
+  describe('togglyVariantsStore and variant derived stores', () => {
+    it('createVariantStore returns null when no variant', () => {
+      togglyVariantsStore.set({ F: { enabled: true } });
+      expect(get(createVariantStore('F'))).toBeNull();
+    });
+
+    it('createVariantStore maps variant name and configurationValue', () => {
+      togglyVariantsStore.set({
+        X: { enabled: true, variant: 'blue', configurationValue: 'hex' },
+      });
+      expect(get(createVariantStore('X'))).toEqual({
+        name: 'blue',
+        configurationValue: 'hex',
+      });
+    });
+
+    it('createVariantValueStore returns configuration only', () => {
+      togglyVariantsStore.set({
+        X: { enabled: true, variant: 'blue', configurationValue: 42 },
+      });
+      expect(get(createVariantValueStore('X'))).toBe(42);
     });
   });
 

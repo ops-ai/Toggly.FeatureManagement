@@ -6,7 +6,8 @@
  */
 
 import { useStore } from '@nanostores/react';
-import { $flags, $isReady } from '../../client/store.js';
+import { $flags, $isReady, $variants } from '../../client/store.js';
+import type { VariantResult } from '../../types/index.js';
 import type { ReactNode } from 'react';
 
 export interface FeatureProps {
@@ -165,6 +166,21 @@ export function useFeatureGate(
   }
 
   return { enabled: isEnabled, isReady };
+}
+
+/**
+ * Hook for the current variant assignment of a feature (requires enableVariants in config).
+ */
+export function useVariant(featureKey: string): VariantResult | null {
+  const variants = useStore($variants);
+  const entry = variants[featureKey];
+  if (!entry?.variant) {
+    return null;
+  }
+  return {
+    name: entry.variant,
+    configurationValue: entry.configurationValue,
+  };
 }
 
 export default Feature;

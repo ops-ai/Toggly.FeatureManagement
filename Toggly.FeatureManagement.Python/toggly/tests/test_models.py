@@ -4,6 +4,7 @@ import pytest
 from datetime import datetime, timezone
 
 from toggly import (
+    EvaluatedVariantDef,
     FeatureDefinition,
     FeatureFilter,
     FeatureState,
@@ -13,6 +14,7 @@ from toggly import (
     NetworkState,
     JsonWebKey,
     JsonWebKeySet,
+    VariantResult,
 )
 
 
@@ -198,6 +200,43 @@ class TestTogglyInitResponse:
         )
 
         assert response.etag == "abc123"
+
+
+class TestEvaluatedVariantDef:
+    """Tests for EvaluatedVariantDef."""
+
+    def test_from_dict_camel_case(self) -> None:
+        """Parse API camelCase keys."""
+        d = EvaluatedVariantDef.from_dict(
+            {
+                "enabled": True,
+                "variant": "blue",
+                "configurationValue": {"theme": "dark"},
+            }
+        )
+        assert d.enabled is True
+        assert d.variant == "blue"
+        assert d.configuration_value == {"theme": "dark"}
+
+    def test_to_dict_roundtrip(self) -> None:
+        """Serialization roundtrip."""
+        original = EvaluatedVariantDef(
+            enabled=False, variant=None, configuration_value=42
+        )
+        restored = EvaluatedVariantDef.from_dict(original.to_dict())
+        assert restored.enabled is False
+        assert restored.variant is None
+        assert restored.configuration_value == 42
+
+
+class TestVariantResult:
+    """Tests for VariantResult."""
+
+    def test_variant_result_fields(self) -> None:
+        """Basic construction."""
+        vr = VariantResult(name="a", configuration_value="x")
+        assert vr.name == "a"
+        assert vr.configuration_value == "x"
 
 
 class TestNetworkState:

@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { FeatureRequirement, StorageKeys, TogglyConfig } from './models';
+import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { HookExecutor } from './hooks';
 import type { Hook } from '@ops-ai/toggly-hooks-types';
 
@@ -22,6 +22,13 @@ export class Toggly {
 
   private static get _flagsCacheKey(): string {
     return StorageKeys.flagsCacheKey(
+      Toggly._config?.appKey ?? '',
+      Toggly._config?.environment ?? 'Production',
+    );
+  }
+
+  private static get _variantsCacheKey(): string {
+    return StorageKeys.variantsCacheKey(
       Toggly._config?.appKey ?? '',
       Toggly._config?.environment ?? 'Production',
     );
@@ -114,10 +121,56 @@ export class Toggly {
     if (!canUseStorage) return;
     try {
       localStorage.removeItem(Toggly._flagsCacheKey);
+      localStorage.removeItem(Toggly._variantsCacheKey);
     } catch { /* ignore */ }
   }
 
+  static get variantsValue(): { [key: string]: EvaluatedVariantDef } | null {
+    if (!Toggly._config?.enableVariants) return null;
+    if (Toggly._persistCache) {
+      try {
+        return JSON.parse(localStorage.getItem(Toggly._variantsCacheKey) ?? 'null');
+      } catch { return null; }
+    }
+    return null;
+  }
+
+  static cacheVariants(variants: { [key: string]: EvaluatedVariantDef }) {
+    if (!Toggly._persistCache) return;
+    try {
+      localStorage.setItem(Toggly._variantsCacheKey, JSON.stringify(variants));
+    } catch { /* storage full or unavailable */ }
+  }
+
+  /**
+   * Get the assigned variant for a feature flag.
+   * Returns null if no variant is assigned or variants are not enabled.
+   */
+  static getVariant(featureKey: string): VariantResult | null {
+    const variants = Toggly.variantsValue;
+    if (!variants) return null;
+    const entry = variants[featureKey];
+    if (!entry || !entry.variant) return null;
+    return {
+      name: entry.variant,
+      configurationValue: entry.configurationValue,
+    };
+  }
+
+  /**
+   * Get the configuration value of the assigned variant for a feature flag.
+   * Returns null if no variant is assigned or no configuration value is set.
+   */
+  static getVariantValue(featureKey: string): unknown | null {
+    const variant = Toggly.getVariant(featureKey);
+    return variant?.configurationValue ?? null;
+  }
+
   static fetchFeatureFlags(): Promise<{ [key: string]: boolean }> {
+    if (Toggly._config.enableVariants) {
+      return Toggly.fetchFeatureFlagsWithVariants();
+    }
+
     return new Promise((resolve, reject) => {
       var url = `${Toggly._config.baseURI}/evaluated-signed/${Toggly._config.appKey}/${Toggly._config.environment}`;
 
@@ -136,6 +189,42 @@ export class Toggly {
         })
         .catch((error) => {
           var flags = Toggly._cachedFeatureFlags ?? Toggly._config.flagDefaults;
+          resolve(flags);
+
+          if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }
+        });
+    });
+  }
+
+  private static fetchFeatureFlagsWithVariants(): Promise<{ [key: string]: boolean }> {
+    return new Promise((resolve) => {
+      let url = `${Toggly._config.baseURI}/evaluated-variants-signed/${Toggly._config.appKey}/${Toggly._config.environment}`;
+      const params = new URLSearchParams();
+
+      if (Toggly.identity) {
+        params.set('userId', Toggly.identity);
+      }
+
+      const queryString = params.toString();
+      if (queryString) url += `?${queryString}`;
+
+      fetch(url)
+        .then((response) => response.json())
+        .then((payload) => {
+          const defs: { [key: string]: EvaluatedVariantDef } = (payload && payload.defs) ? payload.defs : payload;
+          Toggly.cacheVariants(defs);
+
+          const boolFlags: { [key: string]: boolean } = {};
+          for (const [key, entry] of Object.entries(defs)) {
+            boolFlags[key] = entry.enabled;
+          }
+          Toggly.cacheFeatureFlags(boolFlags);
+          resolve(boolFlags);
+
+          if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlagsWithVariants - ${JSON.stringify(defs)}`); }
+        })
+        .catch(() => {
+          const flags = Toggly._cachedFeatureFlags ?? Toggly._config.flagDefaults;
           resolve(flags);
 
           if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }

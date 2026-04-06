@@ -180,6 +180,48 @@ class DebugInfo:
 
 
 @dataclass
+class VariantResult:
+    """Assigned variant name and configuration for a feature (when variants are enabled)."""
+
+    name: str
+    """Variant name assigned by the server."""
+
+    configuration_value: Any = None
+    """Optional configuration payload for the variant."""
+
+
+@dataclass
+class EvaluatedVariantDef:
+    """Server-evaluated variant entry for a single feature flag."""
+
+    enabled: bool
+    """Whether the feature is enabled."""
+
+    variant: str | None = None
+    """Assigned variant name, if any."""
+
+    configuration_value: Any = None
+    """Configuration value for the variant (shape depends on the feature)."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to a dictionary for serialization."""
+        return {
+            "enabled": self.enabled,
+            "variant": self.variant,
+            "configuration_value": self.configuration_value,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EvaluatedVariantDef:
+        """Create from API or cache dictionary (camelCase or snake_case)."""
+        return cls(
+            enabled=bool(data.get("enabled", False)),
+            variant=data.get("variant"),
+            configuration_value=data.get("configurationValue", data.get("configuration_value")),
+        )
+
+
+@dataclass
 class SignedDefinitionsResponse:
     """Response containing signed feature definitions."""
 

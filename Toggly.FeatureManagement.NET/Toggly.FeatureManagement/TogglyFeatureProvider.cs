@@ -17,11 +17,12 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Toggly.FeatureManagement.Data;
+using TogglyVariantDefinition = Toggly.FeatureManagement.Data.VariantDefinition;
 using Websocket.Client;
-using System.Text.Json.Serialization;
 
 namespace Toggly.FeatureManagement
 {
@@ -190,17 +191,7 @@ namespace Toggly.FeatureManagement
 
                         foreach (var featureDefinition in snapshot.Features)
                         {
-                            var newDefinition = new FeatureDefinition
-                            {
-                                Name = featureDefinition.FeatureKey,
-                                EnabledFor = featureDefinition.Filters.Select(featureFilter =>
-                                    new FeatureFilterConfiguration
-                                    {
-                                        Name = featureFilter.Name,
-                                        Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters?.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)) ?? Enumerable.Empty<KeyValuePair<string, string?>>()).Build()
-                                    }),
-                                RequirementType = featureDefinition.RequirementType
-                            };
+                            var newDefinition = BuildFeatureDefinition(featureDefinition);
                             if (featureDefinition.SecuredFeature) _secureFeatures.Add(featureDefinition.FeatureKey);
                             else _secureFeatures.TryRemove(featureDefinition.FeatureKey);
                             _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
@@ -582,17 +573,7 @@ namespace Toggly.FeatureManagement
         {
             foreach (var featureDefinition in newDefinitions)
             {
-                var newDefinition = new FeatureDefinition
-                {
-                    Name = featureDefinition.FeatureKey,
-                    EnabledFor = featureDefinition.Filters.Select(featureFilter =>
-                        new FeatureFilterConfiguration
-                        {
-                            Name = featureFilter.Name,
-                            Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters?.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)) ?? Enumerable.Empty<KeyValuePair<string, string?>>()).Build()
-                        }),
-                    RequirementType = featureDefinition.RequirementType
-                };
+                var newDefinition = BuildFeatureDefinition(featureDefinition);
                 if (featureDefinition.SecuredFeature) _secureFeatures.Add(featureDefinition.FeatureKey);
                 else _secureFeatures.TryRemove(featureDefinition.FeatureKey);
                 _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
@@ -688,6 +669,162 @@ namespace Toggly.FeatureManagement
             _logger.LogError("Error refreshing feature definitions: {ErrorMessage}", message);
             _lastError = message;
             _lastErrorTime = DateTime.UtcNow;
+        }
+
+        private static FeatureDefinition BuildFeatureDefinition(FeatureDefinitionModel featureDefinition)
+        {
+            return new FeatureDefinition
+            {
+                Name = featureDefinition.FeatureKey,
+                EnabledFor = featureDefinition.Filters.Select(featureFilter =>
+                    new FeatureFilterConfiguration
+                    {
+                        Name = featureFilter.Name,
+                        Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters?.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)) ?? Enumerable.Empty<KeyValuePair<string, string?>>()).Build()
+                    }),
+                RequirementType = featureDefinition.RequirementType,
+                Variants = MapVariantsToMicrosoft(featureDefinition.Variants),
+                Allocation = MapAllocationToMicrosoft(featureDefinition.Allocation)
+            };
+        }
+
+        private static IEnumerable<Microsoft.FeatureManagement.VariantDefinition> MapVariantsToMicrosoft(IReadOnlyList<TogglyVariantDefinition>? variants)
+        {
+            if (variants == null || variants.Count == 0)
+                return Enumerable.Empty<Microsoft.FeatureManagement.VariantDefinition>();
+
+            return variants
+                .Where(v => !string.IsNullOrEmpty(v.Name))
+                .Select(v => new Microsoft.FeatureManagement.VariantDefinition
+                {
+                    Name = v.Name,
+                    ConfigurationValue = BuildConfigurationSectionFromJson(v.ConfigurationValue),
+                    StatusOverride = v.StatusOverride
+                });
+        }
+
+        private static Allocation? MapAllocationToMicrosoft(AllocationDefinition? model)
+        {
+            if (model == null)
+                return null;
+
+            var hasUser = model.User != null && model.User.Count > 0;
+            var hasGroup = model.Group != null && model.Group.Count > 0;
+            var hasPercentile = model.Percentile != null && model.Percentile.Count > 0;
+            if (model.DefaultWhenEnabled == null && model.DefaultWhenDisabled == null && model.Seed == null
+                && !hasUser && !hasGroup && !hasPercentile)
+                return null;
+
+            return new Allocation
+            {
+                DefaultWhenEnabled = model.DefaultWhenEnabled,
+                DefaultWhenDisabled = model.DefaultWhenDisabled,
+                Seed = model.Seed,
+                User = hasUser
+                    ? model.User!
+                        .Where(u => u != null && !string.IsNullOrEmpty(u.Variant))
+                        .Select(u => new UserAllocation
+                        {
+                            Variant = u!.Variant!,
+                            Users = u.Users ?? Enumerable.Empty<string>()
+                        })
+                    : Enumerable.Empty<UserAllocation>(),
+                Group = hasGroup
+                    ? model.Group!
+                        .Where(g => g != null && !string.IsNullOrEmpty(g.Variant))
+                        .Select(g => new GroupAllocation
+                        {
+                            Variant = g!.Variant!,
+                            Groups = g.Groups ?? Enumerable.Empty<string>()
+                        })
+                    : Enumerable.Empty<GroupAllocation>(),
+                Percentile = hasPercentile
+                    ? model.Percentile!
+                        .Where(p => p != null && !string.IsNullOrEmpty(p.Variant))
+                        .Select(p => new PercentileAllocation
+                        {
+                            Variant = p!.Variant!,
+                            From = p.From,
+                            To = p.To
+                        })
+                    : Enumerable.Empty<PercentileAllocation>()
+            };
+        }
+
+        private static IConfigurationSection? BuildConfigurationSectionFromJson(JsonElement configurationValue)
+        {
+            if (configurationValue.ValueKind == JsonValueKind.Undefined || configurationValue.ValueKind == JsonValueKind.Null)
+                return null;
+
+            if (configurationValue.ValueKind == JsonValueKind.Object && !configurationValue.EnumerateObject().Any())
+                return null;
+
+            const string rootKey = "v";
+            var data = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            if (configurationValue.ValueKind == JsonValueKind.Object || configurationValue.ValueKind == JsonValueKind.Array)
+            {
+                FlattenJsonElement(configurationValue, rootKey, data);
+            }
+            else
+            {
+                data[rootKey] = JsonElementToConfigString(configurationValue);
+            }
+
+            if (data.Count == 0)
+                return null;
+
+            var root = new ConfigurationBuilder().AddInMemoryCollection(data).Build();
+            return root.GetSection(rootKey);
+        }
+
+        private static void FlattenJsonElement(JsonElement element, string prefix, IDictionary<string, string?> target)
+        {
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    foreach (var prop in element.EnumerateObject())
+                    {
+                        var key = string.IsNullOrEmpty(prefix) ? prop.Name : prefix + ConfigurationPath.KeyDelimiter + prop.Name;
+                        FlattenJsonElement(prop.Value, key, target);
+                    }
+                    break;
+                case JsonValueKind.Array:
+                    var i = 0;
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        var key = prefix + ConfigurationPath.KeyDelimiter + i.ToString();
+                        FlattenJsonElement(item, key, target);
+                        i++;
+                    }
+                    break;
+                case JsonValueKind.String:
+                    target[prefix] = element.GetString();
+                    break;
+                case JsonValueKind.Number:
+                    target[prefix] = element.GetRawText();
+                    break;
+                case JsonValueKind.True:
+                    target[prefix] = "true";
+                    break;
+                case JsonValueKind.False:
+                    target[prefix] = "false";
+                    break;
+                case JsonValueKind.Null:
+                    target[prefix] = null;
+                    break;
+            }
+        }
+
+        private static string? JsonElementToConfigString(JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                JsonValueKind.String => element.GetString(),
+                JsonValueKind.Number => element.GetRawText(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => element.GetRawText()
+            };
         }
 
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _keyFetchSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();

@@ -39,6 +39,12 @@ export class TogglyOptions implements ITogglyOptions {
 
   /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
   persistCache?: boolean
+
+  /**
+   * When true, fetches from evaluated-variants-signed and exposes variant APIs.
+   * Default: false.
+   */
+  enableVariants?: boolean
 }
 
 /**

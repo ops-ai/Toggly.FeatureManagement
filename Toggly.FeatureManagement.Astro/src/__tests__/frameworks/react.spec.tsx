@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
-import { $flags, $isReady, __resetClient, initTogglyClient } from '../../client/store.js';
+import { $flags, $isReady, $variants, __resetClient } from '../../client/store.js';
 
 // We test the pure logic of Feature, useFeatureFlag, useFeatureGate
 // by importing them and testing with nanostores directly.
@@ -12,12 +12,13 @@ vi.mock('@nanostores/react', () => ({
   useStore: vi.fn((store: any) => store.get()),
 }));
 
-import { Feature, useFeatureFlag, useFeatureGate } from '../../frameworks/react/Feature.js';
+import { Feature, useFeatureFlag, useFeatureGate, useVariant } from '../../frameworks/react/Feature.js';
 
 describe('React Framework Adapter', () => {
   beforeEach(() => {
     __resetClient();
     $flags.set({});
+    $variants.set({});
     $isReady.set(false);
   });
 
@@ -90,6 +91,26 @@ describe('React Framework Adapter', () => {
     it('should support negation', () => {
       expect(useFeatureGate(['F1', 'F2'], 'all', true).enabled).toBe(false);
       expect(useFeatureGate(['F3'], 'all', true).enabled).toBe(true);
+    });
+  });
+
+  describe('useVariant', () => {
+    it('should return variant when defs include variant name', () => {
+      $variants.set({
+        V: { enabled: true, variant: 'B', configurationValue: 42 },
+      });
+
+      expect(useVariant('V')).toEqual({ name: 'B', configurationValue: 42 });
+    });
+
+    it('should return null when variant name missing', () => {
+      $variants.set({ V: { enabled: true, configurationValue: 'x' } });
+      expect(useVariant('V')).toBeNull();
+    });
+
+    it('should return null for unknown key', () => {
+      $variants.set({});
+      expect(useVariant('Unknown')).toBeNull();
     });
   });
 

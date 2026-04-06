@@ -5,6 +5,10 @@ import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
 import type { Hook } from '@ops-ai/toggly-hooks-types';
 
 describe('TogglyService', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
   // ─── Constructor / Init ──────────────────────────
   describe('Constructor', () => {
     it('should be created', () => {
@@ -374,6 +378,65 @@ describe('TogglyService', () => {
 
     it('should return false for enabled feature (negated)', async () => {
       expect(await service.isFeatureOff('F1')).toBe(false);
+    });
+  });
+
+  // ─── Variants ──────────────────────────
+  describe('Variants', () => {
+    let fetchSpy: jasmine.Spy;
+
+    beforeEach(() => {
+      fetchSpy = spyOn(globalThis, 'fetch');
+      spyOn(console, 'warn');
+    });
+
+    it('should return null from getVariant when enableVariants is false', async () => {
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ featureDefaults: { F1: true } })],
+      });
+      const service = TestBed.inject(TogglyService);
+      expect(await service.getVariant('F1')).toBeNull();
+      expect(await service.getVariantValue('F1')).toBeNull();
+    });
+
+    it('should fetch evaluated-variants-signed when enableVariants is true', async () => {
+      fetchSpy.and.resolveTo({
+        json: () => Promise.resolve({
+          F1: { enabled: true, variant: 'treatment-a', configurationValue: { x: 1 } },
+        }),
+      } as any);
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+          enableVariants: true,
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      const v = await service.getVariant('F1');
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://definitions.toggly.io/evaluated-variants-signed/key/Production',
+      );
+      expect(v).toEqual({ name: 'treatment-a', configurationValue: { x: 1 } });
+      expect(await service.getVariantValue('F1')).toEqual({ x: 1 });
+    });
+
+    it('should return null when feature has no variant name', async () => {
+      fetchSpy.and.resolveTo({
+        json: () => Promise.resolve({
+          F1: { enabled: true },
+        }),
+      } as any);
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+          enableVariants: true,
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      expect(await service.getVariant('F1')).toBeNull();
+      expect(await service.getVariantValue('F1')).toBeNull();
     });
   });
 

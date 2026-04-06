@@ -3100,8 +3100,21 @@ var HookExecutor = /** @class */ (function () {
 
 var canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 var CACHE_PREFIX = 'toggly:flags:';
+var VARIANTS_CACHE_PREFIX = 'toggly:variants:';
 function getCacheKey(appKey, environment) {
     return "".concat(CACHE_PREFIX).concat(appKey, ":").concat(environment);
+}
+function getVariantsCacheKey(appKey, environment) {
+    return "".concat(VARIANTS_CACHE_PREFIX).concat(appKey, ":").concat(environment);
+}
+function variantDefsToFlags(defs) {
+    var _a;
+    var out = {};
+    for (var _i = 0, _b = Object.keys(defs); _i < _b.length; _i++) {
+        var key = _b[_i];
+        out[key] = ((_a = defs[key]) === null || _a === void 0 ? void 0 : _a.enabled) === true;
+    }
+    return out;
 }
 function readCachedFlags(appKey, environment) {
     if (!canUseStorage)
@@ -3122,10 +3135,29 @@ function writeCachedFlags(appKey, environment, flags) {
     }
     catch ( /* storage full or unavailable */_a) { /* storage full or unavailable */ }
 }
+function readCachedVariants(appKey, environment) {
+    if (!canUseStorage)
+        return null;
+    try {
+        var raw = localStorage.getItem(getVariantsCacheKey(appKey, environment));
+        return raw ? JSON.parse(raw) : null;
+    }
+    catch (_a) {
+        return null;
+    }
+}
+function writeCachedVariants(appKey, environment, variants) {
+    if (!canUseStorage)
+        return;
+    try {
+        localStorage.setItem(getVariantsCacheKey(appKey, environment), JSON.stringify(variants));
+    }
+    catch ( /* storage full or unavailable */_a) { /* storage full or unavailable */ }
+}
 var Toggly = /** @class */ (function () {
     function Toggly(config) {
         var _this = this;
-        var _a, _b, _c;
+        var _a, _b;
         this._config = {
             baseURI: 'https://definitions.toggly.io',
             verifySignatures: false,
@@ -3133,15 +3165,17 @@ var Toggly = /** @class */ (function () {
             hooks: []
         };
         this._features = null;
+        this._variants = null;
         this._loadingFeatures = false;
         this._hookExecutor = new HookExecutor();
+        this._featuresRefreshListeners = new Set();
         this._ws = null;
         this._wsConnected = false;
         this._wsReconnectTimer = null;
         this._lastFallbackRefresh = 0;
         this.shouldShowFeatureDuringEvaluation = false;
         this._loadFeatures = function () { return __awaiter(_this, void 0, void 0, function () {
-            var now, isInitialLoad, url, response, payload, cached;
+            var now, isInitialLoad, appKey, env, url, response, payload, rawDefs, defs, vCached, cached, cached;
             var _this = this;
             var _a, _b, _c, _d, _e, _f;
             return __generator(this, function (_g) {
@@ -3177,12 +3211,23 @@ var Toggly = /** @class */ (function () {
                         }
                         this._loadingFeatures = true;
                         isInitialLoad = this._ws === null && !this._wsConnected;
+                        appKey = (_a = this._config.appKey) !== null && _a !== void 0 ? _a : '';
+                        env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
                         _g.label = 3;
                     case 3:
-                        _g.trys.push([3, 6, 7, 8]);
-                        url = "".concat(this._config.baseURI, "/evaluated-signed/").concat(this._config.appKey, "/").concat(this._config.environment);
-                        if (this._config.identity) {
-                            url += "?u=".concat(this._config.identity);
+                        _g.trys.push([3, 8, 11, 12]);
+                        url = void 0;
+                        if (this._config.enableVariants) {
+                            url = "".concat(this._config.baseURI, "/evaluated-variants-signed/").concat(this._config.appKey, "/").concat(this._config.environment);
+                            if (this._config.identity) {
+                                url += "?".concat(new URLSearchParams({ userId: this._config.identity }).toString());
+                            }
+                        }
+                        else {
+                            url = "".concat(this._config.baseURI, "/evaluated-signed/").concat(this._config.appKey, "/").concat(this._config.environment);
+                            if (this._config.identity) {
+                                url += "?u=".concat(this._config.identity);
+                            }
                         }
                         return [4 /*yield*/, fetch(url)];
                     case 4:
@@ -3190,27 +3235,65 @@ var Toggly = /** @class */ (function () {
                         return [4 /*yield*/, response.json()];
                     case 5:
                         payload = _g.sent();
-                        this._features = (_a = payload === null || payload === void 0 ? void 0 : payload.defs) !== null && _a !== void 0 ? _a : payload;
-                        if (this._features && this._canPersist) {
-                            writeCachedFlags((_b = this._config.appKey) !== null && _b !== void 0 ? _b : '', (_c = this._config.environment) !== null && _c !== void 0 ? _c : 'Production', this._features);
+                        if (this._config.enableVariants) {
+                            rawDefs = (_c = payload === null || payload === void 0 ? void 0 : payload.defs) !== null && _c !== void 0 ? _c : payload;
+                            defs = rawDefs && typeof rawDefs === 'object' && !Array.isArray(rawDefs)
+                                ? rawDefs
+                                : {};
+                            this._variants = defs;
+                            this._features = variantDefsToFlags(defs);
+                            if (this._features && this._canPersist) {
+                                writeCachedVariants(appKey, env, defs);
+                                writeCachedFlags(appKey, env, this._features);
+                            }
                         }
-                        // Trigger afterRefresh hooks
-                        if (this._features) {
-                            this._hookExecutor.executeAfterRefresh(this._features);
+                        else {
+                            this._variants = null;
+                            this._features = (_d = payload === null || payload === void 0 ? void 0 : payload.defs) !== null && _d !== void 0 ? _d : payload;
+                            if (this._features && this._canPersist) {
+                                writeCachedFlags(appKey, env, this._features);
+                            }
                         }
-                        return [3 /*break*/, 8];
+                        if (!this._features) return [3 /*break*/, 7];
+                        return [4 /*yield*/, this._hookExecutor.executeAfterRefresh(this._features)];
                     case 6:
                         _g.sent();
-                        cached = this._canPersist
-                            ? readCachedFlags((_d = this._config.appKey) !== null && _d !== void 0 ? _d : '', (_e = this._config.environment) !== null && _e !== void 0 ? _e : 'Production')
-                            : null;
-                        this._features = (_f = cached !== null && cached !== void 0 ? cached : this._config.featureDefaults) !== null && _f !== void 0 ? _f : {};
-                        console.warn('Toggly --- Using cached/default features as features could not be loaded from the Toggly API');
-                        return [3 /*break*/, 8];
+                        _g.label = 7;
                     case 7:
+                        this.notifyFeaturesRefresh();
+                        return [3 /*break*/, 12];
+                    case 8:
+                        _g.sent();
+                        if (this._config.enableVariants) {
+                            vCached = this._canPersist ? readCachedVariants(appKey, env) : null;
+                            if (vCached) {
+                                this._variants = vCached;
+                                this._features = variantDefsToFlags(vCached);
+                            }
+                            else {
+                                this._variants = null;
+                                cached = this._canPersist ? readCachedFlags(appKey, env) : null;
+                                this._features = (_e = cached !== null && cached !== void 0 ? cached : this._config.featureDefaults) !== null && _e !== void 0 ? _e : {};
+                            }
+                        }
+                        else {
+                            this._variants = null;
+                            cached = this._canPersist ? readCachedFlags(appKey, env) : null;
+                            this._features = (_f = cached !== null && cached !== void 0 ? cached : this._config.featureDefaults) !== null && _f !== void 0 ? _f : {};
+                        }
+                        console.warn('Toggly --- Using cached/default features as features could not be loaded from the Toggly API');
+                        if (!this._features) return [3 /*break*/, 10];
+                        return [4 /*yield*/, this._hookExecutor.executeAfterRefresh(this._features)];
+                    case 9:
+                        _g.sent();
+                        _g.label = 10;
+                    case 10:
+                        this.notifyFeaturesRefresh();
+                        return [3 /*break*/, 12];
+                    case 11:
                         this._loadingFeatures = false;
                         return [7 /*endfinally*/];
-                    case 8:
+                    case 12:
                         // Start WebSocket live updates after initial feature load
                         if (isInitialLoad) {
                             this.startWebSocket();
@@ -3436,11 +3519,22 @@ var Toggly = /** @class */ (function () {
         if (this._config.hooks) {
             this._config.hooks.forEach(function (hook) { return _this._hookExecutor.addHook(hook); });
         }
-        // Seed in-memory features from localStorage cache for instant availability
-        if (this._features === null && this._canPersist) {
-            var cached = readCachedFlags((_b = this._config.appKey) !== null && _b !== void 0 ? _b : '', (_c = this._config.environment) !== null && _c !== void 0 ? _c : 'Production');
-            if (cached) {
-                this._features = cached;
+        // Seed in-memory features (and variants) from localStorage for instant availability
+        if (this._features === null && this._canPersist && this._config.appKey) {
+            var appKey = this._config.appKey;
+            var env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
+            if (this._config.enableVariants) {
+                var vCached = readCachedVariants(appKey, env);
+                if (vCached) {
+                    this._variants = vCached;
+                    this._features = variantDefsToFlags(vCached);
+                }
+            }
+            if (this._features === null) {
+                var cached = readCachedFlags(appKey, env);
+                if (cached) {
+                    this._features = cached;
+                }
             }
         }
     }
@@ -3451,6 +3545,55 @@ var Toggly = /** @class */ (function () {
         enumerable: false,
         configurable: true
     });
+    /**
+     * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants} and loaded data).
+     */
+    Toggly.prototype.getVariant = function (featureKey) {
+        if (!this._config.enableVariants) {
+            return null;
+        }
+        var variants = this._variants;
+        if (!variants) {
+            return null;
+        }
+        var entry = variants[featureKey];
+        if (!entry || !entry.variant) {
+            return null;
+        }
+        return {
+            name: entry.variant,
+            configurationValue: entry.configurationValue,
+        };
+    };
+    /**
+     * Configuration payload for the assigned variant, if any.
+     */
+    Toggly.prototype.getVariantValue = function (featureKey) {
+        var _a;
+        var variant = this.getVariant(featureKey);
+        return (_a = variant === null || variant === void 0 ? void 0 : variant.configurationValue) !== null && _a !== void 0 ? _a : null;
+    };
+    /**
+     * Subscribe to feature (and variant) data updates after HTTP refresh or WebSocket-driven reload.
+     * @returns Unsubscribe function.
+     */
+    Toggly.prototype.subscribeFeaturesRefresh = function (listener) {
+        var _this = this;
+        this._featuresRefreshListeners.add(listener);
+        return function () {
+            _this._featuresRefreshListeners.delete(listener);
+        };
+    };
+    Toggly.prototype.notifyFeaturesRefresh = function () {
+        this._featuresRefreshListeners.forEach(function (listener) {
+            try {
+                listener();
+            }
+            catch (e) {
+                console.error('[Toggly] Error in features refresh listener:', e);
+            }
+        });
+    };
     /**
      * Add a hook dynamically
      */
@@ -3473,24 +3616,62 @@ var Feature = /** @class */ (function (_super) {
     __extends(Feature, _super);
     function Feature(props) {
         var _this = _super.call(this, props) || this;
-        var gate = [];
-        if (props.featureKey) {
-            gate.push(props.featureKey);
-        }
-        if (props.featureKeys) {
-            gate = gate.concat(props.featureKeys);
-        }
-        _this.state = { gate: gate, shouldShow: false };
+        _this.runGate = function () {
+            var _a, _b;
+            var gate = _this.buildGate();
+            if (gate.length === 0 || !_this.context.toggly) {
+                return;
+            }
+            _this.context.toggly
+                .evaluateFeatureGate(gate, (_a = _this.props.requirement) !== null && _a !== void 0 ? _a : 'all', (_b = _this.props.negate) !== null && _b !== void 0 ? _b : false)
+                .then(function (isEnabled) { return _this.setState({ shouldShow: _this.applyVariantFilter(isEnabled) }); });
+        };
+        _this.state = { shouldShow: false };
         return _this;
     }
+    Feature.prototype.buildGate = function () {
+        var gate = [];
+        if (this.props.featureKey) {
+            gate.push(this.props.featureKey);
+        }
+        if (this.props.featureKeys) {
+            gate = gate.concat(this.props.featureKeys);
+        }
+        return gate;
+    };
+    Feature.prototype.applyVariantFilter = function (isEnabled) {
+        var _a;
+        var _b = this.props, variant = _b.variant, featureKey = _b.featureKey;
+        if (!isEnabled || variant == null || variant === '') {
+            return isEnabled;
+        }
+        if (!featureKey) {
+            return false;
+        }
+        var assigned = (_a = this.context.toggly) === null || _a === void 0 ? void 0 : _a.getVariant(featureKey);
+        return (assigned === null || assigned === void 0 ? void 0 : assigned.name) === variant;
+    };
     Feature.prototype.componentDidMount = function () {
-        var _this = this;
-        var _a, _b;
-        this.state.gate.length > 0
-            ? this.context
-                .toggly.evaluateFeatureGate(this.state.gate, (_a = this.props.requirement) !== null && _a !== void 0 ? _a : 'all', (_b = this.props.negate) !== null && _b !== void 0 ? _b : false)
-                .then(function (isEnabled) { return _this.setState({ shouldShow: isEnabled }); })
-            : true;
+        var gate = this.buildGate();
+        if (gate.length > 0 && this.context.toggly) {
+            this.runGate();
+            this.unsubscribeRefresh = this.context.toggly.subscribeFeaturesRefresh(this.runGate);
+        }
+    };
+    Feature.prototype.componentDidUpdate = function (prevProps) {
+        var gateChanged = prevProps.featureKey !== this.props.featureKey ||
+            prevProps.featureKeys !== this.props.featureKeys;
+        if (gateChanged ||
+            prevProps.requirement !== this.props.requirement ||
+            prevProps.negate !== this.props.negate ||
+            prevProps.variant !== this.props.variant) {
+            this.runGate();
+        }
+    };
+    Feature.prototype.componentWillUnmount = function () {
+        var _a;
+        (_a = this.unsubscribeRefresh) === null || _a === void 0 ? void 0 : _a.call(this);
+        this.unsubscribeRefresh = undefined;
     };
     Feature.prototype.render = function () {
         return this.state.shouldShow ? this.props.children : null;
@@ -3513,10 +3694,32 @@ function createTogglyProvider(config) {
     });
 }
 
+/**
+ * Subscribes to the current {@link VariantResult} for a feature when variants are enabled on the service.
+ * Re-renders after feature definitions refresh (HTTP load or WebSocket update).
+ */
+function useVariant(featureKey) {
+    var toggly = reactExports.useContext(context).toggly;
+    var _a = reactExports.useState(function () { var _a; return (_a = toggly === null || toggly === void 0 ? void 0 : toggly.getVariant(featureKey)) !== null && _a !== void 0 ? _a : null; }), variant = _a[0], setVariant = _a[1];
+    reactExports.useEffect(function () {
+        if (!toggly) {
+            setVariant(null);
+            return undefined;
+        }
+        var sync = function () {
+            setVariant(toggly.getVariant(featureKey));
+        };
+        sync();
+        return toggly.subscribeFeaturesRefresh(sync);
+    }, [toggly, featureKey]);
+    return variant;
+}
+
 exports.Consumer = Consumer;
 exports.Feature = Feature;
 exports.Provider = Provider;
 exports.Toggly = Toggly;
 exports.context = context;
 exports.createTogglyProvider = createTogglyProvider;
+exports.useVariant = useVariant;
 //# sourceMappingURL=index.js.map

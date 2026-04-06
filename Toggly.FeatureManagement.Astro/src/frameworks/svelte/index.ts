@@ -4,6 +4,6 @@
  * Note: Feature.svelte is distributed as source and will be compiled by your Astro project
  */
 
-export { featureFlag, featureGate, flags, isReady } from './stores.js';
+export { featureFlag, featureGate, featureVariant, flags, isReady, variants } from './stores.js';
 
 

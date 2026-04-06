@@ -70,6 +70,7 @@ class Toggly:
         app.config.setdefault("TOGGLY_REFRESH_INTERVAL", 180.0)
         app.config.setdefault("TOGGLY_FEATURE_DEFAULTS", {})
         app.config.setdefault("TOGGLY_USE_SIGNED_DEFINITIONS", False)
+        app.config.setdefault("TOGGLY_ENABLE_VARIANTS", False)
         app.config.setdefault("TOGGLY_CONNECT_TIMEOUT", 10.0)
         app.config.setdefault("TOGGLY_REQUEST_TIMEOUT", 30.0)
         app.config.setdefault("TOGGLY_ENABLE_USAGE_TRACKING", True)
@@ -104,6 +105,7 @@ class Toggly:
             feature_defaults=app.config.get("TOGGLY_FEATURE_DEFAULTS", {}),
             refresh_interval=app.config.get("TOGGLY_REFRESH_INTERVAL", 180.0),
             use_signed_definitions=app.config.get("TOGGLY_USE_SIGNED_DEFINITIONS", False),
+            enable_variants=app.config.get("TOGGLY_ENABLE_VARIANTS", False),
             connect_timeout=app.config.get("TOGGLY_CONNECT_TIMEOUT", 10.0),
             request_timeout=app.config.get("TOGGLY_REQUEST_TIMEOUT", 30.0),
             enable_usage_tracking=app.config.get("TOGGLY_ENABLE_USAGE_TRACKING", True),
