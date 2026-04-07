@@ -96,6 +96,14 @@ namespace Toggly.FeatureManagement
             Formatting = Formatting.None
         };
 
+        /// <summary>
+        /// JWKS and similar responses use lowercase RFC JSON names; STJ defaults are case-sensitive.
+        /// </summary>
+        private static readonly JsonSerializerOptions SystemJsonCaseInsensitive = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
         /// <summary>Single SHA-256 over UTF-8 payload, matching server-side signing before ES256.</summary>
         private static byte[] ComputeSignedDefinitionsPayloadHash(string dataToVerify)
         {
@@ -307,7 +315,7 @@ namespace Toggly.FeatureManagement
 
                     // Get the raw JSON string first
                     var rawJson = await newDefinitionsRequest.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    var signedDefinitionsResponse = System.Text.Json.JsonSerializer.Deserialize<SignedDefinitionsResponse>(rawJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    var signedDefinitionsResponse = System.Text.Json.JsonSerializer.Deserialize<SignedDefinitionsResponse>(rawJson, SystemJsonCaseInsensitive);
                     if (signedDefinitionsResponse == null)
                     {
                         _logger.LogWarning("Received empty response from toggly");
@@ -957,7 +965,7 @@ namespace Toggly.FeatureManagement
                         jwksResponse.RequestMessage?.RequestUri, (int)jwksResponse.StatusCode, body);
                     return null;
                 }
-                var jwks = await jwksResponse.Content.ReadFromJsonAsync<JsonWebKeySet>().ConfigureAwait(false);
+                var jwks = await jwksResponse.Content.ReadFromJsonAsync<JsonWebKeySet>(SystemJsonCaseInsensitive).ConfigureAwait(false);
                 if (jwks == null)
                 {
                     _logger.LogError("Received empty JWKS from toggly");

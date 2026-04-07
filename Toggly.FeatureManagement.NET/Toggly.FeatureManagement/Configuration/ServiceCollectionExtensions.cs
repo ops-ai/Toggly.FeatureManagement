@@ -148,6 +148,11 @@ namespace Toggly.FeatureManagement.Configuration
             services.AddSingleton<IMetricsDebug>(x => x.GetRequiredService<TogglyMetricsService>());
         }
 
+        /// <summary>
+        /// Adds Microsoft Feature Management with Toggly filters and decorates <see cref="IFeatureManager"/> with <see cref="TogglyFeatureManager"/>.
+        /// </summary>
+        /// <param name="services">The application service collection.</param>
+        /// <returns>The feature management builder for further configuration.</returns>
         public static IFeatureManagementBuilder AddTogglyFeatureManagement(this IServiceCollection services)
         {
             var featureManagement = services.AddFeatureManagement()

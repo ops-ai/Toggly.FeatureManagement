@@ -13,6 +13,7 @@
 		<PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);1591</NoWarn>
     <Description>Toggly.FeatureManagement extends Microsoft.FeatureManagement with extensions to handle feature state changes, Decorate and register services that are injected when a feature is on, feature usage tracking, and integration with toggly.io</Description>
     <AssemblyTitle>Toggly Feature Management</AssemblyTitle>
   </PropertyGroup>
