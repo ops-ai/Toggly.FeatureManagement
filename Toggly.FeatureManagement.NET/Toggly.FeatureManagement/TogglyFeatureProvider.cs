@@ -314,6 +314,24 @@ namespace Toggly.FeatureManagement
                         return;
                     }
 
+                    if (signedDefinitionsResponse.Defs == null)
+                    {
+                        _logger.LogWarning("Signed definitions response missing defs");
+                        return;
+                    }
+
+                    if (string.IsNullOrEmpty(signedDefinitionsResponse.Signature))
+                    {
+                        _logger.LogWarning("Signed definitions response missing signature");
+                        return;
+                    }
+
+                    if (string.IsNullOrEmpty(signedDefinitionsResponse.Kid))
+                    {
+                        _logger.LogWarning("Signed definitions response missing kid");
+                        return;
+                    }
+
                     // Check timestamp (thread-safe read)
                     var currentTimestamp = Interlocked.Read(ref _lastDefinitionsTimestamp);
                     if (signedDefinitionsResponse.Timestamp < currentTimestamp)
@@ -871,8 +889,14 @@ namespace Toggly.FeatureManagement
                     var jwkSnapshot = await _snapshotProvider.GetJwkSnapshotAsync(CancellationToken.None).ConfigureAwait(false);
                     if (jwkSnapshot.Jwks != null)
                     {
-                        foreach (var key in jwkSnapshot.Jwks.Keys)
+                        foreach (var key in jwkSnapshot.Jwks.Keys ?? Enumerable.Empty<JsonWebKey>())
                         {
+                            if (string.IsNullOrEmpty(key.X) || string.IsNullOrEmpty(key.Y) || string.IsNullOrEmpty(key.Kid) || string.IsNullOrEmpty(key.Alg))
+                            {
+                                _logger.LogWarning("Skipping JWK with missing coordinates or metadata");
+                                continue;
+                            }
+
                             // Verify key ID for each key
                             byte[] xCoord = Convert.FromBase64String(key.X.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.X.Length % 4) % 4));
                             byte[] yCoord = Convert.FromBase64String(key.Y.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.Y.Length % 4) % 4));
@@ -942,8 +966,20 @@ namespace Toggly.FeatureManagement
                 if (_snapshotProvider != null)
                     await _snapshotProvider.SaveJwkSnapshot(jwks, ((DateTimeOffset)DateTime.UtcNow.AddDays(30)).ToUnixTimeSeconds(), CancellationToken.None).ConfigureAwait(false);
                 
-                foreach (var key in jwks!.Keys)
+                if (jwks.Keys == null || jwks.Keys.Count == 0)
                 {
+                    _logger.LogError("JWKS response contained no keys");
+                    return null;
+                }
+
+                foreach (var key in jwks.Keys)
+                {
+                    if (string.IsNullOrEmpty(key.X) || string.IsNullOrEmpty(key.Y) || string.IsNullOrEmpty(key.Kid) || string.IsNullOrEmpty(key.Alg))
+                    {
+                        _logger.LogWarning("Skipping JWK with missing coordinates or metadata");
+                        continue;
+                    }
+
                     // Verify key ID for each key
                     byte[] xCoord = Convert.FromBase64String(key.X.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.X.Length % 4) % 4));
                     byte[] yCoord = Convert.FromBase64String(key.Y.Replace('-', '+').Replace('_', '/') + new string('=', (4 - key.Y.Length % 4) % 4));

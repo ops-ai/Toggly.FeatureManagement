@@ -202,8 +202,8 @@ public class SignedDefinitionsResponseTests
 
         // Assert
         deserialized.Should().NotBeNull();
-        deserialized!.Defs.Should().HaveCount(2);
-        deserialized.Defs[0].FeatureKey.Should().Be("feature1");
+        deserialized!.Defs.Should().NotBeNull().And.HaveCount(2);
+        deserialized.Defs![0].FeatureKey.Should().Be("feature1");
         deserialized.Defs[1].FeatureKey.Should().Be("feature2");
         deserialized.Signature.Should().Be("round-trip-signature");
         deserialized.Timestamp.Should().Be(9876543210L);

@@ -346,20 +346,40 @@ namespace Toggly.FeatureManagement
                 for (int i = 0; i < allFeatureKeys.Count; i++)
                 {
                     var featureKey = allFeatureKeys[i];
+                    var enabledCheckCount = stats.TryGetValue((featureKey, (byte)StatType.Enabled), out var enabledCount) ? enabledCount : 0;
+                    var disabledCheckCount = stats.TryGetValue((featureKey, (byte)StatType.Disabled), out var disabledCount) ? disabledCount : 0;
+                    var uniqueRequestEnabledCount = stats.TryGetValue((featureKey, (byte)StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0;
+                    var uniqueRequestDisabledCount = stats.TryGetValue((featureKey, (byte)StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0;
+                    var usedCountTotal = stats.TryGetValue((featureKey, (byte)StatType.Used), out var usedCount) ? usedCount : 0;
+
                     var statMessage = new StatMessage
                     {
-                        EnabledCount = stats.TryGetValue((featureKey, (byte)StatType.Enabled), out var enabledCount) ? enabledCount : 0,
-                        DisabledCount = stats.TryGetValue((featureKey, (byte)StatType.Disabled), out var disabledCount) ? disabledCount : 0,
                         Feature = featureKey,
-                        // Use correct maps for enabled vs disabled
                         UniqueContextIdentifierEnabledCount = uniqueUsageEnabledMap.TryGetValue(featureKey, out var uniqueIdEnabledCount) ? uniqueIdEnabledCount.Count : 0,
                         UniqueContextIdentifierDisabledCount = uniqueUsageDisabledMap.TryGetValue(featureKey, out var uniqueIdDisabledCount) ? uniqueIdDisabledCount.Count : 0,
-                        UniqueRequestEnabledCount = stats.TryGetValue((featureKey, (byte)StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0,
-                        UniqueRequestDisabledCount = stats.TryGetValue((featureKey, (byte)StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0,
-                        UsedCount = stats.TryGetValue((featureKey, (byte)StatType.Used), out var usedCount) ? usedCount : 0,
                         UniqueUsersUsedCount = uniqueUsageUsedMap.TryGetValue(featureKey, out var uniqueUsedCount) ? uniqueUsedCount.Count : 0
                     };
-                    
+
+                    // Legacy scalar counts map to variantStats (enabled / disabled); server reads these instead of deprecated fields.
+                    if (enabledCheckCount > 0 || uniqueRequestEnabledCount > 0 || usedCountTotal > 0)
+                    {
+                        statMessage.VariantStats["enabled"] = new VariantStats
+                        {
+                            CheckCount = enabledCheckCount,
+                            RequestCount = uniqueRequestEnabledCount,
+                            UsedCount = usedCountTotal
+                        };
+                    }
+
+                    if (disabledCheckCount > 0 || uniqueRequestDisabledCount > 0)
+                    {
+                        statMessage.VariantStats["disabled"] = new VariantStats
+                        {
+                            CheckCount = disabledCheckCount,
+                            RequestCount = uniqueRequestDisabledCount
+                        };
+                    }
+
                     // Add viewedCount via variantStats (new approach, not legacy fields)
                     var viewedCount = stats.TryGetValue((featureKey, (byte)StatType.Viewed), out var vc) ? vc : 0;
                     if (viewedCount > 0)

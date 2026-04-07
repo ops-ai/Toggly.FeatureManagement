@@ -7,6 +7,6 @@ namespace Toggly.FeatureManagement.Data
     /// </summary>
     public class JsonWebKeySet
     {
-        public List<JsonWebKey> Keys { get; set; }
+        public List<JsonWebKey>? Keys { get; set; }
     }
 }

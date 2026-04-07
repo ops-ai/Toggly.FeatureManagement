@@ -12,13 +12,13 @@ namespace Toggly.FeatureManagement.Data
         /// List of feature definitions
         /// </summary>
         [JsonPropertyName("defs")]
-        public List<FeatureDefinitionModel> Defs { get; set; }
+        public List<FeatureDefinitionModel>? Defs { get; set; }
 
         /// <summary>
         /// Signature of the definitions
         /// </summary>
         [JsonPropertyName("signature")]
-        public string Signature { get; set; }
+        public string? Signature { get; set; }
 
         /// <summary>
         /// Timestamp of the definitions
@@ -30,6 +30,6 @@ namespace Toggly.FeatureManagement.Data
         /// Key Id of the signature
         /// </summary>
         [JsonPropertyName("kid")]
-        public string Kid { get; set; }
+        public string? Kid { get; set; }
     }
 }
