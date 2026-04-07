@@ -16,8 +16,17 @@ using Grpc.Core;
 
 namespace Toggly.FeatureManagement.Configuration
 {
+    /// <summary>
+    /// Registers Toggly feature management, HTTP clients, gRPC clients, and related services.
+    /// </summary>
     public static class ServiceCollectionExtensions
     {
+        /// <summary>
+        /// Adds Toggly services using configuration from the supplied setup action.
+        /// </summary>
+        /// <param name="services">The application service collection.</param>
+        /// <param name="togglyOptions">Configures <see cref="TogglySettings"/>.</param>
+        /// <returns><paramref name="services"/> for chaining.</returns>
         public static IServiceCollection AddToggly(this IServiceCollection services, Action<TogglySettings> togglyOptions)
         {
             services.Configure(togglyOptions);
@@ -27,6 +36,12 @@ namespace Toggly.FeatureManagement.Configuration
             return services;
         }
 
+        /// <summary>
+        /// Adds Toggly services using the provided settings instance.
+        /// </summary>
+        /// <param name="services">The application service collection.</param>
+        /// <param name="togglyOptions">Toggly options to apply.</param>
+        /// <returns><paramref name="services"/> for chaining.</returns>
         public static IServiceCollection AddToggly(this IServiceCollection services, TogglySettings togglyOptions)
         {
             services.AddOptions<TogglySettings>()
@@ -46,6 +61,11 @@ namespace Toggly.FeatureManagement.Configuration
             return services;
         }
 
+        /// <summary>
+        /// Adds Toggly services. Expects <see cref="TogglySettings"/> to be configured separately (e.g. from configuration).
+        /// </summary>
+        /// <param name="services">The application service collection.</param>
+        /// <returns><paramref name="services"/> for chaining.</returns>
         public static IServiceCollection AddToggly(this IServiceCollection services)
         {
             AddCoreServices(services);

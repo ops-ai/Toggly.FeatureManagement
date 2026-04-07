@@ -15,12 +15,12 @@ namespace Toggly.FeatureManagement.Data
         /// <summary>
         /// Unique key of feature
         /// </summary>
-        public string FeatureKey { get; set; }
+        public string FeatureKey { get; set; } = string.Empty;
 
         /// <summary>
         /// List of filters to checked to determine if feature is enabled
         /// </summary>
-        public List<FeatureFilter> Filters { get; set; }
+        public List<FeatureFilter> Filters { get; set; } = new List<FeatureFilter>();
 
         /// <summary>
         /// List of metrics to be tracked
@@ -103,7 +103,7 @@ namespace Toggly.FeatureManagement.Data
         /// <summary>
         /// Unique name of filter
         /// </summary>
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
 
         /// <summary>
         /// List of parameters for filter

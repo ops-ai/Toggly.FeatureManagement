@@ -55,8 +55,12 @@ namespace Toggly.FeatureManagement.Helpers
 
             if (!type.IsEnum)
                 throw new ArgumentException("The provided feature name must be an enum.", nameof(featureName));
-            
-            DecorateForFeature<TInterface, TDecorator>(services, Enum.GetName(featureName.GetType(), featureName));
+
+            var name = Enum.GetName(featureName.GetType(), featureName);
+            if (string.IsNullOrEmpty(name))
+                throw new ArgumentException("The enum value has no registered name.", nameof(featureName));
+
+            DecorateForFeature<TInterface, TDecorator>(services, name);
         }
 
         public static void DecorateForFeature<TInterface, TDecorator>(this IServiceCollection services, string featureName)
@@ -96,7 +100,11 @@ namespace Toggly.FeatureManagement.Helpers
             if (!type.IsEnum)
                 throw new ArgumentException("The provided feature name must be an enum.", nameof(featureName));
 
-            AddTransientForFeature<TInterface, TImplementation>(services, Enum.GetName(featureName.GetType(), featureName));
+            var name = Enum.GetName(featureName.GetType(), featureName);
+            if (string.IsNullOrEmpty(name))
+                throw new ArgumentException("The enum value has no registered name.", nameof(featureName));
+
+            AddTransientForFeature<TInterface, TImplementation>(services, name);
         }
         
         public static void AddTransientForFeature<TInterface, TImplementation>(this IServiceCollection services, string featureName)
@@ -132,7 +140,11 @@ namespace Toggly.FeatureManagement.Helpers
             if (!type.IsEnum)
                 throw new ArgumentException("The provided feature name must be an enum.", nameof(featureName));
 
-            AddScopedForFeature<TInterface, TImplementation>(services, Enum.GetName(featureName.GetType(), featureName));
+            var name = Enum.GetName(featureName.GetType(), featureName);
+            if (string.IsNullOrEmpty(name))
+                throw new ArgumentException("The enum value has no registered name.", nameof(featureName));
+
+            AddScopedForFeature<TInterface, TImplementation>(services, name);
         }
 
         public static void AddScopedForFeature<TInterface, TImplementation>(this IServiceCollection services, string featureName)
