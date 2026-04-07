@@ -102,7 +102,7 @@ namespace Demo.Mvc
             });
             //HangfireExtensions
             var featureStateService = app.Services.GetRequiredService<IFeatureStateService>();
-            featureStateService.AddOrUpdateJob<ITestRecurringJob>(FeatureFlags.HourlyJob2, "Hourly job 2", s => s.RunAsync(), Cron.Hourly());
+            featureStateService.AddOrUpdateJob<ITestRecurringJob>(app.Services, FeatureFlags.HourlyJob2, "Hourly job 2", s => s.RunAsync(), Cron.Hourly());
             
             featureStateService.WhenFeatureTurnsOn(FeatureFlags.HourlyJob, () =>
             {

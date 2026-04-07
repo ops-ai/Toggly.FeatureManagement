@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Hangfire;
 using Moq;
 using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.HangfireExtensions;
@@ -9,9 +10,17 @@ namespace Toggly.FeatureManagement.Hangfire.Tests;
 public class HangfireExtensionsTests
 {
     private readonly Mock<IFeatureStateService> _featureStateServiceMock;
+    private readonly Mock<IServiceProvider> _serviceProviderMock;
+    private readonly Mock<IRecurringJobManager> _recurringJobManagerMock;
 
     public HangfireExtensionsTests()
     {
+        _recurringJobManagerMock = new Mock<IRecurringJobManager>();
+        _serviceProviderMock = new Mock<IServiceProvider>();
+        _serviceProviderMock
+            .Setup(sp => sp.GetService(typeof(IRecurringJobManager)))
+            .Returns(_recurringJobManagerMock.Object);
+
         _featureStateServiceMock = new Mock<IFeatureStateService>();
         _featureStateServiceMock
             .Setup(x => x.WhenFeatureTurnsOn(It.IsAny<object>(), It.IsAny<Action>()))
@@ -33,7 +42,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithStringFeatureKey_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "feature-key",
             () => Console.WriteLine("test"),
             "*/5 * * * *");
@@ -46,7 +55,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithEnumFeatureKey_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             TestFeatures.FeatureA,
             () => Console.WriteLine("test"),
             "*/5 * * * *");
@@ -59,7 +68,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithIntegerFeatureKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             123,
             () => Console.WriteLine("test"),
             "*/5 * * * *");
@@ -73,7 +82,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithObjectFeatureKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             new object(),
             () => Console.WriteLine("test"),
             "*/5 * * * *");
@@ -87,7 +96,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithBoolFeatureKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             true,
             () => Console.WriteLine("test"),
             "*/5 * * * *");
@@ -105,7 +114,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithStringCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "my-feature",
             () => Console.WriteLine("job"),
             "0 * * * *");
@@ -123,7 +132,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithFuncCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "my-feature",
             () => Console.WriteLine("job"),
             () => "0 * * * *");
@@ -141,7 +150,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithEnumKey_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             TestFeatures.FeatureB,
             () => Console.WriteLine("job"),
             "0 * * * *");
@@ -159,7 +168,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithRecurringJobId_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "my-feature",
             "custom-job-id",
             () => Console.WriteLine("job"),
@@ -182,7 +191,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_AsyncWithStringCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "async-feature",
             () => Task.CompletedTask,
             "0 * * * *");
@@ -200,7 +209,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_AsyncWithFuncCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "async-feature",
             () => Task.CompletedTask,
             () => "0 * * * *");
@@ -218,7 +227,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_AsyncWithRecurringJobId_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "async-feature",
             "async-job-id",
             () => Task.CompletedTask,
@@ -241,7 +250,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_Generic_WithStringFeatureKey_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "feature-key",
             svc => svc.DoWork(),
             "*/5 * * * *");
@@ -254,7 +263,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_Generic_WithInvalidKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             12345L,
             svc => svc.DoWork(),
             "*/5 * * * *");
@@ -268,7 +277,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_Generic_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "generic-feature",
             svc => svc.DoWork(),
             "0 * * * *");
@@ -286,7 +295,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsync_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "generic-async-feature",
             svc => svc.DoWorkAsync(),
             "0 * * * *");
@@ -304,7 +313,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericWithJobId_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "generic-feature",
             "custom-id",
             svc => svc.DoWork(),
@@ -323,7 +332,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithJobId_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "generic-async-feature",
             "async-custom-id",
             svc => svc.DoWorkAsync(),
@@ -346,7 +355,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithTimeZone_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "feature",
             () => Console.WriteLine("test"),
             "0 * * * *",
@@ -360,7 +369,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithCustomQueue_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "feature",
             () => Console.WriteLine("test"),
             "0 * * * *",
@@ -374,7 +383,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithAllOptionalParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "feature",
             "job-id",
             () => Console.WriteLine("test"),
@@ -394,7 +403,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericWithFuncCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "generic-func-feature",
             svc => svc.DoWork(),
             () => "0 * * * *");
@@ -412,7 +421,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericWithFuncCron_InvalidKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             12345,
             svc => svc.DoWork(),
             () => "0 * * * *");
@@ -426,7 +435,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithFuncCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "generic-async-func-feature",
             svc => svc.DoWorkAsync(),
             () => "0 * * * *");
@@ -444,7 +453,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithFuncCron_InvalidKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             false,
             svc => svc.DoWorkAsync(),
             () => "0 * * * *");
@@ -462,7 +471,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericWithJobIdAndFuncCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "generic-jobid-func-feature",
             "my-job-id",
             svc => svc.DoWork(),
@@ -481,7 +490,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericWithJobIdAndFuncCron_InvalidKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             3.14159,
             "my-job-id",
             svc => svc.DoWork(),
@@ -496,7 +505,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithJobIdAndFuncCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "generic-async-jobid-func-feature",
             "async-job-id",
             svc => svc.DoWorkAsync(),
@@ -515,7 +524,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithJobIdAndFuncCron_InvalidKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             DateTime.Now,
             "async-job-id",
             svc => svc.DoWorkAsync(),
@@ -534,7 +543,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithJobIdAndFuncCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "jobid-func-feature",
             "action-job-id",
             () => Console.WriteLine("job"),
@@ -554,7 +563,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_WithJobIdAndFuncCron_InvalidKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             new List<int>(),
             "action-job-id",
             () => Console.WriteLine("job"),
@@ -574,7 +583,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_AsyncWithJobIdAndFuncCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "async-jobid-func-feature",
             "async-action-job-id",
             () => Task.CompletedTask,
@@ -593,7 +602,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_AsyncWithJobIdAndFuncCron_InvalidKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             new Dictionary<string, int>(),
             "async-action-job-id",
             () => Task.CompletedTask,
@@ -612,7 +621,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithJobIdAndStringCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "generic-async-jobid-string-feature",
             "string-cron-job-id",
             svc => svc.DoWorkAsync(),
@@ -631,7 +640,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithJobIdAndStringCron_InvalidKey_ThrowsArgumentException()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             42.0m,
             "string-cron-job-id",
             svc => svc.DoWorkAsync(),
@@ -650,7 +659,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_EnumWithFuncCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             TestFeatures.FeatureA,
             () => Console.WriteLine("enum test"),
             () => "0 * * * *");
@@ -668,7 +677,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_EnumGenericWithStringCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             TestFeatures.FeatureB,
             svc => svc.DoWork(),
             "0 * * * *");
@@ -686,7 +695,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_EnumAsyncWithJobId_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob(
+        _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             TestFeatures.FeatureA,
             "enum-async-job-id",
             () => Task.CompletedTask,
@@ -705,7 +714,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_EnumGenericAsyncWithFuncCron_RegistersBothCallbacks()
     {
         // Act
-        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             TestFeatures.FeatureB,
             svc => svc.DoWorkAsync(),
             () => "0 * * * *");
@@ -727,7 +736,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericWithAllParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "feature",
             svc => svc.DoWork(),
             "0 * * * *",
@@ -742,7 +751,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithAllParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "feature",
             svc => svc.DoWorkAsync(),
             "0 * * * *",
@@ -757,7 +766,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericWithJobIdAndAllParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "feature",
             "full-params-job-id",
             svc => svc.DoWork(),
@@ -773,7 +782,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithJobIdAndAllParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "feature",
             "full-async-params-job-id",
             svc => svc.DoWorkAsync(),
@@ -789,7 +798,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_AsyncWithAllParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "feature",
             () => Task.CompletedTask,
             "0 * * * *",
@@ -804,7 +813,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_AsyncWithJobIdAndAllParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob(_serviceProviderMock.Object,
             "feature",
             "async-all-params-job-id",
             () => Task.CompletedTask,
@@ -820,7 +829,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericWithFuncCronAndAllParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "feature",
             svc => svc.DoWork(),
             () => "0 * * * *",
@@ -835,7 +844,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithFuncCronAndAllParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "feature",
             svc => svc.DoWorkAsync(),
             () => "0 * * * *",
@@ -850,7 +859,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericWithJobIdFuncCronAndAllParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "feature",
             "job-id",
             svc => svc.DoWork(),
@@ -866,7 +875,7 @@ public class HangfireExtensionsTests
     public void AddOrUpdateJob_GenericAsyncWithJobIdFuncCronAndAllParameters_DoesNotThrow()
     {
         // Arrange & Act
-        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(
+        var act = () => _featureStateServiceMock.Object.AddOrUpdateJob<TestService>(_serviceProviderMock.Object,
             "feature",
             "async-job-id",
             svc => svc.DoWorkAsync(),

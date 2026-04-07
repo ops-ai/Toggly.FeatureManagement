@@ -19,6 +19,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using System.Threading.Tasks;
 using Toggly.FeatureManagement.Data;
 using TogglyVariantDefinition = Toggly.FeatureManagement.Data.VariantDefinition;
@@ -81,6 +83,28 @@ namespace Toggly.FeatureManagement
         
         private IMetricsService? _metricsService = null;
         private readonly object _metricsServiceLock = new object();
+
+        /// <summary>Newtonsoft settings aligned with Toggly Web definitions signing (camelCase, dictionary keys unchanged).</summary>
+        private static readonly JsonSerializerSettings SignedDefinitionsSerializerSettings = new JsonSerializerSettings
+        {
+            ContractResolver = new CamelCasePropertyNamesContractResolver
+            {
+                NamingStrategy = new CamelCaseNamingStrategy { ProcessDictionaryKeys = false }
+            },
+            ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+            Converters = { new Newtonsoft.Json.Converters.StringEnumConverter() },
+            Formatting = Formatting.None
+        };
+
+        /// <summary>Single SHA-256 over UTF-8 payload, matching server-side signing before ES256.</summary>
+        private static byte[] ComputeSignedDefinitionsPayloadHash(string dataToVerify)
+        {
+            var dataBytes = Encoding.UTF8.GetBytes(dataToVerify);
+            using (var sha256 = SHA256.Create())
+            {
+                return sha256.ComputeHash(dataBytes);
+            }
+        }
 
         /// <summary>
         /// Constructor
@@ -163,25 +187,10 @@ namespace Toggly.FeatureManagement
                                 _logger.LogError("No ES256 key found in JWKS");
                                 return;
                             }
-                            var serializerOptions = new JsonSerializerOptions
-                            {
-                                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                                DictionaryKeyPolicy = null, // Don't change dictionary key casing
-                                WriteIndented = false,
-                                // DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-                                Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-                            };
-                            
-                            var jsonData = JsonSerializer.Serialize(snapshot.Features, serializerOptions);
+                            // Match server signing: Newtonsoft camelCase, dictionary keys unchanged (Toggly Web ResponseSigner).
+                            var jsonData = JsonConvert.SerializeObject(snapshot.Features, SignedDefinitionsSerializerSettings);
                             var dataToVerify = $"{jsonData}|{snapshot.Timestamp}";
-                            byte[] hash;
-                            using (var sha256Instance = SHA256.Create())
-                            {
-                                // The definitions signer pre-hashes data before calling
-                                // crypto.subtle.sign which hashes again — double-hash here to match.
-                                var first = sha256Instance.ComputeHash(Encoding.UTF8.GetBytes(dataToVerify));
-                                hash = sha256Instance.ComputeHash(first);
-                            }
+                            var hash = ComputeSignedDefinitionsPayloadHash(dataToVerify);
                             if (!ecdsa!.VerifyHash(hash, signature))
                             {
                                 _logger.LogError("Invalid signature");
@@ -298,7 +307,7 @@ namespace Toggly.FeatureManagement
 
                     // Get the raw JSON string first
                     var rawJson = await newDefinitionsRequest.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    var signedDefinitionsResponse = JsonSerializer.Deserialize<SignedDefinitionsResponse>(rawJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    var signedDefinitionsResponse = System.Text.Json.JsonSerializer.Deserialize<SignedDefinitionsResponse>(rawJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                     if (signedDefinitionsResponse == null)
                     {
                         _logger.LogWarning("Received empty response from toggly");
@@ -323,15 +332,7 @@ namespace Toggly.FeatureManagement
                     var dataToVerify = $"{rawData}|{signedDefinitionsResponse.Timestamp}";
                     _logger.LogDebug("Data to verify: {DataToVerify}", dataToVerify);
                     
-                    var dataBytes = Encoding.UTF8.GetBytes(dataToVerify);
-                    byte[] hash;
-                    using (var sha256Instance = SHA256.Create())
-                    {
-                        // The definitions signer pre-hashes data before calling
-                        // crypto.subtle.sign which hashes again — double-hash here to match.
-                        var first = sha256Instance.ComputeHash(dataBytes);
-                        hash = sha256Instance.ComputeHash(first);
-                    }
+                    var hash = ComputeSignedDefinitionsPayloadHash(dataToVerify);
                     _logger.LogDebug("Hash (hex): {Hash}", BitConverter.ToString(hash).Replace("-", ""));
 
                     // Verify signature
@@ -457,7 +458,7 @@ namespace Toggly.FeatureManagement
                                 if (type == "definitions" && !_useSignedDefinitions
                                     && doc.RootElement.TryGetProperty("data", out var dataElement))
                                 {
-                                    var definitions = JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
+                                    var definitions = System.Text.Json.JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
                                         dataElement.GetRawText(),
                                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                                     if (definitions != null)

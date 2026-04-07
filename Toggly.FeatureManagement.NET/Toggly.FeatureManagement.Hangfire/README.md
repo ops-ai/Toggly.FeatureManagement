@@ -30,6 +30,8 @@ featureStateService.WhenFeatureTurnsOff(FeatureFlags.HourlyJob, () =>
 
 ``` csharp
 var featureStateService = app.Services.GetRequiredService<IFeatureStateService>();
-featureStateService.AddOrUpdateJob<ITestRecurringJob>(FeatureFlags.HourlyJob, 
+// Pass a service provider that resolves IRecurringJobManager (e.g. app.ApplicationServices) so jobs can be
+// registered when Hangfire.Server runs in another process.
+featureStateService.AddOrUpdateJob<ITestRecurringJob>(app.Services, FeatureFlags.HourlyJob,
         "Hourly job", s => s.RunAsync(), Cron.Hourly());
 ```
