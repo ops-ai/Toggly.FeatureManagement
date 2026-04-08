@@ -104,13 +104,18 @@ namespace Toggly.FeatureManagement
             PropertyNameCaseInsensitive = true
         };
 
-        /// <summary>Single SHA-256 over UTF-8 payload, matching server-side signing before ES256.</summary>
+        /// <summary>
+        /// Hash payload the same way as <c>Toggly.Definitions</c> <c>signES256</c>: UTF-8 bytes are
+        /// SHA-256 digested, then Web Crypto <c>subtle.sign(ECDSA, SHA-256, …)</c> digests that
+        /// digest again before ECDSA. Matches <c>toggly-go/toggly/crypto/verify.go</c>.
+        /// </summary>
         private static byte[] ComputeSignedDefinitionsPayloadHash(string dataToVerify)
         {
             var dataBytes = Encoding.UTF8.GetBytes(dataToVerify);
             using (var sha256 = SHA256.Create())
             {
-                return sha256.ComputeHash(dataBytes);
+                var firstDigest = sha256.ComputeHash(dataBytes);
+                return sha256.ComputeHash(firstDigest);
             }
         }
 
