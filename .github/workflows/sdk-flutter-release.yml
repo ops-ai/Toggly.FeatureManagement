@@ -43,7 +43,14 @@ jobs:
 
           LATEST_TAG=$(git tag -l "flutter-sdk-v*" --sort=-version:refname | head -n 1)
           if [ -z "$LATEST_TAG" ]; then
-            CURRENT_VERSION="0.0.0"
+            # No release tags yet (first run or tags missing): use pubspec so we never
+            # try to publish e.g. 0.0.1 when pub.dev already has 1.x (pub rejects lower versions).
+            CURRENT_VERSION=$(grep -E '^version:' "${{ env.SDK_ROOT }}/pubspec.yaml" | head -1 | awk '{print $2}' | sed 's/#.*//' | tr -d ' ')
+            CURRENT_VERSION="${CURRENT_VERSION%%+*}"
+            if [ -z "$CURRENT_VERSION" ]; then
+              CURRENT_VERSION="0.0.0"
+            fi
+            echo "No flutter-sdk-v* tag found; seeding from pubspec: $CURRENT_VERSION"
           else
             CURRENT_VERSION="${LATEST_TAG#flutter-sdk-v}"
           fi
