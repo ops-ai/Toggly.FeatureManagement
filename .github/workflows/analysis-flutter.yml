@@ -139,7 +139,7 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - Flutter/Dart"
             -Dsonar.sources=lib
             -Dsonar.tests=test
-            -Dsonar.exclusions=**/.*/**,**/example/**,**/benchmarks/**,**/*.g.dart,**/*.freezed.dart
+            -Dsonar.exclusions=**/.*/**,**/example/**,**/benchmark/**,**/*.g.dart,**/*.freezed.dart
             -Dsonar.dart.lcov.reportPaths=coverage/lcov.info
         continue-on-error: true
 
@@ -162,7 +162,7 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - Flutter/Dart"
             -Dsonar.sources=lib
             -Dsonar.tests=test
-            -Dsonar.exclusions=**/.*/**,**/example/**,**/benchmarks/**,**/*.g.dart,**/*.freezed.dart
+            -Dsonar.exclusions=**/.*/**,**/example/**,**/benchmark/**,**/*.g.dart,**/*.freezed.dart
             -Dsonar.dart.lcov.reportPaths=coverage/lcov.info
             -Dsonar.dependencyCheck.reportPath=../../dependency-check-reports/dependency-check-report.xml
         continue-on-error: true

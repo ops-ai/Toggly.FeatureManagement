@@ -4,7 +4,7 @@
 2026-04-08
 
 ### Maintenance
-- Maintenance release; no SDK API or behavior changes.
+- Satisfied pub.dev publish checks: bounded runtime dependency versions, `.pubignore` for the local benchmark app (not shipped on pub.dev), top-level `benchmarks/` renamed to `benchmark/` for layout consistency, and minor analyzer cleanups in `toggly.dart`.
 
 
 ## 1.1.15

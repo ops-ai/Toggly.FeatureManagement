@@ -11,8 +11,6 @@ import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 import 'package:rxdart/rxdart.dart';
 
-import 'models/variant_result.dart';
-
 /// Static class providing feature flags support.
 ///
 /// Allows enabling and disabling of features easily. Can be used with or without Toggly.io.
@@ -586,7 +584,7 @@ class Toggly with WidgetsBindingObserver {
       final defsPayload =
           signedResponse['defs'] ?? signedResponse['data'] ?? <String, dynamic>{};
       final defs = defsPayload is Map
-          ? Map<String, dynamic>.from(defsPayload as Map)
+          ? Map<String, dynamic>.from(defsPayload)
           : <String, dynamic>{};
 
       final signature = signedResponse['signature'] as String?;

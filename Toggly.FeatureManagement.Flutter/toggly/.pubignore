@@ -1,0 +1,2 @@
+# Local performance harness (separate pubspec); not shipped on pub.dev
+benchmark/
