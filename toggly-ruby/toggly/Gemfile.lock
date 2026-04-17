@@ -93,7 +93,7 @@ GEM
       event_emitter
       mutex_m
       websocket
-    yard (0.9.38)
+    yard (0.9.42)
 
 PLATFORMS
   arm64-darwin-25
