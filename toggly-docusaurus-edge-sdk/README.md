@@ -69,7 +69,7 @@ module.exports = {
     [
       '@ops-ai/toggly-docusaurus-plugin',
       {
-        baseURI: 'https://client.toggly.io',
+        baseURI: 'https://definitions.toggly.io',
         appKey: 'YOUR_APP_KEY',
         environment: 'Production',
       },

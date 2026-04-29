@@ -10,7 +10,7 @@
  * Matches the API structure used in other Toggly SDKs
  */
 export interface TogglyConfig {
-  /** Base URI for the Toggly API (default: 'https://client.toggly.io') */
+  /** Base URI for the Toggly API (default: 'https://definitions.toggly.io') */
   baseURI?: string;
   /** Application key from Toggly */
   appKey?: string;
@@ -86,7 +86,7 @@ interface CachedFlags {
  */
 export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   const {
-    baseURI = 'https://client.toggly.io',
+    baseURI = 'https://definitions.toggly.io',
     appKey,
     environment = 'Production',
     flagDefaults = {},
@@ -126,7 +126,10 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
       return '';
     }
 
-    let url = `${baseUrl}/${appKey}/${environment}`;
+    // Use the signed-flags endpoint exposed by definitions.toggly.io.
+    // The response is `{ defs: { [flag]: bool }, signature, timestamp, kid }`;
+    // fetchFlags() unwraps `defs` if present.
+    let url = `${baseUrl}/evaluated-signed/${appKey}/${environment}`;
     
     // Add identity parameter if provided
     if (identity) {

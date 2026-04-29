@@ -24,7 +24,7 @@ module.exports = {
     [
       '@ops-ai/toggly-docusaurus-plugin',
       {
-        baseURI: 'https://client.toggly.io',
+        baseURI: 'https://definitions.toggly.io',
         appKey: 'your-app-key',
         environment: 'Production',
         flagDefaults: {
@@ -41,7 +41,7 @@ module.exports = {
 
 ### Plugin Options
 
-- `baseURI` (string, optional): Base URI for the Toggly API (default: `'https://client.toggly.io'`)
+- `baseURI` (string, optional): Base URI for the Toggly API (default: `'https://definitions.toggly.io'`). The plugin fetches flags from `${baseURI}/evaluated-signed/${appKey}/${environment}`.
 - `appKey` (string, optional): Application key from Toggly
 - `environment` (string, optional): Environment name (default: `'Production'`)
 - `flagDefaults` (object, optional): Default flag values when API is unavailable

@@ -24,7 +24,7 @@ You need to set the following environment variables. We recommend using `wrangle
 
 | Variable | Description |
 |----------|-------------|
-| `TOGGLY_API_BASE_URL` | URL of the Toggly API (e.g., `https://client.toggly.io`) |
+| `TOGGLY_API_BASE_URL` | URL of the Toggly API (e.g., `https://definitions.toggly.io`) |
 | `TOGGLY_ENVIRONMENT` | Your environment name (e.g., `Production`) |
 | `TOGGLY_APP_KEY` | Your Toggly App Key |
 | `ORIGIN_BASE_URL` | The URL where your actual Docusaurus site is hosted |
@@ -40,7 +40,7 @@ wrangler secret put TOGGLY_APP_KEY
 
 ```toml
 [vars]
-TOGGLY_API_BASE_URL = "https://client.toggly.io"
+TOGGLY_API_BASE_URL = "https://definitions.toggly.io"
 TOGGLY_ENVIRONMENT = "Production"
 ORIGIN_BASE_URL = "https://my-docusaurus-site.pages.dev"
 ```
@@ -89,7 +89,7 @@ You can test the worker locally using `wrangler dev`.
 1.  Create a `.dev.vars` file in `cloudflare/worker`:
 
     ```env
-    TOGGLY_API_BASE_URL=https://client.toggly.io
+    TOGGLY_API_BASE_URL=https://definitions.toggly.io
     TOGGLY_ENVIRONMENT=Production
     TOGGLY_APP_KEY=your_real_or_test_key
     ORIGIN_BASE_URL=http://localhost:3000

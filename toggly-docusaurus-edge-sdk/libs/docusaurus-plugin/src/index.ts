@@ -27,7 +27,7 @@ export interface TogglyContentRoot {
 }
 
 export interface TogglyPluginOptions {
-  /** Base URI for the Toggly API (default: 'https://client.toggly.io') */
+  /** Base URI for the Toggly API (default: 'https://definitions.toggly.io') */
   baseURI?: string;
   /** Application key from Toggly */
   appKey?: string;
@@ -87,7 +87,7 @@ export default function togglyPlugin(
   options: TogglyPluginOptions
 ): Plugin {
   const {
-    baseURI = 'https://client.toggly.io',
+    baseURI = 'https://definitions.toggly.io',
     appKey,
     environment = 'Production',
     flagDefaults = {},

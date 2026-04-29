@@ -25,7 +25,7 @@ module.exports = {
       '@ops-ai/toggly-docusaurus-plugin',
       {
         // Required: Your Toggly API details
-        baseURI: 'https://client.toggly.io',
+        baseURI: 'https://definitions.toggly.io',
         appKey: 'YOUR_APP_KEY',
         environment: 'Production',
         
