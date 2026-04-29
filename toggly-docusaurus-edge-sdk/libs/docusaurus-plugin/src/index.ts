@@ -11,6 +11,21 @@ import * as path from 'path';
 import { glob } from 'glob';
 import webpack from 'webpack';
 
+/**
+ * A docs-style content directory that the plugin should scan for x-feature frontmatter.
+ *
+ * Mirrors @docusaurus/plugin-content-docs's `path` and `routeBasePath` options.
+ * Use this when your site has multiple plugin-content-docs instances
+ * (e.g. `docs/`, `sdks/`, `guides/`) — by default the plugin auto-detects them
+ * from `siteConfig.plugins`, but you can override the discovery here.
+ */
+export interface TogglyContentRoot {
+  /** Directory (relative to siteDir) containing MD/MDX files. */
+  path: string;
+  /** URL prefix for routes generated from this directory (no leading/trailing slash needed). */
+  routeBasePath: string;
+}
+
 export interface TogglyPluginOptions {
   /** Base URI for the Toggly API (default: 'https://client.toggly.io') */
   baseURI?: string;
@@ -38,6 +53,13 @@ export interface TogglyPluginOptions {
    * (default: true)
    */
   renderAllDuringBuild?: boolean;
+  /**
+   * Explicit list of docs-style content directories to scan. When omitted,
+   * the plugin auto-detects content-docs plugin instances from `siteConfig.plugins`
+   * and always includes the classic preset's default `{ path: 'docs', routeBasePath: 'docs' }`.
+   * Set this to take full manual control of discovery.
+   */
+  contentRoots?: TogglyContentRoot[];
 }
 
 interface PageFeatureMapping {
@@ -74,6 +96,7 @@ export default function togglyPlugin(
     connectTimeout = 5 * 1000,
     identity,
     renderAllDuringBuild = true, // Default to true for better DX
+    contentRoots,
   } = options;
 
   // Store page feature mapping for postBuild
@@ -111,10 +134,20 @@ export default function togglyPlugin(
           config: TogglyPluginOptions;
         };
 
-        // Extract page feature mapping from files
-        // We parse files directly to get x-feature frontmatter
-        // and will map to routes using Docusaurus's routing structure
-        pageFeatureMapping = await extractFromFiles(context);
+        // Extract page feature mapping from files.
+        // We parse files directly to get x-feature frontmatter and map to
+        // routes using each content root's routeBasePath. Roots are either
+        // supplied explicitly via `contentRoots` or auto-detected from
+        // `siteConfig.plugins` (with the classic preset's `docs/` always included).
+        const roots = resolveContentRoots(context, contentRoots);
+        if (isDebug) {
+          console.log(
+            `[Toggly Plugin] Scanning content roots: ${roots
+              .map(r => `${r.path} -> /${r.routeBasePath}`)
+              .join(', ')}`,
+          );
+        }
+        pageFeatureMapping = await extractFromFiles(context, roots);
 
         // Store data for configureWebpack and postBuild
         (this as any).__togglyPluginData = {
@@ -236,88 +269,186 @@ export default function togglyPlugin(
 
 
 /**
- * Extract page feature mapping by parsing files directly
- * Maps file paths to Docusaurus route paths
+ * Resolve the set of content roots the plugin should scan.
+ *
+ * Strategy:
+ * 1. If `contentRootsOverride` is provided, use it verbatim (caller knows best).
+ * 2. Otherwise, auto-detect by scanning `siteConfig.plugins` for
+ *    `@docusaurus/plugin-content-docs` instances and reading each one's
+ *    `path`/`routeBasePath` options. The classic preset's default
+ *    `{ path: 'docs', routeBasePath: 'docs' }` is always included so existing
+ *    sites keep working without configuration.
+ *
+ * Exported for testing.
  */
-async function extractFromFiles(context: LoadContext): Promise<PageFeatureMapping> {
-  const { siteDir, baseUrl } = context;
-  const docsDir = path.join(siteDir, 'docs');
+export function resolveContentRoots(
+  context: LoadContext,
+  contentRootsOverride?: TogglyContentRoot[],
+): TogglyContentRoot[] {
+  if (contentRootsOverride && contentRootsOverride.length > 0) {
+    return contentRootsOverride.map(normalizeContentRoot);
+  }
+
+  const discovered = discoverContentRootsFromConfig(context);
+  const roots = new Map<string, TogglyContentRoot>();
+
+  // Always include the classic preset's docs root.
+  const fallback = normalizeContentRoot({ path: 'docs', routeBasePath: 'docs' });
+  roots.set(rootKey(fallback), fallback);
+
+  for (const root of discovered) {
+    const normalized = normalizeContentRoot(root);
+    roots.set(rootKey(normalized), normalized);
+  }
+
+  return Array.from(roots.values());
+}
+
+function normalizeContentRoot(root: TogglyContentRoot): TogglyContentRoot {
+  const trimmedPath = root.path.replace(/^[/\\]+|[/\\]+$/g, '');
+  const trimmedRouteBasePath = root.routeBasePath.replace(/^\/+|\/+$/g, '');
+  return {
+    path: trimmedPath,
+    routeBasePath: trimmedRouteBasePath,
+  };
+}
+
+function rootKey(root: TogglyContentRoot): string {
+  return `${root.path}|${root.routeBasePath}`;
+}
+
+const CONTENT_DOCS_PLUGIN_NAMES = new Set([
+  '@docusaurus/plugin-content-docs',
+  'plugin-content-docs',
+]);
+
+/**
+ * Inspect `siteConfig.plugins` for plugin-content-docs instances and return
+ * their { path, routeBasePath } pairs. Plugin entries can be:
+ *  - 'plugin-id'                                → no options
+ *  - ['plugin-id', { path, routeBasePath }]    → options inline
+ *  - a function/object plugin                   → not introspectable, skip
+ *
+ * If a plugin omits `path` or `routeBasePath`, those default to 'docs'
+ * (matching @docusaurus/plugin-content-docs's own defaults).
+ *
+ * Exported for testing.
+ */
+export function discoverContentRootsFromConfig(context: LoadContext): TogglyContentRoot[] {
+  const result: TogglyContentRoot[] = [];
+  const plugins = (context.siteConfig?.plugins ?? []) as unknown[];
+
+  for (const entry of plugins) {
+    if (!Array.isArray(entry) || entry.length === 0) {
+      continue;
+    }
+
+    const [name, opts] = entry as [unknown, unknown];
+    if (typeof name !== 'string') continue;
+    if (!CONTENT_DOCS_PLUGIN_NAMES.has(name)) continue;
+
+    const options = (opts && typeof opts === 'object' ? (opts as Record<string, unknown>) : {});
+    const pathValue = typeof options.path === 'string' ? options.path : 'docs';
+    const routeBasePathValue =
+      typeof options.routeBasePath === 'string' ? options.routeBasePath : 'docs';
+
+    result.push({ path: pathValue, routeBasePath: routeBasePathValue });
+  }
+
+  return result;
+}
+
+/**
+ * Extract page feature mapping by parsing MD/MDX files in the given content roots.
+ * Maps file paths to Docusaurus route paths using each root's `routeBasePath`.
+ */
+async function extractFromFiles(
+  context: LoadContext,
+  roots: TogglyContentRoot[],
+): Promise<PageFeatureMapping> {
   const pageFeatureMapping: PageFeatureMapping = {};
 
-  // Check if docs directory exists
-  if (!fs.existsSync(docsDir)) {
+  for (const root of roots) {
+    const rootMappings = await extractFromRoot(context, root);
+    Object.assign(pageFeatureMapping, rootMappings);
+  }
+
+  return pageFeatureMapping;
+}
+
+async function extractFromRoot(
+  context: LoadContext,
+  root: TogglyContentRoot,
+): Promise<PageFeatureMapping> {
+  const { siteDir, baseUrl } = context;
+  const rootDir = path.isAbsolute(root.path)
+    ? root.path
+    : path.join(siteDir, root.path);
+  const pageFeatureMapping: PageFeatureMapping = {};
+
+  if (!fs.existsSync(rootDir)) {
     return pageFeatureMapping;
   }
 
-  // Find all MD/MDX files in the docs directory
   const files = await glob('**/*.{md,mdx}', {
-    cwd: docsDir,
+    cwd: rootDir,
     absolute: false,
     ignore: ['node_modules/**'],
   });
 
   const stripOrderPrefix = (seg: string): string => seg.replace(/^\d+-/, '');
+  const normalizedRouteBase = root.routeBasePath; // already trimmed of slashes
 
   for (const file of files) {
-    const filePath = path.join(docsDir, file);
+    const filePath = path.join(rootDir, file);
     const content = fs.readFileSync(filePath, 'utf-8');
 
-    // Extract frontmatter
     const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
-    if (frontmatterMatch) {
-      const frontmatter = frontmatterMatch[1];
+    if (!frontmatterMatch) continue;
 
-      // Extract x-feature property (supports YAML with or without quotes)
-      const xFeatureMatch = frontmatter.match(/^x-feature:\s*(.+)$/m);
-      if (xFeatureMatch) {
-        let featureKey = xFeatureMatch[1].trim();
-        // Remove quotes if present
-        featureKey = featureKey.replace(/^["']|["']$/g, '');
+    const xFeatureMatch = frontmatterMatch[1].match(/^x-feature:\s*(.+)$/m);
+    if (!xFeatureMatch) continue;
 
-        // Normalize path similar to Docusaurus: remove numeric order prefixes (NN-)
-        const normalized = file
-          .replace(/\\/g, '/')
-          .split('/')
-          .map(stripOrderPrefix)
-          .join('/');
+    const featureKey = xFeatureMatch[1].trim().replace(/^["']|["']$/g, '');
 
-        // Convert file path to Docusaurus route path
-        // Docusaurus routes docs as: /docs/<path>
-        // File structure: docs/<category>/<file>.md -> /docs/<category>/<file>
-        let routePath = normalized.replace(/\.(md|mdx)$/, '');
+    const normalized = file
+      .replace(/\\/g, '/')
+      .split('/')
+      .map(stripOrderPrefix)
+      .join('/');
 
-        // Handle index files - they become the parent directory route
-        if (path.basename(routePath) === 'index') {
-          routePath = path.dirname(routePath);
-          if (routePath === '.') {
-            routePath = '';
-          }
-        }
+    let relativeRoute = normalized.replace(/\.(md|mdx)$/, '');
 
-        // Ensure path starts with /
-        if (!routePath.startsWith('/')) {
-          routePath = '/' + routePath;
-        }
-
-        // Prepend /docs/ if not already there
-        if (!routePath.startsWith('/docs')) {
-          routePath = '/docs' + routePath;
-        }
-
-        // Remove trailing slash (except for root /docs)
-        routePath = routePath.replace(/\/$/, '') || '/docs';
-
-        // Prepend baseUrl if not root
-        // baseUrl is typically '/' but can be '/project-name/' for GitHub Pages
-        let fullRoutePath = routePath;
-        if (baseUrl !== '/') {
-          const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
-          fullRoutePath = normalizedBaseUrl + routePath;
-        }
-
-        pageFeatureMapping[fullRoutePath] = featureKey;
+    // Index files become the parent directory route
+    if (path.basename(relativeRoute) === 'index') {
+      relativeRoute = path.dirname(relativeRoute);
+      if (relativeRoute === '.') {
+        relativeRoute = '';
       }
     }
+
+    relativeRoute = relativeRoute.replace(/^\/+/, '');
+
+    let routePath: string;
+    if (normalizedRouteBase === '') {
+      // Root-level routes (routeBasePath: '/') — file paths map directly under '/'.
+      routePath = relativeRoute === '' ? '/' : `/${relativeRoute}`;
+    } else if (relativeRoute === '') {
+      routePath = `/${normalizedRouteBase}`;
+    } else {
+      routePath = `/${normalizedRouteBase}/${relativeRoute}`;
+    }
+
+    routePath = routePath.replace(/\/+$/, '') || '/';
+
+    // Prepend baseUrl when the site is served from a subpath (e.g. GitHub Pages).
+    let fullRoutePath = routePath;
+    if (baseUrl && baseUrl !== '/') {
+      const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+      fullRoutePath = routePath === '/' ? normalizedBaseUrl || '/' : normalizedBaseUrl + routePath;
+    }
+
+    pageFeatureMapping[fullRoutePath] = featureKey;
   }
 
   return pageFeatureMapping;
