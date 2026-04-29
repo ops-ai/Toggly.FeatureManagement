@@ -171,14 +171,18 @@ export class Toggly {
       return Toggly.fetchFeatureFlagsWithVariants();
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       var url = `${Toggly._config.baseURI}/evaluated-signed/${Toggly._config.appKey}/${Toggly._config.environment}`;
 
       if (Toggly.identity) {
         url += `?u=${Toggly.identity}`;
       }
 
-      fetch(url)
+      // Wrap the fetch invocation in a resolved Promise so that any synchronous
+      // failure (e.g. a non-conforming fetch implementation returning undefined)
+      // is funneled through the same .catch handler as a real network error.
+      Promise.resolve()
+        .then(() => fetch(url))
         .then((response) => response.json())
         .then((payload) => {
           const flags = (payload && payload.defs) ? payload.defs : payload;
@@ -187,7 +191,7 @@ export class Toggly {
 
           if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`); }
         })
-        .catch((error) => {
+        .catch(() => {
           var flags = Toggly._cachedFeatureFlags ?? Toggly._config.flagDefaults;
           resolve(flags);
 
@@ -208,7 +212,8 @@ export class Toggly {
       const queryString = params.toString();
       if (queryString) url += `?${queryString}`;
 
-      fetch(url)
+      Promise.resolve()
+        .then(() => fetch(url))
         .then((response) => response.json())
         .then((payload) => {
           const defs: { [key: string]: EvaluatedVariantDef } = (payload && payload.defs) ? payload.defs : payload;

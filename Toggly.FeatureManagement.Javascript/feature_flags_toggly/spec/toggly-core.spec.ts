@@ -408,7 +408,7 @@ describe('Toggly Core', () => {
       });
 
       await Toggly.init({
-        appKey: 'key',
+        appKey: 'test-app-key',
         environment: 'Production',
         featureFlagsRefreshInterval: 0,
       });
@@ -562,7 +562,14 @@ describe('Toggly Core', () => {
       expect(Toggly.featureFlagsValue).toEqual({ DefaultFlag: false });
     });
 
-    it('should store flags via cacheFeatureFlags', () => {
+    it('should store flags via cacheFeatureFlags', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
       Toggly.cacheFeatureFlags({ X: true, Y: false });
 
       const stored = JSON.parse(
@@ -571,7 +578,14 @@ describe('Toggly Core', () => {
       expect(stored).toEqual({ X: true, Y: false });
     });
 
-    it('should remove flags cache via clearFeatureFlagsCache', () => {
+    it('should remove flags cache via clearFeatureFlagsCache', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
       localStorage.setItem(
         StorageKeys.flagsCacheKey('test-app-key', 'Production'),
         JSON.stringify({ X: true })
@@ -1680,6 +1694,324 @@ describe('Toggly Core', () => {
           done(error);
         }
       }, 200);
+    });
+  });
+
+  // ───────────────────────────────────────────────
+  // Variants
+  // ───────────────────────────────────────────────
+  describe('Variants', () => {
+    const variantsKey = StorageKeys.variantsCacheKey('test-app-key', 'Production');
+    const flagsKey = StorageKeys.flagsCacheKey('test-app-key', 'Production');
+
+    it('should fetch variants and cache both flags and variants when enableVariants is true', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            F1: { enabled: true, variant: 'A', configurationValue: { color: 'red' } },
+            F2: { enabled: false },
+          }),
+      });
+
+      const flags = await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('evaluated-variants-signed/test-app-key/Production')
+      );
+      expect(flags).toEqual({ F1: true, F2: false });
+      expect(JSON.parse(localStorage.getItem(flagsKey)!)).toEqual({ F1: true, F2: false });
+      expect(JSON.parse(localStorage.getItem(variantsKey)!)).toEqual({
+        F1: { enabled: true, variant: 'A', configurationValue: { color: 'red' } },
+        F2: { enabled: false },
+      });
+    });
+
+    it('should include identity in variants fetch URL', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({}),
+      });
+
+      localStorage.setItem(StorageKeys.identityKey, 'user-1');
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain('userId=user-1');
+    });
+
+    it('should unwrap payload.defs from variants endpoint', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            defs: {
+              F1: { enabled: true, variant: 'B' },
+            },
+          }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(JSON.parse(localStorage.getItem(variantsKey)!)).toEqual({
+        F1: { enabled: true, variant: 'B' },
+      });
+    });
+
+    it('should log debug message on successful variants fetch', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ F1: { enabled: true } }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        isDebug: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Toggly.fetchFeatureFlagsWithVariants')
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('should fall back to cached flags when variants fetch fails', async () => {
+      localStorage.setItem(flagsKey, JSON.stringify({ Cached: true }));
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+
+      const flags = await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(flags).toEqual({ Cached: true });
+    });
+
+    it('should fall back to flagDefaults when variants fetch fails and no cache', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+
+      const flags = await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        flagDefaults: { Default: true },
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(flags).toEqual({ Default: true });
+    });
+
+    it('should log debug message on variants fetch fallback', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        flagDefaults: { F1: true },
+        isDebug: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Toggly.loadedFromCache')
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('variantsValue should return null when enableVariants is false', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(Toggly.variantsValue).toBeNull();
+    });
+
+    it('variantsValue should return cached variants when enableVariants is true', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({ F1: { enabled: true, variant: 'A' } }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(Toggly.variantsValue).toEqual({
+        F1: { enabled: true, variant: 'A' },
+      });
+    });
+
+    it('variantsValue should return null when cached JSON is corrupted', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      localStorage.setItem(variantsKey, 'not-json{{');
+      expect(Toggly.variantsValue).toBeNull();
+    });
+
+    it('cacheVariants should store variants in localStorage', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      Toggly.cacheVariants({ F1: { enabled: true, variant: 'X' } });
+
+      expect(JSON.parse(localStorage.getItem(variantsKey)!)).toEqual({
+        F1: { enabled: true, variant: 'X' },
+      });
+    });
+
+    it('cacheVariants should be a no-op when persistCache is false', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        persistCache: false,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      Toggly.cacheVariants({ F1: { enabled: true, variant: 'X' } });
+
+      expect(localStorage.getItem(variantsKey)).toBeNull();
+    });
+
+    it('getVariant should return assigned variant with configurationValue', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            F1: { enabled: true, variant: 'A', configurationValue: { theme: 'dark' } },
+          }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(Toggly.getVariant('F1')).toEqual({
+        name: 'A',
+        configurationValue: { theme: 'dark' },
+      });
+    });
+
+    it('getVariant should return null when variants are disabled', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(Toggly.getVariant('F1')).toBeNull();
+    });
+
+    it('getVariant should return null for an unknown feature key', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ F1: { enabled: true, variant: 'A' } }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(Toggly.getVariant('Unknown')).toBeNull();
+    });
+
+    it('getVariant should return null when entry has no variant assigned', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ F1: { enabled: true } }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(Toggly.getVariant('F1')).toBeNull();
+    });
+
+    it('getVariantValue should return configurationValue when present', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            F1: { enabled: true, variant: 'A', configurationValue: 42 },
+          }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(Toggly.getVariantValue('F1')).toBe(42);
+    });
+
+    it('getVariantValue should return null when no variant or value is set', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ F1: { enabled: true, variant: 'A' } }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(Toggly.getVariantValue('F1')).toBeNull();
+      expect(Toggly.getVariantValue('Unknown')).toBeNull();
     });
   });
 });
