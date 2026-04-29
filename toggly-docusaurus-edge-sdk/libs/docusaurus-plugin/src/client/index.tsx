@@ -185,12 +185,19 @@ export interface FeatureProps {
   fallback?: ReactNode;
   /** Default value if flag is not found (default: false) */
   defaultValue?: boolean;
-  /** 
+  /**
    * HTML element to use as wrapper (default: 'div').
-   * The wrapper uses `display: contents` so it doesn't affect layout.
-   * Use 'span' for inline content if needed.
+   *
+   * For 'div' and 'span' the wrapper uses `display: contents` so it does not
+   * affect layout — useful for inline content gating that should be invisible
+   * structurally.
+   *
+   * For other element types (e.g. 'li', 'tr', 'section'), no `display: contents`
+   * is applied so the wrapper participates in the surrounding layout. This is
+   * useful for gating list items so the entire bullet (including the marker)
+   * is removed when the flag is disabled, instead of leaving an empty bullet.
    */
-  as?: 'div' | 'span';
+  as?: keyof JSX.IntrinsicElements;
 }
 
 /**
@@ -221,6 +228,20 @@ const isSSR = typeof window === 'undefined';
  * <Feature flag="beta" as="span">new beta feature</Feature>
  * ```
  */
+/**
+ * For 'div' and 'span' the wrapper should be invisible to layout. For any
+ * other element type the wrapper is part of the layout (e.g. an `<li>` inside
+ * a `<ul>`) and must render normally.
+ */
+function getWrapperStyle(
+  element: keyof JSX.IntrinsicElements,
+): React.CSSProperties | undefined {
+  if (element === 'div' || element === 'span') {
+    return { display: 'contents' as const };
+  }
+  return undefined;
+}
+
 export function Feature({
   flag,
   children,
@@ -228,8 +249,7 @@ export function Feature({
   defaultValue = false,
   as: Element = 'div',
 }: FeatureProps): JSX.Element {
-  // Wrapper style - display: contents makes it invisible to layout
-  const wrapperStyle = { display: 'contents' as const };
+  const wrapperStyle = getWrapperStyle(Element);
 
   // During SSR, render children with data-feature attribute
   // The Cloudflare Worker will strip disabled features at the edge
@@ -243,9 +263,9 @@ export function Feature({
 
   // Client-side rendering - use actual flag evaluation
   return (
-    <FeatureClient 
-      flag={flag} 
-      fallback={fallback} 
+    <FeatureClient
+      flag={flag}
+      fallback={fallback}
       defaultValue={defaultValue}
       as={Element}
     >
@@ -266,13 +286,10 @@ function FeatureClient({
   as: Element = 'div',
 }: FeatureProps): JSX.Element {
   const { enabled, isReady } = useFlag(flag, defaultValue);
-  
-  // Wrapper style - display: contents makes it invisible to layout
-  const wrapperStyle = { display: 'contents' as const };
+  const wrapperStyle = getWrapperStyle(Element);
 
   // Always wrap with data-feature for edge worker compatibility
-  // The wrapper is invisible to layout due to display: contents
-  
+
   // If still loading, show children wrapped (for hydration match with SSR)
   if (!isReady) {
     return (
