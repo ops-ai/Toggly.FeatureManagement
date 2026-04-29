@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-cloudflare-worker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Cloudflare Worker for enforcing Toggly feature flag gating at the edge",
   "main": "./src/index.ts",
   "scripts": {

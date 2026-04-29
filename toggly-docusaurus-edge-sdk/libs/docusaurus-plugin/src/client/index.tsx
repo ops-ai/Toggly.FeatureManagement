@@ -30,6 +30,41 @@ export interface TogglyContextValue {
 const TogglyContext = createContext<TogglyContextValue | null>(null);
 
 /**
+ * Name of the global the edge worker (cloudflare/worker) writes the resolved
+ * flag map onto. Kept in sync with `SNAPSHOT_GLOBAL` in
+ * `cloudflare/worker/src/html-rewriter.ts`.
+ */
+const EDGE_FLAGS_GLOBAL = '__TOGGLY_EDGE_FLAGS__';
+
+/**
+ * Read the flag snapshot the edge worker injected into the page so the React
+ * tree on first client render can match the post-edge-strip DOM.
+ *
+ * Returns:
+ *  - `null` if running on the server, or no snapshot was injected (e.g. no
+ *    edge worker deployed). Callers should fall back to legacy behavior in
+ *    that case.
+ *  - A sanitised `Flags` map otherwise. Non-boolean values are dropped so a
+ *    tampered global cannot smuggle unexpected types into the React tree.
+ */
+export function readEdgeFlagsSnapshot(): Flags | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const raw = (window as unknown as Record<string, unknown>)[EDGE_FLAGS_GLOBAL];
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const out: Flags = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'boolean') {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/**
  * TogglyProvider - React context provider for Toggly feature flags
  *
  * Wrap your Docusaurus app with this provider to enable feature flag evaluation.
@@ -69,8 +104,13 @@ export function TogglyProvider({
     }
     return createTogglyClient(config);
   });
-  const [flags, setFlags] = useState<Flags>({});
-  const [isReady, setIsReady] = useState(false);
+  // Seed from `window.__TOGGLY_EDGE_FLAGS__` synchronously when the edge
+  // worker has injected it. This is what makes hydration match the
+  // post-edge-strip DOM: Feature components on first client render evaluate
+  // the same flag map the edge used, so they emit the same wrapper-or-null
+  // shape as the static HTML the browser received.
+  const [flags, setFlags] = useState<Flags>(() => readEdgeFlagsSnapshot() ?? {});
+  const [isReady, setIsReady] = useState(() => readEdgeFlagsSnapshot() !== null);
   const [error, setError] = useState<Error | null>(null);
 
   // Keep a ref to the latest flags so the polling interval can detect changes
@@ -156,7 +196,13 @@ export function useFlag(
   defaultValue?: boolean
 ): { enabled: boolean; isReady: boolean } {
   const { flags, isReady, getFlag } = useToggly();
-  const [enabled, setEnabled] = useState<boolean>(defaultValue ?? false);
+  // Lazy initializer reads the already-populated flag map (e.g. the edge
+  // snapshot seeded by TogglyProvider) so the very first render reflects
+  // the resolved value. This is what lets Feature components emit a tree
+  // that matches the post-edge-strip DOM during React hydration.
+  const [enabled, setEnabled] = useState<boolean>(() =>
+    flags[flagKey] !== undefined ? flags[flagKey] : defaultValue ?? false,
+  );
 
   useEffect(() => {
     if (isReady) {
@@ -208,13 +254,25 @@ const isSSR = typeof window === 'undefined';
 /**
  * Feature - React component for conditional rendering based on feature flags
  *
- * This component wraps children in a `data-feature` element that:
- * 1. During static build: Renders all content (so anchors exist, build passes)
- * 2. At the edge (Cloudflare Worker): HTMLRewriter removes disabled content
- * 3. At runtime: Falls back to client-side evaluation if no edge worker
+ * Lifecycle of the wrapper across rendering passes:
+ *  1. Static build (SSG): renders `<Element data-feature={flag}>` for every
+ *     flag, regardless of state, so the build is deterministic and anchors
+ *     exist for every gated section.
+ *  2. Edge (Cloudflare Worker): `HTMLRewriter` strips wrappers whose flag is
+ *     disabled, and injects `window.__TOGGLY_EDGE_FLAGS__` with the resolved
+ *     flag map.
+ *  3. Client first render: `TogglyProvider` reads the snapshot synchronously
+ *     so this component evaluates the flag with the same answer the edge used,
+ *     producing a tree that matches the post-strip DOM and lets React 18
+ *     hydrate cleanly. When no edge worker is deployed (no snapshot present)
+ *     the wrapper is rendered until the client SDK loads flags, matching the
+ *     untransformed origin HTML.
+ *  4. Steady state: WebSocket / polling refresh updates flags, which triggers
+ *     a normal re-render — never a hydration mismatch since hydration is done.
  *
  * The wrapper uses `display: contents` so it doesn't affect layout.
- * Use the `as` prop to specify 'span' for inline content.
+ * Use the `as` prop to specify 'span' for inline content, or e.g. 'li' so
+ * the entire list item (marker included) is removed when disabled.
  *
  * @example
  * ```tsx

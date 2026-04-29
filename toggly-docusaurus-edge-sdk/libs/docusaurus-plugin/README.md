@@ -179,6 +179,16 @@ function MyComponent() {
 }
 ```
 
+## Edge / Hydration Contract
+
+When the companion `@ops-ai/toggly-cloudflare-worker` is in front of the site, the worker streams the static HTML through `HTMLRewriter`, removes `[data-feature]` elements whose flag is disabled, and **injects a `<script>` near the top of `<head>` that pins the resolved flag map onto `window.__TOGGLY_EDGE_FLAGS__`**.
+
+`TogglyProvider` reads that snapshot synchronously via `readEdgeFlagsSnapshot()` and seeds its initial `flags` / `isReady` state from it, so the very first client render evaluates `Feature` components against the same flag values the edge used. That keeps the React tree aligned with the post-strip DOM and lets React 18 hydrate without a recoverable error / full-root re-render.
+
+When no edge worker is deployed (no snapshot present), the provider stays `isReady=false` until the client SDK fetches flags, and `Feature` components keep their wrapper during that window so the React tree matches the untransformed origin HTML. Once flags resolve, normal re-renders apply — that is post-hydration and not a mismatch.
+
+You don't need to do anything to opt in: as long as the worker is wired up, hydration is consistent.
+
 ## Section-Level Gating
 
 For section-level gating, you can use the `data-feature` attribute with a client-side script or component:

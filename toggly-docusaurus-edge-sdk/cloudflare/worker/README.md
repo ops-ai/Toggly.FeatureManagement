@@ -6,6 +6,7 @@ This Cloudflare Worker enforces feature flag gating at the network edge for your
 
 -   **Page Gating**: Intercepts requests and checks if the requested path is mapped to a feature flag. Returns 404 or Redirect if disabled.
 -   **Content Scrubbing**: Parses HTML responses and removes elements with `data-feature="flag_key"` attributes if the flag is disabled.
+-   **Hydration-safe Snapshot**: Injects `<script>window.__TOGGLY_EDGE_FLAGS__ = {...}</script>` at the start of `<head>` with the resolved flag map. The companion `@ops-ai/toggly-docusaurus-plugin` reads this synchronously on first client render so the React tree matches the post-strip DOM and React 18 hydration succeeds without a recoverable error / full client re-render.
 -   **Caching**: Caches feature flags and the page manifest at the edge to minimize latency.
 
 ## Deployment Guide
