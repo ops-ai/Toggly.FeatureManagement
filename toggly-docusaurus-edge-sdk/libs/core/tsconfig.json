@@ -6,6 +6,7 @@
     "module": "CommonJS",
     "moduleResolution": "node",
     "composite": false,
+    "lib": ["ES2022", "DOM"],
     "types": ["vitest/globals"]
   },
   "include": ["src/**/*"],

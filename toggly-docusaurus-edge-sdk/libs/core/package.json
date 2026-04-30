@@ -3,12 +3,11 @@
   "version": "0.1.5",
   "description": "Framework-agnostic Toggly client for feature flag evaluation",
   "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
+      "import": "./dist/index.js",
       "require": "./dist/index.js"
     }
   },
