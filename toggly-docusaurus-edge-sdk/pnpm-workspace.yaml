@@ -1,3 +1,4 @@
 packages:
   - 'libs/*'
   - 'cloudflare/worker'
+  - 'cloudflare/pages-function'

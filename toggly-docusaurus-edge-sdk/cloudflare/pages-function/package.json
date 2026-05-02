@@ -1,0 +1,33 @@
+{
+  "name": "@ops-ai/toggly-cloudflare-pages-function",
+  "version": "0.1.0",
+  "description": "Cloudflare Pages Functions middleware for enforcing Toggly feature flag gating on a Docusaurus site",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint functions --ext .ts",
+    "clean": "rm -rf .wrangler dist"
+  },
+  "keywords": [
+    "toggly",
+    "cloudflare",
+    "pages",
+    "pages-functions",
+    "edge",
+    "feature-flags",
+    "docusaurus"
+  ],
+  "author": "Toggly",
+  "license": "MIT",
+  "dependencies": {
+    "@ops-ai/toggly-client-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240208.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.114.17"
+  }
+}

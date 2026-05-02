@@ -16,38 +16,49 @@ This solution provides:
 
 ```mermaid
 graph TD
-    User[User Request] --> Worker[Cloudflare Worker]
-    
+    User[User Request] --> Edge[Edge Enforcement<br/>Worker or Pages Function]
+
     subgraph "Edge Layer"
-    Worker -->|Check Manifest| Manifest[Page Features Manifest]
-    Worker -->|Fetch Flags| Toggly[Toggly API]
+    Edge -->|Check Manifest| Manifest[Page Features Manifest]
+    Edge -->|Fetch Flags| Toggly[Toggly API]
     end
-    
-    Worker -- Feature Disabled --> 404[404 / Redirect]
-    Worker -- Feature Enabled --> Origin[Docusaurus Origin]
-    
+
+    Edge -- Feature Disabled --> 404[404 / Redirect]
+    Edge -- Feature Enabled --> Origin[Docusaurus Origin]
+
     Origin --> HTML[HTML Response]
-    
+
     subgraph "Transformation"
     HTML --> Rewriter[HTMLRewriter]
     Rewriter -->|Strip data-feature elements| CleanHTML[Clean HTML]
     end
-    
+
     CleanHTML --> User
 ```
 
 ### Components
 
--   **`@ops-ai/toggly-client-core`**: Framework-agnostic Toggly client for feature flag evaluation.
+-   **`@ops-ai/toggly-client-core`**: Framework-agnostic Toggly client for feature flag evaluation. Used by all the runtime variants below.
 -   **`@ops-ai/toggly-docusaurus-plugin`**:
     -   Extracts `x-feature` frontmatter during build.
-    -   Generates `toggly-page-features.json` manifest for the Worker.
+    -   Generates `toggly-page-features.json` manifest for the edge runtime.
     -   Injects configuration into the client bundle.
     -   Provides `<Feature>` components and hooks for the UI.
--   **`@ops-ai/toggly-cloudflare-worker`**:
-    -   Reads the manifest to map routes to features.
-    -   Enforces page-level gating (404/redirect).
-    -   Enforces section-level gating (strips DOM elements).
+-   **Edge enforcement** (pick one — both ship in this SDK):
+    -   [`cloudflare/pages-function`](./cloudflare/pages-function/README.md) — drop-in
+        `_middleware.ts` for sites already deployed on Cloudflare Pages.
+        Single file, single dep (`@ops-ai/toggly-client-core`), no separate
+        deploy step, no Cloudflare Access service-token to manage. **Recommended
+        when your DNS already points at Pages.**
+    -   [`cloudflare/worker`](./cloudflare/worker/README.md) — standalone Cloudflare
+        Worker that fronts any HTML origin (Pages, GitHub Pages, Netlify, Vercel,
+        S3+CDN, your own server). Use this when your Docusaurus site is **not**
+        on Cloudflare Pages, or when you want the edge transform to live as a
+        separate deploy from the static site.
+
+Both runtimes do the same three things — read the manifest, fetch the flag map
+from Toggly, and run `HTMLRewriter` to strip disabled `[data-feature]` blocks
+and inject the hydration-safe `window.__TOGGLY_EDGE_FLAGS__` snapshot.
 
 ## Quickstart
 
@@ -104,9 +115,48 @@ import { Feature } from '@ops-ai/toggly-docusaurus-plugin/client';
 </Feature>
 ```
 
-### 5. Deploy the Worker
+### 5. Enforce gating at the edge
 
-Deploy the Cloudflare Worker in front of your Docusaurus site (see `cloudflare/worker/README.md` for details). The Worker will automatically enforce the gates defined in your docs.
+Pick the install path that matches your hosting setup:
+
+#### A) On Cloudflare Pages → use the Pages Function
+
+If your Docusaurus site is already deployed on Cloudflare Pages, copy
+`cloudflare/pages-function/functions/_middleware.ts` into your project as
+`functions/_middleware.ts`, install one runtime dep, and set three env vars on
+the Pages project. No second deploy, no separate domain, no Access token.
+
+```bash
+# In your Docusaurus project
+npm install @ops-ai/toggly-client-core
+mkdir -p functions
+curl -o functions/_middleware.ts \
+  https://raw.githubusercontent.com/ops-ai/Toggly.FeatureManagement/main/toggly-docusaurus-edge-sdk/cloudflare/pages-function/functions/_middleware.ts
+git add functions package.json package-lock.json
+git commit -m "Add Toggly edge middleware"
+git push
+```
+
+Then in the Cloudflare dashboard → your Pages project → **Settings** →
+**Environment variables**, add:
+
+| Variable | Value |
+|---|---|
+| `TOGGLY_API_BASE_URL` | `https://definitions.toggly.io` |
+| `TOGGLY_ENVIRONMENT` | `Production` |
+| `TOGGLY_APP_KEY` | Your Frontend app key (mark as Secret) |
+
+Full instructions and config options:
+[`cloudflare/pages-function/README.md`](./cloudflare/pages-function/README.md).
+
+#### B) Anywhere else → use the standalone Worker
+
+If your site is on GitHub Pages, Netlify, Vercel, S3+CloudFront, your own
+server, or anywhere other than Cloudflare Pages, deploy the standalone
+Cloudflare Worker in front of it. The Worker fetches HTML from your
+existing origin and applies the same gating logic.
+
+Full instructions: [`cloudflare/worker/README.md`](./cloudflare/worker/README.md).
 
 ## Development
 
@@ -125,9 +175,11 @@ pnpm test
 
 ## Project Structure
 
--   `packages/core`: Shared logic and API client.
--   `packages/docusaurus-plugin`: Build-time plugin and React runtime.
--   `cloudflare/worker`: Edge worker for enforcement.
+-   `libs/core`: Framework-agnostic Toggly client (`@ops-ai/toggly-client-core`).
+-   `libs/docusaurus-plugin`: Build-time plugin + React runtime
+    (`@ops-ai/toggly-docusaurus-plugin`).
+-   `cloudflare/pages-function`: Drop-in Pages Functions middleware (`_middleware.ts`).
+-   `cloudflare/worker`: Standalone Cloudflare Worker for non-Pages origins.
 
 ## License
 
