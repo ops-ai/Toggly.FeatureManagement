@@ -36,12 +36,12 @@
  * Optional env vars:
  *   - TOGGLY_PAGE_GATE_BEHAVIOR   '404' (default) or 'redirect'
  *   - TOGGLY_REDIRECT_URL         Path to redirect to when behavior=redirect
+ *
+ * No npm runtime dependencies. The flag fetch against Toggly's
+ * `evaluated-signed` endpoint is short enough to inline (~30 lines) and
+ * keeping it that way means the only thing users have to do is copy this
+ * single file into their Pages project's `functions/` folder.
  */
-
-import {
-  createTogglyClient,
-  type TogglyConfig,
-} from '@ops-ai/toggly-client-core';
 
 interface Env {
   /**
@@ -61,7 +61,17 @@ interface Env {
 type PageFeatureMapping = Record<string, string>;
 type Flags = Record<string, boolean>;
 
+/**
+ * Shape of the `evaluated-signed` endpoint response. The API has historically
+ * returned either a bare flag map or `{ defs: <flag map> }`; we accept both.
+ */
+interface TogglyApiPayload {
+  defs?: Flags;
+  [key: string]: unknown;
+}
+
 const FLAGS_CACHE_TTL_SECONDS = 30;
+const FLAGS_FETCH_TIMEOUT_MS = 5_000;
 const MANIFEST_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const SNAPSHOT_GLOBAL = '__TOGGLY_EDGE_FLAGS__';
@@ -131,9 +141,44 @@ function getFeatureKeyForPath(
 }
 
 /**
- * Fetch flags from the Toggly definitions API, edge-cached for
- * `FLAGS_CACHE_TTL_SECONDS` seconds. Cache is keyed by app-key + environment
- * so multiple Pages projects sharing the same Worker pool don't collide.
+ * Fetch flags from Toggly's `evaluated-signed` endpoint with a hard timeout.
+ * Returns an empty map on any error so the caller can fail open (the section
+ * rewriter just won't strip anything; the page gate won't trigger). Edge
+ * caching wraps this call in `loadFlags`.
+ */
+async function fetchFlagsFromTogglyApi(env: Env): Promise<Flags> {
+  if (!env.TOGGLY_APP_KEY) {
+    return {};
+  }
+
+  const baseUrl = env.TOGGLY_API_BASE_URL.replace(/\/$/, '');
+  const url = `${baseUrl}/${env.TOGGLY_APP_KEY}/evaluated-signed`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FLAGS_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return {};
+    }
+    const payload = (await response.json()) as TogglyApiPayload | Flags;
+    const defs = (payload as TogglyApiPayload).defs;
+    return (defs ?? (payload as Flags)) as Flags;
+  } catch {
+    return {};
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Edge-cached flag fetch. The cache key includes the app key and environment
+ * so multiple Pages projects sharing the Cloudflare Worker pool don't collide.
  */
 async function loadFlags(env: Env): Promise<Flags> {
   const cacheKey = new Request(
@@ -144,13 +189,7 @@ async function loadFlags(env: Env): Promise<Flags> {
     return (await cached.json()) as Flags;
   }
 
-  const config: TogglyConfig = {
-    baseURI: env.TOGGLY_API_BASE_URL,
-    appKey: env.TOGGLY_APP_KEY,
-    environment: env.TOGGLY_ENVIRONMENT,
-    fetch: globalThis.fetch,
-  };
-  const flags = await createTogglyClient(config).getFlags();
+  const flags = await fetchFlagsFromTogglyApi(env);
 
   await caches.default.put(
     cacheKey,

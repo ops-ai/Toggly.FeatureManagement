@@ -28,10 +28,6 @@ importers:
         version: 5.9.3
 
   cloudflare/pages-function:
-    dependencies:
-      '@ops-ai/toggly-client-core':
-        specifier: workspace:*
-        version: link:../../libs/core
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20240208.0
@@ -53,10 +49,6 @@ importers:
         version: 3.114.17(@cloudflare/workers-types@4.20251205.0)
 
   cloudflare/worker:
-    dependencies:
-      '@ops-ai/toggly-client-core':
-        specifier: workspace:*
-        version: link:../../libs/core
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20240208.0

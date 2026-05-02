@@ -123,16 +123,16 @@ Pick the install path that matches your hosting setup:
 
 If your Docusaurus site is already deployed on Cloudflare Pages, copy
 `cloudflare/pages-function/functions/_middleware.ts` into your project as
-`functions/_middleware.ts`, install one runtime dep, and set three env vars on
-the Pages project. No second deploy, no separate domain, no Access token.
+`functions/_middleware.ts` and set three env vars on the Pages project. No
+second deploy, no separate domain, no Access token, no extra npm deps —
+the middleware is a single self-contained file.
 
 ```bash
 # In your Docusaurus project
-npm install @ops-ai/toggly-client-core
 mkdir -p functions
 curl -o functions/_middleware.ts \
   https://raw.githubusercontent.com/ops-ai/Toggly.FeatureManagement/main/toggly-docusaurus-edge-sdk/cloudflare/pages-function/functions/_middleware.ts
-git add functions package.json package-lock.json
+git add functions
 git commit -m "Add Toggly edge middleware"
 git push
 ```

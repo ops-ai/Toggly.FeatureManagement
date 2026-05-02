@@ -28,21 +28,9 @@ For every incoming request to your Pages site:
 
 ## Installation
 
-### 1. Install the runtime dependency
+### 1. Copy the middleware file
 
-In your Docusaurus project (the same one where you installed
-`@ops-ai/toggly-docusaurus-plugin`):
-
-```bash
-npm install @ops-ai/toggly-client-core
-```
-
-That's the only runtime dep the middleware needs. Cloudflare Pages bundles
-the function automatically; no separate build step.
-
-### 2. Copy the middleware file
-
-Copy `functions/_middleware.ts` from this directory into your Docusaurus
+Drop `functions/_middleware.ts` from this directory into your Docusaurus
 project as `functions/_middleware.ts`:
 
 ```bash
@@ -51,13 +39,11 @@ curl -o functions/_middleware.ts \
   https://raw.githubusercontent.com/ops-ai/Toggly.FeatureManagement/main/toggly-docusaurus-edge-sdk/cloudflare/pages-function/functions/_middleware.ts
 ```
 
-(Or copy the file by hand from this repo. It's deliberately a single file
-with only `@ops-ai/toggly-client-core` as an import, so vendoring is fine.)
+(Or copy the file by hand from this repo.) The middleware is intentionally
+self-contained — **zero npm runtime dependencies**. Cloudflare Pages picks
+up the `functions/` folder automatically on the next deploy and bundles it.
 
-The `functions/` folder is a Pages convention. Cloudflare automatically
-picks it up on the next deploy.
-
-### 3. Set environment variables
+### 2. Set environment variables
 
 In the Cloudflare dashboard, open your Pages project → **Settings** →
 **Environment variables** and add the following for **Production** (and
@@ -75,13 +61,13 @@ In the Cloudflare dashboard, open your Pages project → **Settings** →
 "Generate App Key" → Type: Frontend) for the environment you set in
 `TOGGLY_ENVIRONMENT`.
 
-### 4. Trigger a deploy
+### 3. Trigger a deploy
 
 Push the `functions/_middleware.ts` change. Cloudflare Pages rebuilds and
 attaches the function automatically. There's nothing to wire up in DNS or in
 your zone — the function runs in front of your existing custom domain.
 
-### 5. Verify
+### 4. Verify
 
 After the deploy is live:
 

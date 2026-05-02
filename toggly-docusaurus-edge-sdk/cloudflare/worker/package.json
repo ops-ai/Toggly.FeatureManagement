@@ -20,9 +20,6 @@
   ],
   "author": "Toggly",
   "license": "MIT",
-  "dependencies": {
-    "@ops-ai/toggly-client-core": "workspace:*"
-  },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240208.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
