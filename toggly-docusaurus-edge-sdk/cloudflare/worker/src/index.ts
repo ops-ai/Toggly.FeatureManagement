@@ -15,6 +15,7 @@ import { PageGateBehavior } from './types';
 import { getFeatureKeyForPath } from './manifest';
 import { getFlags, isFeatureEnabled } from './flags';
 import { transformHtmlResponse } from './html-rewriter';
+import { fetchFromOrigin } from './origin';
 
 // Worker configuration
 const WORKER_CONFIG: WorkerConfig = {
@@ -91,11 +92,27 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // Skip processing for manifest and other static assets
-    if (path === '/toggly-page-features.json' || path.startsWith('/_next/') || path.startsWith('/static/')) {
-      // Proxy to origin without modification
-      const originUrl = new URL(path, env.ORIGIN_BASE_URL);
-      return fetch(originUrl.toString(), request);
+    // Skip processing for the manifest and common static-asset paths so we
+    // don't pay manifest lookup + HTMLRewriter cost on every JS/CSS/img hit.
+    // Non-HTML responses are also passed through unchanged below (see
+    // `isHtmlResponse`), so this prefix list is just an optimisation.
+    if (
+      path === '/toggly-page-features.json' ||
+      path.startsWith('/assets/') ||
+      path.startsWith('/img/') ||
+      path.startsWith('/static/') ||
+      path.startsWith('/_next/')
+    ) {
+      const originUrl = new URL(path + url.search, env.ORIGIN_BASE_URL);
+      return fetchFromOrigin(
+        originUrl.toString(),
+        {
+          method: request.method,
+          headers: request.headers,
+          body: request.body,
+        },
+        env,
+      );
     }
 
     // Get request context (for future user/tenant targeting)
@@ -122,15 +139,19 @@ export default {
       }
     }
 
-    // Fetch from origin
-    const originUrl = new URL(path, env.ORIGIN_BASE_URL);
-    const originRequest = new Request(originUrl.toString(), {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-    });
-
-    const response = await fetch(originRequest);
+    // Fetch from origin (Access-token aware). We rebuild the URL onto the
+    // configured origin so the worker can sit on a different hostname than
+    // the origin without looping through itself.
+    const originUrl = new URL(path + url.search, env.ORIGIN_BASE_URL);
+    const response = await fetchFromOrigin(
+      originUrl.toString(),
+      {
+        method: request.method,
+        headers: request.headers,
+        body: request.body,
+      },
+      env,
+    );
 
     // If not HTML, return as-is
     if (!isHtmlResponse(response)) {

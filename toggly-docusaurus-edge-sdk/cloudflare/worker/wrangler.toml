@@ -2,22 +2,38 @@ name = "toggly-docusaurus-edge-worker"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
-# Required environment variables (set via wrangler secret put or dashboard):
-# - TOGGLY_API_BASE_URL
-# - TOGGLY_ENVIRONMENT
-# - TOGGLY_APP_KEY
-# - ORIGIN_BASE_URL
+# Default (non-secret) variables. Override per-environment below.
+# Secrets are NOT defined here — set them via `wrangler secret put` or the
+# Cloudflare dashboard. Required secrets:
+#   - TOGGLY_APP_KEY                 always required
+#   - CF_ACCESS_CLIENT_ID            only if ORIGIN_BASE_URL is gated by Cloudflare Access
+#   - CF_ACCESS_CLIENT_SECRET        only if ORIGIN_BASE_URL is gated by Cloudflare Access
+[vars]
+TOGGLY_API_BASE_URL = "https://definitions.toggly.io"
+TOGGLY_ENVIRONMENT = "Production"
+ORIGIN_BASE_URL = "https://staging-docs.toggly.io"
 
+# Production: front-of staging-docs.toggly.io for the Toggly Docusaurus site.
+# We fetch origin from the `main` branch alias of the toggly-docs Pages
+# project. Branch alias URLs (`<branch>.<project>.pages.dev`) follow the
+# latest deploy on that branch and never 301 to the custom domain, so the
+# worker can fetch them without looping back through itself.
 [env.production]
-# Production environment variables can be set via:
-# wrangler secret put TOGGLY_API_BASE_URL --env production
-# wrangler secret put TOGGLY_ENVIRONMENT --env production
-# wrangler secret put TOGGLY_APP_KEY --env production
-# wrangler secret put ORIGIN_BASE_URL --env production
+routes = [
+  { pattern = "staging-docs.toggly.io/*", zone_name = "toggly.io" },
+]
 
+[env.production.vars]
+TOGGLY_API_BASE_URL = "https://definitions.toggly.io"
+TOGGLY_ENVIRONMENT = "Production"
+ORIGIN_BASE_URL = "https://staging-docs.toggly.io"
+
+# Staging: deploy under `wrangler deploy --env staging` once a staging zone
+# / origin URL is wired up. Left empty intentionally so deploys to staging
+# don't accidentally inherit production routes.
 [env.staging]
-# Staging environment variables can be set via:
-# wrangler secret put TOGGLY_API_BASE_URL --env staging
-# wrangler secret put TOGGLY_ENVIRONMENT --env staging
-# wrangler secret put TOGGLY_APP_KEY --env staging
-# wrangler secret put ORIGIN_BASE_URL --env staging
+
+[env.staging.vars]
+TOGGLY_API_BASE_URL = "https://definitions.toggly.io"
+TOGGLY_ENVIRONMENT = "Staging"
+ORIGIN_BASE_URL = "https://staging-docs.toggly.io"

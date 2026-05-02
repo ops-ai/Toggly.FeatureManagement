@@ -6,6 +6,7 @@
  */
 
 import type { PageFeatureMapping, Env } from './types';
+import { fetchFromOrigin } from './origin';
 
 // In-memory cache for the manifest
 let manifestCache: PageFeatureMapping | null = null;
@@ -18,13 +19,17 @@ const MANIFEST_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
  */
 async function fetchManifest(env: Env): Promise<PageFeatureMapping> {
   const manifestUrl = new URL('/toggly-page-features.json', env.ORIGIN_BASE_URL);
-  
-  const response = await fetch(manifestUrl.toString(), {
-    method: 'GET',
-    headers: {
-      'Accept': 'application/json',
+
+  const response = await fetchFromOrigin(
+    manifestUrl.toString(),
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
     },
-  });
+    env,
+  );
 
   if (!response.ok) {
     console.warn(`Failed to fetch manifest: ${response.status} ${response.statusText}`);

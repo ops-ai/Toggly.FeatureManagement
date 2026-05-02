@@ -23,19 +23,33 @@ Update `wrangler.toml` if you want to change the worker name or compatibility da
 
 You need to set the following environment variables. We recommend using `wrangler secret` for sensitive values like API keys.
 
-| Variable | Description |
-|----------|-------------|
-| `TOGGLY_API_BASE_URL` | URL of the Toggly API (e.g., `https://definitions.toggly.io`) |
-| `TOGGLY_ENVIRONMENT` | Your environment name (e.g., `Production`) |
-| `TOGGLY_APP_KEY` | Your Toggly App Key |
-| `ORIGIN_BASE_URL` | The URL where your actual Docusaurus site is hosted |
+| Variable | Description | Sensitive |
+|----------|-------------|-----------|
+| `TOGGLY_API_BASE_URL` | URL of the Toggly API (e.g. `https://definitions.toggly.io`) | No (use `[vars]`) |
+| `TOGGLY_ENVIRONMENT` | Environment name (e.g. `Production`) | No (use `[vars]`) |
+| `TOGGLY_APP_KEY` | Toggly application key for the docs project | Yes (use `wrangler secret put`) |
+| `ORIGIN_BASE_URL` | URL where the static Docusaurus build is served (e.g. a Pages branch alias like `https://main.<project>.pages.dev`). The worker fetches HTML, the manifest, and assets from this origin. | No (use `[vars]`) |
+| `CF_ACCESS_CLIENT_ID` | Cloudflare Access service-token client ID. **Only required** when `ORIGIN_BASE_URL` is gated by Cloudflare Access. | Yes |
+| `CF_ACCESS_CLIENT_SECRET` | Cloudflare Access service-token client secret. **Only required** when `ORIGIN_BASE_URL` is gated by Cloudflare Access. | Yes |
 
 **Set secrets for production:**
 
 ```bash
-wrangler secret put TOGGLY_APP_KEY
-# Enter your key when prompted
+wrangler secret put TOGGLY_APP_KEY --env production
+# When ORIGIN_BASE_URL sits behind Cloudflare Access:
+wrangler secret put CF_ACCESS_CLIENT_ID --env production
+wrangler secret put CF_ACCESS_CLIENT_SECRET --env production
 ```
+
+> **Cloudflare Access service tokens.** If you protect your Pages preview /
+> alias URLs with Cloudflare Access (most teams do), the worker would
+> otherwise receive a 302 to the Access login page on every origin fetch.
+> Create a service token in **Zero Trust → Access → Service Auth** and add
+> the token's UUID + secret as the two `CF_ACCESS_*` worker secrets above.
+> Then in the Access policy that protects your origin hostname, add an
+> include rule of type *Service Auth* referencing that token. The worker
+> automatically attaches `CF-Access-Client-Id` and `CF-Access-Client-Secret`
+> headers on every origin fetch when these env vars are set.
 
 **Set non-sensitive vars in `wrangler.toml` (optional):**
 
@@ -48,12 +62,20 @@ ORIGIN_BASE_URL = "https://my-docusaurus-site.pages.dev"
 
 ### 3. Deployment
 
-Deploy the worker to Cloudflare:
+Deploy the worker to Cloudflare. Use the named environment so routes from
+`[env.production]` (or `[env.staging]`) are picked up — without `--env` the
+worker is uploaded with no triggers and effectively becomes unreachable:
 
 ```bash
-pnpm deploy
-# or
-wrangler deploy
+wrangler deploy --env production
+# or, for a staging environment:
+wrangler deploy --env staging
+```
+
+After the first deploy you can verify the routes attached correctly:
+
+```bash
+wrangler deployments list --env production
 ```
 
 ### 4. Routing

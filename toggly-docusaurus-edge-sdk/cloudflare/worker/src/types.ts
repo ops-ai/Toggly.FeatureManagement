@@ -11,6 +11,15 @@ export interface Env {
   TOGGLY_APP_KEY: string;
   /** Origin base URL (e.g., Cloudflare Pages URL or GitHub Pages URL) */
   ORIGIN_BASE_URL: string;
+  /**
+   * Cloudflare Access service-token client ID. Only required when
+   * `ORIGIN_BASE_URL` is gated by Cloudflare Access. When both this and
+   * `CF_ACCESS_CLIENT_SECRET` are set, the worker injects the appropriate
+   * headers on every origin fetch so the request bypasses the Access login.
+   */
+  CF_ACCESS_CLIENT_ID?: string;
+  /** Cloudflare Access service-token client secret. See `CF_ACCESS_CLIENT_ID`. */
+  CF_ACCESS_CLIENT_SECRET?: string;
 }
 
 /**
