@@ -79,7 +79,7 @@
     "@types/react": "^19.2.7",
     "@types/ws": "^8.0.0",
     "@vitest/coverage-v8": "^4.0.18",
-    "astro": "^5.16.0",
+    "astro": "^6.1.10",
     "jsdom": "^23.0.0",
     "react": "^19.2.3",
     "svelte": "^5.46.1",
