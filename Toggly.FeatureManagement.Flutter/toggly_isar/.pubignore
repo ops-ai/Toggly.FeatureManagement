@@ -1,0 +1,10 @@
+# When a .pubignore exists, `dart pub publish` uses it INSTEAD of .gitignore to
+# decide what to exclude. This is intentional: `*.g.dart` is git-ignored (kept
+# out of source control and regenerated via build_runner), but the generated
+# Isar code MUST be present in the published package so consumers can compile
+# without running build_runner. The release workflow runs build_runner before
+# publishing so the generated files exist in the archive.
+#
+# Exclude only local/dev artifacts here; do NOT exclude *.g.dart.
+example/.dart_tool/
+example/build/

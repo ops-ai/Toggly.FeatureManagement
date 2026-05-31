@@ -1,4 +1,25 @@
 
+## 1.2.0
+
+2026-05-30
+
+### Breaking
+- The SDK no longer bundles `flutter_secure_storage` and is now memory-only by default. The internal `SecureStorageService`/`SecureStorageKeys` (previously exported) have been removed.
+- Anonymous device identity is no longer persisted. When no `identity` is provided to `init`/`setIdentity`, an ephemeral in-memory id is used; pass a stable `identity` for consistent targeting and offline restart.
+
+### Added
+- New typed `TogglyCacheProvider` contract and `TogglyConfig.cacheProvider`. Supply an implementation to persist flags, variants, and JWKS across app restarts. The controlling app owns where data is stored.
+- Companion persistence packages: `feature_flags_toggly_secure_storage`, `feature_flags_toggly_disk`, `feature_flags_toggly_sqlite`, `feature_flags_toggly_isar`.
+- `TogglyFeatureFlagsCache`/`TogglyVariantsCache` cache models are now exported for provider implementations.
+
+### Changed
+- ETags are kept in memory only and are no longer persisted (first fetch after a cold start is a full, non-304 response).
+- Removed secure-storage background/foreground guards that are no longer needed; memory access is always safe.
+
+### Migration
+- Apps needing offline support across restarts should add one of the `feature_flags_toggly_*` companion packages (or implement `TogglyCacheProvider`) and pass it via `TogglyConfig(cacheProvider: ...)`, along with a stable `identity`.
+
+
 ## 1.1.16
 
 2026-04-08

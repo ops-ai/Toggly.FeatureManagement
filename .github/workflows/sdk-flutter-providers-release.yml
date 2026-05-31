@@ -1,0 +1,320 @@
+name: Flutter Cache Providers - Build & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Which provider package to publish'
+        required: true
+        type: choice
+        options:
+          - secure_storage
+          - disk
+          - sqlite
+          - isar
+      bump_type:
+        description: 'Version bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_ROOT_DIR: Toggly.FeatureManagement.Flutter
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      bump_type: ${{ steps.version.outputs.bump_type }}
+      dir: ${{ steps.map.outputs.dir }}
+      package: ${{ steps.map.outputs.package }}
+      tag_prefix: ${{ steps.map.outputs.tag_prefix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Map package input to paths
+        id: map
+        run: |
+          case "${{ github.event.inputs.package }}" in
+            secure_storage)
+              DIR="toggly_secure_storage"
+              PKG="feature_flags_toggly_secure_storage"
+              ;;
+            disk)
+              DIR="toggly_disk"
+              PKG="feature_flags_toggly_disk"
+              ;;
+            sqlite)
+              DIR="toggly_sqlite"
+              PKG="feature_flags_toggly_sqlite"
+              ;;
+            isar)
+              DIR="toggly_isar"
+              PKG="feature_flags_toggly_isar"
+              ;;
+            *)
+              echo "Invalid package: ${{ github.event.inputs.package }}"
+              exit 1
+              ;;
+          esac
+          echo "dir=$DIR" >> $GITHUB_OUTPUT
+          echo "package=$PKG" >> $GITHUB_OUTPUT
+          echo "tag_prefix=flutter-${{ github.event.inputs.package }}-v" >> $GITHUB_OUTPUT
+          echo "Selected package: $PKG ($DIR)"
+
+      - name: Determine version from bump type
+        id: version
+        run: |
+          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
+          TAG_PREFIX="${{ steps.map.outputs.tag_prefix }}"
+          PKG="${{ steps.map.outputs.package }}"
+          PKG_DIR="${{ env.FLUTTER_ROOT_DIR }}/${{ steps.map.outputs.dir }}"
+
+          LATEST_TAG=$(git tag -l "${TAG_PREFIX}*" --sort=-version:refname | head -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            # Seed from pub.dev latest so we do not double-bump when someone already bumped
+            # repo pubspec/CHANGELOG for the next release.
+            CURRENT_VERSION=$(curl -fsSL "https://pub.dev/api/packages/${PKG}" | jq -r '.latest.version // empty')
+            if [ -z "$CURRENT_VERSION" ] || [ "$CURRENT_VERSION" = "null" ]; then
+              CURRENT_VERSION=$(grep -E '^version:' "${PKG_DIR}/pubspec.yaml" | head -1 | awk '{print $2}' | sed 's/#.*//' | tr -d ' ')
+              CURRENT_VERSION="${CURRENT_VERSION%%+*}"
+              if [ -z "$CURRENT_VERSION" ]; then
+                CURRENT_VERSION="0.0.0"
+              fi
+              echo "pub.dev lookup failed or empty; seeding from pubspec: $CURRENT_VERSION"
+            else
+              echo "No ${TAG_PREFIX}* tag found; seeding from pub.dev latest: $CURRENT_VERSION"
+            fi
+          else
+            CURRENT_VERSION="${LATEST_TAG#$TAG_PREFIX}"
+          fi
+
+          BASE_VERSION="${CURRENT_VERSION%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+
+          case "$BUMP_TYPE" in
+            major)
+              MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor)
+              MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch)
+              PATCH=$((PATCH + 1)) ;;
+            *)
+              echo "Invalid bump type: $BUMP_TYPE"; exit 1 ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+          echo "New version: $NEW_VERSION"
+
+      - name: Check if tag exists
+        run: |
+          TAG="${{ steps.map.outputs.tag_prefix }}${{ steps.version.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+            exit 1
+          fi
+
+  build-and-test:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      # Uses the committed pubspec_overrides.yaml (path: ../toggly) to resolve
+      # the in-repo base SDK for pre-publish validation.
+      - name: Install dependencies
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: flutter pub get
+
+      - name: Run code generation (if needed)
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: |
+          if grep -q "build_runner" pubspec.yaml; then
+            flutter pub run build_runner build --delete-conflicting-outputs
+          else
+            echo "No build_runner found, skipping code generation"
+          fi
+
+      - name: Analyze
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: flutter analyze
+        continue-on-error: true
+
+      - name: Run tests
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: flutter test
+        continue-on-error: true
+
+  publish:
+    needs: [build-and-test, validate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_tag_gpgsign: true
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Update version in pubspec.yaml
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: |
+          sed -i "s/^version: .*/version: ${{ needs.validate.outputs.version }}/" pubspec.yaml
+          echo "Updated pubspec.yaml to version ${{ needs.validate.outputs.version }}"
+
+      # Strip the local path override so the published package resolves the base
+      # SDK from pub.dev (>=1.2.0 <2.0.0), not the in-repo path.
+      - name: Remove local dependency overrides
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: |
+          rm -f pubspec_overrides.yaml
+          echo "Removed pubspec_overrides.yaml (if present)"
+
+      - name: Install dependencies
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: flutter pub get
+
+      # Generate Isar (or other) codegen so the *.g.dart files are present in
+      # the published archive (they are git-ignored).
+      - name: Run code generation (if needed)
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: |
+          if grep -q "build_runner" pubspec.yaml; then
+            flutter pub run build_runner build --delete-conflicting-outputs
+          else
+            echo "No build_runner found, skipping code generation"
+          fi
+
+      - name: Dry run publish
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: flutter pub publish --dry-run
+
+      - name: Publish to pub.dev
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: flutter pub publish --force
+        env:
+          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+      - name: Commit version update
+        run: |
+          # Restore the local override that was removed only for publishing.
+          git checkout -- "${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}/pubspec_overrides.yaml" 2>/dev/null || true
+
+          git add "${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}/pubspec.yaml"
+          git commit -S -m "Released ${{ needs.validate.outputs.package }} v${{ needs.validate.outputs.version }} (${{ needs.validate.outputs.bump_type }}) [skip ci]" || echo "No changes to commit"
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version update"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              sleep 2
+            fi
+          done
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Create and push tag
+        run: |
+          TAG="${{ needs.validate.outputs.tag_prefix }}${{ needs.validate.outputs.version }}"
+          git tag -s -m "${{ needs.validate.outputs.package }} v${{ needs.validate.outputs.version }}" "$TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag_prefix }}${{ needs.validate.outputs.version }}
+          name: ${{ needs.validate.outputs.package }} v${{ needs.validate.outputs.version }}
+          body: |
+            ## ${{ needs.validate.outputs.package }} v${{ needs.validate.outputs.version }}
+
+            Persistence backend for the Toggly Flutter SDK.
+
+            ### Installation
+
+            ```yaml
+            dependencies:
+              feature_flags_toggly: ^1.2.0
+              ${{ needs.validate.outputs.package }}: ^${{ needs.validate.outputs.version }}
+            ```
+
+            ### Links
+
+            - [pub.dev package](https://pub.dev/packages/${{ needs.validate.outputs.package }})
+            - [Documentation](https://docs.toggly.io/docs/sdks/flutter)
+          prerelease: ${{ github.event.inputs.prerelease }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    needs: [publish, validate]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Flutter Cache Provider Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | ${{ needs.validate.outputs.package }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bump type | ${{ needs.validate.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | ${{ needs.validate.outputs.tag_prefix }}${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View on pub.dev](https://pub.dev/packages/${{ needs.validate.outputs.package }})" >> $GITHUB_STEP_SUMMARY

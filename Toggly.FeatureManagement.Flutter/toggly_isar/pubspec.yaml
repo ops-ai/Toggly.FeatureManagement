@@ -1,0 +1,28 @@
+name: feature_flags_toggly_isar
+description: Isar database persistence backend for the Toggly Flutter SDK (feature_flags_toggly), enabling offline feature flag, variant, and JWKS caching.
+version: 0.1.0
+homepage: https://docs.toggly.io/
+repository: https://github.com/ops-ai/toggly
+
+environment:
+  sdk: '>=2.18.2 <4.0.0'
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  feature_flags_toggly: '>=1.2.0 <2.0.0'
+  isar: '>=3.1.0 <4.0.0'
+  isar_flutter_libs: '>=3.1.0 <4.0.0'
+  path_provider: '>=2.0.0 <3.0.0'
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+  lints: ^2.0.1
+  build_runner: '>=2.3.0 <3.0.0'
+  isar_generator: '>=3.1.0 <4.0.0'
+
+flutter:

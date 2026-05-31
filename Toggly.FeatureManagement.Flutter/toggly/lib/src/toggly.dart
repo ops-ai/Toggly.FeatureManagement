@@ -23,8 +23,15 @@ class Toggly with WidgetsBindingObserver {
   static late TogglyConfig _config;
   static Map<String, bool> _flagDefaults = {};
   static final _http = HttpService.getInstance.http;
-  static final _storage = SecureStorageService.getInstance;
   static final _sync = SyncService.getInstance;
+
+  /// Optional persistence backend supplied via [TogglyConfig.cacheProvider].
+  /// When null the SDK is memory-only.
+  static TogglyCacheProvider? _cache;
+
+  /// Ephemeral, process-scoped identity used when no explicit identity is
+  /// provided. Not persisted — supply a stable identity for offline restart.
+  static String? _deviceId;
   static BehaviorSubject<Map<String, bool>>? _featureFlagsSubject;
   static DateTime? _lastChecked;
   static DateTime? _lastSynced;
@@ -50,7 +57,8 @@ class Toggly with WidgetsBindingObserver {
     } catch (e) {
       // Binding not available (e.g., in tests), skip observer registration
       if (kDebugMode) {
-        print('Toggly: WidgetsBinding not available, skipping observer registration');
+        print(
+            'Toggly: WidgetsBinding not available, skipping observer registration');
       }
     }
   }
@@ -121,28 +129,19 @@ class Toggly with WidgetsBindingObserver {
 
     Toggly._appKey = appKey;
     Toggly._environment = environment ?? 'Production';
+    Toggly._config = config;
+    Toggly._cache = config.cacheProvider;
 
-    // Use provided identity or get/generate device ID
+    // Use the provided identity, or fall back to an ephemeral in-memory
+    // device id. The fallback is not persisted: stable targeting and offline
+    // restart require the app to pass an explicit [identity].
     if (identity != null) {
       Toggly._identity = identity;
-      await checkAndClearFeatureFlagsCache();
     } else {
-      // Try to get stored device ID
-      var storedId =
-          await _storage.get(key: SecureStorageKeys.deviceId.toString());
-      if (storedId == null) {
-        // Generate new device ID if none exists
-        storedId = _uuid.v4();
-        await _storage.set(
-          key: SecureStorageKeys.deviceId.toString(),
-          value: storedId,
-        );
-      }
-      Toggly._identity = storedId;
-      await checkAndClearFeatureFlagsCache();
+      Toggly._identity = (Toggly._deviceId ??= _uuid.v4());
     }
+    await checkAndClearFeatureFlagsCache();
 
-    Toggly._config = config;
     Toggly._flagDefaults = flagDefaults ?? {};
     Toggly._useSignedDefinitions = useSignedDefinitions;
     if (kDebugMode) {
@@ -216,21 +215,12 @@ class Toggly with WidgetsBindingObserver {
       }
       Toggly._identity = identity;
     } else {
-      // Try to get stored device ID
-      var storedId =
-          await _storage.get(key: SecureStorageKeys.deviceId.toString());
-      if (storedId == null) {
-        // Generate new device ID if none exists
-        storedId = _uuid.v4();
-        await _storage.set(
-          key: SecureStorageKeys.deviceId.toString(),
-          value: storedId,
-        );
-      }
-      if (Toggly._identity != storedId) {
+      // Fall back to the ephemeral in-memory device id (not persisted).
+      final deviceId = (Toggly._deviceId ??= _uuid.v4());
+      if (Toggly._identity != deviceId) {
         await clearFeatureFlagsCache();
       }
-      Toggly._identity = storedId;
+      Toggly._identity = deviceId;
     }
     return await Toggly.refresh();
   }
@@ -238,30 +228,20 @@ class Toggly with WidgetsBindingObserver {
   /// Returns a [Future] with the cached feature flags values.
   static Future<Map<String, bool>> get cachedFeatureFlags async {
     try {
-      // Return in-memory flags if available to avoid secure storage access
+      // Return in-memory flags if available.
       if (_inMemoryFlags != null) {
         return _inMemoryFlags!;
       }
 
-      // If app is backgrounded, return defaults from memory to avoid secure storage access
-      if (!_checkAppVisibility()) {
-        return Map<String, bool>.from(Toggly._flagDefaults);
-      }
-
-      final hashedIdentity =
-          sha256.convert(utf8.encode(Toggly._identity)).toString();
-
-      String? cache = await _storage.get(
-          key: SecureStorageKeys.featureFlagsCache.toString() + hashedIdentity);
+      // No persistence backend — fall back to defaults.
+      final cache = await Toggly._cache?.readFlags(Toggly._identity);
 
       if (cache == null) {
         // If no cache exists, return defaults
         return Map<String, bool>.from(Toggly._flagDefaults);
       }
 
-      TogglyFeatureFlagsCache flagsCache = TogglyFeatureFlagsCache.fromJson(
-        jsonDecode(cache),
-      );
+      final TogglyFeatureFlagsCache flagsCache = cache;
 
       // Check if the cache is signed and if the timestamp and signature are present
       if (Toggly._useSignedDefinitions) {
@@ -309,14 +289,6 @@ class Toggly with WidgetsBindingObserver {
     // Update in-memory cache first
     _inMemoryFlags = Map<String, bool>.from(jsonDecode(featureFlags));
 
-    // Skip secure storage operations if app is backgrounded
-    if (!_checkAppVisibility()) {
-      if (kDebugMode) {
-        print('Skipping secure storage cache as app is not in foreground');
-      }
-      return;
-    }
-
     if (Toggly._useSignedDefinitions) {
       if (timestamp == null || signature == null || keyId == null) {
         throw Exception(
@@ -324,19 +296,14 @@ class Toggly with WidgetsBindingObserver {
       }
     }
 
-    final hashedIdentity =
-        sha256.convert(utf8.encode(Toggly._identity)).toString();
-
-    await _storage.set(
-      key: SecureStorageKeys.featureFlagsCache.toString() + hashedIdentity,
-      value: jsonEncode(TogglyFeatureFlagsCache(
-        identity: Toggly._identity,
-        flags: featureFlags,
-        timestamp: timestamp,
-        signature: signature,
-        keyId: keyId,
-      )),
-    );
+    // Mirror through to the persistence backend, when configured.
+    await Toggly._cache?.writeFlags(TogglyFeatureFlagsCache(
+      identity: Toggly._identity,
+      flags: featureFlags,
+      timestamp: timestamp,
+      signature: signature,
+      keyId: keyId,
+    ));
   }
 
   /// Clears the feature flags cache.
@@ -347,64 +314,30 @@ class Toggly with WidgetsBindingObserver {
     _eTag = null;
     _variantsETag = null;
 
-    // Skip secure storage operations if app is backgrounded
-    if (!_checkAppVisibility()) {
-      if (kDebugMode) {
-        print('Skipping secure storage clear as app is not in foreground');
-      }
-      return;
-    }
-
-    final hashedIdentity =
-        sha256.convert(utf8.encode(Toggly._identity)).toString();
-
-    await _storage.delete(
-      key: SecureStorageKeys.featureFlagsCache.toString() + hashedIdentity,
-    );
-    await _storage.delete(
-      key: SecureStorageKeys.variantsCache.toString() + hashedIdentity,
-    );
-    await _storage.delete(key: SecureStorageKeys.etag.toString());
-    await _storage.delete(key: SecureStorageKeys.etagVariants.toString());
+    // ETags are memory-only; clear persisted flags/variants for this identity.
+    await Toggly._cache?.deleteFlags(Toggly._identity);
+    await Toggly._cache?.deleteVariants(Toggly._identity);
   }
 
   static Future checkAndClearFeatureFlagsCache() async {
-    // Skip secure storage operations if app is backgrounded
-    if (!_checkAppVisibility()) {
-      if (kDebugMode) {
-        print('Skipping cache check as app is not in foreground');
-      }
+    final provider = Toggly._cache;
+    if (provider == null) {
       return;
     }
 
-    final hashedIdentity =
-        sha256.convert(utf8.encode(Toggly._identity)).toString();
-
-    String? cache = await _storage.get(
-        key: SecureStorageKeys.featureFlagsCache.toString() + hashedIdentity);
-
-    if (cache == null) {
+    final flagsCache = await provider.readFlags(Toggly._identity);
+    if (flagsCache == null) {
       return;
     }
-
-    TogglyFeatureFlagsCache flagsCache = TogglyFeatureFlagsCache.fromJson(
-      jsonDecode(cache),
-    );
 
     if (Toggly._identity != flagsCache.identity) {
       await clearFeatureFlagsCache();
       return;
     }
 
-    String? variantsCacheStr = await _storage.get(
-        key: SecureStorageKeys.variantsCache.toString() + hashedIdentity);
-    if (variantsCacheStr != null) {
-      final variantsCache = TogglyVariantsCache.fromJson(
-        jsonDecode(variantsCacheStr),
-      );
-      if (Toggly._identity != variantsCache.identity) {
-        await clearVariantCache();
-      }
+    final variantsCache = await provider.readVariants(Toggly._identity);
+    if (variantsCache != null && Toggly._identity != variantsCache.identity) {
+      await clearVariantCache();
     }
   }
 
@@ -420,10 +353,8 @@ class Toggly with WidgetsBindingObserver {
       Map<String, dynamic> headers = {};
 
       if (Toggly._useSignedDefinitions) {
-        String? etag =
-            _eTag ?? await _storage.get(key: SecureStorageKeys.etag.toString());
-        if (etag != null) {
-          headers['If-None-Match'] = etag;
+        if (_eTag != null) {
+          headers['If-None-Match'] = _eTag!;
         }
       }
 
@@ -442,40 +373,27 @@ class Toggly with WidgetsBindingObserver {
       if (Toggly._useSignedDefinitions) {
         // Parse the response
         final signedResponse = Map<String, dynamic>.from(response.data);
-        flags = Map<String, bool>.from(signedResponse['defs'] ?? signedResponse['data'] ?? <String, dynamic>{});
+        flags = Map<String, bool>.from(signedResponse['defs'] ??
+            signedResponse['data'] ??
+            <String, dynamic>{});
         String signature = signedResponse['signature'];
         int timestamp = signedResponse['timestamp'];
         String keyId = signedResponse['kid'];
 
-        final hashedIdentity =
-            sha256.convert(utf8.encode(Toggly._identity)).toString();
-
-        // Check existing cache timestamp
-        String? existingCache = await _storage.get(
-            key: SecureStorageKeys.featureFlagsCache.toString() +
-                hashedIdentity);
-
-        if (existingCache != null) {
-          TogglyFeatureFlagsCache existing = TogglyFeatureFlagsCache.fromJson(
-            jsonDecode(existingCache),
-          );
-
-          // Validate that new timestamp is greater than existing
-          if (existing.timestamp != null && timestamp <= existing.timestamp!) {
-            throw Exception(
-                'New definitions timestamp must be greater than existing timestamp');
-          }
+        // Check existing cache timestamp (anti-rollback) from the provider.
+        final existing = await Toggly._cache?.readFlags(Toggly._identity);
+        if (existing != null &&
+            existing.timestamp != null &&
+            timestamp <= existing.timestamp!) {
+          throw Exception(
+              'New definitions timestamp must be greater than existing timestamp');
         }
 
         try {
           final flagsPayload = signedResponse['defs'] ?? signedResponse['data'];
           if (Toggly._config.verifySignatures) {
             final isValid = await _verifySignature(
-              jsonEncode(flagsPayload),
-              signature,
-              timestamp,
-              false,
-              keyId);
+                jsonEncode(flagsPayload), signature, timestamp, false, keyId);
 
             if (!isValid) {
               throw Exception('Invalid signature');
@@ -504,26 +422,19 @@ class Toggly with WidgetsBindingObserver {
         String? newEtag = response.headers['etag']?.first;
         if (newEtag != null) {
           _eTag = newEtag;
-          await _storage.set(
-            key: SecureStorageKeys.etag.toString(),
-            value: newEtag,
-          );
         }
       } else {
         _lastChecked = DateTime.now();
         _lastSynced = DateTime.now();
         final payload = Map<String, dynamic>.from(response.data);
         flags = Map<String, bool>.from(payload['defs'] ?? payload);
-        Toggly.cacheFeatureFlags(featureFlags: jsonEncode(payload['defs'] ?? payload));
+        Toggly.cacheFeatureFlags(
+            featureFlags: jsonEncode(payload['defs'] ?? payload));
 
         // Store new ETag if present
         String? newEtag = response.headers['etag']?.first;
         if (newEtag != null) {
           _eTag = newEtag;
-          await _storage.set(
-            key: SecureStorageKeys.etag.toString(),
-            value: newEtag,
-          );
         }
       }
 
@@ -545,7 +456,8 @@ class Toggly with WidgetsBindingObserver {
       } else if (e is DioException && e.response?.statusCode == 403) {
         // Clear cached data on 403 responses
         await clearFeatureFlagsCache();
-        await _storage.delete(key: SecureStorageKeys.jwks.toString());
+        _inMemoryJwks = null;
+        await Toggly._cache?.deleteJwks();
 
         return TogglyLoadFeatureFlagsResponse.error;
       }
@@ -564,10 +476,8 @@ class Toggly with WidgetsBindingObserver {
     }
     try {
       final headers = <String, dynamic>{};
-      final etag = _variantsETag ??
-          await _storage.get(key: SecureStorageKeys.etagVariants.toString());
-      if (etag != null) {
-        headers['If-None-Match'] = etag;
+      if (_variantsETag != null) {
+        headers['If-None-Match'] = _variantsETag!;
       }
 
       final response = await _http.get(
@@ -581,8 +491,9 @@ class Toggly with WidgetsBindingObserver {
       }
 
       final signedResponse = Map<String, dynamic>.from(response.data);
-      final defsPayload =
-          signedResponse['defs'] ?? signedResponse['data'] ?? <String, dynamic>{};
+      final defsPayload = signedResponse['defs'] ??
+          signedResponse['data'] ??
+          <String, dynamic>{};
       final defs = defsPayload is Map
           ? Map<String, dynamic>.from(defsPayload)
           : <String, dynamic>{};
@@ -594,23 +505,18 @@ class Toggly with WidgetsBindingObserver {
         throw Exception('Variants response missing signature metadata');
       }
 
-      final hashedIdentity =
-          sha256.convert(utf8.encode(Toggly._identity)).toString();
-
-      final existingVariantsCache = await _storage.get(
-          key: SecureStorageKeys.variantsCache.toString() + hashedIdentity);
-
-      if (existingVariantsCache != null) {
-        final existing = TogglyVariantsCache.fromJson(
-          jsonDecode(existingVariantsCache),
-        );
-        if (existing.timestamp != null && timestamp <= existing.timestamp!) {
-          throw Exception(
-              'New variants timestamp must be greater than existing timestamp');
-        }
+      final existingVariants = await Toggly._cache?.readVariants(
+        Toggly._identity,
+      );
+      if (existingVariants != null &&
+          existingVariants.timestamp != null &&
+          timestamp <= existingVariants.timestamp!) {
+        throw Exception(
+            'New variants timestamp must be greater than existing timestamp');
       }
 
-      final payloadForSign = jsonEncode(defsPayload is Map ? defsPayload : defs);
+      final payloadForSign =
+          jsonEncode(defsPayload is Map ? defsPayload : defs);
       if (Toggly._config.verifySignatures) {
         final isValid = await _verifySignature(
           payloadForSign,
@@ -639,10 +545,6 @@ class Toggly with WidgetsBindingObserver {
       final newEtag = response.headers['etag']?.first;
       if (newEtag != null) {
         _variantsETag = newEtag;
-        await _storage.set(
-          key: SecureStorageKeys.etagVariants.toString(),
-          value: newEtag,
-        );
       }
 
       if (kDebugMode) {
@@ -655,7 +557,8 @@ class Toggly with WidgetsBindingObserver {
         _inMemoryVariantDefs = cached;
       } else if (e.response?.statusCode == 403) {
         await clearVariantCache();
-        await _storage.delete(key: SecureStorageKeys.jwks.toString());
+        _inMemoryJwks = null;
+        await Toggly._cache?.deleteJwks();
       } else {
         if (kDebugMode) {
           print('Toggly.fetchEvaluatedVariants error: $e');
@@ -678,26 +581,13 @@ class Toggly with WidgetsBindingObserver {
   }) async {
     _inMemoryVariantDefs = Map<String, dynamic>.from(jsonDecode(variantsJson));
 
-    if (!_checkAppVisibility()) {
-      if (kDebugMode) {
-        print('Skipping variants secure storage cache as app is not in foreground');
-      }
-      return;
-    }
-
-    final hashedIdentity =
-        sha256.convert(utf8.encode(Toggly._identity)).toString();
-
-    await _storage.set(
-      key: SecureStorageKeys.variantsCache.toString() + hashedIdentity,
-      value: jsonEncode(TogglyVariantsCache(
-        identity: Toggly._identity,
-        variants: variantsJson,
-        timestamp: timestamp,
-        signature: signature,
-        keyId: keyId,
-      )),
-    );
+    await Toggly._cache?.writeVariants(TogglyVariantsCache(
+      identity: Toggly._identity,
+      variants: variantsJson,
+      timestamp: timestamp,
+      signature: signature,
+      keyId: keyId,
+    ));
   }
 
   /// Drops variant cache from memory and secure storage for the current identity.
@@ -705,35 +595,16 @@ class Toggly with WidgetsBindingObserver {
     _inMemoryVariantDefs = null;
     _variantsETag = null;
 
-    if (!_checkAppVisibility()) {
-      if (kDebugMode) {
-        print('Skipping variant cache clear as app is not in foreground');
-      }
-      return;
-    }
-
-    final hashedIdentity =
-        sha256.convert(utf8.encode(Toggly._identity)).toString();
-
-    await _storage.delete(
-      key: SecureStorageKeys.variantsCache.toString() + hashedIdentity,
-    );
-    await _storage.delete(key: SecureStorageKeys.etagVariants.toString());
+    await Toggly._cache?.deleteVariants(Toggly._identity);
   }
 
-  static Future<Map<String, dynamic>> _readVerifiedVariantDefsFromCache() async {
+  static Future<Map<String, dynamic>>
+      _readVerifiedVariantDefsFromCache() async {
     try {
-      if (!_checkAppVisibility()) {
+      final vc = await Toggly._cache?.readVariants(Toggly._identity);
+      if (vc == null) {
         return {};
       }
-      final hashedIdentity =
-          sha256.convert(utf8.encode(Toggly._identity)).toString();
-      final cache = await _storage.get(
-          key: SecureStorageKeys.variantsCache.toString() + hashedIdentity);
-      if (cache == null) {
-        return {};
-      }
-      final vc = TogglyVariantsCache.fromJson(jsonDecode(cache));
       if (vc.identity != Toggly._identity) {
         return {};
       }
@@ -851,17 +722,8 @@ class Toggly with WidgetsBindingObserver {
         }
       }
 
-      // Skip secure storage operations if app is backgrounded
-      if (!_checkAppVisibility()) {
-        if (kDebugMode) {
-          print('Skipping JWKs fetch as app is not in foreground');
-        }
-        return null;
-      }
-
-      // Try to get cached JWKs from storage
-      var cachedJwks =
-          await _storage.get(key: SecureStorageKeys.jwks.toString());
+      // Try to get cached JWKs from the persistence backend.
+      var cachedJwks = await Toggly._cache?.readJwks();
       if (cachedJwks != null) {
         if (kDebugMode) {
           print('Using cached JWKs from storage');
@@ -904,11 +766,8 @@ class Toggly with WidgetsBindingObserver {
       // Cache in memory
       _inMemoryJwks = jwksData;
 
-      // Cache in storage
-      await _storage.set(
-        key: SecureStorageKeys.jwks.toString(),
-        value: jsonEncode(jwksData),
-      );
+      // Cache through the persistence backend, when configured.
+      await Toggly._cache?.writeJwks(jsonEncode(jwksData));
 
       if (kDebugMode) {
         print('Fetched and cached new JWKs');
@@ -1175,7 +1034,8 @@ class Toggly with WidgetsBindingObserver {
     } catch (e) {
       // Binding not available (e.g., in tests), skip observer removal
       if (kDebugMode) {
-        print('Toggly: WidgetsBinding not available, skipping observer removal');
+        print(
+            'Toggly: WidgetsBinding not available, skipping observer removal');
       }
     }
   }
@@ -1203,8 +1063,7 @@ class Toggly with WidgetsBindingObserver {
           // automatically once the connection drops.
           if (Toggly._sync.wsConnected) {
             if (kDebugMode) {
-              print(
-                  'Toggly: Skipping poll refresh — WebSocket is connected');
+              print('Toggly: Skipping poll refresh — WebSocket is connected');
             }
             return;
           }

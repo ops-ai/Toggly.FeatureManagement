@@ -246,11 +246,45 @@ This ensures seamless key rotation without service interruption.
 
 #### Offline Support
 
-When offline, the client:
-1. Uses cached JWKS if available
-2. Verifies signatures using cached keys
+The SDK is **memory-only by default** and does not persist anything to disk.
+This keeps it crash-safe and avoids secure-storage access while the app is
+backgrounded. As a result, a memory-only configuration has no cache after a
+cold start and cannot evaluate flags offline until the first successful fetch.
+
+To support offline restarts, supply a **cache provider** — your app chooses
+where data is stored. Pass an implementation of `TogglyCacheProvider` via
+`TogglyConfig(cacheProvider: ...)`. Offline restart also requires a **stable
+identity** passed to `Toggly.init`/`Toggly.setIdentity` (the anonymous
+in-memory identity changes on every cold start, so cached entries would not be
+found).
+
+```dart
+await Toggly.init(
+  appKey: '<your-app-key>',
+  identity: currentUserId, // stable identity
+  config: TogglyConfig(cacheProvider: myCacheProvider),
+);
+```
+
+Official persistence backends (each published as its own package):
+
+| Package | Backend |
+|---------|---------|
+| [`feature_flags_toggly_secure_storage`](https://pub.dev/packages/feature_flags_toggly_secure_storage) | Encrypted platform secure storage |
+| [`feature_flags_toggly_disk`](https://pub.dev/packages/feature_flags_toggly_disk) | Plain JSON files on disk |
+| [`feature_flags_toggly_sqlite`](https://pub.dev/packages/feature_flags_toggly_sqlite) | SQLite via `sqflite` |
+| [`feature_flags_toggly_isar`](https://pub.dev/packages/feature_flags_toggly_isar) | Isar database |
+
+Or implement `TogglyCacheProvider` yourself for any other backend.
+
+When a provider is configured and the app is offline, the client:
+1. Loads cached flags, variants, and JWKS from the provider
+2. Verifies signatures using cached keys (when signed definitions are enabled)
 3. Accepts cached feature definitions if verification succeeds
 4. Falls back to default values if verification fails
+
+> **Note:** ETags are kept in memory only, so the first request after a cold
+> start is always a full fetch (never a `304 Not Modified`).
 
 #### Security Considerations
 

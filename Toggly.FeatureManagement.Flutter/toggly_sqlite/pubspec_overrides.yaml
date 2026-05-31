@@ -1,0 +1,6 @@
+# Local development override so the package resolves against the in-repo base
+# SDK before feature_flags_toggly 1.2.0 is published to pub.dev.
+# pubspec_overrides.yaml is local-only and is not uploaded when publishing.
+dependency_overrides:
+  feature_flags_toggly:
+    path: ../toggly

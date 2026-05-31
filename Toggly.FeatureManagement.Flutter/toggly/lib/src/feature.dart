@@ -16,6 +16,7 @@ class Feature extends StatefulWidget {
     required this.featureKeys,
     this.requirement = FeatureRequirement.all,
     this.negate = false,
+
     /// When set, requires [featureKeys.first] to resolve to this variant name
     /// (and [Toggly] must be initialized with `enableVariants: true`).
     this.variant,

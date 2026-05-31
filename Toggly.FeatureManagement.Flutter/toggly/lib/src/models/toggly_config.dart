@@ -1,3 +1,5 @@
+import '../services/toggly_cache_provider.dart';
+
 /// Toggly configuration model allowing various tweaks on how the package
 /// should work to better fit each use-case.
 class TogglyConfig {
@@ -27,6 +29,15 @@ class TogglyConfig {
   /// exposes variant lookup APIs on `Toggly`.
   final bool enableVariants;
 
+  /// Optional persistence backend for caches (flags, variants, JWKS).
+  ///
+  /// When `null` (the default) the SDK is memory-only and does not support
+  /// offline restart. Supply an implementation (e.g. one of the
+  /// `feature_flags_toggly_*` companion packages) to persist caches across
+  /// app restarts. Offline restart also requires a stable [identity] passed
+  /// to `Toggly.init` / `Toggly.setIdentity`.
+  final TogglyCacheProvider? cacheProvider;
+
   const TogglyConfig({
     this.baseURI = 'https://definitions.toggly.io',
     this.connectTimeout = 5 * 1000,
@@ -35,5 +46,6 @@ class TogglyConfig {
     this.verifySignatures = false,
     this.enableLiveUpdates = true,
     this.enableVariants = false,
+    this.cacheProvider,
   });
 }

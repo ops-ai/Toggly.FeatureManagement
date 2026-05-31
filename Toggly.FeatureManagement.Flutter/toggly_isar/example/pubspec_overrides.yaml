@@ -1,0 +1,6 @@
+# Local development overrides for running the example against in-repo packages.
+dependency_overrides:
+  feature_flags_toggly:
+    path: ../../toggly
+  feature_flags_toggly_isar:
+    path: ../

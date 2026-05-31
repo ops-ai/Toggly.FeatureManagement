@@ -1,0 +1,38 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Flutter/Dart/Pub related
+# Libraries should not include pubspec.lock, per https://dart.dev/guides/libraries/private-files#pubspeclock.
+/pubspec.lock
+**/doc/api/
+.dart_tool/
+.packages
+build/
+
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Isar generated code (produced by build_runner; regenerated in CI and before publish)
+*.g.dart
+
+# Isar native core libraries (downloaded on demand for desktop tests via
+# Isar.initializeIsarCore(download: true); must never be committed or published)
+libisar.dylib
+libisar.so
+isar.dll
+isar_*.dll

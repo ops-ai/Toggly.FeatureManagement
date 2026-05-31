@@ -6,14 +6,14 @@ on:
       - develop
       - main
     paths:
-      - 'Toggly.FeatureManagement.Flutter/**'
+      - 'Toggly.FeatureManagement.Flutter/toggly/**'
       - '.github/workflows/analysis-flutter.yml'
   pull_request:
     branches:
       - develop
       - main
     paths:
-      - 'Toggly.FeatureManagement.Flutter/**'
+      - 'Toggly.FeatureManagement.Flutter/toggly/**'
       - '.github/workflows/analysis-flutter.yml'
   workflow_dispatch:
 
