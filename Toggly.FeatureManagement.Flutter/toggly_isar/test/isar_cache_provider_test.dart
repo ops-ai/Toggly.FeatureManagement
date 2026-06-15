@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:feature_flags_toggly_isar/feature_flags_toggly_isar.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 
 import 'support/cache_provider_contract.dart';
 

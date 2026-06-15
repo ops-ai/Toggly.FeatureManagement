@@ -1,4 +1,17 @@
 
+## 1.2.1
+
+2026-06-15
+
+### Fixed
+- Packaging: `.pubignore` now excludes `build/` and other transient artifacts so
+  the published archive no longer bundles the local build cache (which had
+  pushed it past pub.dev's 100 MB limit).
+
+### Changed
+- Added the `repository` field pointing to
+  https://github.com/ops-ai/Toggly.FeatureManagement.
+
 ## 1.2.0
 
 2026-05-30

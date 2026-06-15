@@ -6,5 +6,19 @@
 # publishing so the generated files exist in the archive.
 #
 # Exclude only local/dev artifacts here; do NOT exclude *.g.dart.
+# Because .pubignore replaces .gitignore for this directory, build/transient
+# artifacts must be re-listed here or they get bundled into the archive.
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+coverage/
+*.iml
 example/.dart_tool/
 example/build/
+
+# Isar native core libraries downloaded for desktop tests (never publish these)
+libisar.dylib
+libisar.so
+isar.dll
+isar_*.dll

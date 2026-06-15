@@ -4,8 +4,13 @@ Isar database persistence backend for the [Toggly](https://toggly.io) Flutter
 SDK ([`feature_flags_toggly`](https://pub.dev/packages/feature_flags_toggly)).
 
 The Toggly SDK is memory-only by default. Add this package to persist feature
-flags, variant definitions, and JWKS in an [Isar](https://isar.dev) database so
-flags survive app restarts and remain available offline.
+flags, variant definitions, and JWKS in an
+[Isar](https://isar-community.dev) database so flags survive app restarts and
+remain available offline.
+
+> This package uses the community-maintained
+> [`isar_community`](https://pub.dev/packages/isar_community) fork (the original
+> `isar` package is no longer maintained). It is API-compatible with Isar v3.
 
 > Offline restart also requires a stable `identity` passed to `Toggly.init` /
 > `Toggly.setIdentity`.

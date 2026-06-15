@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:feature_flags_toggly/feature_flags_toggly.dart';
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'toggly_cache_entry.dart';

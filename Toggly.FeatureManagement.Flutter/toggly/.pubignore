@@ -1,2 +1,16 @@
+# NOTE: When a .pubignore exists, `dart pub publish` uses it INSTEAD of
+# .gitignore for this directory. That means build/transient artifacts excluded
+# by .gitignore must be re-listed here, or they get bundled into the published
+# archive. (The root build/ test cache is ~135 MB and pushed the archive past
+# pub.dev's 100 MB uncompressed limit when it was missing here.)
+
 # Local performance harness (separate pubspec); not shipped on pub.dev
 benchmark/
+
+# Build & tooling artifacts (mirror of .gitignore)
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+coverage/
+*.iml
