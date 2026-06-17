@@ -358,9 +358,13 @@ class Toggly with WidgetsBindingObserver {
         }
       }
 
+      final queryParameters = <String, dynamic>{
+        'u': Toggly._identity,
+      };
+
       final response = await _http.get(
-        '${Toggly._config.baseURI}/evaluated-signed/${Toggly._appKey}/${Toggly._environment}?u=${Toggly._identity}',
-        queryParameters: {},
+        '${Toggly._config.baseURI}/evaluated-signed/${Toggly._appKey}/${Toggly._environment}',
+        queryParameters: queryParameters,
         options: Options(headers: headers),
       );
 

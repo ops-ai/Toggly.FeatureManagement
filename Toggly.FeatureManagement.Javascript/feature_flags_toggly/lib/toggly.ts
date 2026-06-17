@@ -175,7 +175,7 @@ export class Toggly {
       var url = `${Toggly._config.baseURI}/evaluated-signed/${Toggly._config.appKey}/${Toggly._config.environment}`;
 
       if (Toggly.identity) {
-        url += `?u=${Toggly.identity}`;
+        url += `?u=${encodeURIComponent(Toggly.identity)}`;
       }
 
       // Wrap the fetch invocation in a resolved Promise so that any synchronous

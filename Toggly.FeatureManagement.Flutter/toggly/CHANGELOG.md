@@ -1,4 +1,14 @@
 
+## 1.2.2
+
+2026-06-16
+
+### Fixed
+- Targeting: pass `identity` to `/evaluated-signed` via Dio `queryParameters`
+  (`u=`) so values are URL-encoded. Embedding raw identity in the request URL
+  could corrupt identities containing `+`, `@`, `/`, or other reserved
+  characters, so targeted users were not matched on the edge worker.
+
 ## 1.2.1
 
 2026-06-15
