@@ -29,6 +29,45 @@ export interface TogglyContextValue {
 
 const TogglyContext = createContext<TogglyContextValue | null>(null);
 
+declare const __TOGGLY_BUILD_FLAGS__: Flags | undefined;
+declare const __TOGGLY_STATIC_GATING__: boolean | undefined;
+
+/**
+ * Whether this bundle was built with `staticGating: true` (flags baked at build).
+ */
+export function isStaticGatingMode(): boolean {
+  return typeof __TOGGLY_STATIC_GATING__ !== 'undefined' && __TOGGLY_STATIC_GATING__ === true;
+}
+
+function sanitizeFlags(raw: unknown): Flags {
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+  const out: Flags = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'boolean') {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * Build-time flag map injected by the plugin when `staticGating` is enabled.
+ */
+export function readBuildFlagsSnapshot(): Flags | null {
+  if (typeof __TOGGLY_BUILD_FLAGS__ === 'undefined') {
+    if (typeof window !== 'undefined') {
+      const fromWindow = (window as unknown as Record<string, unknown>).__TOGGLY_BUILD_FLAGS__;
+      if (fromWindow) {
+        return sanitizeFlags(fromWindow);
+      }
+    }
+    return null;
+  }
+  return sanitizeFlags(__TOGGLY_BUILD_FLAGS__);
+}
+
 /**
  * Name of the global the edge worker (cloudflare/worker) writes the resolved
  * flag map onto. Kept in sync with `SNAPSHOT_GLOBAL` in
@@ -48,6 +87,10 @@ const EDGE_FLAGS_GLOBAL = '__TOGGLY_EDGE_FLAGS__';
  *    tampered global cannot smuggle unexpected types into the React tree.
  */
 export function readEdgeFlagsSnapshot(): Flags | null {
+  if (isStaticGatingMode()) {
+    return readBuildFlagsSnapshot();
+  }
+
   if (typeof window === 'undefined') {
     return null;
   }
@@ -55,13 +98,7 @@ export function readEdgeFlagsSnapshot(): Flags | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
-  const out: Flags = {};
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof value === 'boolean') {
-      out[key] = value;
-    }
-  }
-  return out;
+  return sanitizeFlags(raw);
 }
 
 /**
@@ -95,7 +132,13 @@ export function TogglyProvider({
     (typeof window !== 'undefined'
       ? (window as any).__TOGGLY_CONFIG__ || {}
       : {});
+  const staticGating = isStaticGatingMode();
+  const initialFlags = readBuildFlagsSnapshot() ?? readEdgeFlagsSnapshot() ?? {};
+
   const [client] = useState(() => {
+    if (staticGating) {
+      return null;
+    }
     // Ensure we have a valid config
     if (!config || (!config.appKey && Object.keys(config).length === 0)) {
       console.warn(
@@ -104,13 +147,8 @@ export function TogglyProvider({
     }
     return createTogglyClient(config);
   });
-  // Seed from `window.__TOGGLY_EDGE_FLAGS__` synchronously when the edge
-  // worker has injected it. This is what makes hydration match the
-  // post-edge-strip DOM: Feature components on first client render evaluate
-  // the same flag map the edge used, so they emit the same wrapper-or-null
-  // shape as the static HTML the browser received.
-  const [flags, setFlags] = useState<Flags>(() => readEdgeFlagsSnapshot() ?? {});
-  const [isReady, setIsReady] = useState(() => readEdgeFlagsSnapshot() !== null);
+  const [flags, setFlags] = useState<Flags>(() => initialFlags);
+  const [isReady, setIsReady] = useState(() => staticGating || readEdgeFlagsSnapshot() !== null);
   const [error, setError] = useState<Error | null>(null);
 
   // Keep a ref to the latest flags so the polling interval can detect changes
@@ -118,9 +156,12 @@ export function TogglyProvider({
   flagsRef.current = flags;
 
   useEffect(() => {
+    if (staticGating || !client) {
+      return;
+    }
+
     let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    // Initialize client and load flags
     client
       .getFlags()
       .then((loadedFlags: Flags) => {
@@ -153,9 +194,15 @@ export function TogglyProvider({
         clearInterval(pollTimer);
       }
     };
-  }, [client]);
+  }, [client, staticGating, config.featureFlagsRefreshInterval]);
 
   const getFlag = async (key: string, defaultValue?: boolean): Promise<boolean> => {
+    if (staticGating) {
+      return flags[key] ?? defaultValue ?? false;
+    }
+    if (!client) {
+      return defaultValue ?? false;
+    }
     return client.getFlag(key, defaultValue);
   };
 
@@ -308,9 +355,19 @@ export function Feature({
   as: Element = 'div',
 }: FeatureProps): JSX.Element {
   const wrapperStyle = getWrapperStyle(Element);
+  const buildFlags = readBuildFlagsSnapshot();
 
-  // During SSR, render children with data-feature attribute
-  // The Cloudflare Worker will strip disabled features at the edge
+  // Build-time static gating: evaluate flags during SSG and on the client
+  // using the same baked-in map — no runtime API, no flash.
+  if (isStaticGatingMode() && buildFlags) {
+    const enabled = buildFlags[flag] ?? defaultValue;
+    if (!enabled) {
+      return <>{fallback}</>;
+    }
+    return <Element style={wrapperStyle}>{children}</Element>;
+  }
+
+  // Edge mode: SSR emits data-feature wrappers for the worker to strip.
   if (isSSR) {
     return (
       <Element data-feature={flag} style={wrapperStyle}>

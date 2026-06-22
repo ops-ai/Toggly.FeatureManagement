@@ -5,11 +5,14 @@
  * for gating documentation content with Toggly feature flags.
  */
 
-import type { Plugin, LoadContext, PluginContentLoadedActions } from '@docusaurus/types';
+import type { Plugin, LoadContext } from '@docusaurus/types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { glob } from 'glob';
 import webpack from 'webpack';
+import { fetchBuildTimeFlags } from './lib/fetch-build-flags';
+import { routeToHtmlPath } from './lib/route-to-html-path';
+import type { Flags } from './lib/toggly-client';
 
 /**
  * A docs-style content directory that the plugin should scan for x-feature frontmatter.
@@ -60,6 +63,12 @@ export interface TogglyPluginOptions {
    * Set this to take full manual control of discovery.
    */
   contentRoots?: TogglyContentRoot[];
+  /**
+   * When true, fetch flags once at build time and bake gating into the static
+   * HTML. No runtime Toggly API calls, WebSocket, or edge worker required.
+   * Requires `TOGGLY_APP_KEY` (and related env) in the build environment.
+   */
+  staticGating?: boolean;
 }
 
 interface PageFeatureMapping {
@@ -97,10 +106,12 @@ export default function togglyPlugin(
     identity,
     renderAllDuringBuild = true, // Default to true for better DX
     contentRoots,
+    staticGating = false,
   } = options;
 
   // Store page feature mapping for postBuild
   let pageFeatureMapping: PageFeatureMapping = {};
+  let buildTimeFlags: Flags = {};
 
   return {
     name: 'toggly-plugin',
@@ -121,6 +132,7 @@ export default function togglyPlugin(
           connectTimeout,
           identity,
           renderAllDuringBuild,
+          staticGating,
         },
       };
     },
@@ -149,9 +161,21 @@ export default function togglyPlugin(
         }
         pageFeatureMapping = await extractFromFiles(context, roots);
 
+        if (pluginConfig.staticGating) {
+          buildTimeFlags = await fetchBuildTimeFlags({
+            baseURI: pluginConfig.baseURI,
+            appKey: pluginConfig.appKey,
+            environment: pluginConfig.environment,
+            flagDefaults: pluginConfig.flagDefaults,
+            connectTimeout: pluginConfig.connectTimeout,
+            isDebug: pluginConfig.isDebug,
+          });
+        }
+
         // Store data for configureWebpack and postBuild
         (this as any).__togglyPluginData = {
           pageFeatureMapping,
+          buildTimeFlags,
           config: pluginConfig,
         };
 
@@ -185,8 +209,12 @@ export default function togglyPlugin(
         return;
       }
 
-      const { pageFeatureMapping: mapping } = pluginData;
-      
+      const {
+        pageFeatureMapping: mapping,
+        buildTimeFlags: flags,
+        config: pluginConfig,
+      } = pluginData;
+
       // Write manifest to build output directory
       const manifestPath = path.join(outDir, 'toggly-page-features.json');
       fs.writeFileSync(
@@ -200,29 +228,84 @@ export default function togglyPlugin(
           `[Toggly Plugin] Generated page feature manifest: ${manifestPath}`
         );
       }
+
+      if (!pluginConfig.staticGating) {
+        return;
+      }
+
+      const notFoundPath = path.join(outDir, '404.html');
+      const notFoundHtml = fs.existsSync(notFoundPath)
+        ? fs.readFileSync(notFoundPath, 'utf-8')
+        : '<!DOCTYPE html><html><body><h1>404 Not Found</h1></body></html>';
+
+      let gatedPageCount = 0;
+      for (const [route, featureKey] of Object.entries(mapping) as [string, string][]) {
+        if (flags[featureKey] === true) {
+          continue;
+        }
+
+        const htmlPath = routeToHtmlPath(outDir, route);
+        if (!fs.existsSync(htmlPath)) {
+          if (isDebug) {
+            console.warn(
+              `[Toggly Plugin] staticGating: no HTML for gated route ${route} (${htmlPath})`,
+            );
+          }
+          continue;
+        }
+
+        fs.writeFileSync(htmlPath, notFoundHtml, 'utf-8');
+        gatedPageCount++;
+      }
+
+      if (isDebug && gatedPageCount > 0) {
+        console.log(
+          `[Toggly Plugin] staticGating: replaced ${gatedPageCount} disabled page(s) with 404 HTML`,
+        );
+      }
     },
 
     /**
      * Configure Webpack: Inject Toggly config into client bundle
      */
     configureWebpack(config, isServer) {
-      if (isServer) {
-        return {};
-      }
-
-      // Get stored data from contentLoaded
       const pluginData = (this as any).__togglyPluginData;
       if (!pluginData) {
         return {};
       }
 
-      const { pageFeatureMapping, config: pluginConfig } = pluginData;
+      const {
+        pageFeatureMapping,
+        buildTimeFlags: flags,
+        config: pluginConfig,
+      } = pluginData;
+
+      // Static gating must define flags on both server and client bundles so
+      // Docusaurus SSG emits the correct HTML during `npm run build`.
+      if (pluginConfig.staticGating) {
+        return {
+          plugins: [
+            new webpack.DefinePlugin({
+              __TOGGLY_CONFIG__: JSON.stringify(pluginConfig),
+              __TOGGLY_PAGE_FEATURES__: JSON.stringify(pageFeatureMapping),
+              __TOGGLY_BUILD_FLAGS__: JSON.stringify(flags),
+              __TOGGLY_STATIC_GATING__: JSON.stringify(true),
+            }),
+          ],
+        };
+      }
+
+      if (isServer) {
+        return {};
+      }
 
       return {
         plugins: [
           new webpack.DefinePlugin({
             __TOGGLY_CONFIG__: JSON.stringify(pluginConfig),
             __TOGGLY_PAGE_FEATURES__: JSON.stringify(pageFeatureMapping),
+            __TOGGLY_BUILD_FLAGS__: JSON.stringify({}),
+            __TOGGLY_STATIC_GATING__: JSON.stringify(false),
           }),
         ],
       };
@@ -237,32 +320,46 @@ export default function togglyPlugin(
         return {};
       }
 
-      const { config: pluginConfig, pageFeatureMapping } = pluginData;
+      const {
+        config: pluginConfig,
+        pageFeatureMapping,
+        buildTimeFlags: flags,
+      } = pluginData;
 
-      return {
-        headTags: [
-          {
-            tagName: 'script',
-            innerHTML: `window.__TOGGLY_CONFIG__ = ${JSON.stringify(pluginConfig)};`,
-          },
-          {
-            tagName: 'script',
-            innerHTML: `window.__TOGGLY_PAGE_FEATURES__ = ${JSON.stringify(pageFeatureMapping)};`,
-          },
-        ],
-      };
+      const headTags: { tagName: string; innerHTML: string }[] = [
+        {
+          tagName: 'script',
+          innerHTML: `window.__TOGGLY_CONFIG__ = ${JSON.stringify(pluginConfig)};`,
+        },
+        {
+          tagName: 'script',
+          innerHTML: `window.__TOGGLY_PAGE_FEATURES__ = ${JSON.stringify(pageFeatureMapping)};`,
+        },
+      ];
+
+      if (pluginConfig.staticGating) {
+        headTags.push({
+          tagName: 'script',
+          innerHTML: `window.__TOGGLY_BUILD_FLAGS__ = ${JSON.stringify(flags)};`,
+        });
+      }
+
+      return { headTags };
     },
 
     /**
      * Get client modules: Import the client setup module
      */
     getClientModules() {
-      // Return path relative to the dist directory
-      // Both index.js and client/setup.js are in dist/
-      return [
-        path.resolve(__dirname, './client/setup'),
-        path.resolve(__dirname, './client/nav-gate'),
-      ];
+      const pluginData = (this as any).__togglyPluginData;
+      const modules = [path.resolve(__dirname, './client/setup')];
+
+      // Runtime navbar filtering fetches flags again — skip in staticGating mode.
+      if (!pluginData?.config?.staticGating) {
+        modules.push(path.resolve(__dirname, './client/nav-gate'));
+      }
+
+      return modules;
     },
   };
 }
@@ -455,7 +552,7 @@ async function extractFromRoot(
 }
 
 // Export React components and hooks
-export { TogglyProvider, useToggly, useFlag, Feature } from './client';
+export { TogglyProvider, useToggly, useFlag, Feature, isStaticGatingMode, readBuildFlagsSnapshot } from './client';
 export type {
   TogglyProviderProps,
   TogglyContextValue,
