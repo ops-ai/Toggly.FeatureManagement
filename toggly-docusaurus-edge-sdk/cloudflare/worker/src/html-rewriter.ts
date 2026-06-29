@@ -63,23 +63,19 @@ export function transformHtmlResponse(
   response: Response,
   flags: Record<string, boolean>
 ): Response {
-  const body = response.body;
-  if (!body) {
+  if (!response.body) {
     return response;
   }
 
   const transformer = createFeatureGateTransformer(flags);
-  // @ts-ignore - HTMLRewriter types may be incorrect in @cloudflare/workers-types
-  const transformedStream = transformer.transform(body);
+  const transformed = transformer.transform(response);
 
-  // Content-Length is no longer accurate after stripping/injection.
-  const headers = new Headers(response.headers);
+  const headers = new Headers(transformed.headers);
   headers.delete('Content-Length');
 
-  // @ts-expect-error - TypeScript types for HTMLRewriter may be incorrect
-  return new Response(transformedStream as ReadableStream, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: headers,
+  return new Response(transformed.body, {
+    status: transformed.status,
+    statusText: transformed.statusText,
+    headers,
   });
 }

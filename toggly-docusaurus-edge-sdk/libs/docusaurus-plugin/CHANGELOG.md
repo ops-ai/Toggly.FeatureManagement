@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+2026-06-22
+
+### Changed
+- Published release of `staticGating` build-time flag mode (no API changes from 0.6.0).
+
 ## 0.6.0
 
 2026-06-22

@@ -152,7 +152,7 @@ async function fetchFlagsFromTogglyApi(env: Env): Promise<Flags> {
   }
 
   const baseUrl = env.TOGGLY_API_BASE_URL.replace(/\/$/, '');
-  const url = `${baseUrl}/${env.TOGGLY_APP_KEY}/evaluated-signed`;
+  const url = `${baseUrl}/evaluated-signed/${encodeURIComponent(env.TOGGLY_APP_KEY)}/${encodeURIComponent(env.TOGGLY_ENVIRONMENT)}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FLAGS_FETCH_TIMEOUT_MS);

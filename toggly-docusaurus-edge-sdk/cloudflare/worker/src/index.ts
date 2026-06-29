@@ -15,7 +15,7 @@ import { PageGateBehavior } from './types';
 import { getFeatureKeyForPath } from './manifest';
 import { getFlags, isFeatureEnabled } from './flags';
 import { transformHtmlResponse } from './html-rewriter';
-import { fetchFromOrigin } from './origin';
+import { fetchFromOrigin, probeOriginAccess } from './origin';
 
 // Worker configuration
 const WORKER_CONFIG: WorkerConfig = {
@@ -58,14 +58,15 @@ async function handlePageLevelGate(
   env: Env,
   context: RequestContext,
   cache: Cache | null,
-  config: WorkerConfig
+  config: WorkerConfig,
+  publicOrigin: string,
 ): Promise<Response | null> {
   const isEnabled = await isFeatureEnabled(featureKey, env, context, cache);
 
   if (!isEnabled) {
     if (config.pageGateBehavior === PageGateBehavior.REDIRECT) {
       const redirectUrl = config.redirectUrl || '/upgrade';
-      return Response.redirect(new URL(redirectUrl, env.ORIGIN_BASE_URL).toString(), 302);
+      return Response.redirect(new URL(redirectUrl, publicOrigin).toString(), 302);
     } else {
       return new Response('Not Found', {
         status: 404,
@@ -80,6 +81,43 @@ async function handlePageLevelGate(
   return null; // Feature is enabled, continue processing
 }
 
+function buildOriginRequestInit(request: Request): RequestInit {
+  const headers = new Headers();
+  const allow = [
+    'accept',
+    'accept-encoding',
+    'accept-language',
+    'if-none-match',
+    'if-modified-since',
+    'cache-control',
+    'range',
+  ];
+
+  for (const name of allow) {
+    const value = request.headers.get(name);
+    if (value) {
+      headers.set(name, value);
+    }
+  }
+
+  const init: RequestInit = {
+    method: request.method,
+    headers,
+  };
+
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    init.body = request.body;
+  }
+
+  return init;
+}
+
+function assertOriginConfigured(env: Env): void {
+  if (!env.ORIGIN_BASE_URL) {
+    throw new Error('ORIGIN_BASE_URL is not configured on the Worker');
+  }
+}
+
 /**
  * Cloudflare Worker entry point
  */
@@ -89,79 +127,82 @@ export default {
     env: Env,
     ctx: ExecutionContext
   ): Promise<Response> {
-    const url = new URL(request.url);
-    const path = url.pathname;
+    try {
+      assertOriginConfigured(env);
 
-    // Skip processing for the manifest and common static-asset paths so we
-    // don't pay manifest lookup + HTMLRewriter cost on every JS/CSS/img hit.
-    // Non-HTML responses are also passed through unchanged below (see
-    // `isHtmlResponse`), so this prefix list is just an optimisation.
-    if (
-      path === '/toggly-page-features.json' ||
-      path.startsWith('/assets/') ||
-      path.startsWith('/img/') ||
-      path.startsWith('/static/') ||
-      path.startsWith('/_next/')
-    ) {
-      const originUrl = new URL(path + url.search, env.ORIGIN_BASE_URL);
-      return fetchFromOrigin(
-        originUrl.toString(),
-        {
-          method: request.method,
-          headers: request.headers,
-          body: request.body,
-        },
-        env,
-      );
-    }
+      const url = new URL(request.url);
+      const path = url.pathname;
+      const publicOrigin = url.origin;
+      const originRequestInit = buildOriginRequestInit(request);
 
-    // Get request context (for future user/tenant targeting)
-    const context = getRequestContext(request);
-
-    // Get cache
-    const cache = caches.default;
-
-    // Check for page-level feature gate
-    const featureKey = await getFeatureKeyForPath(path, env, cache);
-
-    if (featureKey) {
-      const gateResponse = await handlePageLevelGate(
-        path,
-        featureKey,
-        env,
-        context,
-        cache,
-        WORKER_CONFIG
-      );
-
-      if (gateResponse) {
-        return gateResponse;
+      if (path === '/__toggly_origin_probe') {
+        return probeOriginAccess(env);
       }
+
+      // Skip processing for the manifest and common static-asset paths so we
+      // don't pay manifest lookup + HTMLRewriter cost on every JS/CSS/img hit.
+      // Non-HTML responses are also passed through unchanged below (see
+      // `isHtmlResponse`), so this prefix list is just an optimisation.
+      if (
+        path === '/toggly-page-features.json' ||
+        path.startsWith('/assets/') ||
+        path.startsWith('/img/') ||
+        path.startsWith('/static/') ||
+        path.startsWith('/_next/')
+      ) {
+        const originUrl = new URL(path + url.search, env.ORIGIN_BASE_URL);
+        return fetchFromOrigin(originUrl.toString(), originRequestInit, env);
+      }
+
+      // Get request context (for future user/tenant targeting)
+      const context = getRequestContext(request);
+
+      // Get cache
+      const cache = caches.default;
+
+      // Check for page-level feature gate
+      const featureKey = await getFeatureKeyForPath(path, env, cache);
+
+      if (featureKey) {
+        const gateResponse = await handlePageLevelGate(
+          path,
+          featureKey,
+          env,
+          context,
+          cache,
+          WORKER_CONFIG,
+          publicOrigin,
+        );
+
+        if (gateResponse) {
+          return gateResponse;
+        }
+      }
+
+      // Fetch from origin (Access-token aware). We rebuild the URL onto the
+      // configured origin so the worker can sit on a different hostname than
+      // the origin without looping through itself.
+      const originUrl = new URL(path + url.search, env.ORIGIN_BASE_URL);
+      const response = await fetchFromOrigin(
+        originUrl.toString(),
+        originRequestInit,
+        env,
+      );
+
+      // If not HTML, return as-is
+      if (!isHtmlResponse(response)) {
+        return response;
+      }
+
+      // For HTML responses, apply section-level gating
+      const flags = await getFlags(env, context, cache);
+      return transformHtmlResponse(response, flags);
+    } catch (error) {
+      console.error('Worker request failed', error);
+      return new Response('Internal Server Error', {
+        status: 500,
+        headers: { 'Content-Type': 'text/plain' },
+      });
     }
-
-    // Fetch from origin (Access-token aware). We rebuild the URL onto the
-    // configured origin so the worker can sit on a different hostname than
-    // the origin without looping through itself.
-    const originUrl = new URL(path + url.search, env.ORIGIN_BASE_URL);
-    const response = await fetchFromOrigin(
-      originUrl.toString(),
-      {
-        method: request.method,
-        headers: request.headers,
-        body: request.body,
-      },
-      env,
-    );
-
-    // If not HTML, return as-is
-    if (!isHtmlResponse(response)) {
-      return response;
-    }
-
-    // For HTML responses, apply section-level gating
-    const flags = await getFlags(env, context, cache);
-    const transformedResponse = transformHtmlResponse(response, flags);
-
-    return transformedResponse;
   },
 };

@@ -36,8 +36,19 @@ async function fetchManifest(env: Env): Promise<PageFeatureMapping> {
     return {};
   }
 
-  const manifest = (await response.json()) as PageFeatureMapping;
-  return manifest;
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    console.warn(`Manifest response is not JSON (${contentType})`);
+    return {};
+  }
+
+  try {
+    const manifest = (await response.json()) as PageFeatureMapping;
+    return manifest;
+  } catch (error) {
+    console.warn('Failed to parse manifest JSON', error);
+    return {};
+  }
 }
 
 /**

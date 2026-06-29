@@ -1,0 +1,63 @@
+name: Deploy Docs Edge Worker
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'toggly-docusaurus-edge-sdk/cloudflare/worker/**'
+      - '.github/workflows/deploy-docs-edge-worker.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Worker environment to deploy'
+        required: true
+        default: both
+        type: choice
+        options:
+          - production
+          - staging
+          - both
+
+jobs:
+  deploy-production:
+    if: github.event_name == 'push' || github.event.inputs.environment == 'production' || github.event.inputs.environment == 'both'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install worker dependencies
+        working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
+        run: npm install
+
+      - name: Deploy production Worker (docs.toggly.io)
+        working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --env production
+
+  deploy-staging:
+    if: github.event_name == 'push' || github.event.inputs.environment == 'staging' || github.event.inputs.environment == 'both'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install worker dependencies
+        working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
+        run: npm install
+
+      - name: Deploy staging Worker (staging-docs.toggly.io)
+        working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --env staging

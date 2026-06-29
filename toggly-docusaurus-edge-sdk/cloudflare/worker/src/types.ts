@@ -12,6 +12,12 @@ export interface Env {
   /** Origin base URL (e.g., Cloudflare Pages URL or GitHub Pages URL) */
   ORIGIN_BASE_URL: string;
   /**
+   * Public hostname this Worker serves (e.g. `docs.toggly.io`,
+   * `staging-docs.toggly.io`). Used to rewrite Pages canonical redirects
+   * back onto `ORIGIN_BASE_URL` during server-side origin fetches.
+   */
+  WORKER_PUBLIC_HOST?: string;
+  /**
    * Cloudflare Access service-token client ID. Only required when
    * `ORIGIN_BASE_URL` is gated by Cloudflare Access. When both this and
    * `CF_ACCESS_CLIENT_SECRET` are set, the worker injects the appropriate

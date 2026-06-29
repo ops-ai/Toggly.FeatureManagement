@@ -6,34 +6,41 @@ compatibility_date = "2024-01-01"
 # Secrets are NOT defined here — set them via `wrangler secret put` or the
 # Cloudflare dashboard. Required secrets:
 #   - TOGGLY_APP_KEY                 always required
-#   - CF_ACCESS_CLIENT_ID            only if ORIGIN_BASE_URL is gated by Cloudflare Access
-#   - CF_ACCESS_CLIENT_SECRET        only if ORIGIN_BASE_URL is gated by Cloudflare Access
+#   - CF_ACCESS_CLIENT_ID            required — Pages branch aliases are gated by Cloudflare Access
+#   - CF_ACCESS_CLIENT_SECRET        required — Pages branch aliases are gated by Cloudflare Access
 [vars]
 TOGGLY_API_BASE_URL = "https://definitions.toggly.io"
 TOGGLY_ENVIRONMENT = "Production"
-ORIGIN_BASE_URL = "https://staging-docs.toggly.io"
+ORIGIN_BASE_URL = "https://main.toggly-docs.pages.dev"
 
-# Production: front-of staging-docs.toggly.io for the Toggly Docusaurus site.
-# We fetch origin from the `main` branch alias of the toggly-docs Pages
-# project. Branch alias URLs (`<branch>.<project>.pages.dev`) follow the
-# latest deploy on that branch and never 301 to the custom domain, so the
-# worker can fetch them without looping back through itself.
+# Production: docs.toggly.io
+# Origin is the `main` branch alias of the toggly-docs Pages project. Branch
+# alias URLs never 301 to the custom domain, so the worker fetches static
+# assets without looping back through itself. Do not point production at
+# `develop.*` — Cloudflare Access will redirect browsers to that hostname.
 [env.production]
 routes = [
-  { pattern = "staging-docs.toggly.io/*", zone_name = "toggly.io" },
+  { pattern = "docs.toggly.io/*", zone_name = "toggly.io" },
 ]
 
 [env.production.vars]
 TOGGLY_API_BASE_URL = "https://definitions.toggly.io"
 TOGGLY_ENVIRONMENT = "Production"
-ORIGIN_BASE_URL = "https://staging-docs.toggly.io"
+ORIGIN_BASE_URL = "https://main.toggly-docs.pages.dev"
+WORKER_PUBLIC_HOST = "docs.toggly.io"
 
-# Staging: deploy under `wrangler deploy --env staging` once a staging zone
-# / origin URL is wired up. Left empty intentionally so deploys to staging
-# don't accidentally inherit production routes.
+# Staging: staging-docs.toggly.io
+# Origin is the `develop` branch alias so staging previews track the develop branch.
+# If origin fetch fails with Access errors, ensure CF_ACCESS_* secrets are set
+# on this Worker environment and the service token is allowed on the Access
+# policy for `*.toggly-docs.pages.dev`.
 [env.staging]
+routes = [
+  { pattern = "staging-docs.toggly.io/*", zone_name = "toggly.io" },
+]
 
 [env.staging.vars]
 TOGGLY_API_BASE_URL = "https://definitions.toggly.io"
-TOGGLY_ENVIRONMENT = "Staging"
-ORIGIN_BASE_URL = "https://staging-docs.toggly.io"
+TOGGLY_ENVIRONMENT = "Production"
+ORIGIN_BASE_URL = "https://develop.toggly-docs.pages.dev"
+WORKER_PUBLIC_HOST = "staging-docs.toggly.io"

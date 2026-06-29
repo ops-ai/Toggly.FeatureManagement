@@ -62,14 +62,20 @@ ORIGIN_BASE_URL = "https://my-docusaurus-site.pages.dev"
 
 ### 3. Deployment
 
+This repo ships two named environments for the Toggly docs site:
+
+| Wrangler env | Route | Origin |
+|---|---|---|
+| `production` | `docs.toggly.io/*` | `https://main.toggly-docs.pages.dev` |
+| `staging` | `staging-docs.toggly.io/*` | `https://develop.toggly-docs.pages.dev` |
+
 Deploy the worker to Cloudflare. Use the named environment so routes from
-`[env.production]` (or `[env.staging]`) are picked up — without `--env` the
+`[env.production]` or `[env.staging]` are picked up — without `--env` the
 worker is uploaded with no triggers and effectively becomes unreachable:
 
 ```bash
-wrangler deploy --env production
-# or, for a staging environment:
-wrangler deploy --env staging
+npm run deploy:production   # docs.toggly.io
+npm run deploy:staging      # staging-docs.toggly.io
 ```
 
 After the first deploy you can verify the routes attached correctly:

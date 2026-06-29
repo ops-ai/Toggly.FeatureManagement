@@ -43,12 +43,12 @@ function getFlagsCacheKey(env: Env, context: RequestContext): string {
  * Returns an empty map on any error so callers can fail open.
  */
 async function fetchFlagsFromTogglyApi(env: Env): Promise<Flags> {
-  if (!env.TOGGLY_APP_KEY) {
+  if (!env.TOGGLY_APP_KEY || !env.TOGGLY_API_BASE_URL || !env.TOGGLY_ENVIRONMENT) {
     return {};
   }
 
   const baseUrl = env.TOGGLY_API_BASE_URL.replace(/\/$/, '');
-  const url = `${baseUrl}/${env.TOGGLY_APP_KEY}/evaluated-signed`;
+  const url = `${baseUrl}/evaluated-signed/${encodeURIComponent(env.TOGGLY_APP_KEY)}/${encodeURIComponent(env.TOGGLY_ENVIRONMENT)}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FLAGS_FETCH_TIMEOUT_MS);
