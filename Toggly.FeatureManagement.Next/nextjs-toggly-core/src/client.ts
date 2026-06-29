@@ -11,6 +11,12 @@ import type {
 import { HookExecutor } from './hooks'
 import { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
 import { generateUUID, evaluateGate, isBrowser } from './utils'
+import {
+  applyLocalGate,
+  buildFlagGateIndex,
+  type FlagGateIndex,
+  type LocalGate,
+} from '@ops-ai/toggly-local-gates'
 
 /**
  * Create a new Toggly client instance
@@ -61,6 +67,38 @@ export function createTogglyClient(
     for (const hook of config.hooks) {
       hookExecutor.addHook(hook)
     }
+  }
+
+  let localGates: LocalGate[] = config.localGates ?? []
+  let localGateIndex: FlagGateIndex = buildFlagGateIndex(localGates)
+  const localGatesListeners = new Set<() => void>()
+
+  function getEffectiveFlag(featureKey: string): boolean {
+    return applyLocalGate(
+      state.features[featureKey] === true,
+      featureKey,
+      localGates,
+      localGateIndex,
+    )
+  }
+
+  function evaluateGateEffective(
+    featureKeys: string[],
+    requirement: FeatureRequirement = 'all',
+    negate = false,
+  ): boolean {
+    if (featureKeys.length === 0) {
+      return !negate
+    }
+
+    let result: boolean
+    if (requirement === 'any') {
+      result = featureKeys.some((key) => getEffectiveFlag(key))
+    } else {
+      result = featureKeys.every((key) => getEffectiveFlag(key))
+    }
+
+    return negate ? !result : result
   }
 
   /**
@@ -364,7 +402,7 @@ export function createTogglyClient(
         config.featureDefaults?.[featureKey]
       )
 
-      const result = state.features[featureKey] === true
+      const result = getEffectiveFlag(featureKey)
 
       // Execute after hooks (fire-and-forget)
       hookExecutor.executeAfterEvaluation(featureKey, dataMap, result).catch(() => {
@@ -407,7 +445,7 @@ export function createTogglyClient(
         dataMaps.push({ key, dataMap })
       }
 
-      const result = evaluateGate(state.features, featureKeys, requirement, negate)
+      const result = evaluateGateEffective(featureKeys, requirement, negate)
 
       // Execute after hooks for each key (fire-and-forget)
       for (const { key, dataMap } of dataMaps) {
@@ -447,6 +485,28 @@ export function createTogglyClient(
 
     removeHook(name: string): boolean {
       return hookExecutor.removeHook(name)
+    },
+
+    setLocalGates(gates: LocalGate[]): void {
+      localGates = [...gates]
+      localGateIndex = buildFlagGateIndex(localGates)
+    },
+
+    notifyLocalGatesChanged(): void {
+      localGatesListeners.forEach((listener) => {
+        try {
+          listener()
+        } catch (error) {
+          console.error('[Toggly] Local gate listener error:', error)
+        }
+      })
+    },
+
+    subscribeLocalGatesChanged(listener: () => void): () => void {
+      localGatesListeners.add(listener)
+      return () => {
+        localGatesListeners.delete(listener)
+      }
     },
 
     destroy(): void {

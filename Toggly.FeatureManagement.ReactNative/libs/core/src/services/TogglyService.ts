@@ -1,4 +1,10 @@
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import {
+  applyLocalGate,
+  buildFlagGateIndex,
+  type FlagGateIndex,
+  type LocalGate,
+} from '@ops-ai/toggly-local-gates';
 import type {
   TogglyConfig,
   FeatureFlags,
@@ -151,6 +157,9 @@ export class TogglyService {
   private _wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastFallbackRefresh = 0;
 
+  private localGates: LocalGate[] = [];
+  private localGateIndex: FlagGateIndex = new Map();
+
   /**
    * Whether to show feature content during initial evaluation
    */
@@ -188,6 +197,10 @@ export class TogglyService {
     // Register initial hooks
     if (config.hooks) {
       config.hooks.forEach((hook) => this.hookExecutor.addHook(hook));
+    }
+
+    if (config.localGates) {
+      this.setLocalGates(config.localGates);
     }
 
     // Setup network info listener
@@ -528,6 +541,25 @@ export class TogglyService {
   }
 
   /**
+   * Register device-local post-filter gates
+   */
+  setLocalGates(gates: LocalGate[]): void {
+    this.localGates = [...gates];
+    this.localGateIndex = buildFlagGateIndex(this.localGates);
+  }
+
+  /**
+   * Notify subscribers that local gate state changed (no network)
+   */
+  notifyLocalGatesChanged(): void {
+    this.eventEmitter.emit('localGatesChanged');
+  }
+
+  private getEffectiveFlag(featureKey: string, remote: boolean): boolean {
+    return applyLocalGate(remote, featureKey, this.localGates, this.localGateIndex);
+  }
+
+  /**
    * Evaluate a feature gate with multiple feature keys.
    */
   async evaluateFeatureGate(
@@ -569,16 +601,21 @@ export class TogglyService {
 
     // Fast path for single feature
     if (featureKeys.length === 1) {
-      const isEnabled = flags[featureKeys[0]] === true;
+      const remote = flags[featureKeys[0]] === true;
+      const isEnabled = this.getEffectiveFlag(featureKeys[0], remote);
       return negate ? !isEnabled : isEnabled;
     }
 
     let isEnabled: boolean;
 
     if (requirement === 'any') {
-      isEnabled = featureKeys.some((key) => flags[key] === true);
+      isEnabled = featureKeys.some((key) =>
+        this.getEffectiveFlag(key, flags[key] === true)
+      );
     } else {
-      isEnabled = featureKeys.every((key) => flags[key] === true);
+      isEnabled = featureKeys.every((key) =>
+        this.getEffectiveFlag(key, flags[key] === true)
+      );
     }
 
     return negate ? !isEnabled : isEnabled;

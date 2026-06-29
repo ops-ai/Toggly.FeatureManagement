@@ -8,6 +8,12 @@
 import { atom, computed, type ReadableAtom } from 'nanostores';
 import type { TogglyPluginOptions, Flags, GateRequirement } from '../types/index.js';
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import {
+  applyLocalGate,
+  buildFlagGateIndex,
+  type FlagGateIndex,
+  type LocalGate,
+} from '@ops-ai/toggly-local-gates';
 import { HookExecutor } from './hooks.js';
 
 /**
@@ -24,6 +30,11 @@ export const $isReady = atom<boolean>(false);
  * Atom containing any error that occurred during initialization
  */
 export const $error = atom<Error | null>(null);
+
+/**
+ * Bumped when device-local gates change so computed atoms re-evaluate.
+ */
+export const $localGatesRevision = atom(0);
 
 /**
  * Internal client instance storage
@@ -46,6 +57,8 @@ class TogglyClientInstance {
   private cache: Flags | null = null;
   private refreshInterval: ReturnType<typeof setInterval> | null = null;
   public hookExecutor = new HookExecutor();
+  private localGates: LocalGate[] = [];
+  private localGateIndex: FlagGateIndex = new Map();
 
   constructor(config: TogglyPluginOptions) {
     this.config = {
@@ -65,6 +78,23 @@ class TogglyClientInstance {
     if (this.config.hooks) {
       this.config.hooks.forEach(hook => this.hookExecutor.addHook(hook));
     }
+
+    if (this.config.localGates) {
+      this.setLocalGates(this.config.localGates);
+    }
+  }
+
+  setLocalGates(gates: LocalGate[]): void {
+    this.localGates = [...gates];
+    this.localGateIndex = buildFlagGateIndex(this.localGates);
+  }
+
+  getEffectiveFlag(flagKey: string, remote: boolean): boolean {
+    return applyLocalGate(remote, flagKey, this.localGates, this.localGateIndex);
+  }
+
+  notifyLocalGatesChanged(): void {
+    $localGatesRevision.set($localGatesRevision.get() + 1);
   }
 
   private getApiUrl(): string {
@@ -307,6 +337,28 @@ export function removeHook(name: string): boolean {
 }
 
 /**
+ * Register device-local post-filter gates
+ */
+export function setLocalGates(gates: LocalGate[]): void {
+  if (!clientInstance) {
+    console.error('[Toggly Client] Client not initialized');
+    return;
+  }
+  clientInstance.setLocalGates(gates);
+}
+
+/**
+ * Notify subscribers that local gate state changed (no network)
+ */
+export function notifyLocalGatesChanged(): void {
+  if (!clientInstance) {
+    console.error('[Toggly Client] Client not initialized');
+    return;
+  }
+  clientInstance.notifyLocalGatesChanged();
+}
+
+/**
  * Create a computed atom for a specific feature flag
  * 
  * @param key - Feature flag key
@@ -314,7 +366,13 @@ export function removeHook(name: string): boolean {
  * @returns Readable atom with the flag value
  */
 export function $flag(key: string, defaultValue: boolean = false): ReadableAtom<boolean> {
-  return computed($flags, (flags) => flags[key] ?? defaultValue);
+  return computed([$flags, $localGatesRevision], (flags) => {
+    const remote = flags[key] ?? defaultValue;
+    if (!clientInstance) {
+      return remote === true;
+    }
+    return clientInstance.getEffectiveFlag(key, remote === true);
+  });
 }
 
 /**
@@ -330,7 +388,7 @@ export function $gate(
   requirement: GateRequirement = 'all',
   negate: boolean = false
 ): ReadableAtom<boolean> {
-  return computed($flags, (flags) => {
+  return computed([$flags, $localGatesRevision], (flags) => {
     if (keys.length === 0) {
       return !negate;
     }
@@ -338,9 +396,19 @@ export function $gate(
     let isEnabled: boolean;
 
     if (requirement === 'any') {
-      isEnabled = keys.some((key) => flags[key] === true);
+      isEnabled = keys.some((key) => {
+        const remote = flags[key] === true;
+        return clientInstance
+          ? clientInstance.getEffectiveFlag(key, remote)
+          : remote;
+      });
     } else {
-      isEnabled = keys.every((key) => flags[key] === true);
+      isEnabled = keys.every((key) => {
+        const remote = flags[key] === true;
+        return clientInstance
+          ? clientInstance.getEffectiveFlag(key, remote)
+          : remote;
+      });
     }
 
     return negate ? !isEnabled : isEnabled;

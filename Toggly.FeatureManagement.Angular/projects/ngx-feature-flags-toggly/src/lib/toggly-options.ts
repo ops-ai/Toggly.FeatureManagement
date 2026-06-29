@@ -45,6 +45,9 @@ export class TogglyOptions implements ITogglyOptions {
    * Default: false.
    */
   enableVariants?: boolean
+
+  /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+  localGates?: import('@ops-ai/toggly-local-gates').LocalGate[]
 }
 
 /**

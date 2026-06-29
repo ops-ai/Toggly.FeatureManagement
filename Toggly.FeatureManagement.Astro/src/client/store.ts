@@ -8,6 +8,12 @@
 import { atom, computed, type ReadableAtom } from 'nanostores';
 import type { TogglyConfig, Flags, VariantResult, EvaluatedVariantDef } from '../types/index.js';
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import {
+  applyLocalGate,
+  buildFlagGateIndex,
+  type FlagGateIndex,
+  type LocalGate,
+} from '@ops-ai/toggly-local-gates';
 import { HookExecutor } from './hooks.js';
 import { parseVariantDefsPayload, variantDefsToFlags } from '../variant-helpers.js';
 
@@ -32,6 +38,11 @@ export const $isReady = atom<boolean>(false);
 export const $error = atom<Error | null>(null);
 
 /**
+ * Bumped when device-local gates change so computed atoms re-evaluate.
+ */
+export const $localGatesRevision = atom(0);
+
+/**
  * Internal client instance storage
  */
 let clientInstance: TogglyClientInstance | null = null;
@@ -45,6 +56,8 @@ class TogglyClientInstance {
   private variantCache: Record<string, EvaluatedVariantDef> | null = null;
   private refreshInterval: NodeJS.Timeout | null = null;
   public hookExecutor = new HookExecutor();
+  private localGates: LocalGate[] = [];
+  private localGateIndex: FlagGateIndex = new Map();
 
   constructor(config: TogglyConfig) {
     this.config = {
@@ -64,6 +77,23 @@ class TogglyClientInstance {
     if (this.config.hooks) {
       this.config.hooks.forEach(hook => this.hookExecutor.addHook(hook));
     }
+
+    if (this.config.localGates) {
+      this.setLocalGates(this.config.localGates);
+    }
+  }
+
+  setLocalGates(gates: LocalGate[]): void {
+    this.localGates = [...gates];
+    this.localGateIndex = buildFlagGateIndex(this.localGates);
+  }
+
+  getEffectiveFlag(flagKey: string, remote: boolean): boolean {
+    return applyLocalGate(remote, flagKey, this.localGates, this.localGateIndex);
+  }
+
+  notifyLocalGatesChanged(): void {
+    $localGatesRevision.set($localGatesRevision.get() + 1);
   }
 
   private getApiUrl(): string {
@@ -268,6 +298,9 @@ class TogglyClientInstance {
     if (!entry?.variant) {
       return null;
     }
+    if (!this.getEffectiveFlag(featureKey, entry.enabled === true)) {
+      return null;
+    }
     return {
       name: entry.variant,
       configurationValue: entry.configurationValue,
@@ -338,6 +371,28 @@ export function stopRefreshInterval(): void {
 }
 
 /**
+ * Register device-local gates (read-time AND on worker booleans).
+ */
+export function setLocalGates(gates: LocalGate[]): void {
+  if (!clientInstance) {
+    console.error('[Toggly Client] Client not initialized');
+    return;
+  }
+  clientInstance.setLocalGates(gates);
+}
+
+/**
+ * Notify UI that local gate state changed (no network fetch).
+ */
+export function notifyLocalGatesChanged(): void {
+  if (!clientInstance) {
+    console.error('[Toggly Client] Client not initialized');
+    return;
+  }
+  clientInstance.notifyLocalGatesChanged();
+}
+
+/**
  * Reset the client instance (for testing purposes)
  * @internal
  */
@@ -378,7 +433,13 @@ export function getVariantValue(featureKey: string): unknown | null {
  * @returns Readable atom with the flag value
  */
 export function $flag(key: string, defaultValue: boolean = false): ReadableAtom<boolean> {
-  return computed($flags, (flags) => flags[key] ?? defaultValue);
+  return computed([$flags, $localGatesRevision], (flags) => {
+    const remote = flags[key] ?? defaultValue;
+    if (!clientInstance) {
+      return remote;
+    }
+    return clientInstance.getEffectiveFlag(key, remote === true);
+  });
 }
 
 /**
@@ -394,7 +455,7 @@ export function $gate(
   requirement: 'all' | 'any' = 'all',
   negate: boolean = false
 ): ReadableAtom<boolean> {
-  return computed($flags, (flags) => {
+  return computed([$flags, $localGatesRevision], (flags) => {
     if (keys.length === 0) {
       return !negate;
     }
@@ -402,9 +463,19 @@ export function $gate(
     let isEnabled: boolean;
 
     if (requirement === 'any') {
-      isEnabled = keys.some((key) => flags[key] === true);
+      isEnabled = keys.some((key) => {
+        const remote = flags[key] === true;
+        return clientInstance
+          ? clientInstance.getEffectiveFlag(key, remote)
+          : remote;
+      });
     } else {
-      isEnabled = keys.every((key) => flags[key] === true);
+      isEnabled = keys.every((key) => {
+        const remote = flags[key] === true;
+        return clientInstance
+          ? clientInstance.getEffectiveFlag(key, remote)
+          : remote;
+      });
     }
 
     return negate ? !isEnabled : isEnabled;
@@ -415,15 +486,11 @@ export function $gate(
  * Reactive variant assignment for a feature (null when disabled, missing, or no variant name).
  */
 export function $variant(featureKey: string): ReadableAtom<VariantResult | null> {
-  return computed($variants, (defs) => {
-    const entry = defs[featureKey];
-    if (!entry?.variant) {
+  return computed([$variants, $localGatesRevision], () => {
+    if (!clientInstance) {
       return null;
     }
-    return {
-      name: entry.variant,
-      configurationValue: entry.configurationValue,
-    };
+    return clientInstance.resolveVariant(featureKey);
   });
 }
 

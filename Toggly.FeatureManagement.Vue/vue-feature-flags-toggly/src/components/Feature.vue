@@ -27,12 +27,21 @@ export default {
   data() {
     return {
       shouldShow: false,
-      isLoading: false
+      isLoading: false,
+      _unsubLocalGates: null as (() => void) | null
     }
   },
 
   mounted() {
     this.checkIfShouldShow()
+    this._unsubLocalGates = this.$toggly.subscribeLocalGatesChanged(this.checkIfShouldShow)
+  },
+
+  beforeUnmount() {
+    if (this._unsubLocalGates) {
+      this._unsubLocalGates()
+      this._unsubLocalGates = null
+    }
   },
 
   methods: {

@@ -9,14 +9,19 @@ import {
   TogglyHook,
   EvaluationSeriesData,
   IdentitySeriesData,
+  LocalGate,
   mergeConfig,
   buildDefinitionsUrl,
   isFeatureEnabled,
-  evaluateFeatureGate,
   fetchWithTimeout,
   createLogger,
   TogglyNetworkError,
 } from '@ops-ai/remix-toggly-core';
+import {
+  applyLocalGate,
+  buildFlagGateIndex,
+  type FlagGateIndex,
+} from '@ops-ai/toggly-local-gates';
 import WebSocket from 'ws';
 
 /**
@@ -36,11 +41,19 @@ export class TogglyServerClient {
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private identity?: string;
 
+  private localGates: LocalGate[] = [];
+  private localGateIndex: FlagGateIndex = new Map();
+  private readonly localGatesListeners = new Set<() => void>();
+
   private static readonly WS_RECONNECT_DELAY = 5000; // 5 seconds
 
   constructor(config: TogglyConfig) {
     this.config = mergeConfig(config);
     this.logger = createLogger(this.config.debug ?? false);
+
+    if (this.config.localGates) {
+      this.setLocalGates(this.config.localGates);
+    }
 
     if (!this.config.appKey && !this.config.featureDefaults) {
       this.logger.warn(
@@ -78,6 +91,62 @@ export class TogglyServerClient {
     }
 
     return false;
+  }
+
+  /**
+   * Register device-local post-filter gates
+   */
+  setLocalGates(gates: LocalGate[]): void {
+    this.localGates = [...gates];
+    this.localGateIndex = buildFlagGateIndex(this.localGates);
+  }
+
+  /**
+   * Notify subscribers that local gate state changed (no network)
+   */
+  notifyLocalGatesChanged(): void {
+    this.localGatesListeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (error) {
+        this.logger.error('Local gate listener error:', error);
+      }
+    });
+  }
+
+  /**
+   * Subscribe to local gate changes
+   */
+  subscribeLocalGatesChanged(listener: () => void): () => void {
+    this.localGatesListeners.add(listener);
+    return () => {
+      this.localGatesListeners.delete(listener);
+    };
+  }
+
+  private getEffectiveFlag(featureKey: string, defaultValue = false): boolean {
+    const remote = isFeatureEnabled(this.flags, featureKey, defaultValue);
+    return applyLocalGate(remote, featureKey, this.localGates, this.localGateIndex);
+  }
+
+  private evaluateGateEffective(
+    featureKeys: string[],
+    requirement: 'all' | 'any' = 'all',
+    negate = false,
+    defaultValue = false
+  ): boolean {
+    if (featureKeys.length === 0) {
+      return !negate;
+    }
+
+    let result: boolean;
+    if (requirement === 'any') {
+      result = featureKeys.some((key) => this.getEffectiveFlag(key, defaultValue));
+    } else {
+      result = featureKeys.every((key) => this.getEffectiveFlag(key, defaultValue));
+    }
+
+    return negate ? !result : result;
   }
 
   /**
@@ -179,7 +248,7 @@ export class TogglyServerClient {
     // Execute beforeEvaluation hooks
     const hookData = await this.executeBeforeEvaluation(featureKey, defaultValue);
 
-    const result = isFeatureEnabled(this.flags, featureKey, defaultValue);
+    const result = this.getEffectiveFlag(featureKey, defaultValue);
 
     // Execute afterEvaluation hooks
     await this.executeAfterEvaluation(featureKey, hookData, result);
@@ -211,8 +280,7 @@ export class TogglyServerClient {
     const firstKey = featureKeys[0] ?? 'gate';
     const hookData = await this.executeBeforeEvaluation(firstKey, defaultValue);
 
-    const result = evaluateFeatureGate(
-      this.flags,
+    const result = this.evaluateGateEffective(
       featureKeys,
       requirement,
       negate,
@@ -220,9 +288,9 @@ export class TogglyServerClient {
     );
 
     // Execute afterEvaluation
-    await this.executeAfterEvaluation(firstKey, hookData, result.enabled);
+    await this.executeAfterEvaluation(firstKey, hookData, result);
 
-    return result.enabled;
+    return result;
   }
 
   /**

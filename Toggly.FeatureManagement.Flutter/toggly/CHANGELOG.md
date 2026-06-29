@@ -1,4 +1,14 @@
 
+## 1.3.0
+
+2026-06-28
+
+### Added
+- Device-local post-filter gates (`LocalGate`, `setLocalGates`, `notifyLocalGatesChanged`, `onLocalGatesChanged`) that AND worker booleans at read time
+- `TogglyConfig.localGates` for init-time registration
+- `Feature` widget re-evaluates when local gates change
+- Pure helpers in `local_gates.dart` (`applyLocalGate`, `buildFlagGateIndex`, etc.)
+
 ## 1.2.2
 
 2026-06-16

@@ -24,7 +24,12 @@ export function useVariant(featureKey: string): VariantResult | null {
     }
 
     sync()
-    return toggly.subscribeFeaturesRefresh(sync)
+    const unsubRefresh = toggly.subscribeFeaturesRefresh(sync)
+    const unsubLocalGates = toggly.subscribeLocalGatesChanged(sync)
+    return () => {
+      unsubRefresh()
+      unsubLocalGates()
+    }
   }, [toggly, featureKey])
 
   return variant

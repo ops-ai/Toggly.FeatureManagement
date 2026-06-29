@@ -7,7 +7,7 @@ const mockFetch = jest.fn();
 
 describe('Toggly Service', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    mockFetch.mockReset();
     localStorage.clear();
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -1015,6 +1015,68 @@ describe('Toggly Service', () => {
       service.subscribeFeaturesRefresh(ok);
       await service._loadFeatures();
       expect(ok).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ───────────────────────────────────────────────
+  // Local gates (post-filter)
+  // ───────────────────────────────────────────────
+  describe('Local gates', () => {
+    it('should AND remote true with local gate when gate is off', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ ApiV2Checkout: true, Other: true }),
+      });
+
+      let gateEnabled = false;
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableLiveUpdates: false,
+        localGates: [{
+          id: 'apiRedesign',
+          flagKeys: ['ApiV2Checkout'],
+          isEnabled: () => gateEnabled,
+        }],
+      });
+
+      await service._loadFeatures();
+
+      expect(await service.isFeatureOn('ApiV2Checkout')).toBe(false);
+      expect(await service.isFeatureOn('Other')).toBe(true);
+    });
+
+    it('notifyLocalGatesChanged should notify subscribers without fetch', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ ApiV2Checkout: true }),
+      });
+
+      let gateEnabled = true;
+      const listener = jest.fn();
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableLiveUpdates: false,
+        localGates: [{
+          id: 'apiRedesign',
+          flagKeys: ['ApiV2Checkout'],
+          isEnabled: () => gateEnabled,
+        }],
+      });
+
+      await service._loadFeatures();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      const unsub = service.subscribeLocalGatesChanged(listener);
+      gateEnabled = false;
+      service.notifyLocalGatesChanged();
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(await service.isFeatureOn('ApiV2Checkout')).toBe(false);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      unsub();
+      service.notifyLocalGatesChanged();
+      expect(listener).toHaveBeenCalledTimes(1);
     });
   });
 });

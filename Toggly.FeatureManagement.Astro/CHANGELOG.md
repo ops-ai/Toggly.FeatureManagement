@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.0] - 2026-06-28
+
+### Added
+
+- Device-local post-filter gates on the client store: `setLocalGates`, `notifyLocalGatesChanged`, and `$localGatesRevision` so `$flag`, `$gate`, and `$variant` apply a read-time AND via `@ops-ai/toggly-local-gates`.
+
 ## [1.1.0] - 2026-01-31
 
 ### Added

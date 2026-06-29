@@ -1,4 +1,5 @@
 import '../services/toggly_cache_provider.dart';
+import '../local_gates.dart';
 
 /// Toggly configuration model allowing various tweaks on how the package
 /// should work to better fit each use-case.
@@ -38,6 +39,9 @@ class TogglyConfig {
   /// to `Toggly.init` / `Toggly.setIdentity`.
   final TogglyCacheProvider? cacheProvider;
 
+  /// Device-local gates applied as a read-time AND on worker-evaluated booleans.
+  final List<LocalGate>? localGates;
+
   const TogglyConfig({
     this.baseURI = 'https://definitions.toggly.io',
     this.connectTimeout = 5 * 1000,
@@ -47,5 +51,6 @@ class TogglyConfig {
     this.enableLiveUpdates = true,
     this.enableVariants = false,
     this.cacheProvider,
+    this.localGates,
   });
 }

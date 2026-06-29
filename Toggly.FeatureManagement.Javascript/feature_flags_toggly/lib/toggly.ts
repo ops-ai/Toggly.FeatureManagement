@@ -2,6 +2,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { HookExecutor } from './hooks';
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import {
+  applyLocalGate,
+  buildFlagGateIndex,
+  type FlagGateIndex,
+  type LocalGate,
+} from '@ops-ai/toggly-local-gates';
 
 const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
@@ -9,6 +15,9 @@ export class Toggly {
   private static _config: TogglyConfig;
   private static _refreshInterval: number | undefined;
   private static _hookExecutor = new HookExecutor();
+  private static _localGates: LocalGate[] = [];
+  private static _localGateIndex: FlagGateIndex = new Map();
+  private static _localGatesChangedListeners = new Set<() => void>();
 
   static _ws: WebSocket | null = null;
   static _wsConnected: boolean = false;
@@ -51,6 +60,10 @@ export class Toggly {
     // Register initial hooks
     if (Toggly._config.hooks) {
       Toggly._config.hooks.forEach(hook => Toggly._hookExecutor.addHook(hook));
+    }
+
+    if (Toggly._config.localGates) {
+      Toggly.setLocalGates(Toggly._config.localGates);
     }
 
     if (!Toggly.identity) {
@@ -151,6 +164,9 @@ export class Toggly {
     if (!variants) return null;
     const entry = variants[featureKey];
     if (!entry || !entry.variant) return null;
+    if (!Toggly._isEffectiveFlagEnabled(featureKey, entry.enabled === true)) {
+      return null;
+    }
     return {
       name: entry.variant,
       configurationValue: entry.configurationValue,
@@ -259,18 +275,27 @@ export class Toggly {
     });
   }
 
+  private static _getEffectiveFlagValue(flags: { [key: string]: boolean }, flagKey: string): boolean {
+    const remote = flags[flagKey] === true;
+    return applyLocalGate(remote, flagKey, Toggly._localGates, Toggly._localGateIndex);
+  }
+
+  private static _isEffectiveFlagEnabled(flagKey: string, remote: boolean): boolean {
+    return applyLocalGate(remote, flagKey, Toggly._localGates, Toggly._localGateIndex);
+  }
+
   private static _evaluateFeatureGate(flags: { [key: string]: boolean } = {}, featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false) {
     var isEnabled: boolean;
 
     if (requirement === FeatureRequirement.any) {
       isEnabled = featureGate.reduce((isEnabled, featureKey) => {
         return isEnabled ||
-          (flags[featureKey] && flags[featureKey] === true);
+          Toggly._getEffectiveFlagValue(flags, featureKey);
       }, false);
     } else {
       isEnabled = featureGate.reduce((isEnabled, featureKey) => {
         return isEnabled &&
-          (flags[featureKey] && flags[featureKey] === true);
+          Toggly._getEffectiveFlagValue(flags, featureKey);
       }, true);
     }
 
@@ -327,6 +352,37 @@ export class Toggly {
    */
   static removeHook(name: string): boolean {
     return Toggly._hookExecutor.removeHook(name);
+  }
+
+  /**
+   * Register device-local gates applied as a read-time AND on worker booleans.
+   */
+  static setLocalGates(gates: LocalGate[]): void {
+    Toggly._localGates = [...gates];
+    Toggly._localGateIndex = buildFlagGateIndex(Toggly._localGates);
+  }
+
+  /**
+   * Notify subscribers that local gate state changed (no network fetch).
+   */
+  static notifyLocalGatesChanged(): void {
+    Toggly._localGatesChangedListeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (err) {
+        console.error('[Toggly] Local gate listener error:', err);
+      }
+    });
+  }
+
+  /**
+   * Subscribe to local gate changes. Returns an unsubscribe function.
+   */
+  static subscribeLocalGatesChanged(listener: () => void): () => void {
+    Toggly._localGatesChangedListeners.add(listener);
+    return () => {
+      Toggly._localGatesChangedListeners.delete(listener);
+    };
   }
 
   static startWebSocket() {

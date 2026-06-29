@@ -7,4 +7,5 @@ export {
   type EvaluatedVariantDef,
   type VariantResult,
 } from './plugins/toggly.service'
+export type { LocalGate } from '@ops-ai/toggly-local-gates'
 export { useVariant, type UseVariantReturn } from './composables/useVariant'

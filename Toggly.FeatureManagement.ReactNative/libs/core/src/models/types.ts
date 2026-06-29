@@ -1,4 +1,7 @@
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { LocalGate } from '@ops-ai/toggly-local-gates';
+
+export type { LocalGate };
 
 /**
  * Feature requirement types allowing "any" or "all" operations
@@ -183,6 +186,11 @@ export interface TogglyConfig {
    * @default false
    */
   enableLiveUpdates?: boolean;
+
+  /**
+   * Device-local gates applied as a read-time AND on worker-evaluated booleans
+   */
+  localGates?: LocalGate[];
 }
 
 /**
@@ -291,6 +299,7 @@ export type TogglyEventType =
   | 'error'
   | 'identityChanged'
   | 'featureChanged'
+  | 'localGatesChanged'
   | 'networkChanged'
   | 'appStateChanged';
 

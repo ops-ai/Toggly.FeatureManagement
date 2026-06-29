@@ -1,4 +1,10 @@
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import {
+  applyLocalGate,
+  buildFlagGateIndex,
+  type FlagGateIndex,
+  type LocalGate,
+} from '@ops-ai/toggly-local-gates';
 import { HookExecutor } from './hooks';
 import type { EvaluatedVariantDef, VariantResult } from './variant.types';
 
@@ -77,6 +83,8 @@ export interface TogglyOptions {
    * Matches @ops-ai/feature-flags-toggly when enableVariants is true.
    */
   enableVariants?: boolean
+  /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+  localGates?: LocalGate[]
 }
 
 export interface TogglyService {
@@ -98,6 +106,9 @@ export interface TogglyService {
   getVariant: (featureKey: string) => VariantResult | null
   getVariantValue: (featureKey: string) => unknown | null
   subscribeFeaturesRefresh: (listener: () => void) => () => void
+  setLocalGates: (gates: LocalGate[]) => void
+  notifyLocalGatesChanged: () => void
+  subscribeLocalGatesChanged: (listener: () => void) => () => void
 }
 
 export class Toggly implements TogglyService {
@@ -112,6 +123,9 @@ export class Toggly implements TogglyService {
   private _loadingFeatures: boolean = false
   private _hookExecutor = new HookExecutor()
   private _featuresRefreshListeners = new Set<() => void>()
+  private _localGates: LocalGate[] = []
+  private _localGateIndex: FlagGateIndex = new Map()
+  private _localGatesChangedListeners = new Set<() => void>()
 
   _ws: WebSocket | null = null
   _wsConnected: boolean = false
@@ -153,6 +167,10 @@ export class Toggly implements TogglyService {
     // Register initial hooks
     if (this._config.hooks) {
       this._config.hooks.forEach(hook => this._hookExecutor.addHook(hook))
+    }
+
+    if (this._config.localGates) {
+      this.setLocalGates(this._config.localGates)
     }
 
     // Seed in-memory features (and variants) from localStorage for instant availability
@@ -295,6 +313,11 @@ export class Toggly implements TogglyService {
     return this._features ?? (await this._loadFeatures())
   }
 
+  private _getEffectiveFlagValue(flagKey: string): boolean {
+    const remote = this._features?.[flagKey] === true
+    return applyLocalGate(remote, flagKey, this._localGates, this._localGateIndex)
+  }
+
   _evaluateFeatureGate = async (
     gate: string[],
     requirement = 'all',
@@ -312,15 +335,14 @@ export class Toggly implements TogglyService {
       isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
         return (
           isEnabled ||
-          (this._features![featureKey] && this._features![featureKey] === true)
+          this._getEffectiveFlagValue(String(featureKey))
         )
       }, false)
     } else {
       isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
         return (
           isEnabled &&
-          this._features![featureKey] &&
-          this._features![featureKey] === true
+          this._getEffectiveFlagValue(String(featureKey))
         )
       }, true)
     }
@@ -373,6 +395,9 @@ export class Toggly implements TogglyService {
     if (!entry || !entry.variant) {
       return null
     }
+    if (!applyLocalGate(entry.enabled === true, featureKey, this._localGates, this._localGateIndex)) {
+      return null
+    }
     return {
       name: entry.variant,
       configurationValue: entry.configurationValue,
@@ -406,6 +431,28 @@ export class Toggly implements TogglyService {
         console.error('[Toggly] Error in features refresh listener:', e)
       }
     })
+  }
+
+  setLocalGates(gates: LocalGate[]): void {
+    this._localGates = [...gates]
+    this._localGateIndex = buildFlagGateIndex(this._localGates)
+  }
+
+  notifyLocalGatesChanged(): void {
+    this._localGatesChangedListeners.forEach((listener) => {
+      try {
+        listener()
+      } catch (e) {
+        console.error('[Toggly] Error in local gates listener:', e)
+      }
+    })
+  }
+
+  subscribeLocalGatesChanged(listener: () => void): () => void {
+    this._localGatesChangedListeners.add(listener)
+    return () => {
+      this._localGatesChangedListeners.delete(listener)
+    }
   }
 
   startWebSocket = () => {

@@ -1,4 +1,5 @@
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { LocalGate } from './local-gate';
 
 export interface TogglyConfig {
   baseURI?: string;
@@ -23,4 +24,7 @@ export interface TogglyConfig {
 
   /** Enable variant support. When true, fetches from /evaluated-variants-signed instead of /evaluated-signed. Default: false. */
   enableVariants?: boolean;
+
+  /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+  localGates?: LocalGate[];
 }

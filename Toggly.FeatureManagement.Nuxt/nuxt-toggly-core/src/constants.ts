@@ -6,6 +6,7 @@ export const DEFAULT_CONFIG = {
   environment: 'Production',
   refreshInterval: 180000, // 3 minutes
   showFeatureDuringEvaluation: false,
+  enableLiveUpdates: false,
 } as const
 
 /**

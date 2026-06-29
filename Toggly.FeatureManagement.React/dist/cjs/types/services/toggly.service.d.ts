@@ -1,4 +1,5 @@
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { type LocalGate } from '@ops-ai/toggly-local-gates';
 import type { VariantResult } from './variant.types';
 export type { EvaluatedVariantDef, VariantResult } from './variant.types';
 export interface TogglyOptions {
@@ -22,6 +23,8 @@ export interface TogglyOptions {
      * Matches @ops-ai/feature-flags-toggly when enableVariants is true.
      */
     enableVariants?: boolean;
+    /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+    localGates?: LocalGate[];
 }
 export interface TogglyService {
     shouldShowFeatureDuringEvaluation: boolean;
@@ -38,6 +41,9 @@ export interface TogglyService {
     getVariant: (featureKey: string) => VariantResult | null;
     getVariantValue: (featureKey: string) => unknown | null;
     subscribeFeaturesRefresh: (listener: () => void) => () => void;
+    setLocalGates: (gates: LocalGate[]) => void;
+    notifyLocalGatesChanged: () => void;
+    subscribeLocalGatesChanged: (listener: () => void) => () => void;
 }
 export declare class Toggly implements TogglyService {
     private _config;
@@ -46,6 +52,9 @@ export declare class Toggly implements TogglyService {
     private _loadingFeatures;
     private _hookExecutor;
     private _featuresRefreshListeners;
+    private _localGates;
+    private _localGateIndex;
+    private _localGatesChangedListeners;
     _ws: WebSocket | null;
     _wsConnected: boolean;
     _wsReconnectTimer: any;
@@ -61,6 +70,7 @@ export declare class Toggly implements TogglyService {
     _featuresLoaded: () => Promise<{
         [key: string]: boolean;
     } | null>;
+    private _getEffectiveFlagValue;
     _evaluateFeatureGate: (gate: string[], requirement?: string, negate?: boolean) => Promise<boolean>;
     evaluateFeatureGate: (featureKeys: string[], requirement?: string, negate?: boolean) => Promise<boolean>;
     isFeatureOn: (featureKey: string) => Promise<boolean>;
@@ -79,6 +89,9 @@ export declare class Toggly implements TogglyService {
      */
     subscribeFeaturesRefresh(listener: () => void): () => void;
     private notifyFeaturesRefresh;
+    setLocalGates(gates: LocalGate[]): void;
+    notifyLocalGatesChanged(): void;
+    subscribeLocalGatesChanged(listener: () => void): () => void;
     startWebSocket: () => void;
     stopWebSocket: () => void;
     /**

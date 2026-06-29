@@ -2885,6 +2885,74 @@ function __generator(thisArg, body) {
     }
 }
 
+function __spreadArray(to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+}
+
+var dist = {};
+
+Object.defineProperty(dist, "__esModule", { value: true });
+var buildFlagGateIndex_1 = dist.buildFlagGateIndex = buildFlagGateIndex;
+dist.isLocalPrerequisiteMet = isLocalPrerequisiteMet;
+var applyLocalGate_1 = dist.applyLocalGate = applyLocalGate;
+dist.applyLocalGatesToMap = applyLocalGatesToMap;
+/**
+ * Builds a flag-key → gate-id index. Throws if a flag key appears in more than one gate.
+ */
+function buildFlagGateIndex(gates) {
+    const index = new Map();
+    for (const gate of gates) {
+        for (const flagKey of gate.flagKeys) {
+            const existing = index.get(flagKey);
+            if (existing !== undefined && existing !== gate.id) {
+                throw new Error(`Flag key "${flagKey}" is registered on multiple local gates ("${existing}" and "${gate.id}")`);
+            }
+            index.set(flagKey, gate.id);
+        }
+    }
+    return index;
+}
+function findGate(gates, gateId) {
+    return gates.find((gate) => gate.id === gateId);
+}
+/**
+ * Returns whether the local prerequisite allows the flag (true when ungated).
+ */
+function isLocalPrerequisiteMet(flagKey, gates, gateIndex) {
+    const gateId = gateIndex.get(flagKey);
+    if (gateId === undefined) {
+        return true;
+    }
+    const gate = findGate(gates, gateId);
+    return gate?.isEnabled() ?? true;
+}
+/**
+ * Applies the local post-filter to a single remote boolean.
+ */
+function applyLocalGate(remote, flagKey, gates, gateIndex) {
+    if (!remote) {
+        return false;
+    }
+    return isLocalPrerequisiteMet(flagKey, gates, gateIndex);
+}
+/**
+ * Applies local gates to every key in a remote flag map (for bulk/debug use).
+ */
+function applyLocalGatesToMap(remoteFlags, gates, gateIndex) {
+    const index = gateIndex ?? buildFlagGateIndex(gates);
+    const effective = {};
+    for (const [flagKey, remote] of Object.entries(remoteFlags)) {
+        effective[flagKey] = applyLocalGate(remote, flagKey, gates, index);
+    }
+    return effective;
+}
+
 /**
  * Internal class that manages hook registration and execution
  */
@@ -3169,6 +3237,9 @@ var Toggly = /** @class */ (function () {
         this._loadingFeatures = false;
         this._hookExecutor = new HookExecutor();
         this._featuresRefreshListeners = new Set();
+        this._localGates = [];
+        this._localGateIndex = new Map();
+        this._localGatesChangedListeners = new Set();
         this._ws = null;
         this._wsConnected = false;
         this._wsReconnectTimer = null;
@@ -3336,14 +3407,13 @@ var Toggly = /** @class */ (function () {
                             if (requirement === 'any') {
                                 isEnabled = gate.reduce(function (isEnabled, featureKey) {
                                     return (isEnabled ||
-                                        (_this._features[featureKey] && _this._features[featureKey] === true));
+                                        _this._getEffectiveFlagValue(String(featureKey)));
                                 }, false);
                             }
                             else {
                                 isEnabled = gate.reduce(function (isEnabled, featureKey) {
                                     return (isEnabled &&
-                                        _this._features[featureKey] &&
-                                        _this._features[featureKey] === true);
+                                        _this._getEffectiveFlagValue(String(featureKey)));
                                 }, true);
                             }
                             isEnabled = negate ? !isEnabled : isEnabled;
@@ -3519,6 +3589,9 @@ var Toggly = /** @class */ (function () {
         if (this._config.hooks) {
             this._config.hooks.forEach(function (hook) { return _this._hookExecutor.addHook(hook); });
         }
+        if (this._config.localGates) {
+            this.setLocalGates(this._config.localGates);
+        }
         // Seed in-memory features (and variants) from localStorage for instant availability
         if (this._features === null && this._canPersist && this._config.appKey) {
             var appKey = this._config.appKey;
@@ -3545,6 +3618,11 @@ var Toggly = /** @class */ (function () {
         enumerable: false,
         configurable: true
     });
+    Toggly.prototype._getEffectiveFlagValue = function (flagKey) {
+        var _a;
+        var remote = ((_a = this._features) === null || _a === void 0 ? void 0 : _a[flagKey]) === true;
+        return applyLocalGate_1(remote, flagKey, this._localGates, this._localGateIndex);
+    };
     /**
      * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants} and loaded data).
      */
@@ -3558,6 +3636,9 @@ var Toggly = /** @class */ (function () {
         }
         var entry = variants[featureKey];
         if (!entry || !entry.variant) {
+            return null;
+        }
+        if (!applyLocalGate_1(entry.enabled === true, featureKey, this._localGates, this._localGateIndex)) {
             return null;
         }
         return {
@@ -3593,6 +3674,27 @@ var Toggly = /** @class */ (function () {
                 console.error('[Toggly] Error in features refresh listener:', e);
             }
         });
+    };
+    Toggly.prototype.setLocalGates = function (gates) {
+        this._localGates = __spreadArray([], gates, true);
+        this._localGateIndex = buildFlagGateIndex_1(this._localGates);
+    };
+    Toggly.prototype.notifyLocalGatesChanged = function () {
+        this._localGatesChangedListeners.forEach(function (listener) {
+            try {
+                listener();
+            }
+            catch (e) {
+                console.error('[Toggly] Error in local gates listener:', e);
+            }
+        });
+    };
+    Toggly.prototype.subscribeLocalGatesChanged = function (listener) {
+        var _this = this;
+        this._localGatesChangedListeners.add(listener);
+        return function () {
+            _this._localGatesChangedListeners.delete(listener);
+        };
     };
     /**
      * Add a hook dynamically
@@ -3656,6 +3758,7 @@ var Feature = /** @class */ (function (_super) {
         if (gate.length > 0 && this.context.toggly) {
             this.runGate();
             this.unsubscribeRefresh = this.context.toggly.subscribeFeaturesRefresh(this.runGate);
+            this.unsubscribeLocalGates = this.context.toggly.subscribeLocalGatesChanged(this.runGate);
         }
     };
     Feature.prototype.componentDidUpdate = function (prevProps) {
@@ -3669,9 +3772,11 @@ var Feature = /** @class */ (function (_super) {
         }
     };
     Feature.prototype.componentWillUnmount = function () {
-        var _a;
+        var _a, _b;
         (_a = this.unsubscribeRefresh) === null || _a === void 0 ? void 0 : _a.call(this);
+        (_b = this.unsubscribeLocalGates) === null || _b === void 0 ? void 0 : _b.call(this);
         this.unsubscribeRefresh = undefined;
+        this.unsubscribeLocalGates = undefined;
     };
     Feature.prototype.render = function () {
         return this.state.shouldShow ? this.props.children : null;
@@ -3710,7 +3815,12 @@ function useVariant(featureKey) {
             setVariant(toggly.getVariant(featureKey));
         };
         sync();
-        return toggly.subscribeFeaturesRefresh(sync);
+        var unsubRefresh = toggly.subscribeFeaturesRefresh(sync);
+        var unsubLocalGates = toggly.subscribeLocalGatesChanged(sync);
+        return function () {
+            unsubRefresh();
+            unsubLocalGates();
+        };
     }, [toggly, featureKey]);
     return variant;
 }

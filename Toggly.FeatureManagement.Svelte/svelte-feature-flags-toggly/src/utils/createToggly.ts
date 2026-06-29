@@ -1,5 +1,5 @@
 import { Toggly, type TogglyOptions } from '../services/toggly.service'
-import { togglyServiceStore, togglyFlagsStore, togglyVariantsStore } from '../stores/toggly.store'
+import { togglyServiceStore, togglyFlagsStore, togglyVariantsStore, togglyLocalGatesRevision } from '../stores/toggly.store'
 
 /**
  * Initialize Toggly with the provided configuration
@@ -32,6 +32,10 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
 
   toggly.onVariantsUpdated = (defs) => {
     togglyVariantsStore.set(defs)
+  }
+
+  toggly.onLocalGatesUpdated = () => {
+    togglyLocalGatesRevision.update((n) => n + 1)
   }
 
   if (!config.enableVariants) {

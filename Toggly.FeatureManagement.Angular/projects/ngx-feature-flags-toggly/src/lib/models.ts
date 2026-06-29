@@ -1,4 +1,5 @@
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
 /** Assigned variant for a feature (from evaluated-variants-signed). */
 export interface VariantResult {
@@ -30,6 +31,8 @@ export interface ITogglyOptions {
    * Default: false.
    */
   enableVariants?: boolean
+  /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+  localGates?: LocalGate[]
 }
 
 export interface ITogglyService {
@@ -45,4 +48,7 @@ export interface ITogglyService {
   getVariantValue: (featureKey: string) => Promise<unknown | null>
   addHook: (hook: Hook) => void
   removeHook: (name: string) => boolean
+  setLocalGates: (gates: LocalGate[]) => void
+  notifyLocalGatesChanged: () => void
+  subscribeLocalGatesChanged: (listener: () => void) => () => void
 }

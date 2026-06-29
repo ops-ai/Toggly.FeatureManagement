@@ -15,12 +15,17 @@ import {
 } from 'react';
 import {
   isFeatureEnabled as coreIsFeatureEnabled,
-  evaluateFeatureGate,
   buildDefinitionsUrl,
   fetchWithTimeout,
   createLogger,
   mergeConfig,
 } from '@ops-ai/remix-toggly-core';
+import {
+  applyLocalGate,
+  buildFlagGateIndex,
+  type FlagGateIndex,
+  type LocalGate,
+} from '@ops-ai/toggly-local-gates';
 import type {
   FeatureFlags,
   ServerFeatureContext,
@@ -59,6 +64,12 @@ export interface TogglyContextValue {
   addHook: (hook: TogglyHook) => void;
   /** Remove a hook by name */
   removeHook: (name: string) => boolean;
+  /** Register device-local post-filter gates */
+  setLocalGates: (gates: LocalGate[]) => void;
+  /** Notify subscribers that local gate state changed (no network) */
+  notifyLocalGatesChanged: () => void;
+  /** Subscribe to local gate changes */
+  subscribeLocalGatesChanged: (listener: () => void) => () => void;
 }
 
 /**
@@ -111,6 +122,58 @@ export function TogglyProvider({
   );
   const [isReady, setIsReady] = useState(!!serverContext);
   const [hooks, setHooks] = useState<TogglyHook[]>([]);
+  const [localGatesRevision, setLocalGatesRevision] = useState(0);
+
+  const localGatesRef = useRef<LocalGate[]>(mergedConfig?.localGates ?? []);
+  const localGateIndexRef = useRef<FlagGateIndex>(
+    buildFlagGateIndex(localGatesRef.current)
+  );
+  const localGatesListenersRef = useRef(new Set<() => void>());
+
+  const getEffectiveFlag = useCallback(
+    (featureKey: string, defaultValue = false): boolean => {
+      const remote = coreIsFeatureEnabled(flags, featureKey, defaultValue);
+      return applyLocalGate(
+        remote,
+        featureKey,
+        localGatesRef.current,
+        localGateIndexRef.current
+      );
+    },
+    [flags, localGatesRevision]
+  );
+
+  const setLocalGates = useCallback((gates: LocalGate[]): void => {
+    localGatesRef.current = [...gates];
+    localGateIndexRef.current = buildFlagGateIndex(localGatesRef.current);
+  }, []);
+
+  const notifyLocalGatesChanged = useCallback((): void => {
+    setLocalGatesRevision((revision) => revision + 1);
+    localGatesListenersRef.current.forEach((listener) => {
+      try {
+        listener();
+      } catch (error) {
+        logger.error('Local gate listener error:', error);
+      }
+    });
+  }, [logger]);
+
+  const subscribeLocalGatesChanged = useCallback(
+    (listener: () => void): (() => void) => {
+      localGatesListenersRef.current.add(listener);
+      return () => {
+        localGatesListenersRef.current.delete(listener);
+      };
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (mergedConfig?.localGates) {
+      setLocalGates(mergedConfig.localGates);
+    }
+  }, [mergedConfig?.localGates, setLocalGates]);
 
   const executeAfterRefresh = useCallback(
     async (newFlags: FeatureFlags): Promise<void> => {
@@ -177,11 +240,9 @@ export function TogglyProvider({
   // Check if feature is enabled (sync for performance)
   const isEnabled = useCallback(
     (featureKey: string, defaultValue = false): boolean => {
-      // Note: Hooks are async but we need sync API for React
-      // Consider using useEffect for hook execution if needed
-      return coreIsFeatureEnabled(flags, featureKey, defaultValue);
+      return getEffectiveFlag(featureKey, defaultValue);
     },
-    [flags]
+    [getEffectiveFlag]
   );
 
   // Check if feature is disabled
@@ -199,16 +260,20 @@ export function TogglyProvider({
       requirement: 'all' | 'any' = 'all',
       negate = false
     ): boolean => {
-      const result = evaluateFeatureGate(
-        flags,
-        featureKeys,
-        requirement,
-        negate,
-        false
-      );
-      return result.enabled;
+      if (featureKeys.length === 0) {
+        return !negate;
+      }
+
+      let result: boolean;
+      if (requirement === 'any') {
+        result = featureKeys.some((key) => getEffectiveFlag(key, false));
+      } else {
+        result = featureKeys.every((key) => getEffectiveFlag(key, false));
+      }
+
+      return negate ? !result : result;
     },
-    [flags]
+    [getEffectiveFlag]
   );
 
   // Identify user
@@ -488,6 +553,9 @@ export function TogglyProvider({
       refresh,
       addHook,
       removeHook,
+      setLocalGates,
+      notifyLocalGatesChanged,
+      subscribeLocalGatesChanged,
     }),
     [
       flags,
@@ -501,6 +569,9 @@ export function TogglyProvider({
       refresh,
       addHook,
       removeHook,
+      setLocalGates,
+      notifyLocalGatesChanged,
+      subscribeLocalGatesChanged,
     ]
   );
 

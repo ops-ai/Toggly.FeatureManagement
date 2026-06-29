@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/react-native-toggly-core",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Core feature flag logic for React Native applications. Framework-agnostic, minimal dependencies. Can be used with or without Toggly.io.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -54,7 +54,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@ops-ai/toggly-hooks-types": "^1.1.0"
+    "@ops-ai/toggly-hooks-types": "^1.1.0",
+    "@ops-ai/toggly-local-gates": "file:../../../toggly-local-gates"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

@@ -186,6 +186,30 @@ This SDK is built with Angular 18 development dependencies to maximize compatibi
 
 Your application should use the latest patch version of your Angular version to ensure you have all security fixes.
 
+## Device-local post-filter gates
+
+Gate bundles of flags behind device-local master switches while rollouts stay on the worker. See **[Post-filter gates](https://docs.toggly.io/sdks/client-side/post-filter)**.
+
+```typescript
+TogglyModule.forRoot({
+  appKey: 'your-app-key',
+  localGates: [{
+    id: 'apiRedesign',
+    flagKeys: ['ApiV2Checkout'],
+    isEnabled: () => apiRedesignEnabled,
+  }],
+});
+
+// OFF — instant
+apiRedesignEnabled = false;
+this.toggly.notifyLocalGatesChanged();
+
+// ON — reload, then notify (FeatureFlagDirective subscribes automatically)
+apiRedesignEnabled = true;
+await this.toggly.refresh();
+this.toggly.notifyLocalGatesChanged();
+```
+
 ## Extensibility with Hooks
 
 Toggly provides a powerful hooks system that allows you to extend SDK functionality by hooking into feature flag lifecycle events. This is perfect for integrating with analytics, monitoring tools, or implementing custom behaviors.

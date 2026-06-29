@@ -15,6 +15,7 @@ declare class Feature extends React.Component<FeatureProps, {
     static contextType: React.Context<import("../../contexts/toggly.context").TogglyContext>;
     context: React.ContextType<typeof context>;
     private unsubscribeRefresh;
+    private unsubscribeLocalGates;
     constructor(props: FeatureProps);
     private buildGate;
     private applyVariantFilter;

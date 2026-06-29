@@ -1,6 +1,7 @@
 import {
   Directive,
   Input,
+  OnDestroy,
   OnInit,
   TemplateRef,
   ViewContainerRef,
@@ -41,9 +42,10 @@ import { TogglyService } from './toggly.service'
   selector: '[featureFlag]',
   standalone: true,
 })
-export class FeatureFlagDirective implements OnInit {
+export class FeatureFlagDirective implements OnInit, OnDestroy {
   private flag: string[] = []
   private isHidden = true
+  private unsubscribeLocalGates: (() => void) | undefined
 
   @Input() set featureFlag(value: string | string[]) {
     if (value) {
@@ -68,6 +70,13 @@ export class FeatureFlagDirective implements OnInit {
 
   ngOnInit() {
     this.updateView()
+    this.unsubscribeLocalGates = this._toggly.subscribeLocalGatesChanged(() => {
+      this.updateView()
+    })
+  }
+
+  ngOnDestroy() {
+    this.unsubscribeLocalGates?.()
   }
 
   private updateView() {

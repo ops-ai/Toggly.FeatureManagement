@@ -3,6 +3,7 @@
  */
 
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
 /**
  * Configuration options for Toggly integration
@@ -41,6 +42,8 @@ export interface TogglyConfig {
   enableVariants?: boolean;
   /** Hooks to extend SDK behavior at key lifecycle points */
   hooks?: Hook[];
+  /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+  localGates?: LocalGate[];
 }
 
 /**

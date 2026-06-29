@@ -2,6 +2,7 @@
 import * as React from 'react';
 import React__default, { ReactNode } from 'react';
 import { Hook } from '@ops-ai/toggly-hooks-types';
+import { LocalGate } from '@ops-ai/toggly-local-gates';
 
 /**
  * Assigned variant for a feature (aligned with @ops-ai/feature-flags-toggly).
@@ -40,6 +41,8 @@ interface TogglyOptions {
      * Matches @ops-ai/feature-flags-toggly when enableVariants is true.
      */
     enableVariants?: boolean;
+    /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+    localGates?: LocalGate[];
 }
 interface TogglyService {
     shouldShowFeatureDuringEvaluation: boolean;
@@ -56,6 +59,9 @@ interface TogglyService {
     getVariant: (featureKey: string) => VariantResult | null;
     getVariantValue: (featureKey: string) => unknown | null;
     subscribeFeaturesRefresh: (listener: () => void) => () => void;
+    setLocalGates: (gates: LocalGate[]) => void;
+    notifyLocalGatesChanged: () => void;
+    subscribeLocalGatesChanged: (listener: () => void) => () => void;
 }
 declare class Toggly implements TogglyService {
     private _config;
@@ -64,6 +70,9 @@ declare class Toggly implements TogglyService {
     private _loadingFeatures;
     private _hookExecutor;
     private _featuresRefreshListeners;
+    private _localGates;
+    private _localGateIndex;
+    private _localGatesChangedListeners;
     _ws: WebSocket | null;
     _wsConnected: boolean;
     _wsReconnectTimer: any;
@@ -79,6 +88,7 @@ declare class Toggly implements TogglyService {
     _featuresLoaded: () => Promise<{
         [key: string]: boolean;
     } | null>;
+    private _getEffectiveFlagValue;
     _evaluateFeatureGate: (gate: string[], requirement?: string, negate?: boolean) => Promise<boolean>;
     evaluateFeatureGate: (featureKeys: string[], requirement?: string, negate?: boolean) => Promise<boolean>;
     isFeatureOn: (featureKey: string) => Promise<boolean>;
@@ -97,6 +107,9 @@ declare class Toggly implements TogglyService {
      */
     subscribeFeaturesRefresh(listener: () => void): () => void;
     private notifyFeaturesRefresh;
+    setLocalGates(gates: LocalGate[]): void;
+    notifyLocalGatesChanged(): void;
+    subscribeLocalGatesChanged(listener: () => void): () => void;
     startWebSocket: () => void;
     stopWebSocket: () => void;
     /**
@@ -137,6 +150,7 @@ declare class Feature extends React__default.Component<FeatureProps, {
     static contextType: React__default.Context<TogglyContext>;
     context: React__default.ContextType<typeof context>;
     private unsubscribeRefresh;
+    private unsubscribeLocalGates;
     constructor(props: FeatureProps);
     private buildGate;
     private applyVariantFilter;

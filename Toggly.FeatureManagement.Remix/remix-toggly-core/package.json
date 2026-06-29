@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/remix-toggly-core",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Core types and utilities for Toggly Remix SDK - shared between server and client packages",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -42,6 +42,9 @@
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
   "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement#readme",
+  "dependencies": {
+    "@ops-ai/toggly-local-gates": "file:../../toggly-local-gates"
+  },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-node-resolve": "^15.0.0",

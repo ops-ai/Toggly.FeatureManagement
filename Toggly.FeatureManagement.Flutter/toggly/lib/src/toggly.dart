@@ -46,6 +46,10 @@ class Toggly with WidgetsBindingObserver {
   /// Parsed `defs` map from the last successful variants response (feature key → payload).
   static Map<String, dynamic>? _inMemoryVariantDefs;
 
+  static List<LocalGate> _localGates = [];
+  static Map<String, String> _localGateIndex = {};
+  static StreamController<void>? _localGatesChangedController;
+
   static String? _variantsETag;
 
   static final Toggly _instance = Toggly._internal();
@@ -131,6 +135,15 @@ class Toggly with WidgetsBindingObserver {
     Toggly._environment = environment ?? 'Production';
     Toggly._config = config;
     Toggly._cache = config.cacheProvider;
+
+    _localGatesChangedController?.close();
+    _localGatesChangedController = StreamController<void>.broadcast();
+    if (config.localGates != null) {
+      setLocalGates(config.localGates!);
+    } else {
+      _localGates = [];
+      _localGateIndex = {};
+    }
 
     // Use the provided identity, or fall back to an ephemeral in-memory
     // device id. The fallback is not persisted: stable targeting and offline
@@ -696,7 +709,40 @@ class Toggly with WidgetsBindingObserver {
         configurationValue: null,
       );
     }
-    return _variantResultFromDef(raw);
+    final result = _variantResultFromDef(raw);
+    if (!applyLocalGate(
+      result.enabled,
+      featureKey,
+      _localGates,
+      _localGateIndex,
+    )) {
+      return const VariantResult(
+        enabled: false,
+        name: null,
+        configurationValue: null,
+      );
+    }
+    return result;
+  }
+
+  /// Register device-local gates (read-time AND on worker booleans).
+  static void setLocalGates(List<LocalGate> gates) {
+    _localGates = List<LocalGate>.from(gates);
+    _localGateIndex = buildFlagGateIndex(_localGates);
+  }
+
+  /// Notify listeners that local gate state changed (no network fetch).
+  static void notifyLocalGatesChanged() {
+    _localGatesChangedController?.add(null);
+  }
+
+  /// Stream that fires when [notifyLocalGatesChanged] is called.
+  static Stream<void> get onLocalGatesChanged =>
+      _localGatesChangedController?.stream ?? const Stream.empty();
+
+  static bool _getEffectiveFlagValue(Map<String, bool> flags, String flagKey) {
+    final remote = flags[flagKey] ?? false;
+    return applyLocalGate(remote, flagKey, _localGates, _localGateIndex);
   }
 
   /// Returns [VariantResult.configurationValue] for [featureKey], or null if none.
@@ -999,14 +1045,14 @@ class Toggly with WidgetsBindingObserver {
   }) {
     // Fast path for single flag
     if (gate.length == 1) {
-      final isEnabled = flags[gate.first] ?? false;
+      final isEnabled = _getEffectiveFlagValue(flags, gate.first);
       return negate ? !isEnabled : isEnabled;
     }
 
     // Fast path for ALL requirement
     if (requirement == FeatureRequirement.all) {
       for (final featureKey in gate) {
-        if (!(flags[featureKey] ?? false)) {
+        if (!_getEffectiveFlagValue(flags, featureKey)) {
           return negate;
         }
       }
@@ -1015,7 +1061,7 @@ class Toggly with WidgetsBindingObserver {
 
     // ANY requirement
     for (final featureKey in gate) {
-      if (flags[featureKey] ?? false) {
+      if (_getEffectiveFlagValue(flags, featureKey)) {
         return !negate;
       }
     }
@@ -1031,6 +1077,8 @@ class Toggly with WidgetsBindingObserver {
     _inMemoryJwks = null; // Clear JWKs cache
     _featureFlagsSubject?.close();
     _featureFlagsSubject = null;
+    _localGatesChangedController?.close();
+    _localGatesChangedController = null;
 
     // Remove lifecycle observer only if binding is available
     try {

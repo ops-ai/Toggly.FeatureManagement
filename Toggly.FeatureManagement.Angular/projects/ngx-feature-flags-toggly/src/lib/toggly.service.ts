@@ -8,6 +8,12 @@ import {
 import { TogglyOptions } from './toggly-options'
 import { HookExecutor } from './hooks'
 import type { Hook } from '@ops-ai/toggly-hooks-types'
+import {
+  applyLocalGate,
+  buildFlagGateIndex,
+  type FlagGateIndex,
+  type LocalGate,
+} from '@ops-ai/toggly-local-gates'
 
 const CACHE_PREFIX_FLAGS = 'toggly:flags:'
 const CACHE_PREFIX_VARIANTS = 'toggly:variants:'
@@ -39,6 +45,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private _loadingFeatures: boolean = false
   private _hookExecutor = new HookExecutor()
   private _isBrowser: boolean
+  private _localGates: LocalGate[] = []
+  private _localGateIndex: FlagGateIndex = new Map()
+  private _localGatesChangedListeners = new Set<() => void>()
 
   private _ws: WebSocket | null = null
   private _wsConnected = false
@@ -101,6 +110,10 @@ export class TogglyService implements ITogglyService, OnDestroy {
     // Register initial hooks
     if (this._config.hooks) {
       this._config.hooks.forEach(hook => this._hookExecutor.addHook(hook))
+    }
+
+    if (this._config.localGates) {
+      this.setLocalGates(this._config.localGates)
     }
 
     // Seed in-memory state from localStorage for instant availability
@@ -290,6 +303,11 @@ export class TogglyService implements ITogglyService, OnDestroy {
     this.startWebSocket()
   }
 
+  private _getEffectiveFlagValue(flagKey: string): boolean {
+    const remote = this._features?.[flagKey] === true
+    return applyLocalGate(remote, flagKey, this._localGates, this._localGateIndex)
+  }
+
   private _evaluateFeatureGate = async (
     gate: string[],
     requirement = 'all',
@@ -307,15 +325,14 @@ export class TogglyService implements ITogglyService, OnDestroy {
       isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
         return (
           isEnabled ||
-          (this._features![featureKey] && this._features![featureKey] === true)
+          this._getEffectiveFlagValue(String(featureKey))
         )
       }, false)
     } else {
       isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
         return (
           isEnabled &&
-          this._features![featureKey] &&
-          this._features![featureKey] === true
+          this._getEffectiveFlagValue(String(featureKey))
         )
       }, true)
     }
@@ -370,6 +387,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
     if (!entry?.variant) {
       return null
     }
+    if (!applyLocalGate(entry.enabled === true, featureKey, this._localGates, this._localGateIndex)) {
+      return null
+    }
     return {
       name: entry.variant,
       configurationValue: entry.configurationValue,
@@ -397,6 +417,28 @@ export class TogglyService implements ITogglyService, OnDestroy {
    */
   removeHook(name: string): boolean {
     return this._hookExecutor.removeHook(name)
+  }
+
+  setLocalGates(gates: LocalGate[]): void {
+    this._localGates = [...gates]
+    this._localGateIndex = buildFlagGateIndex(this._localGates)
+  }
+
+  notifyLocalGatesChanged(): void {
+    this._localGatesChangedListeners.forEach((listener) => {
+      try {
+        listener()
+      } catch (err) {
+        console.error('[Toggly] Local gate listener error:', err)
+      }
+    })
+  }
+
+  subscribeLocalGatesChanged(listener: () => void): () => void {
+    this._localGatesChangedListeners.add(listener)
+    return () => {
+      this._localGatesChangedListeners.delete(listener)
+    }
   }
 
   private startWebSocket(): void {

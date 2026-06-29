@@ -1,3 +1,12 @@
+## 1.1.0
+
+2026-06-28
+
+### Added
+- Device-local post-filter gates (`localGates`, `setLocalGates`, `notifyLocalGatesChanged`, `subscribeLocalGatesChanged`) that AND worker booleans at read time
+- Variant reads respect local gates on the `enabled` field
+- Dependency on `@ops-ai/toggly-local-gates` for shared gate logic
+
 ## 1.0.5
 
 2026-06-16

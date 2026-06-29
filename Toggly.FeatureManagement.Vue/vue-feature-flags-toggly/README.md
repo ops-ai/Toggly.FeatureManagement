@@ -98,6 +98,34 @@ And even evaluate a feature gate (with requirement & negate support).
 await this.$toggly.evaluateFeatureGate(['firstFeature', 'secondFeature'], 'any', true)
 ```
 
+## Device-local post-filter gates
+
+Gate bundles of flags behind device-local master switches while rollouts stay on the worker. See **[Post-filter gates](https://docs.toggly.io/sdks/client-side/post-filter)**.
+
+```js
+import { toggly } from '@ops-ai/vue-feature-flags-toggly';
+
+let apiRedesignEnabled = false;
+
+app.use(toggly, {
+  appKey: 'your-app-key',
+  localGates: [{
+    id: 'apiRedesign',
+    flagKeys: ['ApiV2Checkout'],
+    isEnabled: () => apiRedesignEnabled,
+  }],
+});
+
+// OFF — instant
+apiRedesignEnabled = false;
+toggly.notifyLocalGatesChanged();
+
+// ON — reload remote flags, then notify UI
+apiRedesignEnabled = true;
+await toggly._loadFeatures();
+toggly.notifyLocalGatesChanged();
+```
+
 ## Basic Usage (without Toggly.io)
 
 Import the Toggly plugin in your main file.

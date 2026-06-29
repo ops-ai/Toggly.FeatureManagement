@@ -15,6 +15,7 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
   static contextType = context
   context!: React.ContextType<typeof context>
   private unsubscribeRefresh: (() => void) | undefined
+  private unsubscribeLocalGates: (() => void) | undefined
 
   constructor(props: FeatureProps) {
     super(props)
@@ -59,6 +60,7 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
     if (gate.length > 0 && this.context.toggly) {
       this.runGate()
       this.unsubscribeRefresh = this.context.toggly.subscribeFeaturesRefresh(this.runGate)
+      this.unsubscribeLocalGates = this.context.toggly.subscribeLocalGatesChanged(this.runGate)
     }
   }
 
@@ -78,7 +80,9 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
 
   componentWillUnmount() {
     this.unsubscribeRefresh?.()
+    this.unsubscribeLocalGates?.()
     this.unsubscribeRefresh = undefined
+    this.unsubscribeLocalGates = undefined
   }
 
   render() {

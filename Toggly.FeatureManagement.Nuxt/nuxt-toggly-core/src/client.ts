@@ -10,7 +10,13 @@ import type {
 } from './types'
 import { HookExecutor } from './hooks'
 import { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
-import { generateUUID, evaluateGate, deepMerge } from './utils'
+import { generateUUID, evaluateGate, isBrowser } from './utils'
+import {
+  applyLocalGate,
+  buildFlagGateIndex,
+  type FlagGateIndex,
+  type LocalGate,
+} from '@ops-ai/toggly-local-gates'
 
 /**
  * Create a new Toggly client instance
@@ -30,21 +36,26 @@ export function createTogglyClient(
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
   const WS_RECONNECT_DELAY = 5000
 
-  // Merge with defaults while preserving a deep merge for featureDefaults.
+  // Merge with defaults
   const config: Required<
     Pick<
       TogglyConfig,
-      'baseUri' | 'environment' | 'refreshInterval' | 'showFeatureDuringEvaluation'
+      | 'baseUri'
+      | 'environment'
+      | 'refreshInterval'
+      | 'showFeatureDuringEvaluation'
+      | 'enableLiveUpdates'
     >
   > &
     TogglyConfig = {
-    ...DEFAULT_CONFIG,
-    ...initialConfig,
-    featureDefaults: deepMerge(
-      {},
-      initialConfig.featureDefaults ?? {}
-    ) as FeatureDefinitions,
-  }
+      baseUri: initialConfig.baseUri ?? DEFAULT_CONFIG.baseUri,
+      environment: initialConfig.environment ?? DEFAULT_CONFIG.environment,
+      refreshInterval: initialConfig.refreshInterval ?? DEFAULT_CONFIG.refreshInterval,
+      showFeatureDuringEvaluation: initialConfig.showFeatureDuringEvaluation ?? DEFAULT_CONFIG.showFeatureDuringEvaluation,
+      enableLiveUpdates: initialConfig.enableLiveUpdates ?? DEFAULT_CONFIG.enableLiveUpdates,
+      featureDefaults: initialConfig.featureDefaults ?? {},
+      ...initialConfig,
+    }
 
   // Initialize state
   const state: TogglyState = {
@@ -53,6 +64,7 @@ export function createTogglyClient(
     features: { ...config.featureDefaults },
     error: null,
     lastRefresh: null,
+    wsConnected: false,
   }
 
   // Register initial hooks
@@ -60,6 +72,38 @@ export function createTogglyClient(
     for (const hook of config.hooks) {
       hookExecutor.addHook(hook)
     }
+  }
+
+  let localGates: LocalGate[] = config.localGates ?? []
+  let localGateIndex: FlagGateIndex = buildFlagGateIndex(localGates)
+  const localGatesListeners = new Set<() => void>()
+
+  function getEffectiveFlag(featureKey: string): boolean {
+    return applyLocalGate(
+      state.features[featureKey] === true,
+      featureKey,
+      localGates,
+      localGateIndex,
+    )
+  }
+
+  function evaluateGateEffective(
+    featureKeys: string[],
+    requirement: FeatureRequirement = 'all',
+    negate = false,
+  ): boolean {
+    if (featureKeys.length === 0) {
+      return !negate
+    }
+
+    let result: boolean
+    if (requirement === 'any') {
+      result = featureKeys.some((key) => getEffectiveFlag(key))
+    } else {
+      result = featureKeys.every((key) => getEffectiveFlag(key))
+    }
+
+    return negate ? !result : result
   }
 
   /**
@@ -98,7 +142,6 @@ export function createTogglyClient(
       const data = (await response.json()) as
         | FeatureDefinitionsResponse
         | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
-        | { defs?: FeatureDefinitions }
 
       const definitions: FeatureDefinitions = {}
       if (Array.isArray(data)) {
@@ -121,84 +164,6 @@ export function createTogglyClient(
   }
 
   /**
-   * Build the WebSocket URL from the configured base URI
-   */
-  function buildWebSocketUrl(): string {
-    const base = config.baseUri
-      .replace(/^https:\/\//, 'wss://')
-      .replace(/^http:\/\//, 'ws://')
-      .replace(/\/$/, '')
-    return `${base}/${config.appKey}/ws`
-  }
-
-  /**
-   * Start WebSocket connection for live flag updates (browser only)
-   */
-  function startWebSocket(): void {
-    if (typeof WebSocket === 'undefined') return
-    if (!config.appKey) return
-    if (!config.enableLiveUpdates) return
-    if (ws) return
-
-    try {
-      const url = buildWebSocketUrl()
-      ws = new WebSocket(url)
-
-      ws.onopen = () => {
-        wsConnected = true
-        lastFallbackRefresh = Date.now()
-      }
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          if (data.type === 'ping') return
-          if (data.type === 'flags-updated' || data.type === 'update') {
-            client.refresh().catch(() => {
-              // Error already logged in refresh()
-            })
-          }
-        } catch {
-          // Ignore malformed messages
-        }
-      }
-
-      ws.onclose = () => {
-        wsConnected = false
-        ws = null
-        if (!destroyed) {
-          wsReconnectTimer = setTimeout(() => {
-            wsReconnectTimer = null
-            startWebSocket()
-          }, WS_RECONNECT_DELAY)
-        }
-      }
-
-      ws.onerror = (event) => {
-        console.error('[Toggly] WebSocket error:', event)
-      }
-    } catch (error) {
-      console.error('[Toggly] Failed to create WebSocket:', error)
-    }
-  }
-
-  /**
-   * Stop WebSocket connection and cancel any pending reconnect
-   */
-  function stopWebSocket(): void {
-    if (wsReconnectTimer) {
-      clearTimeout(wsReconnectTimer)
-      wsReconnectTimer = null
-    }
-    if (ws) {
-      ws.onclose = null
-      ws.close()
-      ws = null
-    }
-    wsConnected = false
-  }
-
-  /**
    * Start the auto-refresh interval
    */
   function startRefreshInterval(): void {
@@ -208,7 +173,7 @@ export function createTogglyClient(
 
     refreshIntervalId = setInterval(async () => {
       if (!destroyed) {
-        // When WebSocket is connected, only do fallback refresh every 20 minutes
+        // When WebSocket is connected, only do fallback refreshes at a longer interval
         if (wsConnected) {
           const now = Date.now()
           if (now - lastFallbackRefresh < FALLBACK_REFRESH_INTERVAL) {
@@ -224,6 +189,105 @@ export function createTogglyClient(
         }
       }
     }, config.refreshInterval)
+  }
+
+  /**
+   * Build the WebSocket URL from the base URI
+   */
+  function buildWebSocketUrl(): string {
+    const wsScheme = config.baseUri.replace(/^https?/, (m) =>
+      m === 'https' ? 'wss' : 'ws'
+    )
+    const base = wsScheme.replace(/\/+$/, '')
+    return `${base}/${config.appKey}/ws`
+  }
+
+  /**
+   * Start a WebSocket connection for live feature flag updates (browser only)
+   */
+  function startWebSocket(): void {
+    if (!isBrowser() || !config.appKey || config.enableLiveUpdates === false) {
+      return
+    }
+
+    // Clean up any existing connection
+    stopWebSocket()
+
+    try {
+      const url = buildWebSocketUrl()
+      ws = new WebSocket(url)
+
+      ws.onopen = () => {
+        wsConnected = true
+        state.wsConnected = true
+        lastFallbackRefresh = Date.now()
+      }
+
+      ws.onmessage = (event: MessageEvent) => {
+        try {
+          const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+          const messageType = data?.type ?? data?.event
+
+          if (messageType === 'flags-updated' || messageType === 'update') {
+            client.refresh().catch(() => {
+              // Error already logged in refresh()
+            })
+          }
+        } catch {
+          // If the message isn't JSON, treat any message as a refresh signal
+          client.refresh().catch(() => {
+            // Error already logged in refresh()
+          })
+        }
+      }
+
+      ws.onclose = () => {
+        wsConnected = false
+        state.wsConnected = false
+        ws = null
+
+        // Schedule reconnect if not destroyed
+        if (!destroyed && config.enableLiveUpdates !== false) {
+          wsReconnectTimer = setTimeout(() => {
+            wsReconnectTimer = null
+            startWebSocket()
+          }, WS_RECONNECT_DELAY)
+        }
+      }
+
+      ws.onerror = (error) => {
+        console.error('[Toggly] WebSocket error:', error)
+        // onclose will fire after onerror, which handles reconnect
+        wsConnected = false
+        state.wsConnected = false
+      }
+    } catch (error) {
+      console.error('[Toggly] Failed to create WebSocket connection:', error)
+      wsConnected = false
+      state.wsConnected = false
+    }
+  }
+
+  /**
+   * Stop the WebSocket connection and cancel any pending reconnect
+   */
+  function stopWebSocket(): void {
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer)
+      wsReconnectTimer = null
+    }
+
+    if (ws) {
+      ws.onopen = null
+      ws.onmessage = null
+      ws.onclose = null
+      ws.onerror = null
+      ws.close()
+      ws = null
+    }
+
+    wsConnected = false
+    state.wsConnected = false
   }
 
   /**
@@ -288,7 +352,7 @@ export function createTogglyClient(
         // Start auto-refresh
         startRefreshInterval()
 
-        // Start WebSocket for live updates
+        // Start WebSocket for live updates (browser only)
         startWebSocket()
 
         return state.features
@@ -345,7 +409,7 @@ export function createTogglyClient(
         config.featureDefaults?.[featureKey]
       )
 
-      const result = state.features[featureKey] === true
+      const result = getEffectiveFlag(featureKey)
 
       // Execute after hooks (fire-and-forget)
       hookExecutor.executeAfterEvaluation(featureKey, dataMap, result).catch(() => {
@@ -377,7 +441,7 @@ export function createTogglyClient(
       // Execute before hooks for each key
       const dataMaps: Array<{
         key: string
-        dataMap: Map<string, void | EvaluationSeriesData>
+        dataMap: Map<string, EvaluationSeriesData | void>
       }> = []
 
       for (const key of featureKeys) {
@@ -388,7 +452,7 @@ export function createTogglyClient(
         dataMaps.push({ key, dataMap })
       }
 
-      const result = evaluateGate(state.features, featureKeys, requirement, negate)
+      const result = evaluateGateEffective(featureKeys, requirement, negate)
 
       // Execute after hooks for each key (fire-and-forget)
       for (const { key, dataMap } of dataMaps) {
@@ -428,6 +492,28 @@ export function createTogglyClient(
 
     removeHook(name: string): boolean {
       return hookExecutor.removeHook(name)
+    },
+
+    setLocalGates(gates: LocalGate[]): void {
+      localGates = [...gates]
+      localGateIndex = buildFlagGateIndex(localGates)
+    },
+
+    notifyLocalGatesChanged(): void {
+      localGatesListeners.forEach((listener) => {
+        try {
+          listener()
+        } catch (error) {
+          console.error('[Toggly] Local gate listener error:', error)
+        }
+      })
+    },
+
+    subscribeLocalGatesChanged(listener: () => void): () => void {
+      localGatesListeners.add(listener)
+      return () => {
+        localGatesListeners.delete(listener)
+      }
     },
 
     destroy(): void {

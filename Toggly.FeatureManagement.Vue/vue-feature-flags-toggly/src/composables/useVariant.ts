@@ -44,10 +44,16 @@ export function useVariant(featureKey: string, togglyOverride?: Toggly): UseVari
 
   onMounted(() => {
     void refresh()
-    const unsub = toggly.subscribeFeaturesRefresh(() => {
+    const unsubRefresh = toggly.subscribeFeaturesRefresh(() => {
       void refresh()
     })
-    onUnmounted(unsub)
+    const unsubLocalGates = toggly.subscribeLocalGatesChanged(() => {
+      void refresh()
+    })
+    onUnmounted(() => {
+      unsubRefresh()
+      unsubLocalGates()
+    })
   })
 
   return { variant, variantValue, isLoading, refresh }

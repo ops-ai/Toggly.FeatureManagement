@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/gatsby-feature-flags-toggly",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Toggly feature flags SDK for Gatsby with SSR, SSG, and build-time page gating",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -66,6 +66,7 @@
   "dependencies": {
     "@nanostores/react": "^0.8.0",
     "@ops-ai/toggly-hooks-types": "^1.1.0",
+    "@ops-ai/toggly-local-gates": "file:../toggly-local-gates",
     "nanostores": "^0.11.3"
   },
   "devDependencies": {

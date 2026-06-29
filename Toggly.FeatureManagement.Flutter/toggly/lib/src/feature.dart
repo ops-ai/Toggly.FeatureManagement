@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../feature_flags_toggly.dart';
 
@@ -43,6 +45,24 @@ class FeatureState extends State<Feature> {
   FeatureState();
 
   bool? previousResult;
+  int _localGatesRevision = 0;
+  StreamSubscription<void>? _localGatesSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _localGatesSubscription = Toggly.onLocalGatesChanged.listen((_) {
+      setState(() {
+        _localGatesRevision++;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _localGatesSubscription?.cancel();
+    super.dispose();
+  }
 
   Future<bool> _resolveVisible() async {
     final gate = await Toggly.evaluateFeatureGate(
@@ -66,6 +86,7 @@ class FeatureState extends State<Feature> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
+      key: ValueKey<int>(_localGatesRevision),
       future: _resolveVisible(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {

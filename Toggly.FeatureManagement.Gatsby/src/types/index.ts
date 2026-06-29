@@ -1,4 +1,7 @@
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { LocalGate } from '@ops-ai/toggly-local-gates';
+
+export type { LocalGate };
 
 /**
  * Toggly configuration options for Gatsby plugin
@@ -36,6 +39,9 @@ export interface TogglyPluginOptions {
   
   /** Hooks to extend SDK behavior at key lifecycle points */
   hooks?: Hook[];
+
+  /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+  localGates?: LocalGate[];
 }
 
 /**

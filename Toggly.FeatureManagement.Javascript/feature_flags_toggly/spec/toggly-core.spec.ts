@@ -2014,4 +2014,130 @@ describe('Toggly Core', () => {
       expect(Toggly.getVariantValue('Unknown')).toBeNull();
     });
   });
+
+  // ───────────────────────────────────────────────
+  // Local gates (post-filter)
+  // ───────────────────────────────────────────────
+  describe('Local gates', () => {
+    it('should AND remote true with local gate when gate is off', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ ApiV2Checkout: true, Other: true }),
+      });
+
+      let gateEnabled = false;
+      await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+        localGates: [{
+          id: 'apiRedesign',
+          flagKeys: ['ApiV2Checkout'],
+          isEnabled: () => gateEnabled,
+        }],
+      });
+
+      expect(Toggly.isFeatureOn('ApiV2Checkout')).toBe(false);
+      expect(Toggly.isFeatureOn('Other')).toBe(true);
+    });
+
+    it('should pass remote through when local gate is on', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ ApiV2Checkout: true }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+        localGates: [{
+          id: 'apiRedesign',
+          flagKeys: ['ApiV2Checkout'],
+          isEnabled: () => true,
+        }],
+      });
+
+      expect(Toggly.isFeatureOn('ApiV2Checkout')).toBe(true);
+    });
+
+    it('notifyLocalGatesChanged should notify subscribers without fetch', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ ApiV2Checkout: true }),
+      });
+
+      let gateEnabled = true;
+      const listener = jest.fn();
+      await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+        localGates: [{
+          id: 'apiRedesign',
+          flagKeys: ['ApiV2Checkout'],
+          isEnabled: () => gateEnabled,
+        }],
+      });
+
+      const unsub = Toggly.subscribeLocalGatesChanged(listener);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      gateEnabled = false;
+      Toggly.notifyLocalGatesChanged();
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(Toggly.isFeatureOn('ApiV2Checkout')).toBe(false);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      unsub();
+      Toggly.notifyLocalGatesChanged();
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('setLocalGates should update gates after init', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () => Promise.resolve({ ApiV2Checkout: true }),
+      });
+
+      let gateEnabled = false;
+      await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      Toggly.setLocalGates([{
+        id: 'apiRedesign',
+        flagKeys: ['ApiV2Checkout'],
+        isEnabled: () => gateEnabled,
+      }]);
+
+      expect(Toggly.isFeatureOn('ApiV2Checkout')).toBe(false);
+
+      gateEnabled = true;
+      Toggly.notifyLocalGatesChanged();
+      expect(Toggly.isFeatureOn('ApiV2Checkout')).toBe(true);
+    });
+
+    it('should hide variant when local gate is off', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            ApiV2Checkout: { enabled: true, variant: 'A', configurationValue: 1 },
+          }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+        localGates: [{
+          id: 'apiRedesign',
+          flagKeys: ['ApiV2Checkout'],
+          isEnabled: () => false,
+        }],
+      });
+
+      expect(Toggly.getVariant('ApiV2Checkout')).toBeNull();
+    });
+  });
 });

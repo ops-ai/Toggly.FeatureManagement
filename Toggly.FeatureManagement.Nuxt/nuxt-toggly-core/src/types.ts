@@ -1,6 +1,10 @@
 /**
  * Configuration options for Toggly
  */
+import type { LocalGate } from '@ops-ai/toggly-local-gates'
+
+export type { LocalGate }
+
 export interface TogglyConfig {
   /** Your Toggly application key */
   appKey?: string
@@ -20,6 +24,8 @@ export interface TogglyConfig {
   hooks?: Hook[]
   /** Enable WebSocket live updates for real-time flag changes (browser only, default: false) */
   enableLiveUpdates?: boolean
+  /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+  localGates?: LocalGate[]
 }
 
 /**
@@ -110,6 +116,7 @@ export interface FeatureDefinitionsResponse {
     featureKey: string
     enabled: boolean
   }>
+  defs?: FeatureDefinitions
 }
 
 /**
@@ -140,6 +147,8 @@ export interface TogglyState {
   error: Error | null
   /** Last refresh timestamp */
   lastRefresh: Date | null
+  /** Whether WebSocket is currently connected */
+  wsConnected: boolean
 }
 
 /**
@@ -180,6 +189,15 @@ export interface TogglyClient {
 
   /** Remove a hook by name */
   removeHook(name: string): boolean
+
+  /** Register device-local post-filter gates */
+  setLocalGates(gates: LocalGate[]): void
+
+  /** Notify subscribers that local gate state changed (no network) */
+  notifyLocalGatesChanged(): void
+
+  /** Subscribe to local gate changes */
+  subscribeLocalGatesChanged(listener: () => void): () => void
 
   /** Destroy the client and cleanup */
   destroy(): void

@@ -17,6 +17,9 @@ export const togglyFlagsStore = writable<{ [key: string]: boolean }>({})
  */
 export const togglyVariantsStore = writable<{ [key: string]: EvaluatedVariantDef }>({})
 
+/** Bumped when device-local gates change (triggers derived stores to recompute). */
+export const togglyLocalGatesRevision = writable(0)
+
 /**
  * Get the Toggly service instance from the store
  * @throws Error if service is not initialized
@@ -35,7 +38,15 @@ export function getTogglyService(): TogglyService {
  * @returns A derived store that returns the boolean value of the feature flag
  */
 export function createFeatureStore(featureKey: string) {
-  return derived(togglyFlagsStore, ($flags) => $flags[featureKey] ?? false)
+  return derived(
+    [togglyFlagsStore, togglyLocalGatesRevision, togglyServiceStore],
+    ([$flags, _revision, service]) => {
+      if (service) {
+        return service.getEffectiveFlagValue(featureKey)
+      }
+      return $flags[featureKey] ?? false
+    },
+  )
 }
 
 /**
@@ -43,16 +54,22 @@ export function createFeatureStore(featureKey: string) {
  * Returns null when the feature has no variant or variants are disabled.
  */
 export function createVariantStore(featureKey: string) {
-  return derived(togglyVariantsStore, ($defs): VariantResult | null => {
-    const entry = $defs[featureKey]
-    if (!entry?.variant) {
-      return null
-    }
-    return {
-      name: entry.variant,
-      configurationValue: entry.configurationValue,
-    }
-  })
+  return derived(
+    [togglyVariantsStore, togglyLocalGatesRevision, togglyServiceStore],
+    ([$defs, _revision, service]): VariantResult | null => {
+      if (service) {
+        return service.getVariant(featureKey)
+      }
+      const entry = $defs[featureKey]
+      if (!entry?.variant) {
+        return null
+      }
+      return {
+        name: entry.variant,
+        configurationValue: entry.configurationValue,
+      }
+    },
+  )
 }
 
 /**

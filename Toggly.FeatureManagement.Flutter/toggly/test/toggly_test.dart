@@ -66,5 +66,29 @@ void main() {
       expect(v.name, isNull);
       expect(await Toggly.getVariantValue('TrueFeatureKey'), isNull);
     });
+
+    test('local gate ANDs with remote flag at read time', () async {
+      Toggly.dispose();
+      var gateEnabled = false;
+      await Toggly.init(
+        flagDefaults: {'ApiV2Checkout': true, 'Other': true},
+        config: TogglyConfig(
+          localGates: [
+            LocalGate(
+              id: 'apiRedesign',
+              flagKeys: ['ApiV2Checkout'],
+              isEnabled: () => gateEnabled,
+            ),
+          ],
+        ),
+      );
+
+      expect(await Toggly.evaluateFeatureGate(['ApiV2Checkout']), false);
+      expect(await Toggly.evaluateFeatureGate(['Other']), true);
+
+      gateEnabled = true;
+      Toggly.notifyLocalGatesChanged();
+      expect(await Toggly.evaluateFeatureGate(['ApiV2Checkout']), true);
+    });
   });
 }

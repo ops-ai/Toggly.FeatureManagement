@@ -163,6 +163,34 @@ You can also check multiple feature keys and make use of the *requirement* (all/
 </Feature>
 ```
 
+## Device-local post-filter gates
+
+Gate bundles of flags behind device-local master switches (Settings toggles, `localStorage`, in-app beta gates) while rollouts stay on the worker. See the full guide: **[Post-filter gates](https://docs.toggly.io/sdks/client-side/post-filter)**.
+
+```tsx
+import toggly from '@ops-ai/react-feature-flags-toggly';
+
+let apiRedesignEnabled = false;
+
+toggly.init({
+  appKey: 'your-app-key',
+  localGates: [{
+    id: 'apiRedesign',
+    flagKeys: ['ApiV2Checkout', 'ApiV2Profile'],
+    isEnabled: () => apiRedesignEnabled,
+  }],
+});
+
+// OFF — instant, no network
+apiRedesignEnabled = false;
+toggly.notifyLocalGatesChanged();
+
+// ON — refresh remote rollouts, then notify UI
+apiRedesignEnabled = true;
+await toggly._loadFeatures();
+toggly.notifyLocalGatesChanged();
+```
+
 ## Extensibility with Hooks
 
 Toggly provides a powerful hooks system that allows you to extend SDK functionality by hooking into feature flag lifecycle events. This is perfect for integrating with analytics, monitoring tools, or implementing custom behaviors.

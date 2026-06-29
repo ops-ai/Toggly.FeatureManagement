@@ -21,6 +21,7 @@ export type {
   IdentitySeriesData,
   TogglyHook,
   StorageOptions,
+  LocalGate,
 } from './types';
 
 // Error classes

@@ -691,6 +691,7 @@ describe('createTogglyClient', () => {
   describe('WebSocket live updates', () => {
     let mockWsInstances: any[]
     const savedWindow = (globalThis as any).window
+    const savedDocument = (globalThis as any).document
 
     beforeEach(() => {
       mockWsInstances = []
@@ -708,11 +709,13 @@ describe('createTogglyClient', () => {
         close() { this.closeCalled = true }
       }
       ;(globalThis as any).window = {}
+      ;(globalThis as any).document = {}
       ;(globalThis as any).WebSocket = MockWs
     })
 
     afterEach(() => {
       ;(globalThis as any).window = savedWindow
+      delete (globalThis as any).document
       delete (globalThis as any).WebSocket
     })
 
@@ -891,6 +894,7 @@ describe('createTogglyClient', () => {
         close() {}
       }
       ;(globalThis as any).window = {}
+      ;(globalThis as any).document = {}
       ;(globalThis as any).WebSocket = MockWs
 
       try {
@@ -916,6 +920,7 @@ describe('createTogglyClient', () => {
         client.destroy()
       } finally {
         ;(globalThis as any).window = undefined
+        delete (globalThis as any).document
         delete (globalThis as any).WebSocket
       }
     })
