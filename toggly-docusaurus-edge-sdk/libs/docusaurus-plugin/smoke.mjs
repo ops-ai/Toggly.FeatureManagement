@@ -8,7 +8,7 @@ if (!appKey) {
 const { createTogglyClient } = await import('./dist/lib/toggly-client.js');
 
 const client = createTogglyClient({
-  baseURI: 'https://definitions.toggly.io/evaluated-signed',
+  baseURI: 'https://definitions.toggly.io',
   // Note: URL is constructed as baseURI/{appKey}/{environment}
   appKey,
   environment: 'Production',

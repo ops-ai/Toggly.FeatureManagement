@@ -12,10 +12,6 @@
     "declarationMap": true,
     "sourceMap": true,
     "resolveJsonModule": true,
-    "baseUrl": ".",
-    "paths": {
-      "@ops-ai/toggly-local-gates": ["../../../toggly-local-gates/src"]
-    },
     "isolatedModules": true,
     "noEmit": true
   },

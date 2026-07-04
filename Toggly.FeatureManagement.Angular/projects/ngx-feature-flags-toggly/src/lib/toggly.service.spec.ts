@@ -256,12 +256,8 @@ describe('TogglyService', () => {
 
   // ─── Reliability ──────────────────────────
   describe('Reliability', () => {
-    let fetchSpy: jasmine.Spy;
-
     beforeEach(() => {
       localStorage.clear();
-      fetchSpy = spyOn(globalThis, 'fetch');
-      spyOn(console, 'warn');
     });
 
     it('should expose lastError and invoke onError when fetch fails', async () => {

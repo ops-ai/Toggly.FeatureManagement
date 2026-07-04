@@ -22,6 +22,13 @@ module.exports = function (config) {
       clearContext: false, // leave Jasmine Spec Runner output visible in browser
       smokeAppKey: process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND || ''
     },
+    proxies: {
+      '/toggly-proxy/': {
+        target: 'https://definitions.toggly.io/',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
     jasmineHtmlReporter: {
       suppressAll: true // removes the duplicated traces
     },

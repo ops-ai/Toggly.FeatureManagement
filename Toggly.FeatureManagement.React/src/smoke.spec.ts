@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import Toggly from './services/toggly.service';
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
