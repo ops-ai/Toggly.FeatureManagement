@@ -93,6 +93,10 @@ importers:
         version: 3.5.28(typescript@5.9.3)
 
   nuxt-toggly-core:
+    dependencies:
+      '@ops-ai/toggly-local-gates':
+        specifier: file:../../toggly-local-gates
+        version: file:../toggly-local-gates
     devDependencies:
       '@types/node':
         specifier: ^22.13.1
@@ -1117,6 +1121,10 @@ packages:
 
   '@one-ini/wasm@0.1.1':
     resolution: {integrity: sha512-XuySG1E38YScSJoMlqovLru4KTUNSjgVTIjyh7qMX6aNN5HY5Ct5LhRJdxO79JtTzKfzV/bnWpz+zquYrISsvw==}
+
+  '@ops-ai/toggly-local-gates@file:../toggly-local-gates':
+    resolution: {directory: ../toggly-local-gates, type: directory}
+    engines: {node: '>=18.0.0'}
 
   '@oxc-minify/binding-android-arm-eabi@0.112.0':
     resolution: {integrity: sha512-m7TGBR2hjsBJIN9UJ909KBoKsuogo6CuLsHKvUIBXdjI0JVHP8g4ZHeB+BJpGn5LJdeSGDfz9MWiuXrZDRzunw==}
@@ -5553,6 +5561,8 @@ snapshots:
       - yaml
 
   '@one-ini/wasm@0.1.1': {}
+
+  '@ops-ai/toggly-local-gates@file:../toggly-local-gates': {}
 
   '@oxc-minify/binding-android-arm-eabi@0.112.0':
     optional: true

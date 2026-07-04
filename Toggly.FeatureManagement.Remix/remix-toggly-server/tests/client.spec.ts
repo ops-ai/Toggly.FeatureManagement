@@ -76,6 +76,69 @@ describe('TogglyServerClient', () => {
         'No appKey provided and no featureDefaults set. All features will be disabled.'
       );
     });
+
+    it('should apply local gates from config', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true }),
+      });
+
+      const client = new TogglyServerClient({
+        ...defaultConfig,
+        localGates: [{
+          id: 'gate1',
+          flagKeys: ['feature1'],
+          isEnabled: () => false,
+        }],
+      });
+
+      await client.init();
+      expect(await client.isEnabled('feature1')).toBe(false);
+    });
+  });
+
+  describe('local gate subscriptions', () => {
+    it('should notify subscribers when local gates change', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true }),
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init();
+
+      let notified = false;
+      const unsubscribe = client.subscribeLocalGatesChanged(() => {
+        notified = true;
+      });
+
+      client.setLocalGates([{
+        id: 'gate1',
+        flagKeys: ['feature1'],
+        isEnabled: () => false,
+      }]);
+      client.notifyLocalGatesChanged();
+
+      expect(notified).toBe(true);
+      unsubscribe();
+    });
+
+    it('should swallow listener errors during notifyLocalGatesChanged', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: true }),
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init();
+
+      client.subscribeLocalGatesChanged(() => {
+        throw new Error('listener failed');
+      });
+
+      expect(() => client.notifyLocalGatesChanged()).not.toThrow();
+      expect(console.error).toHaveBeenCalled();
+    });
   });
 
   describe('init', () => {
@@ -150,6 +213,23 @@ describe('TogglyServerClient', () => {
         '[Toggly]',
         'Failed to fetch flags, preserving last-known-good flags when available.',
         expect.any(Error)
+      );
+    });
+
+    it('should invoke onError when fetch fails', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      const onError = jest.fn();
+      const client = new TogglyServerClient({
+        ...defaultConfig,
+        featureDefaults: { fallback: true },
+        onError,
+      });
+
+      await client.fetchFlags();
+
+      expect(onError).toHaveBeenCalledWith(
+        'Error fetching feature flags',
+        expect.any(Error),
       );
     });
 
@@ -302,6 +382,14 @@ describe('TogglyServerClient', () => {
       const result = await client.evaluateGate(['feature1', 'feature2'], 'all');
 
       expect(result).toBe(true);
+    });
+
+    it('should return true for an empty gate without negation', async () => {
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init();
+
+      expect(await client.evaluateGate([], 'all', false)).toBe(true);
+      expect(await client.evaluateGate([], 'all', true)).toBe(false);
     });
 
     it('should return false when not all features are enabled (requirement: all)', async () => {

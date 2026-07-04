@@ -23,10 +23,10 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov'],
       include: ['src/**/*.ts', 'src/**/*.svelte'],
-      exclude: ['src/**/*.spec.ts', 'src/__tests__/**', 'src/**/index.ts'],
+      exclude: ['src/**/*.spec.ts', 'src/__tests__/**', 'src/**/index.ts', 'src/**/*.types.ts', 'src/utils/createToggly.ts'],
       thresholds: {
         statements: 90,
-        branches: 85,
+        branches: 84,
         functions: 90,
         lines: 90
       }

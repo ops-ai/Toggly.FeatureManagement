@@ -274,6 +274,105 @@ describe('Edge Cases & Error Handling', () => {
     });
   });
 
+  // ─── Reliability ──────────────────────
+  describe('Reliability', () => {
+    it('should report fetch errors through onError and lastError', async () => {
+      const errors: string[] = [];
+      mockFetch.and.returnValue(Promise.reject(new TypeError('Failed to fetch')));
+
+      const service = createService({
+        appKey: 'test-key',
+        featureDefaults: { F1: true },
+        onError: (message) => errors.push(message),
+      });
+
+      await service.isFeatureOn('F1');
+      expect(errors).toContain('Error fetching feature flags');
+      expect(service.lastError).toBe('Error fetching feature flags');
+    });
+
+    it('should preserve last-known-good flags on transient refresh failure', async () => {
+      mockFetch.and.returnValues(
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: true }),
+        }),
+        Promise.reject(new Error('network down')),
+      );
+
+      const service = createService({
+        appKey: 'test-key',
+        persistCache: false,
+      });
+
+      expect(await service.isFeatureOn('F1')).toBe(true);
+      mockFetch.calls.reset();
+      mockFetch.and.returnValue(Promise.reject(new Error('network down')));
+      await (service as any)._loadFeatures(true);
+      expect(await service.isFeatureOn('F1')).toBe(true);
+    });
+
+    it('should fall back to cached variant defs when variants fetch fails', async () => {
+      localStorage.setItem(
+        'toggly:variants:test-key:Production',
+        JSON.stringify({ VariantFlag: { enabled: true, variant: 'A' } }),
+      );
+      mockFetch.and.returnValue(Promise.reject(new Error('network')));
+
+      const service = createService({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+      });
+
+      await service.isFeatureOn('VariantFlag');
+      expect(await service.getVariant('VariantFlag')).toEqual(
+        jasmine.objectContaining({ name: 'A' }),
+      );
+    });
+
+    it('should reject non-2xx responses without caching error payload', async () => {
+      mockFetch.and.returnValue(
+        Promise.resolve({
+          ok: false,
+          status: 403,
+          statusText: 'Forbidden',
+          json: () => Promise.resolve({ defs: { BadFlag: true } }),
+        }),
+      );
+
+      const service = createService({
+        appKey: 'test-key',
+        featureDefaults: { F1: true },
+      });
+
+      expect(await service.isFeatureOn('F1')).toBe(true);
+      expect(localStorage.getItem('toggly:flags:test-key:Production')).toBeNull();
+    });
+
+    it('should notify features refresh listeners after load', async () => {
+      mockFetch.and.returnValue(
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: true }),
+        }),
+      );
+
+      const service = createService({ appKey: 'test-key' });
+      let notified = false;
+      service.subscribeFeaturesRefresh(() => {
+        notified = true;
+      });
+
+      await service.isFeatureOn('F1');
+      expect(notified).toBe(true);
+    });
+  });
+
   // ─── Hook Edge Cases ──────────────────────
   describe('Hook Edge Cases', () => {
     function createTestHook(name: string, overrides: any = {}): any {

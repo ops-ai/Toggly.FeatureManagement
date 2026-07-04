@@ -251,9 +251,130 @@ describe('TogglyService', () => {
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');
-      expect(refreshed).toEqual({ F1: true });
+      expect(refreshed).toEqual({ F1: true     });
+  });
+
+  // ─── Reliability ──────────────────────────
+  describe('Reliability', () => {
+    let fetchSpy: jasmine.Spy;
+
+    beforeEach(() => {
+      localStorage.clear();
+      fetchSpy = spyOn(globalThis, 'fetch');
+      spyOn(console, 'warn');
+    });
+
+    it('should expose lastError and invoke onError when fetch fails', async () => {
+      const errors: string[] = [];
+      fetchSpy.and.rejectWith(new Error('network'));
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+          featureDefaults: { F1: true },
+          onError: (message) => errors.push(message),
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+
+      await service.isFeatureOn('F1');
+      expect(errors).toContain('Error fetching feature flags');
+      expect(service.lastError).toBe('Error fetching feature flags');
+    });
+
+    it('should reject non-2xx responses', async () => {
+      fetchSpy.and.resolveTo({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: () => Promise.resolve({ F1: true }),
+      } as any);
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+          featureDefaults: { F1: true },
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+
+      expect(await service.isFeatureOn('F1')).toBe(true);
+    });
+
+    it('should load variant defs when enableVariants is true', async () => {
+      fetchSpy.and.resolveTo({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({
+          defs: { Checkout: { enabled: true, variant: 'B' } },
+        }),
+      } as any);
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+          enableVariants: true,
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+
+      expect(await service.getVariant('Checkout')).toEqual(
+        jasmine.objectContaining({ name: 'B' }),
+      );
+    });
+
+    it('should seed variant cache from localStorage on init', async () => {
+      localStorage.setItem(
+        'toggly:variants:key:Production',
+        JSON.stringify({ Cached: { enabled: true, variant: 'A' } }),
+      );
+      fetchSpy.and.rejectWith(new Error('offline'));
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+          enableVariants: true,
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+
+      await service.isFeatureOn('Cached');
+      expect(await service.getVariant('Cached')).toEqual(
+        jasmine.objectContaining({ name: 'A' }),
+      );
+    });
+
+    it('should preserve in-memory flags when forced refresh fails', async () => {
+      fetchSpy.and.returnValues(
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: true }),
+        }),
+        Promise.reject(new Error('network down')),
+      );
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+          persistCache: false,
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+
+      expect(await service.isFeatureOn('F1')).toBe(true);
+      await (service as any)._loadFeatures(true);
+      expect(await service.isFeatureOn('F1')).toBe(true);
     });
   });
+});
 
   // ─── Feature Evaluation ──────────────────────────
   describe('Feature Evaluation', () => {

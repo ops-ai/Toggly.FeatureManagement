@@ -59,6 +59,10 @@ importers:
         version: 3.2.4(@types/node@22.19.11)(jsdom@26.1.0)
 
   nextjs-toggly-core:
+    dependencies:
+      '@ops-ai/toggly-local-gates':
+        specifier: file:../../toggly-local-gates
+        version: file:../toggly-local-gates
     devDependencies:
       '@types/node':
         specifier: ^22.13.1
@@ -634,6 +638,10 @@ packages:
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
+
+  '@ops-ai/toggly-local-gates@file:../toggly-local-gates':
+    resolution: {directory: ../toggly-local-gates, type: directory}
+    engines: {node: '>=18.0.0'}
 
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
@@ -2247,6 +2255,8 @@ snapshots:
 
   '@next/swc-win32-x64-msvc@15.5.12':
     optional: true
+
+  '@ops-ai/toggly-local-gates@file:../toggly-local-gates': {}
 
   '@pkgjs/parseargs@0.11.0':
     optional: true

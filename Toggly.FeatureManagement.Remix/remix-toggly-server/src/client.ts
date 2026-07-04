@@ -358,16 +358,12 @@ export class TogglyServerClient {
           }
           if (msg.type === 'flags-updated' || msg.type === 'update') {
             this.logger.debug('WebSocket: definitions updated, refreshing');
-            this.fetchFlags(this.identity).catch((error) => {
-              this.logger.error('WebSocket-triggered refresh failed:', error);
-            });
+            void this.fetchFlags(this.identity);
           }
         } catch {
           // Non-JSON message - check for plain text signals
           if (text === 'update' || text === 'flags-updated') {
-            this.fetchFlags(this.identity).catch((error) => {
-              this.logger.error('WebSocket-triggered refresh failed:', error);
-            });
+            void this.fetchFlags(this.identity);
           }
         }
       });

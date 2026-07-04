@@ -6,6 +6,7 @@ import { togglyServiceStore, togglyFlagsStore, isFeatureOn, isFeatureOff, evalua
 
 describe('Edge Cases & Error Handling', () => {
   beforeEach(() => {
+    localStorage.clear();
     togglyServiceStore.set(null);
     togglyFlagsStore.set({});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -121,6 +122,106 @@ describe('Edge Cases & Error Handling', () => {
 
       const flags = get(togglyFlagsStore);
       expect(flags).toBeTruthy();
+    });
+  });
+
+  // ─── Reliability ──────────────────────
+  describe('Reliability', () => {
+    it('should report fetch errors through onError and lastError', async () => {
+      const errors: string[] = [];
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        featureDefaults: { F1: true },
+        enableLiveUpdates: false,
+        onError: (message) => errors.push(message),
+      });
+      togglyServiceStore.set(service);
+
+      await service._loadFeatures();
+      expect(errors).toContain('Error fetching feature flags');
+      expect(service.lastError).toBe('Error fetching feature flags');
+    });
+
+    it('should preserve last-known-good flags on transient refresh failure', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: true }),
+        } as any)
+        .mockRejectedValueOnce(new Error('network down'));
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        persistCache: false,
+        enableLiveUpdates: false,
+      });
+      togglyServiceStore.set(service);
+
+      expect(await service.isFeatureOn('F1')).toBe(true);
+      await service.refreshFlags();
+      expect(await service.isFeatureOn('F1')).toBe(true);
+    });
+
+    it('should not cache JSON error body from non-2xx response', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        json: () => Promise.resolve({ defs: { BadFlag: true } }),
+      } as any);
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        featureDefaults: { F1: true },
+        enableLiveUpdates: false,
+      });
+      togglyServiceStore.set(service);
+      await service._loadFeatures();
+
+      expect(localStorage.getItem('toggly:flags:test-key:Production')).toBeNull();
+      expect(await service.isFeatureOn('F1')).toBe(true);
+    });
+
+    it('should fail closed for non-empty gates when no flags are loaded', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({}),
+      } as any);
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        persistCache: false,
+        enableLiveUpdates: false,
+      });
+      togglyServiceStore.set(service);
+      await service._loadFeatures();
+
+      expect(await service.evaluateFeatureGate(['MissingFeature'])).toBe(false);
+    });
+
+    it('should fall back to cached variant defs when variants fetch fails', async () => {
+      localStorage.setItem(
+        'toggly:variants:test-key:Production',
+        JSON.stringify({ VariantFlag: { enabled: true, variant: 'A' } }),
+      );
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network'));
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+      togglyServiceStore.set(service);
+      await service._loadFeatures();
+
+      expect(await service.getVariant('VariantFlag')).toEqual({ name: 'A' });
     });
   });
 
