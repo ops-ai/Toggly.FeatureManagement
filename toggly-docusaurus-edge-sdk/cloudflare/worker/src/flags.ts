@@ -14,6 +14,7 @@ import type { RequestContext, Env } from './types';
 
 const FLAGS_CACHE_TTL_SECONDS = 30;
 const FLAGS_FETCH_TIMEOUT_MS = 5_000;
+const FLAGS_MEMORY_CACHE_TTL_MS = FLAGS_CACHE_TTL_SECONDS * 1000;
 
 /** Map of feature flag keys to their boolean values. */
 type Flags = Record<string, boolean>;
@@ -26,6 +27,10 @@ interface TogglyApiPayload {
   defs?: Flags;
   [key: string]: unknown;
 }
+
+// In-memory last-known-good cache for flags within the isolate.
+let flagsMemoryCache: Flags | null = null;
+let flagsMemoryCacheTimestamp = 0;
 
 /**
  * Generate a cache key for flags based on context.
@@ -40,7 +45,8 @@ function getFlagsCacheKey(env: Env, context: RequestContext): string {
 
 /**
  * Fetch flags from Toggly's `evaluated-signed` endpoint with a hard timeout.
- * Returns an empty map on any error so callers can fail open.
+ * Throws on transient failures so callers do not poison edge cache with
+ * fallback/default values.
  */
 async function fetchFlagsFromTogglyApi(env: Env): Promise<Flags> {
   if (!env.TOGGLY_APP_KEY || !env.TOGGLY_API_BASE_URL || !env.TOGGLY_ENVIRONMENT) {
@@ -60,15 +66,20 @@ async function fetchFlagsFromTogglyApi(env: Env): Promise<Flags> {
       signal: controller.signal,
     });
     if (!response.ok) {
-      return {};
+      throw new Error(`Failed to fetch flags: ${response.status} ${response.statusText}`);
     }
     const payload = (await response.json()) as TogglyApiPayload | Flags;
     const defs = (payload as TogglyApiPayload).defs;
     return (defs ?? (payload as Flags)) as Flags;
-  } catch {
-    return {};
   } finally {
     clearTimeout(timer);
+  }
+}
+
+function updateFlagsMemoryCache(flags: Flags): void {
+  if (Object.keys(flags).length > 0) {
+    flagsMemoryCache = flags;
+    flagsMemoryCacheTimestamp = Date.now();
   }
 }
 
@@ -81,19 +92,35 @@ export async function getFlags(
   context: RequestContext,
   cache: Cache | null,
 ): Promise<Flags> {
+  const now = Date.now();
+
+  if (flagsMemoryCache && now - flagsMemoryCacheTimestamp < FLAGS_MEMORY_CACHE_TTL_MS) {
+    return flagsMemoryCache;
+  }
+
   const cacheKey = getFlagsCacheKey(env, context);
   const cacheRequest = new Request(`https://toggly-cache/${cacheKey}`);
 
   if (cache) {
     const cachedResponse = await cache.match(cacheRequest);
     if (cachedResponse) {
-      return (await cachedResponse.json()) as Flags;
+      const flags = (await cachedResponse.json()) as Flags;
+      updateFlagsMemoryCache(flags);
+      return flags;
     }
   }
 
-  const flags = await fetchFlagsFromTogglyApi(env);
+  let flags: Flags;
+  try {
+    flags = await fetchFlagsFromTogglyApi(env);
+  } catch (error) {
+    console.error('[Toggly Docusaurus Edge] Failed to fetch flags:', error);
+    return flagsMemoryCache ?? {};
+  }
 
-  if (cache) {
+  updateFlagsMemoryCache(flags);
+
+  if (cache && Object.keys(flags).length > 0) {
     const response = new Response(JSON.stringify(flags), {
       headers: {
         'Content-Type': 'application/json',

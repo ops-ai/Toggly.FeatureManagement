@@ -98,7 +98,7 @@ export function useFeatureFlag(
   useEffect(() => {
     if (!isReady) return;
 
-    const unsubscribe = toggly.on('refreshed', () => {
+    const unsubscribe = toggly.on('effectiveFlagsChanged', () => {
       evaluate();
     });
 
@@ -194,7 +194,7 @@ export function useFeatureGate(
   useEffect(() => {
     if (!isReady) return;
 
-    const unsubscribe = toggly.on('refreshed', () => {
+    const unsubscribe = toggly.on('effectiveFlagsChanged', () => {
       evaluate();
     });
 

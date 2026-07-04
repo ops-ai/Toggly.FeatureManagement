@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import '../feature_flags_toggly.dart';
 
@@ -44,35 +42,11 @@ class Feature extends StatefulWidget {
 class FeatureState extends State<Feature> {
   FeatureState();
 
-  bool? previousResult;
-  int _localGatesRevision = 0;
-  StreamSubscription<void>? _localGatesSubscription;
-
-  @override
-  void initState() {
-    super.initState();
-    _localGatesSubscription = Toggly.onLocalGatesChanged.listen((_) {
-      setState(() {
-        _localGatesRevision++;
-      });
-    });
+  Widget _content() {
+    return widget.child ?? Column(children: widget.children!);
   }
 
-  @override
-  void dispose() {
-    _localGatesSubscription?.cancel();
-    super.dispose();
-  }
-
-  Future<bool> _resolveVisible() async {
-    final gate = await Toggly.evaluateFeatureGate(
-      widget.featureKeys,
-      requirement: widget.requirement,
-      negate: widget.negate,
-    );
-    if (!gate) {
-      return false;
-    }
+  Future<bool> _resolveVariantVisible() async {
     if (widget.variant == null) {
       return true;
     }
@@ -83,21 +57,40 @@ class FeatureState extends State<Feature> {
     return vr.enabled && vr.name == widget.variant;
   }
 
+  bool _resolveGateVisible(Map<String, bool> flags) {
+    return Toggly.evaluateFeatureGateSync(
+      widget.featureKeys,
+      flags: flags,
+      requirement: widget.requirement,
+      negate: widget.negate,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      key: ValueKey<int>(_localGatesRevision),
-      future: _resolveVisible(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done) {
-          previousResult = snapshot.data;
-          if (snapshot.data != true) return const SizedBox();
-
-          return widget.child ?? Column(children: widget.children!);
+    return StreamBuilder<Map<String, bool>>(
+      stream: Toggly.featureFlagsStream,
+      initialData: Toggly.featureFlagsSnapshot,
+      builder: (context, flagsSnapshot) {
+        final flags = flagsSnapshot.data ?? Toggly.featureFlagsSnapshot;
+        if (!_resolveGateVisible(flags)) {
+          return const SizedBox();
         }
 
-        if (previousResult != true) return const SizedBox();
-        return widget.child ?? Column(children: widget.children!);
+        if (widget.variant == null) {
+          return _content();
+        }
+
+        return FutureBuilder<bool>(
+          future: _resolveVariantVisible(),
+          builder: (context, variantSnapshot) {
+            if (variantSnapshot.data != true) {
+              return const SizedBox();
+            }
+
+            return _content();
+          },
+        );
       },
     );
   }

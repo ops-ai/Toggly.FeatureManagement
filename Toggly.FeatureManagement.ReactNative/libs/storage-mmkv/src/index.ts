@@ -122,7 +122,7 @@ export class MMKVStorageAdapter implements TogglyStorage {
       return value ?? null;
     } catch (error) {
       console.error('[Toggly] MMKV get error:', error);
-      return null;
+      throw error;
     }
   }
 
@@ -136,6 +136,7 @@ export class MMKVStorageAdapter implements TogglyStorage {
       this.mmkv.set(this.getKey(key), value);
     } catch (error) {
       console.error('[Toggly] MMKV set error:', error);
+      throw error;
     }
   }
 
@@ -148,6 +149,7 @@ export class MMKVStorageAdapter implements TogglyStorage {
       this.mmkv.delete(this.getKey(key));
     } catch (error) {
       console.error('[Toggly] MMKV delete error:', error);
+      throw error;
     }
   }
 
@@ -161,6 +163,7 @@ export class MMKVStorageAdapter implements TogglyStorage {
       togglyKeys.forEach((key) => this.mmkv.delete(key));
     } catch (error) {
       console.error('[Toggly] MMKV clear error:', error);
+      throw error;
     }
   }
 
@@ -175,7 +178,7 @@ export class MMKVStorageAdapter implements TogglyStorage {
         .map((key) => key.substring(this.keyPrefix.length));
     } catch (error) {
       console.error('[Toggly] MMKV keys error:', error);
-      return [];
+      throw error;
     }
   }
 

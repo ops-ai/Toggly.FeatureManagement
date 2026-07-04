@@ -2893,13 +2893,6 @@ function __spreadArray(to, from, pack) {
     return to.concat(ar || Array.prototype.slice.call(from));
 }
 
-var dist = {};
-
-Object.defineProperty(dist, "__esModule", { value: true });
-var buildFlagGateIndex_1 = dist.buildFlagGateIndex = buildFlagGateIndex;
-dist.isLocalPrerequisiteMet = isLocalPrerequisiteMet;
-var applyLocalGate_1 = dist.applyLocalGate = applyLocalGate;
-dist.applyLocalGatesToMap = applyLocalGatesToMap;
 /**
  * Builds a flag-key → gate-id index. Throws if a flag key appears in more than one gate.
  */
@@ -2938,17 +2931,6 @@ function applyLocalGate(remote, flagKey, gates, gateIndex) {
         return false;
     }
     return isLocalPrerequisiteMet(flagKey, gates, gateIndex);
-}
-/**
- * Applies local gates to every key in a remote flag map (for bulk/debug use).
- */
-function applyLocalGatesToMap(remoteFlags, gates, gateIndex) {
-    const index = gateIndex ?? buildFlagGateIndex(gates);
-    const effective = {};
-    for (const [flagKey, remote] of Object.entries(remoteFlags)) {
-        effective[flagKey] = applyLocalGate(remote, flagKey, gates, index);
-    }
-    return effective;
 }
 
 /**
@@ -3243,134 +3225,140 @@ var Toggly = /** @class */ (function () {
         this._wsReconnectTimer = null;
         this._lastFallbackRefresh = 0;
         this.shouldShowFeatureDuringEvaluation = false;
-        this._loadFeatures = function () { return __awaiter(_this, void 0, void 0, function () {
-            var now, isInitialLoad, appKey, env, url, response, payload, rawDefs, defs, vCached, cached, cached;
-            var _this = this;
-            var _a, _b, _c, _d, _e, _f;
-            return __generator(this, function (_g) {
-                switch (_g.label) {
-                    case 0:
-                        if (!this._loadingFeatures) return [3 /*break*/, 2];
-                        return [4 /*yield*/, new Promise(function (resolve) {
-                                var checkIfApiCallFinished = function () {
-                                    if (!_this._loadingFeatures) {
-                                        resolve();
+        this._loadFeatures = function (forceRefresh) {
+            if (forceRefresh === void 0) { forceRefresh = false; }
+            return __awaiter(_this, void 0, void 0, function () {
+                var now, isInitialLoad, appKey, env, url, response, payload, rawDefs, defs, error_1, vCached, cached, cached;
+                var _this = this;
+                var _a, _b, _c, _d, _e, _f;
+                return __generator(this, function (_g) {
+                    switch (_g.label) {
+                        case 0:
+                            if (!this._loadingFeatures) return [3 /*break*/, 2];
+                            return [4 /*yield*/, new Promise(function (resolve) {
+                                    var checkIfApiCallFinished = function () {
+                                        if (!_this._loadingFeatures) {
+                                            resolve();
+                                        }
+                                        else {
+                                            setTimeout(checkIfApiCallFinished, 100);
+                                        }
+                                    };
+                                    checkIfApiCallFinished();
+                                })];
+                        case 1:
+                            _g.sent();
+                            _g.label = 2;
+                        case 2:
+                            // Features already loaded
+                            if (this._features !== null && !forceRefresh) {
+                                // When WebSocket is connected, throttle HTTP refreshes to fallback interval
+                                if (this._wsConnected) {
+                                    now = Date.now();
+                                    if (now - this._lastFallbackRefresh < Toggly.FALLBACK_REFRESH_INTERVAL) {
+                                        return [2 /*return*/, this._features];
                                     }
-                                    else {
-                                        setTimeout(checkIfApiCallFinished, 100);
-                                    }
-                                };
-                                checkIfApiCallFinished();
-                            })];
-                    case 1:
-                        _g.sent();
-                        _g.label = 2;
-                    case 2:
-                        // Features already loaded
-                        if (this._features !== null) {
-                            // When WebSocket is connected, throttle HTTP refreshes to fallback interval
-                            if (this._wsConnected) {
-                                now = Date.now();
-                                if (now - this._lastFallbackRefresh < Toggly.FALLBACK_REFRESH_INTERVAL) {
-                                    return [2 /*return*/, this._features];
+                                    this._lastFallbackRefresh = now;
                                 }
-                                this._lastFallbackRefresh = now;
+                                return [2 /*return*/, this._features];
                             }
-                            return [2 /*return*/, this._features];
-                        }
-                        this._loadingFeatures = true;
-                        isInitialLoad = this._ws === null && !this._wsConnected;
-                        appKey = (_a = this._config.appKey) !== null && _a !== void 0 ? _a : '';
-                        env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
-                        _g.label = 3;
-                    case 3:
-                        _g.trys.push([3, 8, 11, 12]);
-                        url = void 0;
-                        if (this._config.enableVariants) {
-                            url = "".concat(this._config.baseURI, "/evaluated-variants-signed/").concat(this._config.appKey, "/").concat(this._config.environment);
-                            if (this._config.identity) {
-                                url += "?".concat(new URLSearchParams({ userId: this._config.identity }).toString());
+                            this._loadingFeatures = true;
+                            isInitialLoad = this._ws === null && !this._wsConnected;
+                            appKey = (_a = this._config.appKey) !== null && _a !== void 0 ? _a : '';
+                            env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
+                            _g.label = 3;
+                        case 3:
+                            _g.trys.push([3, 8, 11, 12]);
+                            url = void 0;
+                            if (this._config.enableVariants) {
+                                url = "".concat(this._config.baseURI, "/evaluated-variants-signed/").concat(this._config.appKey, "/").concat(this._config.environment);
+                                if (this._config.identity) {
+                                    url += "?".concat(new URLSearchParams({ userId: this._config.identity }).toString());
+                                }
                             }
-                        }
-                        else {
-                            url = "".concat(this._config.baseURI, "/evaluated-signed/").concat(this._config.appKey, "/").concat(this._config.environment);
-                            if (this._config.identity) {
-                                url += "?u=".concat(this._config.identity);
+                            else {
+                                url = "".concat(this._config.baseURI, "/evaluated-signed/").concat(this._config.appKey, "/").concat(this._config.environment);
+                                if (this._config.identity) {
+                                    url += "?u=".concat(this._config.identity);
+                                }
                             }
-                        }
-                        return [4 /*yield*/, fetch(url)];
-                    case 4:
-                        response = _g.sent();
-                        return [4 /*yield*/, response.json()];
-                    case 5:
-                        payload = _g.sent();
-                        if (this._config.enableVariants) {
-                            rawDefs = (_c = payload === null || payload === void 0 ? void 0 : payload.defs) !== null && _c !== void 0 ? _c : payload;
-                            defs = rawDefs && typeof rawDefs === 'object' && !Array.isArray(rawDefs)
-                                ? rawDefs
-                                : {};
-                            this._variants = defs;
-                            this._features = variantDefsToFlags(defs);
-                            if (this._features && this._canPersist) {
-                                writeCachedVariants(appKey, env, defs);
-                                writeCachedFlags(appKey, env, this._features);
-                            }
-                        }
-                        else {
-                            this._variants = null;
-                            this._features = (_d = payload === null || payload === void 0 ? void 0 : payload.defs) !== null && _d !== void 0 ? _d : payload;
-                            if (this._features && this._canPersist) {
-                                writeCachedFlags(appKey, env, this._features);
-                            }
-                        }
-                        if (!this._features) return [3 /*break*/, 7];
-                        return [4 /*yield*/, this._hookExecutor.executeAfterRefresh(this._features)];
-                    case 6:
-                        _g.sent();
-                        _g.label = 7;
-                    case 7:
-                        this.notifyFeaturesRefresh();
-                        return [3 /*break*/, 12];
-                    case 8:
-                        _g.sent();
-                        if (this._config.enableVariants) {
-                            vCached = this._canPersist ? readCachedVariants(appKey, env) : null;
-                            if (vCached) {
-                                this._variants = vCached;
-                                this._features = variantDefsToFlags(vCached);
+                            return [4 /*yield*/, fetch(url)];
+                        case 4:
+                            response = _g.sent();
+                            return [4 /*yield*/, response.json()];
+                        case 5:
+                            payload = _g.sent();
+                            if (this._config.enableVariants) {
+                                rawDefs = (_c = payload === null || payload === void 0 ? void 0 : payload.defs) !== null && _c !== void 0 ? _c : payload;
+                                defs = rawDefs && typeof rawDefs === 'object' && !Array.isArray(rawDefs)
+                                    ? rawDefs
+                                    : {};
+                                this._variants = defs;
+                                this._features = variantDefsToFlags(defs);
+                                if (this._features && this._canPersist) {
+                                    writeCachedVariants(appKey, env, defs);
+                                    writeCachedFlags(appKey, env, this._features);
+                                }
                             }
                             else {
                                 this._variants = null;
-                                cached = this._canPersist ? readCachedFlags(appKey, env) : null;
-                                this._features = (_e = cached !== null && cached !== void 0 ? cached : this._config.featureDefaults) !== null && _e !== void 0 ? _e : {};
+                                this._features = (_d = payload === null || payload === void 0 ? void 0 : payload.defs) !== null && _d !== void 0 ? _d : payload;
+                                if (this._features && this._canPersist) {
+                                    writeCachedFlags(appKey, env, this._features);
+                                }
                             }
-                        }
-                        else {
-                            this._variants = null;
-                            cached = this._canPersist ? readCachedFlags(appKey, env) : null;
-                            this._features = (_f = cached !== null && cached !== void 0 ? cached : this._config.featureDefaults) !== null && _f !== void 0 ? _f : {};
-                        }
-                        console.warn('Toggly --- Using cached/default features as features could not be loaded from the Toggly API');
-                        if (!this._features) return [3 /*break*/, 10];
-                        return [4 /*yield*/, this._hookExecutor.executeAfterRefresh(this._features)];
-                    case 9:
-                        _g.sent();
-                        _g.label = 10;
-                    case 10:
-                        this.notifyFeaturesRefresh();
-                        return [3 /*break*/, 12];
-                    case 11:
-                        this._loadingFeatures = false;
-                        return [7 /*endfinally*/];
-                    case 12:
-                        // Start WebSocket live updates after initial feature load
-                        if (isInitialLoad) {
-                            this.startWebSocket();
-                        }
-                        return [2 /*return*/, this._features];
-                }
+                            if (!this._features) return [3 /*break*/, 7];
+                            return [4 /*yield*/, this._hookExecutor.executeAfterRefresh(this._features)];
+                        case 6:
+                            _g.sent();
+                            _g.label = 7;
+                        case 7:
+                            this.notifyFeaturesRefresh();
+                            return [3 /*break*/, 12];
+                        case 8:
+                            error_1 = _g.sent();
+                            this._reportError('Error fetching feature flags', error_1);
+                            if (this._config.enableVariants) {
+                                vCached = this._canPersist ? readCachedVariants(appKey, env) : null;
+                                if (vCached) {
+                                    this._variants = vCached;
+                                    this._features = variantDefsToFlags(vCached);
+                                }
+                                else if (this._features === null) {
+                                    this._variants = null;
+                                    cached = this._canPersist ? readCachedFlags(appKey, env) : null;
+                                    this._features = (_e = cached !== null && cached !== void 0 ? cached : this._config.featureDefaults) !== null && _e !== void 0 ? _e : {};
+                                }
+                            }
+                            else {
+                                if (this._features === null) {
+                                    this._variants = null;
+                                    cached = this._canPersist ? readCachedFlags(appKey, env) : null;
+                                    this._features = (_f = cached !== null && cached !== void 0 ? cached : this._config.featureDefaults) !== null && _f !== void 0 ? _f : {};
+                                }
+                            }
+                            console.warn('Toggly --- Using cached/default features as features could not be loaded from the Toggly API');
+                            if (!this._features) return [3 /*break*/, 10];
+                            return [4 /*yield*/, this._hookExecutor.executeAfterRefresh(this._features)];
+                        case 9:
+                            _g.sent();
+                            _g.label = 10;
+                        case 10:
+                            this.notifyFeaturesRefresh();
+                            return [3 /*break*/, 12];
+                        case 11:
+                            this._loadingFeatures = false;
+                            return [7 /*endfinally*/];
+                        case 12:
+                            // Start WebSocket live updates after initial feature load
+                            if (isInitialLoad) {
+                                this.startWebSocket();
+                            }
+                            return [2 /*return*/, this._features];
+                    }
+                });
             });
-        }); };
+        };
         this._featuresLoaded = function () { return __awaiter(_this, void 0, void 0, function () {
             var _a;
             var _b;
@@ -3399,8 +3387,8 @@ var Toggly = /** @class */ (function () {
                         case 0: return [4 /*yield*/, this._featuresLoaded()];
                         case 1:
                             _a.sent();
-                            if (!this._features || Object.keys(this._features).length === 0) {
-                                return [2 /*return*/, true];
+                            if (gate.length > 0 && (!this._features || Object.keys(this._features).length === 0)) {
+                                return [2 /*return*/, negate];
                             }
                             if (requirement === 'any') {
                                 isEnabled = gate.reduce(function (isEnabled, featureKey) {
@@ -3554,9 +3542,7 @@ var Toggly = /** @class */ (function () {
             var _a, _b;
             return __generator(this, function (_c) {
                 switch (_c.label) {
-                    case 0:
-                        this._features = null;
-                        return [4 /*yield*/, this._loadFeatures()];
+                    case 0: return [4 /*yield*/, this._loadFeatures(true)];
                     case 1:
                         flags = _c.sent();
                         if (flags && this._canPersist) {
@@ -3609,6 +3595,18 @@ var Toggly = /** @class */ (function () {
             }
         }
     }
+    Object.defineProperty(Toggly.prototype, "lastError", {
+        get: function () {
+            return this._lastError;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Toggly.prototype._reportError = function (message, error) {
+        var _a, _b;
+        this._lastError = message;
+        (_b = (_a = this._config).onError) === null || _b === void 0 ? void 0 : _b.call(_a, message, error);
+    };
     Object.defineProperty(Toggly.prototype, "_canPersist", {
         get: function () {
             return this._config.persistCache !== false && canUseStorage;
@@ -3619,7 +3617,7 @@ var Toggly = /** @class */ (function () {
     Toggly.prototype._getEffectiveFlagValue = function (flagKey) {
         var _a;
         var remote = ((_a = this._features) === null || _a === void 0 ? void 0 : _a[flagKey]) === true;
-        return applyLocalGate_1(remote, flagKey, this._localGates, this._localGateIndex);
+        return applyLocalGate(remote, flagKey, this._localGates, this._localGateIndex);
     };
     /**
      * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants} and loaded data).
@@ -3636,7 +3634,7 @@ var Toggly = /** @class */ (function () {
         if (!entry || !entry.variant) {
             return null;
         }
-        if (!applyLocalGate_1(entry.enabled === true, featureKey, this._localGates, this._localGateIndex)) {
+        if (!applyLocalGate(entry.enabled === true, featureKey, this._localGates, this._localGateIndex)) {
             return null;
         }
         return {
@@ -3675,7 +3673,7 @@ var Toggly = /** @class */ (function () {
     };
     Toggly.prototype.setLocalGates = function (gates) {
         this._localGates = __spreadArray([], gates, true);
-        this._localGateIndex = buildFlagGateIndex_1(this._localGates);
+        this._localGateIndex = buildFlagGateIndex(this._localGates);
     };
     Toggly.prototype.notifyLocalGatesChanged = function () {
         this._localGatesChangedListeners.forEach(function (listener) {

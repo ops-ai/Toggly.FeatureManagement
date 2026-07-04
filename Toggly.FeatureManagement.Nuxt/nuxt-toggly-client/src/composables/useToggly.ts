@@ -73,6 +73,10 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
   // Create client
   const client = createTogglyClient(mergedConfig)
   globalClient = client
+  client.subscribeFeaturesRefresh?.(() => {
+    features.value = client.state.features
+    error.value = client.state.error
+  })
 
   const toggly: UseTogglyReturn = {
     client,
@@ -121,14 +125,16 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
 
     async refresh() {
       isLoading.value = true
-      error.value = null
+      error.value = client.state.error
 
       try {
         const defs = await client.refresh()
         features.value = defs
+        error.value = client.state.error
 
         // Persist features if enabled
         if (
+          !client.state.error &&
           mergedConfig.persistFeatures &&
           typeof localStorage !== 'undefined'
         ) {
@@ -139,7 +145,6 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
         }
       } catch (e) {
         error.value = e as Error
-        throw e
       } finally {
         isLoading.value = false
       }

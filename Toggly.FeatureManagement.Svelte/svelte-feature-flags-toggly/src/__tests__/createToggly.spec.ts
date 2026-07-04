@@ -36,6 +36,9 @@ describe('createToggly', () => {
 
   it('should load features from API when appKey provided', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
       json: () => Promise.resolve({ F1: true, F2: true }),
     } as Response);
 
@@ -51,6 +54,9 @@ describe('createToggly', () => {
 
   it('should load variants and populate togglyVariantsStore when enableVariants', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
       json: () =>
         Promise.resolve({
           defs: {
@@ -90,6 +96,9 @@ describe('createToggly', () => {
 
   it('should set up periodic refresh when appKey provided', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
       json: () => Promise.resolve({ F1: true }),
     } as Response);
 
@@ -151,6 +160,9 @@ describe('createToggly', () => {
   it('should handle null flags from _loadFeatures', async () => {
     // When features return null, flags store should not be set to null
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
       json: () => Promise.resolve(null),
     } as Response);
 
@@ -183,6 +195,9 @@ describe('createToggly', () => {
   it('should use default refresh interval of 3 minutes', async () => {
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
       json: () => Promise.resolve({ F1: true }),
     } as Response);
 

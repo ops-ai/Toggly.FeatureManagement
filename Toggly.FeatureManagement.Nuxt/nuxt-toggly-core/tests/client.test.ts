@@ -312,15 +312,20 @@ describe('createTogglyClient', () => {
       client.destroy()
     })
 
-    it('should throw error on failure', async () => {
+    it('should preserve last-known-good features on failure', async () => {
       mockFetch
-        .mockResolvedValueOnce(createMockResponse({ features: [] }))
+        .mockResolvedValueOnce(createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: true }],
+        }))
         .mockRejectedValueOnce(new Error('Network error'))
 
       const client = createTogglyClient({ appKey: 'test-key', refreshInterval: 0 })
       await client.init()
 
-      await expect(client.refresh()).rejects.toThrow()
+      await expect(client.refresh()).resolves.toEqual({ 'feature-a': true })
+      expect(client.state.features['feature-a']).toBe(true)
+      expect(client.state.error).toBeInstanceOf(Error)
+      expect(client.state.error?.message).toBe('Network error')
 
       client.destroy()
     })

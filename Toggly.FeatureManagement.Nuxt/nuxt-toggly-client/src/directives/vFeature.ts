@@ -14,6 +14,12 @@ interface FeatureDirectiveValue {
   negate?: boolean
 }
 
+type TogglyDirectiveElement = HTMLElement & {
+  __togglyFeatureUnsubscribe?: () => void
+  __togglyFeatureShowUnsubscribe?: () => void
+  __togglyFeatureClassUnsubscribe?: () => void
+}
+
 /**
  * v-feature directive for conditional rendering based on feature flags
  *
@@ -54,10 +60,19 @@ interface FeatureDirectiveValue {
 export const vFeature: Directive<HTMLElement, string | string[] | FeatureDirectiveValue> = {
   mounted(el, binding) {
     updateVisibility(el, binding)
+    const client = getTogglyClient()
+    if (client?.subscribeFeaturesRefresh) {
+      ;(el as TogglyDirectiveElement).__togglyFeatureUnsubscribe =
+        client.subscribeFeaturesRefresh(() => updateVisibility(el, binding))
+    }
   },
 
   updated(el, binding) {
     updateVisibility(el, binding)
+  },
+
+  beforeUnmount(el) {
+    ;(el as TogglyDirectiveElement).__togglyFeatureUnsubscribe?.()
   },
 }
 
@@ -130,10 +145,19 @@ function updateVisibility(
 export const vFeatureShow: Directive<HTMLElement, string | string[] | FeatureDirectiveValue> = {
   mounted(el, binding) {
     updateShowVisibility(el, binding)
+    const client = getTogglyClient()
+    if (client?.subscribeFeaturesRefresh) {
+      ;(el as TogglyDirectiveElement).__togglyFeatureShowUnsubscribe =
+        client.subscribeFeaturesRefresh(() => updateShowVisibility(el, binding))
+    }
   },
 
   updated(el, binding) {
     updateShowVisibility(el, binding)
+  },
+
+  beforeUnmount(el) {
+    ;(el as TogglyDirectiveElement).__togglyFeatureShowUnsubscribe?.()
   },
 }
 
@@ -178,10 +202,19 @@ function updateShowVisibility(
 export const vFeatureClass: Directive<HTMLElement, string | string[] | FeatureDirectiveValue> = {
   mounted(el, binding) {
     updateClass(el, binding)
+    const client = getTogglyClient()
+    if (client?.subscribeFeaturesRefresh) {
+      ;(el as TogglyDirectiveElement).__togglyFeatureClassUnsubscribe =
+        client.subscribeFeaturesRefresh(() => updateClass(el, binding))
+    }
   },
 
   updated(el, binding) {
     updateClass(el, binding)
+  },
+
+  beforeUnmount(el) {
+    ;(el as TogglyDirectiveElement).__togglyFeatureClassUnsubscribe?.()
   },
 }
 

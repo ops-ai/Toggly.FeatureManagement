@@ -22,6 +22,7 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@ops-ai/toggly-local-gates$': '<rootDir>/../../../toggly-local-gates/src/index.ts',
   },
   transform: {
     '^.+\\.ts$': ['ts-jest', {

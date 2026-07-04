@@ -18,6 +18,9 @@ export class Toggly {
   private static _localGates: LocalGate[] = [];
   private static _localGateIndex: FlagGateIndex = new Map();
   private static _localGatesChangedListeners = new Set<() => void>();
+  private static _inMemoryFlags: { [key: string]: boolean } | null = null;
+  private static _hasLoadedFlags = false;
+  private static _lastError: string | undefined;
 
   static _ws: WebSocket | null = null;
   static _wsConnected: boolean = false;
@@ -34,6 +37,26 @@ export class Toggly {
       Toggly._config?.appKey ?? '',
       Toggly._config?.environment ?? 'Production',
     );
+  }
+
+  static get lastError(): string | undefined {
+    return Toggly._lastError;
+  }
+
+  private static _reportError(message: string, error?: unknown): void {
+    Toggly._lastError = message;
+    Toggly._config?.onError?.(message, error);
+    if (Toggly._config?.isDebug) {
+      console.warn(`[Toggly] ${message}`, error);
+    }
+  }
+
+  private static _getFallbackFlags(): { [key: string]: boolean } {
+    if (Toggly._hasLoadedFlags && Toggly._inMemoryFlags) {
+      return Toggly._inMemoryFlags;
+    }
+
+    return Toggly._cachedFeatureFlags ?? Toggly._inMemoryFlags ?? Toggly._config.flagDefaults ?? {};
   }
 
   private static get _variantsCacheKey(): string {
@@ -56,6 +79,11 @@ export class Toggly {
       hooks: [],
       persistCache: true
     }, config);
+    Toggly._inMemoryFlags = Toggly._config.flagDefaults
+      ? { ...Toggly._config.flagDefaults }
+      : null;
+    Toggly._hasLoadedFlags = false;
+    Toggly._lastError = undefined;
 
     // Register initial hooks
     if (Toggly._config.hooks) {
@@ -77,11 +105,21 @@ export class Toggly {
   }
 
   static get featureFlagsValue(): { [key: string]: boolean } {
+    if (Toggly._inMemoryFlags) {
+      return Toggly._inMemoryFlags;
+    }
+
     if (Toggly._persistCache) {
       try {
         var cachedFlags = JSON.parse(localStorage.getItem(Toggly._flagsCacheKey) ?? 'null');
-        if (Toggly._config?.appKey && cachedFlags) return cachedFlags;
-      } catch { /* corrupt cache — fall through */ }
+        if (Toggly._config?.appKey && cachedFlags) {
+          Toggly._inMemoryFlags = cachedFlags;
+          Toggly._hasLoadedFlags = true;
+          return cachedFlags;
+        }
+      } catch (error) {
+        Toggly._reportError('Error reading cached feature flags', error);
+      }
     }
     return Toggly._config?.flagDefaults ?? {};
   }
@@ -120,22 +158,32 @@ export class Toggly {
     if (!Toggly._persistCache) return null;
     try {
       return JSON.parse(localStorage.getItem(Toggly._flagsCacheKey) ?? 'null');
-    } catch { return null; }
+    } catch (error) {
+      Toggly._reportError('Error reading cached feature flags', error);
+      return null;
+    }
   }
 
   static cacheFeatureFlags(flags: { [key: string]: boolean }) {
+    Toggly._inMemoryFlags = flags;
+    Toggly._hasLoadedFlags = true;
     if (!Toggly._persistCache) return;
     try {
       localStorage.setItem(Toggly._flagsCacheKey, JSON.stringify(flags));
-    } catch { /* storage full or unavailable */ }
+    } catch (error) {
+      Toggly._reportError('Error writing feature flags cache', error);
+    }
   }
 
   static clearFeatureFlagsCache() {
+    Toggly._inMemoryFlags = null;
     if (!canUseStorage) return;
     try {
       localStorage.removeItem(Toggly._flagsCacheKey);
       localStorage.removeItem(Toggly._variantsCacheKey);
-    } catch { /* ignore */ }
+    } catch (error) {
+      Toggly._reportError('Error clearing feature flags cache', error);
+    }
   }
 
   static get variantsValue(): { [key: string]: EvaluatedVariantDef } | null {
@@ -199,7 +247,12 @@ export class Toggly {
       // is funneled through the same .catch handler as a real network error.
       Promise.resolve()
         .then(() => fetch(url))
-        .then((response) => response.json())
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
+          }
+          return response.json();
+        })
         .then((payload) => {
           const flags = (payload && payload.defs) ? payload.defs : payload;
           Toggly.cacheFeatureFlags(flags);
@@ -207,8 +260,9 @@ export class Toggly {
 
           if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`); }
         })
-        .catch(() => {
-          var flags = Toggly._cachedFeatureFlags ?? Toggly._config.flagDefaults;
+        .catch((error) => {
+          Toggly._reportError('Error fetching feature flags', error);
+          var flags = Toggly._getFallbackFlags();
           resolve(flags);
 
           if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }
@@ -230,7 +284,12 @@ export class Toggly {
 
       Promise.resolve()
         .then(() => fetch(url))
-        .then((response) => response.json())
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
+          }
+          return response.json();
+        })
         .then((payload) => {
           const defs: { [key: string]: EvaluatedVariantDef } = (payload && payload.defs) ? payload.defs : payload;
           Toggly.cacheVariants(defs);
@@ -244,8 +303,9 @@ export class Toggly {
 
           if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlagsWithVariants - ${JSON.stringify(defs)}`); }
         })
-        .catch(() => {
-          const flags = Toggly._cachedFeatureFlags ?? Toggly._config.flagDefaults;
+        .catch((error) => {
+          Toggly._reportError('Error fetching feature flags', error);
+          const flags = Toggly._getFallbackFlags();
           resolve(flags);
 
           if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }
@@ -260,6 +320,7 @@ export class Toggly {
       if (Toggly._config.isDebug) { console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(Toggly._config.flagDefaults)}`); }
 
       const flags = Toggly._config.flagDefaults;
+      Toggly._inMemoryFlags = flags;
       Promise.resolve(Toggly._hookExecutor.executeAfterRefresh(flags))
         .catch(err => console.error('[Toggly] Hook execution error:', err));
       
@@ -285,6 +346,10 @@ export class Toggly {
   }
 
   private static _evaluateFeatureGate(flags: { [key: string]: boolean } = {}, featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false) {
+    if (featureGate.length > 0 && Object.keys(flags).length === 0) {
+      return negate;
+    }
+
     var isEnabled: boolean;
 
     if (requirement === FeatureRequirement.any) {

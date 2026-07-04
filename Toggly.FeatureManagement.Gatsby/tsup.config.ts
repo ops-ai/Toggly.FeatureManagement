@@ -19,6 +19,7 @@ export default defineConfig({
   clean: true,
   external: [
     'gatsby',
+    '@ops-ai/toggly-local-gates',
     'react',
     'react-dom',
     'nanostores',

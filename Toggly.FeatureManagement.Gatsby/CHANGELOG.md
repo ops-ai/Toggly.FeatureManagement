@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-03
+
+### Added
+
+- `onError` reports client flag fetch failures to Gatsby SDK consumers.
+
+### Fixed
+
+- Error fallbacks now update the client error store instead of looking like clean ready/default state.
+- Successful refreshes clear the last error after new flags are applied.
+
 ## [1.2.0] - 2026-06-28
 
 ### Added

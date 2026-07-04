@@ -46,6 +46,7 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
   private flag: string[] = []
   private isHidden = true
   private unsubscribeLocalGates: (() => void) | undefined
+  private unsubscribeFeaturesRefresh: (() => void) | undefined
 
   @Input() set featureFlag(value: string | string[]) {
     if (value) {
@@ -73,10 +74,14 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
     this.unsubscribeLocalGates = this._toggly.subscribeLocalGatesChanged(() => {
       this.updateView()
     })
+    this.unsubscribeFeaturesRefresh = this._toggly.subscribeFeaturesRefresh(() => {
+      this.updateView()
+    })
   }
 
   ngOnDestroy() {
     this.unsubscribeLocalGates?.()
+    this.unsubscribeFeaturesRefresh?.()
   }
 
   private updateView() {

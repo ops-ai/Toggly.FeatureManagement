@@ -224,8 +224,11 @@ export class TogglyServerClient {
 
       return this.flags;
     } catch (error) {
-      this.logger.warn('Failed to fetch flags, using featureDefaults.', error);
-      this.flags = this.config.featureDefaults ?? {};
+      this.logger.warn('Failed to fetch flags, preserving last-known-good flags when available.', error);
+      this.config.onError?.('Error fetching feature flags', error);
+      if (Object.keys(this.flags).length === 0) {
+        this.flags = this.config.featureDefaults ?? {};
+      }
       return this.flags;
     }
   }

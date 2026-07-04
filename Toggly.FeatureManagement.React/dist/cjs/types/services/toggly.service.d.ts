@@ -25,6 +25,8 @@ export interface TogglyOptions {
     enableVariants?: boolean;
     /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
     localGates?: LocalGate[];
+    /** Optional SDK error callback for reporting fetch/cache/evaluation failures. */
+    onError?: (message: string, error?: unknown) => void;
 }
 export interface TogglyService {
     shouldShowFeatureDuringEvaluation: boolean;
@@ -55,6 +57,7 @@ export declare class Toggly implements TogglyService {
     private _localGates;
     private _localGateIndex;
     private _localGatesChangedListeners;
+    private _lastError;
     _ws: WebSocket | null;
     _wsConnected: boolean;
     _wsReconnectTimer: any;
@@ -62,9 +65,11 @@ export declare class Toggly implements TogglyService {
     static readonly FALLBACK_REFRESH_INTERVAL: number;
     static readonly WS_RECONNECT_DELAY = 5000;
     shouldShowFeatureDuringEvaluation: boolean;
+    get lastError(): string | undefined;
+    private _reportError;
     constructor(config: TogglyOptions);
     private get _canPersist();
-    _loadFeatures: () => Promise<{
+    _loadFeatures: (forceRefresh?: boolean) => Promise<{
         [key: string]: boolean;
     } | null>;
     _featuresLoaded: () => Promise<{

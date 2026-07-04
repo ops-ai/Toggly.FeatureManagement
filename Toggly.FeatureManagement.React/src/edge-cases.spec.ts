@@ -6,6 +6,7 @@ const mockFetch = jest.fn();
 describe('Edge Cases & Error Handling', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -77,6 +78,9 @@ describe('Edge Cases & Error Handling', () => {
 
     it('should handle null response', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve(null),
       });
 
@@ -92,6 +96,9 @@ describe('Edge Cases & Error Handling', () => {
 
     it('should handle empty object response', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({}),
       });
 
@@ -100,9 +107,9 @@ describe('Edge Cases & Error Handling', () => {
         featureDefaults: { F1: true },
       });
 
-      // Empty features: _evaluateFeatureGate returns true (empty features check)
+      // Empty remote features fail closed for non-empty gates.
       const result = await service.isFeatureOn('F1');
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
   });
 
@@ -249,7 +256,10 @@ describe('Edge Cases & Error Handling', () => {
       const p2 = service.isFeatureOn('F1');
 
       resolvePromise!({
-        json: () => Promise.resolve({ F1: true }),
+        ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: true }),
       });
 
       const [r1, r2] = await Promise.all([p1, p2]);

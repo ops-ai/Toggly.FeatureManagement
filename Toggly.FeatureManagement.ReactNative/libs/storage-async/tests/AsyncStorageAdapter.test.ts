@@ -66,17 +66,11 @@ describe('AsyncStorageAdapter', () => {
       expect(result).toBeNull();
     });
 
-    it('returns null and logs error on failure', async () => {
+    it('propagates storage errors on failure', async () => {
       mockGetItem.mockRejectedValue(new Error('Storage error'));
 
       const adapter = new AsyncStorageAdapter();
-      const result = await adapter.get('testKey');
-
-      expect(result).toBeNull();
-      expect(console.error).toHaveBeenCalledWith(
-        '[Toggly] AsyncStorage get error:',
-        expect.any(Error)
-      );
+      await expect(adapter.get('testKey')).rejects.toThrow('Storage error');
     });
 
     it('uses custom prefix for get', async () => {
@@ -99,16 +93,11 @@ describe('AsyncStorageAdapter', () => {
       expect(mockSetItem).toHaveBeenCalledWith('@toggly:testKey', 'test-value');
     });
 
-    it('logs error on failure', async () => {
+    it('propagates storage errors on failure', async () => {
       mockSetItem.mockRejectedValue(new Error('Storage error'));
 
       const adapter = new AsyncStorageAdapter();
-      await adapter.set('testKey', 'value');
-
-      expect(console.error).toHaveBeenCalledWith(
-        '[Toggly] AsyncStorage set error:',
-        expect.any(Error)
-      );
+      await expect(adapter.set('testKey', 'value')).rejects.toThrow('Storage error');
     });
   });
 
@@ -122,16 +111,11 @@ describe('AsyncStorageAdapter', () => {
       expect(mockRemoveItem).toHaveBeenCalledWith('@toggly:testKey');
     });
 
-    it('logs error on failure', async () => {
+    it('propagates storage errors on failure', async () => {
       mockRemoveItem.mockRejectedValue(new Error('Storage error'));
 
       const adapter = new AsyncStorageAdapter();
-      await adapter.delete('testKey');
-
-      expect(console.error).toHaveBeenCalledWith(
-        '[Toggly] AsyncStorage delete error:',
-        expect.any(Error)
-      );
+      await expect(adapter.delete('testKey')).rejects.toThrow('Storage error');
     });
   });
 
@@ -163,16 +147,11 @@ describe('AsyncStorageAdapter', () => {
       expect(mockMultiRemove).toHaveBeenCalledWith([]);
     });
 
-    it('logs error on failure', async () => {
+    it('propagates storage errors on failure', async () => {
       mockGetAllKeys.mockRejectedValue(new Error('Storage error'));
 
       const adapter = new AsyncStorageAdapter();
-      await adapter.clear();
-
-      expect(console.error).toHaveBeenCalledWith(
-        '[Toggly] AsyncStorage clear error:',
-        expect.any(Error)
-      );
+      await expect(adapter.clear()).rejects.toThrow('Storage error');
     });
   });
 
@@ -199,17 +178,11 @@ describe('AsyncStorageAdapter', () => {
       expect(result).toEqual([]);
     });
 
-    it('returns empty array and logs error on failure', async () => {
+    it('propagates storage errors on failure', async () => {
       mockGetAllKeys.mockRejectedValue(new Error('Storage error'));
 
       const adapter = new AsyncStorageAdapter();
-      const result = await adapter.keys();
-
-      expect(result).toEqual([]);
-      expect(console.error).toHaveBeenCalledWith(
-        '[Toggly] AsyncStorage keys error:',
-        expect.any(Error)
-      );
+      await expect(adapter.keys()).rejects.toThrow('Storage error');
     });
   });
 });

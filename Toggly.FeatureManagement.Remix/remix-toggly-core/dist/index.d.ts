@@ -1,6 +1,10 @@
+import { LocalGate } from '@ops-ai/toggly-local-gates';
+export { LocalGate } from '@ops-ai/toggly-local-gates';
+
 /**
  * Core types for Toggly Remix SDK
  */
+
 /**
  * Feature requirement - whether all or any features must be enabled
  */
@@ -21,6 +25,10 @@ interface TogglyConfig {
     timeout?: number;
     /** Enable debug logging */
     debug?: boolean;
+    /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+    localGates?: LocalGate[];
+    /** Optional SDK error callback for reporting fetch/evaluation failures. */
+    onError?: (message: string, error?: unknown) => void;
 }
 /**
  * User identity context for feature targeting

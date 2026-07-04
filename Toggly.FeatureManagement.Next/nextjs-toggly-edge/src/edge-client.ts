@@ -147,9 +147,12 @@ export class TogglyEdgeClient {
     } catch (error) {
       console.error('[Toggly Edge] Failed to fetch feature definitions:', error)
       this.state.error = error as Error
+      this.config.onError?.('Error fetching feature flags', error)
 
-      // Fall back to defaults
-      this.state.features = { ...this.config.featureDefaults }
+      // Fall back to defaults only when no last-known-good state exists.
+      if (!this.state.initialized || Object.keys(this.state.features).length === 0) {
+        this.state.features = { ...this.config.featureDefaults }
+      }
       this.state.initialized = true
 
       return this.state.features

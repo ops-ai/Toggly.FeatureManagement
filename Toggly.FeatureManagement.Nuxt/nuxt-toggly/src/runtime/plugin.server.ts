@@ -1,4 +1,5 @@
 import { defineNitroPlugin, useRuntimeConfig } from '#imports'
+import moduleOnError from '#toggly/on-error'
 import { initServerToggly } from '@ops-ai/nuxt-toggly-server'
 import type { ModuleOptions } from '../module/types'
 
@@ -21,6 +22,7 @@ export default defineNitroPlugin(async () => {
       cache: config.serverCache,
       cacheTtl: config.serverCacheTtl,
       hooks: config.hooks,
+      onError: moduleOnError,
     })
 
     if (config.debug) {

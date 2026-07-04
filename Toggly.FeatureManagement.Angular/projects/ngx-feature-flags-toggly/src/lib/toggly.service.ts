@@ -48,6 +48,8 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private _localGates: LocalGate[] = []
   private _localGateIndex: FlagGateIndex = new Map()
   private _localGatesChangedListeners = new Set<() => void>()
+  private _featuresRefreshListeners = new Set<() => void>()
+  private _lastError: string | undefined
 
   private _ws: WebSocket | null = null
   private _wsConnected = false
@@ -58,6 +60,15 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private readonly WS_RECONNECT_DELAY = 5000
 
   shouldShowFeatureDuringEvaluation: boolean = false
+
+  get lastError(): string | undefined {
+    return this._lastError
+  }
+
+  private _reportError(message: string, error?: unknown): void {
+    this._lastError = message
+    this._config.onError?.(message, error)
+  }
 
   private get _canPersist(): boolean {
     return this._isBrowser && this._config.persistCache !== false
@@ -170,7 +181,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
     } catch { /* storage full or unavailable */ }
   }
 
-  private _loadFeatures = async () => {
+  private _loadFeatures = async (forceRefresh = false) => {
     // Feature are currently being loaded
     if (this._loadingFeatures) {
       await new Promise<void>((resolve) => {
@@ -186,7 +197,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
     }
 
     // Features already loaded — apply polling throttle when WS is connected
-    if (this._features !== null) {
+    if (this._features !== null && !forceRefresh) {
       if (this._wsConnected) {
         const now = Date.now()
         if (now - this._lastFallbackRefresh < this.FALLBACK_REFRESH_INTERVAL) {
@@ -236,6 +247,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
       }
 
       const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
+      }
       const payload = await response.json()
       const raw = payload?.defs ?? payload
 
@@ -258,18 +272,21 @@ export class TogglyService implements ITogglyService, OnDestroy {
         }
       }
     } catch (error) {
+      this._reportError('Error fetching feature flags', error)
       if (this._enableVariants) {
         const cachedVariants = this._readCachedVariants()
         if (cachedVariants && Object.keys(cachedVariants).length > 0) {
           this._applyVariantDefs(cachedVariants)
-        } else {
+        } else if (this._features === null) {
           const cached = this._readCachedFlags()
           this._variants = null
           this._features = cached ?? this._config.featureDefaults ?? {}
         }
       } else {
-        const cached = this._readCachedFlags()
-        this._features = cached ?? this._config.featureDefaults ?? {}
+        if (this._features === null) {
+          const cached = this._readCachedFlags()
+          this._features = cached ?? this._config.featureDefaults ?? {}
+        }
       }
       console.warn(
         'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',
@@ -277,6 +294,8 @@ export class TogglyService implements ITogglyService, OnDestroy {
     } finally {
       this._loadingFeatures = false
     }
+
+    this.notifyFeaturesRefresh()
 
     return this._features
   }
@@ -315,8 +334,8 @@ export class TogglyService implements ITogglyService, OnDestroy {
   ) => {
     await this._featuresLoaded()
 
-    if (!this._features || Object.keys(this._features).length === 0) {
-      return true
+    if (gate.length > 0 && (!this._features || Object.keys(this._features).length === 0)) {
+      return negate
     }
 
     let isEnabled: boolean
@@ -441,6 +460,23 @@ export class TogglyService implements ITogglyService, OnDestroy {
     }
   }
 
+  subscribeFeaturesRefresh(listener: () => void): () => void {
+    this._featuresRefreshListeners.add(listener)
+    return () => {
+      this._featuresRefreshListeners.delete(listener)
+    }
+  }
+
+  private notifyFeaturesRefresh(): void {
+    this._featuresRefreshListeners.forEach((listener) => {
+      try {
+        listener()
+      } catch (e) {
+        console.error('[Toggly] Error in features refresh listener:', e)
+      }
+    })
+  }
+
   private startWebSocket(): void {
     if (!this._config.appKey) {
       return
@@ -473,11 +509,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
           }
 
           if (data.type === 'flags-updated' || data.type === 'update') {
-            this._features = null
-            if (this._enableVariants) {
-              this._variants = null
-            }
-            this._loadFeatures().then(flags => {
+            this._loadFeatures(true).then(flags => {
               if (flags) {
                 this._writeCachedFlags(flags)
                 if (this._enableVariants && this._variants) {

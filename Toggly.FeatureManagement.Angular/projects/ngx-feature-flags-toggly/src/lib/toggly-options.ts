@@ -48,6 +48,9 @@ export class TogglyOptions implements ITogglyOptions {
 
   /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
   localGates?: import('@ops-ai/toggly-local-gates').LocalGate[]
+
+  /** Optional SDK error callback for reporting fetch/cache/evaluation failures. */
+  onError?: (message: string, error?: unknown) => void
 }
 
 /**

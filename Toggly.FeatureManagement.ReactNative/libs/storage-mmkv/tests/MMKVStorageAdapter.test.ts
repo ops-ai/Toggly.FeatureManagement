@@ -117,19 +117,13 @@ describe('MMKVStorageAdapter', () => {
       expect(result).toBeNull();
     });
 
-    it('returns null and logs error on failure', async () => {
+    it('propagates storage errors on failure', async () => {
       mockGetString.mockImplementation(() => {
         throw new Error('MMKV error');
       });
 
       const adapter = new MMKVStorageAdapter();
-      const result = await adapter.get('testKey');
-
-      expect(result).toBeNull();
-      expect(console.error).toHaveBeenCalledWith(
-        '[Toggly] MMKV get error:',
-        expect.any(Error)
-      );
+      await expect(adapter.get('testKey')).rejects.toThrow('MMKV error');
     });
 
     it('uses custom prefix for get', async () => {
@@ -150,18 +144,13 @@ describe('MMKVStorageAdapter', () => {
       expect(mockSet).toHaveBeenCalledWith('toggly:testKey', 'test-value');
     });
 
-    it('logs error on failure', async () => {
+    it('propagates storage errors on failure', async () => {
       mockSet.mockImplementation(() => {
         throw new Error('MMKV error');
       });
 
       const adapter = new MMKVStorageAdapter();
-      await adapter.set('testKey', 'value');
-
-      expect(console.error).toHaveBeenCalledWith(
-        '[Toggly] MMKV set error:',
-        expect.any(Error)
-      );
+      await expect(adapter.set('testKey', 'value')).rejects.toThrow('MMKV error');
     });
   });
 
@@ -173,18 +162,13 @@ describe('MMKVStorageAdapter', () => {
       expect(mockDelete).toHaveBeenCalledWith('toggly:testKey');
     });
 
-    it('logs error on failure', async () => {
+    it('propagates storage errors on failure', async () => {
       mockDelete.mockImplementation(() => {
         throw new Error('MMKV error');
       });
 
       const adapter = new MMKVStorageAdapter();
-      await adapter.delete('testKey');
-
-      expect(console.error).toHaveBeenCalledWith(
-        '[Toggly] MMKV delete error:',
-        expect.any(Error)
-      );
+      await expect(adapter.delete('testKey')).rejects.toThrow('MMKV error');
     });
   });
 
@@ -213,18 +197,13 @@ describe('MMKVStorageAdapter', () => {
       expect(mockDelete).not.toHaveBeenCalled();
     });
 
-    it('logs error on failure', async () => {
+    it('propagates storage errors on failure', async () => {
       mockGetAllKeys.mockImplementation(() => {
         throw new Error('MMKV error');
       });
 
       const adapter = new MMKVStorageAdapter();
-      await adapter.clear();
-
-      expect(console.error).toHaveBeenCalledWith(
-        '[Toggly] MMKV clear error:',
-        expect.any(Error)
-      );
+      await expect(adapter.clear()).rejects.toThrow('MMKV error');
     });
   });
 
@@ -251,19 +230,13 @@ describe('MMKVStorageAdapter', () => {
       expect(result).toEqual([]);
     });
 
-    it('returns empty array and logs error on failure', async () => {
+    it('propagates storage errors on failure', async () => {
       mockGetAllKeys.mockImplementation(() => {
         throw new Error('MMKV error');
       });
 
       const adapter = new MMKVStorageAdapter();
-      const result = await adapter.keys();
-
-      expect(result).toEqual([]);
-      expect(console.error).toHaveBeenCalledWith(
-        '[Toggly] MMKV keys error:',
-        expect.any(Error)
-      );
+      await expect(adapter.keys()).rejects.toThrow('MMKV error');
     });
   });
 

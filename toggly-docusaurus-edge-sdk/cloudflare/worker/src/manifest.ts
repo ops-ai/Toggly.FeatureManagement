@@ -32,22 +32,19 @@ async function fetchManifest(env: Env): Promise<PageFeatureMapping> {
   );
 
   if (!response.ok) {
-    console.warn(`Failed to fetch manifest: ${response.status} ${response.statusText}`);
-    return {};
+    throw new Error(`Failed to fetch manifest: ${response.status} ${response.statusText}`);
   }
 
   const contentType = response.headers.get('content-type') ?? '';
   if (!contentType.includes('application/json')) {
-    console.warn(`Manifest response is not JSON (${contentType})`);
-    return {};
+    throw new Error(`Manifest response is not JSON (${contentType})`);
   }
 
   try {
     const manifest = (await response.json()) as PageFeatureMapping;
     return manifest;
   } catch (error) {
-    console.warn('Failed to parse manifest JSON', error);
-    return {};
+    throw new Error(`Failed to parse manifest JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -78,15 +75,22 @@ export async function getManifest(
     }
   }
 
-  // Fetch from origin
-  const manifest = await fetchManifest(env);
+  let manifest: PageFeatureMapping;
+  try {
+    manifest = await fetchManifest(env);
+  } catch (error) {
+    console.warn('[Toggly Docusaurus Edge] Failed to fetch manifest:', error);
+    return manifestCache ?? {};
+  }
 
   // Update in-memory cache
-  manifestCache = manifest;
-  manifestCacheTimestamp = now;
+  if (Object.keys(manifest).length > 0) {
+    manifestCache = manifest;
+    manifestCacheTimestamp = now;
+  }
 
   // Store in Cloudflare cache
-  if (cache) {
+  if (cache && Object.keys(manifest).length > 0) {
     const response = new Response(JSON.stringify(manifest), {
       headers: {
         'Content-Type': 'application/json',

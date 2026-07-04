@@ -92,6 +92,9 @@ describe('Edge Cases & Error Handling', () => {
 
     it('should handle null response', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve(null),
       } as any);
 
@@ -105,6 +108,9 @@ describe('Edge Cases & Error Handling', () => {
 
     it('should handle empty object response', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({}),
       } as any);
 
@@ -262,6 +268,9 @@ describe('Edge Cases & Error Handling', () => {
     it('should handle interval cleanup via createToggly', async () => {
       vi.useFakeTimers();
       vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       } as any);
 

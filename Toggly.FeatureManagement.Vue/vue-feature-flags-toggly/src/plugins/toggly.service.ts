@@ -83,6 +83,7 @@ export interface TogglyOptions {
    */
   enableVariants?: boolean
   localGates?: LocalGate[]
+  onError?: (message: string, error?: unknown) => void
 }
 
 export interface TogglyService {
@@ -127,6 +128,7 @@ export class Toggly implements TogglyService {
   private _localGates: LocalGate[] = []
   private _localGateIndex: FlagGateIndex = new Map()
   private _localGatesChangedListeners = new Set<() => void>()
+  private _lastError: string | undefined
 
   _ws: WebSocket | null = null
   _wsConnected: boolean = false
@@ -137,6 +139,15 @@ export class Toggly implements TogglyService {
   static readonly WS_RECONNECT_DELAY = 5000
 
   shouldShowFeatureDuringEvaluation: boolean = false
+
+  get lastError(): string | undefined {
+    return this._lastError
+  }
+
+  private _reportError(message: string, error?: unknown): void {
+    this._lastError = message
+    this._config.onError?.(message, error)
+  }
 
   init = (options: TogglyOptions) => {
     if (!options.appKey) {
@@ -200,7 +211,7 @@ export class Toggly implements TogglyService {
     return this._config.persistCache !== false && canUseStorage
   }
 
-  _loadFeatures = async () => {
+  _loadFeatures = async (forceRefresh = false) => {
     // Feature are currently being loaded
     if (this._loadingFeatures) {
       await new Promise<void>((resolve) => {
@@ -216,7 +227,7 @@ export class Toggly implements TogglyService {
     }
 
     // Features already loaded — throttle polling when WebSocket is connected
-    if (this._features !== null) {
+    if (this._features !== null && !forceRefresh) {
       if (this._wsConnected && (Date.now() - this._lastFallbackRefresh) < Toggly.FALLBACK_REFRESH_INTERVAL) {
         return this._features
       }
@@ -244,6 +255,9 @@ export class Toggly implements TogglyService {
       }
 
       const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
+      }
       const payload = await response.json()
 
       if (this._config.enableVariants) {
@@ -272,20 +286,23 @@ export class Toggly implements TogglyService {
       }
       this.notifyFeaturesRefresh()
     } catch (error) {
+      this._reportError('Error fetching feature flags', error)
       if (this._config.enableVariants) {
         const vCached = this._canPersist ? readCachedVariants(appKey, env) : null
         if (vCached) {
           this._variants = vCached
           this._features = variantDefsToFlags(vCached)
-        } else {
+        } else if (this._features === null) {
           this._variants = null
           const cached = this._canPersist ? readCachedFlags(appKey, env) : null
           this._features = cached ?? this._config.featureDefaults ?? {}
         }
       } else {
-        this._variants = null
-        const cached = this._canPersist ? readCachedFlags(appKey, env) : null
-        this._features = cached ?? this._config.featureDefaults ?? {}
+        if (this._features === null) {
+          this._variants = null
+          const cached = this._canPersist ? readCachedFlags(appKey, env) : null
+          this._features = cached ?? this._config.featureDefaults ?? {}
+        }
       }
       console.warn(
         'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',
@@ -326,8 +343,8 @@ export class Toggly implements TogglyService {
   ) => {
     await this._featuresLoaded()
 
-    if (!this._features || Object.keys(this._features).length === 0) {
-      return true
+    if (gate.length > 0 && (!this._features || Object.keys(this._features).length === 0)) {
+      return negate
     }
 
     var isEnabled: boolean
@@ -538,9 +555,8 @@ export class Toggly implements TogglyService {
   }
 
   private _refreshFeatures = async () => {
-    this._features = null
     this._loadingFeatures = false
-    const flags = await this._loadFeatures()
+    const flags = await this._loadFeatures(true)
     if (flags && this._canPersist) {
       writeCachedFlags(this._config.appKey ?? '', this._config.environment ?? 'Production', flags)
     }

@@ -82,6 +82,7 @@ export interface TogglyOptions {
    */
   enableVariants?: boolean
   localGates?: LocalGate[]
+  onError?: (message: string, error?: unknown) => void
 }
 
 export interface TogglyService {
@@ -131,6 +132,7 @@ export class Toggly implements TogglyService {
   private _localGates: LocalGate[] = []
   private _localGateIndex: FlagGateIndex = new Map()
   private _localGatesChangedListeners = new Set<() => void>()
+  private _lastError: string | undefined
 
   _ws: WebSocket | null = null
   _wsConnected: boolean = false
@@ -148,6 +150,15 @@ export class Toggly implements TogglyService {
   onLocalGatesUpdated: (() => void) | null = null
 
   shouldShowFeatureDuringEvaluation: boolean = false
+
+  get lastError(): string | undefined {
+    return this._lastError
+  }
+
+  private _reportError(message: string, error?: unknown): void {
+    this._lastError = message
+    this._config.onError?.(message, error)
+  }
 
   constructor(config: TogglyOptions) {
     if (!config.appKey) {
@@ -252,6 +263,9 @@ export class Toggly implements TogglyService {
       }
 
       const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
+      }
       const payload = await response.json()
       this._lastFetchTime = Date.now()
 
@@ -279,6 +293,7 @@ export class Toggly implements TogglyService {
         this._hookExecutor.executeAfterRefresh(this._features)
       }
     } catch (error) {
+      this._reportError('Error fetching feature flags', error)
       if (this._config.enableVariants) {
         const vCached = this._canPersist ? readCachedVariants(appKey, env) : null
         if (vCached) {
@@ -350,8 +365,8 @@ export class Toggly implements TogglyService {
   ) => {
     await this._featuresLoaded()
 
-    if (!this._features || Object.keys(this._features).length === 0) {
-      return true
+    if (gate.length > 0 && (!this._features || Object.keys(this._features).length === 0)) {
+      return negate
     }
 
     var isEnabled: boolean

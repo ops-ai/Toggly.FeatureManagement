@@ -148,7 +148,7 @@ describe('TogglyServerClient', () => {
       expect(result).toEqual(featureDefaults);
       expect(console.warn).toHaveBeenCalledWith(
         '[Toggly]',
-        'Failed to fetch flags, using featureDefaults.',
+        'Failed to fetch flags, preserving last-known-good flags when available.',
         expect.any(Error)
       );
     });
@@ -171,7 +171,7 @@ describe('TogglyServerClient', () => {
       expect(result).toEqual(featureDefaults);
       expect(console.warn).toHaveBeenCalledWith(
         '[Toggly]',
-        'Failed to fetch flags, using featureDefaults.',
+        'Failed to fetch flags, preserving last-known-good flags when available.',
         expect.any(Error)
       );
     });

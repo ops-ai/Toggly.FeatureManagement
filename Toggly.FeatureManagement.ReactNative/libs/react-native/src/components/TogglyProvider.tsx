@@ -145,6 +145,7 @@ export function TogglyProvider({
   const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [_featuresRevision, setFeaturesRevision] = useState(0);
   const togglyRef = useRef<TogglyService | null>(null);
   const isInitializedRef = useRef(false);
 
@@ -161,11 +162,19 @@ export function TogglyProvider({
       // Create service with providers
       const service = new TogglyService({
         ...config,
+        onError,
         appState: appStateProvider,
         networkInfo: networkInfoProvider,
       });
 
       togglyRef.current = service;
+      service.on('effectiveFlagsChanged', () => {
+        setFeaturesRevision((revision) => revision + 1);
+      });
+      service.on('error', (event) => {
+        const payload = event.data as { error?: unknown } | undefined;
+        setError(new Error(String(payload?.error ?? 'Toggly error')));
+      });
 
       // Initialize
       await service.init();

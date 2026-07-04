@@ -114,6 +114,13 @@ export function TogglyProvider({
     config.identity
   )
 
+  useEffect(() => {
+    return client.subscribeFeaturesRefresh(() => {
+      setFeatures(client.state.features)
+      setError(client.state.error)
+    })
+  }, [client])
+
   const init = useCallback(
     async (newConfig?: TogglyConfig) => {
       setIsLoading(true)
@@ -153,14 +160,15 @@ export function TogglyProvider({
 
   const refresh = useCallback(async () => {
     setIsLoading(true)
-    setError(null)
+      setError(client.state.error)
 
     try {
       const defs = await client.refresh()
       setFeatures(defs)
+        setError(client.state.error)
 
       // Persist features if enabled
-      if (config.persistFeatures && typeof window !== 'undefined') {
+        if (!client.state.error && config.persistFeatures && typeof window !== 'undefined') {
         localStorage.setItem(
           config.featuresStorageKey ?? 'toggly:features',
           JSON.stringify(defs)
@@ -168,7 +176,6 @@ export function TogglyProvider({
       }
     } catch (e) {
       setError(e as Error)
-      throw e
     } finally {
       setIsLoading(false)
     }

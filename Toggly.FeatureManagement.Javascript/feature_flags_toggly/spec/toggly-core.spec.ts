@@ -53,6 +53,9 @@ describe('Toggly Core', () => {
 
     it('should fetch flags from API when appKey is set', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ Feature1: true }),
       });
 
@@ -68,6 +71,9 @@ describe('Toggly Core', () => {
 
     it('should construct correct API URL with appKey and environment', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -84,6 +90,9 @@ describe('Toggly Core', () => {
 
     it('should use custom baseURI', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -101,6 +110,9 @@ describe('Toggly Core', () => {
 
     it('should default to Production environment', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -221,6 +233,9 @@ describe('Toggly Core', () => {
 
     it('should start refresh interval when appKey and interval configured', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -240,6 +255,9 @@ describe('Toggly Core', () => {
 
     it('should not start interval when featureFlagsRefreshInterval is 0', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -269,6 +287,9 @@ describe('Toggly Core', () => {
 
     it('should use default featureFlagsRefreshInterval of 3 minutes', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -291,6 +312,9 @@ describe('Toggly Core', () => {
 
     it('should trigger refresh at configured interval', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -313,6 +337,9 @@ describe('Toggly Core', () => {
 
     it('should stop refreshing after cancelRefreshInterval', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -332,6 +359,9 @@ describe('Toggly Core', () => {
 
     it('should cancel existing interval when starting new one', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -374,6 +404,9 @@ describe('Toggly Core', () => {
       );
 
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -389,6 +422,9 @@ describe('Toggly Core', () => {
 
     it('should include generated UUID identity in fetch URL', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -404,6 +440,9 @@ describe('Toggly Core', () => {
 
     it('should cache fetched flags in localStorage', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true, F2: false }),
       });
 
@@ -422,6 +461,9 @@ describe('Toggly Core', () => {
     it('should fall back to cached flags on network error', async () => {
       // 1. Init with successful fetch (populates cache)
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ CachedFlag: true }),
       });
 
@@ -485,6 +527,9 @@ describe('Toggly Core', () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -529,6 +574,9 @@ describe('Toggly Core', () => {
   describe('Storage & Persistence', () => {
     it('should return cached flags via featureFlagsValue when appKey is set', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ ApiFlag: true }),
       });
 
@@ -725,6 +773,9 @@ describe('Toggly Core', () => {
 
     it('should include identity in API fetch URL', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -1083,6 +1134,9 @@ describe('Toggly Core', () => {
 
     it('should fetch from API when appKey is set', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ ApiFlag: true }),
       });
 
@@ -1093,6 +1147,9 @@ describe('Toggly Core', () => {
       });
 
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ RefreshedFlag: true }),
       });
 
@@ -1316,6 +1373,9 @@ describe('Toggly Core', () => {
 
     it('should handle multiple rapid refresh calls', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -1338,6 +1398,9 @@ describe('Toggly Core', () => {
 
     it('should handle feature evaluation with API-fetched flags', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             RemoteFeature1: true,
@@ -1370,9 +1433,15 @@ describe('Toggly Core', () => {
     it('should update flags after refresh', async () => {
       mockFetch
         .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
         })
         .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
           json: () => Promise.resolve({ F1: false, F2: true }),
         });
 
@@ -1592,6 +1661,9 @@ describe('Toggly Core', () => {
       const errorSpy = jest.spyOn(console, 'error').mockImplementation();
 
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -1606,7 +1678,10 @@ describe('Toggly Core', () => {
           Promise.reject(new Error('refresh fail'));
 
         mockFetch.mockResolvedValueOnce({
-          json: () => Promise.resolve({ F1: true }),
+          ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
         });
 
         Toggly.refresh().then(() => {
@@ -1706,6 +1781,9 @@ describe('Toggly Core', () => {
 
     it('should fetch variants and cache both flags and variants when enableVariants is true', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             F1: { enabled: true, variant: 'A', configurationValue: { color: 'red' } },
@@ -1733,6 +1811,9 @@ describe('Toggly Core', () => {
 
     it('should include identity in variants fetch URL', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({}),
       });
 
@@ -1751,6 +1832,9 @@ describe('Toggly Core', () => {
 
     it('should unwrap payload.defs from variants endpoint', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             defs: {
@@ -1774,6 +1858,9 @@ describe('Toggly Core', () => {
     it('should log debug message on successful variants fetch', async () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: { enabled: true } }),
       });
 
@@ -1840,6 +1927,9 @@ describe('Toggly Core', () => {
 
     it('variantsValue should return null when enableVariants is false', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -1854,6 +1944,9 @@ describe('Toggly Core', () => {
 
     it('variantsValue should return cached variants when enableVariants is true', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({ F1: { enabled: true, variant: 'A' } }),
       });
@@ -1917,6 +2010,9 @@ describe('Toggly Core', () => {
 
     it('getVariant should return assigned variant with configurationValue', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             F1: { enabled: true, variant: 'A', configurationValue: { theme: 'dark' } },
@@ -1938,6 +2034,9 @@ describe('Toggly Core', () => {
 
     it('getVariant should return null when variants are disabled', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -1952,6 +2051,9 @@ describe('Toggly Core', () => {
 
     it('getVariant should return null for an unknown feature key', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: { enabled: true, variant: 'A' } }),
       });
 
@@ -1967,6 +2069,9 @@ describe('Toggly Core', () => {
 
     it('getVariant should return null when entry has no variant assigned', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: { enabled: true } }),
       });
 
@@ -1982,6 +2087,9 @@ describe('Toggly Core', () => {
 
     it('getVariantValue should return configurationValue when present', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             F1: { enabled: true, variant: 'A', configurationValue: 42 },
@@ -2000,6 +2108,9 @@ describe('Toggly Core', () => {
 
     it('getVariantValue should return null when no variant or value is set', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: { enabled: true, variant: 'A' } }),
       });
 
@@ -2021,6 +2132,9 @@ describe('Toggly Core', () => {
   describe('Local gates', () => {
     it('should AND remote true with local gate when gate is off', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ ApiV2Checkout: true, Other: true }),
       });
 
@@ -2042,6 +2156,9 @@ describe('Toggly Core', () => {
 
     it('should pass remote through when local gate is on', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ ApiV2Checkout: true }),
       });
 
@@ -2061,6 +2178,9 @@ describe('Toggly Core', () => {
 
     it('notifyLocalGatesChanged should notify subscribers without fetch', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ ApiV2Checkout: true }),
       });
 
@@ -2094,6 +2214,9 @@ describe('Toggly Core', () => {
 
     it('setLocalGates should update gates after init', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ ApiV2Checkout: true }),
       });
 
@@ -2119,6 +2242,9 @@ describe('Toggly Core', () => {
 
     it('should hide variant when local gate is off', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             ApiV2Checkout: { enabled: true, variant: 'A', configurationValue: 1 },

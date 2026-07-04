@@ -44,9 +44,11 @@ let clientInstance: TogglyClientInstance | null = null;
 /**
  * Internal config type with required properties except identity
  */
-type ClientConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'hooks'>> & {
+type ClientConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'hooks' | 'localGates' | 'onError'>> & {
   identity?: string;
   hooks?: Hook[];
+  localGates?: TogglyPluginOptions['localGates'];
+  onError?: TogglyPluginOptions['onError'];
 };
 
 /**
@@ -59,6 +61,7 @@ class TogglyClientInstance {
   public hookExecutor = new HookExecutor();
   private localGates: LocalGate[] = [];
   private localGateIndex: FlagGateIndex = new Map();
+  private lastError: Error | null = null;
 
   constructor(config: TogglyPluginOptions) {
     this.config = {
@@ -149,8 +152,14 @@ class TogglyClientInstance {
         console.log('[Toggly Client] Fetched flags:', flags);
       }
 
+      this.lastError = null;
       return flags;
     } catch (error) {
+      const fetchError = error instanceof Error ? error : new Error(String(error));
+      this.lastError = fetchError;
+      this.config.onError?.('Error fetching feature flags', error);
+      $error.set(fetchError);
+
       if (this.config.isDebug) {
         console.error('[Toggly Client] Error fetching flags:', error);
       }
@@ -177,7 +186,7 @@ class TogglyClientInstance {
       this.cache = flags;
       $flags.set(flags);
       $isReady.set(true);
-      $error.set(null);
+      $error.set(this.lastError);
       
       // Trigger afterRefresh hooks
       this.hookExecutor.executeAfterRefresh(flags);
@@ -201,6 +210,7 @@ class TogglyClientInstance {
       const flags = await this.fetchFlags();
       this.cache = flags;
       $flags.set(flags);
+      $error.set(this.lastError);
       
       // Trigger afterRefresh hooks
       await this.hookExecutor.executeAfterRefresh(flags);

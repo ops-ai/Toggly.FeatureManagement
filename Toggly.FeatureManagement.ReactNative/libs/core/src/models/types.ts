@@ -191,6 +191,11 @@ export interface TogglyConfig {
    * Device-local gates applied as a read-time AND on worker-evaluated booleans
    */
   localGates?: LocalGate[];
+
+  /**
+   * Callback invoked when the SDK falls back because of fetch/cache/storage failures
+   */
+  onError?: (error: Error) => void;
 }
 
 /**
@@ -299,6 +304,7 @@ export type TogglyEventType =
   | 'error'
   | 'identityChanged'
   | 'featureChanged'
+  | 'effectiveFlagsChanged'
   | 'localGatesChanged'
   | 'networkChanged'
   | 'appStateChanged';

@@ -1,0 +1,45 @@
+# CI Healer rollout configuration.
+# Phase 2: rollout_phase: 2, dry_run: true  (Flutter only, no pushes)
+# Phase 3: rollout_phase: 3, dry_run: false  (all analysis workflows, live fixes)
+
+rollout_phase: 3
+dry_run: false
+
+# GitHub repository variable: set CI_HEALER_LIVE=true to enable ci-healer.yml (Phase 3).
+# Leave unset during Phase 2 while using ci-healer-phase2-flutter-dryrun.yml.
+ci_healer_live: false
+
+# Parent Linear epic identifier (GitHub Actions variable LINEAR_CI_HEALER_EPIC should match)
+linear_epic: OPS-274
+
+linear:
+  team: opsAI
+  project: Toggly
+
+limits:
+  max_passes: 5
+  max_cost: "$5.00"
+  timeout: 45m
+
+# Workflows watched when rollout_phase is 3 (all analysis-* display names)
+watched_workflows_all:
+  - Flutter Cache Providers - Tests & Analysis
+  - Flutter SDK - Tests & Analysis
+  - Next.js SDKs - Tests & Analysis
+  - Ruby SDKs - Tests & Analysis
+  - Remix SDKs - Tests & Analysis
+  - React Native SDKs - Tests & Analysis
+  - PHP SDK - Tests & Analysis
+  - Nuxt SDKs - Tests & Analysis
+  - JavaScript/TypeScript SDKs - Tests & Analysis
+  - Go SDK - Tests & Analysis
+  - .NET SDKs - Tests & Analysis
+  - iOS SDK - Analysis
+  - Rust SDKs - Tests & Analysis
+  - Java SDK - Tests & Analysis
+  - Android SDK - Analysis
+  - Python SDKs - Tests & Analysis
+
+# Workflows watched when rollout_phase is 2 (dry-run validation)
+watched_workflows_flutter_only:
+  - Flutter SDK - Tests & Analysis

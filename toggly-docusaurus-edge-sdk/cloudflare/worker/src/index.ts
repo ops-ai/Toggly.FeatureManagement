@@ -30,7 +30,7 @@ const WORKER_CONFIG: WorkerConfig = {
  * Currently returns empty object, but can be extended to extract
  * user/tenant IDs from cookies or headers
  */
-function getRequestContext(request: Request): RequestContext {
+function getRequestContext(_request: Request): RequestContext {
   // TODO: Extract user/tenant information from cookies or headers
   // Example:
   // const cookieHeader = request.headers.get('Cookie');
@@ -125,7 +125,7 @@ export default {
   async fetch(
     request: Request,
     env: Env,
-    ctx: ExecutionContext
+    _ctx: ExecutionContext
   ): Promise<Response> {
     try {
       assertOriginConfigured(env);

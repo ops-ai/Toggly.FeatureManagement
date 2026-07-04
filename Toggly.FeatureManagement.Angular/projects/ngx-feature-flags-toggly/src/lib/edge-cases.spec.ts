@@ -91,6 +91,9 @@ describe('Edge Cases & Error Handling', () => {
     it('should handle empty object response', async () => {
       mockFetch.and.returnValue(
         Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
           json: () => Promise.resolve({}),
         })
       );
@@ -100,9 +103,9 @@ describe('Edge Cases & Error Handling', () => {
         featureDefaults: { F1: true },
       });
 
-      // Empty features: _evaluateFeatureGate returns true
+      // Empty remote features fail closed for non-empty gates.
       const result = await service.isFeatureOn('F1');
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
   });
 
@@ -214,6 +217,9 @@ describe('Edge Cases & Error Handling', () => {
     it('should handle customDefinitionsUrl', async () => {
       mockFetch.and.returnValue(
         Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
         })
       );
@@ -256,7 +262,10 @@ describe('Edge Cases & Error Handling', () => {
       const p2 = service.isFeatureOn('F1');
 
       resolvePromise!({
-        json: () => Promise.resolve({ F1: true }),
+        ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: true }),
       });
 
       const [r1, r2] = await Promise.all([p1, p2]);

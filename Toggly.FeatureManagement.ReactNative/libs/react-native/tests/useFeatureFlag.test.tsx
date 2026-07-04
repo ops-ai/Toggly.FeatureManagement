@@ -161,10 +161,10 @@ describe('useFeatureFlag', () => {
     expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['testFeature'], 'all', true);
   });
 
-  it('subscribes to refreshed events', async () => {
+  it('subscribes to effective flags changed events', async () => {
     let refreshCallback: () => void;
     mockService.on.mockImplementation((event: string, callback: () => void) => {
-      if (event === 'refreshed') {
+      if (event === 'effectiveFlagsChanged') {
         refreshCallback = callback;
       }
       return () => {};
@@ -190,7 +190,7 @@ describe('useFeatureFlag', () => {
 
     expect(result.isEnabled).toBe(false);
 
-    // Trigger refresh event
+    // Trigger effective flag change event
     await act(async () => {
       refreshCallback();
     });

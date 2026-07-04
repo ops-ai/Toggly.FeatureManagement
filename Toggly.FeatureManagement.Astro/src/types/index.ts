@@ -44,6 +44,8 @@ export interface TogglyConfig {
   hooks?: Hook[];
   /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
   localGates?: LocalGate[];
+  /** Optional SDK error callback for reporting fetch/cache/evaluation failures. */
+  onError?: (message: string, error?: unknown) => void;
 }
 
 /**

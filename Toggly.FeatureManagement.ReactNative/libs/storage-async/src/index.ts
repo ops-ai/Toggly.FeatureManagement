@@ -54,7 +54,7 @@ export class AsyncStorageAdapter implements TogglyStorage {
       return await AsyncStorage.getItem(this.getKey(key));
     } catch (error) {
       console.error('[Toggly] AsyncStorage get error:', error);
-      return null;
+      throw error;
     }
   }
 
@@ -68,6 +68,7 @@ export class AsyncStorageAdapter implements TogglyStorage {
       await AsyncStorage.setItem(this.getKey(key), value);
     } catch (error) {
       console.error('[Toggly] AsyncStorage set error:', error);
+      throw error;
     }
   }
 
@@ -80,6 +81,7 @@ export class AsyncStorageAdapter implements TogglyStorage {
       await AsyncStorage.removeItem(this.getKey(key));
     } catch (error) {
       console.error('[Toggly] AsyncStorage delete error:', error);
+      throw error;
     }
   }
 
@@ -93,6 +95,7 @@ export class AsyncStorageAdapter implements TogglyStorage {
       await AsyncStorage.multiRemove(togglyKeys);
     } catch (error) {
       console.error('[Toggly] AsyncStorage clear error:', error);
+      throw error;
     }
   }
 
@@ -107,7 +110,7 @@ export class AsyncStorageAdapter implements TogglyStorage {
         .map((key) => key.substring(this.keyPrefix.length));
     } catch (error) {
       console.error('[Toggly] AsyncStorage keys error:', error);
-      return [];
+      throw error;
     }
   }
 }

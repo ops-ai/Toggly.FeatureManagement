@@ -3,6 +3,8 @@ import {
   ContentChild,
   Input,
   OnChanges,
+  OnDestroy,
+  OnInit,
   SimpleChanges,
 } from '@angular/core'
 import { CommonModule } from '@angular/common'
@@ -49,7 +51,7 @@ import { TogglyService } from './toggly.service'
   `,
   styles: [],
 })
-export class FeatureComponent implements OnChanges {
+export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
   @Input() featureKey: string | undefined
   @Input() featureKeys: string[] | undefined
   @Input() requirement: 'all' | 'any' = 'all'
@@ -60,10 +62,25 @@ export class FeatureComponent implements OnChanges {
 
   shouldShow: boolean = false
   isLoading: boolean = false
+  private unsubscribeFeaturesRefresh: (() => void) | undefined
 
   constructor(private toggly: TogglyService) {}
 
-  ngOnChanges(changes: SimpleChanges): void {
+  ngOnInit(): void {
+    this.unsubscribeFeaturesRefresh = this.toggly.subscribeFeaturesRefresh(() => {
+      this.updateVisibility()
+    })
+  }
+
+  ngOnDestroy(): void {
+    this.unsubscribeFeaturesRefresh?.()
+  }
+
+  ngOnChanges(_changes: SimpleChanges): void {
+    this.updateVisibility()
+  }
+
+  private updateVisibility(): void {
     let gate: string[] = []
 
     if (this.featureKey) {

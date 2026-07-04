@@ -31,6 +31,9 @@ describe('Toggly Service', () => {
     it('should warn when appKey provided but no environment', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       } as Response);
       const toggly = new Toggly({ appKey: 'test-key' });
@@ -85,6 +88,9 @@ describe('Toggly Service', () => {
     beforeEach(() => {
       localStorage.clear();
       fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true, F2: false }),
       } as Response);
       vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -165,6 +171,9 @@ describe('Toggly Service', () => {
       const slowPromise = new Promise((r) => { resolveFirst = r; });
       fetchSpy.mockReturnValue(
         slowPromise.then(() => ({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
         })) as any
       );
@@ -219,6 +228,9 @@ describe('Toggly Service', () => {
   describe('refreshFlags', () => {
     it('should force refresh by resetting lastFetchTime', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       } as Response);
       vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -241,6 +253,9 @@ describe('Toggly Service', () => {
 
     it('should fetch evaluated-variants-signed when enableVariants is true', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             defs: {
@@ -266,6 +281,9 @@ describe('Toggly Service', () => {
 
     it('should pass userId query when enableVariants and identity are set', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ defs: {} }),
       } as Response);
       vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -295,6 +313,9 @@ describe('Toggly Service', () => {
 
     it('should persist variants under toggly:variants cache key', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             defs: { V: { enabled: true, variant: 'B' } },
@@ -373,10 +394,10 @@ describe('Toggly Service', () => {
       expect(result).toBeFalsy();
     });
 
-    it('should return true when features are empty', async () => {
+    it('should fail closed when features are empty and gate is non-empty', async () => {
       const emptyToggly = new Toggly({ featureDefaults: {} });
       const result = await emptyToggly._evaluateFeatureGate(['F1'], 'all', false);
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
   });
 
@@ -509,14 +530,16 @@ describe('Toggly Service', () => {
       vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fail'));
       const toggly = new Toggly({ appKey: 'test-key', environment: 'Prod' });
       await toggly._loadFeatures();
-      // Features default to {} when no featureDefaults
       const result = await toggly.isFeatureOn('F1');
-      expect(result).toBe(true); // empty features returns true
+      expect(result).toBe(false);
     });
 
     it('should use cached features on subsequent failed loads', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
         } as Response)
         .mockRejectedValueOnce(new Error('fail'));
@@ -565,6 +588,9 @@ describe('Toggly Service', () => {
       };
       vi.stubGlobal('WebSocket', MockWs);
       fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       } as Response);
     });

@@ -18,7 +18,10 @@ describe('Local gates', () => {
 
   it('should AND remote true with local gate when gate is off', async () => {
     mockFetch.mockResolvedValueOnce({
-      json: () => Promise.resolve({ ApiV2Checkout: true, Other: true }),
+      ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ ApiV2Checkout: true, Other: true }),
     });
 
     let gateEnabled = false;
@@ -42,7 +45,10 @@ describe('Local gates', () => {
 
   it('notifyLocalGatesChanged should notify subscribers without fetch', async () => {
     mockFetch.mockResolvedValueOnce({
-      json: () => Promise.resolve({ ApiV2Checkout: true }),
+      ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ ApiV2Checkout: true }),
     });
 
     let gateEnabled = true;

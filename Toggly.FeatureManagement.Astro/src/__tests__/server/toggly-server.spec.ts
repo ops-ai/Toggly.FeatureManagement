@@ -25,11 +25,11 @@ describe('TogglyServer', () => {
   });
 
   describe('constructor', () => {
-    it('should apply default config values', () => {
+    it('should apply default config values', async () => {
       const server = new TogglyServer({});
       // Verify defaults by testing behavior (no direct access to private config)
       // Without appKey, getFlags should return flagDefaults
-      expect(server.getFlags()).resolves.toEqual({});
+      await expect(server.getFlags()).resolves.toEqual({});
     });
 
     it('should merge provided config with defaults', async () => {

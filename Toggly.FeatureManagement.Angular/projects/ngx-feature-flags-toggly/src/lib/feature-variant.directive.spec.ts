@@ -25,7 +25,10 @@ describe('FeatureVariantDirective', () => {
     localStorage.clear()
     spyOn(console, 'warn');
     spyOn(globalThis, 'fetch').and.resolveTo({
-      json: () => Promise.resolve({
+      ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({
         Exp1: { enabled: true, variant: 'control', configurationValue: null },
         Exp2: { enabled: true, variant: 'treatment', configurationValue: null },
       }),

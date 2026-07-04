@@ -77,6 +77,21 @@ export function createTogglyClient(
   let localGates: LocalGate[] = config.localGates ?? []
   let localGateIndex: FlagGateIndex = buildFlagGateIndex(localGates)
   const localGatesListeners = new Set<() => void>()
+  const featuresRefreshListeners = new Set<() => void>()
+
+  function reportError(message: string, error?: unknown): void {
+    config.onError?.(message, error)
+  }
+
+  function notifyFeaturesRefresh(): void {
+    featuresRefreshListeners.forEach((listener) => {
+      try {
+        listener()
+      } catch (error) {
+        console.error('[Toggly] Feature refresh listener error:', error)
+      }
+    })
+  }
 
   function getEffectiveFlag(featureKey: string): boolean {
     return applyLocalGate(
@@ -159,6 +174,7 @@ export function createTogglyClient(
       return definitions
     } catch (error) {
       console.error('[Toggly] Failed to fetch feature definitions:', error)
+      reportError('Error fetching feature flags', error)
       throw error
     }
   }
@@ -348,6 +364,7 @@ export function createTogglyClient(
 
         // Execute afterRefresh hooks
         await hookExecutor.executeAfterRefresh(state.features)
+        notifyFeaturesRefresh()
 
         // Start auto-refresh
         startRefreshInterval()
@@ -359,8 +376,9 @@ export function createTogglyClient(
       } catch (error) {
         state.error = error as Error
 
-        // Fall back to defaults
-        state.features = { ...config.featureDefaults }
+        if (Object.keys(state.features).length === 0) {
+          state.features = { ...config.featureDefaults }
+        }
         state.initialized = true
 
         return state.features
@@ -388,11 +406,13 @@ export function createTogglyClient(
 
         // Execute afterRefresh hooks
         await hookExecutor.executeAfterRefresh(state.features)
+        notifyFeaturesRefresh()
 
         return state.features
       } catch (error) {
         state.error = error as Error
-        throw error
+        reportError('Error refreshing feature flags', error)
+        return state.features
       } finally {
         state.loading = false
       }
@@ -513,6 +533,13 @@ export function createTogglyClient(
       localGatesListeners.add(listener)
       return () => {
         localGatesListeners.delete(listener)
+      }
+    },
+
+    subscribeFeaturesRefresh(listener: () => void): () => void {
+      featuresRefreshListeners.add(listener)
+      return () => {
+        featuresRefreshListeners.delete(listener)
       }
     },
 

@@ -5,6 +5,7 @@ import {
   addImports,
   addComponent,
   addServerPlugin,
+  addTemplate,
 } from '@nuxt/kit'
 import type { ModuleOptions } from './types'
 
@@ -35,9 +36,24 @@ export default defineNuxtModule<ModuleOptions>({
 
   setup(options, nuxt) {
     const { resolve } = createResolver(import.meta.url)
+    const { onError, ...serializableOptions } = options
 
-    // Add runtime config
-    nuxt.options.runtimeConfig.public.toggly = options
+    const onErrorTemplate = addTemplate({
+      filename: 'toggly-on-error-handler.mjs',
+      getContents: () =>
+        onError
+          ? `export default ${onError.toString()}`
+          : 'export default undefined',
+    })
+    nuxt.options.alias['#toggly/on-error'] = onErrorTemplate.dst
+    nuxt.options.nitro = nuxt.options.nitro || {}
+    nuxt.options.nitro.alias = {
+      ...nuxt.options.nitro.alias,
+      '#toggly/on-error': onErrorTemplate.dst,
+    }
+
+    // Non-serializable callbacks are injected via the virtual module above.
+    nuxt.options.runtimeConfig.public.toggly = serializableOptions as ModuleOptions
 
     // Add client plugin
     addPlugin({

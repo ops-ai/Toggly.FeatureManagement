@@ -51,6 +51,23 @@ describe('Edge Cases & Error Handling', () => {
       expect(result).toEqual({ F1: true });
     });
 
+    it('should not cache JSON error body from non-2xx response', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        json: () => Promise.resolve({ error: 'forbidden', defs: { BadFlag: true } }),
+      });
+
+      const result = await Toggly.init({
+        appKey: 'test-key',
+        flagDefaults: { F1: true },
+      });
+
+      expect(result).toEqual({ F1: true });
+      expect(localStorage.getItem(StorageKeys.flagsCacheKey('test-key', 'Production'))).toBeNull();
+    });
+
     it('should handle 502 Bad Gateway', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
@@ -75,6 +92,59 @@ describe('Edge Cases & Error Handling', () => {
       });
 
       expect(result).toEqual({ F1: true });
+    });
+
+    it('should report fetch errors through onError', async () => {
+      const errors: string[] = [];
+      mockFetch.mockRejectedValue(new TypeError('Failed to fetch'));
+
+      await Toggly.init({
+        appKey: 'test-key',
+        flagDefaults: { F1: true },
+        enableLiveUpdates: false,
+        onError: (message) => errors.push(message),
+      });
+
+      expect(errors).toContain('Error fetching feature flags');
+      expect(Toggly.lastError).toBe('Error fetching feature flags');
+    });
+
+    it('should preserve last-known-good flags on transient refresh failure', async () => {
+      const errors: string[] = [];
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ defs: { F1: true } }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-key',
+        persistCache: false,
+        enableLiveUpdates: false,
+        flagDefaults: { F1: false },
+        onError: (message) => errors.push(message),
+      });
+
+      mockFetch.mockRejectedValueOnce(new Error('network down'));
+      const result = await Toggly.refresh();
+
+      expect(result).toEqual({ F1: true });
+      expect(Toggly.isFeatureOn('F1')).toBe(true);
+      expect(errors).toContain('Error fetching feature flags');
+    });
+
+    it('should fail closed for non-empty gates when no flags are loaded', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      await Toggly.init({
+        appKey: 'test-key',
+        persistCache: false,
+        enableLiveUpdates: false,
+      });
+
+      expect(Toggly.evaluateFeatureGate(['MissingFeature'])).toBe(false);
     });
 
     it('should handle AbortError (timeout)', async () => {

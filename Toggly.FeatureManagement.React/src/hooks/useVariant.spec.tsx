@@ -33,6 +33,9 @@ describe('useVariant', () => {
   it('returns variant after load and updates on refresh', async () => {
     mockFetch
       .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             defs: {
@@ -41,6 +44,9 @@ describe('useVariant', () => {
           }),
       })
       .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             defs: {

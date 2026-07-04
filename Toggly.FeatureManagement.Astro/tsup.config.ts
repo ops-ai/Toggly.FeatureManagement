@@ -20,6 +20,7 @@ export default defineConfig({
   external: [
     'astro',
     '@astrojs/check',
+    '@ops-ai/toggly-local-gates',
     'nanostores',
     '@nanostores/react',
     '@nanostores/svelte',

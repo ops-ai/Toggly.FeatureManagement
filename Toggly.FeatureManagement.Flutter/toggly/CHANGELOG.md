@@ -1,4 +1,16 @@
 
+## 1.4.0
+
+2026-07-03
+
+### Added
+- `TogglyConfig.onError` reports cache, signature, JWKS, and refresh failures to SDK consumers.
+- `featureFlagsStream` and a synchronous feature flag snapshot make Feature widgets reactive to refreshed flag data.
+
+### Fixed
+- Preserved last-known-good cached flags during transient signature/JWKS failures so feature content does not disappear silently.
+- Reported fresh signed-definition verification failures while clearing invalid fresh data.
+
 ## 1.3.0
 
 2026-06-28

@@ -20,6 +20,9 @@ describe('useVariant', () => {
 
   it('exposes variant after load when service is passed explicitly', async () => {
     mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
       json: () =>
         Promise.resolve({
           defs: {

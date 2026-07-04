@@ -174,6 +174,9 @@ describe('Feature Component', () => {
   describe('variant prop', () => {
     it('renders when gate passes and variant matches', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             defs: {
@@ -203,6 +206,9 @@ describe('Feature Component', () => {
 
     it('hides when variant does not match', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             defs: {

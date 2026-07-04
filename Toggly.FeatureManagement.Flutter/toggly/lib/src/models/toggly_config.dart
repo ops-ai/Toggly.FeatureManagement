@@ -42,6 +42,14 @@ class TogglyConfig {
   /// Device-local gates applied as a read-time AND on worker-evaluated booleans.
   final List<LocalGate>? localGates;
 
+  /// Optional callback for SDK errors that would otherwise only be visible in
+  /// debug logs. Use this to report failures to Sentry, Crashlytics, etc.
+  final void Function(
+    String message,
+    Object? error,
+    StackTrace? stackTrace,
+  )? onError;
+
   const TogglyConfig({
     this.baseURI = 'https://definitions.toggly.io',
     this.connectTimeout = 5 * 1000,
@@ -52,5 +60,6 @@ class TogglyConfig {
     this.enableVariants = false,
     this.cacheProvider,
     this.localGates,
+    this.onError,
   });
 }

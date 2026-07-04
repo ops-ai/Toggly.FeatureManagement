@@ -20,7 +20,7 @@ class Toggly with WidgetsBindingObserver {
   static String _environment = 'Production';
   static bool _useSignedDefinitions = false;
   static late String _identity;
-  static late TogglyConfig _config;
+  static TogglyConfig _config = const TogglyConfig();
   static Map<String, bool> _flagDefaults = {};
   static final _http = HttpService.getInstance.http;
   static final _sync = SyncService.getInstance;
@@ -113,6 +113,46 @@ class Toggly with WidgetsBindingObserver {
 
   factory Toggly() => _instance;
 
+  static void _reportError(
+    String message, [
+    Object? error,
+    StackTrace? stackTrace,
+  ]) {
+    _lastError = message;
+    Toggly._config.onError?.call(message, error, stackTrace);
+    if (kDebugMode) {
+      print(error == null ? message : '$message: $error');
+      if (stackTrace != null) {
+        print('Stack trace: $stackTrace');
+      }
+    }
+  }
+
+  /// Stream of current feature flags. Widgets can subscribe to rebuild when
+  /// refreshes, cache writes, or local gate changes affect evaluations.
+  static Stream<Map<String, bool>> get featureFlagsStream {
+    final subject = _featureFlagsSubject;
+    if (subject == null) {
+      return Stream<Map<String, bool>>.value(featureFlagsSnapshot);
+    }
+
+    return subject.stream;
+  }
+
+  /// Synchronous snapshot used by widgets before the first stream emission.
+  static Map<String, bool> get featureFlagsSnapshot {
+    final subject = _featureFlagsSubject;
+    if (subject != null && subject.hasValue) {
+      return Map<String, bool>.from(subject.value);
+    }
+
+    if (_inMemoryFlags != null) {
+      return Map<String, bool>.from(_inMemoryFlags!);
+    }
+
+    return Map<String, bool>.from(Toggly._flagDefaults);
+  }
+
   /// Initialize Toggly either by providing [flagDefaults] (to allow usage
   /// without Toggly.io) or by providing your [appKey] and [environment] from
   /// your Toggly.io application.
@@ -127,9 +167,13 @@ class Toggly with WidgetsBindingObserver {
     TogglyConfig config = const TogglyConfig(),
     Map<String, bool>? flagDefaults,
   }) async {
+    Toggly._flagDefaults = Map<String, bool>.from(flagDefaults ?? {});
+    Toggly._useSignedDefinitions = useSignedDefinitions;
+
     // Create new subject if needed
     _featureFlagsSubject?.close();
-    _featureFlagsSubject = BehaviorSubject<Map<String, bool>>();
+    _featureFlagsSubject =
+        BehaviorSubject<Map<String, bool>>.seeded(Toggly._flagDefaults);
 
     Toggly._appKey = appKey;
     Toggly._environment = environment ?? 'Production';
@@ -154,9 +198,6 @@ class Toggly with WidgetsBindingObserver {
       Toggly._identity = (Toggly._deviceId ??= _uuid.v4());
     }
     await checkAndClearFeatureFlagsCache();
-
-    Toggly._flagDefaults = flagDefaults ?? {};
-    Toggly._useSignedDefinitions = useSignedDefinitions;
     if (kDebugMode) {
       print('Toggly.init');
     }
@@ -256,36 +297,62 @@ class Toggly with WidgetsBindingObserver {
 
       final TogglyFeatureFlagsCache flagsCache = cache;
 
+      if (flagsCache.identity != Toggly._identity) {
+        _reportError(
+          'Cached feature flags identity mismatch',
+          Exception('Cached identity does not match current identity'),
+          StackTrace.current,
+        );
+        await clearFeatureFlagsCache();
+        return Map<String, bool>.from(Toggly._flagDefaults);
+      }
+
+      final parsedFlags =
+          Map<String, bool>.from(jsonDecode(flagsCache.flags));
+
       // Check if the cache is signed and if the timestamp and signature are present
       if (Toggly._useSignedDefinitions) {
-        if (flagsCache.timestamp == null || flagsCache.signature == null) {
-          throw Exception(
-              'Timestamp and signature are required for signed definitions');
+        if (flagsCache.timestamp == null ||
+            flagsCache.signature == null ||
+            flagsCache.keyId == null) {
+          _reportError(
+            'Cached feature flags missing signature metadata',
+            Exception(
+                'Timestamp, signature and keyId are required for signed definitions'),
+            StackTrace.current,
+          );
+          await clearFeatureFlagsCache();
+          return Map<String, bool>.from(Toggly._flagDefaults);
         }
 
         // Validate the signature
-        final isValid = await _verifySignature(
-            flagsCache.flags,
-            flagsCache.signature!,
-            flagsCache.timestamp!,
-            true,
-            flagsCache.keyId!);
+        try {
+          final isValid = await _verifySignature(
+              flagsCache.flags,
+              flagsCache.signature!,
+              flagsCache.timestamp!,
+              true,
+              flagsCache.keyId!);
 
-        if (!isValid) {
-          _lastError = 'Invalid signature';
-          throw Exception('Invalid signature');
+          if (!isValid) {
+            _reportError(
+              'Signature verification failed',
+              Exception('Invalid signature'),
+              StackTrace.current,
+            );
+          }
+        } catch (_) {
+          // Cached definitions were previously accepted when written. If
+          // offline validation cannot be performed now because of transient
+          // JWK/signature issues, keep the last-known-good cached flags.
         }
       }
 
-      if (flagsCache.identity == Toggly._identity) {
-        _inMemoryFlags = Map<String, bool>.from(jsonDecode(flagsCache.flags));
-        return _inMemoryFlags!;
-      }
-    } catch (_) {
-      _lastError = 'Error fetching cached feature flags';
-      if (kDebugMode) {
-        print('Error fetching cached feature flags');
-      }
+      _inMemoryFlags = parsedFlags;
+      _featureFlagsSubject?.add(Map<String, bool>.from(_inMemoryFlags!));
+      return _inMemoryFlags!;
+    } catch (e, stackTrace) {
+      _reportError('Error fetching cached feature flags', e, stackTrace);
       await clearFeatureFlagsCache();
     }
 
@@ -301,6 +368,7 @@ class Toggly with WidgetsBindingObserver {
   }) async {
     // Update in-memory cache first
     _inMemoryFlags = Map<String, bool>.from(jsonDecode(featureFlags));
+    _featureFlagsSubject?.add(Map<String, bool>.from(_inMemoryFlags!));
 
     if (Toggly._useSignedDefinitions) {
       if (timestamp == null || signature == null || keyId == null) {
@@ -323,7 +391,7 @@ class Toggly with WidgetsBindingObserver {
   static Future clearFeatureFlagsCache() async {
     _inMemoryFlags = null;
     _inMemoryVariantDefs = null;
-    _featureFlagsSubject?.add({});
+    _featureFlagsSubject?.add(Map<String, bool>.from(Toggly._flagDefaults));
     _eTag = null;
     _variantsETag = null;
 
@@ -402,8 +470,14 @@ class Toggly with WidgetsBindingObserver {
         if (existing != null &&
             existing.timestamp != null &&
             timestamp <= existing.timestamp!) {
-          throw Exception(
-              'New definitions timestamp must be greater than existing timestamp');
+          _reportError(
+            'New definitions timestamp must be greater than existing timestamp',
+            Exception(
+                'New definitions timestamp must be greater than existing timestamp'),
+            StackTrace.current,
+          );
+          await clearFeatureFlagsCache();
+          return TogglyLoadFeatureFlagsResponse.error;
         }
 
         try {
@@ -427,11 +501,8 @@ class Toggly with WidgetsBindingObserver {
               signature: signature,
               keyId: keyId);
         } catch (e, stack) {
-          if (kDebugMode) {
-            print('Signature verification failed: $e');
-            print('Stack trace: $stack');
-          }
-          _lastError = 'Signature verification failed';
+          _reportError('Signature verification failed', e, stack);
+          await clearFeatureFlagsCache();
           throw Exception('Signature verification failed');
         }
 
@@ -463,7 +534,7 @@ class Toggly with WidgetsBindingObserver {
       }
 
       return TogglyLoadFeatureFlagsResponse.fetched;
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (e is DioException && e.response?.statusCode == 304) {
         _lastChecked = DateTime.now();
         // Not modified, use cached version
@@ -471,6 +542,7 @@ class Toggly with WidgetsBindingObserver {
         Toggly._featureFlagsSubject?.add(cached);
         return TogglyLoadFeatureFlagsResponse.cached;
       } else if (e is DioException && e.response?.statusCode == 403) {
+        _reportError('Error fetching feature flags', e, stackTrace);
         // Clear cached data on 403 responses
         await clearFeatureFlagsCache();
         _inMemoryJwks = null;
@@ -479,7 +551,16 @@ class Toggly with WidgetsBindingObserver {
         return TogglyLoadFeatureFlagsResponse.error;
       }
 
-      return TogglyLoadFeatureFlagsResponse.defaults;
+      if (e.toString().contains('Signature verification failed')) {
+        return TogglyLoadFeatureFlagsResponse.error;
+      }
+
+      _reportError('Error fetching feature flags', e, stackTrace);
+      final cached = await cachedFeatureFlags;
+      Toggly._featureFlagsSubject?.add(cached);
+      return cached.isEmpty
+          ? TogglyLoadFeatureFlagsResponse.defaults
+          : TogglyLoadFeatureFlagsResponse.cached;
     }
   }
 
@@ -646,7 +727,8 @@ class Toggly with WidgetsBindingObserver {
       }
 
       return Map<String, dynamic>.from(jsonDecode(vc.variants));
-    } catch (_) {
+    } catch (e, stackTrace) {
+      _reportError('Error loading cached variant definitions', e, stackTrace);
       await clearVariantCache();
       return {};
     }
@@ -667,10 +749,8 @@ class Toggly with WidgetsBindingObserver {
       final defs = await _readVerifiedVariantDefsFromCache();
       _inMemoryVariantDefs = defs;
       return defs;
-    } catch (_) {
-      if (kDebugMode) {
-        print('Error loading cached variant definitions');
-      }
+    } catch (e, stackTrace) {
+      _reportError('Error loading cached variant definitions', e, stackTrace);
       return {};
     }
   }
@@ -734,6 +814,7 @@ class Toggly with WidgetsBindingObserver {
   /// Notify listeners that local gate state changed (no network fetch).
   static void notifyLocalGatesChanged() {
     _localGatesChangedController?.add(null);
+    _featureFlagsSubject?.add(featureFlagsSnapshot);
   }
 
   /// Stream that fires when [notifyLocalGatesChanged] is called.
@@ -786,7 +867,11 @@ class Toggly with WidgetsBindingObserver {
           if (kDebugMode) {
             print('Cached JWKs validation failed, fetching new ones');
           }
-          _lastError = 'Invalid cached JWKs';
+          _reportError(
+            'Invalid cached JWKs',
+            Exception('Invalid cached JWKs'),
+            StackTrace.current,
+          );
         } else if (ignoreExpiration ||
             jwksData['_expiresAt'] == null ||
             jwksData['_expiresAt'] >= DateTime.now().millisecondsSinceEpoch) {
@@ -806,7 +891,11 @@ class Toggly with WidgetsBindingObserver {
 
       // Validate fetched keys
       if (!_validateJwks(keys)) {
-        _lastError = 'Invalid JWKs received from server';
+        _reportError(
+          'Invalid JWKs received from server',
+          Exception('Invalid JWKs received from server'),
+          StackTrace.current,
+        );
         throw Exception('Invalid JWKs received from server');
       }
 
@@ -824,11 +913,8 @@ class Toggly with WidgetsBindingObserver {
       }
 
       return jwksData;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error fetching JWKs: $e');
-      }
-      _lastError = 'Error fetching JWKs';
+    } catch (e, stackTrace) {
+      _reportError('Error fetching JWKs', e, stackTrace);
       return null;
     }
   }
@@ -903,7 +989,11 @@ class Toggly with WidgetsBindingObserver {
     // Check if keyId is in whitelist if one is provided
     if (Toggly._config.trustedKeyIds != null &&
         !Toggly._config.trustedKeyIds!.contains(keyId)) {
-      _lastError = 'Key ID not in trusted whitelist';
+      _reportError(
+        'Key ID not in trusted whitelist',
+        Exception('Key ID not in trusted whitelist'),
+        StackTrace.current,
+      );
       throw Exception('Key ID not in trusted whitelist');
     }
 
@@ -911,7 +1001,11 @@ class Toggly with WidgetsBindingObserver {
     final jwksData =
         await _fetchAndCacheJwks(ignoreExpiration: allowOfflineValidation);
     if (jwksData == null) {
-      _lastError = 'Failed to fetch JWKs';
+      _reportError(
+        'Failed to fetch JWKs',
+        Exception('Failed to fetch JWKs'),
+        StackTrace.current,
+      );
       throw Exception('Failed to fetch JWKs');
     }
 
@@ -920,7 +1014,11 @@ class Toggly with WidgetsBindingObserver {
     // Find matching key
     final matchingKeys = jwksList.where((jwk) => jwk['kid'] == keyId);
     if (matchingKeys.isEmpty) {
-      _lastError = 'No matching key found for ID: $keyId';
+      _reportError(
+        'No matching key found for ID: $keyId',
+        Exception('No matching key found for ID: $keyId'),
+        StackTrace.current,
+      );
       throw Exception('No matching key found for ID: $keyId');
     }
     final jwk = matchingKeys.first;
@@ -931,7 +1029,11 @@ class Toggly with WidgetsBindingObserver {
 
     try {
       if (jwk['x'] == null || jwk['y'] == null) {
-        _lastError = 'Invalid JWK: missing x or y coordinates';
+        _reportError(
+          'Invalid JWK: missing x or y coordinates',
+          Exception('Invalid JWK: missing x or y coordinates'),
+          StackTrace.current,
+        );
         throw Exception('Invalid JWK: missing x or y coordinates');
       }
 
@@ -1017,11 +1119,7 @@ class Toggly with WidgetsBindingObserver {
 
       return isValid;
     } catch (e, stack) {
-      if (kDebugMode) {
-        print('Signature verification failed: $e');
-        print('Stack trace: $stack');
-      }
-      _lastError = 'Signature verification failed';
+      _reportError('Signature verification failed', e, stack);
       throw Exception('Signature verification failed');
     }
   }
@@ -1034,6 +1132,21 @@ class Toggly with WidgetsBindingObserver {
     // Fast path: use in-memory flags if available
     return _evaluateFeatureGate(await cachedFeatureFlags,
         gate: gate, requirement: requirement, negate: negate);
+  }
+
+  /// Synchronously evaluates a gate against a known flag map.
+  static bool evaluateFeatureGateSync(
+    List<String> gate, {
+    required Map<String, bool> flags,
+    FeatureRequirement requirement = FeatureRequirement.all,
+    bool negate = false,
+  }) {
+    return _evaluateFeatureGate(
+      flags,
+      gate: gate,
+      requirement: requirement,
+      negate: negate,
+    );
   }
 
   // Optimize the evaluation logic

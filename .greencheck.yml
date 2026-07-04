@@ -1,0 +1,29 @@
+watch:
+  branches: [main, develop]
+  ignore-authors: [dependabot]
+
+fix:
+  agent: claude
+  max-passes: 5
+  max-cost: "$5.00"
+  timeout: 45m
+
+safety:
+  never-touch-files:
+    - "*.lock"
+    - "package-lock.json"
+    - "pnpm-lock.yaml"
+    - "yarn.lock"
+    - "Gemfile.lock"
+    - "composer.lock"
+    - "Cargo.lock"
+    - "go.sum"
+    - "poetry.lock"
+    - ".env*"
+    - "**/secrets/**"
+  max-files-per-fix: 15
+  revert-on-regression: true
+
+report:
+  pr-comment: true
+  job-summary: true

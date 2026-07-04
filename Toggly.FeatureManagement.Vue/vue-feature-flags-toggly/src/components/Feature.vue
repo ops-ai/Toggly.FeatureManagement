@@ -28,19 +28,25 @@ export default {
     return {
       shouldShow: false,
       isLoading: false,
-      _unsubLocalGates: null as (() => void) | null
+      _unsubLocalGates: null as (() => void) | null,
+      _unsubFeaturesRefresh: null as (() => void) | null
     }
   },
 
   mounted() {
     this.checkIfShouldShow()
     this._unsubLocalGates = this.$toggly.subscribeLocalGatesChanged(this.checkIfShouldShow)
+    this._unsubFeaturesRefresh = this.$toggly.subscribeFeaturesRefresh(this.checkIfShouldShow)
   },
 
   beforeUnmount() {
     if (this._unsubLocalGates) {
       this._unsubLocalGates()
       this._unsubLocalGates = null
+    }
+    if (this._unsubFeaturesRefresh) {
+      this._unsubFeaturesRefresh()
+      this._unsubFeaturesRefresh = null
     }
   },
 

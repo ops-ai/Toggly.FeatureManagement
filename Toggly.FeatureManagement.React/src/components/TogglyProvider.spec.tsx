@@ -121,7 +121,10 @@ describe('createTogglyProvider', () => {
 
   it('should work with API-based config', async () => {
     mockFetch.mockResolvedValueOnce({
-      json: () => Promise.resolve({ ApiFlag: true }),
+      ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ ApiFlag: true }),
     });
 
     const TogglyProvider = await createTogglyProvider({

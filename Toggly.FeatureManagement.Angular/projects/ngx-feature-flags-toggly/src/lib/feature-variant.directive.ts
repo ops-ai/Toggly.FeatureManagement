@@ -2,6 +2,7 @@ import {
   Directive,
   Input,
   OnChanges,
+  OnDestroy,
   OnInit,
   SimpleChanges,
   TemplateRef,
@@ -38,8 +39,9 @@ import { TogglyService } from './toggly.service'
   selector: '[featureVariant]',
   standalone: true,
 })
-export class FeatureVariantDirective implements OnInit, OnChanges {
+export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
   private isHidden = true
+  private unsubscribeFeaturesRefresh: (() => void) | undefined
 
   @Input() featureVariant = ''
   /** Bound via microsyntax: `*featureVariant="'key'; variant: 'name'"` → `featureVariantVariant` */
@@ -53,6 +55,13 @@ export class FeatureVariantDirective implements OnInit, OnChanges {
 
   ngOnInit(): void {
     this.updateView()
+    this.unsubscribeFeaturesRefresh = this._toggly.subscribeFeaturesRefresh(() => {
+      this.updateView()
+    })
+  }
+
+  ngOnDestroy(): void {
+    this.unsubscribeFeaturesRefresh?.()
   }
 
   ngOnChanges(_changes: SimpleChanges): void {

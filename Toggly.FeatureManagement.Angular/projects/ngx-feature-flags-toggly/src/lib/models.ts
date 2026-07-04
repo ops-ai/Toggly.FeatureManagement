@@ -33,6 +33,8 @@ export interface ITogglyOptions {
   enableVariants?: boolean
   /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
   localGates?: LocalGate[]
+  /** Optional SDK error callback for reporting fetch/cache/evaluation failures. */
+  onError?: (message: string, error?: unknown) => void
 }
 
 export interface ITogglyService {
@@ -51,4 +53,5 @@ export interface ITogglyService {
   setLocalGates: (gates: LocalGate[]) => void
   notifyLocalGatesChanged: () => void
   subscribeLocalGatesChanged: (listener: () => void) => () => void
+  subscribeFeaturesRefresh: (listener: () => void) => () => void
 }

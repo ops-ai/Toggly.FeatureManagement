@@ -113,7 +113,7 @@ describe('TogglyService', () => {
 
       const response = await service.init();
 
-      expect(response.status).toBe('defaults');
+      expect(response.status).toBe('error');
       expect(response.flags).toEqual(featureDefaults);
       expect(response.error).toBe('Network error');
     });
@@ -630,7 +630,7 @@ describe('TogglyService', () => {
       });
 
       const response = await service.init();
-      expect(response.status).toBe('defaults');
+      expect(response.status).toBe('error');
       expect(response.error).toContain('500');
     });
 

@@ -121,6 +121,9 @@ describe('Toggly Service', () => {
 
     it('should fetch features from API when appKey is set', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ ApiFlag: true }),
       });
 
@@ -136,8 +139,65 @@ describe('Toggly Service', () => {
       );
     });
 
+    it('should preserve cached flags when API returns non-2xx', async () => {
+      localStorage.setItem(
+        'toggly:flags:test-key:Production',
+        JSON.stringify({ CachedFlag: true }),
+      );
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        json: () => Promise.resolve({ error: 'forbidden' }),
+      });
+      const onError = jest.fn();
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        onError,
+      });
+
+      const features = await service._loadFeatures(true);
+      expect(features).toEqual({ CachedFlag: true });
+      expect(onError).toHaveBeenCalled();
+      expect(service.lastError).toBe('Error fetching feature flags');
+    });
+
+    it('should fall back to featureDefaults on non-2xx when no cache exists', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: () => Promise.resolve({ error: 'server error' }),
+      });
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureDefaults: { F1: true },
+      });
+
+      const features = await service._loadFeatures();
+      expect(features).toEqual({ F1: true });
+    });
+
+    it('should ignore invalid JSON in localStorage cache', () => {
+      localStorage.setItem('toggly:flags:test-key:Production', 'not-json{{{');
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+      });
+
+      expect((service as any)._features).toBeNull();
+    });
+
     it('should include identity in API URL when set', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -155,6 +215,9 @@ describe('Toggly Service', () => {
 
     it('should use custom baseURI when configured', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -207,6 +270,9 @@ describe('Toggly Service', () => {
 
       mockFetch.mockReturnValueOnce(
         slowPromise.then(() => ({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
         }))
       );
@@ -233,6 +299,9 @@ describe('Toggly Service', () => {
 
     it('should return cached features on subsequent calls', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -251,6 +320,9 @@ describe('Toggly Service', () => {
 
     it('should trigger afterRefresh hooks after loading', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -289,6 +361,9 @@ describe('Toggly Service', () => {
 
     it('should load features if not yet loaded', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ ApiFlag: true }),
       });
 
@@ -368,7 +443,7 @@ describe('Toggly Service', () => {
       expect(result).toBeTruthy();
     });
 
-    it('should return true for empty features object', async () => {
+    it('should fail closed for empty features object with non-empty gate', async () => {
       const emptyService = new Toggly({
         featureDefaults: {},
       });
@@ -378,7 +453,7 @@ describe('Toggly Service', () => {
         'all',
         false
       );
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
     it('should treat unknown flags as falsy with all requirement', async () => {
@@ -536,6 +611,9 @@ describe('Toggly Service', () => {
 
     it('should load features from API before evaluation', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ RemoteFlag: true }),
       });
 
@@ -768,7 +846,7 @@ describe('Toggly Service', () => {
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'flags-updated' }) });
-      expect((service as any)._features).toBeNull();
+      expect((service as any)._features).toEqual({ F1: true });
     });
 
     it('should handle update JSON message by resetting features', () => {
@@ -776,7 +854,7 @@ describe('Toggly Service', () => {
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'update' }) });
-      expect((service as any)._features).toBeNull();
+      expect((service as any)._features).toEqual({ F1: true });
     });
 
     it('should ignore ping JSON message', () => {
@@ -800,7 +878,7 @@ describe('Toggly Service', () => {
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: 'update' });
-      expect((service as any)._features).toBeNull();
+      expect((service as any)._features).toEqual({ F1: true });
     });
 
     it('should handle plain text flags-updated message', () => {
@@ -808,7 +886,7 @@ describe('Toggly Service', () => {
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: 'flags-updated' });
-      expect((service as any)._features).toBeNull();
+      expect((service as any)._features).toEqual({ F1: true });
     });
 
     it('should ignore unrecognized plain text', () => {
@@ -860,16 +938,33 @@ describe('Toggly Service', () => {
       (service as any)._features = { F1: true };
       service._wsConnected = true;
       service._lastFallbackRefresh = Date.now();
-      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: false }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: false }) });
 
       await service._loadFeatures();
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should update fallback refresh timestamp when WS connected and interval elapsed', async () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      (service as any)._features = { F1: true };
+      service._wsConnected = true;
+      service._lastFallbackRefresh =
+        Date.now() - Toggly.FALLBACK_REFRESH_INTERVAL - 1000;
+      const before = service._lastFallbackRefresh;
+
+      const features = await service._loadFeatures();
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(features).toEqual({ F1: true });
+      expect(service._lastFallbackRefresh).toBeGreaterThan(before);
     });
   });
 
   describe('Variants and refresh subscriptions', () => {
     it('should fetch evaluated-variants-signed when enableVariants is true', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             defs: {
@@ -895,6 +990,9 @@ describe('Toggly Service', () => {
 
     it('should pass userId query when enableVariants and identity are set', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ defs: {} }),
       });
 
@@ -920,8 +1018,21 @@ describe('Toggly Service', () => {
       expect(service.getVariantValue('F')).toBeNull();
     });
 
+    it('getVariant returns null before variants are loaded', () => {
+      const service = new Toggly({
+        appKey: 'k',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      expect(service.getVariant('F')).toBeNull();
+    });
+
     it('subscribeFeaturesRefresh runs after successful load', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -939,6 +1050,9 @@ describe('Toggly Service', () => {
 
     it('subscribeFeaturesRefresh can be unsubscribed', async () => {
       mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -981,8 +1095,54 @@ describe('Toggly Service', () => {
       });
     });
 
+    it('falls back to cached flags on API error when enableVariants and no variant cache', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: () => Promise.resolve({ error: 'server error' }),
+      });
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+      localStorage.setItem(
+        'toggly:flags:test-key:Production',
+        JSON.stringify({ F1: true }),
+      );
+
+      const features = await service._loadFeatures();
+      expect(features).toEqual({ F1: true });
+    });
+
+    it('falls back to featureDefaults on API error when enableVariants and no cache', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: () => Promise.resolve({ error: 'server error' }),
+      });
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+        featureDefaults: { F1: true },
+      });
+
+      const features = await service._loadFeatures();
+      expect(features).toEqual({ F1: true });
+    });
+
     it('getVariant returns null when enabled but no variant name on def', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ defs: { V: { enabled: true } } }),
       });
 
@@ -997,8 +1157,35 @@ describe('Toggly Service', () => {
       expect(service.getVariant('V')).toBeNull();
     });
 
+    it('getVariant returns null when a local gate disables the feature', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ defs: { V: { enabled: true, variant: 'A' } } }),
+      });
+
+      const service = new Toggly({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+        localGates: [{
+          id: 'gate',
+          flagKeys: ['V'],
+          isEnabled: () => false,
+        }],
+      });
+
+      await service._loadFeatures();
+      expect(service.getVariant('V')).toBeNull();
+    });
+
     it('subscribeFeaturesRefresh continues when a listener throws', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
       });
 
@@ -1016,6 +1203,103 @@ describe('Toggly Service', () => {
       await service._loadFeatures();
       expect(ok).toHaveBeenCalledTimes(1);
     });
+
+    it('loads cached variant definitions during init', () => {
+      localStorage.setItem(
+        'toggly:variants:k:Production',
+        JSON.stringify({ V: { enabled: true, variant: 'cached', configurationValue: 'x' } }),
+      );
+
+      const service = new Toggly({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      expect(service.getVariant('V')).toEqual({
+        name: 'cached',
+        configurationValue: 'x',
+      });
+    });
+
+    it('ignores corrupt cached variants and falls back to cached flags', async () => {
+      localStorage.setItem('toggly:variants:k:Production', '{bad');
+      localStorage.setItem('toggly:flags:k:Production', JSON.stringify({ F1: true }));
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+
+      const service = new Toggly({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      await service._loadFeatures();
+      expect(await service.isFeatureOn('F1')).toBe(true);
+    });
+
+    it('handles invalid variant payloads as an empty flag set', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve([]),
+      });
+
+      const service = new Toggly({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      await service._loadFeatures();
+      expect(await service.isFeatureOn('F1')).toBe(false);
+    });
+
+    it('preserves current variant flags when force refresh fails', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ defs: { V: { enabled: true, variant: 'A' } } }),
+        })
+        .mockRejectedValueOnce(new Error('network'));
+
+      const service = new Toggly({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      await service._loadFeatures();
+      await (service as any)._refreshFeatures();
+      expect(await service.isFeatureOn('V')).toBe(true);
+    });
+
+    it('handles storage write failures while keeping in-memory flags', async () => {
+      jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('quota');
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      const service = new Toggly({
+        appKey: 'k',
+        environment: 'Production',
+        enableLiveUpdates: false,
+      });
+
+      await service._loadFeatures();
+      expect(await service.isFeatureOn('F1')).toBe(true);
+    });
   });
 
   // ───────────────────────────────────────────────
@@ -1024,6 +1308,9 @@ describe('Toggly Service', () => {
   describe('Local gates', () => {
     it('should AND remote true with local gate when gate is off', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ ApiV2Checkout: true, Other: true }),
       });
 
@@ -1047,6 +1334,9 @@ describe('Toggly Service', () => {
 
     it('notifyLocalGatesChanged should notify subscribers without fetch', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ ApiV2Checkout: true }),
       });
 
@@ -1077,6 +1367,19 @@ describe('Toggly Service', () => {
       unsub();
       service.notifyLocalGatesChanged();
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('notifyLocalGatesChanged continues when a listener throws', () => {
+      const service = new Toggly({ featureDefaults: { F1: true } });
+      const ok = jest.fn();
+      service.subscribeLocalGatesChanged(() => {
+        throw new Error('bad listener');
+      });
+      service.subscribeLocalGatesChanged(ok);
+
+      service.notifyLocalGatesChanged();
+
+      expect(ok).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -1,3 +1,14 @@
+## 1.2.0
+
+2026-07-03
+
+### Added
+- `onError` and `lastError` expose refresh, cache, and storage failures to consumers.
+
+### Fixed
+- Preserved last-known-good flags after transient refresh failures instead of falling back silently to defaults.
+- Failed closed for non-empty gates when no valid flags are available.
+
 ## 1.1.0
 
 2026-06-28

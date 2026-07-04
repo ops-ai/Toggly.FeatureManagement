@@ -1,4 +1,5 @@
 import { defineNuxtPlugin, useRuntimeConfig } from '#app'
+import moduleOnError from '#toggly/on-error'
 import {
   createToggly,
   provideToggly,
@@ -23,6 +24,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     persistIdentity: config.persistIdentity,
     persistFeatures: config.persistFeatures,
     hooks: config.hooks,
+    onError: moduleOnError,
   })
 
   // Provide to Vue app

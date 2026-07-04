@@ -83,6 +83,22 @@ function generateUUID(): string {
   });
 }
 
+function base64UrlToBytes(value: string): Uint8Array {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), '=');
+  const maybeBuffer = (globalThis as unknown as {
+    Buffer?: { from(value: string, encoding: string): { toString(encoding: string): string } };
+  }).Buffer;
+  const binary = typeof atob === 'function'
+    ? atob(padded)
+    : maybeBuffer?.from(padded, 'base64').toString('binary') ?? '';
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 /**
  * Simple SHA-256 hash function (for identity hashing)
  * Uses a basic implementation since we can't rely on crypto APIs in React Native
@@ -186,6 +202,18 @@ export class TogglyService {
    */
   get currentFeatures(): FeatureFlags | null {
     return this.features ? { ...this.features } : null;
+  }
+
+  private reportError(message: string, error?: unknown): void {
+    this.lastError = error instanceof Error ? error.message : message;
+    this.config.onError?.(
+      error instanceof Error ? error : new Error(message)
+    );
+    this.eventEmitter.emit('error', { error: this.lastError });
+  }
+
+  private emitEffectiveFlagsChanged(flags: FeatureFlags = this.features ?? {}): void {
+    this.eventEmitter.emit('effectiveFlagsChanged', flags);
   }
 
   constructor(config: TogglyConfig = {}) {
@@ -298,6 +326,7 @@ export class TogglyService {
     // If no app key, use defaults
     if (!this.config.appKey) {
       this.features = this.config.featureDefaults ?? {};
+      this.emitEffectiveFlagsChanged(this.features);
       return {
         status: 'defaults' as TogglyLoadStatus,
         flags: this.features,
@@ -350,6 +379,7 @@ export class TogglyService {
         this.lastChecked = new Date();
         const cachedFlags = await this.getCachedFeatureFlags();
         this.features = cachedFlags;
+        this.emitEffectiveFlagsChanged(cachedFlags);
         return {
           status: 'cached' as TogglyLoadStatus,
           flags: cachedFlags,
@@ -364,6 +394,15 @@ export class TogglyService {
       let flags: FeatureFlags;
 
       flags = (data?.defs ?? data?.data ?? data) as FeatureFlags;
+
+      if (this.config.useSignedDefinitions && this.config.verifySignatures) {
+        await this.verifySignedDefinitions(
+          flags,
+          data?.signature,
+          data?.timestamp,
+          data?.kid ?? data?.keyId
+        );
+      }
 
       // Track changes
       const previousFlags = this.features;
@@ -388,6 +427,7 @@ export class TogglyService {
 
       // Emit refreshed event
       this.eventEmitter.emit('refreshed', flags);
+      this.emitEffectiveFlagsChanged(flags);
 
       // Notify state change handlers
       if (previousFlags) {
@@ -399,18 +439,20 @@ export class TogglyService {
         flags,
       };
     } catch (error) {
-      this.lastError =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.eventEmitter.emit('error', { error: this.lastError });
+      const hadLastKnownGood = this.features !== null;
+      this.reportError('Error fetching feature flags', error);
 
       // Fall back to cache or defaults
       const cachedFlags = await this.getCachedFeatureFlags();
       this.features = cachedFlags;
+      this.emitEffectiveFlagsChanged(cachedFlags);
 
       return {
-        status: 'defaults' as TogglyLoadStatus,
+        status: hadLastKnownGood
+          ? ('cached' as TogglyLoadStatus)
+          : ('error' as TogglyLoadStatus),
         flags: cachedFlags,
-        error: this.lastError,
+        error: this.lastError ?? undefined,
       };
     } finally {
       this.featuresLoading = false;
@@ -458,8 +500,8 @@ export class TogglyService {
           return JSON.parse(cacheData.flags);
         }
       }
-    } catch {
-      // Cache read failed, use defaults
+    } catch (error) {
+      this.reportError('Error reading cached feature flags', error);
     }
 
     return this.config.featureDefaults ?? {};
@@ -477,8 +519,65 @@ export class TogglyService {
         flags: JSON.stringify(flags),
       };
       await this.storage.set(cacheKey, JSON.stringify(cacheData));
-    } catch {
-      // Cache write failed, continue without caching
+    } catch (error) {
+      this.reportError('Error writing feature flags cache', error);
+    }
+  }
+
+  private async getJwks(): Promise<{ keys?: Array<Record<string, string>> }> {
+    const cached = await this.storage.get(STORAGE_KEYS.JWKS);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+
+    const response = await fetch(`${this.config.baseURI}/.well-known/jwks`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch JWKs: ${response.status}`);
+    }
+
+    const jwks = await response.json();
+    await this.storage.set(STORAGE_KEYS.JWKS, JSON.stringify(jwks));
+    return jwks;
+  }
+
+  private async verifySignedDefinitions(
+    flags: FeatureFlags,
+    signature: string | undefined,
+    timestamp: number | undefined,
+    keyId: string | undefined
+  ): Promise<void> {
+    if (!signature || timestamp === undefined || !keyId) {
+      throw new Error('Signed definitions missing signature metadata');
+    }
+    if (this.config.trustedKeyIds?.length && !this.config.trustedKeyIds.includes(keyId)) {
+      throw new Error('Signed definitions key is not trusted');
+    }
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+      throw new Error('WebCrypto is required to verify signed definitions');
+    }
+
+    const jwks = await this.getJwks();
+    const jwk = jwks.keys?.find((key) => key.kid === keyId);
+    if (!jwk) {
+      throw new Error(`No JWK found for key ${keyId}`);
+    }
+
+    const cryptoKey = await crypto.subtle.importKey(
+      'jwk',
+      { ...jwk, kty: jwk.kty ?? 'EC', crv: jwk.crv ?? 'P-256', ext: true },
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['verify']
+    );
+    const payload = new TextEncoder().encode(`${JSON.stringify(flags)}|${timestamp}`);
+    const isValid = await crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      cryptoKey,
+      base64UrlToBytes(signature) as Uint8Array<ArrayBuffer>,
+      payload
+    );
+    if (!isValid) {
+      throw new Error('Invalid signed definitions signature');
     }
   }
 
@@ -494,8 +593,8 @@ export class TogglyService {
       const cacheKey = STORAGE_KEYS.FEATURE_FLAGS_CACHE + hashedIdentity;
       await this.storage.delete(cacheKey);
       await this.storage.delete(STORAGE_KEYS.ETAG);
-    } catch {
-      // Cache clear failed, continue
+    } catch (error) {
+      this.reportError('Error clearing feature flags cache', error);
     }
   }
 
@@ -553,6 +652,7 @@ export class TogglyService {
    */
   notifyLocalGatesChanged(): void {
     this.eventEmitter.emit('localGatesChanged');
+    this.emitEffectiveFlagsChanged();
   }
 
   private getEffectiveFlag(featureKey: string, remote: boolean): boolean {
@@ -598,6 +698,10 @@ export class TogglyService {
     negate: boolean
   ): boolean {
     const flags = this.features ?? this.config.featureDefaults ?? {};
+
+    if (featureKeys.length > 0 && Object.keys(flags).length === 0) {
+      return negate;
+    }
 
     // Fast path for single feature
     if (featureKeys.length === 1) {

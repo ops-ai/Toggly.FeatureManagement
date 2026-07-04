@@ -104,7 +104,7 @@ describe('Toggly Service', () => {
     });
 
     it('should fetch from API when appKey set', async () => {
-      mockFetch.mockResolvedValueOnce({ json: () => Promise.resolve({ ApiFlag: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ ApiFlag: true }) });
       const service = new Toggly();
       service.init({ appKey: 'key', environment: 'Production' });
 
@@ -114,7 +114,7 @@ describe('Toggly Service', () => {
     });
 
     it('should include identity in API URL', async () => {
-      mockFetch.mockResolvedValueOnce({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       const service = new Toggly();
       service.init({ appKey: 'key', environment: 'Production', identity: 'user-1' });
 
@@ -125,7 +125,7 @@ describe('Toggly Service', () => {
     });
 
     it('should use custom baseURI', async () => {
-      mockFetch.mockResolvedValueOnce({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       const service = new Toggly();
       service.init({ baseURI: 'https://custom.api', appKey: 'key', environment: 'Staging' });
 
@@ -156,7 +156,7 @@ describe('Toggly Service', () => {
       const slowPromise = new Promise((r) => { resolveFirst = r; });
 
       mockFetch.mockReturnValueOnce(
-        slowPromise.then(() => ({ json: () => Promise.resolve({ F1: true }) }))
+        slowPromise.then(() => ({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) }))
       );
 
       const service = new Toggly();
@@ -173,7 +173,7 @@ describe('Toggly Service', () => {
     });
 
     it('should cache features after first load', async () => {
-      mockFetch.mockResolvedValueOnce({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       const service = new Toggly();
       service.init({ appKey: 'key', environment: 'Production' });
 
@@ -183,7 +183,7 @@ describe('Toggly Service', () => {
     });
 
     it('should trigger afterRefresh hooks', async () => {
-      mockFetch.mockResolvedValueOnce({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       let refreshed: any = null;
       const service = new Toggly();
       service.init({
@@ -209,7 +209,7 @@ describe('Toggly Service', () => {
     });
 
     it('should load features if not yet loaded', async () => {
-      mockFetch.mockResolvedValueOnce({ json: () => Promise.resolve({ ApiFlag: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ ApiFlag: true }) });
       const service = new Toggly();
       service.init({ appKey: 'key', environment: 'Production' });
 
@@ -247,10 +247,10 @@ describe('Toggly Service', () => {
       expect(await service._evaluateFeatureGate(['F1'], 'all', true)).toBe(false);
     });
 
-    it('should return true for empty features', async () => {
+    it('should fail closed for empty features with non-empty gate', async () => {
       const empty = new Toggly();
       empty.init({ featureDefaults: {} });
-      expect(await empty._evaluateFeatureGate(['F1'], 'all', false)).toBe(true);
+      expect(await empty._evaluateFeatureGate(['F1'], 'all', false)).toBe(false);
     });
 
     it('should default requirement to all', async () => {
@@ -450,7 +450,7 @@ describe('Toggly Service', () => {
     });
 
     it('should refresh features on JSON flags-updated message', () => {
-      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'flags-updated' }) });
@@ -458,7 +458,7 @@ describe('Toggly Service', () => {
     });
 
     it('should refresh features on JSON update message', () => {
-      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) });
@@ -480,7 +480,7 @@ describe('Toggly Service', () => {
     });
 
     it('should refresh features on plain text "update"', () => {
-      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: 'update' });
@@ -488,7 +488,7 @@ describe('Toggly Service', () => {
     });
 
     it('should refresh features on plain text "flags-updated"', () => {
-      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: 'flags-updated' });
@@ -547,6 +547,9 @@ describe('Toggly Service', () => {
   describe('Variants', () => {
     it('should fetch evaluated-variants-signed when enableVariants is true', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () =>
           Promise.resolve({
             defs: {
@@ -573,6 +576,9 @@ describe('Toggly Service', () => {
 
     it('should pass userId query when enableVariants and identity are set', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ defs: {} }),
       });
       const service = new Toggly();
@@ -620,6 +626,9 @@ describe('Toggly Service', () => {
 
     it('getVariant returns null when enabled but no variant name on def', async () => {
       mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         json: () => Promise.resolve({ defs: { V: { enabled: true } } }),
       });
       const service = new Toggly();
@@ -635,7 +644,7 @@ describe('Toggly Service', () => {
     });
 
     it('subscribeFeaturesRefresh runs after successful load', async () => {
-      mockFetch.mockResolvedValueOnce({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       const service = new Toggly();
       service.init({
         appKey: 'test-key',
@@ -650,7 +659,7 @@ describe('Toggly Service', () => {
     });
 
     it('subscribeFeaturesRefresh can be unsubscribed', async () => {
-      mockFetch.mockResolvedValue({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       const service = new Toggly();
       service.init({
         appKey: 'test-key',
@@ -669,7 +678,7 @@ describe('Toggly Service', () => {
 
     it('subscribeFeaturesRefresh continues when a listener throws', async () => {
       const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      mockFetch.mockResolvedValueOnce({ json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
       const service = new Toggly();
       service.init({
         appKey: 't',

@@ -18,9 +18,11 @@ import type { Hook } from '@ops-ai/toggly-hooks-types';
 /**
  * Server config type with required properties except identity and hooks
  */
-type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'hooks'>> & {
+type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'hooks' | 'localGates' | 'onError'>> & {
   identity?: string;
   hooks?: Hook[];
+  localGates?: TogglyPluginOptions['localGates'];
+  onError?: TogglyPluginOptions['onError'];
 };
 
 /**

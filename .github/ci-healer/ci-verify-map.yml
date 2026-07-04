@@ -1,0 +1,414 @@
+# Scoped local verification commands for CI Healer.
+# Match failed workflow display name and job name from GitHub Actions logs.
+# Derived from .github/workflows/analysis-*.yml matrix definitions.
+
+workflows:
+  "Flutter Cache Providers - Tests & Analysis":
+    jobs:
+      "Secure Storage":
+        working_directory: Toggly.FeatureManagement.Flutter/toggly_secure_storage
+        commands:
+          - flutter pub get
+          - flutter analyze
+          - flutter test --coverage
+      "Disk":
+        working_directory: Toggly.FeatureManagement.Flutter/toggly_disk
+        commands:
+          - flutter pub get
+          - flutter analyze
+          - flutter test --coverage
+      "SQLite":
+        working_directory: Toggly.FeatureManagement.Flutter/toggly_sqlite
+        commands:
+          - flutter pub get
+          - flutter analyze
+          - flutter test --coverage
+      "Isar":
+        working_directory: Toggly.FeatureManagement.Flutter/toggly_isar
+        commands:
+          - flutter pub get
+          - dart run build_runner build --delete-conflicting-outputs
+          - flutter analyze
+          - flutter test --coverage
+    default:
+      working_directory: Toggly.FeatureManagement.Flutter/toggly_secure_storage
+      commands:
+        - flutter pub get
+        - flutter analyze
+        - flutter test --coverage
+
+  "Flutter SDK - Tests & Analysis":
+    default:
+      working_directory: Toggly.FeatureManagement.Flutter/toggly
+      commands:
+        - flutter pub get
+        - flutter analyze
+        - flutter test --coverage
+    jobs:
+      "Test & Analyze":
+        working_directory: Toggly.FeatureManagement.Flutter/toggly
+        commands:
+          - flutter pub get
+          - flutter analyze
+          - flutter test --coverage
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.Flutter/toggly
+        commands:
+          - flutter pub get
+          - flutter test test/smoke_test.dart
+
+  "Next.js SDKs - Tests & Analysis":
+    default:
+      working_directory: Toggly.FeatureManagement.Next
+      commands:
+        - pnpm install
+        - pnpm build
+        - pnpm typecheck
+        - pnpm test
+    jobs:
+      "Lint":
+        working_directory: Toggly.FeatureManagement.Next
+        commands:
+          - pnpm install
+          - pnpm build
+          - pnpm lint
+      "Coverage":
+        working_directory: Toggly.FeatureManagement.Next
+        commands:
+          - pnpm install
+          - pnpm test:coverage
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.Next/nextjs-toggly-core
+        commands:
+          - pnpm vitest run --config vitest.smoke.config.ts tests/smoke.test.ts tests/smoke-ws.test.ts
+
+  "Ruby SDKs - Tests & Analysis":
+    default:
+      working_directory: toggly-ruby/toggly
+      commands:
+        - bundle install
+        - bundle exec rspec --format documentation
+    jobs:
+      "Lint":
+        working_directory: toggly-ruby/toggly
+        commands:
+          - bundle install
+          - bundle exec rubocop --parallel
+      "Smoke Test":
+        working_directory: toggly-ruby/toggly
+        commands:
+          - bundle install
+          - bundle exec rspec spec/toggly/smoke_spec.rb
+
+  "Remix SDKs - Tests & Analysis":
+    default:
+      working_directory: Toggly.FeatureManagement.Remix/remix-toggly-core
+      commands:
+        - npm ci
+        - npm run typecheck
+        - npm run build
+        - npm run test:coverage
+    jobs:
+      "Lint":
+        working_directory: Toggly.FeatureManagement.Remix/remix-toggly-core
+        commands:
+          - npm ci
+          - npm run lint --if-present
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.Remix/remix-toggly-server
+        commands:
+          - npm ci
+          - npx jest tests/smoke.spec.ts tests/smoke-ws.spec.ts
+
+  "React Native SDKs - Tests & Analysis":
+    jobs:
+      "Test Core":
+        working_directory: Toggly.FeatureManagement.ReactNative/libs/core
+        commands:
+          - npm ci
+          - npm run build
+          - npm run typecheck
+          - npm test
+      "Test React-Native":
+        working_directory: Toggly.FeatureManagement.ReactNative/libs/react-native
+        commands:
+          - npm ci
+          - npm run build
+          - npm run typecheck
+          - npm test
+      "Test Storage-Async":
+        working_directory: Toggly.FeatureManagement.ReactNative/libs/storage-async
+        commands:
+          - npm ci
+          - npm run build
+          - npm run typecheck
+      "Test Storage-MMKV":
+        working_directory: Toggly.FeatureManagement.ReactNative/libs/storage-mmkv
+        commands:
+          - npm ci
+          - npm run build
+          - npm run typecheck
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.ReactNative/libs/core
+        commands:
+          - npm ci
+          - npx jest tests/smoke.test.ts tests/smoke-ws.test.ts
+    default:
+      working_directory: Toggly.FeatureManagement.ReactNative/libs/core
+      commands:
+        - npm ci
+        - npm run build
+        - npm run typecheck
+        - npm test
+
+  "PHP SDK - Tests & Analysis":
+    default:
+      working_directory: Toggly.FeatureManagement.PHP
+      commands:
+        - composer update
+        - vendor/bin/phpunit --coverage-clover=coverage.xml
+    jobs:
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.PHP
+        commands:
+          - composer update
+          - vendor/bin/phpunit --filter SmokeTest
+
+  "Nuxt SDKs - Tests & Analysis":
+    default:
+      working_directory: Toggly.FeatureManagement.Nuxt
+      commands:
+        - pnpm install --frozen-lockfile
+        - pnpm --filter @ops-ai/nuxt-toggly-core test:coverage
+    jobs:
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.Nuxt/nuxt-toggly-core
+        commands:
+          - pnpm vitest run --config vitest.smoke.config.ts tests/smoke.test.ts tests/smoke-ws.test.ts
+
+  "JavaScript/TypeScript SDKs - Tests & Analysis":
+    jobs:
+      "Test Angular":
+        working_directory: Toggly.FeatureManagement.Angular
+        commands:
+          - npm ci
+          - npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --code-coverage
+      "Test React":
+        working_directory: Toggly.FeatureManagement.React
+        commands:
+          - npm ci
+          - npm test -- --coverage
+      "Test Vue":
+        working_directory: Toggly.FeatureManagement.Vue/vue-feature-flags-toggly
+        commands:
+          - npm ci
+          - npm test -- --coverage
+      "Test Svelte":
+        working_directory: Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly
+        commands:
+          - npm ci
+          - npx vitest run --coverage
+      "Test Astro":
+        working_directory: Toggly.FeatureManagement.Astro
+        commands:
+          - npm ci
+          - npm test -- --coverage
+      "Test JavaScript":
+        working_directory: Toggly.FeatureManagement.Javascript/feature_flags_toggly
+        commands:
+          - npm ci
+          - npm test -- --coverage
+      "Test Docusaurus":
+        working_directory: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
+        commands:
+          - npm ci
+          - npm test
+      "Test Hooks-Types":
+        working_directory: toggly-hooks-types
+        commands:
+          - npm ci
+          - npm run typecheck
+      "Test Clarity-Hook":
+        working_directory: toggly-clarity-hook
+        commands:
+          - npm ci
+          - npm test -- --coverage
+      "Test GA4-Hook":
+        working_directory: toggly-ga4-hook
+        commands:
+          - npm ci
+          - npm test -- --coverage
+      "Test AppInsights-Hook":
+        working_directory: toggly-appinsights-hook
+        commands:
+          - npm ci
+          - npm test -- --coverage
+      "Test Node.js Server Core (Node 20.x)":
+        working_directory: Toggly.FeatureManagement.Node/toggly-node-core
+        commands:
+          - pnpm install
+          - pnpm -r build
+          - pnpm test:coverage
+      "Smoke Test Node Server Core":
+        working_directory: Toggly.FeatureManagement.Node/toggly-node-core
+        commands:
+          - pnpm install
+          - pnpm vitest run --config vitest.smoke.config.ts tests/smoke.test.ts tests/smoke-ws.test.ts
+    default:
+      working_directory: Toggly.FeatureManagement.Javascript/feature_flags_toggly
+      commands:
+        - npm ci
+        - npm run build
+        - npm run typecheck
+        - npm test -- --coverage
+
+  "Go SDK - Tests & Analysis":
+    default:
+      working_directory: toggly-go
+      commands:
+        - go mod download
+        - go vet ./...
+        - golangci-lint run
+        - go test -v -race -coverprofile=coverage.out ./...
+    jobs:
+      "Test & Lint":
+        working_directory: toggly-go
+        commands:
+          - go mod download
+          - go vet ./...
+          - golangci-lint run
+          - go test -v -race -coverprofile=coverage.out ./...
+      "Smoke Test":
+        working_directory: toggly-go
+        commands:
+          - go test -v -run '^TestSmoke_' ./toggly
+
+  ".NET SDKs - Tests & Analysis":
+    default:
+      commands:
+        - dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln
+        - dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore
+        - dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-build
+    jobs:
+      "Build, Test & Analyze":
+        commands:
+          - dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln
+          - dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore
+          - dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-build
+      "Build CLI":
+        commands:
+          - dotnet build Toggly.CLI/Toggly.CLI.csproj -c Release
+      "Smoke Test":
+        commands:
+          - dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj
+
+  "iOS SDK - Analysis":
+    default:
+      working_directory: Toggly.FeatureManagement.iOS
+      note: Requires macOS runner for full verify; on Linux runners classify as human-needed if only simulator builds fail.
+      commands:
+        - swift package resolve
+        - swift build -v
+        - swift test -v --enable-code-coverage
+    jobs:
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.iOS
+        commands:
+          - swift package resolve
+          - swift test -v --filter SmokeTests
+
+  "Rust SDKs - Tests & Analysis":
+    default:
+      working_directory: toggly-rust
+      commands:
+        - cargo fmt --check
+        - cargo clippy --all-features --workspace -- -D warnings
+        - cargo test --all-features --workspace
+    jobs:
+      "Smoke Test":
+        working_directory: toggly-rust
+        commands:
+          - cargo test -p toggly --test smoke --test smoke_ws
+      "Coverage":
+        working_directory: toggly-rust
+        commands:
+          - cargo llvm-cov --all-features --workspace --lcov
+
+  "Java SDK - Tests & Analysis":
+    default:
+      working_directory: Toggly.FeatureManagement.Java
+      commands:
+        - mvn -B clean package
+        - mvn -B test
+    jobs:
+      "Code Quality":
+        working_directory: Toggly.FeatureManagement.Java
+        commands:
+          - mvn spotbugs:check
+          - mvn checkstyle:check
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.Java
+        commands:
+          - mvn -B test -pl toggly-core -Dtest=SmokeTest
+
+  "Android SDK - Analysis":
+    default:
+      working_directory: Toggly.FeatureManagement.Android
+      commands:
+        - ./gradlew build -x test
+        - ./gradlew test
+    jobs:
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.Android
+        commands:
+          - ./gradlew :toggly-android-core:testDebugUnitTest --tests "io.toggly.core.SmokeTest"
+      "lint":
+        working_directory: Toggly.FeatureManagement.Android
+        commands:
+          - ./gradlew lint
+
+  "Python SDKs - Tests & Analysis":
+    default:
+      working_directory: Toggly.FeatureManagement.Python/toggly
+      commands:
+        - pip install -e ".[dev]"
+        - pytest tests/ --cov=src/toggly
+    jobs:
+      "Lint":
+        working_directory: Toggly.FeatureManagement.Python
+        commands:
+          - ruff check toggly toggly-django toggly-flask toggly-fastapi toggly-cache
+      "Type Check":
+        working_directory: Toggly.FeatureManagement.Python
+        commands:
+          - mypy toggly toggly-cache
+      "Test Core (Python 3.11)":
+        working_directory: Toggly.FeatureManagement.Python/toggly
+        commands:
+          - pip install -e ".[dev]"
+          - pytest tests/ --cov=src/toggly
+      "Test Django (Python 3.11, Django 5.0)":
+        working_directory: Toggly.FeatureManagement.Python/toggly-django
+        commands:
+          - pip install -e ".[dev]"
+          - pytest tests/ --cov=src/toggly_django
+      "Test Flask (Python 3.11)":
+        working_directory: Toggly.FeatureManagement.Python/toggly-flask
+        commands:
+          - pip install -e ".[dev]"
+          - pytest tests/ --cov=src/toggly_flask
+      "Test FastAPI (Python 3.11)":
+        working_directory: Toggly.FeatureManagement.Python/toggly-fastapi
+        commands:
+          - pip install -e ".[dev]"
+          - pytest tests/ --cov=src/toggly_fastapi
+      "Test Cache (Python 3.11)":
+        working_directory: Toggly.FeatureManagement.Python/toggly-cache
+        commands:
+          - pip install -e ".[dev]"
+          - pytest tests/ --cov=src/toggly_cache
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.Python/toggly
+        commands:
+          - pip install -e ".[dev]"
+          - pytest tests/test_smoke.py -v

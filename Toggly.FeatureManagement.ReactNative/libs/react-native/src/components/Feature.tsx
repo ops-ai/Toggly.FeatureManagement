@@ -120,7 +120,7 @@ export function Feature({
 
     // Subscribe to refreshes
     const unsubscribe = isReady
-      ? toggly.on('refreshed', () => {
+      ? toggly.on('effectiveFlagsChanged', () => {
           evaluate();
         })
       : () => {};

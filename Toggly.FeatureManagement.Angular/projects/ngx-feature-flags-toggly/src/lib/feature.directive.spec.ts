@@ -161,13 +161,13 @@ describe('FeatureFlagDirective', () => {
   });
 
   describe('Empty features', () => {
-    it('should show content when no features defined', fakeAsync(() => {
+    it('should hide content when no features are available for a non-empty gate', fakeAsync(() => {
       configureAndCreate({});
       host.flag = 'Any';
       fixture.detectChanges();
       tick();
       fixture.detectChanges();
-      expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('.content')).toBeNull();
     }));
   });
 });

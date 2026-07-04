@@ -132,7 +132,7 @@ describe('TogglyService', () => {
     });
 
     it('should fetch from API when appKey set', async () => {
-      fetchSpy.and.resolveTo({ json: () => Promise.resolve({ ApiFlag: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ ApiFlag: true }) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Production' })],
       });
@@ -143,7 +143,7 @@ describe('TogglyService', () => {
     });
 
     it('should include identity in API URL', async () => {
-      fetchSpy.and.resolveTo({ json: () => Promise.resolve({ F1: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
           appKey: 'key', environment: 'Production', identity: 'user-1',
@@ -155,7 +155,7 @@ describe('TogglyService', () => {
     });
 
     it('should use custom baseURI', async () => {
-      fetchSpy.and.resolveTo({ json: () => Promise.resolve({ F1: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
           baseURI: 'https://custom.api', appKey: 'key', environment: 'Staging',
@@ -167,7 +167,7 @@ describe('TogglyService', () => {
     });
 
     it('should use customDefinitionsUrl when set', async () => {
-      fetchSpy.and.resolveTo({ json: () => Promise.resolve({ F1: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
           customDefinitionsUrl: 'https://my-custom.api/flags',
@@ -191,19 +191,19 @@ describe('TogglyService', () => {
       expect(result).toBe(true);
     });
 
-    it('should fall back to empty object when no defaults on error', async () => {
+    it('should fail closed when no defaults are available on error', async () => {
       fetchSpy.and.rejectWith(new Error('Network error'));
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Production' })],
       });
       const service = TestBed.inject(TogglyService);
-      // empty features → returns true (no features loaded guard)
+      // Empty features fail closed for non-empty gates.
       const result = await service.isFeatureOn('Any');
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
     it('should cache features after first load', async () => {
-      fetchSpy.and.resolveTo({ json: () => Promise.resolve({ F1: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Production' })],
       });
@@ -218,7 +218,7 @@ describe('TogglyService', () => {
       const slowPromise = new Promise((r) => { resolveFirst = r; });
 
       fetchSpy.and.returnValue(
-        slowPromise.then(() => ({ json: () => Promise.resolve({ F1: true }) }))
+        slowPromise.then(() => ({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) }))
       );
 
       TestBed.configureTestingModule({
@@ -238,7 +238,7 @@ describe('TogglyService', () => {
     });
 
     it('should trigger afterRefresh hooks', async () => {
-      fetchSpy.and.resolveTo({ json: () => Promise.resolve({ F1: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) } as any);
       let refreshed: any = null;
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
@@ -294,14 +294,14 @@ describe('TogglyService', () => {
       expect(result).toBe(false);
     });
 
-    it('should return true for empty features object', async () => {
+    it('should fail closed for empty features object with non-empty gate', async () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({ featureDefaults: {} })],
       });
       const emptyService = TestBed.inject(TogglyService);
       const result = await emptyService.evaluateFeatureGate(['F1'], 'all', false);
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
     it('should skip hooks for empty gate', async () => {
@@ -401,7 +401,10 @@ describe('TogglyService', () => {
 
     it('should fetch evaluated-variants-signed when enableVariants is true', async () => {
       fetchSpy.and.resolveTo({
-        json: () => Promise.resolve({
+        ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({
           F1: { enabled: true, variant: 'treatment-a', configurationValue: { x: 1 } },
         }),
       } as any);
@@ -423,7 +426,10 @@ describe('TogglyService', () => {
 
     it('should return null when feature has no variant name', async () => {
       fetchSpy.and.resolveTo({
-        json: () => Promise.resolve({
+        ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({
           F1: { enabled: true },
         }),
       } as any);

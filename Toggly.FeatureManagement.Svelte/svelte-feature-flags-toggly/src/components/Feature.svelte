@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { getTogglyService } from '../stores/toggly.store'
+  import { onDestroy, onMount } from 'svelte'
+  import { getTogglyService, togglyFlagsStore } from '../stores/toggly.store'
   import type { TogglyService } from '../services/toggly.service'
 
   export let featureKey: string | undefined = undefined
@@ -10,6 +10,7 @@
 
   let shouldShow: boolean = false
   let toggly: TogglyService | null = null
+  let unsubscribeFlags: (() => void) | null = null
 
   async function evaluateFeature() {
     if (!toggly) {
@@ -54,6 +55,13 @@
 
   onMount(() => {
     evaluateFeature()
+    unsubscribeFlags = togglyFlagsStore.subscribe(() => {
+      evaluateFeature()
+    })
+  })
+
+  onDestroy(() => {
+    unsubscribeFlags?.()
   })
 </script>
 

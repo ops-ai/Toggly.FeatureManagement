@@ -58,6 +58,7 @@ class TogglyClientInstance {
   public hookExecutor = new HookExecutor();
   private localGates: LocalGate[] = [];
   private localGateIndex: FlagGateIndex = new Map();
+  private lastError: Error | null = null;
 
   constructor(config: TogglyConfig) {
     this.config = {
@@ -175,8 +176,14 @@ class TogglyClientInstance {
         }
       }
 
+      this.lastError = null;
       return { flags, variantDefs };
     } catch (error) {
+      const fetchError = error instanceof Error ? error : new Error(String(error));
+      this.lastError = fetchError;
+      this.config.onError?.('Error fetching feature flags', error);
+      $error.set(fetchError);
+
       if (this.config.isDebug) {
         console.error('[Toggly Client] Error fetching flags:', error);
       }
@@ -211,7 +218,7 @@ class TogglyClientInstance {
       $flags.set(flags);
       $variants.set(variantDefs ?? {});
       $isReady.set(true);
-      $error.set(null);
+      $error.set(this.lastError);
       
       // Trigger afterRefresh hooks
       await this.hookExecutor.executeAfterRefresh(flags);
@@ -237,6 +244,7 @@ class TogglyClientInstance {
       this.variantCache = variantDefs;
       $flags.set(flags);
       $variants.set(variantDefs ?? {});
+      $error.set(this.lastError);
       
       // Trigger afterRefresh hooks
       await this.hookExecutor.executeAfterRefresh(flags);

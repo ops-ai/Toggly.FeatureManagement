@@ -225,10 +225,10 @@ describe('Feature', () => {
     });
   });
 
-  it('subscribes to refreshed events', async () => {
+  it('subscribes to effective flags changed events', async () => {
     let refreshCallback: () => void;
     mockService.on.mockImplementation((event: string, callback: () => void) => {
-      if (event === 'refreshed') {
+      if (event === 'effectiveFlagsChanged') {
         refreshCallback = callback;
       }
       return () => {};
@@ -249,7 +249,7 @@ describe('Feature', () => {
       expect(queryByText('Feature Content')).toBeNull();
     });
 
-    // Trigger refresh
+    // Trigger effective flag change
     await act(async () => {
       refreshCallback();
     });

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.0] - 2026-07-03
+
+### Added
+
+- `onError` reports client flag fetch failures to Astro SDK consumers.
+
+### Fixed
+
+- Error fallbacks now update the client error store instead of looking like clean ready/default state.
+- Successful refreshes clear the last error after new flags are applied.
+
 ## [1.5.0] - 2026-06-28
 
 ### Added

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-03
+
+### Added
+
+- `onError` reports feature refresh failures to Svelte SDK consumers.
+
+### Fixed
+
+- Preserved loaded features on transient refresh failures instead of clearing UI state.
+- `<Feature>` re-evaluates when refreshed flags arrive through the flags store.
+- Failed closed for non-empty gates when no valid flags are available.
+
 ## [1.2.0] - 2026-06-28
 
 ### Added
