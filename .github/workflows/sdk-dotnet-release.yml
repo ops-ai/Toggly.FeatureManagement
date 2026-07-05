@@ -3,8 +3,16 @@ name: .NET SDKs - Build & Publish
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
       bump_type:
-        description: 'Version bump type'
+        description: 'Bump type (only used when release_mode is auto_bump)'
         required: false
         default: 'patch'
         type: choice
@@ -35,92 +43,32 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      bump_type: ${{ steps.version.outputs.bump_type }}
+      version: ${{ steps.release.outputs.version }}
+      action: ${{ steps.release.outputs.action }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Determine version from bump type
-        id: version
-        run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          MINIMUM_BASE_VERSION="3.1.0"
-
-          LATEST_TAG=$(git tag -l "dotnet-sdk-v*" --sort=-version:refname | head -n 1)
-          if [ -z "$LATEST_TAG" ]; then
-            TAG_BASE_VERSION="$MINIMUM_BASE_VERSION"
-          else
-            TAG_BASE_VERSION="${LATEST_TAG#dotnet-sdk-v}"
-          fi
-
-          TAG_BASE_VERSION="${TAG_BASE_VERSION%%-*}"
-
-          # If release tagging was skipped in a previous run, recover from the
-          # latest published NuGet version so bumping does not reset to baseline.
-          NUGET_BASE_VERSION=$(python3 - <<'PY'
-          import json
-          import urllib.request
-          import re
-
-          url = 'https://api.nuget.org/v3-flatcontainer/toggly.featuremanagement/index.json'
-          pattern = re.compile(r'^\d+\.\d+\.\d+$')
-          try:
-              with urllib.request.urlopen(url, timeout=10) as resp:
-                  payload = json.loads(resp.read().decode('utf-8'))
-              versions = [v for v in payload.get('versions', []) if pattern.match(v)]
-              print(versions[-1] if versions else '')
-          except Exception:
-              print('')
-          PY
-          )
-
-          BASE_VERSION="$TAG_BASE_VERSION"
-          if [ -n "$NUGET_BASE_VERSION" ]; then
-            BASE_VERSION=$(printf '%s\n%s\n' "$BASE_VERSION" "$NUGET_BASE_VERSION" | sort -V | tail -n 1)
-          fi
-          BASE_VERSION=$(printf '%s\n%s\n' "$BASE_VERSION" "$MINIMUM_BASE_VERSION" | sort -V | tail -n 1)
-
-          CURRENT_VERSION="$BASE_VERSION"
-
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-
-          case "$BUMP_TYPE" in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
-            *)
-              echo "Invalid bump type: $BUMP_TYPE"
-              exit 1
-              ;;
-          esac
-
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
-          echo "Current version: $CURRENT_VERSION"
-          echo "New version: $NEW_VERSION"
-
-      - name: Check if tag exists
-        run: |
-          if git rev-parse "dotnet-sdk-v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "Tag dotnet-sdk-v${{ steps.version.outputs.version }} already exists"
-            exit 1
-          fi
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_ROOT }}/Directory.Build.props
+          manifest_type: props
+          registry: nuget
+          package_name: Toggly.FeatureManagement
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
 
   build-and-test:
     needs: validate
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -149,6 +97,7 @@ jobs:
 
   publish:
     needs: [build-and-test, validate]
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -330,6 +279,7 @@ jobs:
 
   release:
     needs: [publish, validate]
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -351,6 +301,33 @@ jobs:
         run: |
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+      - name: Commit version bump
+        if: needs.validate.outputs.manifest_changed == 'true'
+        run: |
+          git add ${{ env.SDK_ROOT }}/Directory.Build.props
+          git commit -S -m "Bumped .NET SDK to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]"
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              sleep 2
+            fi
+          done
+
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
 
       - name: Create and push tag
         run: |
@@ -406,8 +383,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ needs.validate.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Bump type | ${{ needs.validate.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ needs.validate.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry latest | ${{ needs.validate.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.validate.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tag | dotnet-sdk-v${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Packages | ${{ github.event.inputs.packages || 'all' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY

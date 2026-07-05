@@ -3,8 +3,16 @@ name: React Native SDK - Build & Publish All Packages
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
       bump_type:
-        description: 'Version bump type'
+        description: 'Bump type (only used when release_mode is auto_bump)'
         required: false
         default: 'patch'
         type: choice
@@ -30,140 +38,50 @@ permissions:
 
 env:
   SDK_ROOT: Toggly.FeatureManagement.ReactNative/libs
+  CORE_MANIFEST: Toggly.FeatureManagement.ReactNative/libs/core/package.json
 
 jobs:
-  # Build and publish core package first (others depend on it)
-  publish-core:
-    if: ${{ github.event.inputs.packages == 'all' || github.event.inputs.packages == 'core' }}
+  validate:
     runs-on: ubuntu-latest
-    environment: npm-publish
     outputs:
-      version: ${{ steps.version.outputs.new_version }}
-      published: ${{ steps.publish.outputs.published }}
-    defaults:
-      run:
-        working-directory: Toggly.FeatureManagement.ReactNative/libs/core
-
+      action: ${{ steps.release.outputs.action }}
+      version: ${{ steps.release.outputs.version }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
         with:
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          manifest_path: ${{ env.CORE_MANIFEST }}
+          registry: npm
+          package_name: '@ops-ai/react-native-toggly-core'
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
 
-      - name: Import GPG key
-        id: import_gpg
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          git_user_signingkey: true
-          git_commit_gpgsign: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install dependencies
-        run: npm ci || npm install
-
-      - name: Check if version was manually bumped
-        id: check_version
+      - name: Sync monorepo package versions
+        if: steps.release.outputs.manifest_changed == 'true'
         run: |
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          PREVIOUS_VERSION=$(git show HEAD~1:${{ env.SDK_ROOT }}/core/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
-
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
-
-          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
-            echo "manually_bumped=true" >> $GITHUB_OUTPUT
-          else
-            echo "manually_bumped=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Bump version (if not manually bumped)
-        id: auto_version
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          NEW_VERSION=$(npm version $BUMP_TYPE --no-git-tag-version)
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Set final version
-        id: version
-        run: |
-          if [ "${{ steps.check_version.outputs.manually_bumped }}" == "true" ]; then
-            echo "new_version=v${{ steps.check_version.outputs.current_version }}" >> $GITHUB_OUTPUT
-          else
-            echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build
-        run: npm run build
-
-      - name: Run tests
-        run: npm test
-
-      - name: Publish to npm
-        id: publish
-        run: |
-          (npm publish --provenance --access public || npm publish --access public)
-          echo "published=true" >> $GITHUB_OUTPUT
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Commit version bump
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          cd $GITHUB_WORKSPACE
-          git config user.name "${{ steps.import_gpg.outputs.name }}"
-          git config user.email "${{ steps.import_gpg.outputs.email }}"
-          git add ${{ env.SDK_ROOT }}/core/package.json ${{ env.SDK_ROOT }}/core/package-lock.json
-          git commit -S -m "Bumped @ops-ai/react-native-toggly-core to ${{ steps.version.outputs.new_version }} [skip ci]"
-
-          MAX_RETRIES=3
-          RETRY_COUNT=0
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if git pull --rebase --autostash origin develop; then
-              if git push origin develop; then
-                echo "Successfully pushed version bump"
-                exit 0
-              fi
-            else
-              git rebase --abort 2>/dev/null || true
-            fi
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
-              sleep 2
-            fi
+          TARGET="${{ steps.release.outputs.version }}"
+          for pkg in react-native storage-async storage-mmkv; do
+            cd "${{ env.SDK_ROOT }}/$pkg"
+            npm version "$TARGET" --no-git-tag-version --allow-same-version
           done
-          echo "Failed to push after $MAX_RETRIES attempts"
-          exit 1
 
-  # Build and publish dependent packages in parallel after core
-  publish-react-native:
-    if: ${{ (github.event.inputs.packages == 'all' || github.event.inputs.packages == 'react-native') && (needs.publish-core.result == 'success' || needs.publish-core.result == 'skipped') }}
-    needs: [publish-core]
+  publish:
+    needs: validate
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
     environment: npm-publish
-    defaults:
-      run:
-        working-directory: Toggly.FeatureManagement.ReactNative/libs/react-native
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.RELEASE_PUSH_TOKEN }}
-          ref: develop
-
-      - name: Pull latest changes
-        run: |
-          cd $GITHUB_WORKSPACE
-          git pull origin develop
 
       - name: Import GPG key
         id: import_gpg
@@ -180,328 +98,77 @@ jobs:
           node-version: 'lts/*'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Install and build core dependency
-        working-directory: Toggly.FeatureManagement.ReactNative/libs/core
+      - name: Publish selected packages
         run: |
-          npm ci || npm install
-          npm run build
+          set -euo pipefail
+          SELECTION="${{ github.event.inputs.packages || 'all' }}"
+          TARGET="${{ needs.validate.outputs.version }}"
 
-      - name: Install dependencies
-        run: npm ci || npm install
+          publish_pkg() {
+            local dir="$1"
+            local npm_name="$2"
+            local needs_core="$3"
 
-      - name: Check if version was manually bumped
-        id: check_version
-        run: |
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          PREVIOUS_VERSION=$(git show HEAD~1:${{ env.SDK_ROOT }}/react-native/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
+            if [ "$SELECTION" != "all" ] && [ "$SELECTION" != "$dir" ]; then
+              echo "Skipping $dir (not selected)"
+              return 0
+            fi
 
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
-            echo "manually_bumped=true" >> $GITHUB_OUTPUT
-          else
-            echo "manually_bumped=false" >> $GITHUB_OUTPUT
-          fi
+            echo "=== Publishing $dir ($npm_name) ==="
+            cd "$GITHUB_WORKSPACE/${{ env.SDK_ROOT }}/$dir"
 
-      - name: Bump version (if not manually bumped)
-        id: auto_version
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          NEW_VERSION=$(npm version $BUMP_TYPE --no-git-tag-version)
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            VER=$(node -p "require('./package.json').version")
+            if [ "$VER" != "$TARGET" ]; then
+              echo "Version mismatch in $dir: expected $TARGET, got $VER"
+              exit 1
+            fi
 
-      - name: Set final version
-        id: version
-        run: |
-          if [ "${{ steps.check_version.outputs.manually_bumped }}" == "true" ]; then
-            echo "new_version=v${{ steps.check_version.outputs.current_version }}" >> $GITHUB_OUTPUT
-          else
-            echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          fi
+            if [ "$needs_core" = "true" ]; then
+              cd "$GITHUB_WORKSPACE/${{ env.SDK_ROOT }}/core"
+              npm ci || npm install
+              npm run build
+              cd "$GITHUB_WORKSPACE/${{ env.SDK_ROOT }}/$dir"
+            fi
 
-      - name: Build
-        run: npm run build
+            npm ci || npm install
+            npm run build
+            npm test
 
-      - name: Run tests
-        run: npm test
+            if npm view "${npm_name}@${VER}" version >/dev/null 2>&1; then
+              echo "Skipping ${npm_name}@${VER} (already published)"
+            else
+              npm publish --provenance --access public || npm publish --access public
+            fi
+          }
 
-      - name: Publish to npm
-        run: npm publish --provenance --access public || npm publish --access public
+          publish_pkg core @ops-ai/react-native-toggly-core false
+          publish_pkg react-native @ops-ai/react-native-toggly true
+          publish_pkg storage-async @ops-ai/react-native-toggly-storage-async true
+          publish_pkg storage-mmkv @ops-ai/react-native-toggly-storage-mmkv true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
-        if: steps.check_version.outputs.manually_bumped == 'false'
+        if: needs.validate.outputs.manifest_changed == 'true'
         run: |
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
-          git add ${{ env.SDK_ROOT }}/react-native/package.json ${{ env.SDK_ROOT }}/react-native/package-lock.json
-          git commit -S -m "Bumped @ops-ai/react-native-toggly to ${{ steps.version.outputs.new_version }} [skip ci]"
-
-          MAX_RETRIES=3
-          RETRY_COUNT=0
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if git pull --rebase --autostash origin develop; then
-              if git push origin develop; then
-                echo "Successfully pushed version bump"
-                exit 0
-              fi
-            else
-              git rebase --abort 2>/dev/null || true
-            fi
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
-              sleep 2
-            fi
+          for pkg in core react-native storage-async storage-mmkv; do
+            git add ${{ env.SDK_ROOT }}/$pkg/package.json
+            git add ${{ env.SDK_ROOT }}/$pkg/package-lock.json 2>/dev/null || true
           done
-          echo "Failed to push after $MAX_RETRIES attempts"
-          exit 1
+          git commit -S -m "Bumped React Native SDK to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]"
+          git pull --rebase --autostash origin develop && git push origin develop
 
-  publish-storage-async:
-    if: ${{ (github.event.inputs.packages == 'all' || github.event.inputs.packages == 'storage-async') && (needs.publish-core.result == 'success' || needs.publish-core.result == 'skipped') }}
-    needs: [publish-core]
-    runs-on: ubuntu-latest
-    environment: npm-publish
-    defaults:
-      run:
-        working-directory: Toggly.FeatureManagement.ReactNative/libs/storage-async
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
-          ref: develop
-
-      - name: Pull latest changes
-        run: |
-          cd $GITHUB_WORKSPACE
-          git pull origin develop
-
-      - name: Import GPG key
-        id: import_gpg
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          git_user_signingkey: true
-          git_commit_gpgsign: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install and build core dependency
-        working-directory: Toggly.FeatureManagement.ReactNative/libs/core
-        run: |
-          npm ci || npm install
-          npm run build
-
-      - name: Install dependencies
-        run: npm ci || npm install
-
-      - name: Check if version was manually bumped
-        id: check_version
-        run: |
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          PREVIOUS_VERSION=$(git show HEAD~1:${{ env.SDK_ROOT }}/storage-async/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
-
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
-            echo "manually_bumped=true" >> $GITHUB_OUTPUT
-          else
-            echo "manually_bumped=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Bump version (if not manually bumped)
-        id: auto_version
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          NEW_VERSION=$(npm version $BUMP_TYPE --no-git-tag-version)
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Set final version
-        id: version
-        run: |
-          if [ "${{ steps.check_version.outputs.manually_bumped }}" == "true" ]; then
-            echo "new_version=v${{ steps.check_version.outputs.current_version }}" >> $GITHUB_OUTPUT
-          else
-            echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build
-        run: npm run build
-
-      - name: Run tests
-        run: npm test
-
-      - name: Publish to npm
-        run: npm publish --provenance --access public || npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Commit version bump
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          cd $GITHUB_WORKSPACE
-          git config user.name "${{ steps.import_gpg.outputs.name }}"
-          git config user.email "${{ steps.import_gpg.outputs.email }}"
-          git add ${{ env.SDK_ROOT }}/storage-async/package.json ${{ env.SDK_ROOT }}/storage-async/package-lock.json
-          git commit -S -m "Bumped @ops-ai/react-native-toggly-storage-async to ${{ steps.version.outputs.new_version }} [skip ci]"
-
-          MAX_RETRIES=3
-          RETRY_COUNT=0
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if git pull --rebase --autostash origin develop; then
-              if git push origin develop; then
-                echo "Successfully pushed version bump"
-                exit 0
-              fi
-            else
-              git rebase --abort 2>/dev/null || true
-            fi
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
-              sleep 2
-            fi
-          done
-          echo "Failed to push after $MAX_RETRIES attempts"
-          exit 1
-
-  publish-storage-mmkv:
-    if: ${{ (github.event.inputs.packages == 'all' || github.event.inputs.packages == 'storage-mmkv') && (needs.publish-core.result == 'success' || needs.publish-core.result == 'skipped') }}
-    needs: [publish-core]
-    runs-on: ubuntu-latest
-    environment: npm-publish
-    defaults:
-      run:
-        working-directory: Toggly.FeatureManagement.ReactNative/libs/storage-mmkv
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
-          ref: develop
-
-      - name: Pull latest changes
-        run: |
-          cd $GITHUB_WORKSPACE
-          git pull origin develop
-
-      - name: Import GPG key
-        id: import_gpg
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          git_user_signingkey: true
-          git_commit_gpgsign: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install and build core dependency
-        working-directory: Toggly.FeatureManagement.ReactNative/libs/core
-        run: |
-          npm ci || npm install
-          npm run build
-
-      - name: Install dependencies
-        run: npm ci || npm install
-
-      - name: Check if version was manually bumped
-        id: check_version
-        run: |
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          PREVIOUS_VERSION=$(git show HEAD~1:${{ env.SDK_ROOT }}/storage-mmkv/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
-
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
-            echo "manually_bumped=true" >> $GITHUB_OUTPUT
-          else
-            echo "manually_bumped=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Bump version (if not manually bumped)
-        id: auto_version
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          NEW_VERSION=$(npm version $BUMP_TYPE --no-git-tag-version)
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Set final version
-        id: version
-        run: |
-          if [ "${{ steps.check_version.outputs.manually_bumped }}" == "true" ]; then
-            echo "new_version=v${{ steps.check_version.outputs.current_version }}" >> $GITHUB_OUTPUT
-          else
-            echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build
-        run: npm run build
-
-      - name: Run tests
-        run: npm test
-
-      - name: Publish to npm
-        run: npm publish --provenance --access public || npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Commit version bump
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          cd $GITHUB_WORKSPACE
-          git config user.name "${{ steps.import_gpg.outputs.name }}"
-          git config user.email "${{ steps.import_gpg.outputs.email }}"
-          git add ${{ env.SDK_ROOT }}/storage-mmkv/package.json ${{ env.SDK_ROOT }}/storage-mmkv/package-lock.json
-          git commit -S -m "Bumped @ops-ai/react-native-toggly-storage-mmkv to ${{ steps.version.outputs.new_version }} [skip ci]"
-
-          MAX_RETRIES=3
-          RETRY_COUNT=0
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if git pull --rebase --autostash origin develop; then
-              if git push origin develop; then
-                echo "Successfully pushed version bump"
-                exit 0
-              fi
-            else
-              git rebase --abort 2>/dev/null || true
-            fi
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
-              sleep 2
-            fi
-          done
-          echo "Failed to push after $MAX_RETRIES attempts"
-          exit 1
-
-  # Summary job
   summary:
     if: always()
-    needs: [publish-core, publish-react-native, publish-storage-async, publish-storage-mmkv]
+    needs: [validate, publish]
     runs-on: ubuntu-latest
     steps:
       - name: Summary
         run: |
-          echo "## React Native SDK Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Package | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| @ops-ai/react-native-toggly-core | ${{ needs.publish-core.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| @ops-ai/react-native-toggly | ${{ needs.publish-react-native.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| @ops-ai/react-native-toggly-storage-async | ${{ needs.publish-storage-async.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| @ops-ai/react-native-toggly-storage-mmkv | ${{ needs.publish-storage-mmkv.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "## React Native SDK Release" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ needs.validate.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.validate.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY

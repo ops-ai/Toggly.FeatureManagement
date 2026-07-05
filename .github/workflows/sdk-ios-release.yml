@@ -3,8 +3,16 @@ name: iOS SDK - Release
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
       bump_type:
-        description: 'Version bump type'
+        description: 'Bump type (only used when release_mode is auto_bump)'
         required: false
         default: 'patch'
         type: choice
@@ -28,63 +36,44 @@ jobs:
   validate:
     runs-on: macos-15
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      bump_type: ${{ steps.version.outputs.bump_type }}
+      version: ${{ steps.release.outputs.version }}
+      action: ${{ steps.release.outputs.action }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Determine version from bump type
-        id: version
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_ROOT }}/TogglyCore/Sources/TogglyCore.swift
+          manifest_type: swift
+          registry: none
+          package_name: TogglyCore
+          tag_prefix: ios-sdk-v
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+
+      - name: Sync package version constants
+        if: steps.release.outputs.manifest_changed == 'true'
         run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-
-          LATEST_TAG=$(git tag -l "ios-sdk-v*" --sort=-version:refname | head -n 1)
-          if [ -z "$LATEST_TAG" ]; then
-            CURRENT_VERSION="0.0.0"
-          else
-            CURRENT_VERSION="${LATEST_TAG#ios-sdk-v}"
-          fi
-
-          BASE_VERSION="${CURRENT_VERSION%%-*}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-
-          case "$BUMP_TYPE" in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
-            *)
-              echo "Invalid bump type: $BUMP_TYPE"
-              exit 1
-              ;;
-          esac
-
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
-          echo "Current version: $CURRENT_VERSION"
-          echo "New version: $NEW_VERSION"
-
-      - name: Check if tag exists
-        run: |
-          if git rev-parse "ios-sdk-v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "Tag ios-sdk-v${{ steps.version.outputs.version }} already exists"
-            exit 1
-          fi
+          NEW_VERSION="${{ steps.release.outputs.version }}"
+          sed -i "s/public let togglySwiftUIVersion = \".*\"/public let togglySwiftUIVersion = \"$NEW_VERSION\"/" \
+            ${{ env.SDK_ROOT }}/TogglySwiftUI/Sources/TogglySwiftUI.swift
+          sed -i "s/public let togglyUIKitVersion = \".*\"/public let togglyUIKitVersion = \"$NEW_VERSION\"/" \
+            ${{ env.SDK_ROOT }}/TogglyUIKit/Sources/TogglyUIKit.swift
+          sed -i "s/public let togglyCombineVersion = \".*\"/public let togglyCombineVersion = \"$NEW_VERSION\"/" \
+            ${{ env.SDK_ROOT }}/TogglyCombine/Sources/TogglyCombine.swift
 
   build-and-test:
     needs: validate
+    if: needs.validate.outputs.action == 'publish'
     runs-on: macos-15
     steps:
       - name: Checkout code
@@ -112,6 +101,7 @@ jobs:
 
   release:
     needs: [build-and-test, validate]
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -134,23 +124,35 @@ jobs:
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
 
-      - name: Update version in source
+      - name: Commit version bump
+        if: needs.validate.outputs.manifest_changed == 'true'
         run: |
-          VERSION="${{ needs.validate.outputs.version }}"
-          sed -i "s/public let togglyVersion = \".*\"/public let togglyVersion = \"$VERSION\"/" \
-            ${{ env.SDK_ROOT }}/TogglyCore/Sources/TogglyCore.swift
-          sed -i "s/public let togglySwiftUIVersion = \".*\"/public let togglySwiftUIVersion = \"$VERSION\"/" \
-            ${{ env.SDK_ROOT }}/TogglySwiftUI/Sources/TogglySwiftUI.swift
-          sed -i "s/public let togglyUIKitVersion = \".*\"/public let togglyUIKitVersion = \"$VERSION\"/" \
-            ${{ env.SDK_ROOT }}/TogglyUIKit/Sources/TogglyUIKit.swift
-          sed -i "s/public let togglyCombineVersion = \".*\"/public let togglyCombineVersion = \"$VERSION\"/" \
-            ${{ env.SDK_ROOT }}/TogglyCombine/Sources/TogglyCombine.swift
+          git add ${{ env.SDK_ROOT }}/TogglyCore/Sources/TogglyCore.swift
+          git add ${{ env.SDK_ROOT }}/TogglySwiftUI/Sources/TogglySwiftUI.swift
+          git add ${{ env.SDK_ROOT }}/TogglyUIKit/Sources/TogglyUIKit.swift
+          git add ${{ env.SDK_ROOT }}/TogglyCombine/Sources/TogglyCombine.swift
+          git commit -S -m "Bumped iOS SDK to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]"
 
-      - name: Commit version update
-        run: |
-          git add -A
-          git commit -S -m "Released iOS SDK v${{ needs.validate.outputs.version }} (${{ needs.validate.outputs.bump_type }}) [skip ci]" || echo "No changes to commit"
-          git push origin develop
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              sleep 2
+            fi
+          done
+
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
 
       - name: Create and push tag
         run: |
@@ -201,6 +203,7 @@ jobs:
   summary:
     needs: [release, validate]
     runs-on: ubuntu-latest
+    if: always()
     steps:
       - name: Summary
         run: |
@@ -208,8 +211,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ needs.validate.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Bump type | ${{ needs.validate.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ needs.validate.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry latest | ${{ needs.validate.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.validate.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tag | ios-sdk-v${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

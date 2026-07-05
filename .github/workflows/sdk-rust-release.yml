@@ -3,8 +3,16 @@ name: Rust SDK - Build & Publish
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
       bump_type:
-        description: 'Version bump type'
+        description: 'Bump type (only used when release_mode is auto_bump)'
         required: false
         default: 'patch'
         type: choice
@@ -35,8 +43,12 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      bump_type: ${{ steps.version.outputs.bump_type }}
+      version: ${{ steps.release.outputs.version }}
+      action: ${{ steps.release.outputs.action }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
       crates: ${{ steps.crates.outputs.list }}
     steps:
       - name: Checkout code
@@ -44,40 +56,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine version from bump type
-        id: version
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_ROOT }}/Cargo.toml
+          registry: crates
+          package_name: toggly
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+
+      - name: Sync workspace path dependency versions
+        if: steps.release.outputs.manifest_changed == 'true'
         run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-
-          LATEST_TAG=$(git tag -l "rust-sdk-v*" --sort=-version:refname | head -n 1)
-          if [ -z "$LATEST_TAG" ]; then
-            CURRENT_VERSION="0.0.0"
-          else
-            CURRENT_VERSION="${LATEST_TAG#rust-sdk-v}"
-          fi
-
-          BASE_VERSION="${CURRENT_VERSION%%-*}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-
-          case "$BUMP_TYPE" in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-            *) echo "Invalid bump type: $BUMP_TYPE"; exit 1 ;;
-          esac
-
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
-          echo "Current version: $CURRENT_VERSION"
-          echo "New version: $NEW_VERSION"
-
-      - name: Check if tag exists
-        run: |
-          if git rev-parse "rust-sdk-v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "Tag rust-sdk-v${{ steps.version.outputs.version }} already exists"
-            exit 1
-          fi
+          NEW_VERSION="${{ steps.release.outputs.version }}"
+          sed -i "s/^toggly = { version = \".*\", path = \"toggly\" }/toggly = { version = \"$NEW_VERSION\", path = \"toggly\" }/" ${{ env.SDK_ROOT }}/Cargo.toml
+          sed -i "s/^toggly-macros = { version = \".*\", path = \"toggly-macros\" }/toggly-macros = { version = \"$NEW_VERSION\", path = \"toggly-macros\" }/" ${{ env.SDK_ROOT }}/Cargo.toml
 
       - name: Determine crates to publish
         id: crates
@@ -91,6 +85,7 @@ jobs:
 
   build-and-test:
     needs: validate
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -136,6 +131,7 @@ jobs:
 
   release:
     needs: [build-and-test, validate]
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
     environment: crates-publish
     steps:
@@ -156,14 +152,6 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Update workspace version
-        run: |
-          NEW_VERSION="${{ needs.validate.outputs.version }}"
-          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" ${{ env.SDK_ROOT }}/Cargo.toml
-          sed -i "s/^toggly = { version = \".*\", path = \"toggly\" }/toggly = { version = \"$NEW_VERSION\", path = \"toggly\" }/" ${{ env.SDK_ROOT }}/Cargo.toml
-          sed -i "s/^toggly-macros = { version = \".*\", path = \"toggly-macros\" }/toggly-macros = { version = \"$NEW_VERSION\", path = \"toggly-macros\" }/" ${{ env.SDK_ROOT }}/Cargo.toml
-          echo "Updated workspace version to $NEW_VERSION"
 
       - name: Publish crates to crates.io
         working-directory: ${{ env.SDK_ROOT }}
@@ -199,19 +187,18 @@ jobs:
           git config user.email "${{ steps.import_gpg.outputs.email }}"
 
       - name: Commit version bump and tag
+        if: needs.validate.outputs.manifest_changed == 'true'
         run: |
           git add ${{ env.SDK_ROOT }}/Cargo.toml
 
-          git commit -S -m "Bumped Rust SDK to v${{ needs.validate.outputs.version }} (${{ needs.validate.outputs.bump_type }}) [skip ci]" || true
-
-          git tag -s -m "Rust SDK v${{ needs.validate.outputs.version }}" "rust-sdk-v${{ needs.validate.outputs.version }}"
+          git commit -S -m "Bumped Rust SDK to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]"
 
           MAX_RETRIES=3
           RETRY_COUNT=0
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             if git pull --rebase --autostash origin develop; then
-              if git push origin develop && git push origin "rust-sdk-v${{ needs.validate.outputs.version }}"; then
-                echo "Successfully pushed version bump and tag"
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
                 exit 0
               fi
             else
@@ -227,6 +214,11 @@ jobs:
 
           echo "Failed to push after $MAX_RETRIES attempts"
           exit 1
+
+      - name: Create and push tag
+        run: |
+          git tag -s -m "Rust SDK v${{ needs.validate.outputs.version }}" "rust-sdk-v${{ needs.validate.outputs.version }}"
+          git push origin "rust-sdk-v${{ needs.validate.outputs.version }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -284,8 +276,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ needs.validate.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Bump type | ${{ needs.validate.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ needs.validate.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry latest | ${{ needs.validate.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.validate.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tag | rust-sdk-v${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Crates | ${{ needs.validate.outputs.crates }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY

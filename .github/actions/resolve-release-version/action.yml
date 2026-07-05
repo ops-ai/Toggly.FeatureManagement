@@ -1,0 +1,66 @@
+name: Resolve release version
+description: Manifest-first version resolution — compare manifest to registry and decide publish, skip, or fail.
+
+inputs:
+  manifest_path:
+    description: Path to the package manifest (package.json, pubspec.yaml, Cargo.toml, etc.)
+    required: true
+  manifest_type:
+    description: Manifest format (auto-detected from path when omitted)
+    required: false
+    default: ''
+  registry:
+    description: Registry to compare against (npm, pub, nuget, crates, pypi, rubygems, packagist, none)
+    required: true
+  package_name:
+    description: Package name on the registry
+    required: true
+  release_mode:
+    description: publish (use manifest) or auto_bump (legacy CI bump from registry)
+    required: false
+    default: publish
+  bump_type:
+    description: Semver bump when release_mode is auto_bump
+    required: false
+    default: patch
+  tag_prefix:
+    description: Optional git tag prefix for skip detection when registry is none (e.g. go-sdk-v)
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: Resolved version to publish
+    value: ${{ steps.resolve.outputs.version }}
+  action:
+    description: publish, skip, or fail
+    value: ${{ steps.resolve.outputs.action }}
+  reason:
+    description: Human-readable decision reason
+    value: ${{ steps.resolve.outputs.reason }}
+  registry_latest:
+    description: Latest version on the registry (empty when unknown)
+    value: ${{ steps.resolve.outputs.registry_latest }}
+  manifest_version:
+    description: Version read from the manifest before resolution
+    value: ${{ steps.resolve.outputs.manifest_version }}
+  manifest_changed:
+    description: Whether the manifest was updated (auto_bump mode)
+    value: ${{ steps.resolve.outputs.manifest_changed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve version
+      id: resolve
+      shell: bash
+      run: node "${{ github.action_path }}/resolve.mjs"
+      env:
+        MANIFEST_PATH: ${{ inputs.manifest_path }}
+        MANIFEST_TYPE: ${{ inputs.manifest_type }}
+        REGISTRY: ${{ inputs.registry }}
+        PACKAGE_NAME: ${{ inputs.package_name }}
+        RELEASE_MODE: ${{ inputs.release_mode }}
+        BUMP_TYPE: ${{ inputs.bump_type }}
+        TAG_PREFIX: ${{ inputs.tag_prefix }}
+        GITHUB_OUTPUT: ${{ env.GITHUB_OUTPUT }}

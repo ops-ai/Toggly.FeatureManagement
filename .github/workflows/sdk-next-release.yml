@@ -3,8 +3,16 @@ name: Next.js SDK - Build & Publish
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
       bump_type:
-        description: 'Version bump type'
+        description: 'Bump type (only used when release_mode is auto_bump)'
         required: false
         default: 'patch'
         type: choice
@@ -24,6 +32,8 @@ permissions:
 
 env:
   SDK_ROOT: Toggly.FeatureManagement.Next
+  CORE_MANIFEST: Toggly.FeatureManagement.Next/nextjs-toggly-core/package.json
+  ALL_PACKAGES: nextjs-toggly-core nextjs-toggly-server nextjs-toggly-client nextjs-toggly-edge
 
 jobs:
   build-and-publish:
@@ -59,132 +69,112 @@ jobs:
         with:
           version: 9
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.CORE_MANIFEST }}
+          registry: npm
+          package_name: '@ops-ai/nextjs-toggly-core'
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
 
-      - name: Check if version was manually bumped
-        id: check_version
+      - name: Sync monorepo package versions
+        if: steps.release.outputs.manifest_changed == 'true'
         run: |
-          CURRENT_VERSION=$(node -p "require('./nextjs-toggly-core/package.json').version")
-
-          PREVIOUS_VERSION=$(git show HEAD~1:${{ env.SDK_ROOT }}/nextjs-toggly-core/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
-
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
-
-          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
-            echo "manually_bumped=true" >> $GITHUB_OUTPUT
-            echo "Version was manually bumped from $PREVIOUS_VERSION to $CURRENT_VERSION"
-          else
-            echo "manually_bumped=false" >> $GITHUB_OUTPUT
-            echo "No manual version bump detected"
-          fi
-
-      - name: Bump version (if not manually bumped)
-        id: auto_version
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          echo "Bumping $BUMP_TYPE version..."
-
-          CURRENT_VERSION=$(node -p "require('./nextjs-toggly-core/package.json').version")
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-
-          case "$BUMP_TYPE" in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-          esac
-
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-
-          for pkg in nextjs-toggly-core nextjs-toggly-server nextjs-toggly-client nextjs-toggly-edge; do
+          TARGET="${{ steps.release.outputs.version }}"
+          for pkg in nextjs-toggly-server nextjs-toggly-client nextjs-toggly-edge; do
             cd "$pkg"
-            npm version "$NEW_VERSION" --no-git-tag-version
+            npm version "$TARGET" --no-git-tag-version --allow-same-version
             cd ..
           done
 
-          echo "new_version=v$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "Bumped to version $NEW_VERSION"
-
-      - name: Set version output (manual bump)
-        id: manual_version
-        if: steps.check_version.outputs.manually_bumped == 'true'
+      - name: Validate monorepo versions
+        if: steps.release.outputs.action == 'publish'
         run: |
-          echo "new_version=v${{ steps.check_version.outputs.current_version }}" >> $GITHUB_OUTPUT
+          TARGET="${{ steps.release.outputs.version }}"
+          for pkg in ${{ env.ALL_PACKAGES }}; do
+            VER=$(node -p "require('./$pkg/package.json').version")
+            if [ "$VER" != "$TARGET" ]; then
+              echo "Version mismatch in $pkg: manifest $VER != resolved $TARGET"
+              exit 1
+            fi
+          done
 
-      - name: Set final version
-        id: version
-        run: |
-          if [ "${{ steps.check_version.outputs.manually_bumped }}" == "true" ]; then
-            echo "new_version=${{ steps.manual_version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          else
-            echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          fi
+      - name: Install dependencies
+        if: steps.release.outputs.action == 'publish'
+        run: pnpm install --frozen-lockfile
 
       - name: Type check
+        if: steps.release.outputs.action == 'publish'
         run: pnpm typecheck
 
       - name: Build
+        if: steps.release.outputs.action == 'publish'
         run: pnpm build
 
       - name: Run tests
+        if: steps.release.outputs.action == 'publish'
         run: pnpm test
 
       - name: Determine packages to publish
+        if: steps.release.outputs.action == 'publish'
         id: packages
         run: |
           INPUT="${{ github.event.inputs.packages || 'all' }}"
           if [ "$INPUT" == "all" ]; then
-            echo "list=nextjs-toggly-core nextjs-toggly-server nextjs-toggly-client nextjs-toggly-edge" >> $GITHUB_OUTPUT
+            echo "list=${{ env.ALL_PACKAGES }}" >> $GITHUB_OUTPUT
           else
             echo "list=$(echo "$INPUT" | tr ',' ' ')" >> $GITHUB_OUTPUT
           fi
 
       - name: Publish packages to npm
+        if: steps.release.outputs.action == 'publish'
         run: |
           for pkg in ${{ steps.packages.outputs.list }}; do
             echo "Publishing $pkg..."
             cd "$pkg"
-            (npm publish --provenance --access public || npm publish --access public)
+            PACKAGE_NAME=$(node -p "require('./package.json').name")
+            PACKAGE_VERSION=$(node -p "require('./package.json').version")
+            if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
+              echo "Skipping ${PACKAGE_NAME}@${PACKAGE_VERSION} (already published)"
+            else
+              npm publish --provenance --access public || npm publish --access public
+            fi
             cd ..
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
-        if: steps.check_version.outputs.manually_bumped == 'false'
+        if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
         run: |
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
 
-          git add ${{ env.SDK_ROOT }}/nextjs-toggly-core/package.json \
-                  ${{ env.SDK_ROOT }}/nextjs-toggly-server/package.json \
-                  ${{ env.SDK_ROOT }}/nextjs-toggly-client/package.json \
-                  ${{ env.SDK_ROOT }}/nextjs-toggly-edge/package.json
+          for pkg in ${{ env.ALL_PACKAGES }}; do
+            git add ${{ env.SDK_ROOT }}/$pkg/package.json
+          done
 
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          git commit -S -m "Bumped Next.js SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
+          git commit -S -m "Bumped Next.js SDK to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
 
           MAX_RETRIES=3
           RETRY_COUNT=0
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if git pull --rebase --autostash origin develop; then
-              if git push origin develop; then
-                echo "Successfully pushed version bump"
-                exit 0
-              fi
-            else
-              git rebase --abort 2>/dev/null || true
+            if git pull --rebase --autostash origin develop && git push origin develop; then
+              exit 0
             fi
-
+            git rebase --abort 2>/dev/null || true
             RETRY_COUNT=$((RETRY_COUNT + 1))
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
-              sleep 2
-            fi
+            sleep 2
           done
-
-          echo "Failed to push after $MAX_RETRIES attempts"
           exit 1
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo "## Next.js SDK Release" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY

@@ -3,8 +3,16 @@ name: React SDK - Build & Publish
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
       bump_type:
-        description: 'Version bump type'
+        description: 'Bump type (only used when release_mode is auto_bump)'
         required: false
         default: 'patch'
         type: choice
@@ -17,13 +25,17 @@ permissions:
   contents: write
   id-token: write
 
+env:
+  SDK_DIR: Toggly.FeatureManagement.React
+  NPM_PACKAGE: '@ops-ai/react-feature-flags-toggly'
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
     environment: npm-publish
     defaults:
       run:
-        working-directory: Toggly.FeatureManagement.React
+        working-directory: ${{ env.SDK_DIR }}
 
     steps:
       - name: Checkout code
@@ -46,108 +58,81 @@ jobs:
           node-version: 'lts/*'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_DIR }}/package.json
+          registry: npm
+          package_name: ${{ env.NPM_PACKAGE }}
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+
       - name: Install dependencies
+        if: steps.release.outputs.action == 'publish'
         run: npm install
 
-      - name: Check if version was manually bumped
-        id: check_version
-        run: |
-          # Get current version from package.json
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          
-          # Get version from previous commit (HEAD~1)
-          # This checks if version changed in the commits being pushed
-          PREVIOUS_VERSION=$(git show HEAD~1:Toggly.FeatureManagement.React/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
-          
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
-          
-          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
-            echo "manually_bumped=true" >> $GITHUB_OUTPUT
-            echo "Version was manually bumped from $PREVIOUS_VERSION to $CURRENT_VERSION"
-          else
-            echo "manually_bumped=false" >> $GITHUB_OUTPUT
-            echo "No manual version bump detected"
-          fi
-
-      - name: Bump version (if not manually bumped)
-        id: auto_version
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          # Determine bump type (default to patch for automatic runs)
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          echo "Bumping $BUMP_TYPE version..."
-          
-          # Bump version and capture the new version
-          NEW_VERSION=$(npm version $BUMP_TYPE --no-git-tag-version)
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "Bumped to version $NEW_VERSION"
-      
-      - name: Set version output (manual bump)
-        id: manual_version
-        if: steps.check_version.outputs.manually_bumped == 'true'
-        run: |
-          echo "new_version=v${{ steps.check_version.outputs.current_version }}" >> $GITHUB_OUTPUT
-      
-      - name: Set final version
-        id: version
-        run: |
-          if [ "${{ steps.check_version.outputs.manually_bumped }}" == "true" ]; then
-            echo "new_version=${{ steps.manual_version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          else
-            echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Build
+        if: steps.release.outputs.action == 'publish'
         run: npm run build
 
       - name: Run tests
+        if: steps.release.outputs.action == 'publish'
         run: npm test
 
       - name: Publish to npm
+        if: steps.release.outputs.action == 'publish'
         run: npm publish --provenance --access public || npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
-        if: steps.check_version.outputs.manually_bumped == 'false'
+        if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
         run: |
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
-          
-          # Add version bump changes
-          git add Toggly.FeatureManagement.React/package.json Toggly.FeatureManagement.React/package-lock.json
-          
-          # Commit with bump type
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          git commit -S -m "Bumped React SDK to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
-          
-          # Pull and push with retry logic
+
+          git add ${{ env.SDK_DIR }}/package.json
+          git add ${{ env.SDK_DIR }}/package-lock.json 2>/dev/null || true
+
+          git commit -S -m "Bumped React SDK to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
+
           MAX_RETRIES=3
           RETRY_COUNT=0
-          
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            # Try to pull with rebase (using autostash to handle any conflicts)
             if git pull --rebase --autostash origin develop; then
-              # Pull succeeded, now try to push
               if git push origin develop; then
-                echo "✅ Successfully pushed version bump"
+                echo "Successfully pushed version bump"
                 exit 0
-              else
-                echo "⚠️ Push failed, retrying..."
               fi
             else
-              echo "⚠️ Pull/rebase failed, aborting rebase and retrying..."
               git rebase --abort 2>/dev/null || true
             fi
-            
+
             RETRY_COUNT=$((RETRY_COUNT + 1))
             if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES..."
               sleep 2
             fi
           done
-          
-          echo "❌ Failed to push after $MAX_RETRIES attempts"
+
+          echo "Failed to push after $MAX_RETRIES attempts"
           exit 1
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo "## React SDK Release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ steps.release.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry latest | ${{ steps.release.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Package**: ${{ env.NPM_PACKAGE }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View on NPM](https://www.npmjs.com/package/${{ env.NPM_PACKAGE }})" >> $GITHUB_STEP_SUMMARY

@@ -3,8 +3,16 @@ name: Build and Release CLI
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
       bump_type:
-        description: 'Version bump type'
+        description: 'Bump type (only used when release_mode is auto_bump)'
         required: false
         default: 'patch'
         type: choice
@@ -17,65 +25,30 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      bump_type: ${{ steps.version.outputs.bump_type }}
+      version: ${{ steps.release.outputs.version }}
+      action: ${{ steps.release.outputs.action }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Determine version from bump type
-        id: version
-        shell: bash
-        run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-
-          LATEST_TAG=$(git tag -l "cli-v*" --sort=-version:refname | head -n 1)
-          if [ -z "$LATEST_TAG" ]; then
-            CURRENT_VERSION="0.0.0"
-          else
-            CURRENT_VERSION="${LATEST_TAG#cli-v}"
-          fi
-
-          BASE_VERSION="${CURRENT_VERSION%%-*}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-
-          case "$BUMP_TYPE" in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
-            *)
-              echo "Invalid bump type: $BUMP_TYPE"
-              exit 1
-              ;;
-          esac
-
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
-          echo "Current version: $CURRENT_VERSION"
-          echo "New version: $NEW_VERSION"
-
-      - name: Check if tag exists
-        shell: bash
-        run: |
-          if git rev-parse "cli-v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "Tag cli-v${{ steps.version.outputs.version }} already exists"
-            exit 1
-          fi
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: Toggly.CLI/VERSION
+          registry: none
+          package_name: toggly-cli
+          tag_prefix: cli-v
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
 
   build:
     needs: validate
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -134,23 +107,16 @@ jobs:
             -p:StripSymbols=false \
             -o ./publish/${{ matrix.rid }}
 
-          # Rename binary to match expected artifact name
           cd ./publish/${{ matrix.rid }}
-          
-          # Expected binary name
           TARGET_BIN="${{ matrix.binary-name }}"
-          
-          # Default output name from dotnet publish
           DEFAULT_BIN="Toggly.CLI"
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             DEFAULT_BIN="Toggly.CLI.exe"
           fi
 
           if [[ ! -f "$TARGET_BIN" && -f "$DEFAULT_BIN" ]]; then
-            echo "Renaming $DEFAULT_BIN to $TARGET_BIN"
             mv "$DEFAULT_BIN" "$TARGET_BIN"
           elif [[ ! -f "$TARGET_BIN" ]]; then
-            echo "Error: Could not find binary. Listing directory:"
             ls -R
             exit 1
           fi
@@ -162,7 +128,6 @@ jobs:
           cd ./publish/${{ matrix.rid }}
           chmod +x ${{ matrix.binary-name }}
           tar -czf ../../${{ matrix.artifact-name }}.tar.gz ${{ matrix.binary-name }}
-          cd ../..
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'
@@ -170,7 +135,6 @@ jobs:
         run: |
           cd ./publish/${{ matrix.rid }}
           Compress-Archive -Path ${{ matrix.binary-name }} -DestinationPath ../../${{ matrix.artifact-name }}.zip
-          cd ../..
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -181,11 +145,14 @@ jobs:
 
   create-release:
     needs: [build, validate]
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -194,48 +161,24 @@ jobs:
           pattern: toggly-cli-*
           merge-multiple: false
 
-      - name: Determine version
-        id: version
-        shell: bash
+      - name: Commit version bump
+        if: needs.validate.outputs.manifest_changed == 'true'
         run: |
-          VERSION="${{ needs.validate.outputs.version }}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=cli-v$VERSION" >> $GITHUB_OUTPUT
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Toggly.CLI/VERSION
+          git commit -m "Bumped CLI to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]" || true
+          git push origin develop || true
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: Toggly CLI ${{ steps.version.outputs.version }}
+          tag_name: cli-v${{ needs.validate.outputs.version }}
+          name: Toggly CLI ${{ needs.validate.outputs.version }}
           body: |
-            ## Toggly CLI ${{ steps.version.outputs.version }}
-            
-            ### Downloads
-            
-            - **Linux x64**: [toggly-cli-linux-x64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/toggly-cli-linux-x64.tar.gz)
-            - **Linux ARM64**: [toggly-cli-linux-arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/toggly-cli-linux-arm64.tar.gz)
-            - **Windows x64**: [toggly-cli-windows-x64.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/toggly-cli-windows-x64.zip)
-            - **macOS x64 (Intel)**: [toggly-cli-macos-x64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/toggly-cli-macos-x64.tar.gz)
-            - **macOS ARM64 (Apple Silicon)**: [toggly-cli-macos-arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/toggly-cli-macos-arm64.tar.gz)
-            
-            ### Installation
-            
-            After downloading, extract the archive and add the binary to your PATH.
-            
-            **Linux/macOS:**
-            ```bash
-            tar -xzf toggly-cli-*.tar.gz
-            chmod +x toggly-cli
-            sudo mv toggly-cli /usr/local/bin/
-            ```
-            
-            **Windows:**
-            ```powershell
-            Expand-Archive toggly-cli-windows-x64.zip
-            # Add toggly-cli.exe to your PATH
-            ```
-            
-            See the [CLI documentation](https://docs.toggly.io/docs/using-toggly/cli) for more information.
+            ## Toggly CLI ${{ needs.validate.outputs.version }}
+
+            See the [CLI documentation](https://docs.toggly.io/docs/using-toggly/cli) for installation instructions.
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
@@ -244,3 +187,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  summary:
+    needs: validate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "## CLI Release" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ needs.validate.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.validate.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY

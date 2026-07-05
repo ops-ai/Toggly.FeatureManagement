@@ -3,8 +3,16 @@ name: Node.js Server SDKs - Build & Publish
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
       bump_type:
-        description: 'Version bump type for all packages'
+        description: 'Bump type (only used when release_mode is auto_bump)'
         required: false
         default: 'patch'
         type: choice
@@ -22,6 +30,9 @@ permissions:
   contents: write
   id-token: write
 
+env:
+  SDK_ROOT: Toggly.FeatureManagement.Node
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -36,7 +47,6 @@ jobs:
           if [ "$PACKAGES" == "all" ]; then
             MATRIX='["toggly-node-core","toggly-express","toggly-fastify","toggly-hono","toggly-koa"]'
           else
-            # Convert comma-separated to JSON array, adding toggly- prefix
             MATRIX=$(echo "$PACKAGES" | sed 's/core/toggly-node-core/g; s/express/toggly-express/g; s/fastify/toggly-fastify/g; s/hono/toggly-hono/g; s/koa/toggly-koa/g' | tr ',' '\n' | jq -R . | jq -s .)
           fi
 
@@ -53,13 +63,11 @@ jobs:
         node-version: ['18.x', '20.x', '22.x']
     defaults:
       run:
-        working-directory: Toggly.FeatureManagement.Node
+        working-directory: ${{ env.SDK_ROOT }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -99,19 +107,18 @@ jobs:
     environment: npm-publish
     strategy:
       fail-fast: false
-      max-parallel: 1  # Publish sequentially to handle dependencies
+      max-parallel: 1
       matrix:
         package: ${{ fromJson(needs.prepare.outputs.matrix) }}
     defaults:
       run:
-        working-directory: Toggly.FeatureManagement.Node
+        working-directory: ${{ env.SDK_ROOT }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.RELEASE_PUSH_TOKEN }}
-          fetch-depth: 2  # Need previous commit for version check
 
       - name: Import GPG key
         id: import_gpg
@@ -151,31 +158,39 @@ jobs:
       - name: Build all packages
         run: pnpm -r build
 
-      - name: Bump version
-        id: version
-        working-directory: Toggly.FeatureManagement.Node/${{ matrix.package }}
+      - name: Read npm package name
+        id: pkg
+        working-directory: ${{ env.SDK_ROOT }}/${{ matrix.package }}
         run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          NEW_VERSION=$(npm version $BUMP_TYPE --no-git-tag-version)
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "Bumped ${{ matrix.package }} to version $NEW_VERSION"
+          echo "name=$(node -p "require('./package.json').name")" >> $GITHUB_OUTPUT
+
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_ROOT }}/${{ matrix.package }}/package.json
+          registry: npm
+          package_name: ${{ steps.pkg.outputs.name }}
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
 
       - name: Publish to npm
-        working-directory: Toggly.FeatureManagement.Node/${{ matrix.package }}
+        if: steps.release.outputs.action == 'publish'
+        working-directory: ${{ env.SDK_ROOT }}/${{ matrix.package }}
         run: npm publish --provenance --access public || npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
+        if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
         run: |
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
 
-          git add Toggly.FeatureManagement.Node/${{ matrix.package }}/package.json
+          git add ${{ env.SDK_ROOT }}/${{ matrix.package }}/package.json
 
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          git commit -S -m "Bumped ${{ matrix.package }} to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
+          git commit -S -m "Bumped ${{ matrix.package }} to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
 
           MAX_RETRIES=5
           RETRY_COUNT=0
@@ -194,12 +209,20 @@ jobs:
             fi
 
             RETRY_COUNT=$((RETRY_COUNT + 1))
-            echo "Push failed, attempt $RETRY_COUNT of $MAX_RETRIES"
             sleep 3
           done
 
           echo "Failed to push after $MAX_RETRIES attempts"
           exit 1
+
+      - name: Package summary
+        if: always()
+        run: |
+          echo "### ${{ matrix.package }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Action: ${{ steps.release.outputs.action }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Version: ${{ steps.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Reason: ${{ steps.release.outputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
   summary:
     runs-on: ubuntu-latest
@@ -210,11 +233,9 @@ jobs:
         run: |
           echo "## Node.js Server SDK Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Released Packages" >> $GITHUB_STEP_SUMMARY
+          echo "Release mode: ${{ github.event.inputs.release_mode || 'publish' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           PACKAGES='${{ needs.prepare.outputs.matrix }}'
           echo "$PACKAGES" | jq -r '.[]' | while read pkg; do
             echo "- @ops-ai/$pkg" >> $GITHUB_STEP_SUMMARY
           done
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Bump type: ${{ github.event.inputs.bump_type || 'patch' }}" >> $GITHUB_STEP_SUMMARY

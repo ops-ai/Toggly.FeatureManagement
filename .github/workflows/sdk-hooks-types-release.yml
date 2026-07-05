@@ -3,8 +3,16 @@ name: Hooks Types Package - Build & Publish
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
       bump_type:
-        description: 'Version bump type'
+        description: 'Bump type (only used when release_mode is auto_bump)'
         required: false
         default: 'patch'
         type: choice
@@ -17,13 +25,17 @@ permissions:
   contents: write
   id-token: write
 
+env:
+  SDK_DIR: toggly-hooks-types
+  NPM_PACKAGE: '@ops-ai/toggly-hooks-types'
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
     environment: npm-publish
     defaults:
       run:
-        working-directory: toggly-hooks-types
+        working-directory: ${{ env.SDK_DIR }}
 
     steps:
       - name: Checkout code
@@ -46,162 +58,101 @@ jobs:
           node-version: 'lts/*'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_DIR }}/package.json
+          registry: npm
+          package_name: ${{ env.NPM_PACKAGE }}
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+
       - name: Install dependencies
+        if: steps.release.outputs.action == 'publish'
         run: npm install
 
-      - name: Check if version was manually bumped
-        id: check_version
-        run: |
-          # Get current version from package.json
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          
-          # Get version from previous commit (HEAD~1)
-          cd $GITHUB_WORKSPACE
-          PREVIOUS_VERSION=$(git show HEAD~1:toggly-hooks-types/package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf-8')).version" || echo "$CURRENT_VERSION")
-          
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
-          
-          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
-            echo "manually_bumped=true" >> $GITHUB_OUTPUT
-            echo "✅ Version was manually bumped from $PREVIOUS_VERSION to $CURRENT_VERSION"
-          else
-            echo "manually_bumped=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No manual version bump detected"
-          fi
-
-      - name: Bump version (if not manually bumped)
-        id: auto_version
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          # Determine bump type (default to patch for automatic runs)
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          echo "🔄 Bumping $BUMP_TYPE version..."
-          
-          # Bump version and capture the new version
-          NEW_VERSION=$(npm version $BUMP_TYPE --no-git-tag-version)
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "✅ Bumped to version $NEW_VERSION"
-      
-      - name: Set version output (manual bump)
-        id: manual_version
-        if: steps.check_version.outputs.manually_bumped == 'true'
-        run: |
-          echo "new_version=v${{ steps.check_version.outputs.current_version }}" >> $GITHUB_OUTPUT
-      
-      - name: Set final version
-        id: version
-        run: |
-          if [ "${{ steps.check_version.outputs.manually_bumped }}" == "true" ]; then
-            echo "new_version=${{ steps.manual_version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          else
-            echo "new_version=${{ steps.auto_version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Run type check
+        if: steps.release.outputs.action == 'publish'
         run: npm run typecheck
 
       - name: Build package
+        if: steps.release.outputs.action == 'publish'
         run: npm run build
 
       - name: Verify build outputs
+        if: steps.release.outputs.action == 'publish'
         run: |
           if [ ! -f "dist/index.js" ] || [ ! -f "dist/index.d.ts" ]; then
-            echo "❌ Build verification failed - missing output files"
+            echo "Build verification failed - missing output files"
             exit 1
           fi
-          echo "✅ Build outputs verified"
-
-      - name: Update CHANGELOG
-        if: steps.check_version.outputs.manually_bumped == 'false'
-        run: |
-          VERSION="${{ steps.version.outputs.new_version }}"
-          VERSION="${VERSION#v}"  # Remove 'v' prefix
-          DATE=$(date +%Y-%m-%d)
-          
-          # Create new changelog entry
-          sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [$VERSION] - $DATE/" CHANGELOG.md
-          
-          echo "✅ Updated CHANGELOG.md with version $VERSION"
+          echo "Build outputs verified"
 
       - name: Verify package contents
+        if: steps.release.outputs.action == 'publish'
         run: |
           npm pack --dry-run
-          echo "📦 Package contents verified"
+          echo "Package contents verified"
 
       - name: Publish to npm
+        if: steps.release.outputs.action == 'publish'
         run: npm publish --provenance --access public || npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
-        if: steps.check_version.outputs.manually_bumped == 'false'
+        if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
         run: |
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
-          
-          # Clean npm cache to avoid any stale files
-          npm cache clean --force
-          
-          # Add version bump changes FIRST (before pulling)
-          git add toggly-hooks-types/package.json
-          git add toggly-hooks-types/package-lock.json
-          git add toggly-hooks-types/CHANGELOG.md
-          
-          # Commit with bump type
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-          git commit -S -m "Bumped hooks types package to ${{ steps.version.outputs.new_version }} ($BUMP_TYPE) [skip ci]"
-          
-          # Now pull and push with retry logic
+
+          git add ${{ env.SDK_DIR }}/package.json
+          git add ${{ env.SDK_DIR }}/package-lock.json 2>/dev/null || true
+
+          git commit -S -m "Bumped hooks types package to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
+
           MAX_RETRIES=3
           RETRY_COUNT=0
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            # Pull latest changes with rebase and autostash
-            if ! git pull --rebase --autostash origin develop; then
-              echo "Pull/rebase failed, retrying..."
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
+                exit 0
+              fi
+            else
               git rebase --abort 2>/dev/null || true
-              sleep 2
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-              continue
             fi
-            
-            # Try to push
-            if git push origin develop; then
-              echo "✅ Successfully pushed version bump"
-              exit 0
-            fi
-            
+
             RETRY_COUNT=$((RETRY_COUNT + 1))
-            echo "⚠️ Push failed, attempt $RETRY_COUNT of $MAX_RETRIES"
-            
             if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
               sleep 2
             fi
           done
-          
-          echo "❌ Failed to push after $MAX_RETRIES attempts"
+
+          echo "Failed to push after $MAX_RETRIES attempts"
           exit 1
 
       - name: Create GitHub Release
-        if: steps.check_version.outputs.manually_bumped == 'false'
+        if: steps.release.outputs.action == 'publish'
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.version.outputs.new_version }}
-          name: Hooks Types ${{ steps.version.outputs.new_version }}
+          tag_name: v${{ steps.release.outputs.version }}
+          name: Hooks Types v${{ steps.release.outputs.version }}
           body: |
-            ## @ops-ai/toggly-hooks-types ${{ steps.version.outputs.new_version }}
-            
+            ## @ops-ai/toggly-hooks-types ${{ steps.release.outputs.version }}
+
             TypeScript types for Toggly SDK hooks
-            
+
             ### Installation
             ```bash
             npm install @ops-ai/toggly-hooks-types
             ```
-            
+
             ### What's Changed
             See [CHANGELOG.md](https://github.com/ops-ai/Toggly.FeatureManagement/blob/develop/toggly-hooks-types/CHANGELOG.md) for details.
-            
+
             ### NPM Package
             https://www.npmjs.com/package/@ops-ai/toggly-hooks-types
           draft: false
@@ -212,10 +163,17 @@ jobs:
       - name: Publish summary
         if: always()
         run: |
-          echo "## 📦 Hooks Types Package Release" >> $GITHUB_STEP_SUMMARY
+          echo "## Hooks Types Package Release" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version**: ${{ steps.version.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Package**: @ops-ai/toggly-hooks-types" >> $GITHUB_STEP_SUMMARY
-          echo "**Bump Type**: ${{ github.event.inputs.bump_type || 'patch' }}" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ steps.release.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry latest | ${{ steps.release.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🔗 [View on NPM](https://www.npmjs.com/package/@ops-ai/toggly-hooks-types)" >> $GITHUB_STEP_SUMMARY
+          echo "**Package**: ${{ env.NPM_PACKAGE }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View on NPM](https://www.npmjs.com/package/${{ env.NPM_PACKAGE }})" >> $GITHUB_STEP_SUMMARY

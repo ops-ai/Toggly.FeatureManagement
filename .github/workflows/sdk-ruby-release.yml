@@ -3,8 +3,16 @@ name: Ruby SDK - Build & Publish
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
       bump_type:
-        description: 'Version bump type'
+        description: 'Bump type (only used when release_mode is auto_bump)'
         required: false
         default: 'patch'
         type: choice
@@ -34,8 +42,12 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      bump_type: ${{ steps.version.outputs.bump_type }}
+      version: ${{ steps.release.outputs.version }}
+      action: ${{ steps.release.outputs.action }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
       gems: ${{ steps.gems.outputs.list }}
     steps:
       - name: Checkout code
@@ -43,40 +55,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine version from bump type
-        id: version
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_ROOT }}/toggly/lib/toggly/version.rb
+          manifest_type: ruby_version
+          registry: rubygems
+          package_name: toggly
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+
+      - name: Sync gem version files
+        if: steps.release.outputs.manifest_changed == 'true'
         run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type || 'patch' }}"
-
-          LATEST_TAG=$(git tag -l "ruby-sdk-v*" --sort=-version:refname | head -n 1)
-          if [ -z "$LATEST_TAG" ]; then
-            CURRENT_VERSION="0.0.0"
-          else
-            CURRENT_VERSION="${LATEST_TAG#ruby-sdk-v}"
-          fi
-
-          BASE_VERSION="${CURRENT_VERSION%%-*}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-
-          case "$BUMP_TYPE" in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-            *) echo "Invalid bump type: $BUMP_TYPE"; exit 1 ;;
-          esac
-
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
-          echo "Current version: $CURRENT_VERSION"
-          echo "New version: $NEW_VERSION"
-
-      - name: Check if tag exists
-        run: |
-          if git rev-parse "ruby-sdk-v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "Tag ruby-sdk-v${{ steps.version.outputs.version }} already exists"
-            exit 1
-          fi
+          NEW_VERSION="${{ steps.release.outputs.version }}"
+          for version_file in \
+            ${{ env.SDK_ROOT }}/toggly-rails/lib/toggly/rails/version.rb \
+            ${{ env.SDK_ROOT }}/toggly-cache/lib/toggly/cache/version.rb; do
+            sed -i "s/VERSION = \".*\"/VERSION = \"${NEW_VERSION}\"/" "$version_file"
+          done
 
       - name: Determine gems to publish
         id: gems
@@ -90,6 +88,7 @@ jobs:
 
   build-and-test:
     needs: validate
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -124,6 +123,7 @@ jobs:
 
   release:
     needs: [build-and-test, validate]
+    if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
     environment: rubygems-publish
     permissions:
@@ -153,44 +153,6 @@ jobs:
       - name: Configure RubyGems credentials (Trusted Publishing)
         uses: rubygems/configure-rubygems-credentials@v1.0.0
 
-      - name: Update version files
-        run: |
-          NEW_VERSION="${{ needs.validate.outputs.version }}"
-
-          # Update toggly core version
-          cat > ${{ env.SDK_ROOT }}/toggly/lib/toggly/version.rb << 'RUBY'
-          # frozen_string_literal: true
-
-          module Toggly
-            VERSION = "NEW_VER"
-          end
-          RUBY
-          sed -i "s/NEW_VER/$NEW_VERSION/" ${{ env.SDK_ROOT }}/toggly/lib/toggly/version.rb
-
-          # Update toggly-rails version
-          cat > ${{ env.SDK_ROOT }}/toggly-rails/lib/toggly/rails/version.rb << 'RUBY'
-          # frozen_string_literal: true
-
-          module Toggly
-            module Rails
-              VERSION = "NEW_VER"
-            end
-          end
-          RUBY
-          sed -i "s/NEW_VER/$NEW_VERSION/" ${{ env.SDK_ROOT }}/toggly-rails/lib/toggly/rails/version.rb
-
-          # Update toggly-cache version
-          cat > ${{ env.SDK_ROOT }}/toggly-cache/lib/toggly/cache/version.rb << 'RUBY'
-          # frozen_string_literal: true
-
-          module Toggly
-            module Cache
-              VERSION = "NEW_VER"
-            end
-          end
-          RUBY
-          sed -i "s/NEW_VER/$NEW_VERSION/" ${{ env.SDK_ROOT }}/toggly-cache/lib/toggly/cache/version.rb
-
       - name: Build and publish gems
         run: |
           for gem_name in ${{ needs.validate.outputs.gems }}; do
@@ -207,19 +169,18 @@ jobs:
           git config user.email "${{ steps.import_gpg.outputs.email }}"
 
       - name: Commit version bump and tag
+        if: needs.validate.outputs.manifest_changed == 'true'
         run: |
           git add ${{ env.SDK_ROOT }}/*/lib/
 
-          git commit -S -m "Bumped Ruby SDK to v${{ needs.validate.outputs.version }} (${{ needs.validate.outputs.bump_type }}) [skip ci]" || true
-
-          git tag -s -m "Ruby SDK v${{ needs.validate.outputs.version }}" "ruby-sdk-v${{ needs.validate.outputs.version }}"
+          git commit -S -m "Bumped Ruby SDK to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]"
 
           MAX_RETRIES=3
           RETRY_COUNT=0
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             if git pull --rebase --autostash origin develop; then
-              if git push origin develop && git push origin "ruby-sdk-v${{ needs.validate.outputs.version }}"; then
-                echo "Successfully pushed version bump and tag"
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
                 exit 0
               fi
             else
@@ -235,6 +196,11 @@ jobs:
 
           echo "Failed to push after $MAX_RETRIES attempts"
           exit 1
+
+      - name: Create and push tag
+        run: |
+          git tag -s -m "Ruby SDK v${{ needs.validate.outputs.version }}" "ruby-sdk-v${{ needs.validate.outputs.version }}"
+          git push origin "ruby-sdk-v${{ needs.validate.outputs.version }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -289,8 +255,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ needs.validate.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Bump type | ${{ needs.validate.outputs.bump_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ needs.validate.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry latest | ${{ needs.validate.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.validate.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tag | ruby-sdk-v${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Gems | ${{ needs.validate.outputs.gems }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
