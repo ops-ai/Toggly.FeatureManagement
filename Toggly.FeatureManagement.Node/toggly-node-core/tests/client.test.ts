@@ -66,7 +66,7 @@ describe('createTogglyClient', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
-        headers: new Map([['etag', '"abc123"']]),
+        headers: new Headers({ ETag: '"abc123"' }),
         json: async () => ({
           features: [
             { featureKey: 'feature-a', enabled: true },
@@ -287,7 +287,7 @@ describe('createTogglyClient', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
-        headers: new Map([['etag', '"v1"']]),
+        headers: new Headers({ ETag: '"v1"' }),
         json: async () => ({
           features: [{ featureKey: 'feature', enabled: true }],
         }),
@@ -607,7 +607,7 @@ describe('API request', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      headers: new Map([['etag', '"abc123"']]),
+      headers: new Headers({ ETag: '"abc123"' }),
       json: async () => ({ features: [] }),
     })
 
@@ -626,7 +626,7 @@ describe('API request', () => {
       expect.any(String),
       expect.objectContaining({
         headers: expect.objectContaining({
-          'If-None-Match': '"abc123"',
+          'If-None-Match': 'abc123',
         }),
       })
     )

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toggly"
-version = "0.1.0"
+version = "0.1.1"
 description = "Feature flag management SDK for Python - zero dependencies core library"
 readme = "README.md"
 license = {text = "MIT"}

@@ -14,6 +14,7 @@ import type {
   GateRequirement,
 } from '../types/index.js';
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
 
 /**
  * Server config type with required properties except identity and hooks
@@ -98,9 +99,9 @@ export class TogglyServer implements TogglyServerClient {
 
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
+        headers: buildDefinitionFetchHeaders({
           Accept: 'application/json',
-        },
+        }),
         signal: controller.signal,
       });
 

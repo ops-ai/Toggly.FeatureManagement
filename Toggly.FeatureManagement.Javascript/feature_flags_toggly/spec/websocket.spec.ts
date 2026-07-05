@@ -115,7 +115,7 @@ describe('Toggly WebSocket', () => {
       });
 
       expect(latestWs()).toBeDefined();
-      expect(latestWs().url).toBe('wss://definitions.toggly.io/my-app-key/ws');
+      expect(latestWs().url).toBe('wss://definitions.toggly.io/my-app-key/ws?sdk=javascript&sdkVersion=1.3.1');
     });
 
     it('sets wsConnected to true on open', async () => {
@@ -149,6 +149,7 @@ describe('Toggly WebSocket', () => {
       const before = mockFetch.mock.calls.length;
 
       latestWs().triggerMessage('update');
+      jest.advanceTimersByTime(300);
       await Promise.resolve();
 
       expect(mockFetch.mock.calls.length).toBeGreaterThan(before);
@@ -159,6 +160,7 @@ describe('Toggly WebSocket', () => {
       const before = mockFetch.mock.calls.length;
 
       latestWs().triggerMessage('flags-updated');
+      jest.advanceTimersByTime(300);
       await Promise.resolve();
 
       expect(mockFetch.mock.calls.length).toBeGreaterThan(before);
@@ -169,6 +171,7 @@ describe('Toggly WebSocket', () => {
       const before = mockFetch.mock.calls.length;
 
       latestWs().triggerMessage(JSON.stringify({ type: 'flags-updated' }));
+      jest.advanceTimersByTime(300);
       await Promise.resolve();
 
       expect(mockFetch.mock.calls.length).toBeGreaterThan(before);
@@ -179,6 +182,38 @@ describe('Toggly WebSocket', () => {
       const before = mockFetch.mock.calls.length;
 
       latestWs().triggerMessage(JSON.stringify({ type: 'update' }));
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+
+      expect(mockFetch.mock.calls.length).toBeGreaterThan(before);
+    });
+
+    it('does not refresh on sync unchanged message', async () => {
+      await initWithWs();
+      const before = mockFetch.mock.calls.length;
+
+      latestWs().triggerMessage(JSON.stringify({
+        type: 'sync',
+        etag: 'abc123',
+        lastUpdated: Date.now(),
+        unchanged: true,
+      }));
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+
+      expect(mockFetch.mock.calls.length).toBe(before);
+    });
+
+    it('triggers refresh on sync when no cached revision exists', async () => {
+      await initWithWs();
+      const before = mockFetch.mock.calls.length;
+
+      latestWs().triggerMessage(JSON.stringify({
+        type: 'sync',
+        etag: 'abc123',
+        lastUpdated: Date.now(),
+      }));
+      jest.advanceTimersByTime(300);
       await Promise.resolve();
 
       expect(mockFetch.mock.calls.length).toBeGreaterThan(before);

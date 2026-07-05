@@ -9,6 +9,7 @@ import time
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from typing import Any, Iterator
+from urllib.parse import urlencode
 
 try:
     import websocket
@@ -41,6 +42,7 @@ from toggly.providers import (
     MemorySnapshotProvider,
     VariantsSnapshot,
 )
+from toggly.version import __version__
 
 logger = logging.getLogger("toggly")
 
@@ -837,6 +839,13 @@ class TogglyClient:
             "http://", "ws://"
         )
         ws_url = f"{ws_url}/{self._config.app_key}/ws"
+        query_params = {
+            "sdk": "python",
+            "sdkVersion": __version__,
+        }
+        if self._etag:
+            query_params["rev"] = self._etag
+        ws_url = f"{ws_url}?{urlencode(query_params)}"
 
         self._ws_stop_event.clear()
 

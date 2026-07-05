@@ -8,4 +8,7 @@ export const StorageKeys = {
   variantsCacheKey(appKey: string, environment: string): string {
     return `${CACHE_PREFIX}variants:${appKey}:${environment}`;
   },
+  definitionsRevisionCacheKey(appKey: string, environment: string): string {
+    return `${CACHE_PREFIX}revision:${appKey}:${environment}`;
+  },
 };

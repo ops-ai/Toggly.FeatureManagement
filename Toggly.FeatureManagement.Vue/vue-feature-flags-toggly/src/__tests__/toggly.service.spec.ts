@@ -5,6 +5,13 @@ import type { Hook } from '@ops-ai/toggly-hooks-types';
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
+const SDK_FETCH_OPTIONS = expect.objectContaining({
+  headers: expect.objectContaining({
+    'X-Toggly-Sdk': 'vue',
+    'X-Toggly-Sdk-Version': '1.4.1',
+  }),
+});
+
 describe('Toggly Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -110,7 +117,7 @@ describe('Toggly Service', () => {
 
       const features = await service._loadFeatures();
       expect(features).toEqual({ ApiFlag: true });
-      expect(mockFetch).toHaveBeenCalledWith('https://definitions.toggly.io/evaluated-signed/key/Production');
+      expect(mockFetch).toHaveBeenCalledWith('https://definitions.toggly.io/evaluated-signed/key/Production', SDK_FETCH_OPTIONS);
     });
 
     it('should include identity in API URL', async () => {
@@ -120,7 +127,8 @@ describe('Toggly Service', () => {
 
       await service._loadFeatures();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://definitions.toggly.io/evaluated-signed/key/Production?u=user-1'
+        'https://definitions.toggly.io/evaluated-signed/key/Production?u=user-1',
+        SDK_FETCH_OPTIONS,
       );
     });
 
@@ -130,7 +138,7 @@ describe('Toggly Service', () => {
       service.init({ baseURI: 'https://custom.api', appKey: 'key', environment: 'Staging' });
 
       await service._loadFeatures();
-      expect(mockFetch).toHaveBeenCalledWith('https://custom.api/evaluated-signed/key/Staging');
+      expect(mockFetch).toHaveBeenCalledWith('https://custom.api/evaluated-signed/key/Staging', SDK_FETCH_OPTIONS);
     });
 
     it('should fall back to featureDefaults on error', async () => {
@@ -389,6 +397,7 @@ describe('Toggly Service', () => {
     const savedWebSocket = (globalThis as any).WebSocket;
 
     beforeEach(() => {
+      vi.useFakeTimers();
       mockWsInstances = [];
       const MockWs = class {
         url: string;
@@ -433,13 +442,13 @@ describe('Toggly Service', () => {
       const s = createWsService({ appKey: 'mykey', environment: 'Prod' });
       s.startWebSocket();
       expect(mockWsInstances).toHaveLength(1);
-      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws');
+      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws?sdk=vue&sdkVersion=1.4.1');
     });
 
     it('should build ws:// URL from http:// baseURI', () => {
       const s = createWsService({ appKey: 'mykey', baseURI: 'http://local.test', environment: 'Prod' });
       s.startWebSocket();
-      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws');
+      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=vue&sdkVersion=1.4.1');
     });
 
     it('should set _wsConnected on onopen', () => {
@@ -454,6 +463,7 @@ describe('Toggly Service', () => {
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'flags-updated' }) });
+      vi.advanceTimersByTime(350);
       expect(mockFetch).toHaveBeenCalled();
     });
 
@@ -462,6 +472,7 @@ describe('Toggly Service', () => {
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) });
+      vi.advanceTimersByTime(350);
       expect(mockFetch).toHaveBeenCalled();
     });
 
@@ -484,6 +495,7 @@ describe('Toggly Service', () => {
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: 'update' });
+      vi.advanceTimersByTime(350);
       expect(mockFetch).toHaveBeenCalled();
     });
 
@@ -492,6 +504,7 @@ describe('Toggly Service', () => {
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: 'flags-updated' });
+      vi.advanceTimersByTime(350);
       expect(mockFetch).toHaveBeenCalled();
     });
 
@@ -568,6 +581,7 @@ describe('Toggly Service', () => {
       await service._loadFeatures();
       expect(mockFetch).toHaveBeenCalledWith(
         'https://definitions.toggly.io/evaluated-variants-signed/test-key/Production',
+        SDK_FETCH_OPTIONS,
       );
       expect(service.getVariant('V')).toEqual({ name: 'A', configurationValue: { x: 1 } });
       expect(service.getVariantValue('V')).toEqual({ x: 1 });
@@ -591,7 +605,7 @@ describe('Toggly Service', () => {
       });
 
       await service._loadFeatures();
-      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('userId=user%40x'));
+      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('userId=user%40x'), SDK_FETCH_OPTIONS);
     });
 
     it('getVariant returns null when enableVariants is false', () => {

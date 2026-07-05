@@ -1,3 +1,10 @@
+## 1.1.1
+
+2026-07-05
+
+### Added
+- SDK identity on definitions traffic: `User-Agent` on server HTTP, `X-Toggly-Sdk` / `X-Toggly-Sdk-Version` on browser HTTP, `sdk` + `sdkVersion` query params on WebSocket connect.
+
 # Changelog
 
 ## 1.1.0

@@ -15,6 +15,7 @@ import {
   type LocalGate,
 } from '@ops-ai/toggly-local-gates';
 import { HookExecutor } from './hooks.js';
+import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
 
 /**
  * Atom containing all feature flags
@@ -133,9 +134,9 @@ class TogglyClientInstance {
 
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
+        headers: buildDefinitionFetchHeaders({
           Accept: 'application/json',
-        },
+        }),
         signal: controller.signal,
       });
 

@@ -16,7 +16,7 @@ jest.mock('uuid', () => ({
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
 
-// Helper to wait for fire-and-forget hook promises (real timers)
+const fetchInitMatcher = expect.objectContaining({ headers: expect.any(Object) });
 function waitForHooks(ms = 100): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -84,7 +84,8 @@ describe('Toggly Core', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('evaluated-signed/my-app/Staging')
+        expect.stringContaining('evaluated-signed/my-app/Staging'),
+        fetchInitMatcher,
       );
     });
 
@@ -104,7 +105,8 @@ describe('Toggly Core', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('https://custom.api.com/evaluated-signed/key/Staging')
+        expect.stringContaining('https://custom.api.com/evaluated-signed/key/Staging'),
+        fetchInitMatcher,
       );
     });
 
@@ -122,7 +124,8 @@ describe('Toggly Core', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('evaluated-signed/key/Production')
+        expect.stringContaining('evaluated-signed/key/Production'),
+        fetchInitMatcher,
       );
     });
 
@@ -1799,7 +1802,8 @@ describe('Toggly Core', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('evaluated-variants-signed/test-app-key/Production')
+        expect.stringContaining('evaluated-variants-signed/test-app-key/Production'),
+        fetchInitMatcher,
       );
       expect(flags).toEqual({ F1: true, F2: false });
       expect(JSON.parse(localStorage.getItem(flagsKey)!)).toEqual({ F1: true, F2: false });

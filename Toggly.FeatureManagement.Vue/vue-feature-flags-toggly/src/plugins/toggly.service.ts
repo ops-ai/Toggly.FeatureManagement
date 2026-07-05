@@ -7,12 +7,24 @@ import {
 } from '@ops-ai/toggly-local-gates';
 import { HookExecutor } from './hooks';
 import type { EvaluatedVariantDef, VariantResult } from '../variant.types';
+import {
+  buildWebSocketUrl,
+  extractDefinitionsRevision,
+  getNextReconnectDelayMs,
+  REFRESH_DEBOUNCE_MS,
+  shouldFetchOnFlagsUpdated,
+  shouldFetchOnSigningKeyUpdated,
+  shouldFetchOnSync,
+  type WsSyncMessage,
+} from '../utils/ws-sync';
+import { buildDefinitionFetchHeaders } from '../utils/sdk-identity'
 
 export type { EvaluatedVariantDef, VariantResult } from '../variant.types';
 
 const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 const CACHE_PREFIX = 'toggly:flags:'
 const VARIANTS_CACHE_PREFIX = 'toggly:variants:'
+const REVISION_CACHE_PREFIX = 'toggly:revision:'
 
 function getCacheKey(appKey: string, environment: string): string {
   return `${CACHE_PREFIX}${appKey}:${environment}`
@@ -20,6 +32,24 @@ function getCacheKey(appKey: string, environment: string): string {
 
 function getVariantsCacheKey(appKey: string, environment: string): string {
   return `${VARIANTS_CACHE_PREFIX}${appKey}:${environment}`
+}
+
+function getRevisionCacheKey(appKey: string, environment: string): string {
+  return `${REVISION_CACHE_PREFIX}${appKey}:${environment}`
+}
+
+function readCachedRevision(appKey: string, environment: string): string | null {
+  if (!canUseStorage) return null
+  try {
+    return localStorage.getItem(getRevisionCacheKey(appKey, environment))
+  } catch { return null }
+}
+
+function writeCachedRevision(appKey: string, environment: string, revision: string): void {
+  if (!canUseStorage) return
+  try {
+    localStorage.setItem(getRevisionCacheKey(appKey, environment), revision)
+  } catch { /* storage full or unavailable */ }
 }
 
 function variantDefsToFlags(defs: { [key: string]: EvaluatedVariantDef }): { [key: string]: boolean } {
@@ -133,10 +163,12 @@ export class Toggly implements TogglyService {
   _ws: WebSocket | null = null
   _wsConnected: boolean = false
   _wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+  _wsReconnectAttempt = 0
+  _refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  _cachedDefinitionsRevision: string | null = null
   _lastFallbackRefresh: number = 0
 
   static readonly FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
-  static readonly WS_RECONNECT_DELAY = 5000
 
   shouldShowFeatureDuringEvaluation: boolean = false
 
@@ -147,6 +179,63 @@ export class Toggly implements TogglyService {
   private _reportError(message: string, error?: unknown): void {
     this._lastError = message
     this._config.onError?.(message, error)
+  }
+
+  private get _definitionsRevision(): string | null {
+    if (this._cachedDefinitionsRevision) {
+      return this._cachedDefinitionsRevision
+    }
+    if (!this._canPersist || !this._config.appKey) {
+      return null
+    }
+    return readCachedRevision(this._config.appKey, this._config.environment ?? 'Production')
+  }
+
+  private _cacheDefinitionsRevision(revision: string | null | undefined): void {
+    if (!revision || !this._config.appKey) {
+      return
+    }
+    this._cachedDefinitionsRevision = revision
+    if (this._canPersist) {
+      writeCachedRevision(this._config.appKey, this._config.environment ?? 'Production', revision)
+    }
+  }
+
+  private _scheduleDebouncedRefresh(forceJwksRefresh = false): void {
+    if (this._refreshDebounceTimer) {
+      clearTimeout(this._refreshDebounceTimer)
+    }
+    this._refreshDebounceTimer = setTimeout(() => {
+      this._refreshDebounceTimer = null
+      if (forceJwksRefresh) {
+        this._cachedDefinitionsRevision = null
+      }
+      void this._refreshFeatures()
+    }, REFRESH_DEBOUNCE_MS)
+  }
+
+  private _handleWsSyncMessage(message: WsSyncMessage): void {
+    const previousRevision = this._definitionsRevision
+    if (shouldFetchOnSync(message, previousRevision)) {
+      this._scheduleDebouncedRefresh()
+    }
+    if (message.etag) {
+      this._cacheDefinitionsRevision(message.etag)
+    }
+  }
+
+  private _handleWsUpdateMessage(message: WsSyncMessage): void {
+    if (shouldFetchOnSigningKeyUpdated(message)) {
+      this._scheduleDebouncedRefresh(true)
+      return
+    }
+    const previousRevision = this._definitionsRevision
+    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      this._scheduleDebouncedRefresh()
+    }
+    if (message.etag) {
+      this._cacheDefinitionsRevision(message.etag)
+    }
   }
 
   init = (options: TogglyOptions) => {
@@ -228,15 +317,19 @@ export class Toggly implements TogglyService {
 
     // Features already loaded — throttle polling when WebSocket is connected
     if (this._features !== null && !forceRefresh) {
-      if (this._wsConnected && (Date.now() - this._lastFallbackRefresh) < Toggly.FALLBACK_REFRESH_INTERVAL) {
-        return this._features
+      if (this._wsConnected) {
+        const now = Date.now()
+        if (now - this._lastFallbackRefresh < Toggly.FALLBACK_REFRESH_INTERVAL) {
+          return this._features
+        }
+        this._lastFallbackRefresh = now
       }
       return this._features
     }
 
     this._loadingFeatures = true
 
-    const isFirstLoad = this._ws === null && this._wsReconnectTimer === null
+    const isInitialLoad = this._ws === null && !this._wsConnected
     const appKey = this._config.appKey ?? ''
     const env = this._config.environment ?? 'Production'
 
@@ -254,7 +347,19 @@ export class Toggly implements TogglyService {
         }
       }
 
-      const response = await fetch(url)
+      const revision = this._definitionsRevision
+      const headers: HeadersInit = buildDefinitionFetchHeaders(
+        revision ? { 'If-None-Match': revision } : {},
+      )
+
+      const response = await fetch(url, { headers })
+      const responseRevision = extractDefinitionsRevision(response)
+      if (responseRevision) {
+        this._cacheDefinitionsRevision(responseRevision.replace(/^"+|"+$/g, ''))
+      }
+      if (response.status === 304) {
+        return this._features
+      }
       if (!response.ok) {
         throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
       }
@@ -315,8 +420,8 @@ export class Toggly implements TogglyService {
       this._loadingFeatures = false
     }
 
-    // Start WebSocket after first feature load
-    if (isFirstLoad) {
+    // Start WebSocket after initial feature load
+    if (isInitialLoad) {
       this.startWebSocket()
     }
 
@@ -486,12 +591,17 @@ export class Toggly implements TogglyService {
 
     this.stopWebSocket()
 
-    const wsUrl = this._config.baseURI!.replace('https://', 'wss://').replace('http://', 'ws://') + `/${this._config.appKey}/ws`
+    const wsUrl = buildWebSocketUrl(
+      this._config.baseURI ?? 'https://definitions.toggly.io',
+      this._config.appKey,
+      this._definitionsRevision,
+    )
 
     const ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
       this._wsConnected = true
+      this._wsReconnectAttempt = 0
       this._lastFallbackRefresh = Date.now()
     }
 
@@ -499,20 +609,22 @@ export class Toggly implements TogglyService {
       const data = event.data
 
       if (typeof data === 'string') {
-        // Handle plain text messages
         if (data === 'update' || data === 'flags-updated') {
-          this._refreshFeatures()
+          this._scheduleDebouncedRefresh()
           return
         }
 
-        // Try to parse as JSON
         try {
-          const message = JSON.parse(data)
+          const message = JSON.parse(data) as WsSyncMessage
           if (message.type === 'ping') {
             return
           }
-          if (message.type === 'flags-updated' || message.type === 'update') {
-            this._refreshFeatures()
+          if (message.type === 'sync') {
+            this._handleWsSyncMessage(message)
+            return
+          }
+          if (message.type === 'flags-updated' || message.type === 'update' || message.type === 'signing-key-updated') {
+            this._handleWsUpdateMessage(message)
           }
         } catch (e) {
           // Unrecognized message, ignore
@@ -524,9 +636,11 @@ export class Toggly implements TogglyService {
       this._wsConnected = false
       this._ws = null
 
+      const delay = getNextReconnectDelayMs(this._wsReconnectAttempt)
+      this._wsReconnectAttempt += 1
       this._wsReconnectTimer = setTimeout(() => {
         this.startWebSocket()
-      }, Toggly.WS_RECONNECT_DELAY)
+      }, delay)
     }
 
     ws.onerror = (error) => {
@@ -542,6 +656,11 @@ export class Toggly implements TogglyService {
       this._wsReconnectTimer = null
     }
 
+    if (this._refreshDebounceTimer) {
+      clearTimeout(this._refreshDebounceTimer)
+      this._refreshDebounceTimer = null
+    }
+
     if (this._ws) {
       this._ws.onopen = null
       this._ws.onmessage = null
@@ -555,7 +674,6 @@ export class Toggly implements TogglyService {
   }
 
   private _refreshFeatures = async () => {
-    this._loadingFeatures = false
     const flags = await this._loadFeatures(true)
     if (flags && this._canPersist) {
       writeCachedFlags(this._config.appKey ?? '', this._config.environment ?? 'Production', flags)

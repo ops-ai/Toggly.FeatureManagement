@@ -17,6 +17,17 @@ import {
   type FlagGateIndex,
   type LocalGate,
 } from '@ops-ai/toggly-local-gates'
+import {
+  buildWebSocketUrl,
+  extractDefinitionsRevision,
+  getNextReconnectDelayMs,
+  REFRESH_DEBOUNCE_MS,
+  shouldFetchOnFlagsUpdated,
+  shouldFetchOnSigningKeyUpdated,
+  shouldFetchOnSync,
+  type WsSyncMessage,
+} from './ws-sync'
+import { buildDefinitionFetchHeaders } from './sdk-identity'
 
 /**
  * Create a new Toggly client instance
@@ -32,9 +43,11 @@ export function createTogglyClient(
   let ws: WebSocket | null = null
   let wsConnected = false
   let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let wsReconnectAttempt = 0
+  let refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  let cachedDefinitionsRevision: string | null = null
   let lastFallbackRefresh = 0
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
-  const WS_RECONNECT_DELAY = 5000
 
   // Merge with defaults
   const config: Required<
@@ -81,6 +94,56 @@ export function createTogglyClient(
 
   function reportError(message: string, error?: unknown): void {
     config.onError?.(message, error)
+  }
+
+  function getDefinitionsRevision(): string | null {
+    return cachedDefinitionsRevision
+  }
+
+  function cacheDefinitionsRevision(revision: string | null | undefined): void {
+    if (!revision) {
+      return
+    }
+    cachedDefinitionsRevision = revision.replace(/^"+|"+$/g, '')
+  }
+
+  function scheduleDebouncedRefresh(forceRevisionReset = false): void {
+    if (refreshDebounceTimer) {
+      clearTimeout(refreshDebounceTimer)
+    }
+    refreshDebounceTimer = setTimeout(() => {
+      refreshDebounceTimer = null
+      if (forceRevisionReset) {
+        cachedDefinitionsRevision = null
+      }
+      client.refresh().catch(() => {
+        // Error already logged in refresh()
+      })
+    }, REFRESH_DEBOUNCE_MS)
+  }
+
+  function handleWsSyncMessage(message: WsSyncMessage): void {
+    const previousRevision = getDefinitionsRevision()
+    if (shouldFetchOnSync(message, previousRevision)) {
+      scheduleDebouncedRefresh()
+    }
+    if (message.etag) {
+      cacheDefinitionsRevision(message.etag)
+    }
+  }
+
+  function handleWsUpdateMessage(message: WsSyncMessage): void {
+    if (shouldFetchOnSigningKeyUpdated(message)) {
+      scheduleDebouncedRefresh(true)
+      return
+    }
+    const previousRevision = getDefinitionsRevision()
+    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      scheduleDebouncedRefresh()
+    }
+    if (message.etag) {
+      cacheDefinitionsRevision(message.etag)
+    }
   }
 
   function notifyFeaturesRefresh(): void {
@@ -136,19 +199,27 @@ export function createTogglyClient(
       config.environment
     )
 
-    const headers: Record<string, string> = {
+    const revision = getDefinitionsRevision()
+    const headers = buildDefinitionFetchHeaders({
       'Content-Type': 'application/json',
-    }
-
-    if (config.identity) {
-      headers['x-toggly-identity'] = config.identity
-    }
+      ...(config.identity ? { 'x-toggly-identity': config.identity } : {}),
+      ...(revision ? { 'If-None-Match': revision } : {}),
+    })
 
     try {
       const response = await fetch(url, {
         method: 'GET',
         headers,
       })
+
+      const responseRevision = extractDefinitionsRevision(response)
+      if (responseRevision) {
+        cacheDefinitionsRevision(responseRevision)
+      }
+
+      if (response.status === 304) {
+        return { ...state.features }
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -208,17 +279,6 @@ export function createTogglyClient(
   }
 
   /**
-   * Build the WebSocket URL from the base URI
-   */
-  function buildWebSocketUrl(): string {
-    const wsScheme = config.baseUri.replace(/^https?/, (m) =>
-      m === 'https' ? 'wss' : 'ws'
-    )
-    const base = wsScheme.replace(/\/+$/, '')
-    return `${base}/${config.appKey}/ws`
-  }
-
-  /**
    * Start a WebSocket connection for live feature flag updates (browser only)
    */
   function startWebSocket(): void {
@@ -230,30 +290,44 @@ export function createTogglyClient(
     stopWebSocket()
 
     try {
-      const url = buildWebSocketUrl()
+      const url = buildWebSocketUrl(config.baseUri, config.appKey, getDefinitionsRevision())
       ws = new WebSocket(url)
 
       ws.onopen = () => {
         wsConnected = true
         state.wsConnected = true
+        wsReconnectAttempt = 0
         lastFallbackRefresh = Date.now()
       }
 
       ws.onmessage = (event: MessageEvent) => {
-        try {
-          const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-          const messageType = data?.type ?? data?.event
+        const data = event.data
 
-          if (messageType === 'flags-updated' || messageType === 'update') {
-            client.refresh().catch(() => {
-              // Error already logged in refresh()
-            })
+        if (typeof data === 'string') {
+          if (data === 'update' || data === 'flags-updated') {
+            scheduleDebouncedRefresh()
+            return
           }
-        } catch {
-          // If the message isn't JSON, treat any message as a refresh signal
-          client.refresh().catch(() => {
-            // Error already logged in refresh()
-          })
+
+          try {
+            const message = JSON.parse(data) as WsSyncMessage
+            if (message.type === 'ping') {
+              return
+            }
+            if (message.type === 'sync') {
+              handleWsSyncMessage(message)
+              return
+            }
+            if (
+              message.type === 'flags-updated' ||
+              message.type === 'update' ||
+              message.type === 'signing-key-updated'
+            ) {
+              handleWsUpdateMessage(message)
+            }
+          } catch {
+            // Unrecognized message, ignore
+          }
         }
       }
 
@@ -264,10 +338,12 @@ export function createTogglyClient(
 
         // Schedule reconnect if not destroyed
         if (!destroyed && config.enableLiveUpdates !== false) {
+          const delay = getNextReconnectDelayMs(wsReconnectAttempt)
+          wsReconnectAttempt += 1
           wsReconnectTimer = setTimeout(() => {
             wsReconnectTimer = null
             startWebSocket()
-          }, WS_RECONNECT_DELAY)
+          }, delay)
         }
       }
 
@@ -291,6 +367,11 @@ export function createTogglyClient(
     if (wsReconnectTimer) {
       clearTimeout(wsReconnectTimer)
       wsReconnectTimer = null
+    }
+
+    if (refreshDebounceTimer) {
+      clearTimeout(refreshDebounceTimer)
+      refreshDebounceTimer = null
     }
 
     if (ws) {

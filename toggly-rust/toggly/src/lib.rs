@@ -102,6 +102,7 @@ pub mod cache;
 pub mod definitions;
 pub mod eval;
 pub mod provider;
+mod sdk_identity;
 
 pub use client::TogglyClient;
 pub use config::{TogglyConfig, TogglyConfigBuilder};

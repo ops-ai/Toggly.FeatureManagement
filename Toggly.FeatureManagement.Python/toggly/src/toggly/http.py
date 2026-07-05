@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import quote, urljoin
 
 from toggly.exceptions import TogglyNetworkError, TogglyTimeoutError
+from toggly.version import __version__
 
 
 @dataclass
@@ -61,7 +62,7 @@ class HttpClient:
         self,
         connect_timeout: float = 10.0,
         request_timeout: float = 30.0,
-        user_agent: str = "toggly-python/0.1.0",
+        user_agent: str | None = None,
     ) -> None:
         """Initialize the HTTP client.
 
@@ -73,7 +74,7 @@ class HttpClient:
         """
         self._connect_timeout = connect_timeout
         self._request_timeout = request_timeout
-        self._user_agent = user_agent
+        self._user_agent = user_agent or f"toggly-python/{__version__}"
 
         # Create SSL context
         self._ssl_context = ssl.create_default_context()

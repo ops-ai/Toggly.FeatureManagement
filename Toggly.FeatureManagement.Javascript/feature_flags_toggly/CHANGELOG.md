@@ -1,3 +1,20 @@
+## 1.3.1
+
+2026-07-05
+
+### Added
+- SDK identity on definitions traffic: `User-Agent` on server HTTP, `X-Toggly-Sdk` / `X-Toggly-Sdk-Version` on browser HTTP, `sdk` + `sdkVersion` query params on WebSocket connect.
+
+## 1.3.0
+
+2026-07-05
+
+### Changed
+- ETag-based WebSocket sync: connect sends `sync` with definitions revision; clients pass `?rev=` and skip HTTP fetch when unchanged.
+- Unified definitions revision cache (`toggly:revision:{appKey}:{env}`) for HTTP `If-None-Match` and WebSocket sync.
+- Debounced refresh (300ms) and exponential WebSocket reconnect backoff (5s–60s).
+- Handles `signing-key-updated` by forcing JWKS and definitions refresh.
+
 ## 1.2.0
 
 2026-07-03

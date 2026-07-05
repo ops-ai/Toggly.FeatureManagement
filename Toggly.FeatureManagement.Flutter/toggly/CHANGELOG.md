@@ -1,3 +1,22 @@
+## 1.5.1
+
+2026-07-05
+
+### Added
+- SDK identity on definitions traffic: User-Agent on server HTTP, custom headers on browser/web HTTP, sdk + sdkVersion query params on WebSocket.
+
+
+## 1.5.0
+
+2026-07-05
+
+### Added
+- ETag-based WebSocket sync: merged definitions revision for all definition fetches (`If-None-Match`), `?rev=` on WebSocket connect, and handling for `sync`, `flags-updated`, and `signing-key-updated` messages.
+- Optional `TogglyRevisionCacheProvider` for persisting definitions revision across restarts when a cache backend supports it.
+
+### Changed
+- WebSocket reconnect uses exponential backoff (5s base, 60s cap) and coalesces refresh callbacks with a 300ms debounce.
+- Timer polling is suppressed while the WebSocket is reconnecting.
 
 ## 1.4.0
 

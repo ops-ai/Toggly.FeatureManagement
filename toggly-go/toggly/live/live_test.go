@@ -34,7 +34,10 @@ func TestStart_CallsOnUpdate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	closer, err := Start(ctx, srv.URL, "app", "env", srv.Client(), func() {
+	closer, err := Start(ctx, srv.URL, "app", "env", srv.Client(), "", func(forceJWKSRefresh bool) {
+		if forceJWKSRefresh {
+			t.Fatalf("unexpected forceJWKSRefresh")
+		}
 		select {
 		case updated <- struct{}{}:
 		default:

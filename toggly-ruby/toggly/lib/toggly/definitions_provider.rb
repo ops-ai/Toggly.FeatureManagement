@@ -217,7 +217,12 @@ module Toggly
       base = @config.definitions_url || @config.base_url
       ws_url = base.gsub(%r{^https://}, "wss://").gsub(%r{^http://}, "ws://")
       ws_url = ws_url.chomp("/")
-      "#{ws_url}/#{@config.app_key}/ws"
+      params = {
+        "sdk" => "ruby",
+        "sdkVersion" => Toggly::VERSION
+      }
+      params["rev"] = @etag if @etag && !@etag.empty?
+      "#{ws_url}/#{@config.app_key}/ws?#{URI.encode_www_form(params)}"
     end
 
     def connect_websocket

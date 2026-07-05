@@ -4,6 +4,13 @@ import { TogglyOptions } from './toggly-options';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
 import type { Hook } from '@ops-ai/toggly-hooks-types';
 
+function expectFetchCalledWithUrl(fetchSpy: jasmine.Spy, url: string): void {
+  expect(fetchSpy).toHaveBeenCalledWith(
+    url,
+    jasmine.objectContaining({ headers: jasmine.any(Object) }),
+  )
+}
+
 describe('TogglyService', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -139,7 +146,7 @@ describe('TogglyService', () => {
       const service = TestBed.inject(TogglyService);
       const result = await service.isFeatureOn('ApiFlag');
       expect(result).toBe(true);
-      expect(fetchSpy).toHaveBeenCalledWith('https://definitions.toggly.io/evaluated-signed/key/Production');
+      expectFetchCalledWithUrl(fetchSpy, 'https://definitions.toggly.io/evaluated-signed/key/Production');
     });
 
     it('should include identity in API URL', async () => {
@@ -151,7 +158,7 @@ describe('TogglyService', () => {
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');
-      expect(fetchSpy).toHaveBeenCalledWith('https://definitions.toggly.io/evaluated-signed/key/Production?u=user-1');
+      expectFetchCalledWithUrl(fetchSpy, 'https://definitions.toggly.io/evaluated-signed/key/Production?u=user-1');
     });
 
     it('should use custom baseURI', async () => {
@@ -163,7 +170,7 @@ describe('TogglyService', () => {
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');
-      expect(fetchSpy).toHaveBeenCalledWith('https://custom.api/evaluated-signed/key/Staging');
+      expectFetchCalledWithUrl(fetchSpy, 'https://custom.api/evaluated-signed/key/Staging');
     });
 
     it('should use customDefinitionsUrl when set', async () => {
@@ -175,7 +182,7 @@ describe('TogglyService', () => {
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');
-      expect(fetchSpy).toHaveBeenCalledWith('https://my-custom.api/flags');
+      expectFetchCalledWithUrl(fetchSpy, 'https://my-custom.api/flags');
     });
 
     it('should fall back to featureDefaults on error', async () => {
@@ -534,7 +541,8 @@ describe('TogglyService', () => {
       });
       const service = TestBed.inject(TogglyService);
       const v = await service.getVariant('F1');
-      expect(fetchSpy).toHaveBeenCalledWith(
+      expectFetchCalledWithUrl(
+        fetchSpy,
         'https://definitions.toggly.io/evaluated-variants-signed/key/Production',
       );
       expect(v).toEqual({ name: 'treatment-a', configurationValue: { x: 1 } });
@@ -627,7 +635,7 @@ describe('TogglyService', () => {
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');
-      expect(fetchSpy).toHaveBeenCalledWith('https://definitions.toggly.io/evaluated-signed/key/Production');
+      expectFetchCalledWithUrl(fetchSpy, 'https://definitions.toggly.io/evaluated-signed/key/Production');
     });
   });
 
@@ -700,12 +708,12 @@ describe('TogglyService', () => {
 
     it('should use wss:// for https:// baseURI', async () => {
       await createWsService('https://custom.io');
-      expect(mockWs.url).toBe('wss://custom.io/key/ws');
+      expect(mockWs.url).toBe('wss://custom.io/key/ws?sdk=angular&sdkVersion=2.2.1');
     });
 
     it('should use ws:// for http:// baseURI', async () => {
       await createWsService('http://local');
-      expect(mockWs.url).toBe('ws://local/key/ws');
+      expect(mockWs.url).toBe('ws://local/key/ws?sdk=angular&sdkVersion=2.2.1');
     });
 
     it('should handle WebSocket constructor throw', async () => {
@@ -731,23 +739,23 @@ describe('TogglyService', () => {
       expect((service as any)._wsConnected).toBe(true);
     });
 
-    it('should reload features on flags-updated message', async () => {
+    it('should reload features on flags-updated message', fakeAsync(async () => {
       const service = await createWsService();
       const fetchSpy = (globalThis.fetch as jasmine.Spy);
       const callsBefore = fetchSpy.calls.count();
       mockWs.onmessage({ data: JSON.stringify({ type: 'flags-updated' }) });
-      await Promise.resolve();
-      expect(fetchSpy.calls.count()).toBeGreaterThanOrEqual(callsBefore);
-    });
+      tick(300);
+      expect(fetchSpy.calls.count()).toBeGreaterThan(callsBefore);
+    }));
 
-    it('should reload features on update message', async () => {
+    it('should reload features on update message', fakeAsync(async () => {
       const service = await createWsService();
       const fetchSpy = (globalThis.fetch as jasmine.Spy);
       const callsBefore = fetchSpy.calls.count();
       mockWs.onmessage({ data: JSON.stringify({ type: 'update' }) });
-      await Promise.resolve();
-      expect(fetchSpy.calls.count()).toBeGreaterThanOrEqual(callsBefore);
-    });
+      tick(300);
+      expect(fetchSpy.calls.count()).toBeGreaterThan(callsBefore);
+    }));
 
     it('should ignore ping message', async () => {
       const service = await createWsService();

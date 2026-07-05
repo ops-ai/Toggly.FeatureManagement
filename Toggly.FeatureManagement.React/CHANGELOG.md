@@ -1,4 +1,19 @@
+## 1.5.1
+
+2026-07-05
+
+### Added
+- SDK identity on definitions traffic: `User-Agent` on server HTTP, `X-Toggly-Sdk` / `X-Toggly-Sdk-Version` on browser HTTP, `sdk` + `sdkVersion` query params on WebSocket connect.
+
 # Changelog
+
+## 1.5.0
+
+2026-07-05
+
+### Changed
+- ETag-based WebSocket sync with definitions revision cache, conditional HTTP fetch, debounced refresh, and exponential reconnect backoff.
+- Handles `sync`, `flags-updated`, and `signing-key-updated` WebSocket messages.
 
 ## 1.4.0
 

@@ -50,7 +50,7 @@ from toggly.providers import (
     VariantsSnapshot,
 )
 
-__version__ = "0.1.0"
+from toggly.version import __version__
 __all__ = [
     # Clients
     "TogglyClient",

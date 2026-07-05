@@ -22,6 +22,17 @@ import {
   createLogger,
 } from './utils.js'
 import WebSocket from 'ws'
+import {
+  buildWebSocketUrl,
+  extractDefinitionsRevision,
+  getNextReconnectDelayMs,
+  REFRESH_DEBOUNCE_MS,
+  shouldFetchOnFlagsUpdated,
+  shouldFetchOnSigningKeyUpdated,
+  shouldFetchOnSync,
+  type WsSyncMessage,
+} from './ws-sync.js'
+import { buildDefinitionFetchHeaders } from './sdk-identity.js'
 
 /**
  * Create a new Toggly client
@@ -72,12 +83,66 @@ export function createTogglyClient(
   let ws: WebSocket | null = null
   let wsConnected = false
   let wsReconnectTimer: NodeJS.Timeout | null = null
+  let wsReconnectAttempt = 0
+  let refreshDebounceTimer: NodeJS.Timeout | null = null
+  let cachedDefinitionsRevision: string | null = null
   let lastFallbackRefresh = 0
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000 // 20 minutes
-  const WS_RECONNECT_DELAY = 5000 // 5 seconds
 
   // Streaming event source (for SSE) - legacy, kept for backward compat
   let streamingAbortController: AbortController | null = null
+
+  function getDefinitionsRevision(): string | null {
+    return cachedDefinitionsRevision ?? state.etag
+  }
+
+  function cacheDefinitionsRevision(revision: string | null | undefined): void {
+    if (!revision) {
+      return
+    }
+    cachedDefinitionsRevision = revision
+    state.etag = revision
+  }
+
+  function scheduleDebouncedRefresh(forceJwksRefresh = false): void {
+    if (refreshDebounceTimer) {
+      clearTimeout(refreshDebounceTimer)
+    }
+    refreshDebounceTimer = setTimeout(() => {
+      refreshDebounceTimer = null
+      if (forceJwksRefresh) {
+        cachedDefinitionsRevision = null
+        state.etag = null
+      }
+      refresh().catch((error) => {
+        logger.error('WebSocket-triggered refresh failed:', error)
+      })
+    }, REFRESH_DEBOUNCE_MS)
+  }
+
+  function handleWsSyncMessage(message: WsSyncMessage): void {
+    const previousRevision = getDefinitionsRevision()
+    if (shouldFetchOnSync(message, previousRevision)) {
+      scheduleDebouncedRefresh()
+    }
+    if (message.etag) {
+      cacheDefinitionsRevision(message.etag)
+    }
+  }
+
+  function handleWsUpdateMessage(message: WsSyncMessage): void {
+    if (shouldFetchOnSigningKeyUpdated(message)) {
+      scheduleDebouncedRefresh(true)
+      return
+    }
+    const previousRevision = getDefinitionsRevision()
+    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      scheduleDebouncedRefresh()
+    }
+    if (message.etag) {
+      cacheDefinitionsRevision(message.etag)
+    }
+  }
 
   /**
    * Build the API URL for fetching definitions
@@ -110,19 +175,12 @@ export function createTogglyClient(
     }
 
     const url = buildApiUrl()
-    const headers: Record<string, string> = {
+    const revision = getDefinitionsRevision()
+    const headers = buildDefinitionFetchHeaders({
       'Content-Type': 'application/json',
-    }
-
-    // Add identity header if set
-    if (config.identity) {
-      headers['x-toggly-identity'] = config.identity
-    }
-
-    // Add ETag for conditional requests
-    if (config.useEtag && state.etag) {
-      headers['If-None-Match'] = state.etag
-    }
+      ...(config.identity ? { 'x-toggly-identity': config.identity } : {}),
+      ...(config.useEtag && revision ? { 'If-None-Match': revision } : {}),
+    })
 
     const controller = new AbortController()
     const timeoutId = setTimeout(
@@ -141,6 +199,11 @@ export function createTogglyClient(
 
       clearTimeout(timeoutId)
 
+      const responseRevision = extractDefinitionsRevision(response)
+      if (responseRevision) {
+        cacheDefinitionsRevision(responseRevision.replace(/^"+|"+$/g, ''))
+      }
+
       // Handle 304 Not Modified
       if (response.status === 304) {
         logger.debug('Definitions unchanged (304)')
@@ -149,15 +212,6 @@ export function createTogglyClient(
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      // Store ETag if present
-      const etag = response.headers.get('etag')
-      if (etag) {
-        state.etag = etag
-        if (cache) {
-          await cache.setEtag(CACHE_KEYS.ETAG, etag)
-        }
       }
 
       const data = (await response.json()) as
@@ -292,13 +346,15 @@ export function createTogglyClient(
   /**
    * Build the WebSocket URL for live updates
    */
-  function buildWebSocketUrl(): string {
+  function buildWsUrl(): string {
     if (config.streamingUrl) {
       return config.streamingUrl
     }
-    const baseUrl = (config.baseUrl ?? DEFAULT_CONFIG.baseUrl)!
-    const wsUrl = baseUrl.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://')
-    return `${wsUrl.replace(/\/$/, '')}/${config.appKey}/ws`
+    return buildWebSocketUrl(
+      config.baseUrl ?? DEFAULT_CONFIG.baseUrl,
+      config.appKey!,
+      getDefinitionsRevision(),
+    )
   }
 
   /**
@@ -318,7 +374,7 @@ export function createTogglyClient(
       return
     }
 
-    const wsUrl = buildWebSocketUrl()
+    const wsUrl = buildWsUrl()
     logger.debug('Connecting WebSocket to:', wsUrl)
 
     try {
@@ -326,30 +382,32 @@ export function createTogglyClient(
 
       ws.on('open', () => {
         wsConnected = true
+        wsReconnectAttempt = 0
         lastFallbackRefresh = Date.now()
         logger.debug('WebSocket connected')
       })
 
       ws.on('message', (data: Buffer) => {
         const text = data.toString()
+        if (text === 'update' || text === 'flags-updated') {
+          scheduleDebouncedRefresh()
+          return
+        }
+
         try {
-          const msg = JSON.parse(text)
+          const msg = JSON.parse(text) as WsSyncMessage
           if (msg.type === 'ping') {
             return
           }
-          if (msg.type === 'flags-updated' || msg.type === 'update') {
-            logger.debug('WebSocket: definitions updated, refreshing')
-            refresh().catch((error) => {
-              logger.error('WebSocket-triggered refresh failed:', error)
-            })
+          if (msg.type === 'sync') {
+            handleWsSyncMessage(msg)
+            return
+          }
+          if (msg.type === 'flags-updated' || msg.type === 'update' || msg.type === 'signing-key-updated') {
+            handleWsUpdateMessage(msg)
           }
         } catch {
-          // Non-JSON message — check for plain text signals
-          if (text === 'update' || text === 'flags-updated') {
-            refresh().catch((error) => {
-              logger.error('WebSocket-triggered refresh failed:', error)
-            })
-          }
+          // Non-JSON message already handled above
         }
       })
 
@@ -378,10 +436,12 @@ export function createTogglyClient(
     if (wsReconnectTimer) {
       return
     }
+    const delay = getNextReconnectDelayMs(wsReconnectAttempt)
+    wsReconnectAttempt += 1
     wsReconnectTimer = setTimeout(() => {
       wsReconnectTimer = null
       startStreaming()
-    }, WS_RECONNECT_DELAY)
+    }, delay)
   }
 
   /**
@@ -391,6 +451,10 @@ export function createTogglyClient(
     if (wsReconnectTimer) {
       clearTimeout(wsReconnectTimer)
       wsReconnectTimer = null
+    }
+    if (refreshDebounceTimer) {
+      clearTimeout(refreshDebounceTimer)
+      refreshDebounceTimer = null
     }
     if (ws) {
       ws.removeAllListeners()
@@ -423,11 +487,6 @@ export function createTogglyClient(
 
     // Try to load from cache first
     if (cache) {
-      const cachedEtag = await cache.getEtag(CACHE_KEYS.ETAG)
-      if (cachedEtag) {
-        state.etag = cachedEtag
-      }
-
       const cachedFeatures = await cache.getDefinitions(CACHE_KEYS.DEFINITIONS)
       if (cachedFeatures) {
         state.features = {

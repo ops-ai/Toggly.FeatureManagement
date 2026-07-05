@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { Toggly, type TogglyOptions } from '../services/toggly.service';
 
+const SDK_FETCH_OPTIONS = expect.objectContaining({
+  headers: expect.objectContaining({
+    'X-Toggly-Sdk': 'svelte',
+    'X-Toggly-Sdk-Version': '1.4.1',
+  }),
+});
+
 describe('Toggly Service', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -101,7 +108,8 @@ describe('Toggly Service', () => {
       const features = await toggly._loadFeatures();
       expect(features).toEqual({ F1: true, F2: false });
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://definitions.toggly.io/evaluated-signed/test-key/Production'
+        'https://definitions.toggly.io/evaluated-signed/test-key/Production',
+        SDK_FETCH_OPTIONS,
       );
     });
 
@@ -113,7 +121,8 @@ describe('Toggly Service', () => {
       });
       await toggly._loadFeatures();
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://definitions.toggly.io/evaluated-signed/test-key/Staging?u=user-123'
+        'https://definitions.toggly.io/evaluated-signed/test-key/Staging?u=user-123',
+        SDK_FETCH_OPTIONS,
       );
     });
 
@@ -125,7 +134,8 @@ describe('Toggly Service', () => {
       });
       await toggly._loadFeatures();
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://custom.api.io/evaluated-signed/test-key/Dev'
+        'https://custom.api.io/evaluated-signed/test-key/Dev',
+        SDK_FETCH_OPTIONS,
       );
     });
 
@@ -274,6 +284,7 @@ describe('Toggly Service', () => {
       await toggly._loadFeatures();
       expect(fetchSpy).toHaveBeenCalledWith(
         'https://definitions.toggly.io/evaluated-variants-signed/test-key/Production',
+        SDK_FETCH_OPTIONS,
       );
       expect(toggly.getVariant('V')).toEqual({ name: 'A', configurationValue: { x: 1 } });
       expect(toggly.getVariantValue('V')).toEqual({ x: 1 });
@@ -298,6 +309,7 @@ describe('Toggly Service', () => {
       await toggly._loadFeatures();
       expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('userId=user%40x'),
+        SDK_FETCH_OPTIONS,
       );
     });
 
@@ -570,6 +582,7 @@ describe('Toggly Service', () => {
     let fetchSpy: any;
 
     beforeEach(() => {
+      vi.useFakeTimers();
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       vi.spyOn(console, 'error').mockImplementation(() => {});
       mockWsInstances = [];
@@ -616,13 +629,13 @@ describe('Toggly Service', () => {
       const s = new Toggly({ appKey: 'mykey', environment: 'Prod' });
       s.startWebSocket();
       expect(mockWsInstances).toHaveLength(1);
-      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws');
+      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws?sdk=svelte&sdkVersion=1.4.1');
     });
 
     it('should build ws:// URL from http:// baseURI', () => {
       const s = new Toggly({ appKey: 'mykey', baseURI: 'http://local.test', environment: 'Prod' });
       s.startWebSocket();
-      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws');
+      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=svelte&sdkVersion=1.4.1');
     });
 
     it('should set _wsConnected on onopen', () => {
@@ -637,6 +650,7 @@ describe('Toggly Service', () => {
       s.startWebSocket();
       fetchSpy.mockClear();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'flags-updated' }) });
+      vi.advanceTimersByTime(350);
       expect(fetchSpy).toHaveBeenCalled();
     });
 
@@ -645,6 +659,7 @@ describe('Toggly Service', () => {
       s.startWebSocket();
       fetchSpy.mockClear();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) });
+      vi.advanceTimersByTime(350);
       expect(fetchSpy).toHaveBeenCalled();
     });
 
@@ -669,6 +684,7 @@ describe('Toggly Service', () => {
       s.startWebSocket();
       fetchSpy.mockClear();
       mockWsInstances[0].onmessage!({ data: 'update' });
+      vi.advanceTimersByTime(350);
       expect(fetchSpy).toHaveBeenCalled();
     });
 
@@ -677,6 +693,7 @@ describe('Toggly Service', () => {
       s.startWebSocket();
       fetchSpy.mockClear();
       mockWsInstances[0].onmessage!({ data: 'flags-updated' });
+      vi.advanceTimersByTime(350);
       expect(fetchSpy).toHaveBeenCalled();
     });
 

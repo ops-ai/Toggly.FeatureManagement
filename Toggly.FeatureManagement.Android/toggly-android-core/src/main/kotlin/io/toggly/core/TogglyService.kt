@@ -60,6 +60,13 @@ class TogglyService(
             .connectTimeout(config.connectTimeout, TimeUnit.MILLISECONDS)
             .readTimeout(config.requestTimeout, TimeUnit.MILLISECONDS)
             .writeTimeout(config.requestTimeout, TimeUnit.MILLISECONDS)
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header("User-Agent", SdkIdentity.userAgent())
+                        .build()
+                )
+            }
             .build()
     }
 
@@ -618,9 +625,12 @@ class TogglyService(
 
         stopWebSocket()
 
-        val wsUrl = config.baseUri
-            .replace("https://", "wss://")
-            .replace("http://", "ws://") + "/${config.appKey}/ws"
+        val wsUrl = SdkIdentity.appendSdkQueryParams(
+            config.baseUri
+                .replace("https://", "wss://")
+                .replace("http://", "ws://") + "/${config.appKey}/ws",
+            eTag
+        )
 
         val request = Request.Builder()
             .url(wsUrl)

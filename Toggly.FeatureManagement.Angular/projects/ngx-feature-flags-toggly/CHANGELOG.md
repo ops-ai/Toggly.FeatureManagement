@@ -1,4 +1,21 @@
+## 2.2.1
+
+2026-07-05
+
+### Added
+- SDK identity on definitions traffic: `User-Agent` on server HTTP, `X-Toggly-Sdk` / `X-Toggly-Sdk-Version` on browser HTTP, `sdk` + `sdkVersion` query params on WebSocket connect.
+
 # Changelog
+
+## 2.2.0
+
+2026-07-05
+
+### Added
+
+- ETag-based definitions sync: HTTP requests send `If-None-Match`, honor `304 Not Modified`, and persist `X-Definitions-Revision`.
+- WebSocket live updates use revision-aware sync (`sync`, `flags-updated`, `signing-key-updated`) with debounced refresh and exponential reconnect backoff.
+- WebSocket remains enabled when `customDefinitionsUrl` is set (proxied HTTP only).
 
 ## 2.1.0
 

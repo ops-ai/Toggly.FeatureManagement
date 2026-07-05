@@ -23,6 +23,17 @@ import {
   type FlagGateIndex,
 } from '@ops-ai/toggly-local-gates';
 import WebSocket from 'ws';
+import {
+  buildWebSocketUrl,
+  extractDefinitionsRevision,
+  getNextReconnectDelayMs,
+  REFRESH_DEBOUNCE_MS,
+  shouldFetchOnFlagsUpdated,
+  shouldFetchOnSigningKeyUpdated,
+  shouldFetchOnSync,
+  type WsSyncMessage,
+} from './ws-sync';
+import { buildDefinitionFetchHeaders } from './sdk-identity';
 
 /**
  * Server-side Toggly client for fetching and evaluating feature flags
@@ -38,14 +49,15 @@ export class TogglyServerClient {
   private ws: WebSocket | null = null;
   private wsConnected = false;
   private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private wsReconnectAttempt = 0;
+  private refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private cachedDefinitionsRevision: string | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private identity?: string;
 
   private localGates: LocalGate[] = [];
   private localGateIndex: FlagGateIndex = new Map();
   private readonly localGatesListeners = new Set<() => void>();
-
-  private static readonly WS_RECONNECT_DELAY = 5000; // 5 seconds
 
   constructor(config: TogglyConfig) {
     this.config = mergeConfig(config);
@@ -129,6 +141,54 @@ export class TogglyServerClient {
     return applyLocalGate(remote, featureKey, this.localGates, this.localGateIndex);
   }
 
+  private getDefinitionsRevision(): string | null {
+    return this.cachedDefinitionsRevision;
+  }
+
+  private cacheDefinitionsRevision(revision: string | null | undefined): void {
+    if (!revision) {
+      return;
+    }
+    this.cachedDefinitionsRevision = revision.replace(/^"+|"+$/g, '');
+  }
+
+  private scheduleDebouncedRefresh(forceRevisionReset = false): void {
+    if (this.refreshDebounceTimer) {
+      clearTimeout(this.refreshDebounceTimer);
+    }
+    this.refreshDebounceTimer = setTimeout(() => {
+      this.refreshDebounceTimer = null;
+      if (forceRevisionReset) {
+        this.cachedDefinitionsRevision = null;
+      }
+      void this.fetchFlags(this.identity);
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  private handleWsSyncMessage(message: WsSyncMessage): void {
+    const previousRevision = this.getDefinitionsRevision();
+    if (shouldFetchOnSync(message, previousRevision)) {
+      this.scheduleDebouncedRefresh();
+    }
+    if (message.etag) {
+      this.cacheDefinitionsRevision(message.etag);
+    }
+  }
+
+  private handleWsUpdateMessage(message: WsSyncMessage): void {
+    if (shouldFetchOnSigningKeyUpdated(message)) {
+      this.scheduleDebouncedRefresh(true);
+      return;
+    }
+    const previousRevision = this.getDefinitionsRevision();
+    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      this.scheduleDebouncedRefresh();
+    }
+    if (message.etag) {
+      this.cacheDefinitionsRevision(message.etag);
+    }
+  }
+
   private evaluateGateEffective(
     featureKeys: string[],
     requirement: 'all' | 'any' = 'all',
@@ -200,7 +260,22 @@ export class TogglyServerClient {
       const url = buildDefinitionsUrl(this.config, identity);
       this.logger.debug(`Fetching flags from: ${url}`);
 
-      const response = await fetchWithTimeout(url, {}, this.config.timeout);
+      const revision = this.getDefinitionsRevision();
+      const headers = buildDefinitionFetchHeaders(
+        revision ? { 'If-None-Match': revision } : {},
+      );
+
+      const response = await fetchWithTimeout(url, { headers }, this.config.timeout);
+
+      const responseRevision = extractDefinitionsRevision(response);
+      if (responseRevision) {
+        this.cacheDefinitionsRevision(responseRevision);
+      }
+
+      if (response.status === 304) {
+        this.logger.debug('Definitions unchanged (304)');
+        return this.flags;
+      }
 
       if (!response.ok) {
         throw new TogglyNetworkError(
@@ -316,17 +391,6 @@ export class TogglyServerClient {
   // WebSocket live updates
 
   /**
-   * Build the WebSocket URL for live updates
-   */
-  private buildWebSocketUrl(): string {
-    const baseUrl = this.config.baseUrl ?? 'https://definitions.toggly.io';
-    const wsUrl = baseUrl
-      .replace(/^https:\/\//, 'wss://')
-      .replace(/^http:\/\//, 'ws://');
-    return `${wsUrl.replace(/\/$/, '')}/${this.config.appKey}/ws`;
-  }
-
-  /**
    * Start WebSocket connection for live updates
    */
   private startWebSocket(): void {
@@ -338,7 +402,8 @@ export class TogglyServerClient {
       return;
     }
 
-    const wsUrl = this.buildWebSocketUrl();
+    const baseUrl = this.config.baseUrl ?? 'https://definitions.toggly.io';
+    const wsUrl = buildWebSocketUrl(baseUrl, this.config.appKey, this.getDefinitionsRevision());
     this.logger.debug(`WebSocket connecting to: ${wsUrl}`);
 
     try {
@@ -346,32 +411,43 @@ export class TogglyServerClient {
 
       this.ws.on('open', () => {
         this.wsConnected = true;
+        this.wsReconnectAttempt = 0;
         this.logger.debug('WebSocket connected');
       });
 
       this.ws.on('message', (data: Buffer) => {
         const text = data.toString();
+
+        if (text === 'update' || text === 'flags-updated') {
+          this.scheduleDebouncedRefresh();
+          return;
+        }
+
         try {
-          const msg = JSON.parse(text);
-          if (msg.type === 'ping') {
+          const message = JSON.parse(text) as WsSyncMessage;
+          if (message.type === 'ping') {
             return;
           }
-          if (msg.type === 'flags-updated' || msg.type === 'update') {
-            this.logger.debug('WebSocket: definitions updated, refreshing');
-            void this.fetchFlags(this.identity);
+          if (message.type === 'sync') {
+            this.handleWsSyncMessage(message);
+            return;
+          }
+          if (
+            message.type === 'flags-updated' ||
+            message.type === 'update' ||
+            message.type === 'signing-key-updated'
+          ) {
+            this.handleWsUpdateMessage(message);
           }
         } catch {
-          // Non-JSON message - check for plain text signals
-          if (text === 'update' || text === 'flags-updated') {
-            void this.fetchFlags(this.identity);
-          }
+          // Unrecognized message, ignore
         }
       });
 
       this.ws.on('close', () => {
         this.wsConnected = false;
         this.ws = null;
-        this.logger.debug('WebSocket disconnected, reconnecting in 5s');
+        this.logger.debug('WebSocket disconnected, scheduling reconnect');
         this.scheduleReconnect();
       });
 
@@ -393,10 +469,12 @@ export class TogglyServerClient {
     if (this.wsReconnectTimer) {
       return;
     }
+    const delay = getNextReconnectDelayMs(this.wsReconnectAttempt);
+    this.wsReconnectAttempt += 1;
     this.wsReconnectTimer = setTimeout(() => {
       this.wsReconnectTimer = null;
       this.startWebSocket();
-    }, TogglyServerClient.WS_RECONNECT_DELAY);
+    }, delay);
   }
 
   /**
@@ -406,6 +484,10 @@ export class TogglyServerClient {
     if (this.wsReconnectTimer) {
       clearTimeout(this.wsReconnectTimer);
       this.wsReconnectTimer = null;
+    }
+    if (this.refreshDebounceTimer) {
+      clearTimeout(this.refreshDebounceTimer);
+      this.refreshDebounceTimer = null;
     }
     if (this.ws) {
       this.ws.removeAllListeners();

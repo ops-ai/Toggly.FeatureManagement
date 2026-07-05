@@ -6,7 +6,7 @@ import WebSocket from 'ws';
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
 describe('WebSocket smoke test', () => {
-  it('connects and receives initial definitions message', async () => {
+  it('connects and receives sync message', async () => {
     if (!appKey) {
       console.warn('SKIPPED: TOGGLY_SMOKE_APP_KEY_FRONTEND not configured');
       return;
@@ -24,6 +24,7 @@ describe('WebSocket smoke test', () => {
         try {
           const msg = JSON.parse(text);
           if (msg.type === 'ping') return;
+          if (msg.type === 'definitions' || msg.type === 'evaluated') return;
         } catch { /* not JSON, resolve anyway */ }
         clearTimeout(timeout);
         resolve(text);
@@ -35,8 +36,13 @@ describe('WebSocket smoke test', () => {
     });
 
     const parsed = JSON.parse(message);
-    expect(['definitions', 'evaluated']).toContain(parsed.type);
-    expect(parsed).toHaveProperty('timestamp');
+    expect(['sync', 'definitions', 'evaluated']).toContain(parsed.type);
+    if (parsed.type === 'sync') {
+      expect(parsed).toHaveProperty('etag');
+      expect(parsed).toHaveProperty('lastUpdated');
+    } else {
+      expect(parsed).toHaveProperty('timestamp');
+    }
 
     ws.close();
   }, 20_000);

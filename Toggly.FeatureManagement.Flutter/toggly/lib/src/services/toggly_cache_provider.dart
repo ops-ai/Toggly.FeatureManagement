@@ -49,3 +49,27 @@ abstract class TogglyCacheProvider {
   /// Removes any cached JWKS.
   Future<void> deleteJwks();
 }
+
+/// Optional extension for [TogglyCacheProvider] implementations that persist
+/// the definitions revision (ETag) across app restarts.
+///
+/// When supplied via [TogglyConfig.cacheProvider], the SDK reads and writes
+/// revision through this interface for WebSocket `?rev=` sync and
+/// `If-None-Match` conditional fetches.
+abstract class TogglyRevisionCacheProvider implements TogglyCacheProvider {
+  /// Returns the cached definitions revision for [appKey] / [environment].
+  Future<String?> readDefinitionsRevision(
+    String appKey,
+    String environment,
+  );
+
+  /// Persists [revision] for [appKey] / [environment].
+  Future<void> writeDefinitionsRevision(
+    String appKey,
+    String environment,
+    String revision,
+  );
+
+  /// Removes any cached definitions revision for [appKey] / [environment].
+  Future<void> deleteDefinitionsRevision(String appKey, String environment);
+}

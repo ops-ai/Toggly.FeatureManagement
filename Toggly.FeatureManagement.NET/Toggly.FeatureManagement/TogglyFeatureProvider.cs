@@ -284,7 +284,7 @@ namespace Toggly.FeatureManagement
 #if NETCOREAPP3_1_OR_GREATER
                 httpClient.DefaultRequestVersion = HttpVersion.Version20;
 #endif
-                httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Toggly.FeatureManagement", Version));
+                httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("toggly-dotnet", Version));
                 if (timeout.HasValue)
                     httpClient.Timeout = new TimeSpan(timeout.Value);
                 
@@ -461,6 +461,16 @@ namespace Toggly.FeatureManagement
                             Scheme = baseUri.Scheme == Uri.UriSchemeHttps ? "wss" : "ws",
                             Port = baseUri.IsDefaultPort ? -1 : baseUri.Port
                         };
+                        var queryParts = new List<string>
+                        {
+                            "sdk=dotnet",
+                            $"sdkVersion={Uri.EscapeDataString(Version)}"
+                        };
+                        if (_lastETag != null)
+                        {
+                            queryParts.Insert(0, $"rev={Uri.EscapeDataString(_lastETag.Tag.Trim('"'))}");
+                        }
+                        wsBuilder.Query = string.Join("&", queryParts);
                         var liveConnectionUri = wsBuilder.Uri;
 
                         var newWebSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
@@ -958,7 +968,7 @@ namespace Toggly.FeatureManagement
 #if NETCOREAPP3_1_OR_GREATER
                 httpClient.DefaultRequestVersion = HttpVersion.Version20;
 #endif
-                httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Toggly.FeatureManagement", Version));
+                httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("toggly-dotnet", Version));
                         
                 // Fetch JWKS
                 var jwksResponse = await httpClient.GetAsync(".well-known/jwks").ConfigureAwait(false);
@@ -1160,7 +1170,7 @@ namespace Toggly.FeatureManagement
                 Environment = _environment,
                 Definitions = _definitions,
                 Experiments = _experiments,
-                UserAgent = new ProductInfoHeaderValue("Toggly.FeatureManagement", Version).ToString(),
+                UserAgent = new ProductInfoHeaderValue("toggly-dotnet", Version).ToString(),
                 LastError = _lastError,
                 LastErrorTime = _lastErrorTime,
                 LastRefresh = _lastRefresh,

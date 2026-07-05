@@ -9,6 +9,8 @@ jest.mock('uuid', () => ({
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
 
+const fetchInitMatcher = expect.objectContaining({ headers: expect.any(Object) });
+
 describe('Edge Cases & Error Handling', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -392,7 +394,8 @@ describe('Edge Cases & Error Handling', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('https://api.toggly.io/')
+        expect.stringContaining('https://api.toggly.io/'),
+        fetchInitMatcher,
       );
     });
 

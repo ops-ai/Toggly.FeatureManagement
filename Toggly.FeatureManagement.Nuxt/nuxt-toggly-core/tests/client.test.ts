@@ -753,7 +753,7 @@ describe('createTogglyClient', () => {
       })
       await client.init()
       expect(mockWsInstances).toHaveLength(1)
-      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/test-key/ws')
+      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/test-key/ws?sdk=nuxt&sdkVersion=1.3.1')
       client.destroy()
     })
 
@@ -766,7 +766,7 @@ describe('createTogglyClient', () => {
         enableLiveUpdates: true,
       })
       await client.init()
-      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws')
+      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=nuxt&sdkVersion=1.3.1')
       client.destroy()
     })
 
@@ -793,6 +793,7 @@ describe('createTogglyClient', () => {
       await client.init()
       const callsBefore = mockFetch.mock.calls.length
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'flags-updated' }) })
+      await vi.advanceTimersByTimeAsync(350)
       expect(mockFetch.mock.calls.length).toBeGreaterThan(callsBefore)
       client.destroy()
     })
@@ -807,6 +808,7 @@ describe('createTogglyClient', () => {
       await client.init()
       const callsBefore = mockFetch.mock.calls.length
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) })
+      await vi.advanceTimersByTimeAsync(350)
       expect(mockFetch.mock.calls.length).toBeGreaterThan(callsBefore)
       client.destroy()
     })

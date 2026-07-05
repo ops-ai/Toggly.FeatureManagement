@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:dio_smart_retry/dio_smart_retry.dart';
 
+import './sdk_identity.dart';
+
 /// Simple [Dio] wrapper to simplify http requests across the package.
 class HttpService {
   static final HttpService _instance = HttpService._internal();
@@ -10,6 +12,13 @@ class HttpService {
 
   HttpService._internal() {
     http = Dio();
+
+    http.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        options.headers = sdkHttpHeaders(options.headers);
+        handler.next(options);
+      },
+    ));
 
     http.interceptors.add(RetryInterceptor(
       dio: http,

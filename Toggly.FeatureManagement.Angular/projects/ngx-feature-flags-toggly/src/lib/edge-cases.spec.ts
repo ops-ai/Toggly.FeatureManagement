@@ -231,7 +231,8 @@ describe('Edge Cases & Error Handling', () => {
       const result = await service.isFeatureOn('F1');
       expect(result).toBe(true);
       expect(mockFetch).toHaveBeenCalledWith(
-        jasmine.stringContaining('https://custom.api.io/flags')
+        jasmine.stringContaining('https://custom.api.io/flags'),
+        jasmine.objectContaining({ headers: jasmine.any(Object) }),
       );
     });
 

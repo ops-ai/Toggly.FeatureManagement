@@ -16,6 +16,7 @@ import {
 } from '@ops-ai/toggly-local-gates';
 import { HookExecutor } from './hooks.js';
 import { parseVariantDefsPayload, variantDefsToFlags } from '../variant-helpers.js';
+import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
 
 /**
  * Atom containing all feature flags
@@ -141,9 +142,9 @@ class TogglyClientInstance {
 
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
+        headers: buildDefinitionFetchHeaders({
           Accept: 'application/json',
-        },
+        }),
         cache: 'no-store',
         signal: controller.signal,
       });

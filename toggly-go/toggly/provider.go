@@ -134,7 +134,10 @@ func (p *definitionsProvider) startLiveUpdates() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	closer, err := live.Start(ctx, p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment, p.hc, func() {
+	closer, err := live.Start(ctx, p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment, p.hc, p.getDefinitionsRevision(), func(forceJWKSRefresh bool) {
+		if forceJWKSRefresh {
+			p.clearJWKS()
+		}
 		_ = p.refresh(context.Background(), 10*time.Second)
 	})
 	if err != nil {
@@ -174,6 +177,27 @@ func (p *definitionsProvider) getVariantIdentity() string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.variantID
+}
+
+func (p *definitionsProvider) getDefinitionsRevision() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.cfg.EnableVariants {
+		return p.variantEtag
+	}
+	return p.etag
+}
+
+func (p *definitionsProvider) clearJWKS() {
+	p.jwksMu.Lock()
+	p.jwks = nil
+	p.jwksExpiry = time.Time{}
+	p.jwksMu.Unlock()
+
+	p.mu.Lock()
+	p.etag = ""
+	p.variantEtag = ""
+	p.mu.Unlock()
 }
 
 func (p *definitionsProvider) getVariant(featureKey string) *VariantResult {
@@ -261,6 +285,7 @@ func (p *definitionsProvider) refreshUnsigned(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	SetSDKHeaders(req)
 	p.mu.RLock()
 	etag := p.etag
 	p.mu.RUnlock()
@@ -314,6 +339,7 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) erro
 	if err != nil {
 		return err
 	}
+	SetSDKHeaders(req)
 	p.mu.RLock()
 	etag := p.variantEtag
 	currentTS := p.variantLastTS
@@ -408,6 +434,7 @@ func (p *definitionsProvider) refreshSigned(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	SetSDKHeaders(req)
 	p.mu.RLock()
 	etag := p.etag
 	currentTS := p.lastTS
@@ -497,6 +524,7 @@ func (p *definitionsProvider) loadOrFetchJWKS(ctx context.Context) (*definitions
 	if err != nil {
 		return nil, err
 	}
+	SetSDKHeaders(req)
 	resp, err := p.hc.Do(req)
 	if err != nil {
 		return nil, err

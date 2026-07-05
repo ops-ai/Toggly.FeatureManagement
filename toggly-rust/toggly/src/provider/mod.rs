@@ -1,6 +1,7 @@
 //! Feature definitions provider.
 
 use crate::config::TogglyConfig;
+use crate::sdk_identity::{append_sdk_query, sdk_user_agent};
 use crate::definitions::{FeatureDefinition, SignedDefinitionsResponse};
 use dashmap::DashMap;
 use parking_lot::RwLock;
@@ -33,6 +34,7 @@ impl DefinitionsProvider {
     pub fn new(config: TogglyConfig) -> crate::Result<Self> {
         let http_client = reqwest::Client::builder()
             .timeout(config.http_timeout)
+            .user_agent(sdk_user_agent())
             .build()?;
 
         Ok(Self {
@@ -60,7 +62,7 @@ impl DefinitionsProvider {
     }
 
     /// Build the WebSocket URL from the definitions URL.
-    fn build_ws_url(config: &TogglyConfig) -> String {
+    fn build_ws_url(config: &TogglyConfig, cached_revision: Option<&str>) -> String {
         let base = if config.definitions_url.ends_with('/') {
             &config.definitions_url[..config.definitions_url.len() - 1]
         } else {
@@ -69,7 +71,10 @@ impl DefinitionsProvider {
         let ws_base = base
             .replace("https://", "wss://")
             .replace("http://", "ws://");
-        format!("{}/{}/ws", ws_base, config.app_key)
+        append_sdk_query(
+            &format!("{}/{}/ws", ws_base, config.app_key),
+            cached_revision,
+        )
     }
 
     /// Start background refresh task.
@@ -98,7 +103,10 @@ impl DefinitionsProvider {
             let mut ws_shutdown_rx = shutdown_rx.clone();
 
             tokio::spawn(async move {
-                let ws_url = Self::build_ws_url(&ws_config);
+                let ws_url = Self::build_ws_url(
+                    &ws_config,
+                    ws_etag.read().as_deref(),
+                );
                 info!(url = %ws_url, "Starting WebSocket live updates");
 
                 loop {
@@ -108,6 +116,10 @@ impl DefinitionsProvider {
                         break;
                     }
 
+                    let ws_url = Self::build_ws_url(
+                        &ws_config,
+                        ws_etag.read().as_deref(),
+                    );
                     debug!(url = %ws_url, "Connecting WebSocket");
                     match tokio_tungstenite::connect_async(&ws_url).await {
                         Ok((ws_stream, _response)) => {
@@ -480,8 +492,11 @@ mod tests {
             .environment("production")
             .build();
 
-        let url = DefinitionsProvider::build_ws_url(&config);
-        assert_eq!(url, "wss://definitions.toggly.io/my-app/ws");
+        let url = DefinitionsProvider::build_ws_url(&config, None);
+        assert_eq!(
+            url,
+            "wss://definitions.toggly.io/my-app/ws?sdk=rust&sdkVersion=0.1.0"
+        );
     }
 
     #[test]
@@ -492,8 +507,11 @@ mod tests {
             .definitions_url("https://custom.example.com/")
             .build();
 
-        let url = DefinitionsProvider::build_ws_url(&config);
-        assert_eq!(url, "wss://custom.example.com/my-app/ws");
+        let url = DefinitionsProvider::build_ws_url(&config, Some("rev123"));
+        assert_eq!(
+            url,
+            "wss://custom.example.com/my-app/ws?rev=rev123&sdk=rust&sdkVersion=0.1.0"
+        );
     }
 
     #[test]
@@ -504,7 +522,10 @@ mod tests {
             .definitions_url("http://localhost:8080")
             .build();
 
-        let url = DefinitionsProvider::build_ws_url(&config);
-        assert_eq!(url, "ws://localhost:8080/my-app/ws");
+        let url = DefinitionsProvider::build_ws_url(&config, None);
+        assert_eq!(
+            url,
+            "ws://localhost:8080/my-app/ws?sdk=rust&sdkVersion=0.1.0"
+        );
     }
 }

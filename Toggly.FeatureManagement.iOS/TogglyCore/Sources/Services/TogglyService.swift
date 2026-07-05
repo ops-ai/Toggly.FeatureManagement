@@ -346,6 +346,7 @@ public actor TogglyService {
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
             request.timeoutInterval = config.requestTimeout
+            request.setValue(SdkIdentity.userAgent, forHTTPHeaderField: "User-Agent")
 
             if config.useSignedDefinitions, let etag = eTag {
                 request.setValue(etag, forHTTPHeaderField: "If-None-Match")
@@ -529,7 +530,10 @@ public actor TogglyService {
         let wsBaseURI = config.baseURI
             .replacingOccurrences(of: "https://", with: "wss://")
             .replacingOccurrences(of: "http://", with: "ws://")
-        let wsURLString = "\(wsBaseURI)/\(appKey)/ws"
+        let wsURLString = SdkIdentity.appendSdkQueryParams(
+            to: "\(wsBaseURI)/\(appKey)/ws",
+            cachedRevision: eTag
+        )
 
         guard let url = URL(string: wsURLString) else { return }
 

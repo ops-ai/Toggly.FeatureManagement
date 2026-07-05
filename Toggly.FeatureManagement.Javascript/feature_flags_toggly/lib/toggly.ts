@@ -8,6 +8,17 @@ import {
   type FlagGateIndex,
   type LocalGate,
 } from '@ops-ai/toggly-local-gates';
+import {
+  buildWebSocketUrl,
+  extractDefinitionsRevision,
+  getNextReconnectDelayMs,
+  REFRESH_DEBOUNCE_MS,
+  shouldFetchOnFlagsUpdated,
+  shouldFetchOnSigningKeyUpdated,
+  shouldFetchOnSync,
+  type WsSyncMessage,
+} from './ws-sync';
+import { buildDefinitionFetchHeaders } from './sdk-identity';
 
 const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
@@ -25,8 +36,98 @@ export class Toggly {
   static _ws: WebSocket | null = null;
   static _wsConnected: boolean = false;
   static _wsReconnectTimer: any = null;
+  static _wsReconnectAttempt: number = 0;
+  static _refreshDebounceTimer: any = null;
+  static _cachedDefinitionsRevision: string | null = null;
   static _lastFallbackRefresh: number = 0;
   static _fallbackRefreshInterval: number = 20 * 60 * 1000;
+
+  private static get _revisionCacheKey(): string {
+    return StorageKeys.definitionsRevisionCacheKey(
+      Toggly._config?.appKey ?? '',
+      Toggly._config?.environment ?? 'Production',
+    );
+  }
+
+  private static get definitionsRevision(): string | null {
+    if (Toggly._cachedDefinitionsRevision) {
+      return Toggly._cachedDefinitionsRevision;
+    }
+    if (!Toggly._persistCache) {
+      return null;
+    }
+    try {
+      return localStorage.getItem(Toggly._revisionCacheKey);
+    } catch {
+      return null;
+    }
+  }
+
+  private static cacheDefinitionsRevision(revision: string | null | undefined): void {
+    if (!revision) {
+      return;
+    }
+    Toggly._cachedDefinitionsRevision = revision;
+    if (!Toggly._persistCache) {
+      return;
+    }
+    try {
+      localStorage.setItem(Toggly._revisionCacheKey, revision);
+    } catch (error) {
+      Toggly._reportError('Error writing definitions revision cache', error);
+    }
+  }
+
+  private static scheduleDebouncedRefresh(forceJwksRefresh = false): void {
+    if (Toggly._refreshDebounceTimer) {
+      clearTimeout(Toggly._refreshDebounceTimer);
+    }
+    Toggly._refreshDebounceTimer = setTimeout(() => {
+      Toggly._refreshDebounceTimer = null;
+      if (forceJwksRefresh && Toggly._config.verifySignatures) {
+        // Force re-fetch by clearing revision so signing key rotation always pulls fresh defs.
+        Toggly._cachedDefinitionsRevision = null;
+      }
+      Toggly.refresh();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  private static handleWsSyncMessage(message: WsSyncMessage): void {
+    const previousRevision = Toggly.definitionsRevision;
+    if (shouldFetchOnSync(message, previousRevision)) {
+      Toggly.scheduleDebouncedRefresh();
+    }
+    if (message.etag) {
+      Toggly.cacheDefinitionsRevision(message.etag);
+    }
+  }
+
+  private static handleWsUpdateMessage(message: WsSyncMessage): void {
+    if (shouldFetchOnSigningKeyUpdated(message)) {
+      Toggly.scheduleDebouncedRefresh(true);
+      return;
+    }
+    const previousRevision = Toggly.definitionsRevision;
+    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      Toggly.scheduleDebouncedRefresh();
+    }
+    if (message.etag) {
+      Toggly.cacheDefinitionsRevision(message.etag);
+    }
+  }
+
+  private static buildFetchHeaders(): HeadersInit {
+    return buildDefinitionFetchHeaders(
+      Toggly.definitionsRevision ? { 'If-None-Match': Toggly.definitionsRevision } : {},
+    );
+  }
+
+  private static applyFetchRevision(response: Response): void {
+    const revision = extractDefinitionsRevision(response);
+    if (revision) {
+      Toggly.cacheDefinitionsRevision(revision.replace(/^"+|"+$/g, ''));
+    }
+  }
 
   private static get _persistCache(): boolean {
     return Toggly._config?.persistCache !== false && canUseStorage;
@@ -84,6 +185,8 @@ export class Toggly {
       : null;
     Toggly._hasLoadedFlags = false;
     Toggly._lastError = undefined;
+    Toggly._cachedDefinitionsRevision = null;
+    Toggly._wsReconnectAttempt = 0;
 
     // Register initial hooks
     if (Toggly._config.hooks) {
@@ -181,6 +284,7 @@ export class Toggly {
     try {
       localStorage.removeItem(Toggly._flagsCacheKey);
       localStorage.removeItem(Toggly._variantsCacheKey);
+      localStorage.removeItem(Toggly._revisionCacheKey);
     } catch (error) {
       Toggly._reportError('Error clearing feature flags cache', error);
     }
@@ -246,14 +350,25 @@ export class Toggly {
       // failure (e.g. a non-conforming fetch implementation returning undefined)
       // is funneled through the same .catch handler as a real network error.
       Promise.resolve()
-        .then(() => fetch(url))
+        .then(() => fetch(url, { headers: Toggly.buildFetchHeaders() }))
         .then((response) => {
+          Toggly.applyFetchRevision(response);
+          if (response.status === 304) {
+            const flags = Toggly._getFallbackFlags();
+            resolve(flags);
+            return null;
+          }
           if (!response.ok) {
             throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
           }
           return response.json();
         })
         .then((payload) => {
+          if (!payload) {
+            const flags = Toggly._getFallbackFlags();
+            resolve(flags);
+            return;
+          }
           const flags = (payload && payload.defs) ? payload.defs : payload;
           Toggly.cacheFeatureFlags(flags);
           resolve(flags);
@@ -283,14 +398,25 @@ export class Toggly {
       if (queryString) url += `?${queryString}`;
 
       Promise.resolve()
-        .then(() => fetch(url))
+        .then(() => fetch(url, { headers: Toggly.buildFetchHeaders() }))
         .then((response) => {
+          Toggly.applyFetchRevision(response);
+          if (response.status === 304) {
+            const flags = Toggly._getFallbackFlags();
+            resolve(flags);
+            return null;
+          }
           if (!response.ok) {
             throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
           }
           return response.json();
         })
         .then((payload) => {
+          if (!payload) {
+            const flags = Toggly._getFallbackFlags();
+            resolve(flags);
+            return;
+          }
           const defs: { [key: string]: EvaluatedVariantDef } = (payload && payload.defs) ? payload.defs : payload;
           Toggly.cacheVariants(defs);
 
@@ -461,7 +587,11 @@ export class Toggly {
 
     Toggly.stopWebSocket();
 
-    const wsUrl = Toggly._config.baseURI.replace('https://', 'wss://').replace('http://', 'ws://') + `/${Toggly._config.appKey}/ws`;
+    const wsUrl = buildWebSocketUrl(
+      Toggly._config.baseURI,
+      Toggly._config.appKey,
+      Toggly.definitionsRevision,
+    );
 
     if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket connecting to ${wsUrl}`); }
 
@@ -469,6 +599,7 @@ export class Toggly {
 
     ws.onopen = () => {
       Toggly._wsConnected = true;
+      Toggly._wsReconnectAttempt = 0;
       Toggly._lastFallbackRefresh = Date.now();
       if (Toggly._config.isDebug) { console.log('[Toggly] WebSocket connected'); }
     };
@@ -479,18 +610,23 @@ export class Toggly {
       if (typeof data === 'string') {
         if (data === 'update' || data === 'flags-updated') {
           if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received text: ${data}`); }
-          Toggly.refresh();
+          Toggly.scheduleDebouncedRefresh();
           return;
         }
 
         try {
-          const message = JSON.parse(data);
+          const message = JSON.parse(data) as WsSyncMessage;
           if (message.type === 'ping') {
             return;
           }
-          if (message.type === 'flags-updated' || message.type === 'update') {
+          if (message.type === 'sync') {
+            if (Toggly._config.isDebug) { console.log('[Toggly] WebSocket received sync'); }
+            Toggly.handleWsSyncMessage(message);
+            return;
+          }
+          if (message.type === 'flags-updated' || message.type === 'update' || message.type === 'signing-key-updated') {
             if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received: ${message.type}`); }
-            Toggly.refresh();
+            Toggly.handleWsUpdateMessage(message);
           }
         } catch (e) {
           if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received unrecognized message: ${data}`); }
@@ -501,11 +637,13 @@ export class Toggly {
     ws.onclose = () => {
       Toggly._wsConnected = false;
       Toggly._ws = null;
-      if (Toggly._config.isDebug) { console.log('[Toggly] WebSocket closed, reconnecting in 5s'); }
+      const delay = getNextReconnectDelayMs(Toggly._wsReconnectAttempt);
+      Toggly._wsReconnectAttempt += 1;
+      if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket closed, reconnecting in ${delay}ms`); }
 
       Toggly._wsReconnectTimer = setTimeout(() => {
         Toggly.startWebSocket();
-      }, 5000);
+      }, delay);
     };
 
     ws.onerror = (error) => {
@@ -519,6 +657,11 @@ export class Toggly {
     if (Toggly._wsReconnectTimer) {
       clearTimeout(Toggly._wsReconnectTimer);
       Toggly._wsReconnectTimer = null;
+    }
+
+    if (Toggly._refreshDebounceTimer) {
+      clearTimeout(Toggly._refreshDebounceTimer);
+      Toggly._refreshDebounceTimer = null;
     }
 
     if (Toggly._ws) {

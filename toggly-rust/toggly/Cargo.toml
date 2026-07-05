@@ -47,6 +47,7 @@ regex = "1.10"
 # WebSocket live updates
 tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
+url = "2.5"
 
 [dev-dependencies]
 tokio-test = { workspace = true }

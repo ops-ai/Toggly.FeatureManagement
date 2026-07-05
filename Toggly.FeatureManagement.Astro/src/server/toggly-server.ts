@@ -14,6 +14,7 @@ import type {
   EvaluatedVariantDef,
 } from '../types/index.js';
 import { parseVariantDefsPayload, variantDefsToFlags } from '../variant-helpers.js';
+import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
 
 interface CachedFlags {
   flags: Flags;
@@ -106,9 +107,9 @@ export class TogglyServer implements TogglyClient {
 
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
+        headers: buildDefinitionFetchHeaders({
           Accept: 'application/json',
-        },
+        }),
         cache: 'no-store',
         signal: controller.signal,
       });

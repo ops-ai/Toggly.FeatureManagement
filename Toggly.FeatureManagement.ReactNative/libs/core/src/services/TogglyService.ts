@@ -23,6 +23,17 @@ import type {
 import { HookExecutor } from './HookExecutor';
 import { EventEmitter } from './EventEmitter';
 import { MemoryStorage } from './MemoryStorage';
+import {
+  buildWebSocketUrl,
+  extractDefinitionsRevision,
+  getNextReconnectDelayMs,
+  REFRESH_DEBOUNCE_MS,
+  shouldFetchOnFlagsUpdated,
+  shouldFetchOnSigningKeyUpdated,
+  shouldFetchOnSync,
+  type WsSyncMessage,
+} from '../ws-sync';
+import { buildDefinitionFetchHeaders } from '../sdk-identity';
 
 /**
  * Storage keys used by Toggly
@@ -38,11 +49,6 @@ const STORAGE_KEYS = {
  * Fallback polling interval when WebSocket is connected (20 minutes)
  */
 const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000;
-
-/**
- * Delay before attempting to reconnect a dropped WebSocket (5 seconds)
- */
-const WS_RECONNECT_DELAY = 5000;
 
 /**
  * Default configuration values
@@ -159,7 +165,7 @@ export class TogglyService {
   private lastChecked: Date | null = null;
   private lastSynced: Date | null = null;
   private lastError: string | null = null;
-  private eTag: string | null = null;
+  private cachedDefinitionsRevision: string | null = null;
   private isInitialized = false;
   private networkState: NetworkState | null = null;
   private appState: AppStateType = 'active';
@@ -171,6 +177,8 @@ export class TogglyService {
   private _ws: WebSocket | null = null;
   private _wsConnected = false;
   private _wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private _wsReconnectAttempt = 0;
+  private _refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastFallbackRefresh = 0;
 
   private localGates: LocalGate[] = [];
@@ -214,6 +222,78 @@ export class TogglyService {
 
   private emitEffectiveFlagsChanged(flags: FeatureFlags = this.features ?? {}): void {
     this.eventEmitter.emit('effectiveFlagsChanged', flags);
+  }
+
+  private getDefinitionsRevision(): string | null {
+    if (this.cachedDefinitionsRevision) {
+      return this.cachedDefinitionsRevision;
+    }
+    return null;
+  }
+
+  private async loadCachedDefinitionsRevision(): Promise<void> {
+    if (this.cachedDefinitionsRevision) {
+      return;
+    }
+    try {
+      const stored = await this.storage.get(STORAGE_KEYS.ETAG);
+      if (stored) {
+        this.cachedDefinitionsRevision = stored;
+      }
+    } catch (error) {
+      this.reportError('Error reading definitions revision cache', error);
+    }
+  }
+
+  private async cacheDefinitionsRevision(revision: string | null | undefined): Promise<void> {
+    if (!revision) {
+      return;
+    }
+    const normalized = revision.replace(/^"+|"+$/g, '');
+    this.cachedDefinitionsRevision = normalized;
+    try {
+      await this.storage.set(STORAGE_KEYS.ETAG, normalized);
+    } catch (error) {
+      this.reportError('Error writing definitions revision cache', error);
+    }
+  }
+
+  private scheduleDebouncedRefresh(forceRevisionReset = false): void {
+    if (this._refreshDebounceTimer) {
+      clearTimeout(this._refreshDebounceTimer);
+    }
+    this._refreshDebounceTimer = setTimeout(() => {
+      this._refreshDebounceTimer = null;
+      if (forceRevisionReset) {
+        this.cachedDefinitionsRevision = null;
+        void this.storage.delete(STORAGE_KEYS.ETAG);
+      }
+      void this.refresh();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  private handleWsSyncMessage(message: WsSyncMessage): void {
+    const previousRevision = this.getDefinitionsRevision();
+    if (shouldFetchOnSync(message, previousRevision)) {
+      this.scheduleDebouncedRefresh();
+    }
+    if (message.etag) {
+      void this.cacheDefinitionsRevision(message.etag);
+    }
+  }
+
+  private handleWsUpdateMessage(message: WsSyncMessage): void {
+    if (shouldFetchOnSigningKeyUpdated(message)) {
+      this.scheduleDebouncedRefresh(true);
+      return;
+    }
+    const previousRevision = this.getDefinitionsRevision();
+    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      this.scheduleDebouncedRefresh();
+    }
+    if (message.etag) {
+      void this.cacheDefinitionsRevision(message.etag);
+    }
   }
 
   constructor(config: TogglyConfig = {}) {
@@ -287,6 +367,9 @@ export class TogglyService {
     // Start refresh timer
     this.startRefreshTimer();
 
+    // Load cached definitions revision for conditional HTTP requests
+    await this.loadCachedDefinitionsRevision();
+
     // Perform initial refresh
     const response = await this.refresh();
 
@@ -354,11 +437,10 @@ export class TogglyService {
 
     try {
       const url = this.buildApiUrl();
-      const headers: Record<string, string> = {};
-
-      if (this.config.useSignedDefinitions && this.eTag) {
-        headers['If-None-Match'] = this.eTag;
-      }
+      const revision = this.getDefinitionsRevision();
+      const headers = buildDefinitionFetchHeaders(
+        revision ? { 'If-None-Match': revision } : {},
+      );
 
       const controller = new AbortController();
       const timeoutId = setTimeout(
@@ -373,6 +455,11 @@ export class TogglyService {
       });
 
       clearTimeout(timeoutId);
+
+      const responseRevision = extractDefinitionsRevision(response);
+      if (responseRevision) {
+        await this.cacheDefinitionsRevision(responseRevision);
+      }
 
       if (response.status === 304) {
         // Not modified, use cached
@@ -410,13 +497,6 @@ export class TogglyService {
 
       // Cache the flags
       await this.cacheFeatureFlags(flags);
-
-      // Store ETag
-      const newEtag = response.headers.get('etag');
-      if (newEtag) {
-        this.eTag = newEtag;
-        await this.storage.set(STORAGE_KEYS.ETAG, newEtag);
-      }
 
       this.lastChecked = new Date();
       this.lastSynced = new Date();
@@ -586,7 +666,7 @@ export class TogglyService {
    */
   async clearCache(): Promise<void> {
     this.features = null;
-    this.eTag = null;
+    this.cachedDefinitionsRevision = null;
 
     try {
       const hashedIdentity = await sha256(this.identity ?? '');
@@ -767,33 +847,44 @@ export class TogglyService {
 
     this.stopWebSocket();
 
-    const baseUri = this.config.baseURI.replace(/\/$/, '');
-    const wsUrl = baseUri
-      .replace(/^https:\/\//i, 'wss://')
-      .replace(/^http:\/\//i, 'ws://');
-    const url = `${wsUrl}/${this.config.appKey}/ws`;
+    const url = buildWebSocketUrl(
+      this.config.baseURI,
+      this.config.appKey,
+      this.getDefinitionsRevision(),
+    );
 
     try {
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
         this._wsConnected = true;
+        this._wsReconnectAttempt = 0;
         this._lastFallbackRefresh = Date.now();
       };
 
       ws.onmessage = (event: MessageEvent) => {
-        try {
-          const message = JSON.parse(
-            typeof event.data === 'string' ? event.data : ''
-          );
-          const type: string | undefined = message?.type;
+        const data = typeof event.data === 'string' ? event.data : '';
 
-          if (type === 'ping') {
+        if (data === 'update' || data === 'flags-updated') {
+          this.scheduleDebouncedRefresh();
+          return;
+        }
+
+        try {
+          const message = JSON.parse(data) as WsSyncMessage;
+          if (message.type === 'ping') {
             return;
           }
-
-          if (type === 'flags-updated' || type === 'update') {
-            this.refresh();
+          if (message.type === 'sync') {
+            this.handleWsSyncMessage(message);
+            return;
+          }
+          if (
+            message.type === 'flags-updated' ||
+            message.type === 'update' ||
+            message.type === 'signing-key-updated'
+          ) {
+            this.handleWsUpdateMessage(message);
           }
         } catch {
           // Ignore malformed messages
@@ -824,12 +915,14 @@ export class TogglyService {
     if (this._wsReconnectTimer) {
       clearTimeout(this._wsReconnectTimer);
     }
+    const delay = getNextReconnectDelayMs(this._wsReconnectAttempt);
+    this._wsReconnectAttempt += 1;
     this._wsReconnectTimer = setTimeout(() => {
       this._wsReconnectTimer = null;
       if (this.config.enableLiveUpdates && this.appState === 'active') {
         this.startWebSocket();
       }
-    }, WS_RECONNECT_DELAY);
+    }, delay);
   }
 
   /**
@@ -839,6 +932,10 @@ export class TogglyService {
     if (this._wsReconnectTimer) {
       clearTimeout(this._wsReconnectTimer);
       this._wsReconnectTimer = null;
+    }
+    if (this._refreshDebounceTimer) {
+      clearTimeout(this._refreshDebounceTimer);
+      this._refreshDebounceTimer = null;
     }
     if (this._ws) {
       this._ws.onopen = null;
@@ -974,7 +1071,7 @@ export class TogglyService {
       wsConnected: this._wsConnected,
       lastChecked: this.lastChecked,
       lastSynced: this.lastSynced,
-      eTag: this.eTag,
+      eTag: this.cachedDefinitionsRevision,
       lastError: this.lastError,
       networkState: this.networkState,
       appState: this.appState,

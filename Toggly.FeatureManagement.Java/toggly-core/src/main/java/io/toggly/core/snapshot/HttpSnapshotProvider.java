@@ -172,7 +172,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
             connection.setReadTimeout(READ_TIMEOUT_MS);
             connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("User-Agent", "Toggly-Java-SDK/1.0");
+            connection.setRequestProperty("User-Agent", SdkIdentity.userAgent());
 
             // Send ETag for conditional request
             String etag = lastEtag.get();
@@ -467,10 +467,12 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         if (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
-        String wsUrl = baseUrl
-                .replace("https://", "wss://")
-                .replace("http://", "ws://")
-                + "/" + config.getAppKey() + "/ws";
+        String wsUrl = SdkIdentity.appendSdkQueryParams(
+                baseUrl
+                        .replace("https://", "wss://")
+                        .replace("http://", "ws://")
+                        + "/" + config.getAppKey() + "/ws",
+                lastEtag.get());
 
         LOGGER.log(Level.INFO, "Connecting WebSocket to {0}", wsUrl);
 

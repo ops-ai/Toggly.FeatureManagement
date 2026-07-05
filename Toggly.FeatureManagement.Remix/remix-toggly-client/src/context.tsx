@@ -20,6 +20,7 @@ import {
   createLogger,
   mergeConfig,
 } from '@ops-ai/remix-toggly-core';
+import { appendSdkQueryParams } from './sdk-identity';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -442,7 +443,10 @@ export function TogglyProvider({
       const wsUrl = baseUrl
         .replace(/^https:\/\//, 'wss://')
         .replace(/^http:\/\//, 'ws://');
-      return `${wsUrl.replace(/\/$/, '')}/${mergedConfig!.appKey}/ws`;
+      const params = new URLSearchParams();
+      appendSdkQueryParams(params);
+      const query = params.toString();
+      return `${wsUrl.replace(/\/$/, '')}/${mergedConfig!.appKey}/ws${query ? `?${query}` : ''}`;
     }
 
     function connect(): void {

@@ -35,7 +35,7 @@ class Toggly with WidgetsBindingObserver {
   static BehaviorSubject<Map<String, bool>>? _featureFlagsSubject;
   static DateTime? _lastChecked;
   static DateTime? _lastSynced;
-  static String? _eTag;
+  static String? _definitionsRevision;
   static String? _lastError;
   // Add new static field for in-memory cache
   static Map<String, bool>? _inMemoryFlags;
@@ -49,8 +49,6 @@ class Toggly with WidgetsBindingObserver {
   static List<LocalGate> _localGates = [];
   static Map<String, String> _localGateIndex = {};
   static StreamController<void>? _localGatesChangedController;
-
-  static String? _variantsETag;
 
   static final Toggly _instance = Toggly._internal();
 
@@ -79,10 +77,9 @@ class Toggly with WidgetsBindingObserver {
           Toggly._sync.refreshFeatureFlagsTimer != null ? 'Yes' : 'No',
       'lastChecked': _lastChecked?.toString(),
       'lastSynced': _lastSynced?.toString(),
-      'eTag': _eTag,
+      'definitionsRevision': _definitionsRevision,
       'lastError': _lastError,
       'enableVariants': Toggly._config.enableVariants.toString(),
-      'variantsETag': _variantsETag,
     };
   }
 
@@ -198,6 +195,7 @@ class Toggly with WidgetsBindingObserver {
       Toggly._identity = (Toggly._deviceId ??= _uuid.v4());
     }
     await checkAndClearFeatureFlagsCache();
+    await _loadCachedDefinitionsRevision();
     if (kDebugMode) {
       print('Toggly.init');
     }
@@ -392,12 +390,12 @@ class Toggly with WidgetsBindingObserver {
     _inMemoryFlags = null;
     _inMemoryVariantDefs = null;
     _featureFlagsSubject?.add(Map<String, bool>.from(Toggly._flagDefaults));
-    _eTag = null;
-    _variantsETag = null;
+    _definitionsRevision = null;
 
     // ETags are memory-only; clear persisted flags/variants for this identity.
     await Toggly._cache?.deleteFlags(Toggly._identity);
     await Toggly._cache?.deleteVariants(Toggly._identity);
+    await _deleteCachedDefinitionsRevision();
   }
 
   static Future checkAndClearFeatureFlagsCache() async {
@@ -431,12 +429,10 @@ class Toggly with WidgetsBindingObserver {
   static Future<TogglyLoadFeatureFlagsResponse> fetchFeatureFlags() async {
     try {
       // Prepare headers
-      Map<String, dynamic> headers = {};
-
-      if (Toggly._useSignedDefinitions) {
-        if (_eTag != null) {
-          headers['If-None-Match'] = _eTag!;
-        }
+      final headers = <String, dynamic>{};
+      final revision = _definitionsRevision;
+      if (revision != null) {
+        headers['If-None-Match'] = revision;
       }
 
       final queryParameters = <String, dynamic>{
@@ -506,11 +502,7 @@ class Toggly with WidgetsBindingObserver {
           throw Exception('Signature verification failed');
         }
 
-        // Store new ETag if present
-        String? newEtag = response.headers['etag']?.first;
-        if (newEtag != null) {
-          _eTag = newEtag;
-        }
+        _applyDefinitionsRevision(response);
       } else {
         _lastChecked = DateTime.now();
         _lastSynced = DateTime.now();
@@ -519,11 +511,7 @@ class Toggly with WidgetsBindingObserver {
         Toggly.cacheFeatureFlags(
             featureFlags: jsonEncode(payload['defs'] ?? payload));
 
-        // Store new ETag if present
-        String? newEtag = response.headers['etag']?.first;
-        if (newEtag != null) {
-          _eTag = newEtag;
-        }
+        _applyDefinitionsRevision(response);
       }
 
       // Cache flags on successful response
@@ -574,8 +562,8 @@ class Toggly with WidgetsBindingObserver {
     }
     try {
       final headers = <String, dynamic>{};
-      if (_variantsETag != null) {
-        headers['If-None-Match'] = _variantsETag!;
+      if (_definitionsRevision != null) {
+        headers['If-None-Match'] = _definitionsRevision!;
       }
 
       final response = await _http.get(
@@ -640,10 +628,7 @@ class Toggly with WidgetsBindingObserver {
         keyId: keyId,
       );
 
-      final newEtag = response.headers['etag']?.first;
-      if (newEtag != null) {
-        _variantsETag = newEtag;
-      }
+      _applyDefinitionsRevision(response);
 
       if (kDebugMode) {
         print('Toggly.fetchEvaluatedVariants — ${jsonEncode(defs)}');
@@ -691,7 +676,6 @@ class Toggly with WidgetsBindingObserver {
   /// Drops variant cache from memory and secure storage for the current identity.
   static Future<void> clearVariantCache() async {
     _inMemoryVariantDefs = null;
-    _variantsETag = null;
 
     await Toggly._cache?.deleteVariants(Toggly._identity);
   }
@@ -1186,7 +1170,7 @@ class Toggly with WidgetsBindingObserver {
     cancelTimers();
     _inMemoryFlags = null;
     _inMemoryVariantDefs = null;
-    _variantsETag = null;
+    _definitionsRevision = null;
     _inMemoryJwks = null; // Clear JWKs cache
     _featureFlagsSubject?.close();
     _featureFlagsSubject = null;
@@ -1223,12 +1207,14 @@ class Toggly with WidgetsBindingObserver {
                 'Toggly.syncFeatureFlags - every ${Toggly._config.featureFlagsRefreshInterval / 1000}s');
           }
 
-          // When WebSocket is connected, skip polling entirely — live
-          // updates are handled by the WebSocket. Polling resumes
-          // automatically once the connection drops.
-          if (Toggly._sync.wsConnected) {
+          // When WebSocket is connected or reconnecting, skip polling — live
+          // updates are handled by the WebSocket. Polling resumes once the
+          // connection drops and reconnect is not in progress.
+          if (Toggly._sync.wsConnected || Toggly._sync.wsReconnecting) {
             if (kDebugMode) {
-              print('Toggly: Skipping poll refresh — WebSocket is connected');
+              print(
+                'Toggly: Skipping poll refresh — WebSocket active or reconnecting',
+              );
             }
             return;
           }
@@ -1246,17 +1232,125 @@ class Toggly with WidgetsBindingObserver {
 
   /// Starts the WebSocket connection for live feature flag updates.
   static void _startWebSocket() {
-    Toggly._sync.onFlagsUpdated = () async {
+    Toggly._sync.onSyncMessage =
+        ({required bool unchanged, String? etag}) async {
+      final previousRevision = _definitionsRevision;
+
+      if (shouldFetchOnSync(
+        unchanged: unchanged,
+        messageEtag: etag,
+        cachedRevision: previousRevision,
+      )) {
+        Toggly._sync.requestRefresh();
+      } else if (kDebugMode) {
+        print('Toggly: WebSocket sync unchanged — skipping fetch');
+      }
+
+      if (etag != null) {
+        await _cacheDefinitionsRevision(etag);
+      }
+    };
+
+    Toggly._sync.onRefreshRequested =
+        ({required bool forceJwksRefresh}) async {
+      if (forceJwksRefresh) {
+        _definitionsRevision = null;
+        Toggly._sync.updateCachedRevision(null);
+        await _deleteCachedDefinitionsRevision();
+        _inMemoryJwks = null;
+        await Toggly._cache?.deleteJwks();
+      }
+
       if (kDebugMode) {
         print('Toggly: WebSocket triggered refresh');
       }
       await Toggly.refresh();
     };
 
+    Toggly._sync.onDefinitionsRevisionUpdated = (etag) {
+      unawaited(_cacheDefinitionsRevision(etag));
+    };
+
     Toggly._sync.startWebSocket(
       baseURI: Toggly._config.baseURI,
       appKey: Toggly._appKey!,
+      cachedRevision: _definitionsRevision,
     );
+  }
+
+  static TogglyRevisionCacheProvider? get _revisionCache {
+    final cache = Toggly._cache;
+    return cache is TogglyRevisionCacheProvider ? cache : null;
+  }
+
+  static Future<void> _loadCachedDefinitionsRevision() async {
+    final appKey = Toggly._appKey;
+    if (appKey == null) {
+      return;
+    }
+
+    final revision = await _revisionCache?.readDefinitionsRevision(
+      appKey,
+      Toggly._environment,
+    );
+    if (revision != null && revision.isNotEmpty) {
+      _definitionsRevision = revision;
+    }
+  }
+
+  static Future<void> _cacheDefinitionsRevision(String revision) async {
+    final normalized = revision.replaceAll(RegExp(r'^"+|"+$'), '');
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    _definitionsRevision = normalized;
+    Toggly._sync.updateCachedRevision(normalized);
+
+    final appKey = Toggly._appKey;
+    if (appKey == null) {
+      return;
+    }
+
+    await _revisionCache?.writeDefinitionsRevision(
+      appKey,
+      Toggly._environment,
+      normalized,
+    );
+  }
+
+  static Future<void> _deleteCachedDefinitionsRevision() async {
+    final appKey = Toggly._appKey;
+    if (appKey == null) {
+      return;
+    }
+
+    await _revisionCache?.deleteDefinitionsRevision(
+      appKey,
+      Toggly._environment,
+    );
+  }
+
+  static void _applyDefinitionsRevision(Response<dynamic> response) {
+    final revision = _extractDefinitionsRevision(response);
+    if (revision != null) {
+      unawaited(_cacheDefinitionsRevision(revision));
+    }
+  }
+
+  static String? _extractDefinitionsRevision(Response<dynamic> response) {
+    final custom = response.headers.value(definitionsRevisionHeader) ??
+        response.headers.value(definitionsRevisionHeader.toLowerCase());
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
+
+    final etag = response.headers.value('etag');
+    if (etag != null && etag.isNotEmpty) {
+      return etag;
+    }
+
+    return null;
   }
 
   /// Cancels the registered timers and stops the WebSocket connection.

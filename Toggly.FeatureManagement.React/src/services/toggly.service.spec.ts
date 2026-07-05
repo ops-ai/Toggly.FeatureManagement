@@ -5,6 +5,8 @@ import type { Hook } from '@ops-ai/toggly-hooks-types';
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
 
+const fetchInitMatcher = expect.objectContaining({ headers: expect.any(Object) });
+
 describe('Toggly Service', () => {
   beforeEach(() => {
     mockFetch.mockReset();
@@ -135,7 +137,35 @@ describe('Toggly Service', () => {
       const features = await service._loadFeatures();
       expect(features).toEqual({ ApiFlag: true });
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://definitions.toggly.io/evaluated-signed/test-key/Production'
+        'https://definitions.toggly.io/evaluated-signed/test-key/Production',
+        fetchInitMatcher,
+      );
+    });
+
+    it('should return cached features when API returns 304', async () => {
+      localStorage.setItem('toggly:revision:test-key:Production', 'rev123');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 304,
+        statusText: 'Not Modified',
+        headers: { get: (key: string) => (key === 'X-Definitions-Revision' ? 'rev123' : null) },
+        json: () => Promise.reject(new Error('304 has no body')),
+      });
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureDefaults: { Fallback: true },
+      });
+      (service as any)._features = { CachedFlag: true };
+
+      const features = await service._loadFeatures(true);
+      expect(features).toEqual({ CachedFlag: true });
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://definitions.toggly.io/evaluated-signed/test-key/Production',
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'If-None-Match': 'rev123' }),
+        }),
       );
     });
 
@@ -209,7 +239,8 @@ describe('Toggly Service', () => {
 
       await service._loadFeatures();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://definitions.toggly.io/evaluated-signed/test-key/Production?u=user-123'
+        'https://definitions.toggly.io/evaluated-signed/test-key/Production?u=user-123',
+        fetchInitMatcher,
       );
     });
 
@@ -229,7 +260,8 @@ describe('Toggly Service', () => {
 
       await service._loadFeatures();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://custom.api.com/evaluated-signed/test-key/Staging'
+        'https://custom.api.com/evaluated-signed/test-key/Staging',
+        fetchInitMatcher,
       );
     });
 
@@ -825,13 +857,13 @@ describe('Toggly Service', () => {
       const service = new Toggly({ appKey: 'my-key', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws?sdk=react&sdkVersion=1.5.1');
     });
 
     it('should create ws:// URL for http:// baseURI', () => {
       const service = new Toggly({ appKey: 'k', baseURI: 'http://local', featureDefaults: {} });
       service.startWebSocket();
-      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws');
+      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws?sdk=react&sdkVersion=1.5.1');
     });
 
     it('should set _wsConnected=true on open', () => {
@@ -887,6 +919,57 @@ describe('Toggly Service', () => {
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: 'flags-updated' });
       expect((service as any)._features).toEqual({ F1: true });
+    });
+
+    it('should include rev query param when definitions revision is cached', () => {
+      localStorage.setItem('toggly:revision:k:Production', 'rev123');
+      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
+      service.startWebSocket();
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?rev=rev123&sdk=react&sdkVersion=1.5.1');
+    });
+
+    it('should handle sync message with unchanged without scheduling refresh', () => {
+      localStorage.setItem('toggly:revision:k:Production', 'rev123');
+      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
+      (service as any)._features = { F1: true };
+      service.startWebSocket();
+      mockFetch.mockClear();
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'sync', etag: 'rev123', unchanged: true }),
+      });
+      jest.advanceTimersByTime(500);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should handle signing-key-updated by scheduling refresh', async () => {
+      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => 'rev-new' },
+        json: () => Promise.resolve({ defs: { F1: false } }),
+      });
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'signing-key-updated', kid: 'kid-1' }),
+      });
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should skip refresh when flags-updated etag matches cache', () => {
+      localStorage.setItem('toggly:revision:k:Production', 'same-rev');
+      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
+      (service as any)._features = { F1: true };
+      service.startWebSocket();
+      mockFetch.mockClear();
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'flags-updated', etag: 'same-rev' }),
+      });
+      jest.advanceTimersByTime(500);
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('should ignore unrecognized plain text', () => {
@@ -983,6 +1066,7 @@ describe('Toggly Service', () => {
       await service._loadFeatures();
       expect(mockFetch).toHaveBeenCalledWith(
         'https://definitions.toggly.io/evaluated-variants-signed/test-key/Production',
+        fetchInitMatcher,
       );
       expect(service.getVariant('V')).toEqual({ name: 'A', configurationValue: { x: 1 } });
       expect(service.getVariantValue('V')).toEqual({ x: 1 });
@@ -1007,6 +1091,7 @@ describe('Toggly Service', () => {
       await service._loadFeatures();
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('userId=user%40x'),
+        fetchInitMatcher,
       );
     });
 
