@@ -94,6 +94,9 @@ importers:
 
   nuxt-toggly-core:
     dependencies:
+      '@ops-ai/toggly-hooks-types':
+        specifier: file:../../toggly-hooks-types
+        version: file:../toggly-hooks-types
       '@ops-ai/toggly-local-gates':
         specifier: file:../../toggly-local-gates
         version: file:../toggly-local-gates
@@ -1121,6 +1124,10 @@ packages:
 
   '@one-ini/wasm@0.1.1':
     resolution: {integrity: sha512-XuySG1E38YScSJoMlqovLru4KTUNSjgVTIjyh7qMX6aNN5HY5Ct5LhRJdxO79JtTzKfzV/bnWpz+zquYrISsvw==}
+
+  '@ops-ai/toggly-hooks-types@file:../toggly-hooks-types':
+    resolution: {directory: ../toggly-hooks-types, type: directory}
+    engines: {node: '>=18.0.0'}
 
   '@ops-ai/toggly-local-gates@file:../toggly-local-gates':
     resolution: {directory: ../toggly-local-gates, type: directory}
@@ -5561,6 +5568,8 @@ snapshots:
       - yaml
 
   '@one-ini/wasm@0.1.1': {}
+
+  '@ops-ai/toggly-hooks-types@file:../toggly-hooks-types': {}
 
   '@ops-ai/toggly-local-gates@file:../toggly-local-gates': {}
 

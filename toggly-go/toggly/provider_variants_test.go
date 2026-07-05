@@ -105,12 +105,12 @@ func TestClient_SetVariantIdentity_ClearsVariantETag(t *testing.T) {
 	defer srv.Close()
 
 	cfg := Config{
-		AppKey:               "k",
-		Environment:        "e",
-		DefinitionsURL:       srv.URL + "/",
-		HTTPTimeout:          2 * time.Second,
-		RefreshInterval:      time.Hour,
-		EnableVariants:       true,
+		AppKey:                   "k",
+		Environment:              "e",
+		DefinitionsURL:           srv.URL + "/",
+		HTTPTimeout:              2 * time.Second,
+		RefreshInterval:          time.Hour,
+		EnableVariants:           true,
 		DisableBackgroundRefresh: true,
 	}
 	c, err := NewClient(cfg)

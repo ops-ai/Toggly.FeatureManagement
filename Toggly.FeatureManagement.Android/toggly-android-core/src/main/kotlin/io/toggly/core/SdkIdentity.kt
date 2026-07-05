@@ -1,7 +1,6 @@
 package io.toggly.core
 
 import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 object SdkIdentity {
     const val SDK_ID = "android"
@@ -18,9 +17,7 @@ object SdkIdentity {
         params["sdkVersion"] = SDK_VERSION
 
         val query = params.entries.joinToString("&") { (key, value) ->
-            "${URLEncoder.encode(key, StandardCharsets.UTF_8)}=${
-                URLEncoder.encode(value, StandardCharsets.UTF_8)
-            }"
+            "${URLEncoder.encode(key, "UTF-8")}=${URLEncoder.encode(value, "UTF-8")}"
         }
 
         return "$wsUrl?$query"

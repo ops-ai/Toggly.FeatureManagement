@@ -1,8 +1,8 @@
 //! Feature definitions provider.
 
 use crate::config::TogglyConfig;
-use crate::sdk_identity::{append_sdk_query, sdk_user_agent};
 use crate::definitions::{FeatureDefinition, SignedDefinitionsResponse};
+use crate::sdk_identity::{append_sdk_query, sdk_user_agent};
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -103,10 +103,7 @@ impl DefinitionsProvider {
             let mut ws_shutdown_rx = shutdown_rx.clone();
 
             tokio::spawn(async move {
-                let ws_url = Self::build_ws_url(
-                    &ws_config,
-                    ws_etag.read().as_deref(),
-                );
+                let ws_url = Self::build_ws_url(&ws_config, ws_etag.read().as_deref());
                 info!(url = %ws_url, "Starting WebSocket live updates");
 
                 loop {
@@ -116,10 +113,7 @@ impl DefinitionsProvider {
                         break;
                     }
 
-                    let ws_url = Self::build_ws_url(
-                        &ws_config,
-                        ws_etag.read().as_deref(),
-                    );
+                    let ws_url = Self::build_ws_url(&ws_config, ws_etag.read().as_deref());
                     debug!(url = %ws_url, "Connecting WebSocket");
                     match tokio_tungstenite::connect_async(&ws_url).await {
                         Ok((ws_stream, _response)) => {

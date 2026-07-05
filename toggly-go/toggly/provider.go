@@ -415,14 +415,14 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) erro
 
 	if p.snap != nil {
 		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{
-			Defs:               defsSlice,
-			Signature:          env.Signature,
-			Kid:                env.Kid,
-			Timestamp:          env.Timestamp,
-			VariantDefs:        variantMap,
-			VariantSignature:   env.Signature,
-			VariantKid:         env.Kid,
-			VariantTimestamp:   env.Timestamp,
+			Defs:             defsSlice,
+			Signature:        env.Signature,
+			Kid:              env.Kid,
+			Timestamp:        env.Timestamp,
+			VariantDefs:      variantMap,
+			VariantSignature: env.Signature,
+			VariantKid:       env.Kid,
+			VariantTimestamp: env.Timestamp,
 		})
 	}
 	return nil

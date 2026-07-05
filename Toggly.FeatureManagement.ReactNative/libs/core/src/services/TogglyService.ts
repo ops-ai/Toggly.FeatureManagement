@@ -371,6 +371,7 @@ export class TogglyService {
     this.claims = this.config.claims ? { ...this.config.claims } : {};
 
     // Start refresh timer
+    this.startRefreshTimer();
 
     // Load cached definitions revision for conditional HTTP requests
     await this.loadCachedDefinitionsRevision();

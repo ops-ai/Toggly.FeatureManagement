@@ -12,7 +12,7 @@ import (
 
 // VariantResult is the assigned variant for a feature from evaluated-variants-signed.
 type VariantResult struct {
-	Name                 string
+	Name               string
 	ConfigurationValue interface{}
 }
 
