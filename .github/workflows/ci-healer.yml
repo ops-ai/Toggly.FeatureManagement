@@ -3,8 +3,7 @@ name: CI Healer
 on:
   workflow_run:
     workflows:
-      - Flutter Cache Providers - Tests & Analysis
-      - Flutter SDK - Tests & Analysis
+      - Flutter SDKs - Tests & Analysis
       - Next.js SDKs - Tests & Analysis
       - Ruby SDKs - Tests & Analysis
       - Remix SDKs - Tests & Analysis

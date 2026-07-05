@@ -27,7 +27,7 @@ Read [ci-verify-map.yml](./ci-verify-map.yml) before running any local verificat
 1. Identify the failed workflow display name and job name from the GitHub Actions run.
 2. Look up the matching entry in [ci-verify-map.yml](./ci-verify-map.yml).
 3. Run only the scoped commands for that workflow/job.
-4. Do **not** attempt to run all 16 analysis workflows locally.
+4. Do **not** attempt to run all 15 analysis workflows locally.
 5. Do **not** commit until scoped verify passes.
 6. Skip SonarCloud, OWASP dependency-check, and summary-only jobs for local verify unless the failure is in a preceding build/test job.
 
@@ -91,4 +91,4 @@ Move the daily sweep issue to **In Review** when the sweep completes. Never mark
 | Phase | Configuration |
 |-------|---------------|
 | 2 | [config.yml](./config.yml): `rollout_phase: 2`, `dry_run: true` — Flutter workflow only |
-| 3 | [config.yml](./config.yml): `rollout_phase: 3`, `dry_run: false` — all 16 analysis workflows |
+| 3 | [config.yml](./config.yml): `rollout_phase: 3`, `dry_run: false` — all 15 analysis workflows |

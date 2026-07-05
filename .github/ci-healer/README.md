@@ -57,7 +57,7 @@ If pushes fail with 403, add `CI_HEALER_PAT` and verify the token can push to pr
 
 ### 4. Verify analysis workflows have `workflow_dispatch`
 
-All 16 `analysis-*` workflows already declare `workflow_dispatch:`. greencheck uses this to re-trigger CI after a fix push (because `GITHUB_TOKEN` pushes do not always start new workflow runs).
+All 15 `analysis-*` workflows already declare `workflow_dispatch:`. greencheck uses this to re-trigger CI after a fix push (because `GITHUB_TOKEN` pushes do not always start new workflow runs).
 
 ---
 
@@ -65,7 +65,7 @@ All 16 `analysis-*` workflows already declare `workflow_dispatch:`. greencheck u
 
 ### Phase 1 — Config only (complete when these files are merged)
 
-- [ci-verify-map.yml](./ci-verify-map.yml) covers all 16 analysis workflows
+- [ci-verify-map.yml](./ci-verify-map.yml) covers all 15 analysis workflows
 - [report-to-linear.mjs](./report-to-linear.mjs) can be dry-tested locally:
 
 ```bash
@@ -73,7 +73,7 @@ export LINEAR_API_KEY="lin_api_..."
 export LINEAR_CI_HEALER_EPIC="OPS-274"
 export WORKFLOW_RUN_URL="https://github.com/ops-ai/Toggly.FeatureManagement/actions/runs/123"
 export WORKFLOW_RUN_ID="123"
-export WORKFLOW_RUN_NAME="Flutter SDK - Tests & Analysis"
+export WORKFLOW_RUN_NAME="Flutter SDKs - Tests & Analysis"
 export HEAD_BRANCH="develop"
 export GREENCHECK_FIXED="false"
 export CI_HEALER_DRY_RUN="true"
@@ -93,7 +93,7 @@ node .github/ci-healer/report-to-linear.mjs
 
 1. Set repository variable `CI_HEALER_LIVE` = `true`
 2. Delete [ci-healer-phase2-flutter-dryrun.yml](../workflows/ci-healer-phase2-flutter-dryrun.yml) to avoid duplicate Flutter healing
-3. Confirm [ci-healer.yml](../workflows/ci-healer.yml) lists all 16 analysis workflows
+3. Confirm [ci-healer.yml](../workflows/ci-healer.yml) lists all 15 analysis workflows
 4. Confirm a fix commit lands on the branch and the failed workflow re-dispatches green
 5. Confirm loop prevention: healer does not re-trigger on its own commits
 

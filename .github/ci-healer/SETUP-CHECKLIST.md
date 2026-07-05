@@ -27,5 +27,5 @@ Repository: https://github.com/ops-ai/Toggly.FeatureManagement
 ## Rollout
 
 - [ ] Phase 2: Disable `ci-healer.yml`, enable `ci-healer-phase2-flutter-dryrun.yml`, validate Linear comments
-- [ ] Phase 3: Remove phase2 workflow, enable `ci-healer.yml` with all 16 analysis workflows
+- [ ] Phase 3: Remove phase2 workflow, enable `ci-healer.yml` with all 15 analysis workflows
 - [ ] Phase 4: Configure daily Cursor Automation per [README.md](./README.md)

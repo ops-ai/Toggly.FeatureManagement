@@ -3,8 +3,25 @@
 # Derived from .github/workflows/analysis-*.yml matrix definitions.
 
 workflows:
-  "Flutter Cache Providers - Tests & Analysis":
+  "Flutter SDKs - Tests & Analysis":
+    default:
+      working_directory: Toggly.FeatureManagement.Flutter/toggly
+      commands:
+        - flutter pub get
+        - flutter analyze
+        - flutter test --coverage
     jobs:
+      "Test & Analyze":
+        working_directory: Toggly.FeatureManagement.Flutter/toggly
+        commands:
+          - flutter pub get
+          - flutter analyze
+          - flutter test --coverage
+      "Smoke Test":
+        working_directory: Toggly.FeatureManagement.Flutter/toggly
+        commands:
+          - flutter pub get
+          - flutter test test/smoke_test.dart
       "Secure Storage":
         working_directory: Toggly.FeatureManagement.Flutter/toggly_secure_storage
         commands:
@@ -30,32 +47,6 @@ workflows:
           - dart run build_runner build --delete-conflicting-outputs
           - flutter analyze
           - flutter test --coverage
-    default:
-      working_directory: Toggly.FeatureManagement.Flutter/toggly_secure_storage
-      commands:
-        - flutter pub get
-        - flutter analyze
-        - flutter test --coverage
-
-  "Flutter SDK - Tests & Analysis":
-    default:
-      working_directory: Toggly.FeatureManagement.Flutter/toggly
-      commands:
-        - flutter pub get
-        - flutter analyze
-        - flutter test --coverage
-    jobs:
-      "Test & Analyze":
-        working_directory: Toggly.FeatureManagement.Flutter/toggly
-        commands:
-          - flutter pub get
-          - flutter analyze
-          - flutter test --coverage
-      "Smoke Test":
-        working_directory: Toggly.FeatureManagement.Flutter/toggly
-        commands:
-          - flutter pub get
-          - flutter test test/smoke_test.dart
 
   "Next.js SDKs - Tests & Analysis":
     default:

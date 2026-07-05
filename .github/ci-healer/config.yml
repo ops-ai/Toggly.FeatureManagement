@@ -23,8 +23,7 @@ limits:
 
 # Workflows watched when rollout_phase is 3 (all analysis-* display names)
 watched_workflows_all:
-  - Flutter Cache Providers - Tests & Analysis
-  - Flutter SDK - Tests & Analysis
+  - Flutter SDKs - Tests & Analysis
   - Next.js SDKs - Tests & Analysis
   - Ruby SDKs - Tests & Analysis
   - Remix SDKs - Tests & Analysis
@@ -42,4 +41,4 @@ watched_workflows_all:
 
 # Workflows watched when rollout_phase is 2 (dry-run validation)
 watched_workflows_flutter_only:
-  - Flutter SDK - Tests & Analysis
+  - Flutter SDKs - Tests & Analysis

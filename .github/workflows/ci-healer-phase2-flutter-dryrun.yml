@@ -8,7 +8,7 @@ name: CI Healer (Phase 2 — Flutter dry-run)
 on:
   workflow_run:
     workflows:
-      - Flutter SDK - Tests & Analysis
+      - Flutter SDKs - Tests & Analysis
     types: [completed]
 
 permissions:
