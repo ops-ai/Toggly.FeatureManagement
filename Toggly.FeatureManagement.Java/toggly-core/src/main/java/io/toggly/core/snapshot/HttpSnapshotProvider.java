@@ -1,5 +1,6 @@
 package io.toggly.core.snapshot;
 
+import io.toggly.core.SdkIdentity;
 import io.toggly.core.config.TogglyConfig;
 import io.toggly.core.exception.TogglyNetworkException;
 import io.toggly.core.model.FeatureDefinition;
