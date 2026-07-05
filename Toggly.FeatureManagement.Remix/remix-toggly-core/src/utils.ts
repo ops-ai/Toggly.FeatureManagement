@@ -8,6 +8,10 @@ import type {
   EvaluationResult,
   TogglyConfig,
 } from './types';
+import {
+  appendEvaluationContext,
+  type TogglyEvaluationContext,
+} from '@ops-ai/toggly-hooks-types';
 
 /**
  * Default Toggly configuration
@@ -36,21 +40,29 @@ export function mergeConfig(config: TogglyConfig): TogglyConfig {
  */
 export function buildDefinitionsUrl(
   config: TogglyConfig,
-  identity?: string
+  context?: string | TogglyEvaluationContext
 ): string {
-  const { baseUrl, appKey, environment } = mergeConfig(config);
+  const { baseUrl, appKey, environment, groups, claims } = mergeConfig(config);
 
   if (!appKey) {
     throw new Error('appKey is required');
   }
 
-  let url = `${baseUrl}/evaluated-signed/${appKey}/${environment}`;
+  const url = new URL(`${baseUrl}/evaluated-signed/${appKey}/${environment}`);
+  const fromParam =
+    typeof context === 'string' ? { identity: context } : context;
 
-  if (identity) {
-    url += `?u=${encodeURIComponent(identity)}`;
-  }
+  appendEvaluationContext(
+    url,
+    {
+      identity: fromParam?.identity,
+      groups: fromParam?.groups ?? groups,
+      claims: fromParam?.claims ?? claims,
+    },
+    'evaluated',
+  );
 
-  return url;
+  return url.toString();
 }
 
 /**

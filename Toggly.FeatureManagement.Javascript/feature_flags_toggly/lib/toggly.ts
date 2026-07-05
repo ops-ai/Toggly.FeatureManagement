@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { HookExecutor } from './hooks';
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import { appendEvaluationContext, evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -133,10 +134,15 @@ export class Toggly {
     return Toggly._config?.persistCache !== false && canUseStorage;
   }
 
+  private static get _contextCacheKey(): string {
+    return evaluationContextCacheKey(Toggly.evaluationContext);
+  }
+
   private static get _flagsCacheKey(): string {
     return StorageKeys.flagsCacheKey(
       Toggly._config?.appKey ?? '',
       Toggly._config?.environment ?? 'Production',
+      Toggly._contextCacheKey,
     );
   }
 
@@ -164,6 +170,7 @@ export class Toggly {
     return StorageKeys.variantsCacheKey(
       Toggly._config?.appKey ?? '',
       Toggly._config?.environment ?? 'Production',
+      Toggly._contextCacheKey,
     );
   }
 
@@ -257,6 +264,82 @@ export class Toggly {
     }
   }
 
+  static get groups(): string[] {
+    if (!canUseStorage) return [];
+    try {
+      return JSON.parse(localStorage.getItem(StorageKeys.groupsKey) ?? '[]');
+    } catch {
+      return [];
+    }
+  }
+
+  static set groups(values: string[]) {
+    if (!canUseStorage) return;
+    localStorage.setItem(StorageKeys.groupsKey, JSON.stringify(values ?? []));
+  }
+
+  static get claims(): Record<string, string> {
+    if (!canUseStorage) return {};
+    try {
+      return JSON.parse(localStorage.getItem(StorageKeys.claimsKey) ?? '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  static set claims(values: Record<string, string>) {
+    if (!canUseStorage) return;
+    localStorage.setItem(StorageKeys.claimsKey, JSON.stringify(values ?? {}));
+  }
+
+  static get evaluationContext(): TogglyEvaluationContext {
+    const identity = Toggly.identity || undefined;
+    const groups = Toggly.groups;
+    const claims = Toggly.claims;
+    return {
+      identity,
+      groups: groups.length ? groups : undefined,
+      claims: Object.keys(claims).length ? claims : undefined,
+    };
+  }
+
+  static setContext(context: TogglyEvaluationContext): Promise<{ [key: string]: boolean }> {
+    if (context.identity !== undefined) {
+      if (context.identity) {
+        Toggly.identity = context.identity;
+      } else {
+        Toggly.clearIdentity();
+      }
+    }
+    if (context.groups !== undefined) {
+      Toggly.groups = context.groups;
+    }
+    if (context.claims !== undefined) {
+      Toggly.claims = context.claims;
+    }
+    Toggly._inMemoryFlags = null;
+    Toggly._hasLoadedFlags = false;
+    return Toggly.refresh();
+  }
+
+  static clearContext(): Promise<{ [key: string]: boolean }> {
+    Toggly.clearIdentity();
+    Toggly.groups = [];
+    Toggly.claims = {};
+    Toggly._inMemoryFlags = null;
+    Toggly._hasLoadedFlags = false;
+    return Toggly.refresh();
+  }
+
+  private static buildEvaluatedUrl(mode: 'evaluated' | 'variants'): string {
+    const path = mode === 'variants' ? 'evaluated-variants-signed' : 'evaluated-signed';
+    const url = new URL(
+      `${Toggly._config.baseURI}/${path}/${Toggly._config.appKey}/${Toggly._config.environment}`
+    );
+    appendEvaluationContext(url, Toggly.evaluationContext, mode);
+    return url.toString();
+  }
+
   private static get _cachedFeatureFlags(): { [key: string]: boolean } | null {
     if (!Toggly._persistCache) return null;
     try {
@@ -340,11 +423,7 @@ export class Toggly {
     }
 
     return new Promise((resolve) => {
-      var url = `${Toggly._config.baseURI}/evaluated-signed/${Toggly._config.appKey}/${Toggly._config.environment}`;
-
-      if (Toggly.identity) {
-        url += `?u=${encodeURIComponent(Toggly.identity)}`;
-      }
+      const url = Toggly.buildEvaluatedUrl('evaluated');
 
       // Wrap the fetch invocation in a resolved Promise so that any synchronous
       // failure (e.g. a non-conforming fetch implementation returning undefined)
@@ -387,15 +466,7 @@ export class Toggly {
 
   private static fetchFeatureFlagsWithVariants(): Promise<{ [key: string]: boolean }> {
     return new Promise((resolve) => {
-      let url = `${Toggly._config.baseURI}/evaluated-variants-signed/${Toggly._config.appKey}/${Toggly._config.environment}`;
-      const params = new URLSearchParams();
-
-      if (Toggly.identity) {
-        params.set('userId', Toggly.identity);
-      }
-
-      const queryString = params.toString();
-      if (queryString) url += `?${queryString}`;
+      const url = Toggly.buildEvaluatedUrl('variants');
 
       Promise.resolve()
         .then(() => fetch(url, { headers: Toggly.buildFetchHeaders() }))

@@ -7,7 +7,7 @@
 
 import { atom, computed, type ReadableAtom } from 'nanostores';
 import type { TogglyConfig, Flags, VariantResult, EvaluatedVariantDef } from '../types/index.js';
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { appendEvaluationContext, type Hook } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -99,7 +99,7 @@ class TogglyClientInstance {
   }
 
   private getApiUrl(): string {
-    const { baseURI, appKey, environment, identity, enableVariants } = this.config;
+    const { baseURI, appKey, environment, identity, groups, claims, enableVariants } = this.config;
 
     if (!appKey) {
       return '';
@@ -109,17 +109,15 @@ class TogglyClientInstance {
     const path = enableVariants
       ? `/evaluated-variants-signed/${appKey}/${environment}`
       : `/evaluated-signed/${appKey}/${environment}`;
-    let url = `${baseUrl}${path}`;
+    const url = new URL(`${baseUrl}${path}`);
 
-    if (identity) {
-      if (enableVariants) {
-        url += `?${new URLSearchParams({ userId: identity }).toString()}`;
-      } else {
-        url += `?u=${encodeURIComponent(identity)}`;
-      }
-    }
+    appendEvaluationContext(
+      url,
+      { identity, groups, claims },
+      enableVariants ? 'variants' : 'evaluated',
+    );
 
-    return url;
+    return url.toString();
   }
 
   async fetchFlags(): Promise<{ flags: Flags; variantDefs: Record<string, EvaluatedVariantDef> | null }> {

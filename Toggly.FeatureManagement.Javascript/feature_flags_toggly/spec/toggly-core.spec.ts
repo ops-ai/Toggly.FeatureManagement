@@ -6,6 +6,33 @@ import {
   TogglyLoadFeatureFlagsResponse,
 } from '../lib/models';
 import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
+
+const DEFAULT_TEST_IDENTITY = 'mock-uuid-1234';
+
+function flagsCacheKeyForContext(
+  appKey: string,
+  environment: string,
+  identity: string = DEFAULT_TEST_IDENTITY,
+): string {
+  return StorageKeys.flagsCacheKey(
+    appKey,
+    environment,
+    evaluationContextCacheKey({ identity }),
+  );
+}
+
+function variantsCacheKeyForContext(
+  appKey: string,
+  environment: string,
+  identity: string = DEFAULT_TEST_IDENTITY,
+): string {
+  return StorageKeys.variantsCacheKey(
+    appKey,
+    environment,
+    evaluationContextCacheKey({ identity }),
+  );
+}
 
 // Mock uuid to return predictable values
 jest.mock('uuid', () => ({
@@ -148,14 +175,14 @@ describe('Toggly Core', () => {
 
     it('should preserve cached flags on init for stale-while-revalidate', async () => {
       localStorage.setItem(
-        StorageKeys.flagsCacheKey('test-app-key', 'Production'),
+        flagsCacheKeyForContext('test-app-key', 'Production'),
         JSON.stringify({ OldFlag: true })
       );
 
       await Toggly.init({ appKey: 'test-app-key', flagDefaults: { F1: true } });
 
       expect(
-        localStorage.getItem(StorageKeys.flagsCacheKey('test-app-key', 'Production'))
+        localStorage.getItem(flagsCacheKeyForContext('test-app-key', 'Production'))
       ).not.toBeNull();
     });
 
@@ -456,7 +483,7 @@ describe('Toggly Core', () => {
       });
 
       const cached = JSON.parse(
-        localStorage.getItem(StorageKeys.flagsCacheKey('test-app-key', 'Production'))!
+        localStorage.getItem(flagsCacheKeyForContext('test-app-key', 'Production'))!
       );
       expect(cached).toEqual({ F1: true, F2: false });
     });
@@ -624,7 +651,7 @@ describe('Toggly Core', () => {
       Toggly.cacheFeatureFlags({ X: true, Y: false });
 
       const stored = JSON.parse(
-        localStorage.getItem(StorageKeys.flagsCacheKey('test-app-key', 'Production'))!
+        localStorage.getItem(flagsCacheKeyForContext('test-app-key', 'Production'))!
       );
       expect(stored).toEqual({ X: true, Y: false });
     });
@@ -638,21 +665,21 @@ describe('Toggly Core', () => {
       });
 
       localStorage.setItem(
-        StorageKeys.flagsCacheKey('test-app-key', 'Production'),
+        flagsCacheKeyForContext('test-app-key', 'Production'),
         JSON.stringify({ X: true })
       );
 
       Toggly.clearFeatureFlagsCache();
 
       expect(
-        localStorage.getItem(StorageKeys.flagsCacheKey('test-app-key', 'Production'))
+        localStorage.getItem(flagsCacheKeyForContext('test-app-key', 'Production'))
       ).toBeNull();
     });
 
     it('should handle null/missing localStorage for featureFlagsValue', async () => {
       await Toggly.init({ flagDefaults: { F1: true } });
 
-      localStorage.removeItem(StorageKeys.flagsCacheKey('test-app-key', 'Production'));
+      localStorage.removeItem(flagsCacheKeyForContext('test-app-key', 'Production'));
 
       expect(Toggly.featureFlagsValue).toEqual({ F1: true });
     });
@@ -1779,8 +1806,8 @@ describe('Toggly Core', () => {
   // Variants
   // ───────────────────────────────────────────────
   describe('Variants', () => {
-    const variantsKey = StorageKeys.variantsCacheKey('test-app-key', 'Production');
-    const flagsKey = StorageKeys.flagsCacheKey('test-app-key', 'Production');
+    const variantsKey = variantsCacheKeyForContext('test-app-key', 'Production');
+    const flagsKey = flagsCacheKeyForContext('test-app-key', 'Production');
 
     it('should fetch variants and cache both flags and variants when enableVariants is true', async () => {
       mockFetch.mockResolvedValueOnce({

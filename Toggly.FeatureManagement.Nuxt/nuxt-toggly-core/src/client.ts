@@ -27,6 +27,7 @@ import {
   shouldFetchOnSync,
   type WsSyncMessage,
 } from './ws-sync'
+import { appendEvaluationContext } from '@ops-ai/toggly-hooks-types'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
 
 /**
@@ -193,11 +194,23 @@ export function createTogglyClient(
       return { ...config.featureDefaults }
     }
 
-    const url = API_ENDPOINTS.definitions(
-      config.baseUri,
-      config.appKey,
-      config.environment
+    const fetchUrl = new URL(
+      API_ENDPOINTS.definitions(
+        config.baseUri,
+        config.appKey,
+        config.environment
+      )
     )
+    appendEvaluationContext(
+      fetchUrl,
+      {
+        identity: config.identity,
+        groups: config.groups,
+        claims: config.claims,
+      },
+      'evaluated',
+    )
+    const url = fetchUrl.toString()
 
     const revision = getDefinitionsRevision()
     const headers = buildDefinitionFetchHeaders({

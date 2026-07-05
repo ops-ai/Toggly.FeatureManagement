@@ -13,14 +13,16 @@ import type {
   CachedFlags,
   GateRequirement,
 } from '../types/index.js';
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { appendEvaluationContext, type Hook } from '@ops-ai/toggly-hooks-types';
 import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
 
 /**
  * Server config type with required properties except identity and hooks
  */
-type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'hooks' | 'localGates' | 'onError'>> & {
+type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | 'claims' | 'hooks' | 'localGates' | 'onError'>> & {
   identity?: string;
+  groups?: string[];
+  claims?: Record<string, string>;
   hooks?: Hook[];
   localGates?: TogglyPluginOptions['localGates'];
   onError?: TogglyPluginOptions['onError'];
@@ -54,20 +56,18 @@ export class TogglyServer implements TogglyServerClient {
    * Get API URL for fetching flags
    */
   private getApiUrl(): string {
-    const { baseURI, appKey, environment, identity } = this.config;
+    const { baseURI, appKey, environment, identity, groups, claims } = this.config;
 
     if (!appKey) {
       return '';
     }
 
     const baseUrl = baseURI.replace(/\/$/, '');
-    let url = `${baseUrl}/evaluated-signed/${appKey}/${environment}`;
+    const url = new URL(`${baseUrl}/evaluated-signed/${appKey}/${environment}`);
 
-    if (identity) {
-      url += `?u=${encodeURIComponent(identity)}`;
-    }
+    appendEvaluationContext(url, { identity, groups, claims }, 'evaluated');
 
-    return url;
+    return url.toString();
   }
 
   /**

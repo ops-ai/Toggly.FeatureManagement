@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-hooks-types",
-  "version": "1.2.0",
+  "version": "1.3.1",
   "description": "TypeScript types for Toggly SDK hooks",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
+    "test": "vitest run",
     "prepublishOnly": "npm run clean && npm run build",
     "typecheck": "tsc --noEmit"
   },
@@ -42,6 +43,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.5"
   }
 }

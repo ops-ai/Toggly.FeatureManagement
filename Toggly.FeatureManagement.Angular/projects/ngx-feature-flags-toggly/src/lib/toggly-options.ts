@@ -25,6 +25,12 @@ export class TogglyOptions implements ITogglyOptions {
   /** User identity for personalized feature flags */
   identity?: string
 
+  /** User groups for group-based targeting rules */
+  groups?: string[]
+
+  /** User claims for User Claims filter evaluation */
+  claims?: Record<string, string>
+
   /** Default feature flag values when offline or during initialization */
   featureDefaults?: { [key: string]: boolean }
 

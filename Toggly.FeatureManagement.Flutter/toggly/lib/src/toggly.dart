@@ -20,6 +20,8 @@ class Toggly with WidgetsBindingObserver {
   static String _environment = 'Production';
   static bool _useSignedDefinitions = false;
   static late String _identity;
+  static List<String> _groups = [];
+  static Map<String, String> _claims = {};
   static TogglyConfig _config = const TogglyConfig();
   static Map<String, bool> _flagDefaults = {};
   static final _http = HttpService.getInstance.http;
@@ -163,6 +165,8 @@ class Toggly with WidgetsBindingObserver {
     bool useSignedDefinitions = false,
     TogglyConfig config = const TogglyConfig(),
     Map<String, bool>? flagDefaults,
+    List<String>? groups,
+    Map<String, String>? claims,
   }) async {
     Toggly._flagDefaults = Map<String, bool>.from(flagDefaults ?? {});
     Toggly._useSignedDefinitions = useSignedDefinitions;
@@ -194,6 +198,8 @@ class Toggly with WidgetsBindingObserver {
     } else {
       Toggly._identity = (Toggly._deviceId ??= _uuid.v4());
     }
+    Toggly._groups = groups != null ? List<String>.from(groups) : [];
+    Toggly._claims = claims != null ? Map<String, String>.from(claims) : {};
     await checkAndClearFeatureFlagsCache();
     await _loadCachedDefinitionsRevision();
     if (kDebugMode) {
@@ -277,6 +283,70 @@ class Toggly with WidgetsBindingObserver {
     return await Toggly.refresh();
   }
 
+  /// Sets evaluation context for targeting (identity, groups, claims).
+  static Future<TogglyInitResponse> setContext({
+    String? identity,
+    List<String>? groups,
+    Map<String, String>? claims,
+  }) async {
+    var shouldRefresh = false;
+
+    if (identity != null) {
+      if (Toggly._identity != identity) {
+        await clearFeatureFlagsCache();
+      }
+      Toggly._identity = identity;
+      shouldRefresh = true;
+    }
+
+    if (groups != null) {
+      Toggly._groups = List<String>.from(groups);
+      shouldRefresh = true;
+    }
+
+    if (claims != null) {
+      Toggly._claims = Map<String, String>.from(claims);
+      shouldRefresh = true;
+    }
+
+    if (shouldRefresh) {
+      await clearFeatureFlagsCache();
+      return Toggly.refresh();
+    }
+
+    return TogglyInitResponse(status: TogglyLoadFeatureFlagsResponse.cached);
+  }
+
+  static String get _contextCacheKey {
+    final parts = <String>['u:${Toggly._identity}'];
+    if (Toggly._groups.isNotEmpty) {
+      final sorted = List<String>.from(Toggly._groups)..sort();
+      parts.add('g:${sorted.join(',')}');
+    }
+    if (Toggly._claims.isNotEmpty) {
+      final entries = Toggly._claims.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+      parts.add('c:${entries.map((e) => '${e.key}=${e.value}').join('&')}');
+    }
+    return parts.join('|');
+  }
+
+  static Map<String, dynamic> _buildEvaluationQueryParameters({required bool variants}) {
+    final params = <String, dynamic>{};
+    if (variants) {
+      params['userId'] = Toggly._identity;
+    } else {
+      params['u'] = Toggly._identity;
+    }
+    if (Toggly._groups.isNotEmpty) {
+      params['g'] = List<String>.from(Toggly._groups);
+    }
+    for (final entry in Toggly._claims.entries) {
+      params['claim.${entry.key}'] = entry.value;
+    }
+    return params;
+  }
+
   /// Returns a [Future] with the cached feature flags values.
   static Future<Map<String, bool>> get cachedFeatureFlags async {
     try {
@@ -286,7 +356,7 @@ class Toggly with WidgetsBindingObserver {
       }
 
       // No persistence backend — fall back to defaults.
-      final cache = await Toggly._cache?.readFlags(Toggly._identity);
+      final cache = await Toggly._cache?.readFlags(Toggly._contextCacheKey);
 
       if (cache == null) {
         // If no cache exists, return defaults
@@ -295,7 +365,7 @@ class Toggly with WidgetsBindingObserver {
 
       final TogglyFeatureFlagsCache flagsCache = cache;
 
-      if (flagsCache.identity != Toggly._identity) {
+      if (flagsCache.identity != Toggly._contextCacheKey) {
         _reportError(
           'Cached feature flags identity mismatch',
           Exception('Cached identity does not match current identity'),
@@ -377,7 +447,7 @@ class Toggly with WidgetsBindingObserver {
 
     // Mirror through to the persistence backend, when configured.
     await Toggly._cache?.writeFlags(TogglyFeatureFlagsCache(
-      identity: Toggly._identity,
+      identity: Toggly._contextCacheKey,
       flags: featureFlags,
       timestamp: timestamp,
       signature: signature,
@@ -393,8 +463,8 @@ class Toggly with WidgetsBindingObserver {
     _definitionsRevision = null;
 
     // ETags are memory-only; clear persisted flags/variants for this identity.
-    await Toggly._cache?.deleteFlags(Toggly._identity);
-    await Toggly._cache?.deleteVariants(Toggly._identity);
+    await Toggly._cache?.deleteFlags(Toggly._contextCacheKey);
+    await Toggly._cache?.deleteVariants(Toggly._contextCacheKey);
     await _deleteCachedDefinitionsRevision();
   }
 
@@ -404,18 +474,18 @@ class Toggly with WidgetsBindingObserver {
       return;
     }
 
-    final flagsCache = await provider.readFlags(Toggly._identity);
+    final flagsCache = await provider.readFlags(Toggly._contextCacheKey);
     if (flagsCache == null) {
       return;
     }
 
-    if (Toggly._identity != flagsCache.identity) {
+    if (Toggly._contextCacheKey != flagsCache.identity) {
       await clearFeatureFlagsCache();
       return;
     }
 
-    final variantsCache = await provider.readVariants(Toggly._identity);
-    if (variantsCache != null && Toggly._identity != variantsCache.identity) {
+    final variantsCache = await provider.readVariants(Toggly._contextCacheKey);
+    if (variantsCache != null && Toggly._contextCacheKey != variantsCache.identity) {
       await clearVariantCache();
     }
   }
@@ -435,9 +505,7 @@ class Toggly with WidgetsBindingObserver {
         headers['If-None-Match'] = revision;
       }
 
-      final queryParameters = <String, dynamic>{
-        'u': Toggly._identity,
-      };
+      final queryParameters = Toggly._buildEvaluationQueryParameters(variants: false);
 
       final response = await _http.get(
         '${Toggly._config.baseURI}/evaluated-signed/${Toggly._appKey}/${Toggly._environment}',
@@ -462,7 +530,7 @@ class Toggly with WidgetsBindingObserver {
         String keyId = signedResponse['kid'];
 
         // Check existing cache timestamp (anti-rollback) from the provider.
-        final existing = await Toggly._cache?.readFlags(Toggly._identity);
+        final existing = await Toggly._cache?.readFlags(Toggly._contextCacheKey);
         if (existing != null &&
             existing.timestamp != null &&
             timestamp <= existing.timestamp!) {
@@ -568,7 +636,7 @@ class Toggly with WidgetsBindingObserver {
 
       final response = await _http.get(
         '${Toggly._config.baseURI}/evaluated-variants-signed/${Toggly._appKey}/${Toggly._environment}',
-        queryParameters: <String, dynamic>{'userId': Toggly._identity},
+        queryParameters: Toggly._buildEvaluationQueryParameters(variants: true),
         options: Options(headers: headers),
       );
 
@@ -592,7 +660,7 @@ class Toggly with WidgetsBindingObserver {
       }
 
       final existingVariants = await Toggly._cache?.readVariants(
-        Toggly._identity,
+        Toggly._contextCacheKey,
       );
       if (existingVariants != null &&
           existingVariants.timestamp != null &&
@@ -665,7 +733,7 @@ class Toggly with WidgetsBindingObserver {
     _inMemoryVariantDefs = Map<String, dynamic>.from(jsonDecode(variantsJson));
 
     await Toggly._cache?.writeVariants(TogglyVariantsCache(
-      identity: Toggly._identity,
+      identity: Toggly._contextCacheKey,
       variants: variantsJson,
       timestamp: timestamp,
       signature: signature,
@@ -677,17 +745,17 @@ class Toggly with WidgetsBindingObserver {
   static Future<void> clearVariantCache() async {
     _inMemoryVariantDefs = null;
 
-    await Toggly._cache?.deleteVariants(Toggly._identity);
+    await Toggly._cache?.deleteVariants(Toggly._contextCacheKey);
   }
 
   static Future<Map<String, dynamic>>
       _readVerifiedVariantDefsFromCache() async {
     try {
-      final vc = await Toggly._cache?.readVariants(Toggly._identity);
+      final vc = await Toggly._cache?.readVariants(Toggly._contextCacheKey);
       if (vc == null) {
         return {};
       }
-      if (vc.identity != Toggly._identity) {
+      if (vc.identity != Toggly._contextCacheKey) {
         return {};
       }
 

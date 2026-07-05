@@ -1,3 +1,11 @@
+## 2.3.0
+
+2026-07-05
+
+### Added
+- `setContext({ identity, groups, claims })` on `TogglyService`; passes groups and claims on evaluated-signed fetches.
+- Context-aware cache keys for personalized evaluations.
+
 ## 2.2.1
 
 2026-07-05

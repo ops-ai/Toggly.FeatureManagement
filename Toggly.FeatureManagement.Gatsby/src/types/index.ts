@@ -30,6 +30,12 @@ export interface TogglyPluginOptions {
   
   /** User identity for targeting */
   identity?: string;
+
+  /** User groups for targeting */
+  groups?: string[];
+
+  /** Custom claims for targeting */
+  claims?: Record<string, string>;
   
   /** Enable debug logging */
   isDebug?: boolean;

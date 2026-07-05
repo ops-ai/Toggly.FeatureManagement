@@ -1,3 +1,14 @@
+## 1.5.0
+
+2026-07-05
+
+### Added
+- `setContext({ identity?, groups?, claims? })` to update evaluation context at runtime and reload flags.
+- `groups` and `claims` options on init for server-side evaluated definitions.
+
+### Changed
+- Evaluated-signed fetch URLs and localStorage cache keys use `@ops-ai/toggly-hooks-types@^1.3.0` (`appendEvaluationContext`, `evaluationContextCacheKey`).
+
 ## 1.4.1
 
 2026-07-05

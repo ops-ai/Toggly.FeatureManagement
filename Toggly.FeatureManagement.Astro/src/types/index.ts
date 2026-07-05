@@ -27,6 +27,10 @@ export interface TogglyConfig {
   connectTimeout?: number;
   /** User identity for targeting (optional) */
   identity?: string;
+  /** User groups for targeting (optional) */
+  groups?: string[];
+  /** Custom claims for targeting (optional) */
+  claims?: Record<string, string>;
   /**
    * When true, all features are enabled during build time (SSG).
    * This is useful when you have an edge worker (like Cloudflare Worker) that

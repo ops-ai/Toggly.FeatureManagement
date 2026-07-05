@@ -58,3 +58,5 @@ export interface Hook {
         [key: string]: boolean;
     }): Promise<void> | void;
 }
+export type { TogglyEvaluationContext, EvaluationUrlMode, } from './evaluation-context';
+export { MAX_EVALUATION_CLAIMS, appendEvaluationContext, evaluationContextCacheKey, normalizeEvaluationClaims, } from './evaluation-context';

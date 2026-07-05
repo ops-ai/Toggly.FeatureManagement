@@ -12,17 +12,17 @@ describe('ws-sync', () => {
   describe('buildWebSocketUrl', () => {
     it('appends rev and sdk query params when cached etag exists', () => {
       expect(buildWebSocketUrl('https://definitions.toggly.io', 'app-key', 'abc123'))
-        .toBe('wss://definitions.toggly.io/app-key/ws?rev=abc123&sdk=react&sdkVersion=1.5.1');
+        .toBe('wss://definitions.toggly.io/app-key/ws?rev=abc123&sdk=react&sdkVersion=1.6.0');
     });
 
     it('appends sdk query params when no cached etag', () => {
       expect(buildWebSocketUrl('https://definitions.toggly.io', 'app-key', null))
-        .toBe('wss://definitions.toggly.io/app-key/ws?sdk=react&sdkVersion=1.5.0');
+        .toBe('wss://definitions.toggly.io/app-key/ws?sdk=react&sdkVersion=1.6.0');
     });
 
     it('converts http to ws', () => {
       expect(buildWebSocketUrl('http://localhost:8787/', 'key', 'rev1'))
-        .toBe('ws://localhost:8787/key/ws?rev=rev1&sdk=react&sdkVersion=1.5.1');
+        .toBe('ws://localhost:8787/key/ws?rev=rev1&sdk=react&sdkVersion=1.6.0');
     });
   });
 

@@ -1,3 +1,11 @@
+## 1.6.0
+
+2026-07-05
+
+### Added
+- `setContext({ identity, groups, claims })` for evaluated-signed targeting (User Claims, group rules).
+- Context-aware cache keys including groups and claims.
+
 ## 1.5.1
 
 2026-07-05

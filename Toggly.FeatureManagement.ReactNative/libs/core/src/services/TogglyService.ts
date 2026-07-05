@@ -1,4 +1,5 @@
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import { appendEvaluationContext, evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -161,6 +162,8 @@ export class TogglyService {
   private features: FeatureFlags | null = null;
   private featuresLoading = false;
   private identity: string | null = null;
+  private groups: string[] = [];
+  private claims: Record<string, string> = {};
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private lastChecked: Date | null = null;
   private lastSynced: Date | null = null;
@@ -364,8 +367,10 @@ export class TogglyService {
       this.identity = storedId;
     }
 
+    this.groups = this.config.groups ? [...this.config.groups] : [];
+    this.claims = this.config.claims ? { ...this.config.claims } : {};
+
     // Start refresh timer
-    this.startRefreshTimer();
 
     // Load cached definitions revision for conditional HTTP requests
     await this.loadCachedDefinitionsRevision();
@@ -543,13 +548,23 @@ export class TogglyService {
    * Build the API URL for fetching feature flags.
    */
   private buildApiUrl(): string {
-    let url = `${this.config.baseURI}/evaluated-signed/${this.config.appKey}/${this.config.environment}`;
+    const url = new URL(
+      `${this.config.baseURI}/evaluated-signed/${this.config.appKey}/${this.config.environment}`,
+    );
+    appendEvaluationContext(url, this.getEvaluationContext(), 'evaluated');
+    return url.toString();
+  }
 
-    if (this.identity) {
-      url += `?u=${encodeURIComponent(this.identity)}`;
-    }
+  private getEvaluationContext(): TogglyEvaluationContext {
+    return {
+      identity: this.identity ?? undefined,
+      groups: this.groups.length ? [...this.groups] : undefined,
+      claims: Object.keys(this.claims).length ? { ...this.claims } : undefined,
+    };
+  }
 
-    return url;
+  private getContextCacheKey(): string {
+    return evaluationContextCacheKey(this.getEvaluationContext());
   }
 
   /**
@@ -570,13 +585,13 @@ export class TogglyService {
     }
 
     try {
-      const hashedIdentity = await sha256(this.identity ?? '');
-      const cacheKey = STORAGE_KEYS.FEATURE_FLAGS_CACHE + hashedIdentity;
+      const hashedContext = await sha256(this.getContextCacheKey());
+      const cacheKey = STORAGE_KEYS.FEATURE_FLAGS_CACHE + hashedContext;
       const cached = await this.storage.get(cacheKey);
 
       if (cached) {
         const cacheData: TogglyFeatureFlagsCache = JSON.parse(cached);
-        if (cacheData.identity === this.identity) {
+        if (cacheData.identity === this.getContextCacheKey()) {
           return JSON.parse(cacheData.flags);
         }
       }
@@ -592,10 +607,10 @@ export class TogglyService {
    */
   private async cacheFeatureFlags(flags: FeatureFlags): Promise<void> {
     try {
-      const hashedIdentity = await sha256(this.identity ?? '');
-      const cacheKey = STORAGE_KEYS.FEATURE_FLAGS_CACHE + hashedIdentity;
+      const hashedContext = await sha256(this.getContextCacheKey());
+      const cacheKey = STORAGE_KEYS.FEATURE_FLAGS_CACHE + hashedContext;
       const cacheData: TogglyFeatureFlagsCache = {
-        identity: this.identity ?? '',
+        identity: this.getContextCacheKey(),
         flags: JSON.stringify(flags),
       };
       await this.storage.set(cacheKey, JSON.stringify(cacheData));
@@ -716,6 +731,26 @@ export class TogglyService {
       newIdentity: this.identity,
     });
 
+    return this.refresh();
+  }
+
+  /**
+   * Set evaluation context (identity, groups, claims) and refresh flags.
+   */
+  async setContext(context: TogglyEvaluationContext): Promise<TogglyInitResponse> {
+    if (context.identity !== undefined) {
+      await this.setIdentity(context.identity ?? null);
+      if (context.groups === undefined && context.claims === undefined) {
+        return { status: 'loaded', flags: this.features ?? {} };
+      }
+    }
+    if (context.groups !== undefined) {
+      this.groups = [...context.groups];
+    }
+    if (context.claims !== undefined) {
+      this.claims = { ...context.claims };
+    }
+    await this.clearCache();
     return this.refresh();
   }
 

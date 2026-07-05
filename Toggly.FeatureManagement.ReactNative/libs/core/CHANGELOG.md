@@ -1,11 +1,19 @@
+# Changelog
+
+## 1.4.0
+
+2026-07-05
+
+### Added
+- `setContext({ identity, groups, claims })` and evaluation context on config for User Claims and group targeting.
+- Context-aware cache keys for evaluated-signed responses.
+
 ## 1.3.1
 
 2026-07-05
 
 ### Added
 - SDK identity on definitions traffic: `User-Agent` on server HTTP, `X-Toggly-Sdk` / `X-Toggly-Sdk-Version` on browser HTTP, `sdk` + `sdkVersion` query params on WebSocket connect.
-
-# Changelog
 
 ## 1.3.0
 

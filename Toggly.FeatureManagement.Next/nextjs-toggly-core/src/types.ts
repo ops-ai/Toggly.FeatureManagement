@@ -14,6 +14,10 @@ export interface TogglyConfig {
   baseUri?: string
   /** User identity for targeting and rollouts */
   identity?: string
+  /** User groups for targeting */
+  groups?: string[]
+  /** Custom claims for targeting */
+  claims?: Record<string, string>
   /** Default feature flag values when API is unavailable */
   featureDefaults?: Record<string, boolean>
   /** Show content while evaluating features (default: false) */

@@ -244,6 +244,163 @@ describe('Toggly Service', () => {
       );
     });
 
+    it('should include groups and claims in API URL after setContext', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+      });
+
+      await service.setContext({
+        identity: 'user-123',
+        groups: ['beta', 'enterprise'],
+        claims: { role: 'admin', plan: 'premium' },
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('u=user-123'),
+        fetchInitMatcher,
+      );
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain('g=beta');
+      expect(url).toContain('g=enterprise');
+      expect(url).toContain('claim.role=admin');
+      expect(url).toContain('claim.plan=premium');
+    });
+
+    it('setContext should force refresh when only claims change', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: true }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: false }),
+        });
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+      });
+
+      await service._loadFeatures();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      await service.setContext({ claims: { role: 'admin' } });
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect((service as any)._features).toEqual({ F1: false });
+    });
+
+    it('setContext should use context-scoped cache key in localStorage', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+      });
+
+      await service.setContext({
+        identity: 'user-123',
+        groups: ['beta'],
+        claims: { role: 'admin' },
+      });
+
+      const cacheKeys = Object.keys(localStorage).filter(k => k.includes('toggly:flags'));
+      expect(cacheKeys.some(k => k.includes('u:user-123'))).toBe(true);
+      expect(cacheKeys.some(k => k.includes('g:beta'))).toBe(true);
+      expect(cacheKeys.some(k => k.includes('c:role=admin'))).toBe(true);
+    });
+
+    it('setContext should append context to variants URL when enableVariants is true', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve({
+            defs: { V: { enabled: true, variant: 'A' } },
+          }),
+      });
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+
+      await service.setContext({
+        identity: 'user-456',
+        groups: ['beta'],
+        claims: { tier: 'pro' },
+      });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain('evaluated-variants-signed');
+      expect(url).toContain('userId=user-456');
+      expect(url).toContain('g=beta');
+      expect(url).toContain('claim.tier=pro');
+    });
+
+    it('setContext should clear identity when passed an empty string', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+      });
+
+      await service.setContext({ identity: '' });
+
+      expect((service as any)._config.identity).toBeUndefined();
+    });
+
+    it('setContext with empty groups omits g params on fetch', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+      });
+
+      await service.setContext({ groups: [] });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).not.toContain('g=');
+    });
+
     it('should use custom baseURI when configured', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -857,13 +1014,13 @@ describe('Toggly Service', () => {
       const service = new Toggly({ appKey: 'my-key', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws?sdk=react&sdkVersion=1.5.1');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws?sdk=react&sdkVersion=1.6.0');
     });
 
     it('should create ws:// URL for http:// baseURI', () => {
       const service = new Toggly({ appKey: 'k', baseURI: 'http://local', featureDefaults: {} });
       service.startWebSocket();
-      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws?sdk=react&sdkVersion=1.5.1');
+      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws?sdk=react&sdkVersion=1.6.0');
     });
 
     it('should set _wsConnected=true on open', () => {
@@ -879,6 +1036,25 @@ describe('Toggly Service', () => {
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'flags-updated' }) });
       expect((service as any)._features).toEqual({ F1: true });
+    });
+
+    it('should handle flags-updated with new etag by scheduling refresh', async () => {
+      localStorage.setItem('toggly:revision:k:Production', 'old-rev');
+      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: { F1: true } });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => 'new-rev' },
+        json: () => Promise.resolve({ defs: { F1: false } }),
+      });
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'flags-updated', etag: 'new-rev' }),
+      });
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
+      expect(mockFetch).toHaveBeenCalled();
     });
 
     it('should handle update JSON message by resetting features', () => {
@@ -925,7 +1101,28 @@ describe('Toggly Service', () => {
       localStorage.setItem('toggly:revision:k:Production', 'rev123');
       const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?rev=rev123&sdk=react&sdkVersion=1.5.1');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?rev=rev123&sdk=react&sdkVersion=1.6.0');
+    });
+
+    it('should prefer in-memory revision cache over localStorage', () => {
+      localStorage.setItem('toggly:revision:k:Production', 'stored-rev');
+      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
+      (service as any)._cachedDefinitionsRevision = 'memory-rev';
+      service.startWebSocket();
+      expect(MockWebSocket.instances[0].url).toBe(
+        'wss://definitions.toggly.io/k/ws?rev=memory-rev&sdk=react&sdkVersion=1.6.0',
+      );
+    });
+
+    it('should tolerate localStorage errors when reading revision cache', () => {
+      const getItem = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new Error('storage blocked');
+      });
+      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
+      service.startWebSocket();
+      expect(MockWebSocket.instances).toHaveLength(1);
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?sdk=react&sdkVersion=1.6.0');
+      getItem.mockRestore();
     });
 
     it('should handle sync message with unchanged without scheduling refresh', () => {
@@ -939,6 +1136,25 @@ describe('Toggly Service', () => {
       });
       jest.advanceTimersByTime(500);
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should handle sync message with new etag by scheduling refresh', async () => {
+      localStorage.setItem('toggly:revision:k:Production', 'old-rev');
+      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: { F1: true } });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => 'new-rev' },
+        json: () => Promise.resolve({ defs: { F1: false } }),
+      });
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'sync', etag: 'new-rev' }),
+      });
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
+      expect(mockFetch).toHaveBeenCalled();
     });
 
     it('should handle signing-key-updated by scheduling refresh', async () => {

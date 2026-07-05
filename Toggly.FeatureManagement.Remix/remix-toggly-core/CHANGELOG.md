@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0
+
+2026-07-05
+
+### Added
+- `groups` and `claims` on `TogglyConfig` and `IdentityContext` for server-side evaluated definitions.
+
+### Changed
+- `buildDefinitionsUrl` uses `@ops-ai/toggly-hooks-types@^1.3.0` (`appendEvaluationContext`).
+
 ## 1.2.0
 
 2026-07-03

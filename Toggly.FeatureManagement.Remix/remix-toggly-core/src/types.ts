@@ -31,6 +31,10 @@ export interface TogglyConfig {
   localGates?: LocalGate[];
   /** Optional SDK error callback for reporting fetch/evaluation failures. */
   onError?: (message: string, error?: unknown) => void;
+  /** User groups for targeting */
+  groups?: string[];
+  /** Custom claims for targeting */
+  claims?: Record<string, string>;
 }
 
 /**
@@ -43,6 +47,8 @@ export interface IdentityContext {
   groups?: string[];
   /** Custom traits for targeting */
   traits?: Record<string, string | number | boolean>;
+  /** Custom claims for targeting */
+  claims?: Record<string, string>;
 }
 
 /**

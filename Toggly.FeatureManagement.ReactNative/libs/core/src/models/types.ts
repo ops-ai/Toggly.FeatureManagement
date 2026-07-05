@@ -114,6 +114,16 @@ export interface TogglyConfig {
   identity?: string;
 
   /**
+   * User groups for group-based targeting rules
+   */
+  groups?: string[];
+
+  /**
+   * User claims for User Claims filter evaluation
+   */
+  claims?: Record<string, string>;
+
+  /**
    * Default feature flag values for offline mode
    */
   featureDefaults?: FeatureFlags;

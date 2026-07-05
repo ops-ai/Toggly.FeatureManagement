@@ -1,3 +1,11 @@
+## 1.4.0
+
+2026-07-05
+
+### Added
+- `setContext({ identity, groups, claims })` and `clearContext()` for evaluated-signed targeting (User Claims, group rules).
+- Evaluation cache keys include groups and claims so context changes trigger a refetch.
+
 ## 1.3.1
 
 2026-07-05

@@ -1,3 +1,11 @@
+## 1.6.0
+
+2026-07-05
+
+### Added
+- `setContext({ identity, groups, claims })` on the Toggly service; evaluated-signed URLs include groups and user claims query params.
+- Context-aware cache keys so changing groups or claims invalidates cached evaluations.
+
 ## 1.5.1
 
 2026-07-05

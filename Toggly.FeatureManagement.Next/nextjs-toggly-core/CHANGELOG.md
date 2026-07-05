@@ -1,3 +1,13 @@
+## 1.4.0
+
+2026-07-05
+
+### Added
+- `groups` and `claims` options on `TogglyConfig` for server-side evaluated definitions.
+
+### Changed
+- Evaluated-signed fetch URLs use `@ops-ai/toggly-hooks-types@^1.3.0` (`appendEvaluationContext`).
+
 ## 1.3.1
 
 2026-07-05

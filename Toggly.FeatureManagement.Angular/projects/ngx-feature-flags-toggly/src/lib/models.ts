@@ -1,4 +1,5 @@
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import { appendEvaluationContext, evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
 /** Assigned variant for a feature (from evaluated-variants-signed). */
@@ -19,6 +20,8 @@ export interface ITogglyOptions {
   appKey?: string
   environment?: string
   identity?: string
+  groups?: string[]
+  claims?: Record<string, string>
   featureDefaults?: { [key: string]: boolean }
   showFeatureDuringEvaluation?: boolean
   customDefinitionsUrl?: string
@@ -54,4 +57,5 @@ export interface ITogglyService {
   notifyLocalGatesChanged: () => void
   subscribeLocalGatesChanged: (listener: () => void) => () => void
   subscribeFeaturesRefresh: (listener: () => void) => () => void
+  setContext: (context: TogglyEvaluationContext) => Promise<void>
 }

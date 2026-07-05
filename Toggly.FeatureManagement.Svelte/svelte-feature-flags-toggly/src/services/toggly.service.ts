@@ -1,4 +1,5 @@
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import { appendEvaluationContext, evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -24,12 +25,14 @@ const CACHE_PREFIX = 'toggly:flags:'
 const VARIANTS_CACHE_PREFIX = 'toggly:variants:'
 const REVISION_CACHE_PREFIX = 'toggly:revision:'
 
-function getCacheKey(appKey: string, environment: string): string {
-  return `${CACHE_PREFIX}${appKey}:${environment}`
+function getCacheKey(appKey: string, environment: string, contextKey = ''): string {
+  const suffix = contextKey ? `:${contextKey}` : ''
+  return `${CACHE_PREFIX}${appKey}:${environment}${suffix}`
 }
 
-function getVariantsCacheKey(appKey: string, environment: string): string {
-  return `${VARIANTS_CACHE_PREFIX}${appKey}:${environment}`
+function getVariantsCacheKey(appKey: string, environment: string, contextKey = ''): string {
+  const suffix = contextKey ? `:${contextKey}` : ''
+  return `${VARIANTS_CACHE_PREFIX}${appKey}:${environment}${suffix}`
 }
 
 function getRevisionCacheKey(appKey: string, environment: string): string {
@@ -58,25 +61,34 @@ function variantDefsToFlags(defs: { [key: string]: EvaluatedVariantDef }): { [ke
   return out
 }
 
-function readCachedFlags(appKey: string, environment: string): { [key: string]: boolean } | null {
+function readCachedFlags(appKey: string, environment: string, contextKey = ''): { [key: string]: boolean } | null {
   if (!canUseStorage) return null
   try {
-    const raw = localStorage.getItem(getCacheKey(appKey, environment))
+    const raw = localStorage.getItem(getCacheKey(appKey, environment, contextKey))
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
 
-function writeCachedFlags(appKey: string, environment: string, flags: { [key: string]: boolean }): void {
+function writeCachedFlags(
+  appKey: string,
+  environment: string,
+  flags: { [key: string]: boolean },
+  contextKey = '',
+): void {
   if (!canUseStorage) return
   try {
-    localStorage.setItem(getCacheKey(appKey, environment), JSON.stringify(flags))
+    localStorage.setItem(getCacheKey(appKey, environment, contextKey), JSON.stringify(flags))
   } catch { /* storage full or unavailable */ }
 }
 
-function readCachedVariants(appKey: string, environment: string): { [key: string]: EvaluatedVariantDef } | null {
+function readCachedVariants(
+  appKey: string,
+  environment: string,
+  contextKey = '',
+): { [key: string]: EvaluatedVariantDef } | null {
   if (!canUseStorage) return null
   try {
-    const raw = localStorage.getItem(getVariantsCacheKey(appKey, environment))
+    const raw = localStorage.getItem(getVariantsCacheKey(appKey, environment, contextKey))
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
@@ -85,10 +97,11 @@ function writeCachedVariants(
   appKey: string,
   environment: string,
   variants: { [key: string]: EvaluatedVariantDef },
+  contextKey = '',
 ): void {
   if (!canUseStorage) return
   try {
-    localStorage.setItem(getVariantsCacheKey(appKey, environment), JSON.stringify(variants))
+    localStorage.setItem(getVariantsCacheKey(appKey, environment, contextKey), JSON.stringify(variants))
   } catch { /* storage full or unavailable */ }
 }
 
@@ -98,6 +111,8 @@ export interface TogglyOptions {
   appKey?: string
   environment?: string
   identity?: string
+  groups?: string[]
+  claims?: Record<string, string>
   featureDefaults?: { [key: string]: boolean }
   showFeatureDuringEvaluation?: boolean
   featureFlagsRefreshInterval?: number
@@ -143,6 +158,7 @@ export interface TogglyService {
   setLocalGates: (gates: LocalGate[]) => void
   notifyLocalGatesChanged: () => void
   subscribeLocalGatesChanged: (listener: () => void) => () => void
+  setContext: (context: TogglyEvaluationContext) => Promise<void>
   getEffectiveFlagValue: (featureKey: string) => boolean
 }
 
@@ -163,6 +179,8 @@ export class Toggly implements TogglyService {
   private _localGateIndex: FlagGateIndex = new Map()
   private _localGatesChangedListeners = new Set<() => void>()
   private _lastError: string | undefined
+  private _groups: string[] = []
+  private _claims: Record<string, string> = {}
 
   _ws: WebSocket | null = null
   _wsConnected: boolean = false
@@ -285,19 +303,27 @@ export class Toggly implements TogglyService {
       this.setLocalGates(this._config.localGates)
     }
 
+    this._groups = this._config.groups ? [...this._config.groups] : []
+    this._claims = this._config.claims ? { ...this._config.claims } : {}
+
     // Seed in-memory features (and variants) from localStorage for instant availability
     if (this._features === null && this._canPersist && this._config.appKey) {
       const appKey = this._config.appKey
       const env = this._config.environment ?? 'Production'
+      const contextKey = evaluationContextCacheKey({
+        identity: this._config.identity,
+        groups: this._groups.length ? this._groups : undefined,
+        claims: Object.keys(this._claims).length ? this._claims : undefined,
+      })
       if (this._config.enableVariants) {
-        const vCached = readCachedVariants(appKey, env)
+        const vCached = readCachedVariants(appKey, env, contextKey)
         if (vCached) {
           this._variants = vCached
           this._features = variantDefsToFlags(vCached)
         }
       }
       if (this._features === null) {
-        const cached = readCachedFlags(appKey, env)
+        const cached = readCachedFlags(appKey, env, contextKey)
         if (cached) {
           this._features = cached
         }
@@ -307,6 +333,33 @@ export class Toggly implements TogglyService {
 
   private get _canPersist(): boolean {
     return this._config.persistCache !== false && canUseStorage
+  }
+
+  private _getEvaluationContext(): TogglyEvaluationContext {
+    return {
+      identity: this._config.identity || undefined,
+      groups: this._groups.length ? [...this._groups] : undefined,
+      claims: Object.keys(this._claims).length ? { ...this._claims } : undefined,
+    }
+  }
+
+  private _contextCacheKey(): string {
+    return evaluationContextCacheKey(this._getEvaluationContext())
+  }
+
+  setContext = async (context: TogglyEvaluationContext): Promise<void> => {
+    if (context.identity !== undefined) {
+      this._config.identity = context.identity || undefined
+    }
+    if (context.groups !== undefined) {
+      this._groups = [...context.groups]
+    }
+    if (context.claims !== undefined) {
+      this._claims = { ...context.claims }
+    }
+    this._features = null
+    this._variants = null
+    await this._loadFeatures(true)
   }
 
   _loadFeatures = async (forceRefresh = false) => {
@@ -344,19 +397,18 @@ export class Toggly implements TogglyService {
 
     const appKey = this._config.appKey ?? ''
     const env = this._config.environment ?? 'Production'
+    const contextKey = this._contextCacheKey()
 
     try {
       let url: string
       if (this._config.enableVariants) {
-        url = `${this._config.baseURI}/evaluated-variants-signed/${this._config.appKey}/${this._config.environment}`
-        if (this._config.identity) {
-          url += `?${new URLSearchParams({ userId: this._config.identity }).toString()}`
-        }
+        const fetchUrl = new URL(`${this._config.baseURI}/evaluated-variants-signed/${appKey}/${env}`)
+        appendEvaluationContext(fetchUrl, this._getEvaluationContext(), 'variants')
+        url = fetchUrl.toString()
       } else {
-        url = `${this._config.baseURI}/evaluated-signed/${this._config.appKey}/${this._config.environment}`
-        if (this._config.identity) {
-          url += `?u=${this._config.identity}`
-        }
+        const fetchUrl = new URL(`${this._config.baseURI}/evaluated-signed/${appKey}/${env}`)
+        appendEvaluationContext(fetchUrl, this._getEvaluationContext(), 'evaluated')
+        url = fetchUrl.toString()
       }
 
       const revision = this._definitionsRevision
@@ -388,14 +440,14 @@ export class Toggly implements TogglyService {
         this._variants = defs
         this._features = variantDefsToFlags(defs)
         if (this._features && this._canPersist) {
-          writeCachedVariants(appKey, env, defs)
-          writeCachedFlags(appKey, env, this._features)
+          writeCachedVariants(appKey, env, defs, contextKey)
+          writeCachedFlags(appKey, env, this._features, contextKey)
         }
       } else {
         this._variants = null
         this._features = payload?.defs ?? payload
         if (this._features && this._canPersist) {
-          writeCachedFlags(appKey, env, this._features)
+          writeCachedFlags(appKey, env, this._features, contextKey)
         }
       }
 
@@ -405,19 +457,19 @@ export class Toggly implements TogglyService {
     } catch (error) {
       this._reportError('Error fetching feature flags', error)
       if (this._config.enableVariants) {
-        const vCached = this._canPersist ? readCachedVariants(appKey, env) : null
+        const vCached = this._canPersist ? readCachedVariants(appKey, env, contextKey) : null
         if (vCached) {
           this._variants = vCached
           this._features = variantDefsToFlags(vCached)
         } else if (this._features === null) {
           this._variants = null
-          const cached = this._canPersist ? readCachedFlags(appKey, env) : null
+          const cached = this._canPersist ? readCachedFlags(appKey, env, contextKey) : null
           this._features = cached ?? this._config.featureDefaults ?? {}
         }
       } else {
         if (this._features === null) {
           this._variants = null
-          const cached = this._canPersist ? readCachedFlags(appKey, env) : null
+          const cached = this._canPersist ? readCachedFlags(appKey, env, contextKey) : null
           this._features = cached ?? this._config.featureDefaults ?? {}
         }
       }
@@ -577,9 +629,10 @@ export class Toggly implements TogglyService {
       if (this._canPersist) {
         const ak = this._config.appKey ?? ''
         const env = this._config.environment ?? 'Production'
-        writeCachedFlags(ak, env, flags)
+        const contextKey = this._contextCacheKey()
+        writeCachedFlags(ak, env, flags, contextKey)
         if (this._config.enableVariants && this._variants) {
-          writeCachedVariants(ak, env, this._variants)
+          writeCachedVariants(ak, env, this._variants, contextKey)
         }
       }
       if (this.onFlagsUpdated) {

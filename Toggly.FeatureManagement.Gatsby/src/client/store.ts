@@ -7,7 +7,7 @@
 
 import { atom, computed, type ReadableAtom } from 'nanostores';
 import type { TogglyPluginOptions, Flags, GateRequirement } from '../types/index.js';
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { appendEvaluationContext, type Hook } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -45,8 +45,10 @@ let clientInstance: TogglyClientInstance | null = null;
 /**
  * Internal config type with required properties except identity
  */
-type ClientConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'hooks' | 'localGates' | 'onError'>> & {
+type ClientConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | 'claims' | 'hooks' | 'localGates' | 'onError'>> & {
   identity?: string;
+  groups?: string[];
+  claims?: Record<string, string>;
   hooks?: Hook[];
   localGates?: TogglyPluginOptions['localGates'];
   onError?: TogglyPluginOptions['onError'];
@@ -102,20 +104,18 @@ class TogglyClientInstance {
   }
 
   private getApiUrl(): string {
-    const { baseURI, appKey, environment, identity } = this.config;
+    const { baseURI, appKey, environment, identity, groups, claims } = this.config;
 
     if (!appKey) {
       return '';
     }
 
     const baseUrl = baseURI.replace(/\/$/, '');
-    let url = `${baseUrl}/${appKey}/evaluated-signed`;
+    const url = new URL(`${baseUrl}/evaluated-signed/${appKey}/${environment}`);
 
-    if (identity) {
-      url += `?u=${encodeURIComponent(identity)}`;
-    }
+    appendEvaluationContext(url, { identity, groups, claims }, 'evaluated');
 
-    return url;
+    return url.toString();
   }
 
   async fetchFlags(): Promise<Flags> {
