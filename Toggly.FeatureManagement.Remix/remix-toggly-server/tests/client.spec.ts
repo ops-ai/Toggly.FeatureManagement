@@ -268,6 +268,30 @@ describe('TogglyServerClient', () => {
 
       expect(result).toEqual(flags);
     });
+
+    it('should return existing flags on 304 Not Modified', async () => {
+      const flags: FeatureFlags = { feature1: true };
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(flags),
+        headers: { get: () => '"rev-quoted"' },
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 304,
+        statusText: 'Not Modified',
+        json: () => Promise.resolve({}),
+        headers: { get: () => null },
+      });
+
+      const result = await client.fetchFlags();
+      expect(result).toEqual(flags);
+    });
   });
 
   describe('getFlags', () => {
@@ -757,6 +781,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should refresh flags when flags-updated JSON message is received', async () => {
+      jest.useFakeTimers();
       const client = await initClient();
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -764,14 +789,16 @@ describe('TogglyServerClient', () => {
       });
 
       wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'flags-updated' })));
-      // Allow fire-and-forget fetchFlags to complete
-      await new Promise((r) => setImmediate(r));
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
       client.close();
     });
 
     it('should refresh flags when update JSON message is received', async () => {
+      jest.useFakeTimers();
       const client = await initClient();
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -779,9 +806,11 @@ describe('TogglyServerClient', () => {
       });
 
       wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'update' })));
-      await new Promise((r) => setImmediate(r));
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
       client.close();
     });
 
@@ -796,7 +825,42 @@ describe('TogglyServerClient', () => {
       client.close();
     });
 
+    it('should refresh flags when sync JSON message is received', async () => {
+      jest.useFakeTimers();
+      const client = await initClient();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: false }),
+      });
+
+      wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'sync', etag: 'new-rev' })));
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
+      client.close();
+    });
+
+    it('should refresh flags when signing-key-updated JSON message is received', async () => {
+      jest.useFakeTimers();
+      const client = await initClient();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: false }),
+      });
+
+      wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'signing-key-updated' })));
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
+      client.close();
+    });
+
     it('should refresh flags on plain text "update" message', async () => {
+      jest.useFakeTimers();
       const client = await initClient();
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -804,13 +868,16 @@ describe('TogglyServerClient', () => {
       });
 
       wsHandlers['message']?.(Buffer.from('update'));
-      await new Promise((r) => setImmediate(r));
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
       client.close();
     });
 
     it('should refresh flags on plain text "flags-updated" message', async () => {
+      jest.useFakeTimers();
       const client = await initClient();
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -818,9 +885,11 @@ describe('TogglyServerClient', () => {
       });
 
       wsHandlers['message']?.(Buffer.from('flags-updated'));
-      await new Promise((r) => setImmediate(r));
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
       client.close();
     });
 
