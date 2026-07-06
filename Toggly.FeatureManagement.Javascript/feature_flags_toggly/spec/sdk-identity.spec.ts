@@ -64,4 +64,26 @@ describe('sdk-identity', () => {
     globalWithBrowser.window = previousWindow;
     globalWithBrowser.document = previousDocument;
   });
+
+  it('buildDefinitionFetchHeaders uses custom headers for ReactNative navigator', () => {
+    const globalWithBrowser = globalThis as typeof globalThis & {
+      window?: unknown;
+      document?: unknown;
+      navigator?: { product?: string };
+    };
+    const previousWindow = globalWithBrowser.window;
+    const previousDocument = globalWithBrowser.document;
+    const previousNavigator = globalWithBrowser.navigator;
+    delete globalWithBrowser.window;
+    delete globalWithBrowser.document;
+    globalWithBrowser.navigator = { product: 'ReactNative' };
+
+    const headers = buildDefinitionFetchHeaders();
+    expect(headers['X-Toggly-Sdk']).toBe(SDK_ID);
+    expect(headers['User-Agent']).toBeUndefined();
+
+    globalWithBrowser.window = previousWindow;
+    globalWithBrowser.document = previousDocument;
+    globalWithBrowser.navigator = previousNavigator;
+  });
 });

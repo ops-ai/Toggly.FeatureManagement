@@ -639,6 +639,88 @@ describe('TogglyService', () => {
     });
   });
 
+  // ─── setContext ──────────────────────────────
+  describe('setContext', () => {
+    it('should include groups and claims in API URL after setContext', async () => {
+      spyOn(console, 'warn');
+      const fetchSpy = spyOn(globalThis, 'fetch').and.resolveTo({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ F1: true }),
+      } as any);
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'test-key',
+          environment: 'Production',
+          identity: 'user-123',
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      await service.isFeatureOn('F1');
+      fetchSpy.calls.reset();
+
+      await service.setContext({
+        identity: 'user-123',
+        groups: ['beta'],
+        claims: { role: 'admin' },
+      });
+
+      const url = fetchSpy.calls.mostRecent().args[0] as string;
+      expect(url).toContain('g=beta');
+      expect(url).toContain('claim.role=admin');
+    });
+
+    it('setContext with empty identity clears identity', async () => {
+      spyOn(console, 'warn');
+      const fetchSpy = spyOn(globalThis, 'fetch').and.resolveTo({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ F1: true }),
+      } as any);
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'test-key',
+          environment: 'Production',
+          identity: 'user-123',
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      await service.isFeatureOn('F1');
+      fetchSpy.calls.reset();
+
+      await service.setContext({ identity: '' });
+
+      expect((service as any)._config.identity).toBeUndefined();
+    });
+
+    it('setContext with empty groups omits g params on fetch', async () => {
+      spyOn(console, 'warn');
+      const fetchSpy = spyOn(globalThis, 'fetch').and.resolveTo({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ F1: true }),
+      } as any);
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'test-key',
+          environment: 'Production',
+          identity: 'user-123',
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      await service.isFeatureOn('F1');
+      fetchSpy.calls.reset();
+
+      await service.setContext({ groups: [] });
+
+      const url = fetchSpy.calls.mostRecent().args[0] as string;
+      expect(url).not.toContain('g=');
+    });
+  });
+
   // ─── WebSocket Live Updates ───────────────────────────
   describe('WebSocket live updates', () => {
     let mockWs: any;

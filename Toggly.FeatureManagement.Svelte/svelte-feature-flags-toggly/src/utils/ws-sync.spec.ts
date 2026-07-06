@@ -26,6 +26,14 @@ describe('ws-sync', () => {
     expect(shouldFetchOnSync({ type: 'sync', etag: 'new' }, 'old')).toBe(true);
   });
 
+  it('shouldFetchOnSync returns false for non-sync message types', () => {
+    expect(shouldFetchOnSync({ type: 'update', etag: 'new' }, 'old')).toBe(false);
+  });
+
+  it('shouldFetchOnSync returns true when no cached etag exists', () => {
+    expect(shouldFetchOnSync({ type: 'sync', etag: 'new' }, null)).toBe(true);
+  });
+
   it('shouldFetchOnFlagsUpdated supports update types', () => {
     expect(shouldFetchOnFlagsUpdated({ type: 'update', etag: 'new' }, 'old')).toBe(true);
   });
@@ -41,5 +49,27 @@ describe('ws-sync', () => {
       },
     } as Response;
     expect(extractDefinitionsRevision(response)).toBe('rev-abc');
+  });
+
+  it('shouldFetchOnSync returns false when etag matches cached revision', () => {
+    expect(shouldFetchOnSync({ type: 'sync', etag: 'same' }, 'same')).toBe(false);
+  });
+
+  it('shouldFetchOnFlagsUpdated returns false when etag matches cached revision', () => {
+    expect(shouldFetchOnFlagsUpdated({ type: 'update', etag: 'same' }, 'same')).toBe(false);
+  });
+
+  it('shouldFetchOnFlagsUpdated returns true when etag is missing', () => {
+    expect(shouldFetchOnFlagsUpdated({ type: 'flags-updated' }, 'cached')).toBe(true);
+  });
+
+  it('shouldFetchOnFlagsUpdated returns false for non-update message types', () => {
+    expect(shouldFetchOnFlagsUpdated({ type: 'sync', etag: 'new' }, 'old')).toBe(false);
+  });
+
+  it('buildWebSocketUrl works without cached revision', () => {
+    expect(buildWebSocketUrl('https://definitions.toggly.io', 'app-key', null)).toBe(
+      `wss://definitions.toggly.io/app-key/ws?sdk=${SDK_ID}&sdkVersion=${SDK_VERSION}`
+    );
   });
 });

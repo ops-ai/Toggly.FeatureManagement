@@ -1059,6 +1059,110 @@ describe('Toggly Core', () => {
     });
   });
 
+  describe('HTTP 304 and revision caching', () => {
+    const appKey = 'test-app-key';
+    const env = 'Production';
+
+    it('should use cached flags on 304 Not Modified', async () => {
+      const cacheKey = flagsCacheKeyForContext(appKey, env);
+      localStorage.setItem(cacheKey, JSON.stringify({ Cached: true }));
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 304,
+        statusText: 'Not Modified',
+        headers: { get: () => null },
+        json: async () => ({}),
+      });
+
+      const flags = await Toggly.init({
+        appKey,
+        environment: env,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(flags).toEqual({ Cached: true });
+    });
+
+    it('falls back to flagDefaults when cached flags are corrupted on 304', async () => {
+      const appKey = 'corrupt-304-app';
+      const env = 'Production';
+      const cacheKey = flagsCacheKeyForContext(appKey, env);
+      localStorage.setItem(cacheKey, 'not-json');
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 304,
+        statusText: 'Not Modified',
+        headers: { get: () => null },
+        json: async () => ({}),
+      });
+
+      const flags = await Toggly.init({
+        appKey,
+        environment: env,
+        flagDefaults: { Default: true },
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(flags).toEqual({ Default: true });
+    });
+
+    it('should use cached flags on 304 with enableVariants', async () => {
+      const flagsKey = flagsCacheKeyForContext(appKey, env);
+      const varKey = variantsCacheKeyForContext(appKey, env);
+      localStorage.setItem(flagsKey, JSON.stringify({ V: true }));
+      localStorage.setItem(varKey, JSON.stringify({ V: { enabled: true, variant: 'A' } }));
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 304,
+        statusText: 'Not Modified',
+        headers: { get: () => null },
+        json: async () => ({}),
+      });
+
+      const flags = await Toggly.init({
+        appKey,
+        environment: env,
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(flags).toEqual({ V: true });
+    });
+
+    it('should send If-None-Match after caching revision from ETag header', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: (key: string) => (key === 'ETag' ? '"rev-123"' : null) },
+        json: async () => ({ F1: true }),
+      });
+
+      await Toggly.init({
+        appKey,
+        environment: env,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      mockFetch.mockClear();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => null },
+        json: async () => ({ F1: true }),
+      });
+
+      await Toggly.refresh();
+
+      const init = mockFetch.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)['If-None-Match']).toBe('rev-123');
+    });
+  });
+
   // ───────────────────────────────────────────────
   // Feature Evaluation
   // ───────────────────────────────────────────────
@@ -2429,6 +2533,38 @@ describe('Toggly Core', () => {
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
+    it('notifyLocalGatesChanged continues when a listener throws', async () => {
+      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ ApiV2Checkout: true }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+        localGates: [{
+          id: 'apiRedesign',
+          flagKeys: ['ApiV2Checkout'],
+          isEnabled: () => true,
+        }],
+      });
+
+      const okListener = jest.fn();
+      Toggly.subscribeLocalGatesChanged(() => {
+        throw new Error('bad listener');
+      });
+      Toggly.subscribeLocalGatesChanged(okListener);
+      Toggly.notifyLocalGatesChanged();
+
+      expect(okListener).toHaveBeenCalledTimes(1);
+      expect(errSpy).toHaveBeenCalled();
+      errSpy.mockRestore();
+    });
+
     it('setLocalGates should update gates after init', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -2481,6 +2617,125 @@ describe('Toggly Core', () => {
       });
 
       expect(Toggly.getVariant('ApiV2Checkout')).toBeNull();
+    });
+  });
+
+  describe('Storage getter resilience', () => {
+    it('returns empty groups when localStorage JSON is corrupted', () => {
+      localStorage.setItem(StorageKeys.groupsKey, 'not-json');
+      expect(Toggly.groups).toEqual([]);
+    });
+
+    it('returns empty claims when localStorage JSON is corrupted', () => {
+      localStorage.setItem(StorageKeys.claimsKey, '{bad');
+      expect(Toggly.claims).toEqual({});
+    });
+
+    it('evaluationContext omits empty groups and claims', async () => {
+      await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+      Toggly.groups = [];
+      Toggly.claims = {};
+
+      expect(Toggly.evaluationContext).toEqual({
+        identity: DEFAULT_TEST_IDENTITY,
+      });
+    });
+
+    it('reads feature flags from localStorage when in-memory cache is empty', async () => {
+      const appKey = 'cache-read-app';
+      const env = 'Production';
+      const cacheKey = flagsCacheKeyForContext(appKey, env);
+      localStorage.setItem(cacheKey, JSON.stringify({ Cached: true }));
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => null },
+        json: async () => ({ Cached: true }),
+      });
+
+      await Toggly.init({
+        appKey,
+        environment: env,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      (Toggly as any)._inMemoryFlags = null;
+      (Toggly as any)._hasLoadedFlags = false;
+
+      expect(Toggly.featureFlagsValue).toEqual({ Cached: true });
+    });
+
+    it('featureFlagsValue handles corrupted flags cache JSON', async () => {
+      const appKey = 'corrupt-cache-app';
+      const env = 'Production';
+      const cacheKey = flagsCacheKeyForContext(appKey, env);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => null },
+        json: async () => ({ F1: true }),
+      });
+
+      await Toggly.init({
+        appKey,
+        environment: env,
+        flagDefaults: { Default: true },
+        featureFlagsRefreshInterval: 0,
+      });
+
+      localStorage.setItem(cacheKey, 'not-valid-json');
+      (Toggly as any)._inMemoryFlags = null;
+      (Toggly as any)._hasLoadedFlags = false;
+
+      expect(Toggly.featureFlagsValue).toEqual({ Default: true });
+    });
+
+    it('falls back to flagDefaults when variants fetch returns non-ok status', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Server Error',
+        headers: { get: () => null },
+        json: async () => ({}),
+      });
+
+      const flags = await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        flagDefaults: { Fallback: true },
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(flags).toEqual({ Fallback: true });
+    });
+
+    it('variantsValue returns null when persistCache is disabled', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => null },
+        json: async () => ({ V: { enabled: true, variant: 'A' } }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        persistCache: false,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(Toggly.variantsValue).toBeNull();
     });
   });
 });

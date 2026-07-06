@@ -576,6 +576,106 @@ describe('Toggly Service', () => {
     });
   });
 
+  // ─── setContext ─────────────────────────────────
+  describe('setContext', () => {
+    it('should include groups and claims in API URL after setContext', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      } as Response);
+
+      const toggly = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+        enableLiveUpdates: false,
+      });
+      await toggly.refreshFlags();
+      fetchSpy.mockClear();
+
+      await toggly.setContext({
+        identity: 'user-123',
+        groups: ['beta'],
+        claims: { role: 'admin' },
+      });
+
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).toContain('g=beta');
+      expect(url).toContain('claim.role=admin');
+    });
+
+    it('setContext with empty identity clears identity', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      } as Response);
+
+      const toggly = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+        enableLiveUpdates: false,
+      });
+      await toggly.refreshFlags();
+      fetchSpy.mockClear();
+
+      await toggly.setContext({ identity: '' });
+
+      expect((toggly as any)._config.identity).toBeUndefined();
+    });
+
+    it('setContext with empty groups omits g params on fetch', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      } as Response);
+
+      const toggly = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+        enableLiveUpdates: false,
+      });
+      await toggly.refreshFlags();
+      fetchSpy.mockClear();
+
+      await toggly.setContext({ groups: [] });
+
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).not.toContain('g=');
+    });
+
+    it('setContext with only claims forces refresh', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: false }),
+      } as Response);
+
+      const toggly = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+        enableLiveUpdates: false,
+      });
+      await toggly.refreshFlags();
+      fetchSpy.mockClear();
+
+      await toggly.setContext({ claims: { role: 'admin' } });
+
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).toContain('claim.role=admin');
+      expect(await toggly.isFeatureOn('F1')).toBe(false);
+    });
+  });
+
   // ─── WebSocket live updates ───────────────────────
   describe('WebSocket live updates', () => {
     let mockWsInstances: any[];

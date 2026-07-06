@@ -87,6 +87,14 @@ describe('Toggly Store', () => {
       togglyFlagsStore.set({ F1: false });
       expect(get(f1Store)).toBe(false);
     });
+
+    it('uses service effective value when service is set', () => {
+      const service = new Toggly({ featureDefaults: { F1: true } });
+      vi.spyOn(service, 'getEffectiveFlagValue').mockReturnValue(true);
+      togglyServiceStore.set(service);
+      togglyFlagsStore.set({ F1: false });
+      expect(get(createFeatureStore('F1'))).toBe(true);
+    });
   });
 
   // ─── togglyVariantsStore & createVariantStore ──────────────────────
@@ -104,6 +112,19 @@ describe('Toggly Store', () => {
         name: 'blue',
         configurationValue: 'hex',
       });
+    });
+
+    it('uses service.getVariant when service is set', () => {
+      const service = new Toggly({ featureDefaults: { F1: true } });
+      vi.spyOn(service, 'getVariant').mockReturnValue({ name: 'A', configurationValue: 1 });
+      togglyServiceStore.set(service);
+      togglyVariantsStore.set({});
+      expect(get(createVariantStore('F1'))).toEqual({ name: 'A', configurationValue: 1 });
+    });
+
+    it('createVariantValueStore returns null when variant name is missing', () => {
+      togglyVariantsStore.set({ F: { enabled: true } });
+      expect(get(createVariantValueStore('F'))).toBeNull();
     });
 
     it('createVariantValueStore returns configuration only', () => {

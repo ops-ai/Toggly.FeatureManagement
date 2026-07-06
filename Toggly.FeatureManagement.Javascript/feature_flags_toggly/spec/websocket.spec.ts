@@ -244,6 +244,87 @@ describe('Toggly WebSocket', () => {
         latestWs().triggerMessage('not-valid-{json')
       ).not.toThrow();
     });
+
+    it('triggers force refresh on signing-key-updated when verifySignatures is enabled', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ F1: true }),
+        headers: { get: () => 'rev-1' },
+      });
+
+      await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Test',
+        verifySignatures: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      const before = mockFetch.mock.calls.length;
+      latestWs().triggerMessage(JSON.stringify({ type: 'signing-key-updated' }));
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+
+      expect(mockFetch.mock.calls.length).toBeGreaterThan(before);
+    });
+
+    it('caches etag from sync message without refresh when unchanged', async () => {
+      const { StorageKeys } = require('../lib/models');
+      localStorage.setItem(
+        StorageKeys.definitionsRevisionCacheKey('test-key', 'Test'),
+        'abc123',
+      );
+
+      await initWithWs();
+      const before = mockFetch.mock.calls.length;
+
+      latestWs().triggerMessage(JSON.stringify({
+        type: 'sync',
+        etag: 'abc123',
+        unchanged: true,
+      }));
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+
+      expect(mockFetch.mock.calls.length).toBe(before);
+    });
+
+    it('cancels pending debounced refresh on stopWebSocket', async () => {
+      await initWithWs();
+      const before = mockFetch.mock.calls.length;
+
+      latestWs().triggerMessage('update');
+      Toggly.stopWebSocket();
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+
+      expect(mockFetch.mock.calls.length).toBe(before);
+    });
+
+    it('caches etag from flags-updated message', async () => {
+      const { StorageKeys } = require('../lib/models');
+      await initWithWs();
+
+      latestWs().triggerMessage(JSON.stringify({
+        type: 'flags-updated',
+        etag: 'rev-from-ws',
+      }));
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+
+      expect(
+        localStorage.getItem(StorageKeys.definitionsRevisionCacheKey('test-key', 'Test')),
+      ).toBe('rev-from-ws');
+    });
+
+    it('resets debounce timer when multiple updates arrive quickly', async () => {
+      await initWithWs();
+      latestWs().triggerMessage('update');
+      latestWs().triggerMessage('update');
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      expect(mockFetch.mock.calls.length).toBeGreaterThan(0);
+    });
   });
 
   describe('WebSocket close and reconnect', () => {

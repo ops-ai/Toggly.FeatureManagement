@@ -26,6 +26,15 @@ describe('ws-sync', () => {
     expect(shouldFetchOnFlagsUpdated({ type: 'flags-updated', etag: 'same' }, 'same')).toBeFalse();
   });
 
+  it('shouldFetchOnFlagsUpdated fetches when etag is missing', () => {
+    expect(shouldFetchOnFlagsUpdated({ type: 'update' }, 'cached')).toBeTrue();
+  });
+
+  it('buildWebSocketUrl works without cached revision', () => {
+    expect(buildWebSocketUrl('https://definitions.toggly.io', 'app-key', null))
+      .toBe('wss://definitions.toggly.io/app-key/ws?sdk=angular&sdkVersion=2.2.1');
+  });
+
   it('shouldFetchOnSigningKeyUpdated detects rotation', () => {
     expect(shouldFetchOnSigningKeyUpdated({ type: 'signing-key-updated' })).toBeTrue();
   });

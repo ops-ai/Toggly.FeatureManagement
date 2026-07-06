@@ -391,6 +391,136 @@ describe('Toggly Service', () => {
     });
   });
 
+  // ─── setContext ─────────────────────────────────
+  describe('setContext', () => {
+    it('should include groups and claims in API URL after setContext', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      const service = new Toggly();
+      service.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+        enableLiveUpdates: false,
+      });
+      await service._loadFeatures();
+      mockFetch.mockClear();
+
+      await service.setContext({
+        identity: 'user-123',
+        groups: ['beta', 'enterprise'],
+        claims: { role: 'admin', plan: 'premium' },
+      });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain('g=beta');
+      expect(url).toContain('g=enterprise');
+      expect(url).toContain('claim.role=admin');
+      expect(url).toContain('claim.plan=premium');
+    });
+
+    it('setContext with empty identity clears identity', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      const service = new Toggly();
+      service.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+        enableLiveUpdates: false,
+      });
+      await service._loadFeatures();
+      mockFetch.mockClear();
+
+      await service.setContext({ identity: '' });
+
+      expect((service as any)._config.identity).toBeUndefined();
+    });
+
+    it('setContext with only groups updates groups and refreshes', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      const service = new Toggly();
+      service.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+        enableLiveUpdates: false,
+      });
+      await service._loadFeatures();
+      mockFetch.mockClear();
+
+      await service.setContext({ groups: ['beta'] });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain('g=beta');
+    });
+
+    it('setContext with empty groups omits g params on fetch', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      const service = new Toggly();
+      service.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+        enableLiveUpdates: false,
+      });
+      await service._loadFeatures();
+      mockFetch.mockClear();
+
+      await service.setContext({ groups: [] });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).not.toContain('g=');
+    });
+
+    it('setContext with only claims forces refresh', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: false }),
+      });
+
+      const service = new Toggly();
+      service.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-123',
+        enableLiveUpdates: false,
+      });
+      await service._loadFeatures();
+      mockFetch.mockClear();
+
+      await service.setContext({ claims: { role: 'admin' } });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain('claim.role=admin');
+      expect(await service.isFeatureOn('F1')).toBe(false);
+    });
+  });
+
   // ─── WebSocket live updates ───────────────────────
   describe('WebSocket live updates', () => {
     let mockWsInstances: any[];
@@ -487,6 +617,26 @@ describe('Toggly Service', () => {
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'unknown' }) });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should refresh features on JSON sync message', () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'sync', etag: 'new-rev' }) });
+      vi.advanceTimersByTime(350);
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should cancel debounced refresh on stopWebSocket', () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockFetch.mockClear();
+      mockWsInstances[0].onmessage!({ data: 'update' });
+      s.stopWebSocket();
+      vi.advanceTimersByTime(350);
       expect(mockFetch).not.toHaveBeenCalled();
     });
 

@@ -17,6 +17,7 @@ export default defineConfig({
         'src/**/*.d.ts',
         'src/index.ts',
         'src/vite-env.d.ts',
+        'src/__tests__/test-helpers.ts',
       ],
       reporter: ['text', 'text-summary', 'lcov'],
       thresholds: {

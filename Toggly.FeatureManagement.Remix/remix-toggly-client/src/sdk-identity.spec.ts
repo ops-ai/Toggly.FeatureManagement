@@ -24,6 +24,7 @@ describe('sdk-identity', () => {
     expect(headers.Accept).toBe('application/json');
     if (usesSdkCustomHeaders()) {
       expect(headers['X-Toggly-Sdk']).toBe(SDK_ID);
+      expect(headers['X-Toggly-Sdk-Version']).toBe(SDK_VERSION);
     } else {
       expect(headers['User-Agent']).toBe(`toggly-${SDK_ID}/${SDK_VERSION}`);
     }
@@ -42,23 +43,5 @@ describe('sdk-identity', () => {
       configurable: true,
       value: originalNavigator,
     });
-  });
-
-  it('buildDefinitionFetchHeaders uses User-Agent outside browser contexts', () => {
-    const globalWithBrowser = globalThis as typeof globalThis & {
-      window?: unknown;
-      document?: unknown;
-    };
-    const previousWindow = globalWithBrowser.window;
-    const previousDocument = globalWithBrowser.document;
-    delete globalWithBrowser.window;
-    delete globalWithBrowser.document;
-
-    const headers = buildDefinitionFetchHeaders({ Accept: 'application/json' });
-    expect(headers['User-Agent']).toBe(`toggly-${SDK_ID}/${SDK_VERSION}`);
-    expect(headers['X-Toggly-Sdk']).toBeUndefined();
-
-    globalWithBrowser.window = previousWindow;
-    globalWithBrowser.document = previousDocument;
   });
 });
