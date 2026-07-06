@@ -15,12 +15,14 @@ describe('Smoke test', () => {
       return;
     }
 
+    const apiBase = `${window.location.origin}/toggly-proxy`;
+
     TestBed.configureTestingModule({
       imports: [NgxFeatureFlagsTogglyModule.forRoot({
         appKey,
         environment: 'Production',
-        // Karma proxy (karma.conf.js) avoids browser CORS in CI
-        baseURI: '/toggly-proxy',
+        // Same-origin Karma proxy avoids browser CORS in CI (see karma.conf.js)
+        baseURI: apiBase,
       })],
     });
 
