@@ -19,7 +19,8 @@ describe('Smoke test', () => {
       imports: [NgxFeatureFlagsTogglyModule.forRoot({
         appKey,
         environment: 'Production',
-        baseURI: 'https://definitions.toggly.io',
+        // Karma proxy (karma.conf.js) avoids browser CORS in CI
+        baseURI: '/toggly-proxy',
       })],
     });
 
