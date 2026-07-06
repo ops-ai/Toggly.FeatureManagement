@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
-from tests.test_helpers import set_middleware_client
+from tests.test_helpers import create_test_app, set_middleware_client
 
 
 def _reload_modules():
@@ -50,7 +50,7 @@ class TestGetToggly:
             from toggly_fastapi.dependencies import TogglyDep
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get("/test")
@@ -88,7 +88,7 @@ class TestGetToggly:
 
             from toggly_fastapi.dependencies import TogglyDep
 
-            app = FastAPI()
+            app = create_test_app()
 
             @app.get("/test")
             async def test_endpoint(toggly: TogglyDep):
@@ -129,7 +129,7 @@ class TestRequireFeature:
             from toggly_fastapi.dependencies import require_feature
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get(
@@ -171,7 +171,7 @@ class TestRequireFeature:
             from toggly_fastapi.dependencies import require_feature
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get(
@@ -212,7 +212,7 @@ class TestRequireFeature:
             from toggly_fastapi.dependencies import require_feature
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get(
@@ -253,7 +253,7 @@ class TestRequireFeature:
             from toggly_fastapi.dependencies import require_feature
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get(
@@ -301,7 +301,7 @@ class TestRequireFeatures:
             from toggly_fastapi.dependencies import require_features
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get(
@@ -342,7 +342,7 @@ class TestRequireFeatures:
             from toggly_fastapi.dependencies import require_features
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get(
@@ -387,7 +387,7 @@ class TestFeatureEnabled:
             from toggly_fastapi.dependencies import feature_enabled
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get("/test")
@@ -425,7 +425,7 @@ class TestFeatureEnabled:
             from toggly_fastapi.dependencies import feature_enabled
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get("/test")
@@ -434,7 +434,7 @@ class TestFeatureEnabled:
             ):
                 return {"enabled": is_enabled}
 
-            set_middleware_client(mock_client)
+            set_middleware_client(None)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200
@@ -471,7 +471,7 @@ class TestFeatureGateDependency:
             from toggly_fastapi.dependencies import FeatureGateDependency
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             gate = FeatureGateDependency(required=["base-feature"])
@@ -512,7 +512,7 @@ class TestFeatureGateDependency:
             from toggly_fastapi.dependencies import FeatureGateDependency
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             gate = FeatureGateDependency(required=["missing-feature"])
@@ -553,7 +553,7 @@ class TestFeatureGateDependency:
             from toggly_fastapi.dependencies import FeatureGateDependency
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             gate = FeatureGateDependency(
@@ -607,7 +607,7 @@ class TestGetEvaluationContext:
             from toggly_fastapi.dependencies import ContextDep
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get("/test")
@@ -617,7 +617,6 @@ class TestGetEvaluationContext:
                     "path": context.traits.get("path"),
                 }
 
-            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200

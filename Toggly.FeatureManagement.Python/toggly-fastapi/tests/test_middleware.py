@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.test_helpers import set_middleware_client
+from tests.test_helpers import create_test_app, set_middleware_client
 
 
 def _reload_modules():
@@ -159,7 +159,7 @@ class TestTogglyMiddleware:
 
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get("/test")
@@ -198,7 +198,7 @@ class TestTogglyMiddleware:
 
             from toggly_fastapi.middleware import TogglyMiddleware
 
-            app = FastAPI()
+            app = create_test_app()
             app.add_middleware(TogglyMiddleware)
 
             @app.get("/test")
