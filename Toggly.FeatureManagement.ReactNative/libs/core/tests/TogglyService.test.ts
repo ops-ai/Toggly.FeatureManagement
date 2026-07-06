@@ -458,6 +458,30 @@ describe('TogglyService', () => {
     });
   });
 
+  describe('setContext', () => {
+    it('should update groups and claims and refresh flags', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ feature1: true }),
+        headers: new Map(),
+      });
+
+      service = new TogglyService({
+        appKey: 'test-key',
+        storage: mockStorage,
+      });
+      await service.init();
+
+      await service.setContext({
+        groups: ['beta'],
+        claims: { role: 'admin' },
+      });
+
+      expect(global.fetch).toHaveBeenCalled();
+    });
+  });
+
   describe('debug info', () => {
     it('should return debug information', async () => {
       service = new TogglyService({

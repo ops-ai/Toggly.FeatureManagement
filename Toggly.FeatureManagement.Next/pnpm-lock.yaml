@@ -60,6 +60,9 @@ importers:
 
   nextjs-toggly-core:
     dependencies:
+      '@ops-ai/toggly-hooks-types':
+        specifier: file:../../toggly-hooks-types
+        version: file:../toggly-hooks-types
       '@ops-ai/toggly-local-gates':
         specifier: file:../../toggly-local-gates
         version: file:../toggly-local-gates
@@ -638,6 +641,10 @@ packages:
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
+
+  '@ops-ai/toggly-hooks-types@file:../toggly-hooks-types':
+    resolution: {directory: ../toggly-hooks-types, type: directory}
+    engines: {node: '>=18.0.0'}
 
   '@ops-ai/toggly-local-gates@file:../toggly-local-gates':
     resolution: {directory: ../toggly-local-gates, type: directory}
@@ -2255,6 +2262,8 @@ snapshots:
 
   '@next/swc-win32-x64-msvc@15.5.12':
     optional: true
+
+  '@ops-ai/toggly-hooks-types@file:../toggly-hooks-types': {}
 
   '@ops-ai/toggly-local-gates@file:../toggly-local-gates': {}
 
