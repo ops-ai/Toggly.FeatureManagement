@@ -20,6 +20,7 @@ describe('Smoke test', () => {
         appKey,
         environment: 'Production',
         baseURI: '/toggly-proxy',
+        featureFlagsRefreshInterval: 0,
       })],
     });
 

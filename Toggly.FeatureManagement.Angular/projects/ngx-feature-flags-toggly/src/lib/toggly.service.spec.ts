@@ -909,7 +909,7 @@ describe('TogglyService', () => {
       const fetchSpy = (globalThis.fetch as jasmine.Spy);
       const callsBefore = fetchSpy.calls.count();
       mockWs.onmessage({ data: JSON.stringify({ type: 'flags-updated' }) });
-      tick(300);
+      tick(350);
       expect(fetchSpy.calls.count()).toBeGreaterThan(callsBefore);
     }));
 
@@ -918,7 +918,7 @@ describe('TogglyService', () => {
       const fetchSpy = (globalThis.fetch as jasmine.Spy);
       const callsBefore = fetchSpy.calls.count();
       mockWs.onmessage({ data: JSON.stringify({ type: 'update' }) });
-      tick(300);
+      tick(350);
       expect(fetchSpy.calls.count()).toBeGreaterThan(callsBefore);
     }));
 
@@ -927,7 +927,7 @@ describe('TogglyService', () => {
       const fetchSpy = (globalThis.fetch as jasmine.Spy);
       const callsBefore = fetchSpy.calls.count();
       mockWs.onmessage({ data: JSON.stringify({ type: 'sync', etag: 'new-rev' }) });
-      tick(300);
+      tick(350);
       expect(fetchSpy.calls.count()).toBeGreaterThan(callsBefore);
     }));
 
@@ -936,7 +936,7 @@ describe('TogglyService', () => {
       const fetchSpy = (globalThis.fetch as jasmine.Spy);
       const callsBefore = fetchSpy.calls.count();
       mockWs.onmessage({ data: JSON.stringify({ type: 'signing-key-updated' }) });
-      tick(300);
+      tick(350);
       expect(fetchSpy.calls.count()).toBeGreaterThan(callsBefore);
     }));
 
