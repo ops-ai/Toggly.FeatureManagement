@@ -674,6 +674,60 @@ describe('Toggly Service', () => {
       expect(url).toContain('claim.role=admin');
       expect(await toggly.isFeatureOn('F1')).toBe(false);
     });
+
+    it('should include groups and claims from init config', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const localFetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      } as Response);
+
+      const toggly = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        groups: ['beta'],
+        claims: { role: 'admin' },
+        enableLiveUpdates: false,
+      });
+      await toggly.isFeatureOn('F1');
+
+      const url = localFetchSpy.mock.calls[0][0] as string;
+      expect(url).toContain('g=beta');
+      expect(url).toContain('claim.role=admin');
+    });
+
+    it('should return cached features on 304 Not Modified', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const localFetchSpy = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: true }),
+          headers: { get: () => '"rev-1"' },
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 304,
+          statusText: 'Not Modified',
+          json: () => Promise.resolve({}),
+          headers: { get: () => null },
+        } as Response);
+
+      const toggly = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
+      });
+      await toggly._loadFeatures();
+      await toggly._loadFeatures(true);
+
+      expect(await toggly.isFeatureOn('F1')).toBe(true);
+      expect(localFetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
   });
 
   // ─── WebSocket live updates ───────────────────────
@@ -759,6 +813,24 @@ describe('Toggly Service', () => {
       s.startWebSocket();
       fetchSpy.mockClear();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) });
+      vi.advanceTimersByTime(350);
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    it('should refresh features on JSON sync message', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      fetchSpy.mockClear();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'sync', etag: 'new-rev' }) });
+      vi.advanceTimersByTime(350);
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    it('should refresh features on signing-key-updated message', () => {
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      fetchSpy.mockClear();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'signing-key-updated' }) });
       vi.advanceTimersByTime(350);
       expect(fetchSpy).toHaveBeenCalled();
     });

@@ -1084,6 +1084,29 @@ describe('Toggly Core', () => {
       expect(flags).toEqual({ Cached: true });
     });
 
+    it('skips persisting revision when persistCache is false', async () => {
+      const setItemSpy = jest.spyOn(Storage.prototype, 'setItem');
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => '"rev-only-memory"' },
+        json: async () => ({ F1: true }),
+      });
+
+      await Toggly.init({
+        appKey: 'no-persist-rev',
+        environment: env,
+        persistCache: false,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      const revisionKey = StorageKeys.definitionsRevisionCacheKey('no-persist-rev', env);
+      expect(setItemSpy).not.toHaveBeenCalledWith(revisionKey, expect.any(String));
+      setItemSpy.mockRestore();
+    });
+
     it('falls back to flagDefaults when cached flags are corrupted on 304', async () => {
       const appKey = 'corrupt-304-app';
       const env = 'Production';

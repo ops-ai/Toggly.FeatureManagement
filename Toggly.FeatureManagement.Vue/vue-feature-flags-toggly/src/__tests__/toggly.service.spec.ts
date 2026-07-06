@@ -521,6 +521,60 @@ describe('Toggly Service', () => {
     });
   });
 
+  describe('Evaluation context from config', () => {
+    it('should include groups and claims from init config', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      const service = new Toggly();
+      service.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        groups: ['beta'],
+        claims: { role: 'admin' },
+        enableLiveUpdates: false,
+      });
+      await service._loadFeatures();
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain('g=beta');
+      expect(url).toContain('claim.role=admin');
+    });
+
+    it('should return cached features on 304 Not Modified', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: true }),
+          headers: { get: () => '"rev-1"' },
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 304,
+          statusText: 'Not Modified',
+          json: () => Promise.resolve({}),
+          headers: { get: () => null },
+        });
+
+      const service = new Toggly();
+      service.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableLiveUpdates: false,
+      });
+      await service._loadFeatures();
+      await service._loadFeatures(true);
+
+      expect(await service.isFeatureOn('F1')).toBe(true);
+    });
+  });
+
   // ─── WebSocket live updates ───────────────────────
   describe('WebSocket live updates', () => {
     let mockWsInstances: any[];
@@ -625,6 +679,15 @@ describe('Toggly Service', () => {
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'sync', etag: 'new-rev' }) });
+      vi.advanceTimersByTime(350);
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should refresh features on signing-key-updated message', () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      const s = createWsService({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'signing-key-updated' }) });
       vi.advanceTimersByTime(350);
       expect(mockFetch).toHaveBeenCalled();
     });

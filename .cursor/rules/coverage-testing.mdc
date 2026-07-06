@@ -1,0 +1,42 @@
+---
+description: Require unit tests with new SDK functionality so CI coverage thresholds stay met
+alwaysApply: true
+---
+
+# SDK Coverage Testing
+
+When adding or changing functionality in **Toggly.FeatureManagement** SDK packages, always add or update unit tests so CI coverage thresholds stay met.
+
+## When This Applies
+
+- New public APIs, behavior changes, or bug fixes in any SDK under this repository
+- Shared utilities (`sdk-identity`, `ws-sync`, evaluation context, WebSocket refresh, caching)
+- Framework adapters (React, Vue, Angular, Svelte, Astro, Remix, React Native, etc.)
+
+## Requirements
+
+1. **Add tests with the feature** — do not merge behavior without corresponding coverage in the same PR/commit.
+2. **Run package coverage locally** before pushing (see package `package.json` scripts).
+3. **Target branch coverage** — most SDK workflows fail on **branches** first; exercise both sides of conditionals (empty vs set identity/groups/claims, 304 vs 200, WS message types, `persistCache` on/off).
+4. **WebSocket debounce** — refresh is debounced (~300ms); use fake timers (`jest.advanceTimersByTime`, `vi.advanceTimersByTime`, Angular `fakeAsync` + `tick`).
+5. **URL assertions** — prefer `new URL(url).searchParams.get(...)` over raw encoded query strings when testing `appendEvaluationContext`.
+6. **Do not lower thresholds** to make CI pass unless explicitly approved; add tests instead.
+
+## CI Thresholds (reference)
+
+| Package | Statements | Branches | Functions | Lines |
+|---------|------------|----------|-----------|-------|
+| JS core | 90% | 85% | 90% | 90% |
+| Vue | 90% | 85% | 90% | 90% |
+| Svelte | 90% | 84% | 90% | 90% |
+| Angular lib | 90% | 80% | 90% | 90% |
+| Astro | 85% | 80% | 85% | 85% |
+| Remix server | 90% | 88% | 90% | 90% |
+
+## Checklist for New SDK Behavior
+
+- [ ] Happy path test
+- [ ] Empty/null/undefined inputs where supported
+- [ ] Error or fallback paths (network failure, 304, corrupt cache)
+- [ ] Live-update paths if WebSocket-related
+- [ ] Local `coverage` run meets thresholds for the touched package

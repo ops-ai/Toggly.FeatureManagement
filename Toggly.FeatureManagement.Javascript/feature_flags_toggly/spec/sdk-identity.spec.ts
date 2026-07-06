@@ -76,14 +76,20 @@ describe('sdk-identity', () => {
     const previousNavigator = globalWithBrowser.navigator;
     delete globalWithBrowser.window;
     delete globalWithBrowser.document;
-    globalWithBrowser.navigator = { product: 'ReactNative' };
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { product: 'ReactNative' },
+    });
 
     const headers = buildDefinitionFetchHeaders();
     expect(headers['X-Toggly-Sdk']).toBe(SDK_ID);
     expect(headers['User-Agent']).toBeUndefined();
 
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: previousNavigator,
+    });
     globalWithBrowser.window = previousWindow;
     globalWithBrowser.document = previousDocument;
-    globalWithBrowser.navigator = previousNavigator;
   });
 });

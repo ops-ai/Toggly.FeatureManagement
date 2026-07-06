@@ -30,6 +30,18 @@ describe('ws-sync', () => {
     expect(shouldFetchOnFlagsUpdated({ type: 'update' }, 'cached')).toBeTrue();
   });
 
+  it('shouldFetchOnSync returns false for non-sync message types', () => {
+    expect(shouldFetchOnSync({ type: 'update', etag: 'new' }, 'old')).toBeFalse();
+  });
+
+  it('shouldFetchOnSync returns true when no cached revision exists', () => {
+    expect(shouldFetchOnSync({ type: 'sync', etag: 'new' }, null)).toBeTrue();
+  });
+
+  it('shouldFetchOnFlagsUpdated returns false for non-update message types', () => {
+    expect(shouldFetchOnFlagsUpdated({ type: 'sync', etag: 'new' }, 'old')).toBeFalse();
+  });
+
   it('buildWebSocketUrl works without cached revision', () => {
     expect(buildWebSocketUrl('https://definitions.toggly.io', 'app-key', null))
       .toBe('wss://definitions.toggly.io/app-key/ws?sdk=angular&sdkVersion=2.2.1');

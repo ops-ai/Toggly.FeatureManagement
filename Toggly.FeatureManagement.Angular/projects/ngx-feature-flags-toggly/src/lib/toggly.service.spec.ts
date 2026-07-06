@@ -306,6 +306,37 @@ describe('TogglyService', () => {
       expect(await service.isFeatureOn('F1')).toBe(true);
     });
 
+    it('should return cached features on 304 Not Modified', async () => {
+      fetchSpy.and.returnValues(
+        {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: true }),
+          headers: { get: () => '"rev-1"' },
+        } as any,
+        {
+          ok: false,
+          status: 304,
+          statusText: 'Not Modified',
+          json: () => Promise.resolve({}),
+          headers: { get: () => null },
+        } as any,
+      );
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+
+      expect(await service.isFeatureOn('F1')).toBe(true);
+      await (service as any)._loadFeatures(true);
+      expect(await service.isFeatureOn('F1')).toBe(true);
+    });
+
     it('should load variant defs when enableVariants is true', async () => {
       fetchSpy.and.resolveTo({
         ok: true,
@@ -719,6 +750,58 @@ describe('TogglyService', () => {
       const url = fetchSpy.calls.mostRecent().args[0] as string;
       expect(url).not.toContain('g=');
     });
+
+    it('setContext with only claims forces refresh', async () => {
+      spyOn(console, 'warn');
+      const fetchSpy = spyOn(globalThis, 'fetch').and.resolveTo({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ F1: false }),
+      } as any);
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'test-key',
+          environment: 'Production',
+          identity: 'user-123',
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      await service.isFeatureOn('F1');
+      fetchSpy.calls.reset();
+
+      await service.setContext({ claims: { role: 'admin' } });
+
+      const url = fetchSpy.calls.mostRecent().args[0] as string;
+      expect(url).toContain('claim.role=admin');
+      expect(await service.isFeatureOn('F1')).toBe(false);
+    });
+  });
+
+  describe('Evaluation context from config', () => {
+    it('should include groups and claims from module config', async () => {
+      spyOn(console, 'warn');
+      const fetchSpy = spyOn(globalThis, 'fetch').and.resolveTo({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ F1: true }),
+      } as any);
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+          groups: ['beta'],
+          claims: { role: 'admin' },
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      await service.isFeatureOn('F1');
+
+      const url = fetchSpy.calls.mostRecent().args[0] as string;
+      expect(url).toContain('g=beta');
+      expect(url).toContain('claim.role=admin');
+    });
   });
 
   // ─── WebSocket Live Updates ───────────────────────────
@@ -835,6 +918,24 @@ describe('TogglyService', () => {
       const fetchSpy = (globalThis.fetch as jasmine.Spy);
       const callsBefore = fetchSpy.calls.count();
       mockWs.onmessage({ data: JSON.stringify({ type: 'update' }) });
+      tick(300);
+      expect(fetchSpy.calls.count()).toBeGreaterThan(callsBefore);
+    }));
+
+    it('should reload features on sync message', fakeAsync(async () => {
+      const service = await createWsService();
+      const fetchSpy = (globalThis.fetch as jasmine.Spy);
+      const callsBefore = fetchSpy.calls.count();
+      mockWs.onmessage({ data: JSON.stringify({ type: 'sync', etag: 'new-rev' }) });
+      tick(300);
+      expect(fetchSpy.calls.count()).toBeGreaterThan(callsBefore);
+    }));
+
+    it('should reload features on signing-key-updated message', fakeAsync(async () => {
+      const service = await createWsService();
+      const fetchSpy = (globalThis.fetch as jasmine.Spy);
+      const callsBefore = fetchSpy.calls.count();
+      mockWs.onmessage({ data: JSON.stringify({ type: 'signing-key-updated' }) });
       tick(300);
       expect(fetchSpy.calls.count()).toBeGreaterThan(callsBefore);
     }));

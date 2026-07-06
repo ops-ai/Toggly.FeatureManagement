@@ -120,10 +120,25 @@ describe('TogglyServer', () => {
       });
 
       await server.getFlags();
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('?u=user%20name%40test.com'),
-        expect.anything()
-      );
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(new URL(calledUrl).searchParams.get('u')).toBe('user name@test.com');
+    });
+
+    it('should include groups and claims in API URL', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+
+      const server = new TogglyServer({
+        appKey: 'my-key',
+        environment: 'Production',
+        groups: ['beta'],
+        claims: { role: 'admin' },
+      });
+
+      await server.getFlags();
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      const params = new URL(calledUrl).searchParams;
+      expect(params.getAll('g')).toEqual(['beta']);
+      expect(params.get('claim.role')).toBe('admin');
     });
 
     it('should strip trailing slash from baseURI', async () => {
