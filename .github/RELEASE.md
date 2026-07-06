@@ -51,6 +51,34 @@ That version is already published. Bump the manifest if you have unreleased chan
 
 Use `release_mode: auto_bump` and choose `bump_type`. This updates the manifest, publishes, and commits the bump back. Prefer fixing the manifest in a PR instead.
 
+### Flutter publish (pub.dev OIDC)
+
+Publishing uses [GitHub Actions OIDC](https://dart.dev/tools/pub/automated-publishing) — no upload token or Google sign-in in CI.
+
+**One-time setup per package** on [pub.dev Admin](https://pub.dev/packages/feature_flags_toggly/admin) → **Automated publishing**:
+
+| Package | Tag pattern |
+|---------|-------------|
+| `feature_flags_toggly` | `flutter-sdk-v{{version}}` |
+| `feature_flags_toggly_secure_storage` | `flutter-secure_storage-v{{version}}` |
+| `feature_flags_toggly_disk` | `flutter-disk-v{{version}}` |
+| `feature_flags_toggly_sqlite` | `flutter-sqlite-v{{version}}` |
+| `feature_flags_toggly_isar` | `flutter-isar-v{{version}}` |
+
+For each package:
+
+1. **Repository:** `ops-ai/Toggly.FeatureManagement`
+2. **Tag pattern:** row from the table above (not `v{{version}}`)
+3. Enable **Enable publishing from push events** (tag push triggers publish)
+4. Optionally enable **Enable publishing from workflow_dispatch events**
+
+**Release flow:**
+
+1. Run **Flutter SDKs - Build & Publish** on `develop` (workflow_dispatch) — validates, tests, pushes a signed tag.
+2. The tag push starts a second run that publishes to pub.dev via OIDC and creates the GitHub Release.
+
+pub.dev requires the publish job to run on a **tag ref**, not a branch — that is why publish is split from tagging.
+
 ### Monorepo packages (Nuxt, Next, Remix, React Native, Node server)
 
 All sibling packages must share the same version. The workflow validates this before publishing.

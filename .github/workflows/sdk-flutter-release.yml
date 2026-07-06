@@ -36,9 +36,17 @@ on:
         required: false
         default: false
         type: boolean
+  push:
+    tags:
+      - 'flutter-sdk-v*'
+      - 'flutter-secure_storage-v*'
+      - 'flutter-disk-v*'
+      - 'flutter-sqlite-v*'
+      - 'flutter-isar-v*'
 
 permissions:
   contents: write
+  id-token: write
 
 env:
   FLUTTER_ROOT_DIR: Toggly.FeatureManagement.Flutter
@@ -66,7 +74,25 @@ jobs:
       - name: Map package input to paths
         id: map
         run: |
-          case "${{ github.event.inputs.package }}" in
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            case "$TAG" in
+              flutter-sdk-v*) PACKAGE_INPUT="core" ;;
+              flutter-secure_storage-v*) PACKAGE_INPUT="secure_storage" ;;
+              flutter-disk-v*) PACKAGE_INPUT="disk" ;;
+              flutter-sqlite-v*) PACKAGE_INPUT="sqlite" ;;
+              flutter-isar-v*) PACKAGE_INPUT="isar" ;;
+              *)
+                echo "Unrecognized tag prefix: $TAG"
+                exit 1
+                ;;
+            esac
+            echo "Resolved package from tag: $PACKAGE_INPUT ($TAG)"
+          else
+            PACKAGE_INPUT="${{ github.event.inputs.package }}"
+          fi
+
+          case "$PACKAGE_INPUT" in
             core)
               DIR="toggly"
               PKG="feature_flags_toggly"
@@ -98,7 +124,7 @@ jobs:
               IS_PROVIDER="true"
               ;;
             *)
-              echo "Invalid package: ${{ github.event.inputs.package }}"
+              echo "Invalid package: $PACKAGE_INPUT"
               exit 1
               ;;
           esac
@@ -157,9 +183,13 @@ jobs:
         run: flutter test
         continue-on-error: true
 
-  publish:
+  # Branch dispatch: validate, test, then push a signed tag. Tag push triggers publish via OIDC.
+  tag-and-push:
     needs: [build-and-test, validate]
-    if: needs.validate.outputs.action == 'publish'
+    if: |
+      needs.validate.outputs.action == 'publish' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref_type == 'branch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -176,45 +206,6 @@ jobs:
           git_user_signingkey: true
           git_commit_gpgsign: true
           git_tag_gpgsign: true
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.x'
-          channel: 'stable'
-
-      # Strip the local path override so provider packages resolve the base SDK from pub.dev.
-      - name: Remove local dependency overrides
-        if: needs.validate.outputs.is_provider == 'true'
-        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
-        run: |
-          rm -f pubspec_overrides.yaml
-          echo "Removed pubspec_overrides.yaml (if present)"
-
-      - name: Install dependencies
-        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
-        run: flutter pub get
-
-      # Generate Isar (or other) codegen so *.g.dart files are present in the published archive.
-      - name: Run code generation (if needed)
-        if: needs.validate.outputs.is_provider == 'true'
-        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
-        run: |
-          if grep -q "build_runner" pubspec.yaml; then
-            flutter pub run build_runner build --delete-conflicting-outputs
-          else
-            echo "No build_runner found, skipping code generation"
-          fi
-
-      - name: Dry run publish
-        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
-        run: flutter pub publish --dry-run
-
-      - name: Publish to pub.dev
-        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
-        run: flutter pub publish --force
-        env:
-          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
 
       - name: Configure git
         run: |
@@ -269,6 +260,69 @@ jobs:
           fi
           git tag -s -m "$TAG_MSG" "$TAG"
           git push origin "$TAG"
+          echo "Pushed tag $TAG — publish will run automatically on the tag push event."
+
+  # Tag ref only: pub.dev OIDC auth requires github.ref_type == tag.
+  publish:
+    needs: [build-and-test, validate]
+    if: |
+      needs.validate.outputs.action == 'publish' &&
+      github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Verify tag matches manifest version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          EXPECTED="${{ needs.validate.outputs.tag_prefix }}${{ needs.validate.outputs.version }}"
+          if [ "$TAG" != "$EXPECTED" ]; then
+            echo "::error::Tag $TAG does not match expected $EXPECTED from pubspec.yaml"
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # setup-dart must run before Flutter so OIDC credentials are registered for pub.dev.
+      - name: Setup Dart (OIDC for pub.dev)
+        uses: dart-lang/setup-dart@v1
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      # Strip the local path override so provider packages resolve the base SDK from pub.dev.
+      - name: Remove local dependency overrides
+        if: needs.validate.outputs.is_provider == 'true'
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: |
+          rm -f pubspec_overrides.yaml
+          echo "Removed pubspec_overrides.yaml (if present)"
+
+      - name: Install dependencies
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: flutter pub get
+
+      # Generate Isar (or other) codegen so *.g.dart files are present in the published archive.
+      - name: Run code generation (if needed)
+        if: needs.validate.outputs.is_provider == 'true'
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: |
+          if grep -q "build_runner" pubspec.yaml; then
+            flutter pub run build_runner build --delete-conflicting-outputs
+          else
+            echo "No build_runner found, skipping code generation"
+          fi
+
+      - name: Dry run publish
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: flutter pub publish --dry-run
+
+      - name: Publish to pub.dev
+        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+        run: flutter pub publish --force
 
       - name: Create GitHub Release (core)
         if: needs.validate.outputs.is_provider != 'true'
@@ -303,7 +357,7 @@ jobs:
 
             - [pub.dev package](https://pub.dev/packages/feature_flags_toggly)
             - [Documentation](https://docs.toggly.io/docs/sdks/flutter)
-          prerelease: ${{ github.event.inputs.prerelease }}
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -331,13 +385,13 @@ jobs:
 
             - [pub.dev package](https://pub.dev/packages/${{ needs.validate.outputs.package }})
             - [Documentation](https://docs.toggly.io/docs/sdks/flutter)
-          prerelease: ${{ github.event.inputs.prerelease }}
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   summary:
-    needs: [publish, validate]
+    needs: [publish, tag-and-push, validate]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -347,6 +401,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Trigger | ${{ github.event_name }} (${{ github.ref_type }}) |" >> $GITHUB_STEP_SUMMARY
           echo "| Action | ${{ needs.validate.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Package | ${{ needs.validate.outputs.package }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
@@ -355,6 +410,10 @@ jobs:
           echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Reason | ${{ needs.validate.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tag | ${{ needs.validate.outputs.tag_prefix }}${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-release | ${{ github.event.inputs.prerelease || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.ref_type }}" = "branch" ] && [ "${{ needs.tag-and-push.result }}" = "success" ]; then
+            echo "Tag pushed. **Publish runs automatically** when the tag push workflow starts." >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "[View on pub.dev](https://pub.dev/packages/${{ needs.validate.outputs.package }})" >> $GITHUB_STEP_SUMMARY
