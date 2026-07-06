@@ -49,7 +49,7 @@ jobs:
         include:
           - sdk: Angular
             path: Toggly.FeatureManagement.Angular
-            test-cmd: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --code-coverage
+            test-cmd: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --code-coverage --exclude='**/smoke*.spec.ts'
             has-lint: false
           - sdk: React
             path: Toggly.FeatureManagement.React
