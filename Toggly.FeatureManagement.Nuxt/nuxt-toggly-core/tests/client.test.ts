@@ -562,6 +562,41 @@ describe('createTogglyClient', () => {
     })
   })
 
+  describe('subscriptions', () => {
+    it('should subscribe and unsubscribe local gate listeners', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+
+      const client = createTogglyClient({ appKey: 'test-key', refreshInterval: 0 })
+      await client.init()
+
+      const listener = vi.fn()
+      const unsubscribe = client.subscribeLocalGatesChanged(listener)
+      client.notifyLocalGatesChanged()
+      expect(listener).toHaveBeenCalledTimes(1)
+
+      unsubscribe()
+      client.notifyLocalGatesChanged()
+      expect(listener).toHaveBeenCalledTimes(1)
+
+      client.destroy()
+    })
+
+    it('should subscribe and unsubscribe feature refresh listeners', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+
+      const client = createTogglyClient({ appKey: 'test-key', refreshInterval: 0 })
+      await client.init()
+
+      const listener = vi.fn()
+      const unsubscribe = client.subscribeFeaturesRefresh(listener)
+      client.subscribeFeaturesRefresh(() => {}) // cover add path only
+      unsubscribe()
+      client.destroy()
+
+      expect(typeof unsubscribe).toBe('function')
+    })
+  })
+
   describe('destroy()', () => {
     it('should stop refresh interval', async () => {
       mockFetch

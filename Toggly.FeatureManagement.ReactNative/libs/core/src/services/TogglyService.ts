@@ -740,9 +740,9 @@ export class TogglyService {
    */
   async setContext(context: TogglyEvaluationContext): Promise<TogglyInitResponse> {
     if (context.identity !== undefined) {
-      await this.setIdentity(context.identity ?? null);
+      const identityResponse = await this.setIdentity(context.identity ?? null);
       if (context.groups === undefined && context.claims === undefined) {
-        return { status: 'loaded', flags: this.features ?? {} };
+        return identityResponse;
       }
     }
     if (context.groups !== undefined) {

@@ -4,6 +4,7 @@ import {
   buildDefinitionFetchHeaders,
   sdkUserAgent,
   sdkCustomHeaders,
+  usesSdkCustomHeaders,
 } from '../lib/sdk-identity';
 
 describe('sdk-identity', () => {
@@ -20,7 +21,7 @@ describe('sdk-identity', () => {
 
   it('buildDefinitionFetchHeaders adds SDK identity to existing headers', () => {
     const headers = buildDefinitionFetchHeaders({ Accept: 'application/json' });
-    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    if (usesSdkCustomHeaders()) {
       expect(headers['X-Toggly-Sdk']).toBe(SDK_ID);
       expect(headers['X-Toggly-Sdk-Version']).toBe(SDK_VERSION);
       expect(headers['User-Agent']).toBeUndefined();
@@ -29,5 +30,38 @@ describe('sdk-identity', () => {
       expect(headers['X-Toggly-Sdk']).toBeUndefined();
     }
     expect(headers.Accept).toBe('application/json');
+  });
+
+  it('usesSdkCustomHeaders is true when navigator.product is ReactNative', () => {
+    const originalNavigator = global.navigator;
+    Object.defineProperty(global, 'navigator', {
+      configurable: true,
+      value: { product: 'ReactNative' },
+    });
+
+    expect(usesSdkCustomHeaders()).toBe(true);
+
+    Object.defineProperty(global, 'navigator', {
+      configurable: true,
+      value: originalNavigator,
+    });
+  });
+
+  it('buildDefinitionFetchHeaders uses User-Agent outside browser contexts', () => {
+    const globalWithBrowser = globalThis as typeof globalThis & {
+      window?: unknown;
+      document?: unknown;
+    };
+    const previousWindow = globalWithBrowser.window;
+    const previousDocument = globalWithBrowser.document;
+    delete globalWithBrowser.window;
+    delete globalWithBrowser.document;
+
+    const headers = buildDefinitionFetchHeaders({ Accept: 'application/json' });
+    expect(headers['User-Agent']).toBe(`toggly-${SDK_ID}/${SDK_VERSION}`);
+    expect(headers['X-Toggly-Sdk']).toBeUndefined();
+
+    globalWithBrowser.window = previousWindow;
+    globalWithBrowser.document = previousDocument;
   });
 });

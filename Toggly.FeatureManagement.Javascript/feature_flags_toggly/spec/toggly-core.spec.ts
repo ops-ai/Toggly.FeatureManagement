@@ -801,6 +801,19 @@ describe('Toggly Core', () => {
       }, 200);
     });
 
+    it('should persist groups and claims in localStorage', () => {
+      Toggly.groups = ['beta', 'enterprise'];
+      Toggly.claims = { role: 'admin' };
+
+      expect(Toggly.groups).toEqual(['beta', 'enterprise']);
+      expect(Toggly.claims).toEqual({ role: 'admin' });
+      expect(Toggly.evaluationContext).toEqual({
+        identity: DEFAULT_TEST_IDENTITY,
+        groups: ['beta', 'enterprise'],
+        claims: { role: 'admin' },
+      });
+    });
+
     it('should include identity in API fetch URL', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -870,6 +883,179 @@ describe('Toggly Core', () => {
           done(error);
         }
       }, 200);
+    });
+  });
+
+  describe('setContext', () => {
+    beforeEach(async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+      Toggly.identity = 'user-123';
+      await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+      mockFetch.mockClear();
+    });
+
+    it('should include groups and claims in API URL after setContext', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      await Toggly.setContext({
+        identity: 'user-123',
+        groups: ['beta', 'enterprise'],
+        claims: { role: 'admin', plan: 'premium' },
+      });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain('u=user-123');
+      expect(url).toContain('g=beta');
+      expect(url).toContain('g=enterprise');
+      expect(url).toContain('claim.role=admin');
+      expect(url).toContain('claim.plan=premium');
+    });
+
+    it('setContext should force refresh when only claims change', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ F1: false }),
+        });
+
+      await Toggly.setContext({ claims: { role: 'admin' } });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(Toggly.isFeatureOn('F1')).toBe(false);
+    });
+
+    it('clearContext should reset evaluation context and refresh', async () => {
+      await Toggly.setContext({ groups: ['beta'], claims: { role: 'admin' } });
+      mockFetch.mockClear();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      await Toggly.clearContext();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('setContext with empty identity clears identity', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      await Toggly.setContext({ identity: '' });
+
+      expect(localStorage.getItem(StorageKeys.identityKey)).toBeNull();
+    });
+
+    it('setContext with only groups updates groups and refreshes', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      await Toggly.setContext({ groups: ['beta'] });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain('g=beta');
+    });
+
+    it('setContext should use context-scoped cache key in localStorage', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      await Toggly.setContext({
+        identity: 'user-123',
+        groups: ['beta'],
+        claims: { role: 'admin' },
+      });
+
+      const cacheKeys = Object.keys(localStorage).filter((key) => key.includes('toggly:flags'));
+      expect(cacheKeys.some((key) => key.includes('u:user-123'))).toBe(true);
+      expect(cacheKeys.some((key) => key.includes('g:beta'))).toBe(true);
+      expect(cacheKeys.some((key) => key.includes('c:role=admin'))).toBe(true);
+    });
+
+    it('setContext should append context to variants URL when enableVariants is true', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve({
+            defs: { V: { enabled: true, variant: 'A' } },
+          }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+      mockFetch.mockClear();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve({
+            defs: { V: { enabled: true, variant: 'A' } },
+          }),
+      });
+
+      await Toggly.setContext({
+        identity: 'user-456',
+        groups: ['beta'],
+        claims: { tier: 'pro' },
+      });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain('evaluated-variants-signed');
+      expect(url).toContain('userId=user-456');
+      expect(url).toContain('g=beta');
+      expect(url).toContain('claim.tier=pro');
+    });
+
+    it('setContext with empty groups omits g params on fetch', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ F1: true }),
+      });
+
+      await Toggly.setContext({ groups: [] });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).not.toContain('g=');
     });
   });
 

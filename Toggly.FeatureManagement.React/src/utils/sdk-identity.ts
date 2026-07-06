@@ -20,12 +20,19 @@ export function appendSdkQueryParams(params: URLSearchParams): void {
   params.set('sdkVersion', SDK_VERSION);
 }
 
+type BrowserLikeGlobal = typeof globalThis & {
+  window?: unknown;
+  document?: unknown;
+  navigator?: { product?: string };
+};
+
 /** Browser and React Native use custom headers on HTTP (User-Agent is forbidden in browser fetch). */
 export function usesSdkCustomHeaders(): boolean {
-  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const g = globalThis as BrowserLikeGlobal;
+  if (g.window !== undefined && g.document !== undefined) {
     return true;
   }
-  if (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') {
+  if (g.navigator?.product === 'ReactNative') {
     return true;
   }
   return false;
