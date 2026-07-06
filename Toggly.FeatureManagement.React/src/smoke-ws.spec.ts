@@ -24,7 +24,6 @@ describe('WebSocket smoke test', () => {
         try {
           const msg = JSON.parse(text);
           if (msg.type === 'ping') return;
-          if (msg.type === 'definitions' || msg.type === 'evaluated') return;
         } catch { /* not JSON, resolve anyway */ }
         clearTimeout(timeout);
         resolve(text);
