@@ -7,6 +7,7 @@ gemspec
 gem "toggly", path: "../toggly"
 
 group :development, :test do
+  gem "parallel", "~> 1.27"
   gem "rails", ENV.fetch("RAILS_VERSION", ">= 7.0")
   gem "rake", "~> 13.0"
   gem "rspec", "~> 3.12"

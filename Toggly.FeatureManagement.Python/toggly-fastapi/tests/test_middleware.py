@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.test_helpers import set_middleware_client
+
 
 def _reload_modules():
     """Reload modules to apply patches."""
@@ -164,6 +166,7 @@ class TestTogglyMiddleware:
             async def test_endpoint(request: Request):
                 return {"has_toggly": hasattr(request.state, "toggly")}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200
@@ -202,6 +205,7 @@ class TestTogglyMiddleware:
             async def test_endpoint(request: Request):
                 return {"enabled": request.state.toggly.is_enabled("my-feature")}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200

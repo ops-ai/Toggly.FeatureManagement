@@ -93,8 +93,8 @@ void main() {
     );
     HttpService.getInstance.http.interceptors.add(interceptor);
 
-    provider.flags['user-1'] = TogglyFeatureFlagsCache(
-      identity: 'user-1',
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
       flags: '{"FeatureA":true}',
       timestamp: 100,
       signature: 'bad-signature',
@@ -143,8 +143,8 @@ void main() {
     );
     HttpService.getInstance.http.interceptors.add(interceptor);
 
-    provider.flags['user-1'] = TogglyFeatureFlagsCache(
-      identity: 'user-1',
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
       flags: '{"FeatureA":true}',
       timestamp: 100,
       signature: base64Encode(List<int>.filled(64, 0)),
@@ -207,8 +207,8 @@ void main() {
     );
     HttpService.getInstance.http.interceptors.add(interceptor);
 
-    provider.flags['user-1'] = TogglyFeatureFlagsCache(
-      identity: 'user-1',
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
       flags: '{"FeatureA":false}',
       timestamp: 100,
       signature: base64Encode(List<int>.filled(64, 1)),

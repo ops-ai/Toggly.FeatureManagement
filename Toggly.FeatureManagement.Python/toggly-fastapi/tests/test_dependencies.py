@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
+from tests.test_helpers import set_middleware_client
+
 
 def _reload_modules():
     """Reload modules to apply patches."""
@@ -55,6 +57,7 @@ class TestGetToggly:
             async def test_endpoint(toggly: TogglyDep):
                 return {"has_methods": hasattr(toggly, "is_enabled")}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200
@@ -91,6 +94,7 @@ class TestGetToggly:
             async def test_endpoint(toggly: TogglyDep):
                 return {"enabled": toggly.is_enabled("my-feature")}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200
@@ -135,6 +139,7 @@ class TestRequireFeature:
             async def test_endpoint():
                 return {"message": "success"}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200
@@ -176,6 +181,7 @@ class TestRequireFeature:
             async def test_endpoint():
                 return {"message": "success"}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 403
@@ -216,6 +222,7 @@ class TestRequireFeature:
             async def test_endpoint():
                 return {"message": "success"}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 404
@@ -258,6 +265,7 @@ class TestRequireFeature:
             async def test_endpoint():
                 return {"message": "success"}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 403
@@ -303,6 +311,7 @@ class TestRequireFeatures:
             async def test_endpoint():
                 return {"message": "success"}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200
@@ -343,6 +352,7 @@ class TestRequireFeatures:
             async def test_endpoint():
                 return {"message": "success"}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 403
@@ -386,6 +396,7 @@ class TestFeatureEnabled:
             ):
                 return {"enabled": is_enabled}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200
@@ -423,6 +434,7 @@ class TestFeatureEnabled:
             ):
                 return {"enabled": is_enabled}
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200
@@ -468,6 +480,7 @@ class TestFeatureGateDependency:
             async def test_endpoint(features: dict = Depends(gate)):
                 return features
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200
@@ -508,6 +521,7 @@ class TestFeatureGateDependency:
             async def test_endpoint(features: dict = Depends(gate)):
                 return features
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 403
@@ -551,6 +565,7 @@ class TestFeatureGateDependency:
             async def test_endpoint(features: dict = Depends(gate)):
                 return features
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200
@@ -602,6 +617,7 @@ class TestGetEvaluationContext:
                     "path": context.traits.get("path"),
                 }
 
+            set_middleware_client(mock_client)
             client = TestClient(app)
             response = client.get("/test")
             assert response.status_code == 200

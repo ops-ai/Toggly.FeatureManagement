@@ -160,7 +160,7 @@ GEM
       racc (~> 1.4)
     nokogiri (1.19.4-x86_64-linux-musl)
       racc (~> 1.4)
-    parallel (2.1.0)
+    parallel (1.28.0)
     parser (3.3.11.1)
       ast (~> 2.4.1)
       racc
@@ -318,6 +318,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
+  parallel (~> 1.27)
   rails (>= 7.0)
   rake (~> 13.0)
   rspec (~> 3.12)

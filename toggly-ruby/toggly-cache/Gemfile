@@ -7,6 +7,7 @@ gemspec
 gem "toggly", path: "../toggly"
 
 group :development, :test do
+  gem "parallel", "~> 1.27"
   gem "mock_redis", "~> 0.44"
   gem "rake", "~> 13.0"
   gem "rspec", "~> 3.12"
