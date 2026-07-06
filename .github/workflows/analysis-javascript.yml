@@ -106,7 +106,7 @@ jobs:
           cache-dependency-path: ${{ matrix.path }}/package-lock.json
 
       - name: Build shared toggly-hooks-types package
-        working-directory: Toggly.FeatureManagement/toggly-hooks-types
+        working-directory: toggly-hooks-types
         run: npm ci || npm install && npm run build
 
       - name: Install dependencies
@@ -249,7 +249,7 @@ jobs:
           cache-dependency-path: ${{ matrix.path }}/package-lock.json
 
       - name: Build shared toggly-hooks-types package
-        working-directory: Toggly.FeatureManagement/toggly-hooks-types
+        working-directory: toggly-hooks-types
         run: npm ci || npm install && npm run build
 
       - name: Install dependencies
