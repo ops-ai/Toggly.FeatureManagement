@@ -251,13 +251,13 @@ async fn premium_function() -> String {
 // Define feature flags as an enum
 #[derive(FeatureFlags)]
 pub enum Features {
-    #[feature(key = "dark-mode")]
+    #[toggly(key = "dark-mode")]
     DarkMode,
 
-    #[feature(key = "new-dashboard", default = true)]
+    #[toggly(key = "new-dashboard", default = true)]
     NewDashboard,
 
-    #[feature(key = "beta-features")]
+    #[toggly(key = "beta-features")]
     BetaFeatures,
 }
 

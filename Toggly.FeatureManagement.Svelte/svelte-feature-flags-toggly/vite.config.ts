@@ -40,7 +40,7 @@ export default defineConfig({
       fileName: (format) => `svelte-feature-flags-toggly.${format === 'es' ? 'es' : 'cjs'}`
     },
     rollupOptions: {
-      external: ['svelte', 'svelte/store'],
+      external: ['svelte', 'svelte/store', '@ops-ai/toggly-hooks-types', '@ops-ai/toggly-local-gates'],
       output: {
         globals: {
           svelte: 'Svelte',

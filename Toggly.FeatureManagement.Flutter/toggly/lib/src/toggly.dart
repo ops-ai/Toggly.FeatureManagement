@@ -331,7 +331,8 @@ class Toggly with WidgetsBindingObserver {
     return parts.join('|');
   }
 
-  static Map<String, dynamic> _buildEvaluationQueryParameters({required bool variants}) {
+  static Map<String, dynamic> _buildEvaluationQueryParameters(
+      {required bool variants}) {
     final params = <String, dynamic>{};
     if (variants) {
       params['userId'] = Toggly._identity;
@@ -375,8 +376,7 @@ class Toggly with WidgetsBindingObserver {
         return Map<String, bool>.from(Toggly._flagDefaults);
       }
 
-      final parsedFlags =
-          Map<String, bool>.from(jsonDecode(flagsCache.flags));
+      final parsedFlags = Map<String, bool>.from(jsonDecode(flagsCache.flags));
 
       // Check if the cache is signed and if the timestamp and signature are present
       if (Toggly._useSignedDefinitions) {
@@ -485,7 +485,8 @@ class Toggly with WidgetsBindingObserver {
     }
 
     final variantsCache = await provider.readVariants(Toggly._contextCacheKey);
-    if (variantsCache != null && Toggly._contextCacheKey != variantsCache.identity) {
+    if (variantsCache != null &&
+        Toggly._contextCacheKey != variantsCache.identity) {
       await clearVariantCache();
     }
   }
@@ -505,7 +506,8 @@ class Toggly with WidgetsBindingObserver {
         headers['If-None-Match'] = revision;
       }
 
-      final queryParameters = Toggly._buildEvaluationQueryParameters(variants: false);
+      final queryParameters =
+          Toggly._buildEvaluationQueryParameters(variants: false);
 
       final response = await _http.get(
         '${Toggly._config.baseURI}/evaluated-signed/${Toggly._appKey}/${Toggly._environment}',
@@ -530,7 +532,8 @@ class Toggly with WidgetsBindingObserver {
         String keyId = signedResponse['kid'];
 
         // Check existing cache timestamp (anti-rollback) from the provider.
-        final existing = await Toggly._cache?.readFlags(Toggly._contextCacheKey);
+        final existing =
+            await Toggly._cache?.readFlags(Toggly._contextCacheKey);
         if (existing != null &&
             existing.timestamp != null &&
             timestamp <= existing.timestamp!) {
@@ -1319,8 +1322,7 @@ class Toggly with WidgetsBindingObserver {
       }
     };
 
-    Toggly._sync.onRefreshRequested =
-        ({required bool forceJwksRefresh}) async {
+    Toggly._sync.onRefreshRequested = ({required bool forceJwksRefresh}) async {
       if (forceJwksRefresh) {
         _definitionsRevision = null;
         Toggly._sync.updateCachedRevision(null);

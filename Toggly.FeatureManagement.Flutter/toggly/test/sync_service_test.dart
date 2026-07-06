@@ -50,9 +50,12 @@ void main() {
 
   group('SyncService.reconnectDelayForAttempt', () {
     test('exponentially backs off up to the max delay', () {
-      expect(SyncService.reconnectDelayForAttempt(0), const Duration(seconds: 5));
-      expect(SyncService.reconnectDelayForAttempt(1), const Duration(seconds: 10));
-      expect(SyncService.reconnectDelayForAttempt(10), const Duration(seconds: 60));
+      expect(
+          SyncService.reconnectDelayForAttempt(0), const Duration(seconds: 5));
+      expect(
+          SyncService.reconnectDelayForAttempt(1), const Duration(seconds: 10));
+      expect(SyncService.reconnectDelayForAttempt(10),
+          const Duration(seconds: 60));
     });
   });
 

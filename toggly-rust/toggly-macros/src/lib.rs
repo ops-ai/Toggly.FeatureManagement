@@ -175,20 +175,20 @@ fn expand_feature_flag(args: FeatureFlagArgs, input_fn: ItemFn) -> syn::Result<T
 ///
 /// #[derive(FeatureFlags)]
 /// pub enum Features {
-///     #[feature(key = "dark-mode")]
+///     #[toggly(key = "dark-mode")]
 ///     DarkMode,
 ///
-///     #[feature(key = "new-dashboard", default = true)]
+///     #[toggly(key = "new-dashboard", default = true)]
 ///     NewDashboard,
 ///
-///     #[feature(key = "beta-features")]
+///     #[toggly(key = "beta-features")]
 ///     BetaFeatures,
 /// }
 ///
 /// // Usage:
 /// let enabled = Features::DarkMode.is_enabled(&client, context).await?;
 /// ```
-#[proc_macro_derive(FeatureFlags, attributes(feature))]
+#[proc_macro_derive(FeatureFlags, attributes(toggly))]
 pub fn derive_feature_flags(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
 
@@ -218,9 +218,9 @@ fn expand_feature_flags(input: syn::DeriveInput) -> syn::Result<TokenStream2> {
         let mut feature_key = variant_name.to_string();
         let mut default_value = false;
 
-        // Parse #[feature(...)] attributes
+        // Parse #[toggly(...)] attributes
         for attr in &variant.attrs {
-            if attr.path().is_ident("feature") {
+            if attr.path().is_ident("toggly") {
                 attr.parse_nested_meta(|meta| {
                     if meta.path.is_ident("key") {
                         let value: syn::LitStr = meta.value()?.parse()?;

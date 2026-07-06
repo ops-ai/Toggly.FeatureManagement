@@ -513,7 +513,6 @@ class AsyncTogglyClient:
         if not self._config.app_key:
             raise TogglyConfigError("app_key is required for fetching variants")
 
-        import time
 
         from toggly.http import HttpClient, build_evaluated_variants_url
 

@@ -210,7 +210,8 @@ class SyncService {
 
       if (message.type == 'flags-updated' || message.type == 'update') {
         if (kDebugMode) {
-          print('Toggly: Received WebSocket flags update (type: ${message.type})');
+          print(
+              'Toggly: Received WebSocket flags update (type: ${message.type})');
         }
         if (_shouldFetchOnFlagsUpdated(message)) {
           requestRefresh();

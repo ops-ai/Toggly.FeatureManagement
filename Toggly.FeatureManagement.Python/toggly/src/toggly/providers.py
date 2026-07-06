@@ -249,7 +249,7 @@ class SnapshotProvider(ABC):
         """
         return None
 
-    def save_variants(self, snapshot: VariantsSnapshot) -> None:
+    def save_variants(self, snapshot: VariantsSnapshot) -> None:  # noqa: B027
         """Persist evaluated variants snapshot.
 
         Default implementation does nothing.

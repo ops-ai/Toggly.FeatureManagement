@@ -376,7 +376,7 @@ public class TogglyFeatureProviderTests : IDisposable
         debugInfo.Environment.Should().Be("staging");
         debugInfo.Definitions.Should().NotBeNull();
         debugInfo.Experiments.Should().NotBeNull();
-        debugInfo.UserAgent.Should().Contain("Toggly.FeatureManagement");
+        debugInfo.UserAgent.Should().Contain("toggly-dotnet");
     }
 
     [Fact]

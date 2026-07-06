@@ -49,8 +49,8 @@ from toggly.providers import (
     SnapshotProvider,
     VariantsSnapshot,
 )
-
 from toggly.version import __version__
+
 __all__ = [
     # Clients
     "TogglyClient",
@@ -98,4 +98,5 @@ __all__ = [
     "DefinitionsSnapshot",
     "VariantsSnapshot",
     "JwksSnapshot",
+    "__version__",
 ]

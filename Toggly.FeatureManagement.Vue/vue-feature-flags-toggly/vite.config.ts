@@ -28,7 +28,7 @@ export default defineConfig({
     },
 
     rollupOptions: {
-      external: ['vue'],
+      external: ['vue', '@ops-ai/toggly-hooks-types', '@ops-ai/toggly-local-gates'],
       output: {
         globals: {
           vue: 'Vue',
