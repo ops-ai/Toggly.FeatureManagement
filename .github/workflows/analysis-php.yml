@@ -64,7 +64,7 @@ jobs:
         working-directory: Toggly.FeatureManagement.PHP
         run: |
           if [ -f "vendor/bin/phpcs" ]; then
-            vendor/bin/phpcs --standard=PSR12 src/ || echo "Code style check completed with warnings"
+            vendor/bin/phpcs --standard=PSR12 src/
           else
             echo "PHP_CodeSniffer not installed, skipping code style check"
           fi
@@ -254,6 +254,15 @@ jobs:
     if: always()
     
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: test,smoke-test
+
       - name: Generate summary
         run: |
           echo "## PHP SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY

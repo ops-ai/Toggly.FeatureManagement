@@ -112,7 +112,7 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}/toggly
         run: |
           pip install -e ".[dev]"
-          python -m pytest || true
+          python -m pytest
 
       - name: Build integration packages
         run: |

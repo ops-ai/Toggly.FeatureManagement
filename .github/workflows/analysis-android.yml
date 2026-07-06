@@ -111,7 +111,12 @@ jobs:
 
       - name: Run tests with coverage
         working-directory: ${{ env.SDK_ROOT }}
-        run: ./gradlew testDebugUnitTest koverXmlReport || ./gradlew test
+        run: |
+          if ./gradlew tasks --all 2>/dev/null | grep -qE '( koverXmlReport|koverXmlReport )'; then
+            ./gradlew testDebugUnitTest koverXmlReport
+          else
+            ./gradlew test
+          fi
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -181,7 +186,12 @@ jobs:
 
       - name: Check API compatibility
         working-directory: ${{ env.SDK_ROOT }}
-        run: ./gradlew apiCheck || echo "API check not configured yet"
+        run: |
+          if ./gradlew tasks --all 2>/dev/null | grep -qE '(^apiCheck| apiCheck )'; then
+            ./gradlew apiCheck
+          else
+            echo "apiCheck task not configured, skipping"
+          fi
 
   smoke-test:
     name: Smoke Test

@@ -67,11 +67,11 @@ jobs:
 
       - name: Build package
         working-directory: ${{ matrix.path }}
-        run: npm run build || echo "No build script configured"
+        run: npm run build --if-present
 
       - name: Run TypeScript type check
         working-directory: ${{ matrix.path }}
-        run: npm run typecheck || echo "No typecheck script configured"
+        run: npm run typecheck --if-present
 
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}
@@ -270,6 +270,15 @@ jobs:
     if: always()
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: test,smoke-test
+
       - name: Check test results
         run: |
           echo "## React Native SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY

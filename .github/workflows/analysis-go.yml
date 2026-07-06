@@ -190,13 +190,12 @@ jobs:
             for example in examples/*.go; do
               if [ -f "$example" ]; then
                 echo "Building $example"
-                go build -v "$example" || echo "Failed to build $example"
+                go build -v "$example"
               fi
             done
           else
             echo "No examples directory found"
           fi
-        continue-on-error: true
 
   dependency-check:
     name: OWASP Dependency Check
@@ -255,6 +254,15 @@ jobs:
     if: always()
     
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: test,smoke-test,build
+
       - name: Generate summary
         working-directory: .
         run: |

@@ -115,7 +115,7 @@ jobs:
 
       - name: Run core tests
         working-directory: ${{ env.SDK_ROOT }}/toggly
-        run: bundle exec rspec || true
+        run: bundle exec rspec
 
       - name: Build core gem
         working-directory: ${{ env.SDK_ROOT }}/toggly

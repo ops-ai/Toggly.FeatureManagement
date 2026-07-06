@@ -254,6 +254,15 @@ jobs:
     if: always()
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: test,smoke-test
+
       - name: Generate summary
         working-directory: .
         run: |

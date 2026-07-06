@@ -112,7 +112,6 @@ jobs:
       - name: Run tests
         working-directory: ${{ env.SDK_ROOT }}/toggly-rails
         run: bundle exec rspec --format documentation
-        continue-on-error: true
 
       - name: Upload coverage (Ruby 3.3, Rails 8.0 only)
         if: matrix.ruby == '3.3' && matrix.rails == '8.0'
@@ -161,7 +160,6 @@ jobs:
         run: bundle exec rspec --format documentation
         env:
           REDIS_URL: redis://localhost:6379
-        continue-on-error: true
 
       - name: Upload coverage (Ruby 3.3 only)
         if: matrix.ruby == '3.3'
@@ -353,6 +351,15 @@ jobs:
     if: always()
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: test-core,test-rails,test-cache,smoke-test
+
       - name: Generate summary
         run: |
           echo "## Ruby SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY

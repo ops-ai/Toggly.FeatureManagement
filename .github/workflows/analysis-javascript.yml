@@ -115,11 +115,11 @@ jobs:
 
       - name: Build package (if needed)
         working-directory: ${{ matrix.path }}
-        run: npm run build || echo "No build script configured"
+        run: npm run build --if-present
 
       - name: Run TypeScript type check
         working-directory: ${{ matrix.path }}
-        run: npm run typecheck || echo "No typecheck script configured"
+        run: npm run typecheck --if-present
 
       - name: Run linter
         if: matrix.has-lint == true
@@ -501,6 +501,15 @@ jobs:
     if: always()
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: test,test-node-server,smoke-test,smoke-test-node-server
+
       - name: Check test results
         run: |
           echo "## JavaScript/TypeScript SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY

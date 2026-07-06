@@ -545,10 +545,19 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [test-core, test-django, test-flask, test-fastapi, test-cache, smoke-test, build, sonar, dependency-check]
+    needs: [lint, type-check, test-core, test-django, test-flask, test-fastapi, test-cache, integration, smoke-test, build, sonar, dependency-check]
     if: always()
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: lint,type-check,test-core,test-django,test-flask,test-fastapi,test-cache,integration,smoke-test,build
+
       - name: Generate summary
         working-directory: .
         run: |

@@ -111,7 +111,6 @@ jobs:
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj -c Release
-        continue-on-error: true
 
       - name: Run core tests
         run: |
@@ -121,7 +120,6 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=core-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-        continue-on-error: true
 
       - name: Run Web tests
         run: |
@@ -131,7 +129,6 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=web-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-        continue-on-error: true
 
       - name: Run DistributedCache storage tests
         run: |
@@ -141,7 +138,6 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=distributedcache-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-        continue-on-error: true
 
       - name: Run Hangfire tests
         run: |
@@ -151,7 +147,6 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=hangfire-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-        continue-on-error: true
 
       - name: Run NSwag tests
         run: |
@@ -161,7 +156,6 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=nswag-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-        continue-on-error: true
 
       - name: Run Dapper storage tests
         run: |
@@ -171,7 +165,6 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=dapper-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-        continue-on-error: true
 
       - name: Run EntityFramework storage tests
         run: |
@@ -181,7 +174,6 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=ef-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-        continue-on-error: true
 
       - name: Run MongoDB storage tests
         run: |
@@ -191,7 +183,6 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=mongodb-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-        continue-on-error: true
 
       - name: Run RavenDB storage tests
         run: |
@@ -201,7 +192,6 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=ravendb-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-        continue-on-error: true
 
       - name: Run SystemMetrics tests
         run: |
@@ -211,7 +201,6 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=systemmetrics-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-        continue-on-error: true
 
       - name: Merge coverage reports
         run: |

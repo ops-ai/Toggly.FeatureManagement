@@ -55,21 +55,18 @@ jobs:
           else
             echo "No build_runner found, skipping code generation"
           fi
-        continue-on-error: true
       
       - name: Analyze code
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
-        continue-on-error: true
       
       - name: Check formatting
         run: dart format --output=none --set-exit-if-changed .
-        continue-on-error: true
       
       - name: Run tests with coverage
         run: flutter test --coverage --test-randomize-ordering-seed random
-        continue-on-error: true
       
       - name: Display coverage summary
+        if: always()
         run: |
           if [ -f "coverage/lcov.info" ]; then
             echo "Coverage file generated successfully"
@@ -77,7 +74,6 @@ jobs:
           else
             echo "No coverage file generated"
           fi
-        continue-on-error: true
       
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -209,7 +205,6 @@ jobs:
       
       - name: Build ${{ matrix.platform }}
         run: ${{ matrix.build-cmd }}
-        continue-on-error: true
 
   smoke-test:
     name: Smoke Test
@@ -348,24 +343,21 @@ jobs:
           else
             echo "No build_runner found, skipping code generation"
           fi
-        continue-on-error: true
 
       - name: Analyze code
         working-directory: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
-        continue-on-error: true
 
       - name: Check formatting
         working-directory: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}
         run: dart format --output=none --set-exit-if-changed lib test
-        continue-on-error: true
 
       - name: Run tests with coverage
         working-directory: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}
         run: flutter test --coverage --test-randomize-ordering-seed random
-        continue-on-error: true
 
       - name: Display coverage summary
+        if: always()
         working-directory: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}
         run: |
           if [ -f "coverage/lcov.info" ]; then
@@ -374,7 +366,6 @@ jobs:
           else
             echo "No coverage file generated"
           fi
-        continue-on-error: true
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -467,6 +458,15 @@ jobs:
     if: always()
     
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: analyze,build-platforms,smoke-test,analyze-providers
+
       - name: Generate summary
         working-directory: .
         run: |

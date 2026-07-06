@@ -1,0 +1,41 @@
+name: Verify required jobs passed
+description: Fail when any required upstream job failed or was cancelled.
+
+inputs:
+  needs-json:
+    description: JSON string from toJSON(needs)
+    required: true
+  required-jobs:
+    description: Comma-separated job IDs that must succeed (e.g. test,smoke-test)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Verify required jobs passed
+      shell: bash
+      env:
+        NEEDS_JSON: ${{ inputs.needs-json }}
+        REQUIRED_JOBS: ${{ inputs.required-jobs }}
+      run: |
+        node <<'EOF'
+        const needs = JSON.parse(process.env.NEEDS_JSON);
+        const required = process.env.REQUIRED_JOBS.split(',')
+          .map((job) => job.trim())
+          .filter(Boolean);
+
+        const failed = required.filter((job) => {
+          const result = needs[job]?.result;
+          return result === 'failure' || result === 'cancelled';
+        });
+
+        if (failed.length) {
+          console.error('Required jobs failed or were cancelled:');
+          for (const job of failed) {
+            console.error(`  ${job}: ${needs[job]?.result}`);
+          }
+          process.exit(1);
+        }
+
+        console.log('All required jobs passed:', required.join(', '));
+        EOF

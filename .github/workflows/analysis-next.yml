@@ -329,6 +329,15 @@ jobs:
     if: always()
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: build-and-test,coverage,smoke-test
+
       - name: Generate summary
         run: |
           echo "## Next.js SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
