@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.spec.json",
+  "exclude": [],
+  "include": [
+    "src/**/smoke.spec.ts",
+    "src/**/smoke-ws.spec.ts",
+    "src/**/*.d.ts"
+  ]
+}

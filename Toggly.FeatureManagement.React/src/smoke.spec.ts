@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import Toggly from './services/toggly.service';
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
@@ -12,7 +15,7 @@ describe('Smoke test', () => {
       appKey: appKey!,
       environment: 'Production',
       baseURI: 'https://definitions.toggly.io',
-      featureFlagsRefreshInterval: 0,
+      enableLiveUpdates: false,
     });
 
     await expect(service.isFeatureOn('FlagOn')).resolves.toBe(true);

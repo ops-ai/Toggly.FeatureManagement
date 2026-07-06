@@ -19,8 +19,7 @@ describe('Smoke test', () => {
       imports: [NgxFeatureFlagsTogglyModule.forRoot({
         appKey,
         environment: 'Production',
-        baseURI: '/toggly-proxy',
-        featureFlagsRefreshInterval: 0,
+        baseURI: 'https://definitions.toggly.io',
       })],
     });
 

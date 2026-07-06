@@ -29,7 +29,8 @@
           "options": {
             "tsConfig": "projects/ngx-feature-flags-toggly/tsconfig.spec.json",
             "karmaConfig": "projects/ngx-feature-flags-toggly/karma.conf.js",
-            "polyfills": ["zone.js", "zone.js/testing"]
+            "polyfills": ["zone.js", "zone.js/testing"],
+            "exclude": ["**/smoke.spec.ts", "**/smoke-ws.spec.ts"]
           }
         },
         "lint": {

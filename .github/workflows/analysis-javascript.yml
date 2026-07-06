@@ -213,10 +213,10 @@ jobs:
         include:
           - sdk: Angular
             path: Toggly.FeatureManagement.Angular
-            smoke-cmd: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --include="projects/ngx-feature-flags-toggly/src/lib/smoke.spec.ts" --include="projects/ngx-feature-flags-toggly/src/lib/smoke-ws.spec.ts"
+            smoke-cmd: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --ts-config=projects/ngx-feature-flags-toggly/tsconfig.smoke.spec.json --include="projects/ngx-feature-flags-toggly/src/lib/smoke.spec.ts" --include="projects/ngx-feature-flags-toggly/src/lib/smoke-ws.spec.ts"
           - sdk: React
             path: Toggly.FeatureManagement.React
-            smoke-cmd: npx jest src/smoke.spec.ts src/smoke-ws.spec.ts --runInBand --forceExit --testPathIgnorePatterns='/node_modules/'
+            smoke-cmd: npx jest --config jest.smoke.config.js --runInBand --forceExit
           - sdk: Vue
             path: Toggly.FeatureManagement.Vue/vue-feature-flags-toggly
             smoke-cmd: npx vitest run --config vitest.smoke.config.ts src/__tests__/smoke.spec.ts src/__tests__/smoke-ws.spec.ts

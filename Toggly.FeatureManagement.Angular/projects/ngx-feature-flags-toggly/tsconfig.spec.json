@@ -9,5 +9,9 @@
   "include": [
     "src/**/*.spec.ts",
     "src/**/*.d.ts"
+  ],
+  "exclude": [
+    "src/**/smoke.spec.ts",
+    "src/**/smoke-ws.spec.ts"
   ]
 }

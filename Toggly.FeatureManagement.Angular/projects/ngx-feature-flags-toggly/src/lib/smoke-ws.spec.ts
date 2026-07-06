@@ -37,8 +37,8 @@ describe('WebSocket smoke test', () => {
     const parsed = JSON.parse(message);
     expect(['sync', 'definitions', 'evaluated']).toContain(parsed.type);
     if (parsed.type === 'sync') {
-      expect(parsed).toHaveProperty('etag');
-      expect(parsed).toHaveProperty('lastUpdated');
+      expect(parsed.etag).toBeDefined();
+      expect(parsed.lastUpdated).toBeDefined();
     } else {
       expect(parsed.timestamp).toBeDefined();
     }
