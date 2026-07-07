@@ -76,10 +76,27 @@ describe('FeatureFlagDirective', () => {
     it('should hide when some keys disabled (all)', fakeAsync(() => {
       configureAndCreate();
       host.flag = ['A', 'C'];
+      host.requirement = 'all';
       fixture.detectChanges();
       tick();
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('.content')).toBeNull();
+    }));
+
+    it('should re-evaluate when requirement changes from all to any', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = ['A', 'C'];
+      host.requirement = 'all';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeNull();
+
+      host.requirement = 'any';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
     }));
   });
 

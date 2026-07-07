@@ -8,7 +8,10 @@ type FeatureProps = {
   variant?: string
   requirement?: string
   negate?: boolean
-  children: React.ReactNode
+  children?: React.ReactNode
+  fallback?: React.ReactNode
+  /** Render prop for conditional styling; always invoked with resolved gate boolean. */
+  render?: (enabled: boolean) => React.ReactNode
 }
 
 class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
@@ -57,7 +60,11 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
 
   componentDidMount() {
     const gate = this.buildGate()
-    if (gate.length > 0 && this.context.toggly) {
+    if (gate.length === 0) {
+      this.setState({ shouldShow: !(this.props.negate ?? false) })
+      return
+    }
+    if (this.context.toggly) {
       this.runGate()
       this.unsubscribeRefresh = this.context.toggly.subscribeFeaturesRefresh(this.runGate)
       this.unsubscribeLocalGates = this.context.toggly.subscribeLocalGatesChanged(this.runGate)
@@ -86,7 +93,11 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
   }
 
   render() {
-    return this.state.shouldShow ? this.props.children : null
+    if (this.props.render) {
+      return <>{this.props.render(this.state.shouldShow)}</>
+    }
+
+    return this.state.shouldShow ? this.props.children : (this.props.fallback ?? null)
   }
 }
 

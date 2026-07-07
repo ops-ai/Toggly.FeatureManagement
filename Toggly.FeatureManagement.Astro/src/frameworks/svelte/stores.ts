@@ -1,85 +1,35 @@
 /**
  * Svelte-specific store utilities for Toggly
- * 
+ *
  * Re-exports nanostores for easy use in Svelte components
  */
 
-import { derived } from 'svelte/store';
-import { $flags, $isReady, $variants } from '../../client/store.js';
+import { derived, get } from 'svelte/store';
+import { $flag, $gate, $isReady, $variants, $flags, $localGatesRevision } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
 
 /**
- * Create a derived store for a specific feature flag
- * 
- * @param flagKey - Feature flag key to check
- * @param defaultValue - Default value if flag not found (default: false)
- * @returns Svelte-compatible derived store
- * 
- * @example
- * ```svelte
- * <script>
- * import { featureFlag } from '@ops-ai/astro-feature-flags-toggly/svelte';
- * 
- * const newDashboard = featureFlag('new-dashboard');
- * </script>
- * 
- * {#if $newDashboard}
- *   <NewDashboard />
- * {:else}
- *   <OldDashboard />
- * {/if}
- * ```
+ * Create a derived store for a specific feature flag (includes local post-filter gates).
  */
 export function featureFlag(flagKey: string, defaultValue: boolean = false) {
-  return derived($flags, ($flags) => $flags[flagKey] ?? defaultValue);
+  return derived([$flags, $localGatesRevision], () => {
+    return $flag(flagKey, defaultValue).get();
+  });
 }
 
 /**
- * Create a derived store that evaluates multiple feature flags
- * 
- * @param flagKeys - Array of feature flag keys to check
- * @param requirement - 'all' or 'any' (default: 'all')
- * @param negate - If true, negates the result (default: false)
- * @returns Svelte-compatible derived store
- * 
- * @example
- * ```svelte
- * <script>
- * import { featureGate } from '@ops-ai/astro-feature-flags-toggly/svelte';
- * 
- * const hasAnyFeature = featureGate(['feature1', 'feature2'], 'any');
- * </script>
- * 
- * {#if $hasAnyFeature}
- *   <NewFeatures />
- * {:else}
- *   <OldFeatures />
- * {/if}
- * ```
+ * Create a derived store that evaluates multiple feature flags (includes local post-filter gates).
  */
 export function featureGate(
   flagKeys: string[],
   requirement: 'all' | 'any' = 'all',
-  negate: boolean = false
+  negate: boolean = false,
 ) {
-  return derived($flags, ($flags) => {
-    if (flagKeys.length === 0) {
-      return !negate;
-    }
-
-    let isEnabled: boolean;
-
-    if (requirement === 'any') {
-      isEnabled = flagKeys.some((key) => $flags[key] === true);
-    } else {
-      isEnabled = flagKeys.every((key) => $flags[key] === true);
-    }
-
-    if (negate) {
-      isEnabled = !isEnabled;
-    }
-
-    return isEnabled;
+  const keysKey = flagKeys.join('\0');
+  const gateAtom = $gate(flagKeys, requirement, negate);
+  return derived([$flags, $localGatesRevision], () => {
+    void keysKey;
+    return gateAtom.get();
   });
 }
 
@@ -99,7 +49,16 @@ export function featureVariant(featureKey: string) {
   });
 }
 
+/**
+ * Read the current effective gate boolean synchronously.
+ */
+export function readFeatureGate(
+  flagKeys: string[],
+  requirement: 'all' | 'any' = 'all',
+  negate: boolean = false,
+): boolean {
+  return get($gate(flagKeys, requirement, negate));
+}
+
 // Re-export base stores for direct use
 export { $flags as flags, $isReady as isReady, $variants as variants };
-
-

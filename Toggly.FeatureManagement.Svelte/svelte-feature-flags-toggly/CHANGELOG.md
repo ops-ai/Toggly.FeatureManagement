@@ -1,3 +1,13 @@
+## 1.6.0
+
+2026-07-07
+
+### Added
+- `FeatureGateBuilder` component with `let:enabled` slot for conditional styling and behavior.
+
+### Fixed
+- `<Feature>` now re-evaluates when device-local post-filter gates change via `notifyLocalGatesChanged()`.
+
 ## 1.5.0
 
 2026-07-05

@@ -3,24 +3,33 @@ import { $flags, $isReady, $variants, __resetClient } from '../../client/store.j
 
 // Mock svelte/store's derived to use a simple implementation
 vi.mock('svelte/store', () => ({
-  derived: vi.fn((store: any, fn: (value: any) => any) => {
-    // Return an object that mimics a Svelte store with subscribe
-    let currentValue = fn(store.get());
+  get: vi.fn((store: { get: () => unknown }) => store.get()),
+  derived: vi.fn((stores: any, fn: (...args: any[]) => any) => {
+    const storeList = Array.isArray(stores) ? stores : [stores]
+    const compute = () => {
+      if (storeList.length === 1) {
+        return fn(storeList[0].get())
+      }
+      return fn()
+    }
+
+    let currentValue = compute()
 
     return {
       subscribe: (callback: (value: any) => void) => {
-        callback(currentValue);
-        const unsub = store.subscribe((val: any) => {
-          currentValue = fn(val);
-          callback(currentValue);
-        });
-        return unsub;
+        callback(currentValue)
+        const unsubs = storeList.map((store) =>
+          store.subscribe(() => {
+            currentValue = compute()
+            callback(currentValue)
+          }),
+        )
+        return () => unsubs.forEach((unsub) => unsub())
       },
-      // Helper for testing
       get: () => currentValue,
-    };
+    }
   }),
-}));
+}))
 
 import { featureFlag, featureGate, featureVariant, flags, isReady, variants } from '../../frameworks/svelte/stores.js';
 

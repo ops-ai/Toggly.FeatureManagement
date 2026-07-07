@@ -1,12 +1,13 @@
 /**
  * React Feature Component for Astro Islands
- * 
+ *
  * Use this component in React islands within Astro for client-side feature flagging.
  * Integrates with nanostores for reactive state management.
  */
 
+import { useMemo } from 'react';
 import { useStore } from '@nanostores/react';
-import { $flags, $isReady, $variants } from '../../client/store.js';
+import { $flag, $gate, $isReady, $variants } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
 import type { ReactNode } from 'react';
 
@@ -20,34 +21,41 @@ export interface FeatureProps {
   /** If true, negates the result (default: false) */
   negate?: boolean;
   /** Content to render when flag is enabled */
-  children: ReactNode;
+  children?: ReactNode;
   /** Content to render when flag is disabled (optional) */
   fallback?: ReactNode;
+  /** Render prop for conditional styling; always invoked with resolved gate boolean */
+  render?: (enabled: boolean) => ReactNode;
+}
+
+function buildFlagKeys(flag?: string, flags?: string[]): string[] {
+  const flagKeys: string[] = [];
+  if (flag) {
+    flagKeys.push(flag);
+  }
+  if (flags && Array.isArray(flags)) {
+    flagKeys.push(...flags);
+  }
+  return flagKeys;
+}
+
+function useGateEnabled(
+  flag?: string,
+  flags?: string[],
+  requirement: 'all' | 'any' = 'all',
+  negate = false,
+): boolean {
+  const flagKeys = useMemo(() => buildFlagKeys(flag, flags), [flag, flags]);
+  const keysKey = flagKeys.join('\0');
+  const gateAtom = useMemo(
+    () => $gate(flagKeys, requirement, negate),
+    [keysKey, requirement, negate],
+  );
+  return useStore(gateAtom);
 }
 
 /**
  * Feature - React component for conditional rendering based on feature flags
- * 
- * @example
- * ```tsx
- * <Feature flag="new-dashboard">
- *   <Dashboard />
- * </Feature>
- * ```
- * 
- * @example Multiple flags with 'any' requirement
- * ```tsx
- * <Feature flags={['feature1', 'feature2']} requirement="any">
- *   <Content />
- * </Feature>
- * ```
- * 
- * @example With fallback
- * ```tsx
- * <Feature flag="premium-feature" fallback={<UpgradePrompt />}>
- *   <PremiumContent />
- * </Feature>
- * ```
  */
 export function Feature({
   flag,
@@ -56,116 +64,61 @@ export function Feature({
   negate = false,
   children,
   fallback = null,
+  render,
 }: FeatureProps) {
-  const allFlags = useStore($flags);
   const isReady = useStore($isReady);
+  const isEnabled = useGateEnabled(flag, flags, requirement, negate);
 
-  // Build flag keys array
-  const flagKeys: string[] = [];
-  if (flag) {
-    flagKeys.push(flag);
-  }
-  if (flags && Array.isArray(flags)) {
-    flagKeys.push(...flags);
+  if (render) {
+    if (!isReady) {
+      return <>{render(false)}</>;
+    }
+    return <>{render(isEnabled)}</>;
   }
 
-  // Wait for flags to be ready
   if (!isReady) {
     return <>{fallback}</>;
   }
 
-  // No flags specified
+  const flagKeys = buildFlagKeys(flag, flags);
   if (flagKeys.length === 0) {
     return <>{negate ? fallback : children}</>;
-  }
-
-  // Evaluate flags
-  let isEnabled: boolean;
-
-  if (requirement === 'any') {
-    isEnabled = flagKeys.some((key) => allFlags[key] === true);
-  } else {
-    isEnabled = flagKeys.every((key) => allFlags[key] === true);
-  }
-
-  if (negate) {
-    isEnabled = !isEnabled;
   }
 
   return <>{isEnabled ? children : fallback}</>;
 }
 
 /**
- * Hook to check if a feature flag is enabled
- * 
- * @param flagKey - Feature flag key to check
- * @param defaultValue - Default value if flag not found (default: false)
- * @returns Object with enabled state and ready state
- * 
- * @example
- * ```tsx
- * function MyComponent() {
- *   const { enabled, isReady } = useFeatureFlag('new-dashboard');
- *   
- *   if (!isReady) return <Loading />;
- *   if (!enabled) return <OldDashboard />;
- *   return <NewDashboard />;
- * }
- * ```
+ * Hook to check if a feature flag is enabled (includes local post-filter gates).
  */
 export function useFeatureFlag(
   flagKey: string,
-  defaultValue: boolean = false
+  defaultValue: boolean = false,
 ): { enabled: boolean; isReady: boolean } {
-  const flags = useStore($flags);
+  const flagAtom = useMemo(() => $flag(flagKey, defaultValue), [flagKey, defaultValue]);
+  const enabled = useStore(flagAtom);
   const isReady = useStore($isReady);
-
-  const enabled = flags[flagKey] ?? defaultValue;
 
   return { enabled, isReady };
 }
 
 /**
- * Hook to check if multiple feature flags are enabled
- * 
- * @param flagKeys - Array of feature flag keys to check
- * @param requirement - 'all' or 'any' (default: 'all')
- * @param negate - If true, negates the result (default: false)
- * @returns Object with enabled state and ready state
- * 
- * @example
- * ```tsx
- * function MyComponent() {
- *   const { enabled } = useFeatureGate(['feature1', 'feature2'], 'any');
- *   return enabled ? <NewFeatures /> : <OldFeatures />;
- * }
- * ```
+ * Hook to check if multiple feature flags are enabled (includes local post-filter gates).
  */
 export function useFeatureGate(
   flagKeys: string[],
   requirement: 'all' | 'any' = 'all',
-  negate: boolean = false
+  negate: boolean = false,
 ): { enabled: boolean; isReady: boolean } {
-  const flags = useStore($flags);
+  const keysKey = flagKeys.join('\0');
+  const gateAtom = useMemo(
+    () => $gate(flagKeys, requirement, negate),
+    [keysKey, requirement, negate],
+  );
+  const enabled = useStore(gateAtom);
   const isReady = useStore($isReady);
 
-  if (flagKeys.length === 0) {
-    return { enabled: !negate, isReady };
-  }
-
-  let isEnabled: boolean;
-
-  if (requirement === 'any') {
-    isEnabled = flagKeys.some((key) => flags[key] === true);
-  } else {
-    isEnabled = flagKeys.every((key) => flags[key] === true);
-  }
-
-  if (negate) {
-    isEnabled = !isEnabled;
-  }
-
-  return { enabled: isEnabled, isReady };
+  return { enabled, isReady };
 }
 
 /**
@@ -184,5 +137,3 @@ export function useVariant(featureKey: string): VariantResult | null {
 }
 
 export default Feature;
-
-

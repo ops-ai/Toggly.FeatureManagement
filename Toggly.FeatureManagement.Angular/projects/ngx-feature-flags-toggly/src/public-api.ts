@@ -10,6 +10,7 @@ export * from './lib/models'
 export * from './lib/toggly.service'
 
 // Components & Directives (standalone)
+export * from './lib/feature-gate-builder.directive'
 export * from './lib/feature.component'
 export * from './lib/feature-template.directive'
 export * from './lib/feature.directive'

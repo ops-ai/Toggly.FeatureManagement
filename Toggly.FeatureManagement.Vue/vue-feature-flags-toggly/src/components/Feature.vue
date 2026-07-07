@@ -1,7 +1,5 @@
 <template>
-  <div v-if="shouldShow">
-    <slot></slot>
-  </div>
+  <slot v-if="shouldShow"></slot>
 </template>
 
 <script lang="ts">

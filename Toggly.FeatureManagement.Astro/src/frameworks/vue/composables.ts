@@ -4,93 +4,55 @@
 
 import { computed, type Ref } from 'vue';
 import { useStore } from '@nanostores/vue';
-import { $flags, $isReady, $variants } from '../../client/store.js';
+import { $flag, $gate, $isReady, $variants, $flags, $localGatesRevision } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
 
 /**
- * Hook to check if a feature flag is enabled
- * 
- * @param flagKey - Feature flag key to check
- * @param defaultValue - Default value if flag not found (default: false)
- * @returns Object with enabled state and ready state
- * 
- * @example
- * ```vue
- * <script setup>
- * const { enabled, isReady } = useFeatureFlag('new-dashboard');
- * </script>
- * 
- * <template>
- *   <Loading v-if="!isReady" />
- *   <NewDashboard v-else-if="enabled" />
- *   <OldDashboard v-else />
- * </template>
- * ```
+ * Hook to check if a feature flag is enabled (includes local post-filter gates).
  */
 export function useFeatureFlag(
   flagKey: string,
-  defaultValue: boolean = false
+  defaultValue: boolean = false,
 ): {
   enabled: Readonly<Ref<boolean>>;
   isReady: Readonly<Ref<boolean>>;
 } {
   const flags = useStore($flags);
+  const localGatesRevision = useStore($localGatesRevision);
   const isReady = useStore($isReady);
 
-  const enabled = computed(() => flags.value[flagKey] ?? defaultValue);
+  const enabled = computed(() => {
+    void flags.value;
+    void localGatesRevision.value;
+    return $flag(flagKey, defaultValue).get();
+  });
 
   return { enabled, isReady };
 }
 
 /**
- * Hook to check if multiple feature flags are enabled
- * 
- * @param flagKeys - Array of feature flag keys to check
- * @param requirement - 'all' or 'any' (default: 'all')
- * @param negate - If true, negates the result (default: false)
- * @returns Object with enabled state and ready state
- * 
- * @example
- * ```vue
- * <script setup>
- * const { enabled } = useFeatureGate(['feature1', 'feature2'], 'any');
- * </script>
- * 
- * <template>
- *   <NewFeatures v-if="enabled" />
- *   <OldFeatures v-else />
- * </template>
- * ```
+ * Hook to check if multiple feature flags are enabled (includes local post-filter gates).
  */
 export function useFeatureGate(
   flagKeys: string[],
   requirement: 'all' | 'any' = 'all',
-  negate: boolean = false
+  negate: boolean = false,
 ): {
   enabled: Readonly<Ref<boolean>>;
   isReady: Readonly<Ref<boolean>>;
 } {
   const flags = useStore($flags);
+  const localGatesRevision = useStore($localGatesRevision);
   const isReady = useStore($isReady);
+  const keysKey = flagKeys.join('\0');
+
+  const gateAtom = computed(() => $gate(flagKeys, requirement, negate));
 
   const enabled = computed(() => {
-    if (flagKeys.length === 0) {
-      return !negate;
-    }
-
-    let isEnabled: boolean;
-
-    if (requirement === 'any') {
-      isEnabled = flagKeys.some((key) => flags.value[key] === true);
-    } else {
-      isEnabled = flagKeys.every((key) => flags.value[key] === true);
-    }
-
-    if (negate) {
-      isEnabled = !isEnabled;
-    }
-
-    return isEnabled;
+    void flags.value;
+    void localGatesRevision.value;
+    void keysKey;
+    return gateAtom.value.get();
   });
 
   return { enabled, isReady };
@@ -112,5 +74,3 @@ export function useVariant(featureKey: string): Readonly<Ref<VariantResult | nul
     };
   });
 }
-
-

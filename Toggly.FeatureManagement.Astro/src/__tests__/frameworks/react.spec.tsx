@@ -2,15 +2,19 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { $flags, $isReady, $variants, __resetClient } from '../../client/store.js';
 
-// We test the pure logic of Feature, useFeatureFlag, useFeatureGate
-// by importing them and testing with nanostores directly.
-// Full React rendering tests would require @testing-library/react,
-// but we can test the hooks' logic by mocking useStore.
-
 // Mock @nanostores/react to return store values directly
 vi.mock('@nanostores/react', () => ({
   useStore: vi.fn((store: any) => store.get()),
 }));
+
+// Allow Feature tests to invoke useMemo without a React dispatcher
+vi.mock('react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react')>();
+  return {
+    ...actual,
+    useMemo: <T,>(factory: () => T) => factory(),
+  };
+});
 
 import { Feature, useFeatureFlag, useFeatureGate, useVariant } from '../../frameworks/react/Feature.js';
 

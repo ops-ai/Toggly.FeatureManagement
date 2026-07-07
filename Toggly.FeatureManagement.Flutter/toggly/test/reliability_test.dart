@@ -254,6 +254,7 @@ void main() {
 
     Toggly.cacheFeatureFlags(featureFlags: '{"FeatureA":true}');
     await tester.pump();
+    await tester.pump();
 
     expect(find.text('Visible feature'), findsOneWidget);
   });

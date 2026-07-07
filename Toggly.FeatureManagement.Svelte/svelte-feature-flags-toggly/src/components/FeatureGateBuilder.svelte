@@ -8,7 +8,7 @@
   export let requirement: 'all' | 'any' = 'all'
   export let negate: boolean = false
 
-  let shouldShow: boolean = false
+  let enabled: boolean = false
   let toggly: TogglyService | null = null
   let unsubscribeFlags: (() => void) | null = null
   let unsubscribeLocalGates: (() => void) | null = null
@@ -18,14 +18,11 @@
       try {
         toggly = getTogglyService()
       } catch (error) {
-        console.error('Toggly Feature component error:', error)
-        shouldShow = false
+        console.error('Toggly FeatureGateBuilder error:', error)
+        enabled = false
         return
       }
     }
-
-    // Check if we should show the feature during evaluation
-    shouldShow = toggly.shouldShowFeatureDuringEvaluation
 
     const gate: string[] = []
 
@@ -37,20 +34,20 @@
       gate.push(...featureKeys)
     }
 
-    if (gate.length > 0 && toggly) {
-      try {
-        shouldShow = await toggly.evaluateFeatureGate(gate, requirement, negate)
-      } catch (error) {
-        console.error('Toggly Feature evaluation error:', error)
-        shouldShow = false
-      }
-    } else {
-      shouldShow = true
+    if (gate.length === 0) {
+      enabled = !negate
+      return
+    }
+
+    try {
+      enabled = await toggly.evaluateFeatureGate(gate, requirement, negate)
+    } catch (error) {
+      console.error('Toggly FeatureGateBuilder evaluation error:', error)
+      enabled = false
     }
   }
 
-  // Reactive statement to re-evaluate when props change
-  $: if (toggly || featureKey || featureKeys) {
+  $: if (toggly || featureKey || featureKeys || requirement || negate) {
     evaluateFeature()
   }
 
@@ -70,6 +67,4 @@
   })
 </script>
 
-{#if shouldShow}
-  <slot />
-{/if}
+<slot {enabled} />

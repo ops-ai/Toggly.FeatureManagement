@@ -61,7 +61,7 @@ const { flag, client = 'load', requirement = 'all', negate = false } = Astro.pro
 </div>
 
 <script>
-  import { $flags, $isReady } from '@ops-ai/astro-feature-flags-toggly/client/store';
+  import { $gate, $isReady } from '@ops-ai/astro-feature-flags-toggly/client/store';
 
   // Hydrate all FeatureClient components
   function hydrateFeatureClients() {
@@ -79,27 +79,12 @@ const { flag, client = 'load', requirement = 'all', negate = false } = Astro.pro
 
       if (!content || !fallback) return;
 
-      // Subscribe to flags changes
-      const unsubscribe = $flags.subscribe((flags) => {
-        // Wait for flags to be ready
-        const ready = $isReady.get();
-        if (!ready) return;
+      const flagKeys = flag.split(',').map((k) => k.trim());
+      const gateAtom = $gate(flagKeys, requirement, negate);
 
-        // Evaluate flag
-        const flagKeys = flag.split(',').map((k) => k.trim());
-        let isEnabled: boolean;
+      const updateDisplay = (isEnabled: boolean) => {
+        if (!$isReady.get()) return;
 
-        if (requirement === 'any') {
-          isEnabled = flagKeys.some((key) => flags[key] === true);
-        } else {
-          isEnabled = flagKeys.every((key) => flags[key] === true);
-        }
-
-        if (negate) {
-          isEnabled = !isEnabled;
-        }
-
-        // Show/hide content based on flag
         if (isEnabled) {
           content.style.display = '';
           fallback.style.display = 'none';
@@ -107,7 +92,21 @@ const { flag, client = 'load', requirement = 'all', negate = false } = Astro.pro
           content.style.display = 'none';
           fallback.style.display = '';
         }
+      };
+
+      const unsubscribeGate = gateAtom.subscribe((isEnabled) => {
+        updateDisplay(isEnabled);
       });
+      const unsubscribeReady = $isReady.subscribe((ready) => {
+        if (ready) {
+          updateDisplay(gateAtom.get());
+        }
+      });
+
+      const unsubscribe = () => {
+        unsubscribeGate();
+        unsubscribeReady();
+      };
 
       // Store unsubscribe function for cleanup
       (element as any).__togglyUnsubscribe = unsubscribe;

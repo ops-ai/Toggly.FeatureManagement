@@ -1,3 +1,21 @@
+## 1.6.1
+
+2026-07-07
+
+### Changed
+- `useFeatureGate` now accepts a single options object (`{ featureKey?, featureKeys?, requirement?, negate?, toggly? }`) or a `computed()` when options depend on reactive props, instead of positional arguments.
+
+### Fixed
+- `<Feature>` no longer wraps slotted content in an extra `<div>` when visible.
+
+## 1.6.0
+
+2026-07-07
+
+### Added
+- `FeatureGateBuilder` component with scoped slot `{ enabled }` for conditional styling and behavior.
+- `useFeatureFlag` and `useFeatureGate` composables mirroring the builder evaluation path.
+
 ## 1.5.0
 
 2026-07-05

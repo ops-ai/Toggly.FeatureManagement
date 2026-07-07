@@ -1,3 +1,14 @@
+## 1.8.0
+
+2026-07-07
+
+### Fixed
+- Island `<Feature>` wrappers, composables, Svelte store helpers, and `FeatureClient.astro` now evaluate gates through `$gate` / `$flag`, so device-local post-filter gates apply correctly.
+
+### Added
+- React island `<Feature render={(enabled) => ...} />` render prop for conditional UI.
+- Vue island `FeatureGateBuilder.vue` (scoped slot `{ enabled }`) and Svelte island `FeatureGateBuilder.svelte` (`let:enabled`) for conditional UI parity.
+
 ## 1.7.0
 
 2026-07-05

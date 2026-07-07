@@ -1,6 +1,8 @@
 <script lang="ts">
 /**
- * Svelte Feature Component for Astro Islands
+ * Svelte FeatureGateBuilder for Astro Islands
+ *
+ * Always renders its slot and exposes the resolved gate boolean for conditional UI.
  */
 
 import { $gate, $isReady, $flags, $localGatesRevision } from '../../client/store.js';
@@ -19,15 +21,14 @@ $: flagKeys = (() => {
 
 $: gateAtom = $gate(flagKeys, requirement, negate);
 
-$: isEnabled = (() => {
+$: enabled = (() => {
+  if (!$isReady) {
+    return false;
+  }
   void $flags;
   void $localGatesRevision;
   return gateAtom.get();
 })();
 </script>
 
-{#if $isReady && isEnabled}
-  <slot />
-{:else}
-  <slot name="fallback" />
-{/if}
+<slot {enabled} />

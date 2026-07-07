@@ -63,6 +63,7 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
   shouldShow: boolean = false
   isLoading: boolean = false
   private unsubscribeFeaturesRefresh: (() => void) | undefined
+  private unsubscribeLocalGates: (() => void) | undefined
 
   constructor(private toggly: TogglyService) {}
 
@@ -70,10 +71,14 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
     this.unsubscribeFeaturesRefresh = this.toggly.subscribeFeaturesRefresh(() => {
       this.updateVisibility()
     })
+    this.unsubscribeLocalGates = this.toggly.subscribeLocalGatesChanged(() => {
+      this.updateVisibility()
+    })
   }
 
   ngOnDestroy(): void {
     this.unsubscribeFeaturesRefresh?.()
+    this.unsubscribeLocalGates?.()
   }
 
   ngOnChanges(_changes: SimpleChanges): void {

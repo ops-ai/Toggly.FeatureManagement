@@ -1,3 +1,13 @@
+## 1.7.0
+
+2026-07-07
+
+### Added
+- `FeatureGateBuilder` widget exposes the resolved gate boolean via a `builder`
+  callback for conditional UI (styling, taps) without duplicating
+  `StreamBuilder` + `evaluateFeatureGateSync` boilerplate.
+- `Feature.builder` named constructor as sugar over the same evaluation path.
+
 ## 1.6.0
 
 2026-07-05

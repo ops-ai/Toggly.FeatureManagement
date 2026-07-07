@@ -1,3 +1,11 @@
+## 1.7.0
+
+2026-07-07
+
+### Added
+- `useFeatureFlag` and `useFeatureGate` hooks for conditional UI without show/hide wrappers.
+- `<Feature render={(enabled) => ...} />` render prop for styling, taps, and behavior driven by the resolved gate boolean.
+
 ## 1.6.0
 
 2026-07-05

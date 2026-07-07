@@ -49,19 +49,31 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
   private unsubscribeFeaturesRefresh: (() => void) | undefined
 
   @Input() set featureFlag(value: string | string[]) {
-    if (value) {
-      if (typeof value === 'string') {
-        this.flag = [value]
-      } else if (Array.isArray(value)) {
-        this.flag = value
-      }
-
-      this.updateView()
+    if (typeof value === 'string') {
+      this.flag = value ? [value] : []
+    } else if (Array.isArray(value)) {
+      this.flag = value
+    } else {
+      this.flag = []
     }
+
+    this.updateView()
   }
 
-  @Input('featureFlagRequirement') requirement: 'all' | 'any' = 'all'
-  @Input('featureFlagNegate') negate: boolean = false
+  private requirement: 'all' | 'any' = 'all'
+  private negate = false
+
+  @Input('featureFlagRequirement')
+  set featureFlagRequirement(value: 'all' | 'any') {
+    this.requirement = value ?? 'all'
+    this.updateView()
+  }
+
+  @Input('featureFlagNegate')
+  set featureFlagNegate(value: boolean) {
+    this.negate = value ?? false
+    this.updateView()
+  }
 
   constructor(
     private _templateRef: TemplateRef<unknown>,

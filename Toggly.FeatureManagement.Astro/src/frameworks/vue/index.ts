@@ -14,4 +14,6 @@ export interface FeatureProps {
   negate?: boolean;
 }
 
+export interface FeatureGateBuilderProps extends FeatureProps {}
+
 

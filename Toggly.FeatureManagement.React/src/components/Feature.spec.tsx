@@ -271,4 +271,58 @@ describe('Feature Component', () => {
       });
     });
   });
+
+  describe('render prop', () => {
+    it('should invoke render with enabled boolean while keeping content mounted', async () => {
+      render(
+        <Provider value={{ toggly: service }}>
+          <Feature
+            featureKey="Enabled"
+            render={(enabled) => (
+              <span data-testid="render-prop">{enabled ? 'active' : 'inactive'}</span>
+            )}
+          />
+        </Provider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('render-prop')).toHaveTextContent('active');
+      });
+    });
+
+    it('should pass false when feature is disabled', async () => {
+      render(
+        <Provider value={{ toggly: service }}>
+          <Feature
+            featureKey="Disabled"
+            render={(enabled) => (
+              <span data-testid="render-prop">{enabled ? 'active' : 'inactive'}</span>
+            )}
+          />
+        </Provider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('render-prop')).toHaveTextContent('inactive');
+      });
+    });
+
+    it('should render fallback when feature is disabled', async () => {
+      render(
+        <Provider value={{ toggly: service }}>
+          <Feature
+            featureKey="Disabled"
+            fallback={<span data-testid="fallback">hidden</span>}
+          >
+            <span data-testid="content">Visible</span>
+          </Feature>
+        </Provider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('fallback')).toBeInTheDocument();
+        expect(screen.queryByTestId('content')).not.toBeInTheDocument();
+      });
+    });
+  });
 });

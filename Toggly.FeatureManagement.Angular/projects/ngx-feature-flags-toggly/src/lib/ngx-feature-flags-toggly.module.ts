@@ -1,4 +1,5 @@
 import { ModuleWithProviders, NgModule } from '@angular/core'
+import { FeatureGateBuilderDirective } from './feature-gate-builder.directive'
 import { FeatureComponent } from './feature.component'
 import { TogglyOptions } from './toggly-options'
 import { FeatureTemplateDirective } from './feature-template.directive'
@@ -28,6 +29,7 @@ import { FeatureFlagGuard } from './feature.guard'
  * ```typescript
  * import {
  *   FeatureComponent,
+ *   FeatureGateBuilderDirective,
  *   FeatureFlagDirective,
  *   FeatureVariantDirective,
  *   FeatureTemplateDirective,
@@ -45,6 +47,7 @@ import { FeatureFlagGuard } from './feature.guard'
 @NgModule({
   imports: [
     FeatureComponent,
+    FeatureGateBuilderDirective,
     FeatureTemplateDirective,
     FeatureFlagDirective,
     FeatureVariantDirective,
@@ -52,6 +55,7 @@ import { FeatureFlagGuard } from './feature.guard'
   providers: [FeatureFlagGuard],
   exports: [
     FeatureComponent,
+    FeatureGateBuilderDirective,
     FeatureTemplateDirective,
     FeatureFlagDirective,
     FeatureVariantDirective,

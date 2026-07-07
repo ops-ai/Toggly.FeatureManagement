@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/astro-feature-flags-toggly",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Toggly feature flags SDK for Astro with SSR, SSG, and framework support",
   "type": "module",
   "main": "./dist/index.js",
@@ -34,11 +34,13 @@
       "import": "./dist/frameworks/vue/index.js"
     },
     "./vue/Feature.vue": "./dist/frameworks/vue/Feature.vue",
+    "./vue/FeatureGateBuilder.vue": "./dist/frameworks/vue/FeatureGateBuilder.vue",
     "./svelte": {
       "types": "./dist/frameworks/svelte/index.d.ts",
       "import": "./dist/frameworks/svelte/index.js"
     },
-    "./svelte/Feature.svelte": "./dist/frameworks/svelte/Feature.svelte"
+    "./svelte/Feature.svelte": "./dist/frameworks/svelte/Feature.svelte",
+    "./svelte/FeatureGateBuilder.svelte": "./dist/frameworks/svelte/FeatureGateBuilder.svelte"
   },
   "files": [
     "dist"

@@ -1,18 +1,19 @@
 <template>
-  <slot v-if="isReady && isEnabled" />
-  <slot v-else name="fallback" />
+  <slot :enabled="enabled" />
 </template>
 
 <script setup lang="ts">
 /**
- * Vue Feature Component for Astro Islands
+ * Vue FeatureGateBuilder for Astro Islands
+ *
+ * Always renders its slot and exposes the resolved gate boolean for conditional UI.
  */
 
 import { computed } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { $flags, $gate, $isReady, $localGatesRevision } from '../../client/store.js';
 
-export interface FeatureProps {
+export interface FeatureGateBuilderProps {
   /** Single feature flag key to check */
   flag?: string;
   /** Multiple feature flag keys to check */
@@ -23,7 +24,7 @@ export interface FeatureProps {
   negate?: boolean;
 }
 
-const props = withDefaults(defineProps<FeatureProps>(), {
+const props = withDefaults(defineProps<FeatureGateBuilderProps>(), {
   requirement: 'all',
   negate: false,
 });
@@ -45,7 +46,10 @@ const flagKeys = computed(() => {
 
 const gateAtom = computed(() => $gate(flagKeys.value, props.requirement, props.negate));
 
-const isEnabled = computed(() => {
+const enabled = computed(() => {
+  if (!isReady.value) {
+    return false;
+  }
   void flags.value;
   void localGatesRevision.value;
   return gateAtom.value.get();

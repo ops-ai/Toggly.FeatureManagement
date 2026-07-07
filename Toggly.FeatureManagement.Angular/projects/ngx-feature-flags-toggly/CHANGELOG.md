@@ -1,3 +1,15 @@
+## 2.4.0
+
+2026-07-07
+
+### Added
+- `*featureGateBuilder` structural directive exposing `let enabled` for conditional UI while keeping content mounted.
+
+### Fixed
+- `<feature>` component now re-evaluates when device-local post-filter gates change via `notifyLocalGatesChanged()`.
+- `*featureGateBuilder` re-evaluates when `featureGateBuilderRequirement` or `featureGateBuilderNegate` bindings change.
+- `*featureFlag` re-evaluates when `featureFlagRequirement` or `featureFlagNegate` bindings change.
+
 ## 2.3.0
 
 2026-07-05

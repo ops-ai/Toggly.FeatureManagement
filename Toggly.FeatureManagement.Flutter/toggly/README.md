@@ -99,6 +99,29 @@ await Toggly.evaluateFeatureGate(
 );
 ```
 
+### Feature vs FeatureGateBuilder
+
+Use **Feature** when you want simple show/hide: the child is rendered when the gate is on, otherwise an empty placeholder is returned.
+
+Use **FeatureGateBuilder** (or **Feature.builder**) when the widget tree stays visible but behavior or styling depends on the gate — for example, disabling link styling and tap handlers while keeping content on screen.
+
+```dart
+FeatureGateBuilder(
+  featureKeys: const ['PremiumCheckout'],
+  builder: (context, premiumCheckoutEnabled) {
+    return Text(
+      'USDA ID',
+      style: TextStyle(
+        color: premiumCheckoutEnabled ? Colors.blue : Colors.grey,
+        decoration: premiumCheckoutEnabled ? TextDecoration.underline : null,
+      ),
+    );
+  },
+)
+```
+
+`Feature.builder` uses the same gate resolution (remote flags, local gates, requirement, negate, variant) and is equivalent to wiring your own show/hide via the `enabled` argument.
+
 ## Basic Usage (without Toggly.io)
 
 Initialize Toggly by running the Toggly.init method
