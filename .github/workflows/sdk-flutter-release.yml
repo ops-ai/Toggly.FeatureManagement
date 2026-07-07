@@ -252,12 +252,24 @@ jobs:
 
       - name: Create and push tag
         run: |
+          set -euo pipefail
           TAG="${{ needs.validate.outputs.tag_prefix }}${{ needs.validate.outputs.version }}"
           if [ "${{ needs.validate.outputs.is_provider }}" = "true" ]; then
             TAG_MSG="${{ needs.validate.outputs.package }} v${{ needs.validate.outputs.version }}"
           else
             TAG_MSG="Flutter SDK v${{ needs.validate.outputs.version }}"
           fi
+
+          if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on origin — skipping push."
+            echo "If publish did not finish, re-run this workflow with Branch/tag set to $TAG."
+            exit 0
+          fi
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag -d "$TAG"
+          fi
+
           git tag -s -m "$TAG_MSG" "$TAG"
           git push origin "$TAG"
           echo "Pushed tag $TAG — publish will run automatically on the tag push event."
@@ -282,6 +294,20 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Tag ref is required for pub.dev OIDC, but the tag commit may predate
+          # publish fixes on develop (e.g. .pubignore). Publish latest develop
+          # when the manifest version still matches the release tag.
+          ref: develop
+
+      - name: Verify manifest version matches release tag
+        run: |
+          MANIFEST_VERSION=$(grep '^version:' "${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}/pubspec.yaml" | awk '{print $2}')
+          EXPECTED="${{ needs.validate.outputs.version }}"
+          if [ "$MANIFEST_VERSION" != "$EXPECTED" ]; then
+            echo "::error::develop manifest version $MANIFEST_VERSION does not match release tag version $EXPECTED — create a new tag after bumping the manifest."
+            exit 1
+          fi
 
       # setup-dart must run before Flutter so OIDC credentials are registered for pub.dev.
       - name: Setup Dart (OIDC for pub.dev)

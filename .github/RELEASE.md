@@ -79,6 +79,20 @@ For each package:
 
 pub.dev requires the publish job to run on a **tag ref**, not a branch — that is why publish is split from tagging.
 
+### Tag already exists (tag-and-push failed)
+
+If an earlier run pushed the tag but publish failed (e.g. dry-run validation), re-running from `develop` fails with `tag already exists`.
+
+**Retry publish without a new tag:**
+
+1. Actions → **Flutter SDKs - Build & Publish** → **Run workflow**
+2. Set **Use workflow from** to the release tag (e.g. `flutter-secure_storage-v0.1.2`)
+3. Package can stay as-is (inferred from the tag on tag refs)
+
+That run skips `tag-and-push` and executes the `publish` job only. The publish job checks out **`develop`** (not the tag commit) so publish fixes on develop apply, as long as the manifest version still matches the tag.
+
+If `develop` has moved past that version, bump the manifest and push a new tag instead.
+
 ### Monorepo packages (Nuxt, Next, Remix, React Native, Node server)
 
 All sibling packages must share the same version. The workflow validates this before publishing.
