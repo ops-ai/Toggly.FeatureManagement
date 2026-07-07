@@ -208,5 +208,62 @@ describe('React Framework Adapter', () => {
 
       expect(result).toBeTruthy();
     });
+
+    it('should invoke render prop with false while not ready', () => {
+      $flags.set({ PremiumCheckout: true });
+      $isReady.set(false);
+      const render = vi.fn(() => React.createElement('button', null, 'checkout'));
+
+      Feature({ flag: 'PremiumCheckout', render });
+
+      expect(render).toHaveBeenCalledWith(false);
+    });
+
+    it('should invoke render prop with resolved gate when ready', () => {
+      $flags.set({ PremiumCheckout: true });
+      $isReady.set(true);
+      const render = vi.fn((enabled: boolean) =>
+        React.createElement('button', { disabled: !enabled }, 'checkout'),
+      );
+
+      Feature({ flag: 'PremiumCheckout', render });
+
+      expect(render).toHaveBeenCalledWith(true);
+    });
+
+    it('should invoke render prop with false when gate is disabled', () => {
+      $flags.set({ PremiumCheckout: false });
+      $isReady.set(true);
+      const render = vi.fn((enabled: boolean) =>
+        React.createElement('button', { disabled: !enabled }, 'checkout'),
+      );
+
+      Feature({ flag: 'PremiumCheckout', render });
+
+      expect(render).toHaveBeenCalledWith(false);
+    });
+
+    it('should render children for empty gate when not negated', () => {
+      $isReady.set(true);
+
+      const result = Feature({
+        negate: false,
+        children: React.createElement('div', null, 'content'),
+      });
+
+      expect(result).toBeTruthy();
+    });
+
+    it('should render fallback for empty gate when negated', () => {
+      $isReady.set(true);
+
+      const result = Feature({
+        negate: true,
+        children: React.createElement('div', null, 'content'),
+        fallback: React.createElement('div', null, 'fallback'),
+      });
+
+      expect(result).toBeTruthy();
+    });
   });
 });

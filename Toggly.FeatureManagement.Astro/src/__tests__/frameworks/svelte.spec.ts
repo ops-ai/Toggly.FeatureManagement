@@ -31,7 +31,7 @@ vi.mock('svelte/store', () => ({
   }),
 }))
 
-import { featureFlag, featureGate, featureVariant, flags, isReady, variants } from '../../frameworks/svelte/stores.js';
+import { featureFlag, featureGate, featureVariant, readFeatureGate, flags, isReady, variants } from '../../frameworks/svelte/stores.js';
 
 describe('Svelte Framework Adapter - Stores', () => {
   beforeEach(() => {
@@ -156,6 +156,22 @@ describe('Svelte Framework Adapter - Stores', () => {
     it('should return null when variant name missing', () => {
       $variants.set({ V: { enabled: true, configurationValue: 'x' } });
       expect(featureVariant('V').get()).toBeNull();
+    });
+  });
+
+  describe('readFeatureGate', () => {
+    beforeEach(() => {
+      $flags.set({ F1: true, F2: true, F3: false });
+    });
+
+    it('should read gate synchronously with all requirement', () => {
+      expect(readFeatureGate(['F1', 'F2'], 'all')).toBe(true);
+      expect(readFeatureGate(['F1', 'F3'], 'all')).toBe(false);
+    });
+
+    it('should read gate synchronously with any requirement and negate', () => {
+      expect(readFeatureGate(['F1', 'F3'], 'any')).toBe(true);
+      expect(readFeatureGate(['F3'], 'all', true)).toBe(true);
     });
   });
 });

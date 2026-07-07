@@ -8,16 +8,17 @@ import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
   imports: [FeatureGateBuilderDirective],
   template: `
     <button
-      *featureGateBuilder="flag; requirement: requirement; let enabled"
+      *featureGateBuilder="flag; requirement: requirement; negate: negate; let enabled"
       [class.active]="enabled"
     >
-      Sales
+      Checkout
     </button>
   `,
 })
 class BuilderHostComponent {
   flag: string | string[] = ['Enabled', 'Disabled'];
   requirement: 'all' | 'any' = 'all';
+  negate = false;
 }
 
 describe('FeatureGateBuilderDirective', () => {
@@ -79,5 +80,46 @@ describe('FeatureGateBuilderDirective', () => {
 
     button = fixture.nativeElement.querySelector('button');
     expect(button.classList.contains('active')).toBe(true);
+  }));
+
+  it('should re-evaluate when negate changes', fakeAsync(() => {
+    host.flag = 'Enabled';
+    host.negate = false;
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+
+    let button = fixture.nativeElement.querySelector('button');
+    expect(button.classList.contains('active')).toBe(true);
+
+    host.negate = true;
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+
+    button = fixture.nativeElement.querySelector('button');
+    expect(button.classList.contains('active')).toBe(false);
+  }));
+
+  it('should expose enabled=true for empty gate when not negated', fakeAsync(() => {
+    host.flag = '';
+    host.negate = false;
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('button');
+    expect(button.classList.contains('active')).toBe(true);
+  }));
+
+  it('should expose enabled=false for empty gate when negated', fakeAsync(() => {
+    host.flag = '';
+    host.negate = true;
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('button');
+    expect(button.classList.contains('active')).toBe(false);
   }));
 });

@@ -98,6 +98,22 @@ describe('FeatureFlagDirective', () => {
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
     }));
+
+    it('should re-evaluate when negate changes', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = 'Enabled';
+      host.negate = false;
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
+
+      host.negate = true;
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeNull();
+    }));
   });
 
   describe('Requirement: any', () => {
@@ -185,6 +201,15 @@ describe('FeatureFlagDirective', () => {
       tick();
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('.content')).toBeNull();
+    }));
+
+    it('should show content when feature flag is cleared to empty', fakeAsync(() => {
+      configureAndCreate();
+      host.flag = '';
+      fixture.detectChanges();
+      tick();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
     }));
   });
 });
