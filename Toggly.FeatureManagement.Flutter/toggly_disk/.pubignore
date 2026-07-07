@@ -9,3 +9,7 @@ coverage/
 *.iml
 example/.dart_tool/
 example/build/
+
+# Monorepo path overrides for local dev; committed for CI but never published.
+pubspec_overrides.yaml
+example/pubspec_overrides.yaml

@@ -17,6 +17,10 @@ coverage/
 example/.dart_tool/
 example/build/
 
+# Monorepo path overrides for local dev; committed for CI but never published.
+pubspec_overrides.yaml
+example/pubspec_overrides.yaml
+
 # Isar native core libraries downloaded for desktop tests (never publish these)
 libisar.dylib
 libisar.so

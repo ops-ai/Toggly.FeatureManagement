@@ -298,8 +298,8 @@ jobs:
         if: needs.validate.outputs.is_provider == 'true'
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
         run: |
-          rm -f pubspec_overrides.yaml
-          echo "Removed pubspec_overrides.yaml (if present)"
+          rm -f pubspec_overrides.yaml example/pubspec_overrides.yaml
+          echo "Removed pubspec_overrides.yaml files (if present)"
 
       - name: Install dependencies
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
