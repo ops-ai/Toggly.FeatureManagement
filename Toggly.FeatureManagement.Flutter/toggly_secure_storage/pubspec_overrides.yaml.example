@@ -1,0 +1,5 @@
+# Copy to pubspec_overrides.yaml for local monorepo development (git-ignored).
+# Resolves the in-repo base SDK via path instead of pub.dev.
+dependency_overrides:
+  feature_flags_toggly:
+    path: ../toggly

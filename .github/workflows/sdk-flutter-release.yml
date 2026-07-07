@@ -158,7 +158,13 @@ jobs:
           flutter-version: '3.x'
           channel: 'stable'
 
-      # Provider packages use committed pubspec_overrides.yaml (path: ../toggly).
+      # Provider packages resolve the in-repo base SDK via pubspec_overrides.yaml.
+      - name: Apply monorepo pubspec overrides
+        if: needs.validate.outputs.is_provider == 'true'
+        uses: ./.github/actions/flutter-provider-overrides
+        with:
+          working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
+
       - name: Install dependencies
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
         run: flutter pub get
@@ -215,10 +221,6 @@ jobs:
       - name: Commit version bump
         if: needs.validate.outputs.manifest_changed == 'true'
         run: |
-          if [ "${{ needs.validate.outputs.is_provider }}" = "true" ]; then
-            git checkout -- "${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}/pubspec_overrides.yaml" 2>/dev/null || true
-          fi
-
           git add "${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}/pubspec.yaml"
 
           if [ "${{ needs.validate.outputs.is_provider }}" = "true" ]; then
@@ -319,14 +321,7 @@ jobs:
           flutter-version: '3.x'
           channel: 'stable'
 
-      # Strip the local path override so provider packages resolve the base SDK from pub.dev.
-      - name: Remove local dependency overrides
-        if: needs.validate.outputs.is_provider == 'true'
-        working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
-        run: |
-          rm -f pubspec_overrides.yaml example/pubspec_overrides.yaml
-          echo "Removed pubspec_overrides.yaml files (if present)"
-
+      # Provider packages resolve feature_flags_toggly from pub.dev when publishing.
       - name: Install dependencies
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
         run: flutter pub get

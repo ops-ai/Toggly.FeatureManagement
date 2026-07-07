@@ -26,3 +26,7 @@ build/
 
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Monorepo path overrides (copy from pubspec_overrides.yaml.example).
+pubspec_overrides.yaml
+example/pubspec_overrides.yaml

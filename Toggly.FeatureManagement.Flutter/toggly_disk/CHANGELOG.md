@@ -6,6 +6,8 @@
 ### Fixed
 - Added `.pubignore` so build and tooling artifacts are excluded from the
   published archive (same pattern as the core SDK and Isar provider).
+- Stopped tracking `pubspec_overrides.yaml` in git (use
+  `pubspec_overrides.yaml.example`) so pub.dev publish validation passes.
 
 ### Changed
 - Verified compatibility with `feature_flags_toggly` 1.6.x (setContext,

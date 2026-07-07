@@ -334,9 +334,13 @@ jobs:
           flutter --version
           flutter doctor -v
 
-      # The companion packages resolve the in-repo base SDK through their
-      # committed pubspec_overrides.yaml (path: ../toggly), so no extra
-      # override injection is required here.
+      # Companion packages resolve the in-repo base SDK via pubspec_overrides.yaml.example.
+      - name: Apply monorepo pubspec overrides
+        working-directory: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}
+        run: |
+          cp pubspec_overrides.yaml.example pubspec_overrides.yaml
+          cp example/pubspec_overrides.yaml.example example/pubspec_overrides.yaml
+
       - name: Get dependencies
         working-directory: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}
         run: flutter pub get

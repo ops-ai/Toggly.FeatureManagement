@@ -1,0 +1,22 @@
+name: Apply Flutter provider monorepo overrides
+description: Copy pubspec_overrides.yaml.example into place for in-repo path dependencies.
+
+inputs:
+  working-directory:
+    description: Provider package directory (contains pubspec_overrides.yaml.example)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Copy pubspec override templates
+      shell: bash
+      run: |
+        set -euo pipefail
+        PKG_DIR="${{ inputs.working-directory }}"
+        if [ -f "$PKG_DIR/pubspec_overrides.yaml.example" ]; then
+          cp "$PKG_DIR/pubspec_overrides.yaml.example" "$PKG_DIR/pubspec_overrides.yaml"
+        fi
+        if [ -f "$PKG_DIR/example/pubspec_overrides.yaml.example" ]; then
+          cp "$PKG_DIR/example/pubspec_overrides.yaml.example" "$PKG_DIR/example/pubspec_overrides.yaml"
+        fi

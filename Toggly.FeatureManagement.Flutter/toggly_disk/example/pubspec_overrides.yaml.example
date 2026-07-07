@@ -1,4 +1,4 @@
-# Local development overrides for running the example against in-repo packages.
+# Copy to pubspec_overrides.yaml for local monorepo development (git-ignored).
 dependency_overrides:
   feature_flags_toggly:
     path: ../../toggly

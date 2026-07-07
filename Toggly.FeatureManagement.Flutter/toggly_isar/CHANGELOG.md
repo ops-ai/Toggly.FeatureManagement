@@ -7,6 +7,10 @@
 - Verified compatibility with `feature_flags_toggly` 1.6.x (setContext,
   SDK identity on definitions traffic, ETag WebSocket sync).
 
+### Fixed
+- Stopped tracking `pubspec_overrides.yaml` in git (use
+  `pubspec_overrides.yaml.example`) so pub.dev publish validation passes.
+
 ## 0.2.1
 
 2026-06-15

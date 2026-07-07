@@ -27,6 +27,10 @@ build/
 .flutter-plugins
 .flutter-plugins-dependencies
 
+# Monorepo path overrides (copy from pubspec_overrides.yaml.example).
+pubspec_overrides.yaml
+example/pubspec_overrides.yaml
+
 # Isar generated code (produced by build_runner; regenerated in CI and before publish)
 *.g.dart
 
