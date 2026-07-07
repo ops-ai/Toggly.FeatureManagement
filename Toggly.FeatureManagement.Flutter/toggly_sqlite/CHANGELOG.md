@@ -1,4 +1,16 @@
 
+## 0.1.2
+
+2026-07-06
+
+### Fixed
+- Added `.pubignore` so build and tooling artifacts are excluded from the
+  published archive (same pattern as the core SDK and Isar provider).
+
+### Changed
+- Verified compatibility with `feature_flags_toggly` 1.6.x (setContext,
+  SDK identity on definitions traffic, ETag WebSocket sync).
+
 ## 0.1.1
 
 2026-06-15

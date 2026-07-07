@@ -1,4 +1,12 @@
 
+## 0.2.2
+
+2026-07-06
+
+### Changed
+- Verified compatibility with `feature_flags_toggly` 1.6.x (setContext,
+  SDK identity on definitions traffic, ETag WebSocket sync).
+
 ## 0.2.1
 
 2026-06-15

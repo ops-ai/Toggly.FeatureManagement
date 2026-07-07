@@ -1,0 +1,11 @@
+# When a .pubignore exists, `dart pub publish` uses it INSTEAD of .gitignore to
+# decide what to exclude. Re-list build/transient artifacts here so they are
+# not bundled into the published archive.
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+coverage/
+*.iml
+example/.dart_tool/
+example/build/
