@@ -7,10 +7,11 @@ import {
   ref,
   unref,
   watch,
-  type MaybeRef,
   type Ref,
 } from 'vue'
 import defaultToggly, { type Toggly } from '../plugins/toggly.service'
+
+type MaybeRef<T> = T | Ref<T>
 
 export interface UseFeatureGateReturn {
   isEnabled: Ref<boolean>

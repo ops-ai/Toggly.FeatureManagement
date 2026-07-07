@@ -133,7 +133,8 @@ void main() {
       expect(find.textContaining('enabled:true'), findsOneWidget);
     });
 
-    testWidgets('requirement any matches Feature gate behavior', (tester) async {
+    testWidgets('requirement any matches Feature gate behavior',
+        (tester) async {
       Toggly.dispose();
       await Toggly.init(
         flagDefaults: {
@@ -160,7 +161,8 @@ void main() {
       expect(lastEnabled, true);
     });
 
-    testWidgets('requirement all matches Feature gate behavior', (tester) async {
+    testWidgets('requirement all matches Feature gate behavior',
+        (tester) async {
       Toggly.dispose();
       await Toggly.init(
         flagDefaults: {

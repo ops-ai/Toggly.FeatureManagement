@@ -20,10 +20,17 @@ ws.on('message', (data) => {
   if (!parsed.type) {
     throw new Error(`Missing type field in message: ${data}`);
   }
-  if (parsed.type !== 'definitions' && parsed.type !== 'evaluated') {
-    throw new Error(`Expected type=definitions or evaluated, received ${parsed.type}`);
+  if (!['sync', 'definitions', 'evaluated'].includes(parsed.type)) {
+    throw new Error(`Expected type=sync, definitions, or evaluated, received ${parsed.type}`);
   }
-  if (!parsed.timestamp) {
+  if (parsed.type === 'sync') {
+    if (!parsed.etag) {
+      throw new Error('Missing etag in sync message');
+    }
+    if (!parsed.lastUpdated) {
+      throw new Error('Missing lastUpdated in sync message');
+    }
+  } else if (!parsed.timestamp) {
     throw new Error('Missing timestamp in message');
   }
   ws.close();

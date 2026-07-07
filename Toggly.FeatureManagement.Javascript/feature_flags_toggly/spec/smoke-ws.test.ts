@@ -3,7 +3,7 @@ import WebSocket = require('ws');
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
 describe('WebSocket smoke test', () => {
-  it('connects and receives initial definitions message', async () => {
+  it('connects and receives sync message', async () => {
     if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_FRONTEND is not configured — set this env var to run smoke tests');
     const ws = new WebSocket(`wss://definitions.toggly.io/${appKey!}/ws`);
 
@@ -29,8 +29,13 @@ describe('WebSocket smoke test', () => {
     });
 
     const parsed = JSON.parse(message);
-    expect(['definitions', 'evaluated']).toContain(parsed.type);
-    expect(parsed).toHaveProperty('timestamp');
+    expect(['sync', 'definitions', 'evaluated']).toContain(parsed.type);
+    if (parsed.type === 'sync') {
+      expect(parsed).toHaveProperty('etag');
+      expect(parsed).toHaveProperty('lastUpdated');
+    } else {
+      expect(parsed).toHaveProperty('timestamp');
+    }
 
     ws.close();
   }, 20_000);
