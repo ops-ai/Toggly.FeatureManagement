@@ -76,7 +76,8 @@ void main() {
         '"etag-abc"',
       );
       expect(
-        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        await provider.readDefinitionsRevision(
+            'app-1', 'Production', identityA),
         '"etag-abc"',
       );
     });
@@ -85,15 +86,21 @@ void main() {
       final provider = SecureStorageCacheProvider();
       await provider.writeDefinitionsRevision(
           'app-1', 'Production', identityA, 'rev-a');
-      await provider.writeDefinitionsRevision('app-1', 'Staging', identityA, 'rev-b');
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Staging', identityA, 'rev-b');
       await provider.writeDefinitionsRevision(
           'app-2', 'Production', identityA, 'rev-c');
 
-      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+      expect(
+          await provider.readDefinitionsRevision(
+              'app-1', 'Production', identityA),
           'rev-a');
-      expect(await provider.readDefinitionsRevision('app-1', 'Staging', identityA),
+      expect(
+          await provider.readDefinitionsRevision('app-1', 'Staging', identityA),
           'rev-b');
-      expect(await provider.readDefinitionsRevision('app-2', 'Production', identityA),
+      expect(
+          await provider.readDefinitionsRevision(
+              'app-2', 'Production', identityA),
           'rev-c');
     });
 
@@ -104,9 +111,13 @@ void main() {
       await provider.writeDefinitionsRevision(
           'app-1', 'Production', identityB, 'rev-b');
 
-      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+      expect(
+          await provider.readDefinitionsRevision(
+              'app-1', 'Production', identityA),
           'rev-a');
-      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityB),
+      expect(
+          await provider.readDefinitionsRevision(
+              'app-1', 'Production', identityB),
           'rev-b');
     });
 
@@ -114,9 +125,11 @@ void main() {
       final provider = SecureStorageCacheProvider();
       await provider.writeDefinitionsRevision(
           'app-1', 'Production', identityA, 'rev-a');
-      await provider.deleteDefinitionsRevision('app-1', 'Production', identityA);
+      await provider.deleteDefinitionsRevision(
+          'app-1', 'Production', identityA);
       expect(
-        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        await provider.readDefinitionsRevision(
+            'app-1', 'Production', identityA),
         isNull,
       );
     });
@@ -126,7 +139,8 @@ void main() {
       final provider = SecureStorageCacheProvider();
 
       expect(
-        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        await provider.readDefinitionsRevision(
+            'app-1', 'Production', identityA),
         'legacy-rev',
       );
       expect(store.containsKey('toggly.revision.app-1:Production'), isFalse);

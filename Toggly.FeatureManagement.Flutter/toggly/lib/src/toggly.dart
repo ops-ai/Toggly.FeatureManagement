@@ -483,7 +483,8 @@ class Toggly with WidgetsBindingObserver {
   /// revision (ETag) used for `If-None-Match` and WebSocket `?rev=` sync.
   /// Pass [deletePersistedRevision: false] only when you need to invalidate
   /// flags/variants without discarding the conditional-fetch etag (uncommon).
-  static Future clearFeatureFlagsCache({bool deletePersistedRevision = true}) async {
+  static Future clearFeatureFlagsCache(
+      {bool deletePersistedRevision = true}) async {
     _clearInMemoryEvaluationState();
 
     await Toggly._cache?.deleteFlags(Toggly._contextCacheKey);

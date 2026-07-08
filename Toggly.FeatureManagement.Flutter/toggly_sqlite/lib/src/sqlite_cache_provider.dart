@@ -160,7 +160,8 @@ class SqliteCacheProvider implements TogglyRevisionCacheProvider {
   @override
   Future<void> deleteJwks() => _delete(_kindJwks, _jwksIdentity);
 
-  String _revisionIdentity(String appKey, String environment, String identity) =>
+  String _revisionIdentity(
+          String appKey, String environment, String identity) =>
       '$appKey:$environment:$identity';
 
   String _legacyRevisionIdentity(String appKey, String environment) =>

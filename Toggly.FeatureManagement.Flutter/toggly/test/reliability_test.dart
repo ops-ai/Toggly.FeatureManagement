@@ -624,7 +624,8 @@ void main() {
     expect(result.status, TogglyLoadFeatureFlagsResponse.cached);
   });
 
-  test('setIdentity(null) clears in-memory state without deleting persisted cache',
+  test(
+      'setIdentity(null) clears in-memory state without deleting persisted cache',
       () async {
     final provider = _MemoryRevisionCacheProvider();
     provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
@@ -656,7 +657,8 @@ void main() {
     HttpService.getInstance.http.interceptors.remove(interceptor);
   });
 
-  test('setContext with identity change refreshes without deleting persisted cache',
+  test(
+      'setContext with identity change refreshes without deleting persisted cache',
       () async {
     final provider = _MemoryRevisionCacheProvider();
     provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
@@ -696,7 +698,8 @@ void main() {
     HttpService.getInstance.http.interceptors.remove(interceptor);
   });
 
-  test('setContext with claims change preserves other persisted entries', () async {
+  test('setContext with claims change preserves other persisted entries',
+      () async {
     final provider = _MemoryRevisionCacheProvider();
     provider.flags['u:user-1|c:role=admin'] = TogglyFeatureFlagsCache(
       identity: 'u:user-1|c:role=admin',
@@ -800,7 +803,9 @@ void main() {
         'timestamp': 200,
         'kid': 'kid-1',
       },
-      headers: {'etag': ['rev-from-server']},
+      headers: {
+        'etag': ['rev-from-server']
+      },
     );
     HttpService.getInstance.http.interceptors.add(interceptor);
 
@@ -828,7 +833,8 @@ void main() {
   test('variants equal-timestamp re-fetch keeps cached assignments', () async {
     final provider = _MemoryRevisionCacheProvider();
     const signedMeta = {
-      'signature': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+      'signature':
+          'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
       'timestamp': 200,
       'kid': 'kid-1',
     };
@@ -877,7 +883,8 @@ void main() {
   test('variants rollback keeps newer cached assignments', () async {
     final provider = _MemoryRevisionCacheProvider();
     const signedMeta = {
-      'signature': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+      'signature':
+          'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
       'timestamp': 100,
       'kid': 'kid-1',
     };

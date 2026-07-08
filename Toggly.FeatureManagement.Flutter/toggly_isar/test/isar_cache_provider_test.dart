@@ -48,7 +48,8 @@ void main() {
         '"etag-abc"',
       );
       expect(
-        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        await provider.readDefinitionsRevision(
+            'app-1', 'Production', identityA),
         '"etag-abc"',
       );
     });
@@ -56,15 +57,21 @@ void main() {
     test('different appKey/environment pairs are isolated', () async {
       await provider.writeDefinitionsRevision(
           'app-1', 'Production', identityA, 'rev-a');
-      await provider.writeDefinitionsRevision('app-1', 'Staging', identityA, 'rev-b');
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Staging', identityA, 'rev-b');
       await provider.writeDefinitionsRevision(
           'app-2', 'Production', identityA, 'rev-c');
 
-      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+      expect(
+          await provider.readDefinitionsRevision(
+              'app-1', 'Production', identityA),
           'rev-a');
-      expect(await provider.readDefinitionsRevision('app-1', 'Staging', identityA),
+      expect(
+          await provider.readDefinitionsRevision('app-1', 'Staging', identityA),
           'rev-b');
-      expect(await provider.readDefinitionsRevision('app-2', 'Production', identityA),
+      expect(
+          await provider.readDefinitionsRevision(
+              'app-2', 'Production', identityA),
           'rev-c');
     });
 
@@ -74,18 +81,24 @@ void main() {
       await provider.writeDefinitionsRevision(
           'app-1', 'Production', identityB, 'rev-b');
 
-      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+      expect(
+          await provider.readDefinitionsRevision(
+              'app-1', 'Production', identityA),
           'rev-a');
-      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityB),
+      expect(
+          await provider.readDefinitionsRevision(
+              'app-1', 'Production', identityB),
           'rev-b');
     });
 
     test('delete removes the revision entry', () async {
       await provider.writeDefinitionsRevision(
           'app-1', 'Production', identityA, 'rev-a');
-      await provider.deleteDefinitionsRevision('app-1', 'Production', identityA);
+      await provider.deleteDefinitionsRevision(
+          'app-1', 'Production', identityA);
       expect(
-        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        await provider.readDefinitionsRevision(
+            'app-1', 'Production', identityA),
         isNull,
       );
     });
