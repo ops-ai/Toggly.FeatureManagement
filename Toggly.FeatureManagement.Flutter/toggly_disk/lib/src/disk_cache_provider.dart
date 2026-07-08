@@ -16,7 +16,7 @@ import 'package:path_provider/path_provider.dart';
 /// Writes are atomic (written to a temporary file then renamed). This backend
 /// is not encrypted — use `feature_flags_toggly_secure_storage` if the cached
 /// payloads must be protected at rest.
-class DiskCacheProvider implements TogglyCacheProvider {
+class DiskCacheProvider implements TogglyRevisionCacheProvider {
   static const String _jwksName = 'jwks.json';
 
   final Directory? _explicitDir;
@@ -52,6 +52,11 @@ class DiskCacheProvider implements TogglyCacheProvider {
 
   String _flagsName(String identity) => 'flags_${_token(identity)}.json';
   String _variantsName(String identity) => 'variants_${_token(identity)}.json';
+  String _revisionName(String appKey, String environment, String identity) =>
+      'revision_${_token('$appKey:$environment:$identity')}.txt';
+
+  String _legacyRevisionName(String appKey, String environment) =>
+      'revision_${_token('$appKey:$environment')}.txt';
 
   Future<String?> _read(String name) async {
     try {
@@ -126,4 +131,44 @@ class DiskCacheProvider implements TogglyCacheProvider {
 
   @override
   Future<void> deleteJwks() => _delete(_jwksName);
+
+  @override
+  Future<String?> readDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  ) async {
+    final name = _revisionName(appKey, environment, identity);
+    final revision = await _read(name);
+    if (revision != null) {
+      return revision;
+    }
+
+    final legacyName = _legacyRevisionName(appKey, environment);
+    final legacy = await _read(legacyName);
+    if (legacy == null) {
+      return null;
+    }
+
+    await _write(name, legacy);
+    await _delete(legacyName);
+    return legacy;
+  }
+
+  @override
+  Future<void> writeDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+    String revision,
+  ) =>
+      _write(_revisionName(appKey, environment, identity), revision);
+
+  @override
+  Future<void> deleteDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  ) =>
+      _delete(_revisionName(appKey, environment, identity));
 }

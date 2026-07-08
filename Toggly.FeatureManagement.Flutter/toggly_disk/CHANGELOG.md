@@ -1,3 +1,21 @@
+## 0.3.0
+
+2026-07-07
+
+### Changed
+- Definitions revision keys now include evaluation identity (user/groups/claims)
+  alongside `appKey` and `environment`, matching `feature_flags_toggly` 1.8.0.
+- Reads migrate legacy `appKey`/`environment`-only revision entries to the
+  identity-scoped key automatically.
+
+## 0.2.0
+
+2026-07-07
+
+### Added
+- `DiskCacheProvider` now implements `TogglyRevisionCacheProvider`, persisting
+  the definitions revision (ETag) keyed by `appKey`/`environment` so cold
+  starts send `If-None-Match` with signed definitions.
 
 ## 0.1.2
 

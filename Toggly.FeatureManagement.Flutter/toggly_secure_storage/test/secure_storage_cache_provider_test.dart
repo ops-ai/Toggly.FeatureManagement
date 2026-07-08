@@ -62,4 +62,78 @@ void main() {
       expect(await provider.readFlags('user-1'), isNull);
     });
   });
+
+  group('definitions revision', () {
+    const identityA = 'u:user-a';
+    const identityB = 'u:user-b';
+
+    test('write then read round-trips by appKey and environment', () async {
+      final provider = SecureStorageCacheProvider();
+      await provider.writeDefinitionsRevision(
+        'app-1',
+        'Production',
+        identityA,
+        '"etag-abc"',
+      );
+      expect(
+        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        '"etag-abc"',
+      );
+    });
+
+    test('different appKey/environment pairs are isolated', () async {
+      final provider = SecureStorageCacheProvider();
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityA, 'rev-a');
+      await provider.writeDefinitionsRevision('app-1', 'Staging', identityA, 'rev-b');
+      await provider.writeDefinitionsRevision(
+          'app-2', 'Production', identityA, 'rev-c');
+
+      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+          'rev-a');
+      expect(await provider.readDefinitionsRevision('app-1', 'Staging', identityA),
+          'rev-b');
+      expect(await provider.readDefinitionsRevision('app-2', 'Production', identityA),
+          'rev-c');
+    });
+
+    test('different evaluation identities are isolated', () async {
+      final provider = SecureStorageCacheProvider();
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityA, 'rev-a');
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityB, 'rev-b');
+
+      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+          'rev-a');
+      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityB),
+          'rev-b');
+    });
+
+    test('delete removes the revision entry', () async {
+      final provider = SecureStorageCacheProvider();
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityA, 'rev-a');
+      await provider.deleteDefinitionsRevision('app-1', 'Production', identityA);
+      expect(
+        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        isNull,
+      );
+    });
+
+    test('migrates legacy appKey/environment revision keys on read', () async {
+      store['toggly.revision.app-1:Production'] = 'legacy-rev';
+      final provider = SecureStorageCacheProvider();
+
+      expect(
+        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        'legacy-rev',
+      );
+      expect(store.containsKey('toggly.revision.app-1:Production'), isFalse);
+      expect(
+        store['toggly.revision.app-1:Production:u:user-a'],
+        'legacy-rev',
+      );
+    });
+  });
 }

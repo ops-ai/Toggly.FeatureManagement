@@ -55,21 +55,37 @@ abstract class TogglyCacheProvider {
 ///
 /// When supplied via [TogglyConfig.cacheProvider], the SDK reads and writes
 /// revision through this interface for WebSocket `?rev=` sync and
-/// `If-None-Match` conditional fetches.
+/// `If-None-Match` conditional fetches. Revisions are scoped per evaluation
+/// [identity] (the same context cache key used for flags/variants: user,
+/// groups, and claims) so multiple users on one app each retain their own ETag.
+///
+/// Custom backends should key revisions as
+/// `{appKey}:{environment}:{identity}` where [identity] is the SDK context
+/// key (e.g. `u:user-1|g:beta|c:role=admin`). On read, implementations may
+/// migrate a legacy `{appKey}:{environment}` revision to the identity-scoped
+/// key (see official cache packages).
 abstract class TogglyRevisionCacheProvider implements TogglyCacheProvider {
-  /// Returns the cached definitions revision for [appKey] / [environment].
+  /// Returns the cached definitions revision for [appKey], [environment], and
+  /// evaluation [identity].
   Future<String?> readDefinitionsRevision(
     String appKey,
     String environment,
+    String identity,
   );
 
-  /// Persists [revision] for [appKey] / [environment].
+  /// Persists [revision] for [appKey], [environment], and evaluation [identity].
   Future<void> writeDefinitionsRevision(
     String appKey,
     String environment,
+    String identity,
     String revision,
   );
 
-  /// Removes any cached definitions revision for [appKey] / [environment].
-  Future<void> deleteDefinitionsRevision(String appKey, String environment);
+  /// Removes any cached definitions revision for [appKey], [environment], and
+  /// evaluation [identity].
+  Future<void> deleteDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  );
 }

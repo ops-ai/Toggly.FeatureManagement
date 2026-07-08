@@ -49,6 +49,98 @@ class _MemoryCacheProvider implements TogglyCacheProvider {
   }
 }
 
+class _MemoryRevisionCacheProvider extends _MemoryCacheProvider
+    implements TogglyRevisionCacheProvider {
+  final Map<String, String> revisions = {};
+  final Map<String, TogglyVariantsCache> variants = {};
+  int deletedRevisions = 0;
+
+  String _revisionKey(String appKey, String environment, String identity) =>
+      '$appKey:$environment:$identity';
+
+  @override
+  Future<TogglyVariantsCache?> readVariants(String identity) async =>
+      variants[identity];
+
+  @override
+  Future<void> writeVariants(TogglyVariantsCache cache) async {
+    variants[cache.identity] = cache;
+  }
+
+  @override
+  Future<void> deleteVariants(String identity) async {
+    variants.remove(identity);
+  }
+
+  @override
+  Future<String?> readDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  ) async =>
+      revisions[_revisionKey(appKey, environment, identity)];
+
+  @override
+  Future<void> writeDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+    String revision,
+  ) async {
+    revisions[_revisionKey(appKey, environment, identity)] = revision;
+  }
+
+  @override
+  Future<void> deleteDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  ) async {
+    deletedRevisions++;
+    revisions.remove(_revisionKey(appKey, environment, identity));
+  }
+}
+
+InterceptorsWrapper _signedFlagsInterceptor({
+  required Map<String, dynamic> flagsBody,
+  Map<String, dynamic>? variantsBody,
+  Map<String, List<String>>? headers,
+}) {
+  return InterceptorsWrapper(
+    onRequest: (options, handler) {
+      final body = options.path.contains('/evaluated-variants-signed/')
+          ? (variantsBody ?? flagsBody)
+          : flagsBody;
+
+      handler.resolve(
+        Response<dynamic>(
+          requestOptions: options,
+          data: body,
+          statusCode: 200,
+          headers: headers != null ? Headers.fromMap(headers) : null,
+        ),
+      );
+    },
+  );
+}
+
+InterceptorsWrapper _notModifiedInterceptor() {
+  return InterceptorsWrapper(
+    onRequest: (options, handler) {
+      handler.reject(
+        DioException(
+          requestOptions: options,
+          response: Response<dynamic>(
+            requestOptions: options,
+            statusCode: 304,
+          ),
+          type: DioExceptionType.badResponse,
+        ),
+      );
+    },
+  );
+}
+
 String _b64(List<int> bytes) => base64UrlEncode(bytes).replaceAll('=', '');
 
 Map<String, dynamic> _jwks(String keyId) {
@@ -231,6 +323,603 @@ void main() {
     expect(result.status, TogglyLoadFeatureFlagsResponse.error);
     expect(provider.deletedFlags, greaterThan(0));
     expect(errors, contains('Signature verification failed'));
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('equal-timestamp re-fetch keeps flags instead of wiping to defaults',
+      () async {
+    final provider = _MemoryCacheProvider();
+    final errors = <String>[];
+    // Toggly's signed `timestamp` is the definitions publish time — it stays
+    // constant across fetches of unchanged definitions. A re-fetch that
+    // returns the same timestamp must NOT be treated as a rollback.
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        handler.resolve(
+          Response<dynamic>(
+            requestOptions: options,
+            data: {
+              'defs': {'FeatureA': true},
+              'signature': base64Encode(List<int>.filled(64, 0)),
+              'timestamp': 200,
+              'kid': 'kid-1',
+            },
+            statusCode: 200,
+          ),
+        );
+      },
+    );
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: '{"FeatureA":true}',
+      timestamp: 200,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        cacheProvider: provider,
+        onError: (message, error, stackTrace) => errors.add(message),
+      ),
+    );
+
+    final flags = await Toggly.cachedFeatureFlags;
+
+    expect(flags['FeatureA'], true);
+    expect(provider.deletedFlags, 0);
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('rollback (older timestamp) keeps newer cached flags, no cache delete',
+      () async {
+    final provider = _MemoryCacheProvider();
+    final errors = <String>[];
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        handler.resolve(
+          Response<dynamic>(
+            requestOptions: options,
+            data: {
+              'defs': {'FeatureA': false},
+              'signature': base64Encode(List<int>.filled(64, 0)),
+              'timestamp': 100,
+              'kid': 'kid-1',
+            },
+            statusCode: 200,
+          ),
+        );
+      },
+    );
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: '{"FeatureA":true}',
+      timestamp: 300,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+
+    final result = await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        cacheProvider: provider,
+        onError: (message, error, stackTrace) => errors.add(message),
+      ),
+    );
+
+    final flags = await Toggly.cachedFeatureFlags;
+
+    expect(result.status, TogglyLoadFeatureFlagsResponse.cached);
+    expect(flags['FeatureA'], true);
+    expect(provider.deletedFlags, 0);
+    expect(
+      errors.any((message) => message.contains('Rejected rollback')),
+      isFalse,
+    );
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('each user sends their own persisted If-None-Match revision', () async {
+    final provider = _MemoryRevisionCacheProvider();
+    await provider.writeDefinitionsRevision(
+      'app',
+      'Production',
+      'u:user-a',
+      'rev-a',
+    );
+    await provider.writeDefinitionsRevision(
+      'app',
+      'Production',
+      'u:user-b',
+      'rev-b',
+    );
+
+    final captured = <String?>[];
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        captured.add(options.headers['If-None-Match'] as String?);
+        handler.resolve(
+          Response<dynamic>(
+            requestOptions: options,
+            data: {
+              'defs': {'FeatureA': true},
+              'signature': base64Encode(List<int>.filled(64, 0)),
+              'timestamp': 200,
+              'kid': 'kid-1',
+            },
+            statusCode: 200,
+          ),
+        );
+      },
+    );
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-a',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        cacheProvider: provider,
+      ),
+    );
+    expect(captured.last, 'rev-a');
+    expect(provider.deletedRevisions, 0);
+
+    captured.clear();
+    await Toggly.setIdentity('user-b');
+    expect(captured.last, 'rev-b');
+    expect(provider.deletedRevisions, 0);
+    expect(provider.revisions['app:Production:u:user-a'], 'rev-a');
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('setIdentity switch preserves persisted flags for switch-back',
+      () async {
+    final provider = _MemoryRevisionCacheProvider();
+    provider.flags['u:user-a'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-a',
+      flags: '{"FeatureA":true}',
+      timestamp: 200,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+    provider.flags['u:user-b'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-b',
+      flags: '{"FeatureA":false}',
+      timestamp: 200,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+
+    final interceptor = _notModifiedInterceptor();
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-a',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(provider.deletedFlags, 0);
+    expect((await Toggly.cachedFeatureFlags)['FeatureA'], true);
+
+    await Toggly.setIdentity('user-b');
+    expect(provider.deletedFlags, 0);
+    expect(provider.flags.containsKey('u:user-a'), isTrue);
+    expect((await Toggly.cachedFeatureFlags)['FeatureA'], false);
+
+    await Toggly.setIdentity('user-a');
+    expect(provider.deletedFlags, 0);
+    expect(provider.flags.containsKey('u:user-b'), isTrue);
+    expect((await Toggly.cachedFeatureFlags)['FeatureA'], true);
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('setIdentity with unchanged identity returns cached without deleting',
+      () async {
+    final provider = _MemoryCacheProvider();
+    final interceptor = _notModifiedInterceptor();
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: '{"FeatureA":true}',
+      timestamp: 200,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        cacheProvider: provider,
+      ),
+    );
+
+    final result = await Toggly.setIdentity('user-1');
+
+    expect(result.status, TogglyLoadFeatureFlagsResponse.cached);
+    expect(provider.deletedFlags, 0);
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('setContext preserves persisted cache when groups change', () async {
+    final provider = _MemoryRevisionCacheProvider();
+    provider.flags['u:user-1|g:beta'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1|g:beta',
+      flags: '{"FeatureA":true}',
+      timestamp: 200,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+
+    final interceptor = _notModifiedInterceptor();
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      groups: ['beta'],
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(provider.deletedFlags, 0);
+
+    await Toggly.setContext(groups: ['enterprise']);
+
+    expect(provider.deletedFlags, 0);
+    expect(provider.flags.containsKey('u:user-1|g:beta'), isTrue);
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('setContext with no changes returns cached', () async {
+    await Toggly.init(
+      flagDefaults: {'FeatureA': false},
+    );
+
+    final result = await Toggly.setContext();
+
+    expect(result.status, TogglyLoadFeatureFlagsResponse.cached);
+  });
+
+  test('setIdentity(null) clears in-memory state without deleting persisted cache',
+      () async {
+    final provider = _MemoryRevisionCacheProvider();
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: '{"FeatureA":true}',
+      timestamp: 200,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+
+    final interceptor = _notModifiedInterceptor();
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+      ),
+    );
+
+    await Toggly.setIdentity(null);
+
+    expect(provider.deletedFlags, 0);
+    expect(provider.flags.containsKey('u:user-1'), isTrue);
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('setContext with identity change refreshes without deleting persisted cache',
+      () async {
+    final provider = _MemoryRevisionCacheProvider();
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: '{"FeatureA":true}',
+      timestamp: 200,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+    provider.flags['u:user-2'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-2',
+      flags: '{"FeatureA":false}',
+      timestamp: 200,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+
+    final interceptor = _notModifiedInterceptor();
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+      ),
+    );
+
+    await Toggly.setContext(identity: 'user-2');
+
+    expect(provider.deletedFlags, 0);
+    expect(provider.flags.containsKey('u:user-1'), isTrue);
+    expect(provider.flags.containsKey('u:user-2'), isTrue);
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('setContext with claims change preserves other persisted entries', () async {
+    final provider = _MemoryRevisionCacheProvider();
+    provider.flags['u:user-1|c:role=admin'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1|c:role=admin',
+      flags: '{"FeatureA":true}',
+      timestamp: 200,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+
+    final interceptor = _notModifiedInterceptor();
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      claims: {'role': 'admin'},
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        cacheProvider: provider,
+      ),
+    );
+
+    await Toggly.setContext(claims: {'role': 'viewer'});
+
+    expect(provider.deletedFlags, 0);
+    expect(provider.flags.containsKey('u:user-1|c:role=admin'), isTrue);
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('clearFeatureFlagsCache deletes persisted revision for current identity',
+      () async {
+    final provider = _MemoryRevisionCacheProvider();
+    await provider.writeDefinitionsRevision(
+      'app',
+      'Production',
+      'u:user-1',
+      'rev-1',
+    );
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+      ),
+    );
+
+    await Toggly.clearFeatureFlagsCache();
+
+    expect(provider.deletedRevisions, 1);
+    expect(provider.revisions['app:Production:u:user-1'], isNull);
+  });
+
+  test('fetch persists X-Definitions-Revision header', () async {
+    final provider = _MemoryRevisionCacheProvider();
+    final interceptor = _signedFlagsInterceptor(
+      flagsBody: {
+        'defs': {'FeatureA': true},
+        'signature': base64Encode(List<int>.filled(64, 0)),
+        'timestamp': 200,
+        'kid': 'kid-1',
+      },
+      headers: {
+        'x-definitions-revision': ['custom-rev'],
+      },
+    );
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(
+      provider.revisions['app:Production:u:user-1'],
+      'custom-rev',
+    );
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('fetch persists definitions revision from response ETag', () async {
+    final provider = _MemoryRevisionCacheProvider();
+    final interceptor = _signedFlagsInterceptor(
+      flagsBody: {
+        'defs': {'FeatureA': true},
+        'signature': base64Encode(List<int>.filled(64, 0)),
+        'timestamp': 200,
+        'kid': 'kid-1',
+      },
+      headers: {'etag': ['rev-from-server']},
+    );
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(
+      provider.revisions['app:Production:u:user-1'],
+      'rev-from-server',
+    );
+    expect(Toggly.debug()['definitionsRevision'], 'rev-from-server');
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('variants equal-timestamp re-fetch keeps cached assignments', () async {
+    final provider = _MemoryRevisionCacheProvider();
+    const signedMeta = {
+      'signature': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+      'timestamp': 200,
+      'kid': 'kid-1',
+    };
+    final interceptor = _signedFlagsInterceptor(
+      flagsBody: {
+        'defs': {'FeatureA': true},
+        ...signedMeta,
+      },
+      variantsBody: {
+        'defs': {
+          'FeatureA': {'enabled': true, 'variant': 'v1'},
+        },
+        ...signedMeta,
+      },
+    );
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    provider.variants['u:user-1'] = TogglyVariantsCache(
+      identity: 'u:user-1',
+      variants: '{"FeatureA":{"enabled":true,"variant":"v1"}}',
+      timestamp: 200,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      useSignedDefinitions: false,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        enableVariants: true,
+        cacheProvider: provider,
+      ),
+    );
+
+    final defs = await Toggly.cachedVariantDefinitions();
+    expect(defs['FeatureA'], isNotNull);
+    expect((defs['FeatureA'] as Map)['variant'], 'v1');
+
+    HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('variants rollback keeps newer cached assignments', () async {
+    final provider = _MemoryRevisionCacheProvider();
+    const signedMeta = {
+      'signature': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+      'timestamp': 100,
+      'kid': 'kid-1',
+    };
+    final interceptor = _signedFlagsInterceptor(
+      flagsBody: {
+        'defs': {'FeatureA': true},
+        'signature': base64Encode(List<int>.filled(64, 0)),
+        'timestamp': 300,
+        'kid': 'kid-1',
+      },
+      variantsBody: {
+        'defs': {
+          'FeatureA': {'enabled': true, 'variant': 'old'},
+        },
+        ...signedMeta,
+      },
+    );
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    provider.variants['u:user-1'] = TogglyVariantsCache(
+      identity: 'u:user-1',
+      variants: '{"FeatureA":{"enabled":true,"variant":"new"}}',
+      timestamp: 300,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: 'kid-1',
+    );
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      useSignedDefinitions: false,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        baseURI: 'https://example.test',
+        verifySignatures: false,
+        enableVariants: true,
+        cacheProvider: provider,
+      ),
+    );
+
+    final defs = await Toggly.cachedVariantDefinitions();
+    expect((defs['FeatureA'] as Map)['variant'], 'new');
 
     HttpService.getInstance.http.interceptors.remove(interceptor);
   });

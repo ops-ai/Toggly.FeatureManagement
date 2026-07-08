@@ -10,9 +10,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// on Android, etc.). Pass an instance via
 /// `TogglyConfig(cacheProvider: SecureStorageCacheProvider())` to enable
 /// offline restart.
-class SecureStorageCacheProvider implements TogglyCacheProvider {
+class SecureStorageCacheProvider implements TogglyRevisionCacheProvider {
   static const String _flagsPrefix = 'toggly.flags.';
   static const String _variantsPrefix = 'toggly.variants.';
+  static const String _revisionPrefix = 'toggly.revision.';
   static const String _jwksKey = 'toggly.jwks';
 
   final FlutterSecureStorage _storage;
@@ -77,4 +78,53 @@ class SecureStorageCacheProvider implements TogglyCacheProvider {
 
   @override
   Future<void> deleteJwks() => _storage.delete(key: _jwksKey);
+
+  String _revisionKey(String appKey, String environment, String identity) =>
+      '$_revisionPrefix$appKey:$environment:$identity';
+
+  String _legacyRevisionKey(String appKey, String environment) =>
+      '$_revisionPrefix$appKey:$environment';
+
+  @override
+  Future<String?> readDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  ) async {
+    final key = _revisionKey(appKey, environment, identity);
+    final revision = await _storage.read(key: key);
+    if (revision != null) {
+      return revision;
+    }
+
+    final legacyKey = _legacyRevisionKey(appKey, environment);
+    final legacy = await _storage.read(key: legacyKey);
+    if (legacy == null) {
+      return null;
+    }
+
+    await _storage.write(key: key, value: legacy);
+    await _storage.delete(key: legacyKey);
+    return legacy;
+  }
+
+  @override
+  Future<void> writeDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+    String revision,
+  ) =>
+      _storage.write(
+        key: _revisionKey(appKey, environment, identity),
+        value: revision,
+      );
+
+  @override
+  Future<void> deleteDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  ) =>
+      _storage.delete(key: _revisionKey(appKey, environment, identity));
 }

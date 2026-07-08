@@ -1,3 +1,37 @@
+## 1.8.0
+
+2026-07-07
+
+### Changed
+- Definitions revision (ETag) persistence is scoped per evaluation identity
+  (user, groups, claims — same key as flags/variants) so multiple users on
+  one app each retain their own `If-None-Match` value across cold starts and
+  user switches.
+- `setIdentity` / `setContext` clear in-memory evaluation state only; persisted
+  flags, variants, and revisions for other users are kept for switch-back.
+- `TogglyRevisionCacheProvider` read/write/delete methods now take an
+  `identity` parameter (breaking change for custom cache backends).
+- Rejected definition rollbacks are logged in debug mode only; they no longer
+  invoke `TogglyConfig.onError` while the SDK keeps cached flags.
+
+### Note
+- Upgrading from pre-1.8.0 revision storage (`appKey`/`environment` only):
+  official cache providers migrate legacy revision keys on first read. Custom
+  backends should do the same or expect one extra full fetch per identity.
+
+## 1.7.1
+
+2026-07-07
+
+### Fixed
+- Anti-rollback for signed definitions now rejects only strictly **older**
+  timestamps (`<`), not equal ones. Equal timestamps are the same
+  definitions re-served (e.g. cold start without a persisted ETag) and are
+  accepted instead of wiping flags back to `flagDefaults`.
+- On a genuine rollback attempt, the SDK keeps the newer cached flags (or
+  variants), re-emits them to the stream, and returns `cached` — it no longer
+  calls `clearFeatureFlagsCache()` and downgrade to defaults.
+
 ## 1.7.0
 
 2026-07-07

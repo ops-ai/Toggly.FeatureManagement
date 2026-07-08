@@ -15,10 +15,11 @@ import 'package:sqflite/sqflite.dart';
 /// A custom [dbFactory] and [path] can be injected (used by tests with
 /// `sqflite_common_ffi`). By default the global `sqflite` factory and the
 /// platform databases directory are used.
-class SqliteCacheProvider implements TogglyCacheProvider {
+class SqliteCacheProvider implements TogglyRevisionCacheProvider {
   static const String _table = 'toggly_cache';
   static const String _kindFlags = 'flags';
   static const String _kindVariants = 'variants';
+  static const String _kindRevision = 'revision';
   static const String _kindJwks = 'jwks';
 
   // JWKS is a single, identity-independent row.
@@ -158,4 +159,54 @@ class SqliteCacheProvider implements TogglyCacheProvider {
 
   @override
   Future<void> deleteJwks() => _delete(_kindJwks, _jwksIdentity);
+
+  String _revisionIdentity(String appKey, String environment, String identity) =>
+      '$appKey:$environment:$identity';
+
+  String _legacyRevisionIdentity(String appKey, String environment) =>
+      '$appKey:$environment';
+
+  @override
+  Future<String?> readDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  ) async {
+    final scopedIdentity = _revisionIdentity(appKey, environment, identity);
+    final revision = await _read(_kindRevision, scopedIdentity);
+    if (revision != null) {
+      return revision;
+    }
+
+    final legacyIdentity = _legacyRevisionIdentity(appKey, environment);
+    final legacy = await _read(_kindRevision, legacyIdentity);
+    if (legacy == null) {
+      return null;
+    }
+
+    await _write(_kindRevision, scopedIdentity, legacy);
+    await _delete(_kindRevision, legacyIdentity);
+    return legacy;
+  }
+
+  @override
+  Future<void> writeDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+    String revision,
+  ) =>
+      _write(
+        _kindRevision,
+        _revisionIdentity(appKey, environment, identity),
+        revision,
+      );
+
+  @override
+  Future<void> deleteDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  ) =>
+      _delete(_kindRevision, _revisionIdentity(appKey, environment, identity));
 }

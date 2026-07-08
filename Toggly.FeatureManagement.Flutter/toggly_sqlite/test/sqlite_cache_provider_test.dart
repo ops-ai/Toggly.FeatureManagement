@@ -110,4 +110,119 @@ void main() {
       await reader.close();
     });
   });
+
+  group('definitions revision', () {
+    const identityA = 'u:user-a';
+    const identityB = 'u:user-b';
+    late SqliteCacheProvider provider;
+
+    setUp(() {
+      provider = SqliteCacheProvider(
+        dbFactory: databaseFactoryFfi,
+        path: p.join(tempDir.path, 'revision.db'),
+      );
+    });
+
+    tearDown(() async {
+      await provider.close();
+    });
+
+    test('write then read round-trips by appKey and environment', () async {
+      await provider.writeDefinitionsRevision(
+        'app-1',
+        'Production',
+        identityA,
+        '"etag-abc"',
+      );
+      expect(
+        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        '"etag-abc"',
+      );
+    });
+
+    test('different appKey/environment pairs are isolated', () async {
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityA, 'rev-a');
+      await provider.writeDefinitionsRevision('app-1', 'Staging', identityA, 'rev-b');
+      await provider.writeDefinitionsRevision(
+          'app-2', 'Production', identityA, 'rev-c');
+
+      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+          'rev-a');
+      expect(await provider.readDefinitionsRevision('app-1', 'Staging', identityA),
+          'rev-b');
+      expect(await provider.readDefinitionsRevision('app-2', 'Production', identityA),
+          'rev-c');
+    });
+
+    test('different evaluation identities are isolated', () async {
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityA, 'rev-a');
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityB, 'rev-b');
+
+      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+          'rev-a');
+      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityB),
+          'rev-b');
+    });
+
+    test('delete removes the revision entry', () async {
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityA, 'rev-a');
+      await provider.deleteDefinitionsRevision('app-1', 'Production', identityA);
+      expect(
+        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        isNull,
+      );
+    });
+
+    test('migrates legacy appKey/environment revision rows on read', () async {
+      final dbPath = p.join(tempDir.path, 'legacy_revision.db');
+      final db = await databaseFactoryFfi.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (database, version) async {
+            await database.execute('''
+              CREATE TABLE toggly_cache (
+                kind TEXT NOT NULL,
+                identity TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (kind, identity)
+              )
+            ''');
+          },
+        ),
+      );
+      await db.insert('toggly_cache', {
+        'kind': 'revision',
+        'identity': 'app-1:Production',
+        'payload': 'legacy-rev',
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      });
+      await db.close();
+
+      final reader = SqliteCacheProvider(
+        dbFactory: databaseFactoryFfi,
+        path: dbPath,
+      );
+      expect(
+        await reader.readDefinitionsRevision('app-1', 'Production', identityA),
+        'legacy-rev',
+      );
+
+      final verifyDb = await databaseFactoryFfi.openDatabase(dbPath);
+      final rows = await verifyDb.query(
+        'toggly_cache',
+        where: 'kind = ?',
+        whereArgs: ['revision'],
+      );
+      expect(rows.length, 1);
+      expect(rows.first['identity'], 'app-1:Production:u:user-a');
+      await verifyDb.close();
+      await reader.close();
+    });
+  });
 }

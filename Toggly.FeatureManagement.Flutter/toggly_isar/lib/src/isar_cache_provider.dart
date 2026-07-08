@@ -19,9 +19,10 @@ import 'toggly_cache_entry.dart';
 ///   config: TogglyConfig(cacheProvider: provider),
 /// );
 /// ```
-class IsarCacheProvider implements TogglyCacheProvider {
+class IsarCacheProvider implements TogglyRevisionCacheProvider {
   static const String _flagsPrefix = 'flags:';
   static const String _variantsPrefix = 'variants:';
+  static const String _revisionPrefix = 'revision:';
   static const String _jwksKey = 'jwks';
 
   final Isar _isar;
@@ -116,4 +117,50 @@ class IsarCacheProvider implements TogglyCacheProvider {
 
   @override
   Future<void> deleteJwks() => _delete(_jwksKey);
+
+  String _revisionKey(String appKey, String environment, String identity) =>
+      '$_revisionPrefix$appKey:$environment:$identity';
+
+  String _legacyRevisionKey(String appKey, String environment) =>
+      '$_revisionPrefix$appKey:$environment';
+
+  @override
+  Future<String?> readDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  ) async {
+    final key = _revisionKey(appKey, environment, identity);
+    final revision = await _read(key);
+    if (revision != null) {
+      return revision;
+    }
+
+    final legacyKey = _legacyRevisionKey(appKey, environment);
+    final legacy = await _read(legacyKey);
+    if (legacy == null) {
+      return null;
+    }
+
+    await _write(key, legacy);
+    await _delete(legacyKey);
+    return legacy;
+  }
+
+  @override
+  Future<void> writeDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+    String revision,
+  ) =>
+      _write(_revisionKey(appKey, environment, identity), revision);
+
+  @override
+  Future<void> deleteDefinitionsRevision(
+    String appKey,
+    String environment,
+    String identity,
+  ) =>
+      _delete(_revisionKey(appKey, environment, identity));
 }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:feature_flags_toggly/feature_flags_toggly.dart';
@@ -54,6 +55,90 @@ void main() {
       final provider = DiskCacheProvider(directory: nested);
       await provider.writeJwks('{"keys":[]}');
       expect(nested.existsSync(), isTrue);
+    });
+  });
+
+  group('definitions revision', () {
+    const identityA = 'u:user-a';
+    const identityB = 'u:user-b';
+
+    test('write then read round-trips by appKey and environment', () async {
+      final provider = DiskCacheProvider(directory: tempDir);
+      await provider.writeDefinitionsRevision(
+        'app-1',
+        'Production',
+        identityA,
+        '"etag-abc"',
+      );
+      expect(
+        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        '"etag-abc"',
+      );
+    });
+
+    test('different appKey/environment pairs are isolated', () async {
+      final provider = DiskCacheProvider(directory: tempDir);
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityA, 'rev-a');
+      await provider.writeDefinitionsRevision('app-1', 'Staging', identityA, 'rev-b');
+      await provider.writeDefinitionsRevision(
+          'app-2', 'Production', identityA, 'rev-c');
+
+      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+          'rev-a');
+      expect(await provider.readDefinitionsRevision('app-1', 'Staging', identityA),
+          'rev-b');
+      expect(await provider.readDefinitionsRevision('app-2', 'Production', identityA),
+          'rev-c');
+    });
+
+    test('different evaluation identities are isolated', () async {
+      final provider = DiskCacheProvider(directory: tempDir);
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityA, 'rev-a');
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityB, 'rev-b');
+
+      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+          'rev-a');
+      expect(await provider.readDefinitionsRevision('app-1', 'Production', identityB),
+          'rev-b');
+    });
+
+    test('delete removes the revision entry', () async {
+      final provider = DiskCacheProvider(directory: tempDir);
+      await provider.writeDefinitionsRevision(
+          'app-1', 'Production', identityA, 'rev-a');
+      await provider.deleteDefinitionsRevision('app-1', 'Production', identityA);
+      expect(
+        await provider.readDefinitionsRevision('app-1', 'Production', identityA),
+        isNull,
+      );
+    });
+
+    test('migrates legacy appKey/environment revision files on read', () async {
+      final provider = DiskCacheProvider(directory: tempDir);
+      final legacyToken =
+          base64Url.encode(utf8.encode('app-1:Production'));
+      final legacyFile = File('${tempDir.path}/revision_$legacyToken.txt');
+      await legacyFile.writeAsString('legacy-rev');
+
+      expect(
+        await provider.readDefinitionsRevision(
+          'app-1',
+          'Production',
+          identityA,
+        ),
+        'legacy-rev',
+      );
+      expect(legacyFile.existsSync(), isFalse);
+
+      final scopedToken =
+          base64Url.encode(utf8.encode('app-1:Production:u:user-a'));
+      expect(
+        File('${tempDir.path}/revision_$scopedToken.txt').readAsStringSync(),
+        'legacy-rev',
+      );
     });
   });
 }

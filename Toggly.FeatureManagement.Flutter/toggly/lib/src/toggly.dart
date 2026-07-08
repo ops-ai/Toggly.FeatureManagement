@@ -253,6 +253,10 @@ class Toggly with WidgetsBindingObserver {
     }
 
     // Try to fetch flags from the API
+    if (Toggly._appKey != null && _definitionsRevision == null) {
+      await _loadCachedDefinitionsRevision();
+    }
+
     final status = await Toggly.fetchFeatureFlags();
 
     if (Toggly._config.enableVariants && Toggly._appKey != null) {
@@ -266,24 +270,35 @@ class Toggly with WidgetsBindingObserver {
 
   /// Sets an unique identifier to the current session. Useful in case of custom
   /// feature rollouts.
+  ///
+  /// When the identity changes, in-memory evaluation state is cleared and
+  /// [refresh] runs for the new context. Persisted flags, variants, and
+  /// revisions for other users are kept so switching back does not require a
+  /// full re-fetch. The feature-flag stream may briefly emit [flagDefaults]
+  /// until [refresh] completes.
   static Future<TogglyInitResponse> setIdentity(String? identity) async {
+    final identityChanged = identity != null
+        ? Toggly._identity != identity
+        : Toggly._identity != (Toggly._deviceId ??= _uuid.v4());
+
     if (identity != null) {
-      if (Toggly._identity != identity) {
-        await clearFeatureFlagsCache();
-      }
       Toggly._identity = identity;
     } else {
-      // Fall back to the ephemeral in-memory device id (not persisted).
-      final deviceId = (Toggly._deviceId ??= _uuid.v4());
-      if (Toggly._identity != deviceId) {
-        await clearFeatureFlagsCache();
-      }
-      Toggly._identity = deviceId;
+      Toggly._identity = (Toggly._deviceId ??= _uuid.v4());
     }
-    return await Toggly.refresh();
+
+    if (identityChanged) {
+      _clearInMemoryEvaluationState();
+      return Toggly.refresh();
+    }
+
+    return TogglyInitResponse(status: TogglyLoadFeatureFlagsResponse.cached);
   }
 
   /// Sets evaluation context for targeting (identity, groups, claims).
+  ///
+  /// Same persistence rules as [setIdentity]: only in-memory state is cleared
+  /// on context change; other users' persisted cache entries are retained.
   static Future<TogglyInitResponse> setContext({
     String? identity,
     List<String>? groups,
@@ -291,10 +306,7 @@ class Toggly with WidgetsBindingObserver {
   }) async {
     var shouldRefresh = false;
 
-    if (identity != null) {
-      if (Toggly._identity != identity) {
-        await clearFeatureFlagsCache();
-      }
+    if (identity != null && Toggly._identity != identity) {
       Toggly._identity = identity;
       shouldRefresh = true;
     }
@@ -310,11 +322,20 @@ class Toggly with WidgetsBindingObserver {
     }
 
     if (shouldRefresh) {
-      await clearFeatureFlagsCache();
+      _clearInMemoryEvaluationState();
       return Toggly.refresh();
     }
 
     return TogglyInitResponse(status: TogglyLoadFeatureFlagsResponse.cached);
+  }
+
+  /// Drops in-memory evaluation state for the current context without deleting
+  /// persisted flags, variants, or revisions (supports multi-user switch-back).
+  static void _clearInMemoryEvaluationState() {
+    _inMemoryFlags = null;
+    _inMemoryVariantDefs = null;
+    _definitionsRevision = null;
+    _featureFlagsSubject?.add(Map<String, bool>.from(Toggly._flagDefaults));
   }
 
   static String get _contextCacheKey {
@@ -455,17 +476,21 @@ class Toggly with WidgetsBindingObserver {
     ));
   }
 
-  /// Clears the feature flags cache.
-  static Future clearFeatureFlagsCache() async {
-    _inMemoryFlags = null;
-    _inMemoryVariantDefs = null;
-    _featureFlagsSubject?.add(Map<String, bool>.from(Toggly._flagDefaults));
-    _definitionsRevision = null;
+  /// Clears the feature flags cache for the current evaluation context.
+  ///
+  /// Drops in-memory state and deletes persisted flags and variants for
+  /// [_contextCacheKey]. By default also deletes the persisted definitions
+  /// revision (ETag) used for `If-None-Match` and WebSocket `?rev=` sync.
+  /// Pass [deletePersistedRevision: false] only when you need to invalidate
+  /// flags/variants without discarding the conditional-fetch etag (uncommon).
+  static Future clearFeatureFlagsCache({bool deletePersistedRevision = true}) async {
+    _clearInMemoryEvaluationState();
 
-    // ETags are memory-only; clear persisted flags/variants for this identity.
     await Toggly._cache?.deleteFlags(Toggly._contextCacheKey);
     await Toggly._cache?.deleteVariants(Toggly._contextCacheKey);
-    await _deleteCachedDefinitionsRevision();
+    if (deletePersistedRevision) {
+      await _deleteCachedDefinitionsRevision();
+    }
   }
 
   static Future checkAndClearFeatureFlagsCache() async {
@@ -531,20 +556,29 @@ class Toggly with WidgetsBindingObserver {
         int timestamp = signedResponse['timestamp'];
         String keyId = signedResponse['kid'];
 
-        // Check existing cache timestamp (anti-rollback) from the provider.
+        // Anti-rollback: reject definitions strictly OLDER than what we have
+        // cached (a genuine downgrade attempt). An EQUAL timestamp is the same
+        // signed definitions re-served — e.g. a 200 served without an
+        // If-None-Match match, or a cold start before the revision/ETag is
+        // known — and MUST be accepted. Treating equal timestamps as a
+        // rollback (and clearing the cache) destructively resets every flag
+        // back to flagDefaults. On a genuine rollback, keep the newer cached
+        // flags and re-emit them instead of wiping to defaults.
         final existing =
             await Toggly._cache?.readFlags(Toggly._contextCacheKey);
         if (existing != null &&
             existing.timestamp != null &&
-            timestamp <= existing.timestamp!) {
-          _reportError(
-            'New definitions timestamp must be greater than existing timestamp',
-            Exception(
-                'New definitions timestamp must be greater than existing timestamp'),
-            StackTrace.current,
-          );
-          await clearFeatureFlagsCache();
-          return TogglyLoadFeatureFlagsResponse.error;
+            timestamp < existing.timestamp!) {
+          if (kDebugMode) {
+            print(
+              'Toggly.fetchFeatureFlags — rejected rollback: incoming timestamp '
+              '($timestamp) is older than cached (${existing.timestamp}); '
+              'keeping cached flags',
+            );
+          }
+          final cached = await cachedFeatureFlags;
+          Toggly._featureFlagsSubject?.add(cached);
+          return TogglyLoadFeatureFlagsResponse.cached;
         }
 
         try {
@@ -662,14 +696,22 @@ class Toggly with WidgetsBindingObserver {
         throw Exception('Variants response missing signature metadata');
       }
 
+      // Anti-rollback: only reject variants strictly OLDER than cached. Equal
+      // timestamps are the same signed variants re-served and must be accepted.
+      // On a genuine rollback keep the newer cached variants instead of
+      // discarding them.
       final existingVariants = await Toggly._cache?.readVariants(
         Toggly._contextCacheKey,
       );
       if (existingVariants != null &&
           existingVariants.timestamp != null &&
-          timestamp <= existingVariants.timestamp!) {
-        throw Exception(
-            'New variants timestamp must be greater than existing timestamp');
+          timestamp < existingVariants.timestamp!) {
+        if (kDebugMode) {
+          print('Toggly.fetchEvaluatedVariants — rejected rollback '
+              '($timestamp < ${existingVariants.timestamp}); keeping cached');
+        }
+        _inMemoryVariantDefs = await _readVerifiedVariantDefsFromCache();
+        return;
       }
 
       final payloadForSign =
@@ -1362,6 +1404,7 @@ class Toggly with WidgetsBindingObserver {
     final revision = await _revisionCache?.readDefinitionsRevision(
       appKey,
       Toggly._environment,
+      Toggly._contextCacheKey,
     );
     if (revision != null && revision.isNotEmpty) {
       _definitionsRevision = revision;
@@ -1385,6 +1428,7 @@ class Toggly with WidgetsBindingObserver {
     await _revisionCache?.writeDefinitionsRevision(
       appKey,
       Toggly._environment,
+      Toggly._contextCacheKey,
       normalized,
     );
   }
@@ -1398,6 +1442,7 @@ class Toggly with WidgetsBindingObserver {
     await _revisionCache?.deleteDefinitionsRevision(
       appKey,
       Toggly._environment,
+      Toggly._contextCacheKey,
     );
   }
 
