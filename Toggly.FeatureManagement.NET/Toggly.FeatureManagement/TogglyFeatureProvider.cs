@@ -179,55 +179,181 @@ namespace Toggly.FeatureManagement
         {
             try
             {
-                if (_snapshotProvider != null)
+                if (_snapshotProvider == null)
+                    return;
+
+                var snapshot = await _snapshotProvider.GetFeaturesSnapshotAsync().ConfigureAwait(false);
+                if (snapshot == null)
+                    return;
+
+                List<FeatureDefinitionModel>? featuresToApply = snapshot.Features;
+
+                if (_useSignedDefinitions)
                 {
-                    var snapshot = await _snapshotProvider.GetFeaturesSnapshotAsync().ConfigureAwait(false);
-                    if (snapshot.Features != null)
+                    if (snapshot.Signature == null || snapshot.KeyId == null || snapshot.Timestamp == null)
                     {
-                        if (_useSignedDefinitions)
-                        {
-                            if (snapshot.Signature == null || snapshot.KeyId == null || snapshot.Timestamp == null)
-                            {
-                                _logger.LogWarning("Snapshot is missing required signature fields");
-                                return;
-                            }
+                        ReportError("Snapshot is missing required signature fields");
+                        return;
+                    }
 
-                            //validate signature
-                            var signature = Convert.FromBase64String(snapshot.Signature);
-                            var ecdsa = await GetEcdsaKey(snapshot.KeyId).ConfigureAwait(false);
-                            if (ecdsa == null)
-                            {
-                                _logger.LogError("No ES256 key found in JWKS");
-                                return;
-                            }
-                            // Match server signing: Newtonsoft camelCase, dictionary keys unchanged (Toggly Web ResponseSigner).
-                            var jsonData = JsonConvert.SerializeObject(snapshot.Features, SignedDefinitionsSerializerSettings);
-                            var dataToVerify = $"{jsonData}|{snapshot.Timestamp}";
-                            var hash = ComputeSignedDefinitionsPayloadHash(dataToVerify);
-                            if (!ecdsa!.VerifyHash(hash, signature))
-                            {
-                                _logger.LogError("Invalid signature");
-                                return;
-                            }
+                    var signature = Convert.FromBase64String(snapshot.Signature);
+                    var ecdsa = await GetEcdsaKey(snapshot.KeyId).ConfigureAwait(false);
+                    if (ecdsa == null)
+                    {
+                        ReportError("No ES256 key found in JWKS");
+                        return;
+                    }
+
+                    if (!string.IsNullOrEmpty(snapshot.SignedDefsJson))
+                    {
+                        // Verify against the exact server-signed defs JSON (never re-serialize).
+                        var dataToVerify = $"{snapshot.SignedDefsJson}|{snapshot.Timestamp}";
+                        var hash = ComputeSignedDefinitionsPayloadHash(dataToVerify);
+                        if (!ecdsa.VerifyHash(hash, signature))
+                        {
+                            ReportError("Invalid signature");
+                            return;
                         }
 
-                        foreach (var featureDefinition in snapshot.Features)
+                        var verifiedFeatures = System.Text.Json.JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
+                            snapshot.SignedDefsJson, SystemJsonCaseInsensitive);
+                        if (verifiedFeatures == null)
                         {
-                            var newDefinition = BuildFeatureDefinition(featureDefinition);
-                            if (featureDefinition.SecuredFeature) _secureFeatures.Add(featureDefinition.FeatureKey);
-                            else _secureFeatures.TryRemove(featureDefinition.FeatureKey);
-                            _definitions.AddOrUpdate(featureDefinition.FeatureKey, newDefinition, (name, def) => def = newDefinition);
-                            _featureStateService.UpdateFeatureState(featureDefinition.FeatureKey, newDefinition.EnabledFor.Any(s => s.Name == "AlwaysOn"));
+                            ReportError("Failed to deserialize SignedDefsJson after signature verification");
+                            return;
                         }
-                        _featureStateService.NotifyDefinitionsChanged();
+
+                        // Typed Features are not independently trusted. If present they must match
+                        // the verified SignedDefsJson; any divergence means storage was tampered with.
+                        if (snapshot.Features != null &&
+                            !FeatureListsMatchForIntegrity(snapshot.Features, verifiedFeatures))
+                        {
+                            ReportError(
+                                "Snapshot Features do not match verified SignedDefsJson; refusing to load (possible storage tampering)");
+                            return;
+                        }
+
+                        featuresToApply = verifiedFeatures;
+                    }
+                    else if (featuresToApply != null)
+                    {
+                        // Legacy snapshot without raw defs — soft-load typed features once.
+                        // The ongoing RefreshFeatures HTTP path upgrades the snapshot with SignedDefsJson.
+                        ReportError(
+                            "Snapshot is missing SignedDefsJson; loaded without cryptographic re-verification. Clear and refresh to upgrade the snapshot.",
+                            level: LogLevel.Warning);
+                    }
+                    else
+                    {
+                        ReportError("Snapshot is missing SignedDefsJson and Features");
+                        return;
                     }
                 }
+
+                if (featuresToApply == null)
+                    return;
+
+                if (!string.IsNullOrEmpty(snapshot.ETag))
+                    _lastETag = TryParseEntityTag(snapshot.ETag);
+                if (snapshot.Timestamp.HasValue)
+                    Interlocked.Exchange(ref _lastDefinitionsTimestamp, snapshot.Timestamp.Value);
+
+                ApplyNewDefinitions(featuresToApply);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error loading from snapshot");
+                ReportError("Error loading from snapshot", ex);
             }
         }
+
+        private const string DefinitionsRevisionHeader = "X-Definitions-Revision";
+
+        private void ReportError(string message, Exception? ex = null, LogLevel level = LogLevel.Error)
+        {
+            _lastError = message;
+            _lastErrorTime = DateTime.UtcNow;
+            if (ex != null)
+                _logger.Log(level, ex, "{ErrorMessage}", message);
+            else
+                _logger.Log(level, "{ErrorMessage}", message);
+
+            try
+            {
+                _settings.Value.OnError?.Invoke(message, ex);
+            }
+            catch (Exception callbackEx)
+            {
+                _logger.LogWarning(callbackEx, "OnError callback threw");
+            }
+        }
+
+        private static EntityTagHeaderValue? TryParseEntityTag(string? revision)
+        {
+            if (string.IsNullOrWhiteSpace(revision))
+                return null;
+
+            var trimmed = revision.Trim();
+            if (!trimmed.StartsWith("\"", StringComparison.Ordinal))
+                trimmed = $"\"{trimmed.Trim('"')}\"";
+
+            return EntityTagHeaderValue.TryParse(trimmed, out var etag) ? etag : null;
+        }
+
+        private string? ReadDefinitionsRevision(HttpResponseMessage response)
+        {
+            if (response.Headers.ETag != null)
+                return response.Headers.ETag.Tag.Trim('"');
+
+            if (response.Headers.TryGetValues("ETag", out var etagValues))
+            {
+                var raw = etagValues.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(raw))
+                    return raw.Trim().Trim('"');
+            }
+
+            if (response.Headers.TryGetValues(DefinitionsRevisionHeader, out var revValues))
+            {
+                var raw = revValues.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(raw))
+                    return raw.Trim().Trim('"');
+            }
+
+            return null;
+        }
+
+        private void StoreDefinitionsRevision(string? revision)
+        {
+            if (string.IsNullOrWhiteSpace(revision))
+            {
+                _logger.LogWarning("Response did not include ETag or {Header} header", DefinitionsRevisionHeader);
+                return;
+            }
+
+            _lastETag = TryParseEntityTag(revision);
+            _logger.LogDebug("Received and stored definitions revision: {Revision}", revision);
+        }
+
+        private void ClearCachedJwks()
+        {
+            foreach (var key in _ecDsaKeys.Keys)
+                _ecDsaKeys.TryRemove(key, out _);
+        }
+
+        /// <summary>
+        /// Clears persisted feature and JWKS snapshots (when a snapshot provider is configured).
+        /// Does not clear in-memory definitions; call after a successful refresh to rebuild cache,
+        /// or before restart when recovering from a corrupt snapshot.
+        /// </summary>
+        public async Task ClearPersistedSnapshotsAsync(CancellationToken ct = default)
+        {
+            if (_snapshotProvider == null)
+                return;
+
+            await _snapshotProvider.ClearSnapshotAsync(ct).ConfigureAwait(false);
+            await _snapshotProvider.ClearJwkSnapshotAsync(ct).ConfigureAwait(false);
+            ClearCachedJwks();
+        }
+
 
         private string _lastError = string.Empty;
         private DateTime? _lastErrorTime = null;
@@ -329,19 +455,19 @@ namespace Toggly.FeatureManagement
 
                     if (signedDefinitionsResponse.Defs == null)
                     {
-                        _logger.LogWarning("Signed definitions response missing defs");
+                        ReportError("Signed definitions response missing defs", level: LogLevel.Warning);
                         return;
                     }
 
                     if (string.IsNullOrEmpty(signedDefinitionsResponse.Signature))
                     {
-                        _logger.LogWarning("Signed definitions response missing signature");
+                        ReportError("Signed definitions response missing signature", level: LogLevel.Warning);
                         return;
                     }
 
                     if (string.IsNullOrEmpty(signedDefinitionsResponse.Kid))
                     {
-                        _logger.LogWarning("Signed definitions response missing kid");
+                        ReportError("Signed definitions response missing kid", level: LogLevel.Warning);
                         return;
                     }
 
@@ -349,56 +475,66 @@ namespace Toggly.FeatureManagement
                     var currentTimestamp = Interlocked.Read(ref _lastDefinitionsTimestamp);
                     if (signedDefinitionsResponse.Timestamp < currentTimestamp)
                     {
-                        _logger.LogWarning("Received definitions with older timestamp. Current: {CurrentTimestamp}, Received: {ReceivedTimestamp}", 
-                            currentTimestamp, signedDefinitionsResponse.Timestamp);
+                        ReportError(
+                            $"Received definitions with older timestamp. Current: {currentTimestamp}, Received: {signedDefinitionsResponse.Timestamp}",
+                            level: LogLevel.Warning);
                         return;
                     }
 
                     // Extract the raw data portion from the JSON
-                    var jsonDoc = JsonDocument.Parse(rawJson);
-                    var dataElement = jsonDoc.RootElement.GetProperty("defs");
-                    var rawData = dataElement.GetRawText();
+                    string rawData;
+                    using (var jsonDoc = JsonDocument.Parse(rawJson))
+                    {
+                        if (!jsonDoc.RootElement.TryGetProperty("defs", out var dataElement))
+                        {
+                            ReportError("Signed definitions response missing defs property");
+                            return;
+                        }
 
-                    // Create data string to verify using the raw JSON
+                        rawData = dataElement.GetRawText();
+                    }
+
                     var dataToVerify = $"{rawData}|{signedDefinitionsResponse.Timestamp}";
-                    _logger.LogDebug("Data to verify: {DataToVerify}", dataToVerify);
-                    
-                    var hash = ComputeSignedDefinitionsPayloadHash(dataToVerify);
-                    _logger.LogDebug("Hash (hex): {Hash}", BitConverter.ToString(hash).Replace("-", ""));
+                    _logger.LogDebug(
+                        "Verifying signed definitions payload length {Length}, timestamp {Timestamp}",
+                        rawData.Length, signedDefinitionsResponse.Timestamp);
 
-                    // Verify signature
+                    var hash = ComputeSignedDefinitionsPayloadHash(dataToVerify);
+
                     var signature = Convert.FromBase64String(signedDefinitionsResponse.Signature);
-                    _logger.LogDebug("Signature length: {Length}", signature.Length);
-                    _logger.LogDebug("Signature (hex): {Signature}", BitConverter.ToString(signature).Replace("-", ""));
 
                     var ecdsa = await GetEcdsaKey(signedDefinitionsResponse.Kid).ConfigureAwait(false);
                     if (ecdsa == null)
                     {
-                        _logger.LogError("No ES256 key found in JWKS");
+                        ReportError("No ES256 key found in JWKS");
                         return;
                     }
 
                     if (!ecdsa.VerifyHash(hash, signature))
                     {
-                        _logger.LogError("Invalid signature");
+                        ReportError("Invalid signature");
                         return;
                     }
 
-                    newDefinitions = signedDefinitionsResponse.Defs;
-                    var receivedETag = newDefinitionsRequest.Headers.ETag;
-                    if (receivedETag != null)
-                    {
-                        _lastETag = receivedETag;
-                        _logger.LogDebug("Received and stored ETag: {ETag}", receivedETag);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Response did not include ETag header");
-                    }
+                    // Prefer verified raw defs for evaluation and persistence (same bytes that were signed).
+                    newDefinitions = System.Text.Json.JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
+                        rawData, SystemJsonCaseInsensitive) ?? signedDefinitionsResponse.Defs;
+                    var revision = ReadDefinitionsRevision(newDefinitionsRequest);
+                    StoreDefinitionsRevision(revision);
                     Interlocked.Exchange(ref _lastDefinitionsTimestamp, signedDefinitionsResponse.Timestamp);
 
                     if (_snapshotProvider != null)
-                        await _snapshotProvider.SaveSnapshotAsync(newDefinitions, signedDefinitionsResponse.Signature, signedDefinitionsResponse.Kid, signedDefinitionsResponse.Timestamp).ConfigureAwait(false);
+                        await _snapshotProvider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+                        {
+                            // Always persist Features derived from verified SignedDefsJson — never a
+                            // separately mutable typed copy that could diverge in storage.
+                            Features = newDefinitions,
+                            Signature = signedDefinitionsResponse.Signature,
+                            KeyId = signedDefinitionsResponse.Kid,
+                            Timestamp = signedDefinitionsResponse.Timestamp,
+                            SignedDefsJson = rawData,
+                            ETag = revision
+                        }).ConfigureAwait(false);
                 }
                 else
                 {
@@ -423,18 +559,14 @@ namespace Toggly.FeatureManagement
                         return;
                     }
 
-                    var receivedETag = newDefinitionsRequest.Headers.ETag;
-                    if (receivedETag != null)
-                    {
-                        _lastETag = receivedETag;
-                        _logger.LogDebug("Received and stored ETag: {ETag}", receivedETag);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Response did not include ETag header");
-                    }
+                    var revision = ReadDefinitionsRevision(newDefinitionsRequest);
+                    StoreDefinitionsRevision(revision);
                     if (_snapshotProvider != null)
-                        await _snapshotProvider.SaveSnapshotAsync(newDefinitions).ConfigureAwait(false);
+                        await _snapshotProvider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+                        {
+                            Features = newDefinitions,
+                            ETag = revision
+                        }).ConfigureAwait(false);
                 }
 
                 ApplyNewDefinitions(newDefinitions);
@@ -495,6 +627,28 @@ namespace Toggly.FeatureManagement
                                 using var doc = JsonDocument.Parse(text);
                                 if (!doc.RootElement.TryGetProperty("type", out var typeProp)) return;
                                 var type = typeProp.GetString();
+
+                                if (type == "signing-key-updated")
+                                {
+                                    ClearCachedJwks();
+                                    var snapshotProvider = _snapshotProvider;
+                                    // Clear JWKS snapshot before refresh so the refresh cannot
+                                    // race with ClearJwkSnapshotAsync deleting a newly saved JWKS.
+                                    _ = Task.Run(async () =>
+                                    {
+                                        try
+                                        {
+                                            if (snapshotProvider != null)
+                                                await snapshotProvider.ClearJwkSnapshotAsync().ConfigureAwait(false);
+                                            await RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
+                                        }
+                                        catch (Exception clearEx)
+                                        {
+                                            ReportError("Failed to process signing-key-updated", clearEx);
+                                        }
+                                    });
+                                    return;
+                                }
 
                                 if (type == "definitions" && !_useSignedDefinitions
                                     && doc.RootElement.TryGetProperty("data", out var dataElement))
@@ -577,26 +731,23 @@ namespace Toggly.FeatureManagement
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogError(ex, "HTTP error refreshing feature definitions from {BaseUrl} for AppKey={AppKey}, Environment={Environment}. " +
+                ReportError(
+                    $"HTTP error refreshing feature definitions from {httpClient?.BaseAddress} for AppKey={SanitizedAppKey}, Environment={_environment}. " +
                     "Verify your Toggly configuration: ensure the AppKey is a valid Backend-type key and the Environment name matches exactly",
-                    httpClient?.BaseAddress, SanitizedAppKey, _environment);
-                _lastError = ex.Message;
-                _lastErrorTime = DateTime.UtcNow;
+                    ex);
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                _logger.LogError(ex, "Timeout refreshing feature definitions from {BaseUrl} for AppKey={AppKey}, Environment={Environment}. " +
+                ReportError(
+                    $"Timeout refreshing feature definitions from {httpClient?.BaseAddress} for AppKey={SanitizedAppKey}, Environment={_environment}. " +
                     "The definitions service may be temporarily unavailable",
-                    httpClient?.BaseAddress, SanitizedAppKey, _environment);
-                _lastError = ex.Message;
-                _lastErrorTime = DateTime.UtcNow;
+                    ex);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error refreshing feature definitions for AppKey={AppKey}, Environment={Environment}",
-                    SanitizedAppKey, _environment);
-                _lastError = ex.Message;
-                _lastErrorTime = DateTime.UtcNow;
+                ReportError(
+                    $"Unexpected error refreshing feature definitions for AppKey={SanitizedAppKey}, Environment={_environment}",
+                    ex);
             }
             finally
             {
@@ -647,6 +798,43 @@ namespace Toggly.FeatureManagement
             _featureStateService.NotifyDefinitionsChanged();
         }
 
+        /// <summary>
+        /// Integrity check: stored typed Features must describe the same flags as the
+        /// cryptographically verified SignedDefsJson (keys, filters, secured, metrics).
+        /// </summary>
+        internal static bool FeatureListsMatchForIntegrity(
+            List<FeatureDefinitionModel> stored,
+            List<FeatureDefinitionModel> verified)
+        {
+            if (stored.Count != verified.Count)
+                return false;
+
+            static string FeatureFingerprint(FeatureDefinitionModel f)
+            {
+                var filters = (f.Filters ?? Enumerable.Empty<FeatureFilter>())
+                    .Select(filter =>
+                    {
+                        var parameters = filter.Parameters == null
+                            ? string.Empty
+                            : string.Join(",", filter.Parameters.OrderBy(p => p.Key).Select(p => $"{p.Key}={p.Value}"));
+                        return $"{filter.Name}:{parameters}";
+                    })
+                    .OrderBy(x => x, StringComparer.Ordinal);
+                var metrics = (f.Metrics ?? Enumerable.Empty<string>())
+                    .OrderBy(x => x, StringComparer.Ordinal);
+                return string.Join("|",
+                    f.FeatureKey,
+                    f.SecuredFeature,
+                    f.RequirementType,
+                    string.Join(";", filters),
+                    string.Join(",", metrics));
+            }
+
+            var storedFingerprints = stored.Select(FeatureFingerprint).OrderBy(x => x, StringComparer.Ordinal).ToList();
+            var verifiedFingerprints = verified.Select(FeatureFingerprint).OrderBy(x => x, StringComparer.Ordinal).ToList();
+            return storedFingerprints.SequenceEqual(verifiedFingerprints, StringComparer.Ordinal);
+        }
+
         private void TriggerHttpRefresh()
         {
             _ = Task.Run(async () =>
@@ -657,7 +845,7 @@ namespace Toggly.FeatureManagement
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error refreshing features from websocket notification");
+                    ReportError("Error refreshing features from websocket notification", ex);
                 }
             });
         }
@@ -708,9 +896,7 @@ namespace Toggly.FeatureManagement
                     (!string.IsNullOrEmpty(responseBody) ? $" Server response: {responseBody}" : string.Empty)
             };
 
-            _logger.LogError("Error refreshing feature definitions: {ErrorMessage}", message);
-            _lastError = message;
-            _lastErrorTime = DateTime.UtcNow;
+            ReportError(message);
         }
 
         private static FeatureDefinition BuildFeatureDefinition(FeatureDefinitionModel featureDefinition)

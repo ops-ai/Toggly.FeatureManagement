@@ -36,6 +36,7 @@ namespace Toggly.FeatureManagement.Storage.EntityFramework
                 entity.Property(e => e.Data).IsRequired();
                 entity.Property(e => e.Signature).HasMaxLength(1000);
                 entity.Property(e => e.KeyId).HasMaxLength(100);
+                entity.Property(e => e.ETag).HasMaxLength(255);
             });
         }
     }
@@ -75,6 +76,17 @@ namespace Toggly.FeatureManagement.Storage.EntityFramework
         /// Timestamp of the snapshot
         /// </summary>
         public long? Timestamp { get; set; }
+
+        /// <summary>
+        /// Exact JSON text of the signed <c>defs</c> array from the server.
+        /// </summary>
+        public string? SignedDefsJson { get; set; }
+
+        /// <summary>
+        /// Definitions revision (ETag / X-Definitions-Revision) for conditional fetches.
+        /// </summary>
+        [StringLength(255)]
+        public string? ETag { get; set; }
 
         /// <summary>
         /// Last update time

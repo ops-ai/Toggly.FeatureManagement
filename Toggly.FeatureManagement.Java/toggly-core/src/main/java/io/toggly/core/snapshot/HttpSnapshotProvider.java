@@ -2,7 +2,11 @@ package io.toggly.core.snapshot;
 
 import io.toggly.core.SdkIdentity;
 import io.toggly.core.config.TogglyConfig;
+import io.toggly.core.crypto.Es256Verifier;
+import io.toggly.core.crypto.JsonWebKey;
+import io.toggly.core.crypto.JsonWebKeySet;
 import io.toggly.core.exception.TogglyNetworkException;
+import io.toggly.core.exception.TogglySignatureException;
 import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.model.FeatureRequirement;
@@ -28,7 +32,9 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -37,7 +43,9 @@ import java.util.regex.Pattern;
 /**
  * HTTP-based snapshot provider that fetches definitions from Toggly API.
  *
- * <p>Uses only JDK classes for zero external dependencies.</p>
+ * <p>Uses only JDK classes for zero external dependencies. When
+ * {@code useSignedDefinitions} is enabled, verifies ES256 signatures against
+ * JWKS before applying updates and re-verifies from raw defs JSON on cache load.</p>
  */
 public final class HttpSnapshotProvider implements SnapshotProvider {
 
@@ -46,11 +54,15 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private static final int READ_TIMEOUT_MS = 30_000;
     private static final long FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000L;
     private static final long WS_RECONNECT_DELAY = 5000L;
+    private static final long JWKS_TTL_DAYS = 30;
 
     private final TogglyConfig config;
     private final String definitionsUrl;
     private final AtomicReference<FeatureSnapshot> currentSnapshot;
     private final AtomicReference<String> lastEtag;
+    private final AtomicLong lastSignedTimestamp;
+    private final AtomicReference<JsonWebKeySet> jwks;
+    private final AtomicReference<Instant> jwksExpiry;
     private final ScheduledExecutorService scheduler;
 
     private java.net.http.WebSocket webSocket;
@@ -67,8 +79,10 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         this.definitionsUrl = buildDefinitionsUrl(config);
         this.currentSnapshot = new AtomicReference<>(FeatureSnapshot.empty());
         this.lastEtag = new AtomicReference<>(null);
+        this.lastSignedTimestamp = new AtomicLong(0);
+        this.jwks = new AtomicReference<>(null);
+        this.jwksExpiry = new AtomicReference<>(Instant.EPOCH);
 
-        // Start background refresh if interval is configured
         long intervalSeconds = config.getRefreshIntervalSeconds();
         boolean needsScheduler = intervalSeconds > 0 || config.isEnableLiveUpdates();
         if (needsScheduler) {
@@ -106,7 +120,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     public FeatureSnapshot getSnapshot() {
         FeatureSnapshot snapshot = currentSnapshot.get();
         if (snapshot.isEmpty()) {
-            // First access - try to fetch
             return refresh();
         }
         return snapshot;
@@ -126,18 +139,22 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         try {
             FeatureSnapshot newSnapshot = fetchDefinitions();
             if (newSnapshot != null) {
-                currentSnapshot.set(newSnapshot);
+                applySnapshot(newSnapshot);
 
-                // Start WebSocket after first successful refresh
                 if (config.isEnableLiveUpdates() && !wsConnected && webSocket == null) {
                     startWebSocket();
                 }
 
                 return newSnapshot;
             }
+        } catch (TogglySignatureException e) {
+            reportError("Invalid signature", e);
+            LOGGER.log(Level.WARNING, "Signature verification failed", e);
         } catch (Exception e) {
+            reportError("Failed to refresh definitions", e);
             LOGGER.log(Level.WARNING, "Failed to refresh definitions", e);
         }
+        // Last-known-good: keep serving the previous snapshot on transient failures
         return currentSnapshot.get();
     }
 
@@ -146,9 +163,85 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         return CompletableFuture.supplyAsync(this::refresh);
     }
 
+    /**
+     * Applies a previously persisted snapshot, re-verifying from raw defs when signed.
+     *
+     * @param snapshot cached snapshot
+     * @return true if applied
+     */
+    public boolean applyCachedSnapshot(FeatureSnapshot snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) {
+            return false;
+        }
+        try {
+            if (config.isUseSignedDefinitions()) {
+                if (!snapshot.hasSignatureMetadata()) {
+                    reportError(
+                            "Snapshot is missing SignedDefsJson; loaded without cryptographic re-verification. Clear and refresh to upgrade the snapshot.",
+                            null);
+                } else {
+                    JsonWebKeySet keySet = loadOrFetchJwks();
+                    Es256Verifier.verify(
+                            snapshot.getSignedDefsJson(),
+                            snapshot.getSignedTimestamp(),
+                            snapshot.getSignature(),
+                            snapshot.getKeyId(),
+                            keySet,
+                            config.getAllowedKeyIds());
+                }
+            }
+            applySnapshot(snapshot);
+            return true;
+        } catch (Exception e) {
+            reportError("Failed to apply cached snapshot", e);
+            return false;
+        }
+    }
+
+    private void applySnapshot(FeatureSnapshot snapshot) {
+        currentSnapshot.set(snapshot);
+        if (snapshot.getEtag() != null) {
+            lastEtag.set(snapshot.getEtag());
+        }
+        if (snapshot.getSignedTimestamp() != null) {
+            lastSignedTimestamp.set(snapshot.getSignedTimestamp());
+        }
+    }
+
+    @Override
+    public void clear() {
+        currentSnapshot.set(FeatureSnapshot.empty());
+        lastEtag.set(null);
+        lastSignedTimestamp.set(0);
+        clearJwks();
+    }
+
+    @Override
+    public void clearJwks() {
+        jwks.set(null);
+        jwksExpiry.set(Instant.EPOCH);
+    }
+
+    @Override
+    public JsonWebKeySet loadJwks() {
+        Instant expiry = jwksExpiry.get();
+        JsonWebKeySet cached = jwks.get();
+        if (cached != null && Instant.now().isBefore(expiry)) {
+            return cached;
+        }
+        return null;
+    }
+
+    @Override
+    public void saveJwks(JsonWebKeySet keySet, Instant expiry) {
+        if (keySet != null) {
+            jwks.set(keySet);
+            jwksExpiry.set(expiry != null ? expiry : Instant.now().plusSeconds(JWKS_TTL_DAYS * 24 * 3600));
+        }
+    }
+
     private void refreshSilently() {
         try {
-            // When WebSocket is connected, skip polling unless fallback interval has elapsed
             if (wsConnected) {
                 long elapsed = System.currentTimeMillis() - lastFallbackRefresh;
                 if (elapsed < FALLBACK_REFRESH_INTERVAL) {
@@ -175,7 +268,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("User-Agent", SdkIdentity.userAgent());
 
-            // Send ETag for conditional request
             String etag = lastEtag.get();
             if (etag != null) {
                 connection.setRequestProperty("If-None-Match", etag);
@@ -184,7 +276,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             int responseCode = connection.getResponseCode();
 
             if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                // No changes
                 return currentSnapshot.get();
             }
 
@@ -194,19 +285,15 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                         responseCode);
             }
 
-            // Store new ETag
             String newEtag = connection.getHeaderField("ETag");
             if (newEtag != null) {
                 lastEtag.set(newEtag);
             }
 
-            // Read response
             String responseBody = readResponse(connection.getInputStream());
-
-            // Parse JSON (simple parser for zero dependencies)
             return parseDefinitions(responseBody, newEtag);
 
-        } catch (TogglyNetworkException e) {
+        } catch (TogglyNetworkException | TogglySignatureException e) {
             throw e;
         } catch (IOException e) {
             throw new TogglyNetworkException("Network error fetching definitions", e);
@@ -229,45 +316,226 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         return response.toString();
     }
 
-    /**
-     * Simple JSON parser for feature definitions.
-     * Avoids external dependencies like Jackson/Gson.
-     */
     private FeatureSnapshot parseDefinitions(String json, String etag) {
         Map<String, FeatureDefinition> features = new HashMap<>();
         Map<String, MetricDefinition> metrics = new HashMap<>();
 
-        // Try signed envelope "defs" first, then "feature_flags", then raw array
-        String featuresJson = null;
-        for (String key : new String[]{"defs", "feature_flags"}) {
-            featuresJson = extractArrayByKey(json, key);
-            if (featuresJson != null) break;
-        }
-        // Fall back: raw array response (no wrapper key)
-        if (featuresJson == null && json.trim().startsWith("[")) {
-            featuresJson = json.trim().substring(1, json.trim().length() - 1);
-        }
-        if (featuresJson != null) {
-            parseFeatures(featuresJson, features);
+        String signedDefsJson = null;
+        String signature = null;
+        String kid = null;
+        Long signedTs = null;
+
+        if (config.isUseSignedDefinitions()) {
+            signedDefsJson = extractRawJsonValue(json, "defs");
+            signature = extractStringValue(json, "signature");
+            kid = extractStringValue(json, "kid");
+            signedTs = extractLongValue(json, "timestamp");
+
+            if (signedDefsJson == null) {
+                throw new TogglySignatureException("Signed response missing defs");
+            }
+            if (signature == null || signature.isEmpty()) {
+                throw new TogglySignatureException("Signed response missing signature");
+            }
+            if (kid == null || kid.isEmpty()) {
+                throw new TogglySignatureException("Signed response missing kid");
+            }
+            if (signedTs == null) {
+                throw new TogglySignatureException("Signed response missing timestamp");
+            }
+            if (signedTs < lastSignedTimestamp.get() && lastSignedTimestamp.get() > 0) {
+                LOGGER.log(Level.FINE, "Ignoring older signed definitions timestamp");
+                return currentSnapshot.get();
+            }
+
+            JsonWebKeySet keySet = loadOrFetchJwks();
+            Es256Verifier.verify(
+                    signedDefsJson,
+                    signedTs,
+                    signature,
+                    kid,
+                    keySet,
+                    config.getAllowedKeyIds());
+
+            String arrayContent = signedDefsJson.trim();
+            if (arrayContent.startsWith("[") && arrayContent.endsWith("]")) {
+                arrayContent = arrayContent.substring(1, arrayContent.length() - 1);
+            }
+            parseFeatures(arrayContent, features);
+        } else {
+            String featuresJson = null;
+            for (String key : new String[]{"defs", "feature_flags"}) {
+                featuresJson = extractArrayByKey(json, key);
+                if (featuresJson != null) break;
+            }
+            if (featuresJson == null && json.trim().startsWith("[")) {
+                featuresJson = json.trim().substring(1, json.trim().length() - 1);
+            }
+            if (featuresJson != null) {
+                parseFeatures(featuresJson, features);
+            }
         }
 
-        // Parse metrics array if present
         Pattern metricsPattern = Pattern.compile(
                 "\"metrics\"\\s*:\\s*\\[([^\\]]*)]",
                 Pattern.DOTALL);
         Matcher metricsMatcher = metricsPattern.matcher(json);
         if (metricsMatcher.find()) {
-            String metricsJson = metricsMatcher.group(1);
-            parseMetrics(metricsJson, metrics);
+            parseMetrics(metricsMatcher.group(1), metrics);
         }
 
-        return new FeatureSnapshot(features, metrics, Instant.now(), etag);
+        return new FeatureSnapshot(
+                features, metrics, Instant.now(), etag,
+                signature, kid, signedTs, signedDefsJson);
+    }
+
+    private JsonWebKeySet loadOrFetchJwks() {
+        JsonWebKeySet cached = loadJwks();
+        if (cached != null) {
+            return cached;
+        }
+
+        String baseUrl = config.getBaseUrl();
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        String jwksUrl = baseUrl + "/.well-known/jwks";
+
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(jwksUrl);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("User-Agent", SdkIdentity.userAgent());
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                throw new TogglyNetworkException(
+                        "Failed to fetch JWKS: HTTP " + responseCode, responseCode);
+            }
+
+            String body = readResponse(connection.getInputStream());
+            JsonWebKeySet keySet = parseJwks(body);
+            Instant expiry = Instant.now().plusSeconds(JWKS_TTL_DAYS * 24 * 3600);
+            for (JsonWebKey key : keySet.getKeys()) {
+                if (key.getExp() != null) {
+                    Instant keyExp = Instant.ofEpochSecond(key.getExp());
+                    if (keyExp.isBefore(expiry)) {
+                        expiry = keyExp;
+                    }
+                }
+            }
+            saveJwks(keySet, expiry);
+            return keySet;
+        } catch (TogglyNetworkException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new TogglyNetworkException("Network error fetching JWKS", e);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    private JsonWebKeySet parseJwks(String json) {
+        List<JsonWebKey> keys = new ArrayList<>();
+        Pattern keysPattern = Pattern.compile("\"keys\"\\s*:\\s*\\[", Pattern.DOTALL);
+        Matcher keysMatcher = keysPattern.matcher(json);
+        if (!keysMatcher.find()) {
+            return JsonWebKeySet.empty();
+        }
+        int start = json.indexOf('[', keysMatcher.start());
+        String arrayContent = extractBalancedArray(json, start);
+        if (arrayContent == null) {
+            return JsonWebKeySet.empty();
+        }
+
+        int braceCount = 0;
+        int objStart = -1;
+        for (int i = 0; i < arrayContent.length(); i++) {
+            char c = arrayContent.charAt(i);
+            if (c == '{') {
+                if (braceCount == 0) objStart = i;
+                braceCount++;
+            } else if (c == '}') {
+                braceCount--;
+                if (braceCount == 0 && objStart >= 0) {
+                    String keyJson = arrayContent.substring(objStart, i + 1);
+                    String kty = extractStringValue(keyJson, "kty");
+                    String kid = extractStringValue(keyJson, "kid");
+                    String crv = extractStringValue(keyJson, "crv");
+                    String x = extractStringValue(keyJson, "x");
+                    String y = extractStringValue(keyJson, "y");
+                    String alg = extractStringValue(keyJson, "alg");
+                    String use = extractStringValue(keyJson, "use");
+                    Long exp = extractLongValue(keyJson, "exp");
+                    if (kid != null && x != null && y != null) {
+                        keys.add(new JsonWebKey(
+                                kty != null ? kty : "EC",
+                                kid,
+                                crv != null ? crv : "P-256",
+                                x,
+                                y,
+                                alg != null ? alg : "ES256",
+                                use != null ? use : "sig",
+                                exp));
+                    }
+                    objStart = -1;
+                }
+            }
+        }
+        return new JsonWebKeySet(keys);
     }
 
     /**
-     * Extracts the content of a JSON array value by key using bracket counting,
-     * which correctly handles nested arrays and objects.
+     * Extracts the exact JSON value for a key (array or object), preserving raw bytes.
      */
+    private String extractRawJsonValue(String json, String key) {
+        String search = "\"" + key + "\"";
+        int idx = json.indexOf(search);
+        if (idx < 0) return null;
+
+        idx = idx + search.length();
+        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) idx++;
+        if (idx >= json.length() || json.charAt(idx) != ':') return null;
+        idx++;
+        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) idx++;
+        if (idx >= json.length()) return null;
+
+        char start = json.charAt(idx);
+        if (start == '[') {
+            String content = extractBalancedArray(json, idx);
+            return content != null ? "[" + content + "]" : null;
+        }
+        if (start == '{') {
+            int end = findMatchingBrace(json, idx);
+            return end > idx ? json.substring(idx, end + 1) : null;
+        }
+        return null;
+    }
+
+    private int findMatchingBrace(String json, int start) {
+        int count = 0;
+        boolean inString = false;
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
+                inString = !inString;
+            } else if (!inString) {
+                if (c == '{') count++;
+                else if (c == '}') {
+                    count--;
+                    if (count == 0) return i;
+                }
+            }
+        }
+        return -1;
+    }
+
     private String extractArrayByKey(String json, String key) {
         String search = "\"" + key + "\"";
         int idx = json.indexOf(search);
@@ -298,7 +566,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     }
 
     private void parseFeatures(String json, Map<String, FeatureDefinition> features) {
-        // Split by objects (simplified parsing)
         int braceCount = 0;
         int start = -1;
         for (int i = 0; i < json.length(); i++) {
@@ -383,14 +650,12 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
         Map<String, Object> parameters = new HashMap<>();
 
-        // Extract parameters object
         Pattern paramsPattern = Pattern.compile(
                 "\"parameters\"\\s*:\\s*\\{([^}]*)}",
                 Pattern.DOTALL);
         Matcher paramsMatcher = paramsPattern.matcher(json);
         if (paramsMatcher.find()) {
-            String paramsJson = paramsMatcher.group(1);
-            parseParameters(paramsJson, parameters);
+            parseParameters(paramsMatcher.group(1), parameters);
         }
 
         return FeatureFilter.of(name, parameters);
@@ -428,7 +693,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     }
 
     private void parseMetrics(String json, Map<String, MetricDefinition> metrics) {
-        // Simple metric parsing
         int braceCount = 0;
         int start = -1;
         for (int i = 0; i < json.length(); i++) {
@@ -443,7 +707,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                     String key = extractStringValue(metricJson, "metric_key");
                     if (key == null) key = extractStringValue(metricJson, "metricKey");
                     String name = extractStringValue(metricJson, "name");
-                    String description = extractStringValue(metricJson, "description");
                     String unit = extractStringValue(metricJson, "unit");
 
                     if (key != null) {
@@ -459,6 +722,30 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         Pattern pattern = Pattern.compile("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
         Matcher matcher = pattern.matcher(json);
         return matcher.find() ? matcher.group(1) : null;
+    }
+
+    private Long extractLongValue(String json, String key) {
+        Pattern pattern = Pattern.compile("\"" + key + "\"\\s*:\\s*(-?\\d+)");
+        Matcher matcher = pattern.matcher(json);
+        if (matcher.find()) {
+            try {
+                return Long.parseLong(matcher.group(1));
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private void reportError(String message, Throwable error) {
+        BiConsumer<String, Throwable> callback = config.getOnError();
+        if (callback != null) {
+            try {
+                callback.accept(message, error);
+            } catch (Exception callbackEx) {
+                LOGGER.log(Level.WARNING, "OnError callback threw", callbackEx);
+            }
+        }
     }
 
     // ========== WebSocket Live Updates ==========
@@ -533,7 +820,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
     private void handleWebSocketMessage(String message) {
         try {
-            // Simple JSON field extraction — check for message type
             String type = extractStringValue(message, "type");
             if (type == null) {
                 type = extractStringValue(message, "event");
@@ -541,6 +827,14 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
             if ("ping".equalsIgnoreCase(type)) {
                 LOGGER.log(Level.FINE, "WebSocket ping received");
+                return;
+            }
+
+            if ("signing-key-updated".equalsIgnoreCase(type)) {
+                LOGGER.log(Level.INFO, "WebSocket signing-key-updated, clearing JWKS and refreshing");
+                clearJwks();
+                lastEtag.set(null);
+                refreshSilently();
                 return;
             }
 

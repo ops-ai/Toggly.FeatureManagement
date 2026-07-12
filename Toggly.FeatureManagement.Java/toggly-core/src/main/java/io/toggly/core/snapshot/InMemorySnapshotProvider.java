@@ -55,6 +55,12 @@ public final class InMemorySnapshotProvider implements SnapshotProvider {
         return snapshot.get();
     }
 
+    @Override
+    public void clear() {
+        snapshot.set(FeatureSnapshot.empty());
+        clearJwks();
+    }
+
     /**
      * Updates the snapshot with new features.
      *
@@ -66,7 +72,11 @@ public final class InMemorySnapshotProvider implements SnapshotProvider {
                 features,
                 current.getMetrics(),
                 Instant.now(),
-                null));
+                null,
+                current.getSignature(),
+                current.getKeyId(),
+                current.getSignedTimestamp(),
+                current.getSignedDefsJson()));
     }
 
     /**

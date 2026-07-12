@@ -99,13 +99,14 @@ mod context;
 mod error;
 
 pub mod cache;
+pub mod crypto;
 pub mod definitions;
 pub mod eval;
 pub mod provider;
 mod sdk_identity;
 
 pub use client::TogglyClient;
-pub use config::{TogglyConfig, TogglyConfigBuilder};
+pub use config::{OnErrorCallback, TogglyConfig, TogglyConfigBuilder};
 pub use context::{EvalContext, EvalContextBuilder};
 pub use error::Error;
 

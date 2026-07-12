@@ -668,3 +668,62 @@ describe('API request', () => {
     expect(await client.isFeatureOn('fallback')).toBe(true)
   })
 })
+
+describe('clearCache and reliability', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    closeToggly()
+  })
+
+  afterEach(() => {
+    closeToggly()
+  })
+
+  it('should clear in-memory features and etag via clearCache', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({ ETag: '"rev-1"' }),
+      json: async () => ({
+        features: [{ featureKey: 'feature-a', enabled: true }],
+      }),
+    })
+
+    const client = createTogglyClient({ appKey: 'test-app' })
+    await client.init()
+    expect(await client.isFeatureOn('feature-a')).toBe(true)
+    expect(client.state.etag).toBe('rev-1')
+
+    await client.clearCache()
+
+    expect(await client.isFeatureOn('feature-a')).toBe(false)
+    expect(client.state.etag).toBeNull()
+  })
+
+  it('should preserve last-known-good features and call onError on refresh failure', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Map(),
+      json: async () => ({
+        features: [{ featureKey: 'feature-a', enabled: true }],
+      }),
+    })
+
+    const onError = vi.fn()
+    const client = createTogglyClient({
+      appKey: 'test-app',
+      onError,
+    })
+    await client.init()
+    expect(await client.isFeatureOn('feature-a')).toBe(true)
+
+    mockFetch.mockRejectedValueOnce(new Error('network down'))
+    const features = await client.refresh()
+
+    expect(features['feature-a']).toBe(true)
+    expect(await client.isFeatureOn('feature-a')).toBe(true)
+    expect(client.state.error).not.toBeNull()
+    expect(onError).toHaveBeenCalled()
+  })
+})

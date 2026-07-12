@@ -173,6 +173,17 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error invalidating Redis cache", e);
         }
+        delegate.clear();
+    }
+
+    @Override
+    public void clear() {
+        invalidate();
+    }
+
+    @Override
+    public void clearJwks() {
+        delegate.clearJwks();
     }
 
     @Override
@@ -211,9 +222,25 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         if (snapshot.getEtag() != null) {
             sb.append(",\"etag\":\"").append(escapeJson(snapshot.getEtag())).append("\"");
         }
+        if (snapshot.getSignature() != null) {
+            sb.append(",\"signature\":\"").append(escapeJson(snapshot.getSignature())).append("\"");
+        }
+        if (snapshot.getKeyId() != null) {
+            sb.append(",\"keyId\":\"").append(escapeJson(snapshot.getKeyId())).append("\"");
+        }
+        if (snapshot.getSignedTimestamp() != null) {
+            sb.append(",\"signedTimestamp\":").append(snapshot.getSignedTimestamp());
+        }
+        if (snapshot.getSignedDefsJson() != null) {
+            sb.append(",\"signedDefsJson\":").append(jsonStringLiteral(snapshot.getSignedDefsJson()));
+        }
         sb.append("}");
 
         return sb.toString();
+    }
+
+    private String jsonStringLiteral(String value) {
+        return "\"" + escapeJson(value) + "\"";
     }
 
     private String serializeFeature(FeatureDefinition feature) {
@@ -301,12 +328,59 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
             Instant timestamp = timestampStr != null ? Instant.parse(timestampStr) : Instant.now();
 
             String etag = extractStringValue(json, "etag");
+            String signature = extractStringValue(json, "signature");
+            String keyId = extractStringValue(json, "keyId");
+            Long signedTimestamp = extractLongValue(json, "signedTimestamp");
+            String signedDefsJson = extractRawStringValue(json, "signedDefsJson");
 
-            return new FeatureSnapshot(features, metrics, timestamp, etag);
+            FeatureSnapshot snapshot = new FeatureSnapshot(
+                    features, metrics, timestamp, etag,
+                    signature, keyId, signedTimestamp, signedDefsJson);
+
+            if (snapshot.hasSignatureMetadata()
+                    && delegate instanceof io.toggly.core.snapshot.HttpSnapshotProvider) {
+                io.toggly.core.snapshot.HttpSnapshotProvider http =
+                        (io.toggly.core.snapshot.HttpSnapshotProvider) delegate;
+                if (!http.applyCachedSnapshot(snapshot)) {
+                    return null;
+                }
+            }
+
+            return snapshot;
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error deserializing snapshot from Redis", e);
             return null;
         }
+    }
+
+    private Long extractLongValue(String json, String key) {
+        Pattern pattern = Pattern.compile("\"" + key + "\"\\s*:\\s*(-?\\d+)");
+        Matcher matcher = pattern.matcher(json);
+        if (matcher.find()) {
+            try {
+                return Long.parseLong(matcher.group(1));
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private String extractRawStringValue(String json, String key) {
+        Pattern pattern = Pattern.compile("\"" + key + "\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"");
+        Matcher matcher = pattern.matcher(json);
+        if (!matcher.find()) {
+            return null;
+        }
+        return unescapeJson(matcher.group(1));
+    }
+
+    private String unescapeJson(String value) {
+        return value.replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+                .replace("\\n", "\n")
+                .replace("\\r", "\r")
+                .replace("\\t", "\t");
     }
 
     private void parseFeatures(String json, Map<String, FeatureDefinition> features) {

@@ -79,6 +79,13 @@ func (r *RedisProvider) SaveDefinitions(ctx context.Context, snap DefinitionsSna
 	return nil
 }
 
+func (r *RedisProvider) Clear(ctx context.Context) error {
+	if err := r.client.Del(ctx, r.definitionsKey(), r.jwksKey()).Err(); err != nil {
+		return fmt.Errorf("redis clear snapshots: %w", err)
+	}
+	return nil
+}
+
 func (r *RedisProvider) LoadJWKS(ctx context.Context) (*JWKSnap, error) {
 	data, err := r.client.Get(ctx, r.jwksKey()).Bytes()
 	if err != nil {

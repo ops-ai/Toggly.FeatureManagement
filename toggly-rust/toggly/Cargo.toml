@@ -38,11 +38,15 @@ prometheus = { workspace = true, optional = true }
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
 
-# Hash functions for percentage rollouts
+# Hash functions for percentage rollouts + signed definitions verify
 sha2 = "0.10"
+sha1 = "0.10"
 base64 = "0.21"
+p256 = { version = "0.13", features = ["ecdsa"] }
+ecdsa = { version = "0.16", features = ["verifying", "arithmetic"] }
 rand = "0.8"
 regex = "1.10"
+hex = "0.4"
 
 # WebSocket live updates
 tokio-tungstenite = { workspace = true }

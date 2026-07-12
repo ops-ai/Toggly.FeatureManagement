@@ -1,9 +1,16 @@
 //! Configuration for the Toggly client.
 
+use crate::Error;
+use std::collections::HashSet;
+use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
+/// Callback invoked when a refresh or verification error occurs.
+pub type OnErrorCallback = Arc<dyn Fn(&Error) + Send + Sync>;
+
 /// Configuration for the Toggly client.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TogglyConfig {
     /// Application key from Toggly dashboard.
     pub app_key: String,
@@ -46,6 +53,12 @@ pub struct TogglyConfig {
 
     /// Maximum number of cached entries.
     pub cache_max_entries: usize,
+
+    /// Optional allow-list of signing key IDs. Empty / None allows all keys.
+    pub allowed_key_ids: Option<HashSet<String>>,
+
+    /// Optional error callback for refresh / signature failures.
+    pub on_error: Option<OnErrorCallback>,
 }
 
 impl Default for TogglyConfig {
@@ -65,7 +78,35 @@ impl Default for TogglyConfig {
             enable_live_updates: false,
             cache_ttl: Duration::from_secs(60),
             cache_max_entries: 10_000,
+            allowed_key_ids: None,
+            on_error: None,
         }
+    }
+}
+
+impl fmt::Debug for TogglyConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TogglyConfig")
+            .field("app_key", &self.app_key)
+            .field("environment", &self.environment)
+            .field("base_url", &self.base_url)
+            .field("definitions_url", &self.definitions_url)
+            .field("app_version", &self.app_version)
+            .field("instance_name", &self.instance_name)
+            .field("refresh_interval", &self.refresh_interval)
+            .field("http_timeout", &self.http_timeout)
+            .field("enable_undefined_in_dev", &self.enable_undefined_in_dev)
+            .field(
+                "disable_background_refresh",
+                &self.disable_background_refresh,
+            )
+            .field("use_signed_definitions", &self.use_signed_definitions)
+            .field("enable_live_updates", &self.enable_live_updates)
+            .field("cache_ttl", &self.cache_ttl)
+            .field("cache_max_entries", &self.cache_max_entries)
+            .field("allowed_key_ids", &self.allowed_key_ids)
+            .field("on_error", &self.on_error.as_ref().map(|_| "<callback>"))
+            .finish()
     }
 }
 
@@ -102,10 +143,26 @@ impl TogglyConfig {
             format!("{}/definitions/{}/{}", base, self.app_key, self.environment)
         }
     }
+
+    /// JWKS endpoint for signed definitions verification.
+    pub fn jwks_endpoint(&self) -> String {
+        let base = if self.definitions_url.ends_with('/') {
+            self.definitions_url.clone()
+        } else {
+            format!("{}/", self.definitions_url)
+        };
+        format!("{}.well-known/jwks", base)
+    }
+
+    pub(crate) fn report_error(&self, err: &Error) {
+        if let Some(cb) = &self.on_error {
+            cb(err);
+        }
+    }
 }
 
 /// Builder for [`TogglyConfig`].
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct TogglyConfigBuilder {
     config: TogglyConfig,
 }
@@ -195,6 +252,18 @@ impl TogglyConfigBuilder {
         self
     }
 
+    /// Restrict accepted signing key IDs.
+    pub fn allowed_key_ids(mut self, kids: HashSet<String>) -> Self {
+        self.config.allowed_key_ids = Some(kids);
+        self
+    }
+
+    /// Set an error callback invoked on refresh / verification failures.
+    pub fn on_error(mut self, callback: OnErrorCallback) -> Self {
+        self.config.on_error = Some(callback);
+        self
+    }
+
     /// Build the configuration.
     pub fn build(self) -> TogglyConfig {
         self.config
@@ -259,6 +328,10 @@ mod tests {
         assert_eq!(
             config.definitions_endpoint(),
             "https://definitions.toggly.io/definitions-signed/my-app/production"
+        );
+        assert_eq!(
+            config.jwks_endpoint(),
+            "https://definitions.toggly.io/.well-known/jwks"
         );
     }
 }

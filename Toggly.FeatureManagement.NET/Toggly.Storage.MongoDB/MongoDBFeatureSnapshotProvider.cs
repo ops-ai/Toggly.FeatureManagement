@@ -49,7 +49,7 @@ namespace Toggly.FeatureManagement.Storage.MongoDB
         /// </summary>
         /// <param name="ct">Cancellation token</param>
         /// <returns>Feature snapshot with signature metadata</returns>
-        public async Task<(List<FeatureDefinitionModel>? Features, string? Signature, string? KeyId, long? Timestamp)> GetFeaturesSnapshotAsync(CancellationToken ct = default)
+        public async Task<FeatureDefinitionsSnapshot?> GetFeaturesSnapshotAsync(CancellationToken ct = default)
         {
             try
             {
@@ -63,39 +63,46 @@ namespace Toggly.FeatureManagement.Storage.MongoDB
 
                 if (snapshot == null || string.IsNullOrEmpty(snapshot.Data))
                 {
-                    return (null, null, null, null);
+                    return null;
                 }
 
                 var features = JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(snapshot.Data);
-                return (features, snapshot.Signature, snapshot.KeyId, snapshot.Timestamp);
+                return new FeatureDefinitionsSnapshot
+                {
+                    Features = features,
+                    Signature = snapshot.Signature,
+                    KeyId = snapshot.KeyId,
+                    Timestamp = snapshot.Timestamp,
+                    SignedDefsJson = snapshot.SignedDefsJson,
+                    ETag = snapshot.ETag
+                };
             }
             catch
             {
-                return (null, null, null, null);
+                return null;
             }
         }
 
         /// <summary>
         /// Save the snapshot of the features
         /// </summary>
-        /// <param name="features">Feature definitions</param>
-        /// <param name="signature">Signature for signed definitions</param>
-        /// <param name="keyId">Key ID for signature verification</param>
-        /// <param name="timestamp">Timestamp of the definitions</param>
+        /// <param name="snapshot">Feature definitions snapshot</param>
         /// <param name="ct">Cancellation token</param>
-        public async Task SaveSnapshotAsync(List<FeatureDefinitionModel> features, string? signature = null, string? keyId = null, long? timestamp = null, CancellationToken ct = default)
+        public async Task SaveSnapshotAsync(FeatureDefinitionsSnapshot snapshot, CancellationToken ct = default)
         {
             var collection = GetCollection();
             var documentName = _snapshotSettings.Value.DocumentName;
-            var jsonData = JsonSerializer.Serialize(features);
+            var jsonData = JsonSerializer.Serialize(snapshot.Features);
 
             var document = new SnapshotDocument
             {
                 Id = documentName,
                 Data = jsonData,
-                Signature = signature,
-                KeyId = keyId,
-                Timestamp = timestamp,
+                Signature = snapshot.Signature,
+                KeyId = snapshot.KeyId,
+                Timestamp = snapshot.Timestamp,
+                SignedDefsJson = snapshot.SignedDefsJson,
+                ETag = snapshot.ETag,
                 UpdatedAt = DateTime.UtcNow
             };
 
@@ -105,6 +112,17 @@ namespace Toggly.FeatureManagement.Storage.MongoDB
                 new ReplaceOptions { IsUpsert = true },
                 ct
             ).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Delete the persisted feature definitions snapshot.
+        /// </summary>
+        /// <param name="ct">Cancellation token</param>
+        public async Task ClearSnapshotAsync(CancellationToken ct = default)
+        {
+            var collection = GetCollection();
+            var documentName = _snapshotSettings.Value.DocumentName;
+            await collection.DeleteOneAsync(d => d.Id == documentName, ct).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -167,6 +185,17 @@ namespace Toggly.FeatureManagement.Storage.MongoDB
                 return (null, null);
             }
         }
+
+        /// <summary>
+        /// Delete the persisted JWKS snapshot.
+        /// </summary>
+        /// <param name="ct">Cancellation token</param>
+        public async Task ClearJwkSnapshotAsync(CancellationToken ct = default)
+        {
+            var collection = GetCollection();
+            var documentName = _snapshotSettings.Value.JwkDocumentName;
+            await collection.DeleteOneAsync(d => d.Id == documentName, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -206,6 +235,20 @@ namespace Toggly.FeatureManagement.Storage.MongoDB
         [BsonElement("timestamp")]
         [BsonIgnoreIfNull]
         public long? Timestamp { get; set; }
+
+        /// <summary>
+        /// Exact JSON text of the signed <c>defs</c> array from the server.
+        /// </summary>
+        [BsonElement("signedDefsJson")]
+        [BsonIgnoreIfNull]
+        public string? SignedDefsJson { get; set; }
+
+        /// <summary>
+        /// Definitions revision (ETag / X-Definitions-Revision) for conditional fetches.
+        /// </summary>
+        [BsonElement("etag")]
+        [BsonIgnoreIfNull]
+        public string? ETag { get; set; }
 
         /// <summary>
         /// Last update time

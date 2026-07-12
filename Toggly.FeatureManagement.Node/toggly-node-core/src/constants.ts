@@ -15,6 +15,7 @@ export const DEFAULT_CONFIG: Required<
     | 'fileCachePath'
     | 'enableStreaming'
     | 'useEtag'
+    | 'verifySignatures'
   >
 > = {
   environment: 'Production',
@@ -26,6 +27,7 @@ export const DEFAULT_CONFIG: Required<
   fileCachePath: '.toggly-cache',
   enableStreaming: false,
   useEtag: true,
+  verifySignatures: false,
 }
 
 /**
@@ -48,4 +50,5 @@ export const CACHE_KEYS = {
   DEFINITIONS: 'toggly:definitions',
   ETAG: 'toggly:etag',
   IDENTITY: 'toggly:identity',
+  JWKS: 'toggly:jwks',
 } as const

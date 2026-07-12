@@ -74,6 +74,8 @@ func (s *SQLiteProvider) ensureTable(ctx context.Context) error {
 			kid TEXT,
 			timestamp INTEGER,
 			expiry INTEGER,
+			raw_defs TEXT,
+			etag TEXT,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)
 	`, s.tableName)
@@ -82,6 +84,11 @@ func (s *SQLiteProvider) ensureTable(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("create table: %w", err)
 	}
+
+	// Best-effort migration for tables created before raw_defs/etag existed.
+	_, _ = s.db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE "%s" ADD COLUMN raw_defs TEXT`, s.tableName))
+	_, _ = s.db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE "%s" ADD COLUMN etag TEXT`, s.tableName))
+
 	s.tableCreated = true
 	return nil
 }
@@ -91,14 +98,14 @@ func (s *SQLiteProvider) LoadDefinitions(ctx context.Context) (*DefinitionsSnaps
 		return nil, err
 	}
 
-	query := fmt.Sprintf(`SELECT data, signature, kid, timestamp FROM "%s" WHERE id = ?`, s.tableName)
+	query := fmt.Sprintf(`SELECT data, signature, kid, timestamp, raw_defs, etag FROM "%s" WHERE id = ?`, s.tableName)
 	row := s.db.QueryRowContext(ctx, query, s.definitionsID)
 
 	var data string
-	var signature, kid sql.NullString
+	var signature, kid, rawDefs, etag sql.NullString
 	var timestamp sql.NullInt64
 
-	err := row.Scan(&data, &signature, &kid, &timestamp)
+	err := row.Scan(&data, &signature, &kid, &timestamp, &rawDefs, &etag)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -123,6 +130,12 @@ func (s *SQLiteProvider) LoadDefinitions(ctx context.Context) (*DefinitionsSnaps
 	if timestamp.Valid {
 		snap.Timestamp = timestamp.Int64
 	}
+	if rawDefs.Valid && rawDefs.String != "" {
+		snap.RawDefs = json.RawMessage(rawDefs.String)
+	}
+	if etag.Valid {
+		snap.ETag = etag.String
+	}
 	return &snap, nil
 }
 
@@ -137,11 +150,11 @@ func (s *SQLiteProvider) SaveDefinitions(ctx context.Context, snap DefinitionsSn
 	}
 
 	query := fmt.Sprintf(`
-		INSERT OR REPLACE INTO "%s" (id, data, signature, kid, timestamp, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT OR REPLACE INTO "%s" (id, data, signature, kid, timestamp, raw_defs, etag, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`, s.tableName)
 
-	var sigPtr, kidPtr *string
+	var sigPtr, kidPtr, rawPtr, etagPtr *string
 	var tsPtr *int64
 	if snap.Signature != "" {
 		sigPtr = &snap.Signature
@@ -152,6 +165,13 @@ func (s *SQLiteProvider) SaveDefinitions(ctx context.Context, snap DefinitionsSn
 	if snap.Timestamp != 0 {
 		tsPtr = &snap.Timestamp
 	}
+	if len(snap.RawDefs) > 0 {
+		s := string(snap.RawDefs)
+		rawPtr = &s
+	}
+	if snap.ETag != "" {
+		etagPtr = &snap.ETag
+	}
 
 	_, err = s.db.ExecContext(ctx, query,
 		s.definitionsID,
@@ -159,10 +179,24 @@ func (s *SQLiteProvider) SaveDefinitions(ctx context.Context, snap DefinitionsSn
 		sigPtr,
 		kidPtr,
 		tsPtr,
+		rawPtr,
+		etagPtr,
 		time.Now().UTC().Format(time.RFC3339),
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite upsert definitions: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLiteProvider) Clear(ctx context.Context) error {
+	if err := s.ensureTable(ctx); err != nil {
+		return err
+	}
+	query := fmt.Sprintf(`DELETE FROM "%s" WHERE id IN (?, ?)`, s.tableName)
+	_, err := s.db.ExecContext(ctx, query, s.definitionsID, s.jwksID)
+	if err != nil {
+		return fmt.Errorf("sqlite clear snapshots: %w", err)
 	}
 	return nil
 }

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
     from toggly.providers import SnapshotProvider
 
 # Type alias for state change handler
 StateChangeHandler = Callable[[str, bool, bool], None]
+# Type alias for error handler: (message, optional exception)
+ErrorHandler = Callable[[str, Optional[Exception]], None]
 
 
 @dataclass
@@ -78,6 +80,9 @@ class TogglyConfig:
 
     enable_live_updates: bool = True
     """Enable WebSocket-based live updates for near-instant flag changes."""
+
+    on_error: ErrorHandler | None = None
+    """Optional callback invoked for transient refresh / signature failures."""
 
     debug: bool = False
     """Enable debug logging."""
@@ -197,6 +202,7 @@ class TogglyConfig:
                 "state_change_handlers", self.state_change_handlers.copy()
             ),
             enable_live_updates=changes.get("enable_live_updates", self.enable_live_updates),
+            on_error=changes.get("on_error", self.on_error),
             debug=changes.get("debug", self.debug),
         )
 

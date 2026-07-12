@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir, unlink, access } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { CacheProvider, FeatureDefinitions } from './types.js'
 import { createLogger } from './utils.js'
+import { CACHE_KEYS } from './constants.js'
 
 /**
  * In-memory cache provider
@@ -179,10 +180,38 @@ export class DefinitionsCache {
   }
 
   /**
+   * Get cached JWKS JSON
+   */
+  async getJwks(key: string): Promise<string | null> {
+    return this.provider.get(key)
+  }
+
+  /**
+   * Set cached JWKS JSON
+   */
+  async setJwks(key: string, value: string, ttl?: number): Promise<void> {
+    return this.provider.set(key, value, ttl)
+  }
+
+  /**
    * Clear all cached data for a key
    */
   async clear(key: string): Promise<void> {
     await this.provider.delete(key)
+  }
+
+  /**
+   * Clear definitions, ETag, and JWKS cache entries.
+   */
+  async clearAll(): Promise<void> {
+    await Promise.all([
+      this.provider.delete(CACHE_KEYS.DEFINITIONS),
+      this.provider.delete(CACHE_KEYS.ETAG),
+      this.provider.delete(CACHE_KEYS.JWKS),
+    ])
+    if ('clear' in this.provider && typeof (this.provider as MemoryCacheProvider).clear === 'function') {
+      ;(this.provider as MemoryCacheProvider).clear()
+    }
   }
 }
 

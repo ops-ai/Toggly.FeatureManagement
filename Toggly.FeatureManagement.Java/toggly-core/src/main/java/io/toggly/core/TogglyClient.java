@@ -417,6 +417,13 @@ public final class TogglyClient implements AutoCloseable {
     }
 
     /**
+     * Clears cached feature definitions and JWKS.
+     */
+    public void clearCache() {
+        snapshotProvider.clear();
+    }
+
+    /**
      * Registers a listener for snapshot changes.
      *
      * @param listener the listener to register

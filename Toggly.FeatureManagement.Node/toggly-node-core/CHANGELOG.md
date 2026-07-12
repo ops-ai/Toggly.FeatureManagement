@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0
+
+2026-07-11
+
+### Added
+- ES256 signed envelope verification (`verifySignatures`) using exact raw `defs` JSON bytes + timestamp (double SHA-256), matching Go `crypto/verify.go`.
+- Public `clearCache()` to clear in-memory features, ETag/revision, JWKS, and durable cache entries.
+- Config `onError` callback; refresh failures always report errors while preserving last-known-good flags.
+- Persists ETag/revision to cache and restores it on init; JWKS cache cleared on `signing-key-updated`.
+
+### Changed
+- Package version bumped to 0.3.0.
+
 ## 0.2.1
 
 2026-07-05

@@ -50,6 +50,13 @@ func (f *FileProvider) SaveDefinitions(ctx context.Context, snap DefinitionsSnap
 	return os.WriteFile(filepath.Join(f.dir, "definitions.json"), b, 0o644)
 }
 
+func (f *FileProvider) Clear(ctx context.Context) error {
+	_ = ctx
+	_ = os.Remove(filepath.Join(f.dir, "definitions.json"))
+	_ = os.Remove(filepath.Join(f.dir, "jwks.json"))
+	return nil
+}
+
 func (f *FileProvider) LoadJWKS(ctx context.Context) (*JWKSnap, error) {
 	_ = ctx
 	b, err := os.ReadFile(filepath.Join(f.dir, "jwks.json"))

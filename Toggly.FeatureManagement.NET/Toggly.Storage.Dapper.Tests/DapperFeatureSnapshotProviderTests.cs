@@ -60,7 +60,11 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
     public async Task GetFeaturesSnapshotAsync_WhenNoDataExists_ReturnsNulls()
     {
         // Act
-        var (features, signature, keyId, timestamp) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var features = snapshot?.Features;
+        var signature = snapshot?.Signature;
+        var keyId = snapshot?.KeyId;
+        var timestamp = snapshot?.Timestamp;
 
         // Assert
         features.Should().BeNull();
@@ -74,10 +78,14 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
     {
         // Arrange
         var featureDefinitions = CreateTestFeatureDefinitions();
-        await _provider.SaveSnapshotAsync(featureDefinitions, "test-signature", "key-123", 1700000000);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = featureDefinitions, Signature = "test-signature", KeyId = "key-123", Timestamp = 1700000000 });
 
         // Act
-        var (features, signature, keyId, timestamp) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var features = snapshot?.Features;
+        var signature = snapshot?.Signature;
+        var keyId = snapshot?.KeyId;
+        var timestamp = snapshot?.Timestamp;
 
         // Assert
         features.Should().NotBeNull();
@@ -100,10 +108,14 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
         var features = CreateTestFeatureDefinitions();
 
         // Act
-        await _provider.SaveSnapshotAsync(features, "sig-1", "kid-1", 1700000001);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig-1", KeyId = "kid-1", Timestamp = 1700000001 });
 
         // Assert
-        var (loaded, sig, kid, ts) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var ts = snapshot?.Timestamp;
         loaded.Should().NotBeNull();
         loaded.Should().HaveCount(2);
         sig.Should().Be("sig-1");
@@ -118,10 +130,14 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
         var features = CreateTestFeatureDefinitions();
 
         // Act
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
-        var (loaded, sig, kid, ts) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var ts = snapshot?.Timestamp;
         loaded.Should().NotBeNull();
         sig.Should().BeNull();
         kid.Should().BeNull();
@@ -133,7 +149,7 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
     {
         // Arrange
         var features1 = CreateTestFeatureDefinitions();
-        await _provider.SaveSnapshotAsync(features1, "sig-1", "kid-1", 1700000001);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features1, Signature = "sig-1", KeyId = "kid-1", Timestamp = 1700000001 });
 
         var features2 = new List<FeatureDefinitionModel>
         {
@@ -141,10 +157,14 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
         };
 
         // Act
-        await _provider.SaveSnapshotAsync(features2, "sig-2", "kid-2", 1700000002);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features2, Signature = "sig-2", KeyId = "kid-2", Timestamp = 1700000002 });
 
         // Assert
-        var (loaded, sig, kid, ts) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var ts = snapshot?.Timestamp;
         loaded.Should().HaveCount(1);
         loaded![0].FeatureKey.Should().Be("updated-feature");
         sig.Should().Be("sig-2");
@@ -159,10 +179,11 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
         var features = new List<FeatureDefinitionModel>();
 
         // Act
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
-        var (loaded, _, _, _) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
         loaded.Should().NotBeNull();
         loaded.Should().BeEmpty();
     }
@@ -191,10 +212,11 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
         };
 
         // Act
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
-        var (loaded, _, _, _) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
         loaded.Should().NotBeNull();
         loaded![0].FeatureKey.Should().Be("complex-feature");
         loaded[0].SecuredFeature.Should().BeTrue();
@@ -312,10 +334,11 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
         var features = CreateTestFeatureDefinitions();
 
         // Act
-        await provider.SaveSnapshotAsync(features);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
-        var (loaded, _, _, _) = await provider.GetFeaturesSnapshotAsync();
+        var snapshot = await provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
         loaded.Should().NotBeNull();
     }
 
@@ -365,11 +388,15 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
         var jwks = CreateTestJwks();
 
         // Act - Save
-        await _provider.SaveSnapshotAsync(features, "sig", "kid", 1700000000);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig", KeyId = "kid", Timestamp = 1700000000 });
         await _provider.SaveJwkSnapshot(jwks, 1700000001);
 
         // Assert - Load
-        var (loadedFeatures, sig, kid, featureTs) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loadedFeatures = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var featureTs = snapshot?.Timestamp;
         var (loadedJwks, jwksTs) = await _provider.GetJwkSnapshotAsync();
 
         loadedFeatures.Should().HaveCount(2);
@@ -381,11 +408,76 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SignedDefsJsonAndETag_RoundTripAndClear()
+    {
+        var features = CreateTestFeatureDefinitions();
+        const string signedJson = "[{\"featureKey\":\"feature1\",\"filters\":[]}]";
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+        {
+            Features = features,
+            Signature = "sig",
+            KeyId = "kid",
+            Timestamp = 1700000000,
+            SignedDefsJson = signedJson,
+            ETag = "rev-abc"
+        });
+        await _provider.SaveJwkSnapshot(CreateTestJwks(), 1700000001);
+
+        var loaded = await _provider.GetFeaturesSnapshotAsync();
+        loaded!.SignedDefsJson.Should().Be(signedJson);
+        loaded.ETag.Should().Be("rev-abc");
+
+        await _provider.ClearSnapshotAsync();
+        await _provider.ClearJwkSnapshotAsync();
+
+        (await _provider.GetFeaturesSnapshotAsync()).Should().BeNull();
+        (await _provider.GetJwkSnapshotAsync()).Jwks.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EnsureColumns_UpgradesLegacyTableWithoutSignedDefsJsonOrETag()
+    {
+        // Simulate a pre-3.3.0 table (missing SignedDefsJson / ETag).
+        await using (var conn = new SqliteConnection(_connectionString))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                DROP TABLE IF EXISTS TogglySnapshots;
+                CREATE TABLE TogglySnapshots (
+                    Id TEXT NOT NULL PRIMARY KEY,
+                    Data TEXT NOT NULL,
+                    Signature TEXT NULL,
+                    KeyId TEXT NULL,
+                    Timestamp INTEGER NULL,
+                    UpdatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );";
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var features = CreateTestFeatureDefinitions();
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+        {
+            Features = features,
+            Signature = "sig",
+            KeyId = "kid",
+            Timestamp = 42,
+            SignedDefsJson = "[{\"featureKey\":\"legacy-upgrade\"}]",
+            ETag = "etag-upgrade"
+        });
+
+        var loaded = await _provider.GetFeaturesSnapshotAsync();
+        loaded.Should().NotBeNull();
+        loaded!.SignedDefsJson.Should().Be("[{\"featureKey\":\"legacy-upgrade\"}]");
+        loaded.ETag.Should().Be("etag-upgrade");
+    }
+
+    [Fact]
     public async Task MultipleProviderInstances_ShareSameData()
     {
         // Arrange
         var features = CreateTestFeatureDefinitions();
-        await _provider.SaveSnapshotAsync(features, "sig", "kid", 1700000000);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig", KeyId = "kid", Timestamp = 1700000000 });
 
         // Create a new provider instance with the same connection
         var provider2 = new DapperFeatureSnapshotProvider(
@@ -398,7 +490,11 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
             _settings);
 
         // Act
-        var (loaded, sig, kid, ts) = await provider2.GetFeaturesSnapshotAsync();
+        var snapshot = await provider2.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var ts = snapshot?.Timestamp;
 
         // Assert
         loaded.Should().HaveCount(2);

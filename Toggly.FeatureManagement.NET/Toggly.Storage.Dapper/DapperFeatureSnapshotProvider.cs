@@ -41,15 +41,74 @@ namespace Toggly.FeatureManagement.Storage.Dapper
             try
             {
                 using var connection = _connectionFactory();
-                var sql = GetCreateTableSql();
-                await connection.ExecuteAsync(sql).ConfigureAwait(false);
+                await connection.ExecuteAsync(GetCreateTableSql()).ConfigureAwait(false);
+                await EnsureColumnsExistAsync(connection).ConfigureAwait(false);
                 _tableEnsured = true;
             }
             catch
             {
-                // Table might already exist, that's fine
+                // Table might already exist; still try to add missing columns.
+                try
+                {
+                    using var connection = _connectionFactory();
+                    await EnsureColumnsExistAsync(connection).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Best effort — Get/Save will surface failures if schema is unusable.
+                }
+
                 _tableEnsured = true;
             }
+        }
+
+        /// <summary>
+        /// Adds SignedDefsJson / ETag to pre-3.3.0 tables. CREATE TABLE IF NOT EXISTS
+        /// does not alter existing schemas.
+        /// </summary>
+        private async Task EnsureColumnsExistAsync(IDbConnection connection)
+        {
+            foreach (var sql in GetEnsureColumnsSql())
+            {
+                try
+                {
+                    await connection.ExecuteAsync(sql).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Column already exists or dialect rejects duplicate ADD — ignore.
+                }
+            }
+        }
+
+        private IEnumerable<string> GetEnsureColumnsSql()
+        {
+            var tableName = _snapshotSettings.Value.TableName;
+
+            return _snapshotSettings.Value.Provider switch
+            {
+                DatabaseProvider.PostgreSql => new[]
+                {
+                    $@"ALTER TABLE ""{tableName}"" ADD COLUMN IF NOT EXISTS ""SignedDefsJson"" TEXT NULL",
+                    $@"ALTER TABLE ""{tableName}"" ADD COLUMN IF NOT EXISTS ""ETag"" VARCHAR(255) NULL"
+                },
+                DatabaseProvider.MySql => new[]
+                {
+                    // MySQL lacks IF NOT EXISTS for ADD COLUMN on older versions; try/catch in caller.
+                    $@"ALTER TABLE `{tableName}` ADD COLUMN `SignedDefsJson` LONGTEXT NULL",
+                    $@"ALTER TABLE `{tableName}` ADD COLUMN `ETag` VARCHAR(255) NULL"
+                },
+                DatabaseProvider.Sqlite => new[]
+                {
+                    $@"ALTER TABLE ""{tableName}"" ADD COLUMN ""SignedDefsJson"" TEXT NULL",
+                    $@"ALTER TABLE ""{tableName}"" ADD COLUMN ""ETag"" TEXT NULL"
+                },
+                _ => new[]
+                {
+                    $@"IF COL_LENGTH('{tableName}', 'SignedDefsJson') IS NULL ALTER TABLE [{tableName}] ADD [SignedDefsJson] NVARCHAR(MAX) NULL",
+                    $@"IF COL_LENGTH('{tableName}', 'ETag') IS NULL ALTER TABLE [{tableName}] ADD [ETag] NVARCHAR(255) NULL"
+                }
+            };
         }
 
         private string GetCreateTableSql()
@@ -65,6 +124,8 @@ namespace Toggly.FeatureManagement.Storage.Dapper
                         ""Signature"" VARCHAR(1000) NULL,
                         ""KeyId"" VARCHAR(100) NULL,
                         ""Timestamp"" BIGINT NULL,
+                        ""SignedDefsJson"" TEXT NULL,
+                        ""ETag"" VARCHAR(255) NULL,
                         ""UpdatedAt"" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                     )",
                 DatabaseProvider.MySql => $@"
@@ -74,6 +135,8 @@ namespace Toggly.FeatureManagement.Storage.Dapper
                         `Signature` VARCHAR(1000) NULL,
                         `KeyId` VARCHAR(100) NULL,
                         `Timestamp` BIGINT NULL,
+                        `SignedDefsJson` LONGTEXT NULL,
+                        `ETag` VARCHAR(255) NULL,
                         `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                     )",
                 DatabaseProvider.Sqlite => $@"
@@ -83,6 +146,8 @@ namespace Toggly.FeatureManagement.Storage.Dapper
                         ""Signature"" TEXT NULL,
                         ""KeyId"" TEXT NULL,
                         ""Timestamp"" INTEGER NULL,
+                        ""SignedDefsJson"" TEXT NULL,
+                        ""ETag"" TEXT NULL,
                         ""UpdatedAt"" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                     )",
                 _ => $@"
@@ -93,6 +158,8 @@ namespace Toggly.FeatureManagement.Storage.Dapper
                         [Signature] NVARCHAR(1000) NULL,
                         [KeyId] NVARCHAR(100) NULL,
                         [Timestamp] BIGINT NULL,
+                        [SignedDefsJson] NVARCHAR(MAX) NULL,
+                        [ETag] NVARCHAR(255) NULL,
                         [UpdatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
                     )"
             };
@@ -104,10 +171,10 @@ namespace Toggly.FeatureManagement.Storage.Dapper
 
             return _snapshotSettings.Value.Provider switch
             {
-                DatabaseProvider.PostgreSql => $@"SELECT ""Id"", ""Data"", ""Signature"", ""KeyId"", ""Timestamp"", ""UpdatedAt"" FROM ""{tableName}"" WHERE ""Id"" = @Id",
-                DatabaseProvider.MySql => $@"SELECT `Id`, `Data`, `Signature`, `KeyId`, `Timestamp`, `UpdatedAt` FROM `{tableName}` WHERE `Id` = @Id",
-                DatabaseProvider.Sqlite => $@"SELECT ""Id"", ""Data"", ""Signature"", ""KeyId"", ""Timestamp"", ""UpdatedAt"" FROM ""{tableName}"" WHERE ""Id"" = @Id",
-                _ => $@"SELECT [Id], [Data], [Signature], [KeyId], [Timestamp], [UpdatedAt] FROM [{tableName}] WHERE [Id] = @Id"
+                DatabaseProvider.PostgreSql => $@"SELECT ""Id"", ""Data"", ""Signature"", ""KeyId"", ""Timestamp"", ""SignedDefsJson"", ""ETag"", ""UpdatedAt"" FROM ""{tableName}"" WHERE ""Id"" = @Id",
+                DatabaseProvider.MySql => $@"SELECT `Id`, `Data`, `Signature`, `KeyId`, `Timestamp`, `SignedDefsJson`, `ETag`, `UpdatedAt` FROM `{tableName}` WHERE `Id` = @Id",
+                DatabaseProvider.Sqlite => $@"SELECT ""Id"", ""Data"", ""Signature"", ""KeyId"", ""Timestamp"", ""SignedDefsJson"", ""ETag"", ""UpdatedAt"" FROM ""{tableName}"" WHERE ""Id"" = @Id",
+                _ => $@"SELECT [Id], [Data], [Signature], [KeyId], [Timestamp], [SignedDefsJson], [ETag], [UpdatedAt] FROM [{tableName}] WHERE [Id] = @Id"
             };
         }
 
@@ -118,35 +185,52 @@ namespace Toggly.FeatureManagement.Storage.Dapper
             return _snapshotSettings.Value.Provider switch
             {
                 DatabaseProvider.PostgreSql => $@"
-                    INSERT INTO ""{tableName}"" (""Id"", ""Data"", ""Signature"", ""KeyId"", ""Timestamp"", ""UpdatedAt"")
-                    VALUES (@Id, @Data, @Signature, @KeyId, @Timestamp, @UpdatedAt)
+                    INSERT INTO ""{tableName}"" (""Id"", ""Data"", ""Signature"", ""KeyId"", ""Timestamp"", ""SignedDefsJson"", ""ETag"", ""UpdatedAt"")
+                    VALUES (@Id, @Data, @Signature, @KeyId, @Timestamp, @SignedDefsJson, @ETag, @UpdatedAt)
                     ON CONFLICT (""Id"") DO UPDATE SET
                         ""Data"" = EXCLUDED.""Data"",
                         ""Signature"" = EXCLUDED.""Signature"",
                         ""KeyId"" = EXCLUDED.""KeyId"",
                         ""Timestamp"" = EXCLUDED.""Timestamp"",
+                        ""SignedDefsJson"" = EXCLUDED.""SignedDefsJson"",
+                        ""ETag"" = EXCLUDED.""ETag"",
                         ""UpdatedAt"" = EXCLUDED.""UpdatedAt""",
                 DatabaseProvider.MySql => $@"
-                    INSERT INTO `{tableName}` (`Id`, `Data`, `Signature`, `KeyId`, `Timestamp`, `UpdatedAt`)
-                    VALUES (@Id, @Data, @Signature, @KeyId, @Timestamp, @UpdatedAt)
+                    INSERT INTO `{tableName}` (`Id`, `Data`, `Signature`, `KeyId`, `Timestamp`, `SignedDefsJson`, `ETag`, `UpdatedAt`)
+                    VALUES (@Id, @Data, @Signature, @KeyId, @Timestamp, @SignedDefsJson, @ETag, @UpdatedAt)
                     ON DUPLICATE KEY UPDATE
                         `Data` = VALUES(`Data`),
                         `Signature` = VALUES(`Signature`),
                         `KeyId` = VALUES(`KeyId`),
                         `Timestamp` = VALUES(`Timestamp`),
+                        `SignedDefsJson` = VALUES(`SignedDefsJson`),
+                        `ETag` = VALUES(`ETag`),
                         `UpdatedAt` = VALUES(`UpdatedAt`)",
                 DatabaseProvider.Sqlite => $@"
-                    INSERT OR REPLACE INTO ""{tableName}"" (""Id"", ""Data"", ""Signature"", ""KeyId"", ""Timestamp"", ""UpdatedAt"")
-                    VALUES (@Id, @Data, @Signature, @KeyId, @Timestamp, @UpdatedAt)",
+                    INSERT OR REPLACE INTO ""{tableName}"" (""Id"", ""Data"", ""Signature"", ""KeyId"", ""Timestamp"", ""SignedDefsJson"", ""ETag"", ""UpdatedAt"")
+                    VALUES (@Id, @Data, @Signature, @KeyId, @Timestamp, @SignedDefsJson, @ETag, @UpdatedAt)",
                 _ => $@"
                     MERGE [{tableName}] AS target
-                    USING (SELECT @Id AS Id, @Data AS Data, @Signature AS Signature, @KeyId AS KeyId, @Timestamp AS [Timestamp], @UpdatedAt AS UpdatedAt) AS source
+                    USING (SELECT @Id AS Id, @Data AS Data, @Signature AS Signature, @KeyId AS KeyId, @Timestamp AS [Timestamp], @SignedDefsJson AS SignedDefsJson, @ETag AS ETag, @UpdatedAt AS UpdatedAt) AS source
                     ON target.[Id] = source.Id
                     WHEN MATCHED THEN
-                        UPDATE SET [Data] = source.Data, [Signature] = source.Signature, [KeyId] = source.KeyId, [Timestamp] = source.[Timestamp], [UpdatedAt] = source.UpdatedAt
+                        UPDATE SET [Data] = source.Data, [Signature] = source.Signature, [KeyId] = source.KeyId, [Timestamp] = source.[Timestamp], [SignedDefsJson] = source.SignedDefsJson, [ETag] = source.ETag, [UpdatedAt] = source.UpdatedAt
                     WHEN NOT MATCHED THEN
-                        INSERT ([Id], [Data], [Signature], [KeyId], [Timestamp], [UpdatedAt])
-                        VALUES (source.Id, source.Data, source.Signature, source.KeyId, source.[Timestamp], source.UpdatedAt);"
+                        INSERT ([Id], [Data], [Signature], [KeyId], [Timestamp], [SignedDefsJson], [ETag], [UpdatedAt])
+                        VALUES (source.Id, source.Data, source.Signature, source.KeyId, source.[Timestamp], source.SignedDefsJson, source.ETag, source.UpdatedAt);"
+            };
+        }
+
+        private string GetDeleteSql()
+        {
+            var tableName = _snapshotSettings.Value.TableName;
+
+            return _snapshotSettings.Value.Provider switch
+            {
+                DatabaseProvider.PostgreSql => $@"DELETE FROM ""{tableName}"" WHERE ""Id"" = @Id",
+                DatabaseProvider.MySql => $@"DELETE FROM `{tableName}` WHERE `Id` = @Id",
+                DatabaseProvider.Sqlite => $@"DELETE FROM ""{tableName}"" WHERE ""Id"" = @Id",
+                _ => $@"DELETE FROM [{tableName}] WHERE [Id] = @Id"
             };
         }
 
@@ -155,7 +239,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
         /// </summary>
         /// <param name="ct">Cancellation token</param>
         /// <returns>Feature snapshot with signature metadata</returns>
-        public async Task<(List<FeatureDefinitionModel>? Features, string? Signature, string? KeyId, long? Timestamp)> GetFeaturesSnapshotAsync(CancellationToken ct = default)
+        public async Task<FeatureDefinitionsSnapshot?> GetFeaturesSnapshotAsync(CancellationToken ct = default)
         {
             try
             {
@@ -168,43 +252,63 @@ namespace Toggly.FeatureManagement.Storage.Dapper
 
                 if (snapshot == null || string.IsNullOrEmpty(snapshot.Data))
                 {
-                    return (null, null, null, null);
+                    return null;
                 }
 
                 var features = JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(snapshot.Data);
-                return (features, snapshot.Signature, snapshot.KeyId, snapshot.Timestamp);
+                return new FeatureDefinitionsSnapshot
+                {
+                    Features = features,
+                    Signature = snapshot.Signature,
+                    KeyId = snapshot.KeyId,
+                    Timestamp = snapshot.Timestamp,
+                    SignedDefsJson = snapshot.SignedDefsJson,
+                    ETag = snapshot.ETag
+                };
             }
             catch
             {
-                return (null, null, null, null);
+                return null;
             }
         }
 
         /// <summary>
         /// Save the snapshot of the features
         /// </summary>
-        /// <param name="features">Feature definitions</param>
-        /// <param name="signature">Signature for signed definitions</param>
-        /// <param name="keyId">Key ID for signature verification</param>
-        /// <param name="timestamp">Timestamp of the definitions</param>
+        /// <param name="snapshot">Feature definitions snapshot</param>
         /// <param name="ct">Cancellation token</param>
-        public async Task SaveSnapshotAsync(List<FeatureDefinitionModel> features, string? signature = null, string? keyId = null, long? timestamp = null, CancellationToken ct = default)
+        public async Task SaveSnapshotAsync(FeatureDefinitionsSnapshot snapshot, CancellationToken ct = default)
         {
             await EnsureTableExistsAsync().ConfigureAwait(false);
 
             using var connection = _connectionFactory();
             var sql = GetUpsertSql();
-            var jsonData = JsonSerializer.Serialize(features);
+            var jsonData = JsonSerializer.Serialize(snapshot.Features);
 
             await connection.ExecuteAsync(sql, new
             {
                 Id = _snapshotSettings.Value.DocumentName,
                 Data = jsonData,
-                Signature = signature,
-                KeyId = keyId,
-                Timestamp = timestamp,
+                Signature = snapshot.Signature,
+                KeyId = snapshot.KeyId,
+                Timestamp = snapshot.Timestamp,
+                SignedDefsJson = snapshot.SignedDefsJson,
+                ETag = snapshot.ETag,
                 UpdatedAt = DateTime.UtcNow
             }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Delete the persisted feature definitions snapshot.
+        /// </summary>
+        /// <param name="ct">Cancellation token</param>
+        public async Task ClearSnapshotAsync(CancellationToken ct = default)
+        {
+            await EnsureTableExistsAsync().ConfigureAwait(false);
+
+            using var connection = _connectionFactory();
+            var sql = GetDeleteSql();
+            await connection.ExecuteAsync(sql, new { Id = _snapshotSettings.Value.DocumentName }).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -228,6 +332,8 @@ namespace Toggly.FeatureManagement.Storage.Dapper
                 Signature = (string?)null,
                 KeyId = (string?)null,
                 Timestamp = timestamp,
+                SignedDefsJson = (string?)null,
+                ETag = (string?)null,
                 UpdatedAt = DateTime.UtcNow
             }).ConfigureAwait(false);
         }
@@ -262,6 +368,19 @@ namespace Toggly.FeatureManagement.Storage.Dapper
             }
         }
 
+        /// <summary>
+        /// Delete the persisted JWKS snapshot.
+        /// </summary>
+        /// <param name="ct">Cancellation token</param>
+        public async Task ClearJwkSnapshotAsync(CancellationToken ct = default)
+        {
+            await EnsureTableExistsAsync().ConfigureAwait(false);
+
+            using var connection = _connectionFactory();
+            var sql = GetDeleteSql();
+            await connection.ExecuteAsync(sql, new { Id = _snapshotSettings.Value.JwkDocumentName }).ConfigureAwait(false);
+        }
+
         private class SnapshotRecord
         {
             public string Id { get; set; } = string.Empty;
@@ -269,6 +388,8 @@ namespace Toggly.FeatureManagement.Storage.Dapper
             public string? Signature { get; set; }
             public string? KeyId { get; set; }
             public long? Timestamp { get; set; }
+            public string? SignedDefsJson { get; set; }
+            public string? ETag { get; set; }
             public DateTime UpdatedAt { get; set; }
         }
     }

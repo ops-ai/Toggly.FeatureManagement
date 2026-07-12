@@ -72,6 +72,21 @@ class TestDefinitionsSnapshot:
         assert result["key_id"] == "key-1"
         assert result["timestamp"] == 1234567890
         assert result["etag"] == "abc123"
+        assert result["signed_defs_json"] is None
+
+    def test_snapshot_signed_defs_roundtrip(self) -> None:
+        """Test signed defs JSON is preserved through serialization."""
+        snapshot = DefinitionsSnapshot(
+            definitions=[],
+            signature="sig",
+            key_id="kid",
+            timestamp=123,
+            etag="etag",
+            signed_defs_json="[]",
+        )
+        restored = DefinitionsSnapshot.from_dict(snapshot.to_dict())
+        assert restored.signed_defs_json == "[]"
+        assert restored.has_signature_metadata() is True
 
     def test_snapshot_from_dict(self) -> None:
         """Test snapshot from_dict creation."""

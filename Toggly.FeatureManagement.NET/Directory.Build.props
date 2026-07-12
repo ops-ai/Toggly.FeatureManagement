@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <Version>3.2.4</Version>
+    <Version>3.3.0</Version>
     <!-- Suppress warnings about packages not supporting older target frameworks -->
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
   </PropertyGroup>

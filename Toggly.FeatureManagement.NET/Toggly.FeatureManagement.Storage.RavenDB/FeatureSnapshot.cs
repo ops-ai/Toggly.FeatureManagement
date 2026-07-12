@@ -34,5 +34,15 @@ namespace Toggly.FeatureManagement.Storage.RavenDB
         /// Timestamp of the signature
         /// </summary>
         public long? Timestamp { get; set; }
+
+        /// <summary>
+        /// Exact JSON text of the signed <c>defs</c> array from the server.
+        /// </summary>
+        public string? SignedDefsJson { get; set; }
+
+        /// <summary>
+        /// Definitions revision (ETag / X-Definitions-Revision) for conditional fetches.
+        /// </summary>
+        public string? ETag { get; set; }
     }
 }

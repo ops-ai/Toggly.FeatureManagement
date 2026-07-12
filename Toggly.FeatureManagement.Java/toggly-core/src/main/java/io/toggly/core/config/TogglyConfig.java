@@ -3,8 +3,11 @@ package io.toggly.core.config;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.BiConsumer;
 
 /**
  * Configuration for the Toggly client.
@@ -33,6 +36,8 @@ public final class TogglyConfig {
     private final Map<String, Boolean> featureDefaults;
     private final String identity;
     private final boolean defaultFeatureState;
+    private final Set<String> allowedKeyIds;
+    private final BiConsumer<String, Throwable> onError;
 
     private TogglyConfig(Builder builder) {
         this.appKey = builder.appKey;
@@ -49,6 +54,10 @@ public final class TogglyConfig {
         this.featureDefaults = Collections.unmodifiableMap(new HashMap<>(builder.featureDefaults));
         this.identity = builder.identity;
         this.defaultFeatureState = builder.defaultFeatureState;
+        this.allowedKeyIds = builder.allowedKeyIds == null
+                ? Collections.emptySet()
+                : Collections.unmodifiableSet(new HashSet<>(builder.allowedKeyIds));
+        this.onError = builder.onError;
     }
 
     /**
@@ -156,6 +165,24 @@ public final class TogglyConfig {
     }
 
     /**
+     * Optional allow-list of signing key ids. Empty means all kids are allowed.
+     *
+     * @return allowed key ids
+     */
+    public Set<String> getAllowedKeyIds() {
+        return allowedKeyIds;
+    }
+
+    /**
+     * Optional error callback invoked for transient and signature failures.
+     *
+     * @return error callback or null
+     */
+    public BiConsumer<String, Throwable> getOnError() {
+        return onError;
+    }
+
+    /**
      * Returns the refresh interval in seconds.
      *
      * @return refresh interval in seconds
@@ -184,7 +211,9 @@ public final class TogglyConfig {
                 .enableLiveUpdates(enableLiveUpdates)
                 .featureDefaults(featureDefaults)
                 .identity(identity)
-                .defaultFeatureState(defaultFeatureState);
+                .defaultFeatureState(defaultFeatureState)
+                .allowedKeyIds(allowedKeyIds)
+                .onError(onError);
     }
 
     /**
@@ -205,6 +234,8 @@ public final class TogglyConfig {
         private Map<String, Boolean> featureDefaults = new HashMap<>();
         private String identity;
         private boolean defaultFeatureState = false;
+        private Set<String> allowedKeyIds = new HashSet<>();
+        private BiConsumer<String, Throwable> onError;
 
         private Builder() {}
 
@@ -396,6 +427,28 @@ public final class TogglyConfig {
          */
         public Builder defaultFeatureState(boolean defaultFeatureState) {
             this.defaultFeatureState = defaultFeatureState;
+            return this;
+        }
+
+        /**
+         * Restricts accepted signing key ids. Empty/null allows all keys.
+         *
+         * @param allowedKeyIds allowed kids
+         * @return this builder
+         */
+        public Builder allowedKeyIds(Set<String> allowedKeyIds) {
+            this.allowedKeyIds = allowedKeyIds != null ? new HashSet<>(allowedKeyIds) : new HashSet<>();
+            return this;
+        }
+
+        /**
+         * Registers a callback for transient refresh / signature failures.
+         *
+         * @param onError callback receiving message and optional cause
+         * @return this builder
+         */
+        public Builder onError(BiConsumer<String, Throwable> onError) {
+            this.onError = onError;
             return this;
         }
 

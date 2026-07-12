@@ -780,7 +780,7 @@ public class TogglyFeatureProviderTests : IDisposable
         };
 
         snapshotProviderMock.Setup(x => x.GetFeaturesSnapshotAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync((snapshotFeatures, (string?)null, (string?)null, (long?)null));
+            .ReturnsAsync(new FeatureDefinitionsSnapshot { Features = snapshotFeatures });
 
         _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureSnapshotProvider)))
             .Returns(snapshotProviderMock.Object);
@@ -814,12 +814,9 @@ public class TogglyFeatureProviderTests : IDisposable
         // Arrange
         var snapshotProviderMock = new Mock<IFeatureSnapshotProvider>();
         snapshotProviderMock.Setup(x => x.GetFeaturesSnapshotAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(((List<FeatureDefinitionModel>?)null, (string?)null, (string?)null, (long?)null));
+            .ReturnsAsync((FeatureDefinitionsSnapshot?)null);
         snapshotProviderMock.Setup(x => x.SaveSnapshotAsync(
-                It.IsAny<List<FeatureDefinitionModel>>(),
-                It.IsAny<string?>(),
-                It.IsAny<string?>(),
-                It.IsAny<long?>(),
+                It.IsAny<FeatureDefinitionsSnapshot>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
@@ -852,10 +849,7 @@ public class TogglyFeatureProviderTests : IDisposable
         // Assert
         snapshotProviderMock.Verify(
             x => x.SaveSnapshotAsync(
-                It.IsAny<List<FeatureDefinitionModel>>(),
-                It.IsAny<string?>(),
-                It.IsAny<string?>(),
-                It.IsAny<long?>(),
+                It.IsAny<FeatureDefinitionsSnapshot>(),
                 It.IsAny<CancellationToken>()),
             Times.AtLeastOnce);
     }
@@ -866,7 +860,7 @@ public class TogglyFeatureProviderTests : IDisposable
         // Arrange
         var snapshotProviderMock = new Mock<IFeatureSnapshotProvider>();
         snapshotProviderMock.Setup(x => x.GetFeaturesSnapshotAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(((List<FeatureDefinitionModel>?)null, (string?)null, (string?)null, (long?)null));
+            .ReturnsAsync((FeatureDefinitionsSnapshot?)null);
 
         _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureSnapshotProvider)))
             .Returns(snapshotProviderMock.Object);
@@ -1917,7 +1911,7 @@ public class TogglyFeatureProviderTests : IDisposable
 
         // Missing Signature, KeyId, Timestamp
         snapshotProviderMock.Setup(x => x.GetFeaturesSnapshotAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync((snapshotFeatures, (string?)null, (string?)null, (long?)null));
+            .ReturnsAsync(new FeatureDefinitionsSnapshot { Features = snapshotFeatures });
 
         _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureSnapshotProvider)))
             .Returns(snapshotProviderMock.Object);
@@ -2489,10 +2483,16 @@ public class TogglyFeatureProviderTests : IDisposable
         // Arrange
         var snapshotMock = new Mock<IFeatureSnapshotProvider>();
         snapshotMock.Setup(x => x.GetFeaturesSnapshotAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Features: new List<FeatureDefinitionModel>
+            .ReturnsAsync(new FeatureDefinitionsSnapshot
             {
-                new FeatureDefinitionModel { FeatureKey = "snapshot-feature", Filters = new List<Data.FeatureFilter>() }
-            }, Signature: (string?)null, KeyId: "key-id", Timestamp: DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+                Features = new List<FeatureDefinitionModel>
+                {
+                    new FeatureDefinitionModel { FeatureKey = "snapshot-feature", Filters = new List<Data.FeatureFilter>() }
+                },
+                Signature = null,
+                KeyId = "key-id",
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            });
 
         _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureSnapshotProvider)))
             .Returns(snapshotMock.Object);

@@ -34,10 +34,17 @@ class DefinitionsSnapshot:
     """Signing key ID."""
 
     timestamp: int | None = None
-    """Unix timestamp when snapshot was created."""
+    """Unix timestamp when snapshot was created / signed."""
 
     etag: str | None = None
     """ETag for cache validation."""
+
+    signed_defs_json: str | None = None
+    """Exact JSON text of the signed ``defs`` array from the server.
+
+    Required for cryptographic verification after a storage round-trip
+    (never re-serialize models for verify).
+    """
 
     def to_dict(self) -> dict[str, Any]:
         """Convert snapshot to a dictionary for serialization.
@@ -52,6 +59,7 @@ class DefinitionsSnapshot:
             "key_id": self.key_id,
             "timestamp": self.timestamp,
             "etag": self.etag,
+            "signed_defs_json": self.signed_defs_json,
         }
 
     @classmethod
@@ -71,9 +79,19 @@ class DefinitionsSnapshot:
         return cls(
             definitions=definitions,
             signature=data.get("signature"),
-            key_id=data.get("key_id"),
+            key_id=data.get("key_id") or data.get("kid"),
             timestamp=data.get("timestamp"),
             etag=data.get("etag"),
+            signed_defs_json=data.get("signed_defs_json") or data.get("raw_defs"),
+        )
+
+    def has_signature_metadata(self) -> bool:
+        """Return True when fields needed for re-verification are present."""
+        return bool(
+            self.signature
+            and self.key_id
+            and self.timestamp is not None
+            and self.signed_defs_json is not None
         )
 
 
@@ -240,6 +258,14 @@ class SnapshotProvider(ABC):
         """
         pass
 
+    def clear_jwks(self) -> None:
+        """Clear cached JWKS only.
+
+        Default clears via ``clear()`` subclasses should override when they
+        can drop JWKS independently of definitions.
+        """
+        pass
+
     def load_variants(self) -> VariantsSnapshot | None:
         """Load cached evaluated variants.
 
@@ -329,6 +355,11 @@ class MemorySnapshotProvider(SnapshotProvider):
         with self._lock:
             self._definitions = None
             self._variants = None
+            self._jwks = None
+
+    def clear_jwks(self) -> None:
+        """Clear cached JWKS only."""
+        with self._lock:
             self._jwks = None
 
 
@@ -423,6 +454,12 @@ class FileSnapshotProvider(SnapshotProvider):
             for path in [self._definitions_path, self._variants_path, self._jwks_path]:
                 with contextlib.suppress(OSError):
                     path.unlink(missing_ok=True)
+
+    def clear_jwks(self) -> None:
+        """Clear cached JWKS file only."""
+        with self._lock:
+            with contextlib.suppress(OSError):
+                self._jwks_path.unlink(missing_ok=True)
 
     def _load_json(
         self,

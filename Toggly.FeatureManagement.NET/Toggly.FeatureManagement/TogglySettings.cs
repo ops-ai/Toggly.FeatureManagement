@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Toggly.FeatureManagement
@@ -51,5 +52,12 @@ namespace Toggly.FeatureManagement
         /// New property for whitelisting
         /// </summary>
         public HashSet<string>? AllowedKeyIds { get; set; }
+
+        /// <summary>
+        /// Optional callback invoked when fetch, cache, signature, JWKS, or storage
+        /// operations fail. Use for Sentry/AppInsights or other telemetry.
+        /// The last error is also available via <see cref="IFeatureProviderDebug.GetDebugInfo"/>.
+        /// </summary>
+        public Action<string, Exception?>? OnError { get; set; }
     }
 }

@@ -18,7 +18,7 @@ const (
 	WSReconnectMaxMs = 60000
 
 	sdkID      = "go"
-	sdkVersion = "0.1.0"
+	sdkVersion = "0.2.0"
 )
 
 type wsSyncMessage struct {

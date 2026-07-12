@@ -222,9 +222,20 @@ impl TogglyClient {
         Ok(())
     }
 
-    /// Clear the evaluation cache.
-    pub fn clear_cache(&self) {
+    /// Clear the evaluation cache and in-memory definitions / JWKS.
+    pub async fn clear_cache(&self) {
         self.cache.clear();
+        self.provider.write().await.clear();
+    }
+
+    /// Last definitions refresh error, if any.
+    pub async fn last_error(&self) -> Option<String> {
+        self.provider.read().await.last_error()
+    }
+
+    /// Cached definitions revision / ETag.
+    pub async fn etag(&self) -> Option<String> {
+        self.provider.read().await.etag()
     }
 
     /// Close the client and release resources.
@@ -327,6 +338,18 @@ impl TogglyClientBuilder {
     /// Enable live updates via WebSocket.
     pub fn enable_live_updates(mut self, enabled: bool) -> Self {
         self.config_builder = self.config_builder.enable_live_updates(enabled);
+        self
+    }
+
+    /// Restrict accepted signing key IDs.
+    pub fn allowed_key_ids(mut self, kids: std::collections::HashSet<String>) -> Self {
+        self.config_builder = self.config_builder.allowed_key_ids(kids);
+        self
+    }
+
+    /// Set an error callback for refresh / verification failures.
+    pub fn on_error(mut self, callback: crate::config::OnErrorCallback) -> Self {
+        self.config_builder = self.config_builder.on_error(callback);
         self
     }
 

@@ -48,7 +48,11 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
     public async Task GetFeaturesSnapshotAsync_WhenNoDataExists_ReturnsNulls()
     {
         // Act
-        var (features, signature, keyId, timestamp) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var features = snapshot?.Features;
+        var signature = snapshot?.Signature;
+        var keyId = snapshot?.KeyId;
+        var timestamp = snapshot?.Timestamp;
 
         // Assert
         features.Should().BeNull();
@@ -62,10 +66,14 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
     {
         // Arrange
         var featureDefinitions = CreateTestFeatureDefinitions();
-        await _provider.SaveSnapshotAsync(featureDefinitions, "test-signature", "key-123", 1700000000);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = featureDefinitions, Signature = "test-signature", KeyId = "key-123", Timestamp = 1700000000 });
 
         // Act
-        var (features, signature, keyId, timestamp) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var features = snapshot?.Features;
+        var signature = snapshot?.Signature;
+        var keyId = snapshot?.KeyId;
+        var timestamp = snapshot?.Timestamp;
 
         // Assert
         features.Should().NotBeNull();
@@ -82,13 +90,14 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
     {
         // Arrange - save some data first
         var features = CreateTestFeatureDefinitions();
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
         // Act - Provider catches OperationCanceledException and returns nulls
-        var (result, _, _, _) = await _provider.GetFeaturesSnapshotAsync(cts.Token);
+        var snapshot = await _provider.GetFeaturesSnapshotAsync(cts.Token);
+        var result = snapshot?.Features;
 
         // Assert - When cancelled, provider returns nulls gracefully
         result.Should().BeNull();
@@ -105,10 +114,14 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         var features = CreateTestFeatureDefinitions();
 
         // Act
-        await _provider.SaveSnapshotAsync(features, "sig-1", "kid-1", 1700000001);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig-1", KeyId = "kid-1", Timestamp = 1700000001 });
 
         // Assert
-        var (loaded, sig, kid, ts) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var ts = snapshot?.Timestamp;
         loaded.Should().NotBeNull();
         loaded.Should().HaveCount(2);
         sig.Should().Be("sig-1");
@@ -123,10 +136,14 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         var features = CreateTestFeatureDefinitions();
 
         // Act
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
-        var (loaded, sig, kid, ts) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var ts = snapshot?.Timestamp;
         loaded.Should().NotBeNull();
         sig.Should().BeNull();
         kid.Should().BeNull();
@@ -138,7 +155,7 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
     {
         // Arrange
         var features1 = CreateTestFeatureDefinitions();
-        await _provider.SaveSnapshotAsync(features1, "sig-1", "kid-1", 1700000001);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features1, Signature = "sig-1", KeyId = "kid-1", Timestamp = 1700000001 });
 
         var features2 = new List<FeatureDefinitionModel>
         {
@@ -146,14 +163,18 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         };
 
         // Act
-        await _provider.SaveSnapshotAsync(features2, "sig-2", "kid-2", 1700000002);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features2, Signature = "sig-2", KeyId = "kid-2", Timestamp = 1700000002 });
 
         // Assert - Verify only one document exists
         var collection = _client.GetDatabase(TestDatabaseName).GetCollection<SnapshotDocument>(TestCollectionName);
         var count = await collection.CountDocumentsAsync(d => d.Id == _settings.Value.DocumentName);
         count.Should().Be(1);
 
-        var (loaded, sig, kid, ts) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var ts = snapshot?.Timestamp;
         loaded.Should().HaveCount(1);
         loaded![0].FeatureKey.Should().Be("updated-feature");
         sig.Should().Be("sig-2");
@@ -168,10 +189,11 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         var features = new List<FeatureDefinitionModel>();
 
         // Act
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
-        var (loaded, _, _, _) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
         loaded.Should().NotBeNull();
         loaded.Should().BeEmpty();
     }
@@ -200,10 +222,11 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         };
 
         // Act
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
-        var (loaded, _, _, _) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
         loaded.Should().NotBeNull();
         loaded![0].FeatureKey.Should().Be("complex-feature");
         loaded[0].SecuredFeature.Should().BeTrue();
@@ -327,7 +350,7 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         var features = CreateTestFeatureDefinitions();
 
         // Act
-        await provider.SaveSnapshotAsync(features);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
         var collection = _client.GetDatabase("toggly").GetCollection<SnapshotDocument>("snapshots");
@@ -352,7 +375,7 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         var jwks = CreateTestJwks();
 
         // Act
-        await provider.SaveSnapshotAsync(features);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
         await provider.SaveJwkSnapshot(jwks, 1700000000);
 
         // Assert
@@ -384,11 +407,15 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         var jwks = CreateTestJwks();
 
         // Act - Save
-        await _provider.SaveSnapshotAsync(features, "sig", "kid", 1700000000);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig", KeyId = "kid", Timestamp = 1700000000 });
         await _provider.SaveJwkSnapshot(jwks, 1700000001);
 
         // Assert - Load
-        var (loadedFeatures, sig, kid, featureTs) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loadedFeatures = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var featureTs = snapshot?.Timestamp;
         var (loadedJwks, jwksTs) = await _provider.GetJwkSnapshotAsync();
 
         loadedFeatures.Should().HaveCount(2);
@@ -400,13 +427,40 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SignedDefsJsonAndETag_RoundTripAndClear()
+    {
+        var features = CreateTestFeatureDefinitions();
+        const string signedJson = "[{\"featureKey\":\"feature1\"}]";
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+        {
+            Features = features,
+            Signature = "sig",
+            KeyId = "kid",
+            Timestamp = 1700000000,
+            SignedDefsJson = signedJson,
+            ETag = "rev-mongo"
+        });
+        await _provider.SaveJwkSnapshot(CreateTestJwks(), 1700000001);
+
+        var loaded = await _provider.GetFeaturesSnapshotAsync();
+        loaded!.SignedDefsJson.Should().Be(signedJson);
+        loaded.ETag.Should().Be("rev-mongo");
+
+        await _provider.ClearSnapshotAsync();
+        await _provider.ClearJwkSnapshotAsync();
+
+        (await _provider.GetFeaturesSnapshotAsync()).Should().BeNull();
+        (await _provider.GetJwkSnapshotAsync()).Jwks.Should().BeNull();
+    }
+
+    [Fact]
     public async Task MultipleSnapshots_IndependentDocuments()
     {
         // Arrange & Act
         var features = CreateTestFeatureDefinitions();
         var jwks = CreateTestJwks();
 
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
         await _provider.SaveJwkSnapshot(jwks, 1700000000);
 
         // Assert
@@ -423,13 +477,17 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
     {
         // Arrange
         var features = CreateTestFeatureDefinitions();
-        await _provider.SaveSnapshotAsync(features, "sig", "kid", 1700000000);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig", KeyId = "kid", Timestamp = 1700000000 });
 
         // Create a new provider instance with the same client
         var provider2 = new MongoDBFeatureSnapshotProvider(_client, _settings);
 
         // Act
-        var (loaded, sig, kid, ts) = await provider2.GetFeaturesSnapshotAsync();
+        var snapshot = await provider2.GetFeaturesSnapshotAsync();
+        var loaded = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var ts = snapshot?.Timestamp;
 
         // Assert
         loaded.Should().HaveCount(2);
@@ -450,7 +508,7 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
             {
                 new() { FeatureKey = $"feature-{i}", Filters = new List<FeatureFilter>() }
             };
-            return _provider.SaveSnapshotAsync(features, $"sig-{i}", $"kid-{i}", 1700000000 + i);
+            return _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = $"sig-{i}", KeyId = $"kid-{i}", Timestamp = 1700000000 + i });
         });
 
         // Act

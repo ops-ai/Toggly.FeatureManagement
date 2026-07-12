@@ -33,6 +33,11 @@ import {
   type WsSyncMessage,
 } from './ws-sync.js'
 import { buildDefinitionFetchHeaders } from './sdk-identity.js'
+import {
+  parseSignedEnvelope,
+  verifySignedDefinitions,
+  type JwkSet,
+} from './verify.js'
 
 /**
  * Create a new Toggly client
@@ -88,6 +93,9 @@ export function createTogglyClient(
   let cachedDefinitionsRevision: string | null = null
   let lastFallbackRefresh = 0
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000 // 20 minutes
+  let cachedJwks: JwkSet | null = null
+  let cachedJwksExpiry = 0
+  const JWKS_TTL_MS = 60 * 60 * 1000
 
   // Streaming event source (for SSE) - legacy, kept for backward compat
   let streamingAbortController: AbortController | null = null
@@ -104,6 +112,62 @@ export function createTogglyClient(
     state.etag = revision
   }
 
+  function clearJwksCache(): void {
+    cachedJwks = null
+    cachedJwksExpiry = 0
+  }
+
+  async function reportError(error: Error, context: string): Promise<void> {
+    state.error = error
+    await hookExecutor.executeOnError(error, context)
+    try {
+      await config.onError?.(error, context)
+    } catch (hookError) {
+      logger.error('Error in onError callback:', hookError)
+    }
+  }
+
+  async function loadOrFetchJwks(force = false): Promise<JwkSet> {
+    if (!force && cachedJwks && Date.now() < cachedJwksExpiry) {
+      return cachedJwks
+    }
+
+    if (!force && cache) {
+      const cached = await cache.getJwks(CACHE_KEYS.JWKS)
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached) as JwkSet & { _expiresAt?: number }
+          if (!parsed._expiresAt || parsed._expiresAt >= Date.now()) {
+            cachedJwks = { keys: parsed.keys ?? [] }
+            cachedJwksExpiry = parsed._expiresAt ?? Date.now() + JWKS_TTL_MS
+            return cachedJwks
+          }
+        } catch {
+          // ignore corrupt cache
+        }
+      }
+    }
+
+    const baseUrl = (config.baseUrl ?? DEFAULT_CONFIG.baseUrl).replace(/\/$/, '')
+    const url = `${baseUrl}/.well-known/jwks`
+    const response = await fetch(url, {
+      headers: buildDefinitionFetchHeaders({ 'Content-Type': 'application/json' }),
+    })
+    if (!response.ok) {
+      throw new Error(`JWKS fetch failed: HTTP ${response.status}`)
+    }
+    const jwks = (await response.json()) as JwkSet
+    cachedJwks = jwks
+    cachedJwksExpiry = Date.now() + JWKS_TTL_MS
+    if (cache) {
+      await cache.setJwks(
+        CACHE_KEYS.JWKS,
+        JSON.stringify({ ...jwks, _expiresAt: cachedJwksExpiry })
+      )
+    }
+    return jwks
+  }
+
   function scheduleDebouncedRefresh(forceJwksRefresh = false): void {
     if (refreshDebounceTimer) {
       clearTimeout(refreshDebounceTimer)
@@ -111,6 +175,7 @@ export function createTogglyClient(
     refreshDebounceTimer = setTimeout(() => {
       refreshDebounceTimer = null
       if (forceJwksRefresh) {
+        clearJwksCache()
         cachedDefinitionsRevision = null
         state.etag = null
       }
@@ -214,19 +279,47 @@ export function createTogglyClient(
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const data = (await response.json()) as
-        | FeatureDefinitionsResponse
-        | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
+      const bodyText =
+        typeof response.text === 'function'
+          ? await response.text()
+          : JSON.stringify(await response.json())
       const features: FeatureDefinitions = {}
-      if (Array.isArray(data)) {
-        for (const definition of data) {
-          features[definition.featureKey] = !!definition.filters?.some((filter) => filter.name === 'AlwaysOn')
+
+      if (config.verifySignatures) {
+        const { envelope, defsRaw } = parseSignedEnvelope(bodyText)
+        if (envelope.signature && envelope.kid) {
+          const jwks = await loadOrFetchJwks()
+          verifySignedDefinitions(defsRaw, envelope, jwks, config.allowedKeyIds)
         }
-      } else if ('defs' in data && data.defs) {
-        Object.assign(features, data.defs)
-      } else if ('features' in data && Array.isArray(data.features)) {
-        for (const feature of data.features) {
-          features[feature.featureKey] = feature.enabled
+
+        if (envelope.defs && typeof envelope.defs === 'object' && !Array.isArray(envelope.defs)) {
+          Object.assign(features, envelope.defs as FeatureDefinitions)
+        } else if (Array.isArray(envelope.defs)) {
+          for (const definition of envelope.defs as Array<{
+            featureKey: string
+            filters?: Array<{ name?: string }>
+          }>) {
+            features[definition.featureKey] = !!definition.filters?.some(
+              (filter) => filter.name === 'AlwaysOn'
+            )
+          }
+        }
+      } else {
+        const data = JSON.parse(bodyText) as
+          | FeatureDefinitionsResponse
+          | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
+        if (Array.isArray(data)) {
+          for (const definition of data) {
+            features[definition.featureKey] = !!definition.filters?.some(
+              (filter) => filter.name === 'AlwaysOn'
+            )
+          }
+        } else if ('defs' in data && data.defs) {
+          Object.assign(features, data.defs)
+        } else if ('features' in data && Array.isArray(data.features)) {
+          for (const feature of data.features) {
+            features[feature.featureKey] = feature.enabled
+          }
         }
       }
 
@@ -249,7 +342,6 @@ export function createTogglyClient(
    */
   async function refresh(): Promise<FeatureDefinitions> {
     state.loading = true
-    state.error = null
 
     try {
       const features = await fetchDefinitions()
@@ -261,10 +353,15 @@ export function createTogglyClient(
       }
 
       state.lastRefresh = Date.now()
+      state.error = null
 
-      // Cache definitions
+      // Cache definitions + revision
       if (cache) {
         await cache.setDefinitions(CACHE_KEYS.DEFINITIONS, state.features)
+        const revision = getDefinitionsRevision()
+        if (revision) {
+          await cache.setEtag(CACHE_KEYS.ETAG, revision)
+        }
       }
 
       // Execute afterRefresh hooks
@@ -274,14 +371,21 @@ export function createTogglyClient(
 
       return state.features
     } catch (error) {
-      state.error = error as Error
-      logger.error('Failed to refresh features:', error)
+      const err = error as Error
+      logger.error('Failed to refresh features:', err)
+      await reportError(err, 'refresh')
 
-      // Try to load from cache on error
+      // Preserve last-known-good in-memory flags first.
+      if (Object.keys(state.features).length > 0) {
+        logger.debug('Preserving last-known-good in-memory features')
+        return state.features
+      }
+
+      // Then try durable cache
       if (cache) {
         const cachedFeatures = await cache.getDefinitions(CACHE_KEYS.DEFINITIONS)
         if (cachedFeatures) {
-          logger.debug('Using cached definitions')
+          logger.debug('Using cached definitions (last-known-good)')
           state.features = {
             ...config.featureDefaults,
             ...cachedFeatures,
@@ -290,14 +394,26 @@ export function createTogglyClient(
         }
       }
 
-      // Fall back to defaults
+      // Fall back to defaults only when no last-known-good flags exist.
       state.features = config.featureDefaults ?? {}
-      await hookExecutor.executeOnError(error as Error, 'refresh')
-
       return state.features
     } finally {
       state.loading = false
     }
+  }
+
+  /**
+   * Clear in-memory features, ETag/revision, JWKS, and durable cache entries.
+   */
+  async function clearCache(): Promise<void> {
+    state.features = { ...(config.featureDefaults ?? {}) }
+    state.etag = null
+    cachedDefinitionsRevision = null
+    clearJwksCache()
+    if (cache) {
+      await cache.clearAll()
+    }
+    logger.debug('Cleared feature and JWKS caches')
   }
 
   /**
@@ -495,6 +611,10 @@ export function createTogglyClient(
         }
         logger.debug('Loaded', Object.keys(cachedFeatures).length, 'features from cache')
       }
+      const cachedEtag = await cache.getEtag(CACHE_KEYS.ETAG)
+      if (cachedEtag) {
+        cacheDefinitionsRevision(cachedEtag)
+      }
     }
 
     // Fetch fresh definitions
@@ -654,6 +774,7 @@ export function createTogglyClient(
     },
     init,
     refresh,
+    clearCache,
     isFeatureOn,
     isFeatureOff,
     evaluateFeatureGate,

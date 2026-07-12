@@ -1,5 +1,8 @@
 package io.toggly.core.snapshot;
 
+import io.toggly.core.crypto.JsonWebKeySet;
+
+import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -39,6 +42,39 @@ public interface SnapshotProvider {
      */
     default CompletableFuture<FeatureSnapshot> refreshAsync() {
         return CompletableFuture.supplyAsync(this::refresh);
+    }
+
+    /**
+     * Clears cached feature definitions (and typically JWKS as well).
+     */
+    default void clear() {
+        clearJwks();
+    }
+
+    /**
+     * Clears cached JWKS so the next signed refresh refetches keys.
+     */
+    default void clearJwks() {
+        // Default no-op
+    }
+
+    /**
+     * Loads a cached JWKS if this provider persists keys.
+     *
+     * @return JWKS or null
+     */
+    default JsonWebKeySet loadJwks() {
+        return null;
+    }
+
+    /**
+     * Persists a JWKS snapshot.
+     *
+     * @param jwks the key set
+     * @param expiry when the cached JWKS should be considered stale
+     */
+    default void saveJwks(JsonWebKeySet jwks, Instant expiry) {
+        // Default no-op
     }
 
     /**

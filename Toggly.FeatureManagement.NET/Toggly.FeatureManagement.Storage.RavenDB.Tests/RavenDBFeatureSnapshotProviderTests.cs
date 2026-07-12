@@ -93,10 +93,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert
-        result.Features.Should().BeNull();
-        result.Signature.Should().BeNull();
-        result.KeyId.Should().BeNull();
-        result.Timestamp.Should().BeNull();
+        result.Should().BeNull();
     }
 
     [Fact]
@@ -134,10 +131,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert
-        result.Features.Should().BeNull();
-        result.Signature.Should().BeNull();
-        result.KeyId.Should().BeNull();
-        result.Timestamp.Should().BeNull();
+        result.Should().BeNull();
     }
 
     [Fact]
@@ -175,7 +169,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
         // Act
-        await provider.SaveSnapshotAsync(features, "sig", "kid", 123456L);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig", KeyId = "kid", Timestamp = 123456L });
 
         // Assert
         _sessionMock.Verify(s => s.StoreAsync(
@@ -213,7 +207,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
         // Act
-        await provider.SaveSnapshotAsync(newFeatures, "new-sig", "new-kid", 200L);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = newFeatures, Signature = "new-sig", KeyId = "new-kid", Timestamp = 200L });
 
         // Assert
         existingSnapshot.Features.Should().BeSameAs(newFeatures);
@@ -236,7 +230,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _customSettings);
 
         // Act
-        await provider.SaveSnapshotAsync(features);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
         _sessionMock.Verify(s => s.LoadAsync<FeatureSnapshot>("FeatureSnapshots/Custom", It.IsAny<CancellationToken>()), Times.Once);
@@ -257,7 +251,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
         // Act
-        await provider.SaveSnapshotAsync(features);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
         _sessionMock.Verify(s => s.StoreAsync(
@@ -278,7 +272,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
         // Act
-        await provider.SaveSnapshotAsync(new List<FeatureDefinitionModel>());
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = new List<FeatureDefinitionModel>() });
 
         // Assert
         _sessionMock.Verify(s => s.Dispose(), Times.Once);
@@ -503,7 +497,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
         // Act
-        await provider.SaveSnapshotAsync(features, "sig", "kid", 123L);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig", KeyId = "kid", Timestamp = 123L });
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert
@@ -546,6 +540,58 @@ public class RavenDBFeatureSnapshotProviderTests
         result.Jwks!.Keys.Should().HaveCount(1);
         result.Jwks.Keys![0].Kid.Should().Be("test-key");
         result.Timestamp.Should().Be(456L);
+    }
+
+    [Fact]
+    public async Task SaveSnapshotAsync_PersistsSignedDefsJsonAndETag()
+    {
+        var features = new List<FeatureDefinitionModel>
+        {
+            new() { FeatureKey = "NewFeature", Filters = new List<FeatureFilter>() }
+        };
+
+        _sessionMock.Setup(s => s.LoadAsync<FeatureSnapshot>("FeatureSnapshots/Toggly", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((FeatureSnapshot?)null);
+
+        var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
+
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+        {
+            Features = features,
+            Signature = "sig",
+            KeyId = "kid",
+            Timestamp = 123456L,
+            SignedDefsJson = "[{\"featureKey\":\"NewFeature\"}]",
+            ETag = "rev-raven"
+        });
+
+        _sessionMock.Verify(s => s.StoreAsync(
+            It.Is<FeatureSnapshot>(snap =>
+                snap.SignedDefsJson == "[{\"featureKey\":\"NewFeature\"}]" &&
+                snap.ETag == "rev-raven"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ClearSnapshotAsync_DeletesFeatureDocument()
+    {
+        var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
+
+        await provider.ClearSnapshotAsync();
+
+        _sessionMock.Verify(s => s.Delete("FeatureSnapshots/Toggly"), Times.Once);
+        _sessionMock.Verify(s => s.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ClearJwkSnapshotAsync_DeletesJwkDocument()
+    {
+        var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
+
+        await provider.ClearJwkSnapshotAsync();
+
+        _sessionMock.Verify(s => s.Delete("JwkSnapshots/Toggly"), Times.Once);
+        _sessionMock.Verify(s => s.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     #endregion

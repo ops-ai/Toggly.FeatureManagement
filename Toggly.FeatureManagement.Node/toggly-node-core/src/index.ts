@@ -54,5 +54,13 @@ export {
   getPercentageBucket,
 } from './utils.js'
 
+// Signature verification
+export {
+  extractRawJsonProperty,
+  parseSignedEnvelope,
+  verifySignedDefinitions,
+  validateAndParseEs256Key,
+} from './verify.js'
+
 // Constants
 export { DEFAULT_CONFIG, INITIAL_STATE, CACHE_KEYS } from './constants.js'

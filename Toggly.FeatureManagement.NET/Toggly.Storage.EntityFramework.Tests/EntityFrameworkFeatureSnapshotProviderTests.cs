@@ -46,7 +46,11 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
     public async Task GetFeaturesSnapshotAsync_WhenNoDataExists_ReturnsNulls()
     {
         // Act
-        var (features, signature, keyId, timestamp) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var features = snapshot?.Features;
+        var signature = snapshot?.Signature;
+        var keyId = snapshot?.KeyId;
+        var timestamp = snapshot?.Timestamp;
 
         // Assert
         features.Should().BeNull();
@@ -60,10 +64,14 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
     {
         // Arrange
         var featureDefinitions = CreateTestFeatureDefinitions();
-        await _provider.SaveSnapshotAsync(featureDefinitions, "test-signature", "key-123", 1700000000);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = featureDefinitions, Signature = "test-signature", KeyId = "key-123", Timestamp = 1700000000 });
 
         // Act
-        var (features, signature, keyId, timestamp) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var features = snapshot?.Features;
+        var signature = snapshot?.Signature;
+        var keyId = snapshot?.KeyId;
+        var timestamp = snapshot?.Timestamp;
 
         // Assert
         features.Should().NotBeNull();
@@ -80,13 +88,14 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
     {
         // Arrange - save some data first
         var features = CreateTestFeatureDefinitions();
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
         // Act - Provider catches OperationCanceledException and returns nulls
-        var (result, _, _, _) = await _provider.GetFeaturesSnapshotAsync(cts.Token);
+        var snapshot = await _provider.GetFeaturesSnapshotAsync(cts.Token);
+        var result = snapshot?.Features;
 
         // Assert - When cancelled, provider returns nulls gracefully
         result.Should().BeNull();
@@ -106,7 +115,11 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         await _context.SaveChangesAsync();
 
         // Act
-        var (features, signature, keyId, timestamp) = await _provider.GetFeaturesSnapshotAsync();
+        var loaded = await _provider.GetFeaturesSnapshotAsync();
+        var features = loaded?.Features;
+        var signature = loaded?.Signature;
+        var keyId = loaded?.KeyId;
+        var timestamp = loaded?.Timestamp;
 
         // Assert
         features.Should().BeNull();
@@ -123,7 +136,7 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         var features = CreateTestFeatureDefinitions();
 
         // Act
-        await _provider.SaveSnapshotAsync(features, "sig-1", "kid-1", 1700000001);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig-1", KeyId = "kid-1", Timestamp = 1700000001 });
 
         // Assert
         var saved = await _context.TogglySnapshots.FirstOrDefaultAsync(s => s.Id == _settings.Value.DocumentName);
@@ -141,7 +154,7 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         var features = CreateTestFeatureDefinitions();
 
         // Act
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
         var saved = await _context.TogglySnapshots.FirstOrDefaultAsync(s => s.Id == _settings.Value.DocumentName);
@@ -156,7 +169,7 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
     {
         // Arrange
         var features1 = CreateTestFeatureDefinitions();
-        await _provider.SaveSnapshotAsync(features1, "sig-1", "kid-1", 1700000001);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features1, Signature = "sig-1", KeyId = "kid-1", Timestamp = 1700000001 });
 
         var features2 = new List<FeatureDefinitionModel>
         {
@@ -164,7 +177,7 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         };
 
         // Act
-        await _provider.SaveSnapshotAsync(features2, "sig-2", "kid-2", 1700000002);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features2, Signature = "sig-2", KeyId = "kid-2", Timestamp = 1700000002 });
 
         // Assert
         var count = await _context.TogglySnapshots.CountAsync(s => s.Id == _settings.Value.DocumentName);
@@ -184,7 +197,7 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         var features = new List<FeatureDefinitionModel>();
 
         // Act
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
         var saved = await _context.TogglySnapshots.FirstOrDefaultAsync(s => s.Id == _settings.Value.DocumentName);
@@ -216,10 +229,11 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         };
 
         // Act
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
-        var (retrieved, _, _, _) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var retrieved = snapshot?.Features;
         retrieved.Should().NotBeNull();
         retrieved![0].FeatureKey.Should().Be("complex-feature");
         retrieved[0].SecuredFeature.Should().BeTrue();
@@ -358,7 +372,7 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         var provider = new EntityFrameworkFeatureSnapshotProvider(_context, defaultSettings);
 
         var features = CreateTestFeatureDefinitions();
-        await provider.SaveSnapshotAsync(features);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
         var saved = await _context.TogglySnapshots.FirstOrDefaultAsync(s => s.Id == "toggly_features");
@@ -377,7 +391,7 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         var provider = new EntityFrameworkFeatureSnapshotProvider(_context, customSettings);
 
         var features = CreateTestFeatureDefinitions();
-        await provider.SaveSnapshotAsync(features);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         var jwks = CreateTestJwks();
         await provider.SaveJwkSnapshot(jwks, 1700000000);
@@ -404,7 +418,7 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
             {
                 new() { FeatureKey = $"feature-{i}", Filters = new List<FeatureFilter>() }
             };
-            return _provider.SaveSnapshotAsync(features, $"sig-{i}", $"kid-{i}", 1700000000 + i);
+            return _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = $"sig-{i}", KeyId = $"kid-{i}", Timestamp = 1700000000 + i });
         });
 
         // Act
@@ -427,11 +441,15 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         var jwks = CreateTestJwks();
 
         // Act - Save
-        await _provider.SaveSnapshotAsync(features, "sig", "kid", 1700000000);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig", KeyId = "kid", Timestamp = 1700000000 });
         await _provider.SaveJwkSnapshot(jwks, 1700000001);
 
         // Assert - Load
-        var (loadedFeatures, sig, kid, featureTs) = await _provider.GetFeaturesSnapshotAsync();
+        var snapshot = await _provider.GetFeaturesSnapshotAsync();
+        var loadedFeatures = snapshot?.Features;
+        var sig = snapshot?.Signature;
+        var kid = snapshot?.KeyId;
+        var featureTs = snapshot?.Timestamp;
         var (loadedJwks, jwksTs) = await _provider.GetJwkSnapshotAsync();
 
         loadedFeatures.Should().HaveCount(2);
@@ -443,13 +461,74 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SignedDefsJsonAndETag_RoundTripAndClear()
+    {
+        var features = CreateTestFeatureDefinitions();
+        const string signedJson = "[{\"featureKey\":\"feature1\",\"filters\":[]}]";
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+        {
+            Features = features,
+            Signature = "sig",
+            KeyId = "kid",
+            Timestamp = 1700000000,
+            SignedDefsJson = signedJson,
+            ETag = "rev-ef"
+        });
+        await _provider.SaveJwkSnapshot(CreateTestJwks(), 1700000001);
+
+        var loaded = await _provider.GetFeaturesSnapshotAsync();
+        loaded!.SignedDefsJson.Should().Be(signedJson);
+        loaded.ETag.Should().Be("rev-ef");
+
+        await _provider.ClearSnapshotAsync();
+        await _provider.ClearJwkSnapshotAsync();
+
+        (await _provider.GetFeaturesSnapshotAsync()).Should().BeNull();
+        (await _provider.GetJwkSnapshotAsync()).Jwks.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EnsureColumns_UpgradesLegacyTableWithoutSignedDefsJsonOrETag()
+    {
+        await _context.Database.ExecuteSqlRawAsync("DROP TABLE IF EXISTS TogglySnapshots");
+        await _context.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE TogglySnapshots (
+                Id TEXT NOT NULL PRIMARY KEY,
+                Data TEXT NOT NULL,
+                Signature TEXT NULL,
+                KeyId TEXT NULL,
+                Timestamp INTEGER NULL,
+                UpdatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )");
+
+        // New provider instance so EnsureTableExists runs again against the legacy schema.
+        _provider = new EntityFrameworkFeatureSnapshotProvider(_context, _settings);
+
+        var features = CreateTestFeatureDefinitions();
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+        {
+            Features = features,
+            Signature = "sig",
+            KeyId = "kid",
+            Timestamp = 42,
+            SignedDefsJson = "[{\"featureKey\":\"legacy-upgrade\"}]",
+            ETag = "etag-upgrade"
+        });
+
+        var loaded = await _provider.GetFeaturesSnapshotAsync();
+        loaded.Should().NotBeNull();
+        loaded!.SignedDefsJson.Should().Be("[{\"featureKey\":\"legacy-upgrade\"}]");
+        loaded.ETag.Should().Be("etag-upgrade");
+    }
+
+    [Fact]
     public async Task MultipleSnapshots_IndependentDocuments()
     {
         // Arrange & Act
         var features = CreateTestFeatureDefinitions();
         var jwks = CreateTestJwks();
 
-        await _provider.SaveSnapshotAsync(features);
+        await _provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
         await _provider.SaveJwkSnapshot(jwks, 1700000000);
 
         // Assert

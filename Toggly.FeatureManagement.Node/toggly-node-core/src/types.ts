@@ -49,12 +49,23 @@ export interface TogglyServerConfig extends TogglyConfig {
   fileCachePath?: string
   /** Custom cache provider */
   cacheProvider?: CacheProvider
-  /** Enable streaming updates via SSE (default: false) */
+  /** Enable streaming updates via SSE/WebSocket (default: true when appKey is set) */
   enableStreaming?: boolean
   /** Streaming endpoint URL */
   streamingUrl?: string
   /** Use ETag-based polling for efficient updates (default: true) */
   useEtag?: boolean
+  /**
+   * Verify signed envelopes from evaluated-signed / definitions-signed.
+   * Uses exact raw `defs` JSON bytes (never re-serialized).
+   */
+  verifySignatures?: boolean
+  /** Optional allow-list of signing key IDs. Empty / omitted allows all keys. */
+  allowedKeyIds?: string[]
+  /**
+   * Called on refresh / verification failures while last-known-good flags are preserved.
+   */
+  onError?: (error: Error, context?: string) => void | Promise<void>
 }
 
 /**
@@ -81,6 +92,9 @@ export interface FeatureDefinition {
 export interface FeatureDefinitionsResponse {
   features?: FeatureDefinition[]
   defs?: FeatureDefinitions
+  signature?: string
+  timestamp?: number
+  kid?: string
 }
 
 /**
@@ -164,6 +178,7 @@ export interface TogglyClient {
 
   init(config?: TogglyServerConfig): Promise<FeatureDefinitions>
   refresh(): Promise<FeatureDefinitions>
+  clearCache(): Promise<void>
   isFeatureOn(featureKey: string, context?: EvaluationContext): Promise<boolean>
   isFeatureOff(featureKey: string, context?: EvaluationContext): Promise<boolean>
   evaluateFeatureGate(

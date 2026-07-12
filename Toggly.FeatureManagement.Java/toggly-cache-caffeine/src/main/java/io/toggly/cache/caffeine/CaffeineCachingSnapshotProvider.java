@@ -128,6 +128,17 @@ public class CaffeineCachingSnapshotProvider implements SnapshotProvider {
      */
     public void invalidate() {
         cache.invalidateAll();
+        delegate.clear();
+    }
+
+    @Override
+    public void clear() {
+        invalidate();
+    }
+
+    @Override
+    public void clearJwks() {
+        delegate.clearJwks();
     }
 
     @Override

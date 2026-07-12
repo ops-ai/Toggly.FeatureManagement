@@ -10,20 +10,25 @@ from typing import Any, AsyncIterator
 
 from toggly.config import TogglyConfig
 from toggly.context import EvaluationContext
+from toggly.crypto import verify_signed_definitions
 from toggly.enums import FeatureRequirement, LoadStatus
 from toggly.evaluator import EvaluationEngine, EvaluatorRegistry
-from toggly.exceptions import TogglyConfigError, TogglyNetworkError
+from toggly.exceptions import TogglyConfigError, TogglyNetworkError, TogglySignatureError
+from toggly.http import HttpClient, build_definitions_url, build_evaluated_variants_url, build_jwks_url
 from toggly.models import (
     DebugInfo,
     EvaluatedVariantDef,
     FeatureDefinition,
     FeatureFilter,
     FeatureState,
+    JsonWebKey,
+    JsonWebKeySet,
     TogglyInitResponse,
     VariantResult,
 )
 from toggly.providers import (
     DefinitionsSnapshot,
+    JwksSnapshot,
     MemorySnapshotProvider,
     VariantsSnapshot,
 )
@@ -85,6 +90,9 @@ class AsyncTogglyClient:
         self._last_error: str | None = None
         self._etag: str | None = None
         self._lock = asyncio.Lock()
+        self._last_signed_timestamp: int = 0
+        self._jwks: JsonWebKeySet | None = None
+        self._jwks_expiry: float = 0.0
 
         # Components
         self._engine = EvaluationEngine()
@@ -145,8 +153,13 @@ class AsyncTogglyClient:
                 self._start_background_refresh()
                 return response
             except TogglyNetworkError as e:
+                self._report_error(f"Failed to fetch definitions: {e}", e)
                 self._last_error = str(e)
                 logger.warning(f"Failed to fetch definitions: {e}")
+            except TogglySignatureError as e:
+                self._report_error("Invalid signature", e)
+                self._last_error = str(e)
+                logger.warning(f"Signature verification failed: {e}")
 
         # Fall back to cached or defaults
         self._is_initialized = True
@@ -187,6 +200,15 @@ class AsyncTogglyClient:
                 return await self._fetch_variants()
             return await self._fetch_definitions()
         except TogglyNetworkError as e:
+            self._report_error(f"Failed to refresh definitions: {e}", e)
+            self._last_error = str(e)
+            return TogglyInitResponse(
+                status=LoadStatus.ERROR,
+                flags=dict(self._flags),
+                error=str(e),
+            )
+        except TogglySignatureError as e:
+            self._report_error("Invalid signature", e)
             self._last_error = str(e)
             return TogglyInitResponse(
                 status=LoadStatus.ERROR,
@@ -359,8 +381,22 @@ class AsyncTogglyClient:
         )
 
     async def clear_cache(self) -> None:
-        """Clear cached definitions."""
+        """Clear cached definitions and JWKS."""
         self._snapshot_provider.clear()
+        self._jwks = None
+        self._jwks_expiry = 0.0
+        self._last_signed_timestamp = 0
+        self._etag = None
+
+    def _report_error(self, message: str, error: Exception | None = None) -> None:
+        """Invoke the optional on_error callback."""
+        handler = self._config.on_error
+        if handler is None:
+            return
+        try:
+            handler(message, error)
+        except Exception as callback_ex:
+            logger.warning(f"on_error callback threw: {callback_ex}")
 
     def get_debug_info(self) -> DebugInfo:
         """Get debug information about the client state."""
@@ -429,15 +465,14 @@ class AsyncTogglyClient:
 
         Raises:
             TogglyNetworkError: If the request fails.
+            TogglySignatureError: If signature verification fails.
 
         """
         if not self._config.app_key:
             raise TogglyConfigError("app_key is required for fetching definitions")
 
-        # Run blocking HTTP request in executor
+        import json
         import time
-
-        from toggly.http import HttpClient, build_definitions_url
 
         http = HttpClient(
             connect_timeout=self._config.connect_timeout,
@@ -472,15 +507,61 @@ class AsyncTogglyClient:
                 status_code=response.status_code,
             )
 
+        raw_body = response.text()
         try:
-            data = response.json()
+            data = json.loads(raw_body)
         except Exception as e:
             raise TogglyNetworkError(f"Invalid JSON response: {e}", cause=e) from e
 
-        # Parse definitions
-        definitions = self._parse_definitions(data)
+        signature: str | None = None
+        kid: str | None = None
+        signed_ts: int | None = None
+        signed_defs_json: str | None = None
 
-        # Update state
+        if self._config.use_signed_definitions:
+            if not isinstance(data, dict):
+                raise TogglySignatureError("Signed response must be an object")
+            signed_defs_json = self._extract_raw_defs_json(raw_body)
+            if signed_defs_json is None:
+                raise TogglySignatureError("Signed response missing defs")
+            raw_sig = data.get("signature")
+            signature = raw_sig if isinstance(raw_sig, str) else None
+            raw_kid = data.get("kid")
+            kid = raw_kid if isinstance(raw_kid, str) else None
+            ts = data.get("timestamp")
+            if isinstance(ts, bool):
+                signed_ts = None
+            elif isinstance(ts, (int, float)):
+                signed_ts = int(ts)
+            else:
+                signed_ts = None
+            if not signature:
+                raise TogglySignatureError("Signed response missing signature")
+            if not kid:
+                raise TogglySignatureError("Signed response missing kid")
+            if signed_ts is None:
+                raise TogglySignatureError("Signed response missing timestamp")
+            if signed_ts < self._last_signed_timestamp and self._last_signed_timestamp > 0:
+                self._last_refresh = datetime.now(timezone.utc)
+                return TogglyInitResponse(
+                    status=LoadStatus.CACHED,
+                    flags=dict(self._flags),
+                )
+
+            jwks = await self._load_or_fetch_jwks()
+            verify_signed_definitions(
+                signed_defs_json,
+                signed_ts,
+                signature,
+                kid,
+                jwks,
+                self._config.allowed_key_ids,
+            )
+            definitions = self._parse_definitions(json.loads(signed_defs_json))
+            self._last_signed_timestamp = signed_ts
+        else:
+            definitions = self._parse_definitions(data)
+
         async with self._lock:
             old_flags = dict(self._flags)
             self._variant_defs = {}
@@ -488,15 +569,15 @@ class AsyncTogglyClient:
             self._update_flags()
             self._last_refresh = datetime.now(timezone.utc)
             self._etag = response.headers.get("ETag")
-
-            # Notify handlers of changes
             self._notify_changes(old_flags)
 
-        # Save to cache
         snapshot = DefinitionsSnapshot(
             definitions=definitions,
             etag=self._etag,
-            timestamp=int(time.time()),
+            timestamp=signed_ts if signed_ts is not None else int(time.time()),
+            signature=signature,
+            key_id=kid,
+            signed_defs_json=signed_defs_json,
         )
         self._snapshot_provider.save_definitions(snapshot)
 
@@ -507,6 +588,101 @@ class AsyncTogglyClient:
             etag=self._etag,
             timestamp=datetime.now(timezone.utc),
         )
+
+    def _extract_raw_defs_json(self, body: str) -> str | None:
+        """Extract the exact JSON value of the ``defs`` property from a response body."""
+        marker = '"defs"'
+        idx = body.find(marker)
+        if idx < 0:
+            return None
+        idx = body.find(":", idx + len(marker))
+        if idx < 0:
+            return None
+        idx += 1
+        while idx < len(body) and body[idx].isspace():
+            idx += 1
+        if idx >= len(body):
+            return None
+        start_char = body[idx]
+        if start_char not in "[{":
+            return None
+        open_c, close_c = ("[", "]") if start_char == "[" else ("{", "}")
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(idx, len(body)):
+            c = body[i]
+            if in_string:
+                if escape:
+                    escape = False
+                elif c == "\\":
+                    escape = True
+                elif c == '"':
+                    in_string = False
+                continue
+            if c == '"':
+                in_string = True
+            elif c == open_c:
+                depth += 1
+            elif c == close_c:
+                depth -= 1
+                if depth == 0:
+                    return body[idx : i + 1]
+        return None
+
+    async def _load_or_fetch_jwks(self) -> JsonWebKeySet:
+        """Load JWKS from memory/cache or fetch from the server."""
+        import time
+
+        now = time.time()
+        if self._jwks is not None and now < self._jwks_expiry:
+            return self._jwks
+
+        cached = self._snapshot_provider.load_jwks()
+        if cached is not None and cached.jwks.keys:
+            self._jwks = cached.jwks
+            self._jwks_expiry = now + 30 * 24 * 3600
+            return cached.jwks
+
+        http = HttpClient(
+            connect_timeout=self._config.connect_timeout,
+            request_timeout=self._config.request_timeout,
+        )
+        url = build_jwks_url(self._config.base_url)
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(None, lambda: http.get(url))
+        if response.status_code != 200:
+            raise TogglyNetworkError(
+                f"Failed to fetch JWKS: HTTP {response.status_code}",
+                status_code=response.status_code,
+            )
+        try:
+            data = response.json()
+        except Exception as e:
+            raise TogglyNetworkError(f"Invalid JWKS JSON: {e}", cause=e) from e
+
+        keys: list[JsonWebKey] = []
+        for item in data.get("keys", []) if isinstance(data, dict) else []:
+            if not isinstance(item, dict):
+                continue
+            if not all(k in item for k in ("kid", "crv", "x", "y")):
+                continue
+            keys.append(
+                JsonWebKey(
+                    kty=item.get("kty", "EC"),
+                    kid=item["kid"],
+                    crv=item["crv"],
+                    x=item["x"],
+                    y=item["y"],
+                    alg=item.get("alg", "ES256"),
+                    use=item.get("use", "sig"),
+                )
+            )
+        jwks = JsonWebKeySet(keys=keys)
+        self._jwks = jwks
+        self._jwks_expiry = now + 30 * 24 * 3600
+        self._snapshot_provider.save_jwks(JwksSnapshot(jwks=jwks, timestamp=int(now)))
+        return jwks
 
     async def _fetch_variants(self) -> TogglyInitResponse:
         """Fetch evaluated variants from the signed variants endpoint."""
@@ -612,11 +788,12 @@ class AsyncTogglyClient:
         """Parse definitions from API response."""
         definitions = []
 
-        items = (
-            data
-            if isinstance(data, list)
-            else data.get("features", data.get("definitions", []))
-        )
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            items = data.get("defs") or data.get("features") or data.get("definitions") or []
+        else:
+            items = []
 
         for item in items:
             if not isinstance(item, dict):
@@ -649,12 +826,45 @@ class AsyncTogglyClient:
         return definitions
 
     async def _load_from_cache(self) -> DefinitionsSnapshot | None:
-        """Load definitions from cache."""
+        """Load definitions from cache, re-verifying signed snapshots."""
         try:
-            return self._snapshot_provider.load_definitions()
+            snapshot = self._snapshot_provider.load_definitions()
         except Exception as e:
             logger.warning(f"Failed to load from cache: {e}")
             return None
+
+        if snapshot is None:
+            return None
+
+        if self._config.use_signed_definitions:
+            if not snapshot.has_signature_metadata():
+                self._report_error(
+                    "Snapshot is missing SignedDefsJson; loaded without "
+                    "cryptographic re-verification. Clear and refresh to upgrade "
+                    "the snapshot.",
+                    None,
+                )
+                return snapshot
+            try:
+                jwks = await self._load_or_fetch_jwks()
+                assert snapshot.signed_defs_json is not None
+                assert snapshot.timestamp is not None
+                assert snapshot.signature is not None
+                assert snapshot.key_id is not None
+                verify_signed_definitions(
+                    snapshot.signed_defs_json,
+                    snapshot.timestamp,
+                    snapshot.signature,
+                    snapshot.key_id,
+                    jwks,
+                    self._config.allowed_key_ids,
+                )
+            except Exception as e:
+                self._report_error("Failed to verify cached snapshot", e)
+                logger.warning(f"Cached snapshot verification failed: {e}")
+                return None
+
+        return snapshot
 
     async def _apply_snapshot(self, snapshot: DefinitionsSnapshot) -> None:
         """Apply a snapshot to the current state."""
@@ -663,6 +873,8 @@ class AsyncTogglyClient:
             self._definitions = {d.feature_key: d for d in snapshot.definitions}
             self._update_flags()
             self._etag = snapshot.etag
+            if snapshot.timestamp is not None:
+                self._last_signed_timestamp = snapshot.timestamp
 
     async def _load_variants_from_cache(self) -> VariantsSnapshot | None:
         """Load evaluated variants from cache."""

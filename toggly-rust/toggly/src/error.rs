@@ -31,6 +31,9 @@ pub enum Error {
 
     /// Internal error.
     Internal(String),
+
+    /// Signature verification error.
+    Signature(String),
 }
 
 impl fmt::Display for Error {
@@ -45,6 +48,7 @@ impl fmt::Display for Error {
             Error::Cache(msg) => write!(f, "cache error: {}", msg),
             Error::Timeout(msg) => write!(f, "timeout: {}", msg),
             Error::Internal(msg) => write!(f, "internal error: {}", msg),
+            Error::Signature(msg) => write!(f, "signature error: {}", msg),
         }
     }
 }

@@ -81,16 +81,19 @@ pub struct DefinitionsResponse {
     pub definitions: HashMap<String, FeatureDefinition>,
 }
 
-/// Signed definitions response from v2 endpoint.
+/// Signed definitions response from definitions-signed / evaluated-signed.
+///
+/// IMPORTANT: `defs` is raw JSON so signature verification uses the exact
+/// server-signed payload (never re-serialize for verify).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedDefinitionsResponse {
-    /// Raw JSON definitions for signature verification.
-    pub defs: serde_json::Value,
+    /// Exact raw JSON bytes of the `"defs"` property.
+    pub defs: Box<serde_json::value::RawValue>,
 
-    /// Signature.
+    /// Signature (standard base64).
     pub signature: String,
 
-    /// Timestamp.
+    /// Timestamp (Unix seconds).
     pub timestamp: i64,
 
     /// Key ID.

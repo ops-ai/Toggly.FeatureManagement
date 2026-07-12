@@ -39,6 +39,8 @@ type mongoDocument struct {
 	Signature string    `bson:"signature,omitempty"`
 	Kid       string    `bson:"kid,omitempty"`
 	Timestamp int64     `bson:"timestamp,omitempty"`
+	RawDefs   string    `bson:"rawDefs,omitempty"`
+	ETag      string    `bson:"etag,omitempty"`
 	Expiry    int64     `bson:"expiry,omitempty"`
 	UpdatedAt time.Time `bson:"updatedAt"`
 }
@@ -81,6 +83,10 @@ func (m *MongoDBProvider) LoadDefinitions(ctx context.Context) (*DefinitionsSnap
 	snap.Signature = doc.Signature
 	snap.Kid = doc.Kid
 	snap.Timestamp = doc.Timestamp
+	if doc.RawDefs != "" {
+		snap.RawDefs = json.RawMessage(doc.RawDefs)
+	}
+	snap.ETag = doc.ETag
 	return &snap, nil
 }
 
@@ -96,6 +102,8 @@ func (m *MongoDBProvider) SaveDefinitions(ctx context.Context, snap DefinitionsS
 		Signature: snap.Signature,
 		Kid:       snap.Kid,
 		Timestamp: snap.Timestamp,
+		RawDefs:   string(snap.RawDefs),
+		ETag:      snap.ETag,
 		UpdatedAt: time.Now().UTC(),
 	}
 
@@ -103,6 +111,14 @@ func (m *MongoDBProvider) SaveDefinitions(ctx context.Context, snap DefinitionsS
 	_, err = m.collection.ReplaceOne(ctx, bson.M{"_id": m.definitionsID}, doc, opts)
 	if err != nil {
 		return fmt.Errorf("mongodb replace definitions: %w", err)
+	}
+	return nil
+}
+
+func (m *MongoDBProvider) Clear(ctx context.Context) error {
+	_, err := m.collection.DeleteMany(ctx, bson.M{"_id": bson.M{"$in": []string{m.definitionsID, m.jwksID}}})
+	if err != nil {
+		return fmt.Errorf("mongodb clear snapshots: %w", err)
 	}
 	return nil
 }

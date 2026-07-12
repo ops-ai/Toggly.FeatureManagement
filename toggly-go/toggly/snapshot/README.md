@@ -168,10 +168,14 @@ All providers implement the `snapshot.Provider` interface:
 type Provider interface {
     LoadDefinitions(ctx context.Context) (*DefinitionsSnapshot, error)
     SaveDefinitions(ctx context.Context, snap DefinitionsSnapshot) error
+    Clear(ctx context.Context) error
     LoadJWKS(ctx context.Context) (*JWKSnap, error)
     SaveJWKS(ctx context.Context, snap JWKSnap) error
 }
 ```
+
+`DefinitionsSnapshot` includes `RawDefs` (exact signed defs JSON) and `ETag`
+so signature verification does not re-serialize feature models after load.
 
 ## Custom Provider
 
@@ -188,6 +192,10 @@ func (p *MyProvider) LoadDefinitions(ctx context.Context) (*snapshot.Definitions
 
 func (p *MyProvider) SaveDefinitions(ctx context.Context, snap snapshot.DefinitionsSnapshot) error {
     // Save to your storage
+}
+
+func (p *MyProvider) Clear(ctx context.Context) error {
+    // Delete definitions and JWKS snapshots
 }
 
 func (p *MyProvider) LoadJWKS(ctx context.Context) (*snapshot.JWKSnap, error) {

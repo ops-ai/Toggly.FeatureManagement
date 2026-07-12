@@ -75,6 +75,8 @@ func (p *PostgresProvider) ensureTable(ctx context.Context) error {
 			kid VARCHAR(100),
 			timestamp BIGINT,
 			expiry BIGINT,
+			raw_defs TEXT,
+			etag VARCHAR(255),
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)
 	`, p.tableName)
@@ -83,6 +85,10 @@ func (p *PostgresProvider) ensureTable(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("create table: %w", err)
 	}
+
+	_, _ = p.db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE "%s" ADD COLUMN IF NOT EXISTS raw_defs TEXT`, p.tableName))
+	_, _ = p.db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE "%s" ADD COLUMN IF NOT EXISTS etag VARCHAR(255)`, p.tableName))
+
 	p.tableCreated = true
 	return nil
 }
@@ -92,14 +98,14 @@ func (p *PostgresProvider) LoadDefinitions(ctx context.Context) (*DefinitionsSna
 		return nil, err
 	}
 
-	query := fmt.Sprintf(`SELECT data, signature, kid, timestamp FROM "%s" WHERE id = $1`, p.tableName)
+	query := fmt.Sprintf(`SELECT data, signature, kid, timestamp, raw_defs, etag FROM "%s" WHERE id = $1`, p.tableName)
 	row := p.db.QueryRowContext(ctx, query, p.definitionsID)
 
 	var data string
-	var signature, kid sql.NullString
+	var signature, kid, rawDefs, etag sql.NullString
 	var timestamp sql.NullInt64
 
-	err := row.Scan(&data, &signature, &kid, &timestamp)
+	err := row.Scan(&data, &signature, &kid, &timestamp, &rawDefs, &etag)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -124,6 +130,12 @@ func (p *PostgresProvider) LoadDefinitions(ctx context.Context) (*DefinitionsSna
 	if timestamp.Valid {
 		snap.Timestamp = timestamp.Int64
 	}
+	if rawDefs.Valid && rawDefs.String != "" {
+		snap.RawDefs = json.RawMessage(rawDefs.String)
+	}
+	if etag.Valid {
+		snap.ETag = etag.String
+	}
 	return &snap, nil
 }
 
@@ -138,13 +150,15 @@ func (p *PostgresProvider) SaveDefinitions(ctx context.Context, snap Definitions
 	}
 
 	query := fmt.Sprintf(`
-		INSERT INTO "%s" (id, data, signature, kid, timestamp, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO "%s" (id, data, signature, kid, timestamp, raw_defs, etag, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (id) DO UPDATE SET
 			data = EXCLUDED.data,
 			signature = EXCLUDED.signature,
 			kid = EXCLUDED.kid,
 			timestamp = EXCLUDED.timestamp,
+			raw_defs = EXCLUDED.raw_defs,
+			etag = EXCLUDED.etag,
 			updated_at = EXCLUDED.updated_at
 	`, p.tableName)
 
@@ -154,10 +168,24 @@ func (p *PostgresProvider) SaveDefinitions(ctx context.Context, snap Definitions
 		nullString(snap.Signature),
 		nullString(snap.Kid),
 		nullInt64(snap.Timestamp),
+		nullString(string(snap.RawDefs)),
+		nullString(snap.ETag),
 		time.Now().UTC(),
 	)
 	if err != nil {
 		return fmt.Errorf("postgres upsert definitions: %w", err)
+	}
+	return nil
+}
+
+func (p *PostgresProvider) Clear(ctx context.Context) error {
+	if err := p.ensureTable(ctx); err != nil {
+		return err
+	}
+	query := fmt.Sprintf(`DELETE FROM "%s" WHERE id = $1 OR id = $2`, p.tableName)
+	_, err := p.db.ExecContext(ctx, query, p.definitionsID, p.jwksID)
+	if err != nil {
+		return fmt.Errorf("postgres clear snapshots: %w", err)
 	}
 	return nil
 }

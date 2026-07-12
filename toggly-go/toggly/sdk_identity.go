@@ -10,7 +10,7 @@ const (
 	// SDKID identifies this SDK to Toggly definitions services.
 	SDKID = "go"
 	// SDKVersion is the semver of this SDK release.
-	SDKVersion = "0.1.1"
+	SDKVersion = "0.2.0"
 )
 
 // SDKUserAgent returns the HTTP User-Agent value for server-side requests.

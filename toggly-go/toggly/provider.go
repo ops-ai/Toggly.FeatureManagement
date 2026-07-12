@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"sync"
@@ -259,22 +260,66 @@ func (p *definitionsProvider) loadSnapshot(ctx context.Context) error {
 	}
 
 	if p.cfg.EnableVariants && len(snapDefs.VariantDefs) > 0 {
+		if p.cfg.UseSignedDefinitions {
+			if err := p.verifySnapshotRawDefs(ctx, snapDefs.VariantRawDefs, snapDefs.VariantSignature, snapDefs.VariantKid, snapDefs.VariantTimestamp); err != nil {
+				return err
+			}
+		}
 		p.applyVariantDefinitions(snapDefs.VariantDefs)
 		p.mu.Lock()
 		if snapDefs.VariantTimestamp > 0 {
 			p.variantLastTS = snapDefs.VariantTimestamp
+		}
+		if snapDefs.ETag != "" {
+			p.variantEtag = snapDefs.ETag
 		}
 		p.mu.Unlock()
 		return nil
 	}
 
 	if len(snapDefs.Defs) > 0 {
+		if p.cfg.UseSignedDefinitions {
+			if err := p.verifySnapshotRawDefs(ctx, snapDefs.RawDefs, snapDefs.Signature, snapDefs.Kid, snapDefs.Timestamp); err != nil {
+				return err
+			}
+		}
 		p.applyDefinitions(snapDefs.Defs)
 		p.mu.Lock()
 		if snapDefs.Timestamp > 0 {
 			p.lastTS = snapDefs.Timestamp
 		}
+		if snapDefs.ETag != "" {
+			p.etag = snapDefs.ETag
+		}
 		p.mu.Unlock()
+	}
+	return nil
+}
+
+// verifySnapshotRawDefs verifies a snapshot using the exact signed defs JSON.
+// Legacy snapshots without RawDefs load typed features with a warning (no re-serialize verify).
+func (p *definitionsProvider) verifySnapshotRawDefs(ctx context.Context, rawDefs []byte, signature, kid string, timestamp int64) error {
+	if signature == "" || kid == "" || timestamp == 0 {
+		log.Printf("toggly: snapshot is missing required signature fields")
+		return fmt.Errorf("snapshot missing signature fields")
+	}
+	if len(rawDefs) == 0 {
+		log.Printf("toggly: snapshot is missing RawDefs; loaded without cryptographic re-verification. Clear and refresh to upgrade the snapshot")
+		return nil
+	}
+
+	jwks, err := p.loadOrFetchJWKS(ctx)
+	if err != nil {
+		return err
+	}
+	env := &definitions.SignedDefinitionsResponse{
+		Defs:      rawDefs,
+		Signature: signature,
+		Kid:       kid,
+		Timestamp: timestamp,
+	}
+	if err := crypto.VerifySignedDefinitions(env, jwks, p.cfg.AllowedKeyIDs); err != nil {
+		return fmt.Errorf("snapshot signature verification failed: %w", err)
 	}
 	return nil
 }
@@ -414,15 +459,21 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) erro
 	}
 
 	if p.snap != nil {
+		p.mu.RLock()
+		variantETag := p.variantEtag
+		p.mu.RUnlock()
 		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{
 			Defs:             defsSlice,
 			Signature:        env.Signature,
 			Kid:              env.Kid,
 			Timestamp:        env.Timestamp,
+			RawDefs:          env.Defs,
+			ETag:             variantETag,
 			VariantDefs:      variantMap,
 			VariantSignature: env.Signature,
 			VariantKid:       env.Kid,
 			VariantTimestamp: env.Timestamp,
+			VariantRawDefs:   env.Defs,
 		})
 	}
 	return nil
@@ -483,15 +534,27 @@ func (p *definitionsProvider) refreshSigned(ctx context.Context) error {
 	}
 	p.applyDefinitions(defs)
 
-	if newETag := resp.Header.Get("ETag"); newETag != "" {
+	newETag := resp.Header.Get("ETag")
+	if newETag != "" {
 		p.mu.Lock()
 		p.etag = newETag
+		p.lastTS = env.Timestamp
+		p.mu.Unlock()
+	} else {
+		p.mu.Lock()
 		p.lastTS = env.Timestamp
 		p.mu.Unlock()
 	}
 
 	if p.snap != nil {
-		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{Defs: defs, Signature: env.Signature, Kid: env.Kid, Timestamp: env.Timestamp})
+		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{
+			Defs:      defs,
+			Signature: env.Signature,
+			Kid:       env.Kid,
+			Timestamp: env.Timestamp,
+			RawDefs:   env.Defs,
+			ETag:      newETag,
+		})
 	}
 	return nil
 }

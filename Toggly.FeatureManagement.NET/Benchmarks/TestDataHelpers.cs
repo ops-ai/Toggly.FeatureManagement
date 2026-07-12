@@ -215,27 +215,32 @@ namespace Toggly.FeatureManagement.Benchmarks
     /// </summary>
     public class MockSnapshotProvider : IFeatureSnapshotProvider
     {
-        private readonly List<FeatureDefinitionModel> _features;
-        private readonly string? _signature;
-        private readonly string? _keyId;
-        private readonly long? _timestamp;
+        private readonly FeatureDefinitionsSnapshot _snapshot;
 
         public MockSnapshotProvider(List<FeatureDefinitionModel> features, string? signature = null, string? keyId = null, long? timestamp = null)
         {
-            _features = features;
-            _signature = signature;
-            _keyId = keyId;
-            _timestamp = timestamp ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            _snapshot = new FeatureDefinitionsSnapshot
+            {
+                Features = features,
+                Signature = signature,
+                KeyId = keyId,
+                Timestamp = timestamp ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            };
         }
 
-        public Task<(List<FeatureDefinitionModel>? Features, string? Signature, string? KeyId, long? Timestamp)> GetFeaturesSnapshotAsync(CancellationToken ct = default)
+        public Task<FeatureDefinitionsSnapshot?> GetFeaturesSnapshotAsync(CancellationToken ct = default)
         {
-            return Task.FromResult((_features, _signature, _keyId, _timestamp));
+            return Task.FromResult<FeatureDefinitionsSnapshot?>(_snapshot);
         }
 
-        public Task SaveSnapshotAsync(List<FeatureDefinitionModel> features, string? signature = null, string? keyId = null, long? timestamp = null, CancellationToken ct = default)
+        public Task SaveSnapshotAsync(FeatureDefinitionsSnapshot snapshot, CancellationToken ct = default)
         {
             // No-op for benchmarks
+            return Task.CompletedTask;
+        }
+
+        public Task ClearSnapshotAsync(CancellationToken ct = default)
+        {
             return Task.CompletedTask;
         }
 
@@ -245,6 +250,11 @@ namespace Toggly.FeatureManagement.Benchmarks
         }
 
         public Task SaveJwkSnapshot(JsonWebKeySet jwks, long timestamp, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task ClearJwkSnapshotAsync(CancellationToken ct = default)
         {
             return Task.CompletedTask;
         }

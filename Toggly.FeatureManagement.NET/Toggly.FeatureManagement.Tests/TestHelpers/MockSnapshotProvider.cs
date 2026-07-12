@@ -7,10 +7,7 @@ namespace Toggly.FeatureManagement.Tests.TestHelpers;
 /// </summary>
 public class MockSnapshotProvider : IFeatureSnapshotProvider
 {
-    private List<FeatureDefinitionModel>? _features;
-    private string? _signature;
-    private string? _keyId;
-    private long? _timestamp;
+    private FeatureDefinitionsSnapshot? _snapshot;
     private JsonWebKeySet? _jwks;
     private long? _jwksTimestamp;
 
@@ -20,23 +17,32 @@ public class MockSnapshotProvider : IFeatureSnapshotProvider
         string? keyId = null,
         long? timestamp = null)
     {
-        _features = features;
-        _signature = signature;
-        _keyId = keyId;
-        _timestamp = timestamp ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (features != null || signature != null || keyId != null || timestamp != null)
+        {
+            _snapshot = new FeatureDefinitionsSnapshot
+            {
+                Features = features,
+                Signature = signature,
+                KeyId = keyId,
+                Timestamp = timestamp ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            };
+        }
     }
 
-    public Task<(List<FeatureDefinitionModel>? Features, string? Signature, string? KeyId, long? Timestamp)> GetFeaturesSnapshotAsync(CancellationToken ct = default)
+    public Task<FeatureDefinitionsSnapshot?> GetFeaturesSnapshotAsync(CancellationToken ct = default)
     {
-        return Task.FromResult((_features, _signature, _keyId, _timestamp));
+        return Task.FromResult(_snapshot);
     }
 
-    public Task SaveSnapshotAsync(List<FeatureDefinitionModel> features, string? signature = null, string? keyId = null, long? timestamp = null, CancellationToken ct = default)
+    public Task SaveSnapshotAsync(FeatureDefinitionsSnapshot snapshot, CancellationToken ct = default)
     {
-        _features = features;
-        _signature = signature;
-        _keyId = keyId;
-        _timestamp = timestamp;
+        _snapshot = snapshot;
+        return Task.CompletedTask;
+    }
+
+    public Task ClearSnapshotAsync(CancellationToken ct = default)
+    {
+        _snapshot = null;
         return Task.CompletedTask;
     }
 
@@ -52,15 +58,25 @@ public class MockSnapshotProvider : IFeatureSnapshotProvider
         return Task.CompletedTask;
     }
 
+    public Task ClearJwkSnapshotAsync(CancellationToken ct = default)
+    {
+        _jwks = null;
+        _jwksTimestamp = null;
+        return Task.CompletedTask;
+    }
+
     /// <summary>
     /// Sets the features to return from GetFeaturesSnapshotAsync.
     /// </summary>
     public void SetFeatures(List<FeatureDefinitionModel> features, string? signature = null, string? keyId = null, long? timestamp = null)
     {
-        _features = features;
-        _signature = signature;
-        _keyId = keyId;
-        _timestamp = timestamp;
+        _snapshot = new FeatureDefinitionsSnapshot
+        {
+            Features = features,
+            Signature = signature,
+            KeyId = keyId,
+            Timestamp = timestamp
+        };
     }
 
     /// <summary>

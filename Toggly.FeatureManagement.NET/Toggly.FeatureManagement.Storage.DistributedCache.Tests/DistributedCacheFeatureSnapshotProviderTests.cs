@@ -36,10 +36,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert
-        result.Features.Should().BeNull();
-        result.Signature.Should().BeNull();
-        result.KeyId.Should().BeNull();
-        result.Timestamp.Should().BeNull();
+        result.Should().BeNull();
     }
 
     [Fact]
@@ -54,7 +51,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
             new() { FeatureKey = "feature2" }
         };
 
-        await provider.SaveSnapshotAsync(features, "sig123", "key456", 1234567890L);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig123", KeyId = "key456", Timestamp = 1234567890L });
 
         // Act
         var result = await provider.GetFeaturesSnapshotAsync();
@@ -79,7 +76,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
             new() { FeatureKey = "default-doc-test" }
         };
 
-        await provider.SaveSnapshotAsync(features);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Act - Create new provider with same cache to verify it reads from same location
         var provider2 = CreateProvider(cache);
@@ -102,7 +99,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
             new() { FeatureKey = "custom-doc-feature" }
         };
 
-        await provider.SaveSnapshotAsync(features, "sig", "key", 123L);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "sig", KeyId = "key", Timestamp = 123L });
 
         // Act - Provider with default settings should not find the data
         var defaultProvider = CreateProvider(cache);
@@ -113,7 +110,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         var customResult = await customProvider.GetFeaturesSnapshotAsync();
 
         // Assert
-        defaultResult.Features.Should().BeNull();
+        defaultResult.Should().BeNull();
         customResult.Features.Should().HaveCount(1);
         customResult.Features![0].FeatureKey.Should().Be("custom-doc-feature");
     }
@@ -149,7 +146,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         };
 
         // Act
-        await provider.SaveSnapshotAsync(features, "signature", "keyId", 9876543210L);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "signature", KeyId = "keyId", Timestamp = 9876543210L });
 
         // Assert
         var result = await provider.GetFeaturesSnapshotAsync();
@@ -175,8 +172,8 @@ public class DistributedCacheFeatureSnapshotProviderTests
         };
 
         // Act
-        await provider.SaveSnapshotAsync(originalFeatures, "sig1", "key1", 100L);
-        await provider.SaveSnapshotAsync(updatedFeatures, "sig2", "key2", 200L);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = originalFeatures, Signature = "sig1", KeyId = "key1", Timestamp = 100L });
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = updatedFeatures, Signature = "sig2", KeyId = "key2", Timestamp = 200L });
 
         // Assert
         var result = await provider.GetFeaturesSnapshotAsync();
@@ -198,7 +195,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         };
 
         // Act
-        await provider.SaveSnapshotAsync(features);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
 
         // Assert
         var result = await provider.GetFeaturesSnapshotAsync();
@@ -243,7 +240,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         };
 
         // Act
-        await provider.SaveSnapshotAsync(features, "complex-sig", "complex-key", 123456L);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features, Signature = "complex-sig", KeyId = "complex-key", Timestamp = 123456L });
 
         // Assert
         var result = await provider.GetFeaturesSnapshotAsync();
@@ -268,7 +265,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         var cts = new CancellationTokenSource();
 
         // Act - Should complete without error
-        await provider.SaveSnapshotAsync(features, ct: cts.Token);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features }, cts.Token);
 
         // Assert
         var result = await provider.GetFeaturesSnapshotAsync();
@@ -509,7 +506,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         const long timestamp = 1700000000L;
 
         // Act
-        await provider.SaveSnapshotAsync(originalFeatures, signature, keyId, timestamp);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = originalFeatures, Signature = signature, KeyId = keyId, Timestamp = timestamp });
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert
@@ -521,6 +518,39 @@ public class DistributedCacheFeatureSnapshotProviderTests
         result.Signature.Should().Be(signature);
         result.KeyId.Should().Be(keyId);
         result.Timestamp.Should().Be(timestamp);
+    }
+
+    [Fact]
+    public async Task SignedDefsJsonAndETag_RoundTripAndClear()
+    {
+        var cache = CreateCache();
+        var provider = CreateProvider(cache);
+        var features = new List<FeatureDefinitionModel>
+        {
+            new() { FeatureKey = "feature1", Filters = new List<FeatureFilter>() }
+        };
+        const string signedJson = "[{\"featureKey\":\"feature1\"}]";
+
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+        {
+            Features = features,
+            Signature = "sig",
+            KeyId = "kid",
+            Timestamp = 99,
+            SignedDefsJson = signedJson,
+            ETag = "rev-cache"
+        });
+        await provider.SaveJwkSnapshot(new JsonWebKeySet { Keys = new List<JsonWebKey> { new() { Kid = "k1" } } }, 100);
+
+        var loaded = await provider.GetFeaturesSnapshotAsync();
+        loaded!.SignedDefsJson.Should().Be(signedJson);
+        loaded.ETag.Should().Be("rev-cache");
+
+        await provider.ClearSnapshotAsync();
+        await provider.ClearJwkSnapshotAsync();
+
+        (await provider.GetFeaturesSnapshotAsync()).Should().BeNull();
+        (await provider.GetJwkSnapshotAsync()).Jwks.Should().BeNull();
     }
 
     [Fact]
@@ -581,7 +611,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         };
 
         // Act
-        await provider.SaveSnapshotAsync(features);
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot { Features = features });
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert

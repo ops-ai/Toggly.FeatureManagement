@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toggly-cache"
-version = "0.1.0"
+version = "0.1.1"
 description = "Caching providers for Toggly feature flag management (Redis, Memcached)"
 readme = "README.md"
 license = {text = "MIT"}
@@ -38,7 +38,7 @@ classifiers = [
 ]
 requires-python = ">=3.8"
 dependencies = [
-    "toggly>=0.1.0"
+    "toggly>=0.2.0"
 ]
 
 [project.urls]

@@ -100,7 +100,7 @@ namespace Toggly.FeatureManagement.Benchmarks
         /// Time to load flags from snapshot provider (simulates startup fetch)
         /// </summary>
         [Benchmark]
-        public async Task<(List<FeatureDefinitionModel>? Features, string? Signature, string? KeyId, long? Timestamp)> InitialFlagLoad()
+        public async Task<FeatureDefinitionsSnapshot?> InitialFlagLoad()
         {
             var snapshotProvider = new MockSnapshotProvider(_testFeatures);
             return await snapshotProvider.GetFeaturesSnapshotAsync();
