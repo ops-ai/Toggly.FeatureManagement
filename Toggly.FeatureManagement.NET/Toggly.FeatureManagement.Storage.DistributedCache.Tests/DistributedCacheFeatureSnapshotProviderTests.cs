@@ -127,7 +127,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         var result = await provider.GetFeaturesSnapshotAsync(cts.Token);
 
         // Assert
-        result.Features.Should().BeNull();
+        result.Should().BeNull();
     }
 
     #endregion
