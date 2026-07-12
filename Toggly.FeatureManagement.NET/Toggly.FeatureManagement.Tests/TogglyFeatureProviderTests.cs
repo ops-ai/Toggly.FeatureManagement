@@ -577,8 +577,8 @@ public class TogglyFeatureProviderTests : IDisposable
         // Act
         var debugInfo = _provider.GetDebugInfo();
 
-        // Assert
-        debugInfo.LastError.Should().Contain("Network error");
+        // Assert — provider wraps the HTTP exception in a configuration-oriented message
+        debugInfo.LastError.Should().Contain("HTTP error refreshing feature definitions");
         debugInfo.LastErrorTime.Should().NotBeNull();
     }
 
@@ -1485,8 +1485,8 @@ public class TogglyFeatureProviderTests : IDisposable
         // Act
         var debugInfo = _provider.GetDebugInfo();
 
-        // Assert
-        debugInfo.LastError.Should().Contain("timeout");
+        // Assert — TaskCanceledException is reported as an unexpected refresh error
+        debugInfo.LastError.Should().Contain("Unexpected error refreshing feature definitions");
     }
 
     #endregion

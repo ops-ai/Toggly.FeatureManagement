@@ -14,7 +14,12 @@ from toggly.crypto import verify_signed_definitions
 from toggly.enums import FeatureRequirement, LoadStatus
 from toggly.evaluator import EvaluationEngine, EvaluatorRegistry
 from toggly.exceptions import TogglyConfigError, TogglyNetworkError, TogglySignatureError
-from toggly.http import HttpClient, build_definitions_url, build_evaluated_variants_url, build_jwks_url
+from toggly.http import (
+    HttpClient,
+    build_definitions_url,
+    build_evaluated_variants_url,
+    build_jwks_url,
+)
 from toggly.models import (
     DebugInfo,
     EvaluatedVariantDef,
@@ -690,7 +695,7 @@ class AsyncTogglyClient:
             raise TogglyConfigError("app_key is required for fetching variants")
 
 
-        from toggly.http import HttpClient, build_evaluated_variants_url
+        from toggly.http import HttpClient
 
         http = HttpClient(
             connect_timeout=self._config.connect_timeout,

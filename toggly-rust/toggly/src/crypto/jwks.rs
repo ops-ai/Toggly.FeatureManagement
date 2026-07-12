@@ -93,10 +93,9 @@ pub fn validate_and_parse_es256_key(
 
     let point = EncodedPoint::from_bytes(&uncompressed)
         .map_err(|e| DecodeB64Error::InvalidPoint(e.to_string()))?;
-    let public_key =
-        PublicKey::from_encoded_point(&point).into_option().ok_or_else(|| {
-            DecodeB64Error::InvalidPoint("failed to decode public key".to_string())
-        })?;
+    let public_key = PublicKey::from_encoded_point(&point)
+        .into_option()
+        .ok_or_else(|| DecodeB64Error::InvalidPoint("failed to decode public key".to_string()))?;
 
     Ok(VerifyingKey::from(public_key))
 }

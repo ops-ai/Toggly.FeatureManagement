@@ -143,7 +143,9 @@ mod tests {
     #[test]
     fn verify_ok_p1363() {
         let (signing, jwk) = make_keypair();
-        let jwks = JwkSet { keys: vec![jwk.clone()] };
+        let jwks = JwkSet {
+            keys: vec![jwk.clone()],
+        };
         let defs = r#"[{"featureKey":"demo","filters":[{"name":"AlwaysOn","parameters":{}}],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}]"#;
         let ts: i64 = 1730000000;
         let payload = format!("{defs}|{ts}");
@@ -162,7 +164,9 @@ mod tests {
     #[test]
     fn verify_rejects_bad_signature() {
         let (signing, jwk) = make_keypair();
-        let jwks = JwkSet { keys: vec![jwk.clone()] };
+        let jwks = JwkSet {
+            keys: vec![jwk.clone()],
+        };
         let defs = "[]";
         let ts: i64 = 1730000000;
         let payload = format!("{defs}|{ts}");
@@ -185,7 +189,9 @@ mod tests {
     #[test]
     fn verify_allowed_kid() {
         let (signing, jwk) = make_keypair();
-        let jwks = JwkSet { keys: vec![jwk.clone()] };
+        let jwks = JwkSet {
+            keys: vec![jwk.clone()],
+        };
         let defs = "[]";
         let ts: i64 = 1730000000;
         let payload = format!("{defs}|{ts}");
@@ -210,7 +216,9 @@ mod tests {
     fn raw_defs_must_not_be_reserialized() {
         // Compact vs pretty JSON of the same object must use exact bytes.
         let (signing, jwk) = make_keypair();
-        let jwks = JwkSet { keys: vec![jwk.clone()] };
+        let jwks = JwkSet {
+            keys: vec![jwk.clone()],
+        };
         let compact = r#"{"a":1}"#;
         let ts: i64 = 100;
         let payload = format!("{compact}|{ts}");

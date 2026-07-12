@@ -63,7 +63,8 @@ CacheLruIndex parseCacheLruIndex(String? raw) {
 }
 
 /// Serializes [index] to the JS-compatible JSON shape.
-String serializeCacheLruIndex(CacheLruIndex index) => jsonEncode(index.toJson());
+String serializeCacheLruIndex(CacheLruIndex index) =>
+    jsonEncode(index.toJson());
 
 /// Upserts [key] with [now] (epoch ms) as lastAccessed.
 CacheLruIndex touchCacheLruKey(
@@ -115,8 +116,8 @@ List<String> selectCacheLruKeysToEvict(
   };
 
   keys.sort((a, b) {
-    final byAccess =
-        index.entries[a]!.lastAccessed.compareTo(index.entries[b]!.lastAccessed);
+    final byAccess = index.entries[a]!.lastAccessed
+        .compareTo(index.entries[b]!.lastAccessed);
     if (byAccess != 0) {
       return byAccess;
     }

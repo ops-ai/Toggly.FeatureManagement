@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+2026-07-12
+
+### Fixed
+- Ruff lint: import sorting, unused import, nested `with` in `FileSnapshotProvider.clear_jwks`.
+
 ## 0.2.0
 
 2026-07-11

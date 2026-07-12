@@ -280,7 +280,8 @@ void main() {
       clock = 1;
       await provider.writeFlags(_flags('u1'));
       await provider.writeVariants(_variants('u1'));
-      await provider.writeDefinitionsRevision('app', 'Production', 'u1', 'rev-1');
+      await provider.writeDefinitionsRevision(
+          'app', 'Production', 'u1', 'rev-1');
 
       await provider.deleteFlags('u1');
       await provider.deleteVariants('u1');

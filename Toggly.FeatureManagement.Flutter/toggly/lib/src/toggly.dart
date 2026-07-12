@@ -181,9 +181,7 @@ class Toggly with WidgetsBindingObserver {
     Toggly._config = config;
     final cacheProvider = config.cacheProvider;
     final maxCacheKeys = config.maxCacheKeys;
-    if (cacheProvider != null &&
-        maxCacheKeys != null &&
-        maxCacheKeys > 0) {
+    if (cacheProvider != null && maxCacheKeys != null && maxCacheKeys > 0) {
       Toggly._cache = LruTogglyCacheProvider(
         cacheProvider,
         maxCacheKeys: maxCacheKeys,

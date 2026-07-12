@@ -258,7 +258,7 @@ class SnapshotProvider(ABC):
         """
         pass
 
-    def clear_jwks(self) -> None:
+    def clear_jwks(self) -> None:  # noqa: B027
         """Clear cached JWKS only.
 
         Default clears via ``clear()`` subclasses should override when they
@@ -457,9 +457,8 @@ class FileSnapshotProvider(SnapshotProvider):
 
     def clear_jwks(self) -> None:
         """Clear cached JWKS file only."""
-        with self._lock:
-            with contextlib.suppress(OSError):
-                self._jwks_path.unlink(missing_ok=True)
+        with self._lock, contextlib.suppress(OSError):
+            self._jwks_path.unlink(missing_ok=True)
 
     def _load_json(
         self,

@@ -91,7 +91,9 @@ export function togglyMiddleware(config: TogglyExpressConfig): RequestHandler {
 
   const initialize = async () => {
     if (!expressClient) {
-      expressClient = createTogglyClient(config)
+      const { onError: _onError, getIdentity: _getIdentity, getContext: _getContext, ...serverConfig } =
+        config
+      expressClient = createTogglyClient(serverConfig)
       await expressClient.init()
     }
   }

@@ -10,7 +10,7 @@ import type {
 /**
  * Express-specific configuration
  */
-export interface TogglyExpressConfig extends TogglyServerConfig {
+export interface TogglyExpressConfig extends Omit<TogglyServerConfig, 'onError'> {
   /**
    * Function to extract identity from request
    * Default: Uses x-toggly-identity header or session.userId

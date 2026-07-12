@@ -479,10 +479,7 @@ impl DefinitionsProvider {
                 Ok((defs, ts)) => {
                     if let Some(prev) = current_ts {
                         if ts < prev {
-                            debug!(
-                                prev,
-                                ts, "Ignoring signed definitions with older timestamp"
-                            );
+                            debug!(prev, ts, "Ignoring signed definitions with older timestamp");
                             *last_fetch.write() = Some(Instant::now());
                             return Ok(());
                         }
