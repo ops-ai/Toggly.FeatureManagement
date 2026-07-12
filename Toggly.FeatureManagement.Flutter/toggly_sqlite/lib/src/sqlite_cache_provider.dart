@@ -21,9 +21,11 @@ class SqliteCacheProvider implements TogglyRevisionCacheProvider {
   static const String _kindVariants = 'variants';
   static const String _kindRevision = 'revision';
   static const String _kindJwks = 'jwks';
+  static const String _kindLru = 'lru';
 
   // JWKS is a single, identity-independent row.
   static const String _jwksIdentity = '__jwks__';
+  static const String _lruIdentity = '__lru__';
 
   final DatabaseFactory _factory;
   final String? _path;
@@ -159,6 +161,13 @@ class SqliteCacheProvider implements TogglyRevisionCacheProvider {
 
   @override
   Future<void> deleteJwks() => _delete(_kindJwks, _jwksIdentity);
+
+  @override
+  Future<String?> readCacheLruIndex() => _read(_kindLru, _lruIdentity);
+
+  @override
+  Future<void> writeCacheLruIndex(String json) =>
+      _write(_kindLru, _lruIdentity, json);
 
   String _revisionIdentity(
           String appKey, String environment, String identity) =>

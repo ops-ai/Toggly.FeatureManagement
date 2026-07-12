@@ -21,6 +21,7 @@ export default {
     '!src/**/*.spec.{ts,tsx}',
     '!src/**/*.test.{ts,tsx}',
     '!src/**/index.ts',
+    '!src/test-helpers.ts',
   ],
   coverageReporters: ['text', 'text-summary', 'lcov'],
   coverageThreshold: {

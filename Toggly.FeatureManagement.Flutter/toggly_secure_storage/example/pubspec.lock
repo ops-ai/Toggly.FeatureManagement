@@ -98,20 +98,19 @@ packages:
     source: hosted
     version: "2.0.8"
   feature_flags_toggly:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: feature_flags_toggly
-      sha256: "5e4795117d1e74ad7c358b682cd4d0e9d32f5ad2bcaf2a693ad72a9a057d46f7"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.7.0"
+      path: "../../toggly"
+      relative: true
+    source: path
+    version: "1.9.0"
   feature_flags_toggly_secure_storage:
     dependency: "direct main"
     description:
       path: ".."
       relative: true
     source: path
-    version: "0.3.0"
+    version: "0.4.0"
   ffi:
     dependency: transitive
     description:

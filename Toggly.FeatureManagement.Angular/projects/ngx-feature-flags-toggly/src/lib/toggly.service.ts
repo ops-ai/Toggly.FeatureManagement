@@ -7,8 +7,17 @@ import {
 } from './models'
 import { TogglyOptions } from './toggly-options'
 import { HookExecutor } from './hooks'
-import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types'
-import { appendEvaluationContext, evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types'
+import type { CacheLruIndex, Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types'
+import {
+  appendEvaluationContext,
+  evaluationContextCacheKey,
+  isCacheLruEnabled,
+  parseCacheLruIndex,
+  removeCacheLruKeys,
+  selectCacheLruKeysToEvict,
+  serializeCacheLruIndex,
+  touchCacheLruKey,
+} from '@ops-ai/toggly-hooks-types'
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -30,6 +39,7 @@ import { buildDefinitionFetchHeaders } from './sdk-identity'
 const CACHE_PREFIX_FLAGS = 'toggly:flags:'
 const CACHE_PREFIX_VARIANTS = 'toggly:variants:'
 const CACHE_PREFIX_REVISION = 'toggly:revision:'
+const CACHE_LRU_KEY = 'toggly:cache-lru'
 
 function getFlagsCacheKey(appKey: string, environment: string, contextKey = ''): string {
   const suffix = contextKey ? `:${contextKey}` : ''
@@ -227,23 +237,37 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private _readCachedFlags(): { [key: string]: boolean } | null {
     if (!this._canPersist) return null
     try {
-      const raw = localStorage.getItem(this._flagsCacheKey)
-      return raw ? JSON.parse(raw) : null
+      const key = this._flagsCacheKey
+      const raw = localStorage.getItem(key)
+      const parsed = raw ? (JSON.parse(raw) as { [key: string]: boolean } | null) : null
+      if (raw != null && parsed != null) {
+        this._touchCacheKey(key)
+      }
+      return parsed
     } catch { return null }
   }
 
   private _writeCachedFlags(flags: { [key: string]: boolean }): void {
     if (!this._canPersist) return
     try {
-      localStorage.setItem(this._flagsCacheKey, JSON.stringify(flags))
+      const key = this._flagsCacheKey
+      const variantsKey = this._variantsCacheKey
+      localStorage.setItem(key, JSON.stringify(flags))
+      this._touchCacheKey(key)
+      this._enforceMaxCacheKeys([key, variantsKey])
     } catch { /* storage full or unavailable */ }
   }
 
   private _readCachedVariants(): { [key: string]: EvaluatedVariantDef } | null {
     if (!this._canPersist) return null
     try {
-      const raw = localStorage.getItem(this._variantsCacheKey)
-      return raw ? JSON.parse(raw) : null
+      const key = this._variantsCacheKey
+      const raw = localStorage.getItem(key)
+      const parsed = raw ? (JSON.parse(raw) as { [key: string]: EvaluatedVariantDef } | null) : null
+      if (raw != null && parsed != null) {
+        this._touchCacheKey(key)
+      }
+      return parsed
     } catch { return null }
   }
 
@@ -252,8 +276,96 @@ export class TogglyService implements ITogglyService, OnDestroy {
   ): void {
     if (!this._canPersist) return
     try {
-      localStorage.setItem(this._variantsCacheKey, JSON.stringify(defs))
+      const key = this._variantsCacheKey
+      const flagsKey = this._flagsCacheKey
+      localStorage.setItem(key, JSON.stringify(defs))
+      this._touchCacheKey(key)
+      this._enforceMaxCacheKeys([flagsKey, key])
     } catch { /* storage full or unavailable */ }
+  }
+
+  private _isTrackedCacheKey(key: string): boolean {
+    return key.startsWith(CACHE_PREFIX_FLAGS) || key.startsWith(CACHE_PREFIX_VARIANTS)
+  }
+
+  private _loadLruIndex(): CacheLruIndex {
+    try {
+      return parseCacheLruIndex(localStorage.getItem(CACHE_LRU_KEY))
+    } catch {
+      return parseCacheLruIndex(null)
+    }
+  }
+
+  private _saveLruIndex(index: CacheLruIndex): void {
+    try {
+      localStorage.setItem(CACHE_LRU_KEY, serializeCacheLruIndex(index))
+    } catch { /* storage full or unavailable */ }
+  }
+
+  private _touchCacheKey(key: string): void {
+    if (!this._canPersist || !isCacheLruEnabled(this._config.maxCacheKeys)) {
+      return
+    }
+    if (!this._isTrackedCacheKey(key)) {
+      return
+    }
+    try {
+      this._saveLruIndex(touchCacheLruKey(this._loadLruIndex(), key))
+    } catch { /* ignore LRU failures */ }
+  }
+
+  private _enforceMaxCacheKeys(protectKeys: string[]): void {
+    const maxKeys = this._config.maxCacheKeys
+    if (!this._canPersist || !isCacheLruEnabled(maxKeys)) {
+      return
+    }
+    try {
+      let index = this._loadLruIndex()
+      const toEvict = selectCacheLruKeysToEvict(index, maxKeys as number, { protectKeys }).filter(
+        (key: string) => this._isTrackedCacheKey(key),
+      )
+      if (toEvict.length === 0) {
+        return
+      }
+      for (const key of toEvict) {
+        try {
+          localStorage.removeItem(key)
+        } catch { /* ignore per-key removal failures */ }
+      }
+      index = removeCacheLruKeys(index, toEvict)
+      this._saveLruIndex(index)
+    } catch { /* ignore LRU failures */ }
+  }
+
+  private _removeCacheKeysFromLruIndex(keys: string[]): void {
+    if (!this._canPersist || !isCacheLruEnabled(this._config.maxCacheKeys)) {
+      return
+    }
+    try {
+      this._saveLruIndex(removeCacheLruKeys(this._loadLruIndex(), keys))
+    } catch { /* ignore LRU failures */ }
+  }
+
+  /**
+   * Clear current identity-scoped flags/variants localStorage entries and update the LRU index.
+   */
+  clearFeatureFlagsCache(): void {
+    if (!this._canPersist || !this._config.appKey) {
+      this._features = null
+      this._variants = null
+      return
+    }
+    try {
+      const flagsKey = this._flagsCacheKey
+      const variantsKey = this._variantsCacheKey
+      const revisionKey = this._revisionCacheKey
+      localStorage.removeItem(flagsKey)
+      localStorage.removeItem(variantsKey)
+      localStorage.removeItem(revisionKey)
+      this._removeCacheKeysFromLruIndex([flagsKey, variantsKey])
+    } catch { /* ignore */ }
+    this._features = null
+    this._variants = null
   }
 
   private _readCachedRevision(): string | null {

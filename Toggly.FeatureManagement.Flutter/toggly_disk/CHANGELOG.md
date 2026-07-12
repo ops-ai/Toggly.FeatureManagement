@@ -1,3 +1,12 @@
+## 0.4.0
+
+2026-07-11
+
+### Added
+- `readCacheLruIndex` / `writeCacheLruIndex` persist the sidecar LRU index as
+  `cache_lru.json` for `TogglyConfig.maxCacheKeys` eviction
+  (`feature_flags_toggly` 1.9.0+).
+
 ## 0.3.0
 
 2026-07-07

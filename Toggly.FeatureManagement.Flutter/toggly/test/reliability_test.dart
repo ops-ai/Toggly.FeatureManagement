@@ -47,6 +47,12 @@ class _MemoryCacheProvider implements TogglyCacheProvider {
   Future<void> deleteJwks() async {
     jwks = null;
   }
+
+  @override
+  Future<String?> readCacheLruIndex() async => null;
+
+  @override
+  Future<void> writeCacheLruIndex(String json) async {}
 }
 
 class _MemoryRevisionCacheProvider extends _MemoryCacheProvider

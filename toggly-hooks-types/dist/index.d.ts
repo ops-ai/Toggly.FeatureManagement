@@ -60,3 +60,5 @@ export interface Hook {
 }
 export type { TogglyEvaluationContext, EvaluationUrlMode, } from './evaluation-context';
 export { MAX_EVALUATION_CLAIMS, appendEvaluationContext, evaluationContextCacheKey, normalizeEvaluationClaims, } from './evaluation-context';
+export type { CacheLruEntry, CacheLruIndex, } from './cache-lru';
+export { emptyCacheLruIndex, isCacheLruEnabled, parseCacheLruIndex, removeCacheLruKeys, selectCacheLruKeysToEvict, serializeCacheLruIndex, touchCacheLruKey, } from './cache-lru';

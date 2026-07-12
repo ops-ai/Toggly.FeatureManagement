@@ -179,7 +179,18 @@ class Toggly with WidgetsBindingObserver {
     Toggly._appKey = appKey;
     Toggly._environment = environment ?? 'Production';
     Toggly._config = config;
-    Toggly._cache = config.cacheProvider;
+    final cacheProvider = config.cacheProvider;
+    final maxCacheKeys = config.maxCacheKeys;
+    if (cacheProvider != null &&
+        maxCacheKeys != null &&
+        maxCacheKeys > 0) {
+      Toggly._cache = LruTogglyCacheProvider(
+        cacheProvider,
+        maxCacheKeys: maxCacheKeys,
+      );
+    } else {
+      Toggly._cache = cacheProvider;
+    }
 
     _localGatesChangedController?.close();
     _localGatesChangedController = StreamController<void>.broadcast();

@@ -22,6 +22,12 @@ export interface TogglyConfig {
   /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
   persistCache?: boolean;
 
+  /**
+   * Max identity-scoped cache keys (flags/variants) retained in localStorage.
+   * Omit or null = unlimited. A positive integer enables LRU eviction by last access.
+   */
+  maxCacheKeys?: number | null;
+
   /** Enable variant support. When true, fetches from /evaluated-variants-signed instead of /evaluated-signed. Default: false. */
   enableVariants?: boolean;
 

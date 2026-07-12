@@ -15,6 +15,7 @@ class SecureStorageCacheProvider implements TogglyRevisionCacheProvider {
   static const String _variantsPrefix = 'toggly.variants.';
   static const String _revisionPrefix = 'toggly.revision.';
   static const String _jwksKey = 'toggly.jwks';
+  static const String _lruKey = 'toggly.cache-lru';
 
   final FlutterSecureStorage _storage;
 
@@ -78,6 +79,13 @@ class SecureStorageCacheProvider implements TogglyRevisionCacheProvider {
 
   @override
   Future<void> deleteJwks() => _storage.delete(key: _jwksKey);
+
+  @override
+  Future<String?> readCacheLruIndex() => _storage.read(key: _lruKey);
+
+  @override
+  Future<void> writeCacheLruIndex(String json) =>
+      _storage.write(key: _lruKey, value: json);
 
   String _revisionKey(String appKey, String environment, String identity) =>
       '$_revisionPrefix$appKey:$environment:$identity';

@@ -10,6 +10,7 @@ class _InMemoryCacheProvider implements TogglyCacheProvider {
   final Map<String, TogglyFeatureFlagsCache> _flags = {};
   final Map<String, TogglyVariantsCache> _variants = {};
   String? _jwks;
+  String? _lruIndex;
 
   @override
   Future<TogglyFeatureFlagsCache?> readFlags(String identity) async =>
@@ -42,6 +43,12 @@ class _InMemoryCacheProvider implements TogglyCacheProvider {
 
   @override
   Future<void> deleteJwks() async => _jwks = null;
+
+  @override
+  Future<String?> readCacheLruIndex() async => _lruIndex;
+
+  @override
+  Future<void> writeCacheLruIndex(String json) async => _lruIndex = json;
 }
 
 void main() {

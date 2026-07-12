@@ -85,3 +85,16 @@ export {
   evaluationContextCacheKey,
   normalizeEvaluationClaims,
 } from './evaluation-context';
+export type {
+  CacheLruEntry,
+  CacheLruIndex,
+} from './cache-lru';
+export {
+  emptyCacheLruIndex,
+  isCacheLruEnabled,
+  parseCacheLruIndex,
+  removeCacheLruKeys,
+  selectCacheLruKeysToEvict,
+  serializeCacheLruIndex,
+  touchCacheLruKey,
+} from './cache-lru';

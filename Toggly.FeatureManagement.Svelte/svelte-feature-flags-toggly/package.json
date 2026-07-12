@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/svelte-feature-flags-toggly",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Provides feature flags support for Svelte applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "type": "module",
   "main": "./dist/svelte-feature-flags-toggly.cjs",
@@ -25,8 +25,9 @@
     "prepublishOnly": "npm run build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",
-    "test": "vitest",
-    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+    "test": "vitest run",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "svelte",

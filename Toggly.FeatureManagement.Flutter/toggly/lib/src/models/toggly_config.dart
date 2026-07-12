@@ -39,6 +39,12 @@ class TogglyConfig {
   /// to `Toggly.init` / `Toggly.setIdentity`.
   final TogglyCacheProvider? cacheProvider;
 
+  /// Optional cap on identity-scoped cache entries (flags, variants, and
+  /// Flutter revision keys). When `null` (default) or non-positive, storage
+  /// is unlimited. A positive value enables last-accessed LRU eviction via
+  /// a sidecar index on [cacheProvider].
+  final int? maxCacheKeys;
+
   /// Device-local gates applied as a read-time AND on worker-evaluated booleans.
   final List<LocalGate>? localGates;
 
@@ -59,6 +65,7 @@ class TogglyConfig {
     this.enableLiveUpdates = true,
     this.enableVariants = false,
     this.cacheProvider,
+    this.maxCacheKeys,
     this.localGates,
     this.onError,
   });

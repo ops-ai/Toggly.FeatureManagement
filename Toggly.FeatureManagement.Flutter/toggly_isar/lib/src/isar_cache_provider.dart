@@ -24,6 +24,7 @@ class IsarCacheProvider implements TogglyRevisionCacheProvider {
   static const String _variantsPrefix = 'variants:';
   static const String _revisionPrefix = 'revision:';
   static const String _jwksKey = 'jwks';
+  static const String _lruKey = 'lru';
 
   final Isar _isar;
 
@@ -117,6 +118,12 @@ class IsarCacheProvider implements TogglyRevisionCacheProvider {
 
   @override
   Future<void> deleteJwks() => _delete(_jwksKey);
+
+  @override
+  Future<String?> readCacheLruIndex() => _read(_lruKey);
+
+  @override
+  Future<void> writeCacheLruIndex(String json) => _write(_lruKey, json);
 
   String _revisionKey(String appKey, String environment, String identity) =>
       '$_revisionPrefix$appKey:$environment:$identity';

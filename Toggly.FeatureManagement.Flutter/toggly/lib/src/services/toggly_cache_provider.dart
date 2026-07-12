@@ -48,6 +48,21 @@ abstract class TogglyCacheProvider {
 
   /// Removes any cached JWKS.
   Future<void> deleteJwks();
+
+  /// Returns the sidecar LRU index JSON string, or `null` if missing.
+  ///
+  /// Shape: `{"entries":{"flags:…":{"lastAccessed":1710000000000}}}`.
+  /// Used by [LruTogglyCacheProvider] when `TogglyConfig.maxCacheKeys` is set.
+  ///
+  /// Official cache providers override this. Custom backends that extend this
+  /// class inherit a no-op default (LRU tracking disabled without storage).
+  Future<String?> readCacheLruIndex() async => null;
+
+  /// Persists the sidecar LRU index [json] string.
+  ///
+  /// Official cache providers override this. Custom backends that extend this
+  /// class inherit a no-op default.
+  Future<void> writeCacheLruIndex(String json) async {}
 }
 
 /// Optional extension for [TogglyCacheProvider] implementations that persist

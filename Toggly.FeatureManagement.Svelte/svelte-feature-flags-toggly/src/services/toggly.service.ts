@@ -1,5 +1,14 @@
-import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
-import { appendEvaluationContext, evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
+import type { CacheLruIndex, Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import {
+  appendEvaluationContext,
+  evaluationContextCacheKey,
+  isCacheLruEnabled,
+  parseCacheLruIndex,
+  removeCacheLruKeys,
+  selectCacheLruKeysToEvict,
+  serializeCacheLruIndex,
+  touchCacheLruKey,
+} from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -24,6 +33,7 @@ const canUseStorage = typeof window !== 'undefined' && typeof window.localStorag
 const CACHE_PREFIX = 'toggly:flags:'
 const VARIANTS_CACHE_PREFIX = 'toggly:variants:'
 const REVISION_CACHE_PREFIX = 'toggly:revision:'
+const CACHE_LRU_KEY = 'toggly:cache-lru'
 
 function getCacheKey(appKey: string, environment: string, contextKey = ''): string {
   const suffix = contextKey ? `:${contextKey}` : ''
@@ -37,6 +47,82 @@ function getVariantsCacheKey(appKey: string, environment: string, contextKey = '
 
 function getRevisionCacheKey(appKey: string, environment: string): string {
   return `${REVISION_CACHE_PREFIX}${appKey}:${environment}`
+}
+
+function isTrackedCacheKey(key: string): boolean {
+  return key.startsWith(CACHE_PREFIX) || key.startsWith(VARIANTS_CACHE_PREFIX)
+}
+
+function loadLruIndex(): CacheLruIndex {
+  try {
+    return parseCacheLruIndex(localStorage.getItem(CACHE_LRU_KEY))
+  } catch {
+    return parseCacheLruIndex(null)
+  }
+}
+
+function saveLruIndex(index: CacheLruIndex): void {
+  try {
+    localStorage.setItem(CACHE_LRU_KEY, serializeCacheLruIndex(index))
+  } catch { /* storage full or unavailable */ }
+}
+
+function touchCacheKey(key: string, maxCacheKeys?: number | null): void {
+  if (!canUseStorage || !isCacheLruEnabled(maxCacheKeys) || !isTrackedCacheKey(key)) {
+    return
+  }
+  try {
+    saveLruIndex(touchCacheLruKey(loadLruIndex(), key))
+  } catch { /* ignore LRU failures */ }
+}
+
+function enforceMaxCacheKeys(protectKeys: string[], maxCacheKeys?: number | null): void {
+  if (!canUseStorage || !isCacheLruEnabled(maxCacheKeys)) {
+    return
+  }
+  try {
+    let index = loadLruIndex()
+    const toEvict = selectCacheLruKeysToEvict(index, maxCacheKeys as number, { protectKeys }).filter(
+      (key) => isTrackedCacheKey(key),
+    )
+    if (toEvict.length === 0) {
+      return
+    }
+    for (const key of toEvict) {
+      try {
+        localStorage.removeItem(key)
+      } catch { /* ignore per-key removal failures */ }
+    }
+    index = removeCacheLruKeys(index, toEvict)
+    saveLruIndex(index)
+  } catch { /* ignore LRU failures */ }
+}
+
+function removeCacheKeysFromLruIndex(keys: string[], maxCacheKeys?: number | null): void {
+  if (!canUseStorage || !isCacheLruEnabled(maxCacheKeys)) {
+    return
+  }
+  try {
+    saveLruIndex(removeCacheLruKeys(loadLruIndex(), keys))
+  } catch { /* ignore LRU failures */ }
+}
+
+function clearCachedFlagsAndVariants(
+  appKey: string,
+  environment: string,
+  contextKey = '',
+  maxCacheKeys?: number | null,
+): void {
+  if (!canUseStorage) return
+  try {
+    const flagsKey = getCacheKey(appKey, environment, contextKey)
+    const variantsKey = getVariantsCacheKey(appKey, environment, contextKey)
+    const revisionKey = getRevisionCacheKey(appKey, environment)
+    localStorage.removeItem(flagsKey)
+    localStorage.removeItem(variantsKey)
+    localStorage.removeItem(revisionKey)
+    removeCacheKeysFromLruIndex([flagsKey, variantsKey], maxCacheKeys)
+  } catch { /* ignore */ }
 }
 
 function readCachedRevision(appKey: string, environment: string): string | null {
@@ -61,11 +147,21 @@ function variantDefsToFlags(defs: { [key: string]: EvaluatedVariantDef }): { [ke
   return out
 }
 
-function readCachedFlags(appKey: string, environment: string, contextKey = ''): { [key: string]: boolean } | null {
+function readCachedFlags(
+  appKey: string,
+  environment: string,
+  contextKey = '',
+  maxCacheKeys?: number | null,
+): { [key: string]: boolean } | null {
   if (!canUseStorage) return null
   try {
-    const raw = localStorage.getItem(getCacheKey(appKey, environment, contextKey))
-    return raw ? JSON.parse(raw) : null
+    const key = getCacheKey(appKey, environment, contextKey)
+    const raw = localStorage.getItem(key)
+    const parsed = raw ? (JSON.parse(raw) as { [key: string]: boolean } | null) : null
+    if (raw != null && parsed != null) {
+      touchCacheKey(key, maxCacheKeys)
+    }
+    return parsed
   } catch { return null }
 }
 
@@ -74,10 +170,15 @@ function writeCachedFlags(
   environment: string,
   flags: { [key: string]: boolean },
   contextKey = '',
+  maxCacheKeys?: number | null,
 ): void {
   if (!canUseStorage) return
   try {
-    localStorage.setItem(getCacheKey(appKey, environment, contextKey), JSON.stringify(flags))
+    const key = getCacheKey(appKey, environment, contextKey)
+    const variantsKey = getVariantsCacheKey(appKey, environment, contextKey)
+    localStorage.setItem(key, JSON.stringify(flags))
+    touchCacheKey(key, maxCacheKeys)
+    enforceMaxCacheKeys([key, variantsKey], maxCacheKeys)
   } catch { /* storage full or unavailable */ }
 }
 
@@ -85,11 +186,17 @@ function readCachedVariants(
   appKey: string,
   environment: string,
   contextKey = '',
+  maxCacheKeys?: number | null,
 ): { [key: string]: EvaluatedVariantDef } | null {
   if (!canUseStorage) return null
   try {
-    const raw = localStorage.getItem(getVariantsCacheKey(appKey, environment, contextKey))
-    return raw ? JSON.parse(raw) : null
+    const key = getVariantsCacheKey(appKey, environment, contextKey)
+    const raw = localStorage.getItem(key)
+    const parsed = raw ? (JSON.parse(raw) as { [key: string]: EvaluatedVariantDef } | null) : null
+    if (raw != null && parsed != null) {
+      touchCacheKey(key, maxCacheKeys)
+    }
+    return parsed
   } catch { return null }
 }
 
@@ -98,10 +205,15 @@ function writeCachedVariants(
   environment: string,
   variants: { [key: string]: EvaluatedVariantDef },
   contextKey = '',
+  maxCacheKeys?: number | null,
 ): void {
   if (!canUseStorage) return
   try {
-    localStorage.setItem(getVariantsCacheKey(appKey, environment, contextKey), JSON.stringify(variants))
+    const key = getVariantsCacheKey(appKey, environment, contextKey)
+    const flagsKey = getCacheKey(appKey, environment, contextKey)
+    localStorage.setItem(key, JSON.stringify(variants))
+    touchCacheKey(key, maxCacheKeys)
+    enforceMaxCacheKeys([flagsKey, key], maxCacheKeys)
   } catch { /* storage full or unavailable */ }
 }
 
@@ -122,6 +234,8 @@ export interface TogglyOptions {
   hooks?: Hook[]
   /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
   persistCache?: boolean
+  /** Max identity-scoped cache keys (flags/variants). null/omit = unlimited. */
+  maxCacheKeys?: number | null
   /**
    * When true, fetches from /evaluated-variants-signed and exposes {@link Toggly.getVariant} / {@link Toggly.getVariantValue}.
    */
@@ -316,14 +430,14 @@ export class Toggly implements TogglyService {
         claims: Object.keys(this._claims).length ? this._claims : undefined,
       })
       if (this._config.enableVariants) {
-        const vCached = readCachedVariants(appKey, env, contextKey)
+        const vCached = readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys)
         if (vCached) {
           this._variants = vCached
           this._features = variantDefsToFlags(vCached)
         }
       }
       if (this._features === null) {
-        const cached = readCachedFlags(appKey, env, contextKey)
+        const cached = readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys)
         if (cached) {
           this._features = cached
         }
@@ -440,14 +554,14 @@ export class Toggly implements TogglyService {
         this._variants = defs
         this._features = variantDefsToFlags(defs)
         if (this._features && this._canPersist) {
-          writeCachedVariants(appKey, env, defs, contextKey)
-          writeCachedFlags(appKey, env, this._features, contextKey)
+          writeCachedVariants(appKey, env, defs, contextKey, this._config.maxCacheKeys)
+          writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys)
         }
       } else {
         this._variants = null
         this._features = payload?.defs ?? payload
         if (this._features && this._canPersist) {
-          writeCachedFlags(appKey, env, this._features, contextKey)
+          writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys)
         }
       }
 
@@ -457,19 +571,19 @@ export class Toggly implements TogglyService {
     } catch (error) {
       this._reportError('Error fetching feature flags', error)
       if (this._config.enableVariants) {
-        const vCached = this._canPersist ? readCachedVariants(appKey, env, contextKey) : null
+        const vCached = this._canPersist ? readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys) : null
         if (vCached) {
           this._variants = vCached
           this._features = variantDefsToFlags(vCached)
         } else if (this._features === null) {
           this._variants = null
-          const cached = this._canPersist ? readCachedFlags(appKey, env, contextKey) : null
+          const cached = this._canPersist ? readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys) : null
           this._features = cached ?? this._config.featureDefaults ?? {}
         }
       } else {
         if (this._features === null) {
           this._variants = null
-          const cached = this._canPersist ? readCachedFlags(appKey, env, contextKey) : null
+          const cached = this._canPersist ? readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys) : null
           this._features = cached ?? this._config.featureDefaults ?? {}
         }
       }
@@ -630,9 +744,9 @@ export class Toggly implements TogglyService {
         const ak = this._config.appKey ?? ''
         const env = this._config.environment ?? 'Production'
         const contextKey = this._contextCacheKey()
-        writeCachedFlags(ak, env, flags, contextKey)
+        writeCachedFlags(ak, env, flags, contextKey, this._config.maxCacheKeys)
         if (this._config.enableVariants && this._variants) {
-          writeCachedVariants(ak, env, this._variants, contextKey)
+          writeCachedVariants(ak, env, this._variants, contextKey, this._config.maxCacheKeys)
         }
       }
       if (this.onFlagsUpdated) {
@@ -647,6 +761,26 @@ export class Toggly implements TogglyService {
   /**
    * Add a hook dynamically
    */
+
+  /**
+   * Clear current identity-scoped flags/variants localStorage entries and update the LRU index.
+   */
+  clearFeatureFlagsCache(): void {
+    if (!this._config.appKey || !this._canPersist) {
+      this._features = null
+      this._variants = null
+      return
+    }
+    clearCachedFlagsAndVariants(
+      this._config.appKey,
+      this._config.environment ?? 'Production',
+      this._contextCacheKey(),
+      this._config.maxCacheKeys,
+    )
+    this._features = null
+    this._variants = null
+  }
+
   addHook(hook: Hook): void {
     this._hookExecutor.addHook(hook)
   }

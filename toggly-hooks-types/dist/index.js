@@ -1,8 +1,16 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.normalizeEvaluationClaims = exports.evaluationContextCacheKey = exports.appendEvaluationContext = exports.MAX_EVALUATION_CLAIMS = void 0;
+exports.touchCacheLruKey = exports.serializeCacheLruIndex = exports.selectCacheLruKeysToEvict = exports.removeCacheLruKeys = exports.parseCacheLruIndex = exports.isCacheLruEnabled = exports.emptyCacheLruIndex = exports.normalizeEvaluationClaims = exports.evaluationContextCacheKey = exports.appendEvaluationContext = exports.MAX_EVALUATION_CLAIMS = void 0;
 var evaluation_context_1 = require("./evaluation-context");
 Object.defineProperty(exports, "MAX_EVALUATION_CLAIMS", { enumerable: true, get: function () { return evaluation_context_1.MAX_EVALUATION_CLAIMS; } });
 Object.defineProperty(exports, "appendEvaluationContext", { enumerable: true, get: function () { return evaluation_context_1.appendEvaluationContext; } });
 Object.defineProperty(exports, "evaluationContextCacheKey", { enumerable: true, get: function () { return evaluation_context_1.evaluationContextCacheKey; } });
 Object.defineProperty(exports, "normalizeEvaluationClaims", { enumerable: true, get: function () { return evaluation_context_1.normalizeEvaluationClaims; } });
+var cache_lru_1 = require("./cache-lru");
+Object.defineProperty(exports, "emptyCacheLruIndex", { enumerable: true, get: function () { return cache_lru_1.emptyCacheLruIndex; } });
+Object.defineProperty(exports, "isCacheLruEnabled", { enumerable: true, get: function () { return cache_lru_1.isCacheLruEnabled; } });
+Object.defineProperty(exports, "parseCacheLruIndex", { enumerable: true, get: function () { return cache_lru_1.parseCacheLruIndex; } });
+Object.defineProperty(exports, "removeCacheLruKeys", { enumerable: true, get: function () { return cache_lru_1.removeCacheLruKeys; } });
+Object.defineProperty(exports, "selectCacheLruKeysToEvict", { enumerable: true, get: function () { return cache_lru_1.selectCacheLruKeysToEvict; } });
+Object.defineProperty(exports, "serializeCacheLruIndex", { enumerable: true, get: function () { return cache_lru_1.serializeCacheLruIndex; } });
+Object.defineProperty(exports, "touchCacheLruKey", { enumerable: true, get: function () { return cache_lru_1.touchCacheLruKey; } });

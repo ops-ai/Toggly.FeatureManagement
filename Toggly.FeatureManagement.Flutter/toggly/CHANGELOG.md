@@ -1,3 +1,21 @@
+## 1.9.0
+
+2026-07-11
+
+### Added
+- `TogglyConfig.maxCacheKeys` opt-in LRU eviction for identity-scoped flags,
+  variants, and revision cache entries (sidecar index via
+  `TogglyCacheProvider.readCacheLruIndex` / `writeCacheLruIndex`).
+- `LruTogglyCacheProvider` wrapper applied automatically in `Toggly.init` when
+  `maxCacheKeys` is a positive integer and a `cacheProvider` is supplied.
+- Shared `cache_lru` helpers matching the JS `@ops-ai/toggly-hooks-types`
+  index JSON shape.
+
+### Changed
+- `TogglyCacheProvider` adds `readCacheLruIndex` / `writeCacheLruIndex` with
+  no-op defaults; official cache providers override them to persist the sidecar
+  index.
+
 ## 1.8.0
 
 2026-07-07

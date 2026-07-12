@@ -2,7 +2,17 @@ import { v4 as uuidv4 } from 'uuid';
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { HookExecutor } from './hooks';
 import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
-import { appendEvaluationContext, evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
+import {
+  appendEvaluationContext,
+  evaluationContextCacheKey,
+  isCacheLruEnabled,
+  parseCacheLruIndex,
+  removeCacheLruKeys,
+  selectCacheLruKeysToEvict,
+  serializeCacheLruIndex,
+  touchCacheLruKey,
+  type CacheLruIndex,
+} from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -219,17 +229,11 @@ export class Toggly {
       return Toggly._inMemoryFlags;
     }
 
-    if (Toggly._persistCache) {
-      try {
-        var cachedFlags = JSON.parse(localStorage.getItem(Toggly._flagsCacheKey) ?? 'null');
-        if (Toggly._config?.appKey && cachedFlags) {
-          Toggly._inMemoryFlags = cachedFlags;
-          Toggly._hasLoadedFlags = true;
-          return cachedFlags;
-        }
-      } catch (error) {
-        Toggly._reportError('Error reading cached feature flags', error);
-      }
+    const cachedFlags = Toggly._cachedFeatureFlags;
+    if (Toggly._config?.appKey && cachedFlags) {
+      Toggly._inMemoryFlags = cachedFlags;
+      Toggly._hasLoadedFlags = true;
+      return cachedFlags;
     }
     return Toggly._config?.flagDefaults ?? {};
   }
@@ -343,7 +347,12 @@ export class Toggly {
   private static get _cachedFeatureFlags(): { [key: string]: boolean } | null {
     if (!Toggly._persistCache) return null;
     try {
-      return JSON.parse(localStorage.getItem(Toggly._flagsCacheKey) ?? 'null');
+      const raw = localStorage.getItem(Toggly._flagsCacheKey);
+      const parsed = JSON.parse(raw ?? 'null') as { [key: string]: boolean } | null;
+      if (raw != null && parsed != null) {
+        Toggly._touchCacheKey(Toggly._flagsCacheKey);
+      }
+      return parsed;
     } catch (error) {
       Toggly._reportError('Error reading cached feature flags', error);
       return null;
@@ -355,7 +364,10 @@ export class Toggly {
     Toggly._hasLoadedFlags = true;
     if (!Toggly._persistCache) return;
     try {
-      localStorage.setItem(Toggly._flagsCacheKey, JSON.stringify(flags));
+      const key = Toggly._flagsCacheKey;
+      localStorage.setItem(key, JSON.stringify(flags));
+      Toggly._touchCacheKey(key);
+      Toggly._enforceMaxCacheKeys([key, Toggly._variantsCacheKey]);
     } catch (error) {
       Toggly._reportError('Error writing feature flags cache', error);
     }
@@ -365,9 +377,12 @@ export class Toggly {
     Toggly._inMemoryFlags = null;
     if (!canUseStorage) return;
     try {
-      localStorage.removeItem(Toggly._flagsCacheKey);
-      localStorage.removeItem(Toggly._variantsCacheKey);
+      const flagsKey = Toggly._flagsCacheKey;
+      const variantsKey = Toggly._variantsCacheKey;
+      localStorage.removeItem(flagsKey);
+      localStorage.removeItem(variantsKey);
       localStorage.removeItem(Toggly._revisionCacheKey);
+      Toggly._removeCacheKeysFromLruIndex([flagsKey, variantsKey]);
     } catch (error) {
       Toggly._reportError('Error clearing feature flags cache', error);
     }
@@ -377,7 +392,12 @@ export class Toggly {
     if (!Toggly._config?.enableVariants) return null;
     if (Toggly._persistCache) {
       try {
-        return JSON.parse(localStorage.getItem(Toggly._variantsCacheKey) ?? 'null');
+        const raw = localStorage.getItem(Toggly._variantsCacheKey);
+        const parsed = JSON.parse(raw ?? 'null') as { [key: string]: EvaluatedVariantDef } | null;
+        if (raw != null && parsed != null) {
+          Toggly._touchCacheKey(Toggly._variantsCacheKey);
+        }
+        return parsed;
       } catch { return null; }
     }
     return null;
@@ -386,8 +406,87 @@ export class Toggly {
   static cacheVariants(variants: { [key: string]: EvaluatedVariantDef }) {
     if (!Toggly._persistCache) return;
     try {
-      localStorage.setItem(Toggly._variantsCacheKey, JSON.stringify(variants));
-    } catch { /* storage full or unavailable */ }
+      const key = Toggly._variantsCacheKey;
+      localStorage.setItem(key, JSON.stringify(variants));
+      Toggly._touchCacheKey(key);
+      Toggly._enforceMaxCacheKeys([Toggly._flagsCacheKey, key]);
+    } catch (error) {
+      Toggly._reportError('Error writing variants cache', error);
+    }
+  }
+
+  private static _isTrackedCacheKey(key: string): boolean {
+    return key.startsWith('toggly:flags:') || key.startsWith('toggly:variants:');
+  }
+
+  private static _loadLruIndex(): CacheLruIndex {
+    try {
+      return parseCacheLruIndex(localStorage.getItem(StorageKeys.cacheLruKey));
+    } catch {
+      return parseCacheLruIndex(null);
+    }
+  }
+
+  private static _saveLruIndex(index: CacheLruIndex): void {
+    try {
+      localStorage.setItem(StorageKeys.cacheLruKey, serializeCacheLruIndex(index));
+    } catch (error) {
+      Toggly._reportError('Error writing cache LRU index', error);
+    }
+  }
+
+  private static _touchCacheKey(key: string): void {
+    if (!Toggly._persistCache || !isCacheLruEnabled(Toggly._config?.maxCacheKeys)) {
+      return;
+    }
+    if (!Toggly._isTrackedCacheKey(key)) {
+      return;
+    }
+    try {
+      const index = touchCacheLruKey(Toggly._loadLruIndex(), key);
+      Toggly._saveLruIndex(index);
+    } catch (error) {
+      Toggly._reportError('Error updating cache LRU index', error);
+    }
+  }
+
+  private static _enforceMaxCacheKeys(protectKeys: string[]): void {
+    const maxKeys = Toggly._config?.maxCacheKeys;
+    if (!Toggly._persistCache || !isCacheLruEnabled(maxKeys)) {
+      return;
+    }
+    try {
+      let index = Toggly._loadLruIndex();
+      const toEvict = selectCacheLruKeysToEvict(index, maxKeys as number, { protectKeys }).filter(
+        (key) => Toggly._isTrackedCacheKey(key),
+      );
+      if (toEvict.length === 0) {
+        return;
+      }
+      for (const key of toEvict) {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          /* ignore per-key removal failures */
+        }
+      }
+      index = removeCacheLruKeys(index, toEvict);
+      Toggly._saveLruIndex(index);
+    } catch (error) {
+      Toggly._reportError('Error enforcing cache LRU limit', error);
+    }
+  }
+
+  private static _removeCacheKeysFromLruIndex(keys: string[]): void {
+    if (!Toggly._persistCache || !isCacheLruEnabled(Toggly._config?.maxCacheKeys)) {
+      return;
+    }
+    try {
+      const index = removeCacheLruKeys(Toggly._loadLruIndex(), keys);
+      Toggly._saveLruIndex(index);
+    } catch (error) {
+      Toggly._reportError('Error updating cache LRU index', error);
+    }
   }
 
   /**

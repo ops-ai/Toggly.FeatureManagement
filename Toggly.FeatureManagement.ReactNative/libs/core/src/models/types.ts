@@ -168,6 +168,12 @@ export interface TogglyConfig {
   storage?: TogglyStorage;
 
   /**
+   * Max identity-scoped feature-flag cache keys retained in storage.
+   * `null` / omit = unlimited. Non-positive values are treated as unlimited.
+   */
+  maxCacheKeys?: number | null;
+
+  /**
    * Network info provider for connectivity awareness
    */
   networkInfo?: NetworkInfoProvider;

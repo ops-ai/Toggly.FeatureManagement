@@ -198,4 +198,28 @@ void runCacheProviderContract(
       expect(await provider.readJwks(), isNull);
     });
   });
+
+  group('cache LRU index', () {
+    test('read returns null when nothing stored', () async {
+      expect(await provider.readCacheLruIndex(), isNull);
+    });
+
+    test('write then read round-trips JSON', () async {
+      const json =
+          '{"entries":{"flags:u:user-1|g:|c:":{"lastAccessed":1710000000000}}}';
+      await provider.writeCacheLruIndex(json);
+      expect(await provider.readCacheLruIndex(), json);
+    });
+
+    test('overwrite returns latest value', () async {
+      await provider.writeCacheLruIndex('{"entries":{}}');
+      await provider.writeCacheLruIndex(
+        '{"entries":{"flags:a":{"lastAccessed":1}}}',
+      );
+      expect(
+        await provider.readCacheLruIndex(),
+        '{"entries":{"flags:a":{"lastAccessed":1}}}',
+      );
+    });
+  });
 }

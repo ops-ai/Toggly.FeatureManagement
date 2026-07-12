@@ -1,3 +1,10 @@
+## 1.5.0
+
+2026-07-11
+
+### Added
+- `maxCacheKeys` opt-in LRU eviction for identity-scoped flags/variants localStorage entries (sidecar index at `toggly:cache-lru`).
+
 ## 1.4.0
 
 2026-07-05

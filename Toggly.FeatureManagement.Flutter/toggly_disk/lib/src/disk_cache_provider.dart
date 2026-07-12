@@ -18,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 /// payloads must be protected at rest.
 class DiskCacheProvider implements TogglyRevisionCacheProvider {
   static const String _jwksName = 'jwks.json';
+  static const String _lruName = 'cache_lru.json';
 
   final Directory? _explicitDir;
   Directory? _resolvedDir;
@@ -131,6 +132,12 @@ class DiskCacheProvider implements TogglyRevisionCacheProvider {
 
   @override
   Future<void> deleteJwks() => _delete(_jwksName);
+
+  @override
+  Future<String?> readCacheLruIndex() => _read(_lruName);
+
+  @override
+  Future<void> writeCacheLruIndex(String json) => _write(_lruName, json);
 
   @override
   Future<String?> readDefinitionsRevision(

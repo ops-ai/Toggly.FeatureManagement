@@ -29,6 +29,8 @@ export interface ITogglyOptions {
   hooks?: Hook[]
   /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
   persistCache?: boolean
+  /** Max identity-scoped cache keys (flags/variants). null/omit = unlimited. */
+  maxCacheKeys?: number | null
   /**
    * When true, fetches from evaluated-variants-signed and exposes variant APIs.
    * Default: false.

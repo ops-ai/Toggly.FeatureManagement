@@ -1,5 +1,14 @@
-import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
-import { appendEvaluationContext, evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
+import type { CacheLruIndex, Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import {
+  appendEvaluationContext,
+  evaluationContextCacheKey,
+  isCacheLruEnabled,
+  parseCacheLruIndex,
+  removeCacheLruKeys,
+  selectCacheLruKeysToEvict,
+  serializeCacheLruIndex,
+  touchCacheLruKey,
+} from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -44,6 +53,7 @@ const STORAGE_KEYS = {
   FEATURE_FLAGS_CACHE: '@toggly:featureFlagsCache:',
   ETAG: '@toggly:etag',
   JWKS: '@toggly:jwks',
+  CACHE_LRU: '@toggly:cache-lru',
 } as const;
 
 /**
@@ -161,6 +171,8 @@ export class TogglyService {
 
   private features: FeatureFlags | null = null;
   private featuresLoading = false;
+  /** Serializes LRU index read-modify-write to avoid lost updates. */
+  private lruMutationChain: Promise<void> = Promise.resolve();
   private identity: string | null = null;
   private groups: string[] = [];
   private claims: Record<string, string> = {};
@@ -568,6 +580,97 @@ export class TogglyService {
     return evaluationContextCacheKey(this.getEvaluationContext());
   }
 
+  private async buildFeatureFlagsCacheKey(): Promise<string> {
+    const hashedContext = await sha256(this.getContextCacheKey());
+    return STORAGE_KEYS.FEATURE_FLAGS_CACHE + hashedContext;
+  }
+
+  private isTrackedCacheKey(key: string): boolean {
+    return key.startsWith(STORAGE_KEYS.FEATURE_FLAGS_CACHE);
+  }
+
+  private async runSerializedLruMutation<T>(action: () => Promise<T>): Promise<T> {
+    const run = this.lruMutationChain.then(action, action);
+    this.lruMutationChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async loadLruIndex(): Promise<CacheLruIndex> {
+    try {
+      return parseCacheLruIndex(await this.storage.get(STORAGE_KEYS.CACHE_LRU));
+    } catch {
+      return parseCacheLruIndex(null);
+    }
+  }
+
+  private async saveLruIndex(index: CacheLruIndex): Promise<void> {
+    try {
+      await this.storage.set(STORAGE_KEYS.CACHE_LRU, serializeCacheLruIndex(index));
+    } catch (error) {
+      this.reportError('Error writing cache LRU index', error);
+    }
+  }
+
+  private async touchCacheKey(key: string): Promise<void> {
+    if (!isCacheLruEnabled(this.config.maxCacheKeys) || !this.isTrackedCacheKey(key)) {
+      return;
+    }
+    await this.runSerializedLruMutation(async () => {
+      try {
+        const index = touchCacheLruKey(await this.loadLruIndex(), key);
+        await this.saveLruIndex(index);
+      } catch (error) {
+        this.reportError('Error updating cache LRU index', error);
+      }
+    });
+  }
+
+  private async enforceMaxCacheKeys(protectKeys: string[]): Promise<void> {
+    const maxKeys = this.config.maxCacheKeys;
+    if (!isCacheLruEnabled(maxKeys)) {
+      return;
+    }
+    await this.runSerializedLruMutation(async () => {
+      try {
+        let index = await this.loadLruIndex();
+        const toEvict = selectCacheLruKeysToEvict(index, maxKeys as number, { protectKeys }).filter(
+          (key) => this.isTrackedCacheKey(key),
+        );
+        if (toEvict.length === 0) {
+          return;
+        }
+        for (const key of toEvict) {
+          try {
+            await this.storage.delete(key);
+          } catch {
+            /* ignore per-key removal failures */
+          }
+        }
+        index = removeCacheLruKeys(index, toEvict);
+        await this.saveLruIndex(index);
+      } catch (error) {
+        this.reportError('Error enforcing cache LRU limit', error);
+      }
+    });
+  }
+
+  private async removeCacheKeysFromLruIndex(keys: string[]): Promise<void> {
+    if (!isCacheLruEnabled(this.config.maxCacheKeys)) {
+      return;
+    }
+    await this.runSerializedLruMutation(async () => {
+      try {
+        const index = removeCacheLruKeys(await this.loadLruIndex(), keys);
+        await this.saveLruIndex(index);
+      } catch (error) {
+        this.reportError('Error updating cache LRU index', error);
+      }
+    });
+  }
+
   /**
    * Wait for features to finish loading.
    */
@@ -586,13 +689,13 @@ export class TogglyService {
     }
 
     try {
-      const hashedContext = await sha256(this.getContextCacheKey());
-      const cacheKey = STORAGE_KEYS.FEATURE_FLAGS_CACHE + hashedContext;
+      const cacheKey = await this.buildFeatureFlagsCacheKey();
       const cached = await this.storage.get(cacheKey);
 
       if (cached) {
         const cacheData: TogglyFeatureFlagsCache = JSON.parse(cached);
         if (cacheData.identity === this.getContextCacheKey()) {
+          await this.touchCacheKey(cacheKey);
           return JSON.parse(cacheData.flags);
         }
       }
@@ -608,13 +711,14 @@ export class TogglyService {
    */
   private async cacheFeatureFlags(flags: FeatureFlags): Promise<void> {
     try {
-      const hashedContext = await sha256(this.getContextCacheKey());
-      const cacheKey = STORAGE_KEYS.FEATURE_FLAGS_CACHE + hashedContext;
+      const cacheKey = await this.buildFeatureFlagsCacheKey();
       const cacheData: TogglyFeatureFlagsCache = {
         identity: this.getContextCacheKey(),
         flags: JSON.stringify(flags),
       };
       await this.storage.set(cacheKey, JSON.stringify(cacheData));
+      await this.touchCacheKey(cacheKey);
+      await this.enforceMaxCacheKeys([cacheKey]);
     } catch (error) {
       this.reportError('Error writing feature flags cache', error);
     }
@@ -685,10 +789,10 @@ export class TogglyService {
     this.cachedDefinitionsRevision = null;
 
     try {
-      const hashedIdentity = await sha256(this.identity ?? '');
-      const cacheKey = STORAGE_KEYS.FEATURE_FLAGS_CACHE + hashedIdentity;
+      const cacheKey = await this.buildFeatureFlagsCacheKey();
       await this.storage.delete(cacheKey);
       await this.storage.delete(STORAGE_KEYS.ETAG);
+      await this.removeCacheKeysFromLruIndex([cacheKey]);
     } catch (error) {
       this.reportError('Error clearing feature flags cache', error);
     }

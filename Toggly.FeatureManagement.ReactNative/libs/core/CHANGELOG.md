@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.0
+
+2026-07-11
+
+### Added
+- `maxCacheKeys` opt-in LRU eviction for identity-scoped feature-flag cache entries (sidecar index at `@toggly:cache-lru`).
+
+### Fixed
+- `clearCache` now deletes the same full evaluation-context hash key used for feature-flag cache read/write.
+
 ## 1.4.0
 
 2026-07-05

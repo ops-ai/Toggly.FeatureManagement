@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-11
+
+### Added
+- Pure LRU helpers for sidecar cache index (`emptyCacheLruIndex`, `parseCacheLruIndex`, `serializeCacheLruIndex`, `touchCacheLruKey`, `removeCacheLruKeys`, `selectCacheLruKeysToEvict`, `isCacheLruEnabled`) for client SDK `maxCacheKeys` eviction.
+- `selectCacheLruKeysToEvict` accepts `protectKeys` (and legacy `protectKey`) so sibling flags/variants keys can be retained together during eviction.
+- `parseCacheLruIndex` drops entries whose `lastAccessed` is not a finite number.
+
 ## [1.3.1] - 2026-07-05
 
 ### Added
