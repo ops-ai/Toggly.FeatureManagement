@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
   SDK_ID,
   SDK_VERSION,
@@ -12,26 +12,8 @@ import {
 } from '../src/sdk-identity'
 
 describe('sdk-identity', () => {
-  const originalWindow = (globalThis as { window?: unknown }).window
-  const originalDocument = (globalThis as { document?: unknown }).document
-  const originalNavigator = (globalThis as { navigator?: unknown }).navigator
-
   afterEach(() => {
-    if (originalWindow === undefined) {
-      delete (globalThis as { window?: unknown }).window
-    } else {
-      ;(globalThis as { window?: unknown }).window = originalWindow
-    }
-    if (originalDocument === undefined) {
-      delete (globalThis as { document?: unknown }).document
-    } else {
-      ;(globalThis as { document?: unknown }).document = originalDocument
-    }
-    if (originalNavigator === undefined) {
-      delete (globalThis as { navigator?: unknown }).navigator
-    } else {
-      ;(globalThis as { navigator?: unknown }).navigator = originalNavigator
-    }
+    vi.unstubAllGlobals()
   })
 
   it('exposes sdk constants and user agent', () => {
@@ -52,9 +34,9 @@ describe('sdk-identity', () => {
   })
 
   it('uses User-Agent on node by default', () => {
-    delete (globalThis as { window?: unknown }).window
-    delete (globalThis as { document?: unknown }).document
-    delete (globalThis as { navigator?: unknown }).navigator
+    vi.stubGlobal('window', undefined)
+    vi.stubGlobal('document', undefined)
+    vi.stubGlobal('navigator', undefined)
     expect(usesSdkCustomHeaders()).toBe(false)
     expect(buildDefinitionFetchHeaders({ Accept: 'application/json' })).toEqual({
       Accept: 'application/json',
@@ -63,16 +45,16 @@ describe('sdk-identity', () => {
   })
 
   it('uses custom headers in browser-like environments', () => {
-    ;(globalThis as { window?: unknown }).window = {}
-    ;(globalThis as { document?: unknown }).document = {}
+    vi.stubGlobal('window', {})
+    vi.stubGlobal('document', {})
     expect(usesSdkCustomHeaders()).toBe(true)
     expect(buildDefinitionFetchHeaders()).toEqual(sdkCustomHeaders())
   })
 
   it('uses custom headers for React Native navigator product', () => {
-    delete (globalThis as { window?: unknown }).window
-    delete (globalThis as { document?: unknown }).document
-    ;(globalThis as { navigator?: { product?: string } }).navigator = { product: 'ReactNative' }
+    vi.stubGlobal('window', undefined)
+    vi.stubGlobal('document', undefined)
+    vi.stubGlobal('navigator', { product: 'ReactNative' })
     expect(usesSdkCustomHeaders()).toBe(true)
     expect(buildDefinitionFetchHeaders()).toEqual(sdkCustomHeaders())
   })
