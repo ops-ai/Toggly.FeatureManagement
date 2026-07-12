@@ -32,6 +32,7 @@ body:
         - iOS
         - Python
         - Java
+        - PHP (`toggly/feature-management-php`)
         - Go
         - Ruby
         - Rust

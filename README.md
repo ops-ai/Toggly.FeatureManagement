@@ -68,6 +68,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 | Node.js | `@ops-ai/toggly-node-core`, Express / Fastify / Hono / Koa | [`Toggly.FeatureManagement.Node`](Toggly.FeatureManagement.Node) | [Docs](https://docs.toggly.io) |
 | Python | `toggly` (+ cache / framework packages) | [`Toggly.FeatureManagement.Python`](Toggly.FeatureManagement.Python) | [Docs](https://docs.toggly.io) |
 | Java | `io.toggly:toggly-*` | [`Toggly.FeatureManagement.Java`](Toggly.FeatureManagement.Java) | [Docs](https://docs.toggly.io) |
+| PHP | [`toggly/feature-management-php`](https://packagist.org/packages/toggly/feature-management-php) | [`ops-ai/Toggly.FeatureManagement.PHP`](https://github.com/ops-ai/Toggly.FeatureManagement.PHP) | [Docs](https://docs.toggly.io) · [Packagist](https://packagist.org/packages/toggly/feature-management-php) |
 | Go | [`github.com/ops-ai/Toggly.FeatureManagement/toggly-go`](https://pkg.go.dev/github.com/ops-ai/Toggly.FeatureManagement/toggly-go) | [`toggly-go`](toggly-go) | [Docs](https://docs.toggly.io) · [pkg.go.dev](https://pkg.go.dev/github.com/ops-ai/Toggly.FeatureManagement/toggly-go) |
 | Ruby | `toggly`, `toggly-rails`, `toggly-cache` | [`toggly-ruby`](toggly-ruby) | [Docs](https://docs.toggly.io) |
 | Rust | `toggly` (+ axum / actix / rocket) | [`toggly-rust`](toggly-rust) | [Docs](https://docs.toggly.io) |
