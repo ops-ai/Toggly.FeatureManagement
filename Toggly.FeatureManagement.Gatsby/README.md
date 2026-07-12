@@ -1,7 +1,11 @@
 # Toggly Feature Flags SDK for Gatsby
 
-[![npm version](https://badge.fury.io/js/@ops-ai%2Fgatsby-feature-flags-toggly.svg)](https://www.npmjs.com/package/@ops-ai/gatsby-feature-flags-toggly)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://www.npmjs.com/package/@ops-ai/gatsby-feature-flags-toggly"><img src="https://img.shields.io/npm/v/@ops-ai/gatsby-feature-flags-toggly.svg" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
 
 A comprehensive Gatsby plugin for [Toggly](https://toggly.io) feature flags with support for SSR, SSG, build-time page gating, and edge worker filtering.
 

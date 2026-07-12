@@ -1,0 +1,58 @@
+name: Feature request
+description: Propose a new capability or improvement for an SDK
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem you are trying to solve. Maintainers may ask clarifying questions before implementation.
+  - type: dropdown
+    id: sdk
+    attributes:
+      label: SDK / package scope
+      description: Where should this land (if known)?
+      multiple: true
+      options:
+        - Cross-cutting / all SDKs
+        - .NET
+        - JavaScript / TypeScript core
+        - React / Angular / Vue / Svelte
+        - Next.js / Nuxt / Remix
+        - Node server adapters
+        - Flutter / React Native / Android / iOS
+        - Python / Java / Go / Ruby / Rust
+        - CLI
+        - Hooks / integrations
+        - Documentation / DX
+        - Other / unsure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to accomplish that is hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like it to work?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional — workarounds or other approaches you evaluated
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Optional — links, screenshots, or related issues
+    validations:
+      required: false

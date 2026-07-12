@@ -1,8 +1,11 @@
 # Toggly Ruby SDK
 
-[![CI](https://github.com/ops-ai/toggly-ruby/actions/workflows/ci.yml/badge.svg)](https://github.com/ops-ai/toggly-ruby/actions/workflows/ci.yml)
-[![Gem Version](https://badge.fury.io/rb/toggly.svg)](https://badge.fury.io/rb/toggly)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://rubygems.org/gems/toggly"><img src="https://img.shields.io/gem/v/toggly.svg" alt="Gem version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
 
 High-performance Ruby SDK for [Toggly](https://toggly.io) feature flag management. Works with or without Toggly.io.
 
@@ -10,9 +13,9 @@ High-performance Ruby SDK for [Toggly](https://toggly.io) feature flag managemen
 
 | Package | Description | RubyGems |
 |---------|-------------|----------|
-| `toggly` | Core SDK with zero dependencies | [![Gem Version](https://badge.fury.io/rb/toggly.svg)](https://rubygems.org/gems/toggly) |
-| `toggly-rails` | Rails integration with Railtie | [![Gem Version](https://badge.fury.io/rb/toggly-rails.svg)](https://rubygems.org/gems/toggly-rails) |
-| `toggly-cache` | Redis caching support | [![Gem Version](https://badge.fury.io/rb/toggly-cache.svg)](https://rubygems.org/gems/toggly-cache) |
+| `toggly` | Core SDK with zero dependencies | [toggly](https://rubygems.org/gems/toggly) |
+| `toggly-rails` | Rails integration with Railtie | [toggly-rails](https://rubygems.org/gems/toggly-rails) |
+| `toggly-cache` | Redis caching support | [toggly-cache](https://rubygems.org/gems/toggly-cache) |
 
 ## Requirements
 

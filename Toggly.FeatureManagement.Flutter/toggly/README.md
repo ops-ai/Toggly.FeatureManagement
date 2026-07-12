@@ -2,6 +2,13 @@ Dart package that provides feature flags support for flutter applications allowi
 
 Can be used *WITH* or *WITHOUT* [Toggly.io](https://toggly.io).
 
+<p align="center">
+  <a href="https://pub.dev/packages/feature_flags_toggly"><img src="https://img.shields.io/pub/v/feature_flags_toggly.svg" alt="pub package"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
+
 ## What is a Feature Flag
 
 A feature flag (or toggle) in software development provides an alternative to maintaining multiple feature branches in source code. A condition within the code enables or disables a feature during runtime.

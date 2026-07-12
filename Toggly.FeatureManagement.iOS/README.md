@@ -2,6 +2,12 @@
 
 Official iOS SDK for [Toggly](https://toggly.io) - Feature Flags & A/B Testing Platform.
 
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
+
 ## Features
 
 - Pure Swift implementation with async/await

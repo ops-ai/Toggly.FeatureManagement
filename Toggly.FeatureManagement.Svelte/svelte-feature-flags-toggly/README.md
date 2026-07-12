@@ -2,6 +2,13 @@ Lightweight package that provides feature flags support for Svelte applications 
 
 Can be used *WITH* or *WITHOUT* [Toggly.io](https://toggly.io).
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@ops-ai/svelte-feature-flags-toggly"><img src="https://img.shields.io/npm/v/@ops-ai/svelte-feature-flags-toggly.svg" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
+
 ## What is a Feature Flag
 
 A feature flag (or toggle) in software development provides an alternative to maintaining multiple feature branches in source code. A condition within the code enables or disables a feature during runtime.

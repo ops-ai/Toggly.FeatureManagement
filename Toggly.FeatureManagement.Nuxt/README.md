@@ -4,8 +4,12 @@ Feature flags for Nuxt 3 applications with SSR/SSG support, auto-imported compos
 
 Can be used *WITH* or *WITHOUT* [Toggly.io](https://toggly.io).
 
-[![npm version](https://img.shields.io/npm/v/@ops-ai/nuxt-toggly.svg)](https://www.npmjs.com/package/@ops-ai/nuxt-toggly)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://www.npmjs.com/package/@ops-ai/nuxt-toggly"><img src="https://img.shields.io/npm/v/@ops-ai/nuxt-toggly.svg" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
 
 ## What is a Feature Flag
 

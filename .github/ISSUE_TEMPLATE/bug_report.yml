@@ -1,0 +1,89 @@
+name: Bug report
+description: Report incorrect SDK behavior or a regression
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve the Toggly SDKs. Please fill out as much as you can.
+        For security issues, use [private vulnerability reporting](https://github.com/ops-ai/Toggly.FeatureManagement/security/advisories/new) instead.
+  - type: dropdown
+    id: sdk
+    attributes:
+      label: SDK / package
+      description: Which package is affected?
+      multiple: false
+      options:
+        - .NET (Toggly.FeatureManagement)
+        - JavaScript (@ops-ai/feature-flags-toggly)
+        - React (@ops-ai/react-feature-flags-toggly)
+        - Angular (@ops-ai/ngx-feature-flags-toggly)
+        - Vue (@ops-ai/vue-feature-flags-toggly)
+        - Svelte (@ops-ai/svelte-feature-flags-toggly)
+        - Next.js
+        - Nuxt
+        - Remix
+        - Node (Express / Fastify / Hono / Koa)
+        - Astro / Gatsby
+        - Flutter
+        - React Native
+        - Android
+        - iOS
+        - Python
+        - Java
+        - Go
+        - Ruby
+        - Rust
+        - CLI
+        - Hooks / integrations
+        - Other / unsure
+    validations:
+      required: true
+  - type: input
+    id: package-version
+    attributes:
+      label: Package version
+      description: Exact version from NuGet, npm, PyPI, pub.dev, etc.
+      placeholder: e.g. 2.1.0
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime / environment
+      description: Language runtime, framework, and OS if relevant
+      placeholder: e.g. Node 20, .NET 8, Flutter 3.24, iOS 18
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Clear description of the bug
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps or a small code sample
+      placeholder: |
+        1. Install package X
+        2. Configure with ...
+        3. Call ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Optional stack traces, network responses, or screenshots (redact secrets)
+    validations:
+      required: false

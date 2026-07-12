@@ -1,8 +1,11 @@
 # Toggly Android SDK
 
-[![Android SDK - Analysis](https://github.com/ops-ai/Toggly.FeatureManagement/actions/workflows/sdk-android-analysis.yml/badge.svg)](https://github.com/ops-ai/Toggly.FeatureManagement/actions/workflows/sdk-android-analysis.yml)
-[![Maven Central](https://img.shields.io/maven-central/v/io.toggly/toggly-android-core)](https://search.maven.org/artifact/io.toggly/toggly-android-core)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://search.maven.org/artifact/io.toggly/toggly-android-core"><img src="https://img.shields.io/maven-central/v/io.toggly/toggly-android-core" alt="Maven Central"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
 
 Native Android SDK for [Toggly.io](https://toggly.io) feature flags with Kotlin, coroutines, Jetpack Compose, and traditional Views support.
 

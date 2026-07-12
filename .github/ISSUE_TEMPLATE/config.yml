@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://docs.toggly.io
+    about: Guides, SDK references, and how-to content for integrating Toggly.
+  - name: Toggly website
+    url: https://toggly.io
+    about: Product overview, pricing, and sign-up (Always Free plan available).
+  - name: Security vulnerability
+    url: https://github.com/ops-ai/Toggly.FeatureManagement/security/advisories/new
+    about: Report a security issue privately (do not open a public issue).

@@ -4,6 +4,13 @@ Feature flag management SDK for Python - zero dependencies core library.
 
 Can be used *WITH* or *WITHOUT* [Toggly.io](https://toggly.io).
 
+<p align="center">
+  <a href="https://pypi.org/project/toggly/"><img src="https://img.shields.io/pypi/v/toggly.svg" alt="PyPI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
+
 ## What is a Feature Flag
 
 A feature flag (or feature toggle) is a software development technique that allows you to enable or disable features in your application without deploying new code. This enables:

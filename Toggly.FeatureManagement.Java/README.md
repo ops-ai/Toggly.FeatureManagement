@@ -2,6 +2,13 @@
 
 Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentation platform.
 
+<p align="center">
+  <a href="https://search.maven.org/search?q=g:io.toggly"><img src="https://img.shields.io/maven-central/v/io.toggly/toggly-core" alt="Maven Central"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
+
 ## Features
 
 - **Zero-dependency core** - Works anywhere Java runs

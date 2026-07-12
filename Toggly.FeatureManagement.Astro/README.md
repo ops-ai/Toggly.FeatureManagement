@@ -2,6 +2,13 @@
 
 Feature flag management for Astro applications with support for SSR, SSG, and client-side rendering.
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@ops-ai/astro-feature-flags-toggly"><img src="https://img.shields.io/npm/v/@ops-ai/astro-feature-flags-toggly.svg" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
+
 ## Features
 
 - 🚀 **Native Astro Components** - Server-rendered `.astro` components for optimal performance

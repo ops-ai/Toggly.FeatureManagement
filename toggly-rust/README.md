@@ -2,10 +2,13 @@
 
 High-performance Rust SDK for [Toggly](https://toggly.io) feature flags and experimentation platform.
 
-[![Crates.io](https://img.shields.io/crates/v/toggly.svg)](https://crates.io/crates/toggly)
-[![Documentation](https://docs.rs/toggly/badge.svg)](https://docs.rs/toggly)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CI](https://github.com/ops-ai/toggly-feature-flags/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/ops-ai/toggly-feature-flags/actions/workflows/rust-ci.yml)
+<p align="center">
+  <a href="https://crates.io/crates/toggly"><img src="https://img.shields.io/crates/v/toggly.svg" alt="Crates.io"></a>
+  <a href="https://docs.rs/toggly"><img src="https://docs.rs/toggly/badge.svg" alt="Documentation"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="docs.toggly.io"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
 
 ## Features
 

@@ -2,11 +2,13 @@
 
 Official Python SDK for [Toggly](https://toggly.io) feature flag management. This monorepo contains multiple packages for different Python frameworks and use cases.
 
-[![CI](https://github.com/ops-ai/toggly-sdks/actions/workflows/ci.yml/badge.svg)](https://github.com/ops-ai/toggly-sdks/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/ops-ai/toggly-sdks/branch/main/graph/badge.svg)](https://codecov.io/gh/ops-ai/toggly-sdks)
-[![PyPI version](https://badge.fury.io/py/toggly.svg)](https://badge.fury.io/py/toggly)
-[![Python Version](https://img.shields.io/pypi/pyversions/toggly.svg)](https://pypi.org/project/toggly/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://pypi.org/project/toggly/"><img src="https://img.shields.io/pypi/v/toggly.svg" alt="PyPI"></a>
+  <a href="https://pypi.org/project/toggly/"><img src="https://img.shields.io/pypi/pyversions/toggly.svg" alt="Python versions"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://docs.toggly.io"><img src="https://img.shields.io/badge/docs-docs.toggly.io-blue.svg" alt="Documentation"></a>
+  <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
+</p>
 
 ## Packages
 
