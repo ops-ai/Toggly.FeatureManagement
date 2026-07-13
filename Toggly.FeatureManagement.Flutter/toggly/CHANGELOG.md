@@ -1,3 +1,16 @@
+## 1.9.1
+
+2026-07-13
+
+### Fixed
+- Guaranteed first HTTP definitions fetch when live updates are enabled: WebSocket
+  connectivity and `sync` messages with `unchanged: true` no longer suppress
+  polling or refresh until `_lastSynced` is set. Prevents cold starts (e.g. iOS
+  inactive splash) from remaining forever on seeded `flagDefaults`.
+- Clearing in-memory evaluation state on identity/context change also clears
+  `_lastSynced` / `_lastChecked` so a follow-up fetch is required for the new
+  context.
+
 ## 1.9.0
 
 2026-07-11

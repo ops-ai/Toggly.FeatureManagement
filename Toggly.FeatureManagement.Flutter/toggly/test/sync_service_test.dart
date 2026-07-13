@@ -14,6 +14,18 @@ void main() {
       );
     });
 
+    test('fetches when unchanged but no successful sync yet', () {
+      expect(
+        shouldFetchOnSync(
+          unchanged: true,
+          messageEtag: 'abc',
+          cachedRevision: 'abc',
+          hasSuccessfulSync: false,
+        ),
+        isTrue,
+      );
+    });
+
     test('fetches when no cached revision', () {
       expect(
         shouldFetchOnSync(

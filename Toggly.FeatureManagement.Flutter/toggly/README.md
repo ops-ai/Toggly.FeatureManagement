@@ -129,6 +129,10 @@ FeatureGateBuilder(
 
 `Feature.builder` uses the same gate resolution (remote flags, local gates, requirement, negate, variant) and is equivalent to wiring your own show/hide via the `enabled` argument.
 
+### Live updates
+
+`enableLiveUpdates` defaults to `true` and opens a WebSocket for real-time definition changes. The SDK still performs a **guaranteed first HTTP pull** until a successful sync (`lastSynced` in `Toggly.debug()`). WebSocket connectivity alone does not replace that initial fetch — important on cold starts where the first `refresh()` may be skipped while the app is inactive (common on iOS splash).
+
 ## Basic Usage (without Toggly.io)
 
 Initialize Toggly by running the Toggly.init method

@@ -42,6 +42,9 @@ class Toggly with WidgetsBindingObserver {
   // Add new static field for in-memory cache
   static Map<String, bool>? _inMemoryFlags;
 
+  /// True until at least one successful HTTP definitions fetch sets [_lastSynced].
+  static bool get _needsInitialHttpSync => _lastSynced == null;
+
   // Add new static field for in-memory JWKs cache
   static Map<String, dynamic>? _inMemoryJwks;
 
@@ -344,6 +347,8 @@ class Toggly with WidgetsBindingObserver {
     _inMemoryFlags = null;
     _inMemoryVariantDefs = null;
     _definitionsRevision = null;
+    _lastSynced = null;
+    _lastChecked = null;
     _featureFlagsSubject?.add(Map<String, bool>.from(Toggly._flagDefaults));
   }
 
@@ -1294,6 +1299,9 @@ class Toggly with WidgetsBindingObserver {
     _inMemoryFlags = null;
     _inMemoryVariantDefs = null;
     _definitionsRevision = null;
+    _lastSynced = null;
+    _lastChecked = null;
+    _lastError = null;
     _inMemoryJwks = null; // Clear JWKs cache
     _featureFlagsSubject?.close();
     _featureFlagsSubject = null;
@@ -1333,7 +1341,10 @@ class Toggly with WidgetsBindingObserver {
           // When WebSocket is connected or reconnecting, skip polling — live
           // updates are handled by the WebSocket. Polling resumes once the
           // connection drops and reconnect is not in progress.
-          if (Toggly._sync.wsConnected || Toggly._sync.wsReconnecting) {
+          // Exception: never skip while we still need an initial HTTP sync;
+          // WS connectivity is not a substitute for a successful fetch.
+          if ((Toggly._sync.wsConnected || Toggly._sync.wsReconnecting) &&
+              !Toggly._needsInitialHttpSync) {
             if (kDebugMode) {
               print(
                 'Toggly: Skipping poll refresh — WebSocket active or reconnecting',
@@ -1363,6 +1374,7 @@ class Toggly with WidgetsBindingObserver {
         unchanged: unchanged,
         messageEtag: etag,
         cachedRevision: previousRevision,
+        hasSuccessfulSync: !Toggly._needsInitialHttpSync,
       )) {
         Toggly._sync.requestRefresh();
       } else if (kDebugMode) {
@@ -1391,6 +1403,17 @@ class Toggly with WidgetsBindingObserver {
 
     Toggly._sync.onDefinitionsRevisionUpdated = (etag) {
       unawaited(_cacheDefinitionsRevision(etag));
+    };
+
+    Toggly._sync.onConnected = () {
+      if (Toggly._needsInitialHttpSync) {
+        if (kDebugMode) {
+          print(
+            'Toggly: WebSocket connected — forcing initial definitions fetch',
+          );
+        }
+        Toggly._sync.requestRefresh();
+      }
     };
 
     Toggly._sync.startWebSocket(

@@ -77,6 +77,9 @@ class SyncService {
   /// Called when a WebSocket message carries a new definitions revision.
   void Function(String etag)? onDefinitionsRevisionUpdated;
 
+  /// Called after the WebSocket successfully connects (including reconnects).
+  VoidCallback? onConnected;
+
   SyncService._internal();
 
   /// Returns the [SyncService] singleton instance.
@@ -125,6 +128,8 @@ class SyncService {
       if (kDebugMode) {
         print('Toggly: WebSocket connected');
       }
+
+      onConnected?.call();
 
       socket.listen(
         (data) {
@@ -307,7 +312,13 @@ bool shouldFetchOnSync({
   required bool unchanged,
   String? messageEtag,
   String? cachedRevision,
+  bool hasSuccessfulSync = true,
 }) {
+  // Until the SDK has completed at least one successful HTTP definitions
+  // fetch, WebSocket "unchanged" must not suppress the initial pull.
+  if (!hasSuccessfulSync) {
+    return true;
+  }
   if (unchanged) {
     return false;
   }
