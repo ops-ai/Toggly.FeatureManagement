@@ -552,7 +552,14 @@ class Toggly with WidgetsBindingObserver {
       final response = await _http.get(
         '${Toggly._config.baseURI}/evaluated-signed/${Toggly._appKey}/${Toggly._environment}',
         queryParameters: queryParameters,
-        options: Options(headers: headers),
+        options: Options(
+          headers: headers,
+          // Keep the exact response body so signature verification can use the
+          // raw `defs` JSON bytes the server signed (never re-serialize).
+          responseType: Toggly._useSignedDefinitions
+              ? ResponseType.plain
+              : ResponseType.json,
+        ),
       );
 
       if (kDebugMode) {
@@ -562,8 +569,9 @@ class Toggly with WidgetsBindingObserver {
       Map<String, bool> flags;
 
       if (Toggly._useSignedDefinitions) {
-        // Parse the response
-        final signedResponse = Map<String, dynamic>.from(response.data);
+        final parsed = _parseSignedDefinitionsResponse(response.data);
+        final signedResponse = parsed.envelope;
+        final signedDefsJson = parsed.signedDefsJson;
         flags = Map<String, bool>.from(signedResponse['defs'] ??
             signedResponse['data'] ??
             <String, dynamic>{});
@@ -598,9 +606,12 @@ class Toggly with WidgetsBindingObserver {
 
         try {
           final flagsPayload = signedResponse['defs'] ?? signedResponse['data'];
+          // Prefer the exact server-signed defs JSON; fall back to encode only
+          // when interceptors/tests supply an already-decoded Map.
+          final defsForSignature = signedDefsJson ?? jsonEncode(flagsPayload);
           if (Toggly._config.verifySignatures) {
             final isValid = await _verifySignature(
-                jsonEncode(flagsPayload), signature, timestamp, false, keyId);
+                defsForSignature, signature, timestamp, false, keyId);
 
             if (!isValid) {
               throw Exception('Invalid signature');
@@ -612,7 +623,7 @@ class Toggly with WidgetsBindingObserver {
           _lastChecked = DateTime.now();
           _lastSynced = DateTime.now();
           Toggly.cacheFeatureFlags(
-              featureFlags: jsonEncode(flagsPayload),
+              featureFlags: defsForSignature,
               timestamp: timestamp,
               signature: signature,
               keyId: keyId);
@@ -689,14 +700,18 @@ class Toggly with WidgetsBindingObserver {
       final response = await _http.get(
         '${Toggly._config.baseURI}/evaluated-variants-signed/${Toggly._appKey}/${Toggly._environment}',
         queryParameters: Toggly._buildEvaluationQueryParameters(variants: true),
-        options: Options(headers: headers),
+        options: Options(
+          headers: headers,
+          responseType: ResponseType.plain,
+        ),
       );
 
       if (kDebugMode) {
         print('Toggly variants raw response: ${response.data}');
       }
 
-      final signedResponse = Map<String, dynamic>.from(response.data);
+      final parsed = _parseSignedDefinitionsResponse(response.data);
+      final signedResponse = parsed.envelope;
       final defsPayload = signedResponse['defs'] ??
           signedResponse['data'] ??
           <String, dynamic>{};
@@ -729,7 +744,7 @@ class Toggly with WidgetsBindingObserver {
         return;
       }
 
-      final payloadForSign =
+      final payloadForSign = parsed.signedDefsJson ??
           jsonEncode(defsPayload is Map ? defsPayload : defs);
       if (Toggly._config.verifySignatures) {
         final isValid = await _verifySignature(
@@ -750,7 +765,7 @@ class Toggly with WidgetsBindingObserver {
       _lastChecked = DateTime.now();
       _lastSynced = DateTime.now();
       await _persistVariantsCache(
-        variantsJson: jsonEncode(defs),
+        variantsJson: payloadForSign,
         timestamp: timestamp,
         signature: signature,
         keyId: keyId,
@@ -1095,6 +1110,136 @@ class Toggly with WidgetsBindingObserver {
     }
   }
 
+  /// Parses a signed definitions HTTP body into an envelope map plus the exact
+  /// raw `defs`/`data` JSON substring the server signed.
+  ///
+  /// When [responseData] is already a decoded [Map] (unit-test interceptors),
+  /// [signedDefsJson] is null and callers must fall back to `jsonEncode`.
+  static _SignedDefinitionsParseResult _parseSignedDefinitionsResponse(
+    dynamic responseData,
+  ) {
+    if (responseData is String) {
+      final envelope = Map<String, dynamic>.from(jsonDecode(responseData));
+      final signedDefsJson = _extractRawJsonProperty(responseData, 'defs') ??
+          _extractRawJsonProperty(responseData, 'data');
+      return _SignedDefinitionsParseResult(
+        envelope: envelope,
+        signedDefsJson: signedDefsJson,
+      );
+    }
+    if (responseData is Map) {
+      return _SignedDefinitionsParseResult(
+        envelope: Map<String, dynamic>.from(responseData),
+        signedDefsJson: null,
+      );
+    }
+    throw Exception('Unexpected signed definitions response type');
+  }
+
+  /// Returns the exact JSON text of [property] from [json], matching
+  /// System.Text.Json `GetRawText()` / Go's raw `Defs` bytes.
+  static String? _extractRawJsonProperty(String json, String property) {
+    final needle = '"$property"';
+    var searchFrom = 0;
+    while (true) {
+      final keyIndex = json.indexOf(needle, searchFrom);
+      if (keyIndex < 0) {
+        return null;
+      }
+
+      var i = keyIndex + needle.length;
+      while (i < json.length && _isJsonWhitespace(json.codeUnitAt(i))) {
+        i++;
+      }
+      if (i >= json.length || json[i] != ':') {
+        searchFrom = keyIndex + 1;
+        continue;
+      }
+      i++;
+      while (i < json.length && _isJsonWhitespace(json.codeUnitAt(i))) {
+        i++;
+      }
+      if (i >= json.length) {
+        return null;
+      }
+
+      final start = i;
+      final c = json[i];
+      if (c == '{' || c == '[') {
+        final open = c;
+        final close = c == '{' ? '}' : ']';
+        var depth = 0;
+        var inString = false;
+        var escape = false;
+        for (; i < json.length; i++) {
+          final ch = json[i];
+          if (inString) {
+            if (escape) {
+              escape = false;
+            } else if (ch == '\\') {
+              escape = true;
+            } else if (ch == '"') {
+              inString = false;
+            }
+            continue;
+          }
+          if (ch == '"') {
+            inString = true;
+            continue;
+          }
+          if (ch == open) {
+            depth++;
+          } else if (ch == close) {
+            depth--;
+            if (depth == 0) {
+              return json.substring(start, i + 1);
+            }
+          }
+        }
+        return null;
+      }
+
+      if (c == '"') {
+        i++;
+        var escape = false;
+        for (; i < json.length; i++) {
+          final ch = json[i];
+          if (escape) {
+            escape = false;
+            continue;
+          }
+          if (ch == '\\') {
+            escape = true;
+            continue;
+          }
+          if (ch == '"') {
+            return json.substring(start, i + 1);
+          }
+        }
+        return null;
+      }
+
+      // number / true / false / null
+      while (i < json.length) {
+        final ch = json[i];
+        if (ch == ',' ||
+            ch == '}' ||
+            ch == ']' ||
+            _isJsonWhitespace(ch.codeUnitAt(0))) {
+          break;
+        }
+        i++;
+      }
+      return json.substring(start, i);
+    }
+  }
+
+  static bool _isJsonWhitespace(int codeUnit) =>
+      codeUnit == 0x20 || // space
+      codeUnit == 0x09 || // tab
+      codeUnit == 0x0A || // LF
+      codeUnit == 0x0D; // CR
+
   /// Verifies the signature of feature flags data
   static Future<bool> _verifySignature(String flags, String signature,
       int timestamp, bool allowOfflineValidation, String keyId) async {
@@ -1135,9 +1280,13 @@ class Toggly with WidgetsBindingObserver {
     }
     final jwk = matchingKeys.first;
 
-    // Create data string to verify and hash it with SHA-256
+    // Create data string to verify. Match Toggly.Definitions / Web Crypto
+    // subtle.sign(ECDSA, SHA-256): pre-hash once, then the ES256 algorithm
+    // hashes again — so verifiers must SHA-256 twice (see Go verify.go and
+    // .NET ComputeSignedDefinitionsPayloadHash).
     final dataToVerify = '$flags|$timestamp';
-    final messageHash = sha256.convert(utf8.encode(dataToVerify)).bytes;
+    final firstDigest = sha256.convert(utf8.encode(dataToVerify)).bytes;
+    final messageHash = sha256.convert(firstDigest).bytes;
 
     try {
       if (jwk['x'] == null || jwk['y'] == null) {
@@ -1506,4 +1655,14 @@ class Toggly with WidgetsBindingObserver {
     Toggly._sync.refreshFeatureFlagsTimer?.cancel();
     Toggly._sync.stopWebSocket();
   }
+}
+
+class _SignedDefinitionsParseResult {
+  const _SignedDefinitionsParseResult({
+    required this.envelope,
+    required this.signedDefsJson,
+  });
+
+  final Map<String, dynamic> envelope;
+  final String? signedDefsJson;
 }

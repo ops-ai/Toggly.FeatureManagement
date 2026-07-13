@@ -235,9 +235,9 @@ Each response from the feature flags API includes:
 
 The signature is verified using public keys available at the JWKS endpoint (`/.well-known/jwks`). The verification process:
 1. Matches the `kid` from the response with the corresponding key in the JWKS
-2. Concatenates the JSON data and timestamp with a pipe separator (`data|timestamp`)
-3. Hashes the result with SHA-256
-4. Verifies the ECDSA signature using the matched public key
+2. Concatenates the **exact raw** JSON `defs` value and timestamp with a pipe separator (`defs|timestamp`) — never a re-serialized map
+3. Digests with **double SHA-256** (`SHA256(SHA256(utf8(...)))`) to match Web Crypto `subtle.sign(ECDSA, SHA-256)` used by Toggly.Definitions
+4. Verifies the ECDSA P-256 signature (IEEE P1363 / raw `r||s`) using the matched public key
 
 Example response:
 ```json

@@ -1,3 +1,16 @@
+## 1.9.2
+
+2026-07-13
+
+### Fixed
+- Signature verification now applies the Web Crypto ES256 **double SHA-256**
+  digest (`SHA256(SHA256(utf8(defs|timestamp)))`), matching Toggly.Definitions,
+  Go, and .NET. A single hash rejected every production signed payload and left
+  apps stuck on `flagDefaults` with `Last Error: Signature verification failed`.
+- Signed definitions/variants requests keep the raw response body and verify
+  against the exact `defs` JSON substring the server signed (not a re-encoded
+  map), matching .NET `GetRawText()` / Go raw `Defs` bytes.
+
 ## 1.9.1
 
 2026-07-13
