@@ -119,7 +119,8 @@ void main() {
           unchanged: unchanged,
           messageEtag: etag,
           cachedRevision: null,
-          hasSuccessfulSync: Toggly.debug()['lastSynced'] == null ? false : true,
+          hasSuccessfulSync:
+              Toggly.debug()['lastSynced'] == null ? false : true,
         )) {
           SyncService.getInstance.requestRefresh();
         }
