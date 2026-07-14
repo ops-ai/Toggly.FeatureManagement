@@ -14,6 +14,7 @@ void main() {
       Toggly.dispose();
       var gateEnabled = false;
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'PremiumCheckout': true},
         config: TogglyConfig(
           localGates: [
@@ -51,6 +52,7 @@ void main() {
       Toggly.dispose();
       var gateEnabled = false;
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'PremiumCheckout': true},
         config: TogglyConfig(
           localGates: [
@@ -94,6 +96,7 @@ void main() {
       Toggly.dispose();
       var gateEnabled = false;
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'ApiV2Checkout': true},
         config: TogglyConfig(
           localGates: [
@@ -137,6 +140,7 @@ void main() {
         (tester) async {
       Toggly.dispose();
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {
           'TrueFeatureKey': true,
           'FalseFeatureKey': false,
@@ -165,6 +169,7 @@ void main() {
         (tester) async {
       Toggly.dispose();
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {
           'TrueFeatureKey': true,
           'FalseFeatureKey': false,
@@ -192,6 +197,7 @@ void main() {
     testWidgets('negate matches Feature gate behavior', (tester) async {
       Toggly.dispose();
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'TrueFeatureKey': true},
       );
 
@@ -217,6 +223,7 @@ void main() {
         (tester) async {
       Toggly.dispose();
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'Experiment': true},
         config: const TogglyConfig(enableVariants: false),
       );
@@ -243,6 +250,7 @@ void main() {
     testWidgets('always invokes builder even when gate is off', (tester) async {
       Toggly.dispose();
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'HiddenFeature': false},
       );
 
@@ -266,6 +274,7 @@ void main() {
     testWidgets('exposes enabled to builder callback', (tester) async {
       Toggly.dispose();
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'FeatureA': true},
       );
 
@@ -287,6 +296,7 @@ void main() {
     testWidgets('hides child when gate is off', (tester) async {
       Toggly.dispose();
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'FeatureA': false},
       );
 
@@ -306,6 +316,7 @@ void main() {
     testWidgets('rebuilds when feature flags stream emits', (tester) async {
       Toggly.dispose();
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'FeatureA': false},
       );
 

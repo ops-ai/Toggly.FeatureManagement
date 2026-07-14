@@ -73,11 +73,12 @@ class Toggly with WidgetsBindingObserver {
   static Map<String, String?> debug() {
     return {
       'user': _identity,
-      'appKey': _appKey,
+      'appKey': _sanitizeAppKey(_appKey),
       'environment': _environment,
       'useSignedDefinitions': _useSignedDefinitions.toString(),
       'isAppInForeground': _checkAppVisibility().toString(),
       'refreshInterval': Toggly._config.featureFlagsRefreshInterval.toString(),
+      'jwksCacheDuration': Toggly._config.jwksCacheDuration.toString(),
       'syncServiceRunning':
           Toggly._sync.refreshFeatureFlagsTimer != null ? 'Yes' : 'No',
       'lastChecked': _lastChecked?.toString(),
@@ -86,6 +87,20 @@ class Toggly with WidgetsBindingObserver {
       'lastError': _lastError,
       'enableVariants': Toggly._config.enableVariants.toString(),
     };
+  }
+
+  /// Masks app keys for debug surfaces (last 6 characters when long enough).
+  static String _sanitizeAppKey(String? appKey) {
+    if (appKey == null || appKey.isEmpty) {
+      return '***';
+    }
+    return appKey.length > 6 ? '***${appKey.substring(appKey.length - 6)}' : '***';
+  }
+
+  static Duration get _jwksCacheDuration {
+    final configured = Toggly._config.jwksCacheDuration;
+    const minDuration = Duration(minutes: 1);
+    return configured < minDuration ? minDuration : configured;
   }
 
   static bool _checkAppVisibility() {
@@ -165,7 +180,7 @@ class Toggly with WidgetsBindingObserver {
     String? appKey,
     String? environment,
     String? identity,
-    bool useSignedDefinitions = false,
+    bool useSignedDefinitions = true,
     TogglyConfig config = const TogglyConfig(),
     Map<String, bool>? flagDefaults,
     List<String>? groups,
@@ -428,7 +443,9 @@ class Toggly with WidgetsBindingObserver {
           return Map<String, bool>.from(Toggly._flagDefaults);
         }
 
-        // Validate the signature
+        // Re-verify persisted flags before trusting them. Invalid signatures
+        // fail closed (clear cache). Transient JWKS/network failures keep
+        // last-known-good flags for offline restart.
         try {
           final isValid = await _verifySignature(
               flagsCache.flags,
@@ -443,11 +460,13 @@ class Toggly with WidgetsBindingObserver {
               Exception('Invalid signature'),
               StackTrace.current,
             );
+            await clearFeatureFlagsCache();
+            return Map<String, bool>.from(Toggly._flagDefaults);
           }
         } catch (_) {
           // Cached definitions were previously accepted when written. If
           // offline validation cannot be performed now because of transient
-          // JWK/signature issues, keep the last-known-good cached flags.
+          // JWK issues, keep the last-known-good cached flags.
         }
       }
 
@@ -609,16 +628,14 @@ class Toggly with WidgetsBindingObserver {
           // Prefer the exact server-signed defs JSON; fall back to encode only
           // when interceptors/tests supply an already-decoded Map.
           final defsForSignature = signedDefsJson ?? jsonEncode(flagsPayload);
-          if (Toggly._config.verifySignatures) {
-            final isValid = await _verifySignature(
-                defsForSignature, signature, timestamp, false, keyId);
+          final isValid = await _verifySignature(
+              defsForSignature, signature, timestamp, false, keyId);
 
-            if (!isValid) {
-              throw Exception('Invalid signature');
-            }
-            if (kDebugMode) {
-              print('Signature verification successful');
-            }
+          if (!isValid) {
+            throw Exception('Invalid signature');
+          }
+          if (kDebugMode) {
+            print('Signature verification successful');
           }
           _lastChecked = DateTime.now();
           _lastSynced = DateTime.now();
@@ -746,7 +763,7 @@ class Toggly with WidgetsBindingObserver {
 
       final payloadForSign = parsed.signedDefsJson ??
           jsonEncode(defsPayload is Map ? defsPayload : defs);
-      if (Toggly._config.verifySignatures) {
+      if (Toggly._useSignedDefinitions) {
         final isValid = await _verifySignature(
           payloadForSign,
           signature,
@@ -834,9 +851,7 @@ class Toggly with WidgetsBindingObserver {
         return {};
       }
 
-      final mustVerify =
-          Toggly._useSignedDefinitions || Toggly._config.verifySignatures;
-      if (mustVerify) {
+      if (Toggly._useSignedDefinitions) {
         if (vc.timestamp == null || vc.signature == null || vc.keyId == null) {
           throw Exception('Variants cache missing signature metadata');
         }
@@ -1027,7 +1042,7 @@ class Toggly with WidgetsBindingObserver {
       }
 
       jwksData['_expiresAt'] =
-          DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch;
+          DateTime.now().add(_jwksCacheDuration).millisecondsSinceEpoch;
 
       // Cache in memory
       _inMemoryJwks = jwksData;
@@ -1136,102 +1151,144 @@ class Toggly with WidgetsBindingObserver {
     throw Exception('Unexpected signed definitions response type');
   }
 
-  /// Returns the exact JSON text of [property] from [json], matching
-  /// System.Text.Json `GetRawText()` / Go's raw `Defs` bytes.
+  /// Returns the exact JSON text of a **top-level** [property] from [json],
+  /// matching System.Text.Json `GetRawText()` / Go's raw `Defs` bytes.
+  ///
+  /// Nested keys (e.g. `data.defs`) are ignored so unsigned outer fields
+  /// cannot be swapped in after verifying nested signed bytes.
   static String? _extractRawJsonProperty(String json, String property) {
-    final needle = '"$property"';
-    var searchFrom = 0;
-    while (true) {
-      final keyIndex = json.indexOf(needle, searchFrom);
-      if (keyIndex < 0) {
-        return null;
-      }
+    var index = 0;
+    var depth = 0;
+    var inString = false;
+    var escape = false;
 
-      var i = keyIndex + needle.length;
-      while (i < json.length && _isJsonWhitespace(json.codeUnitAt(i))) {
-        i++;
-      }
-      if (i >= json.length || json[i] != ':') {
-        searchFrom = keyIndex + 1;
+    while (index < json.length) {
+      final character = json[index];
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (character == '\\') {
+          escape = true;
+        } else if (character == '"') {
+          inString = false;
+        }
+        index++;
         continue;
       }
-      i++;
-      while (i < json.length && _isJsonWhitespace(json.codeUnitAt(i))) {
-        i++;
-      }
-      if (i >= json.length) {
-        return null;
-      }
 
-      final start = i;
-      final c = json[i];
-      if (c == '{' || c == '[') {
-        final open = c;
-        final close = c == '{' ? '}' : ']';
-        var depth = 0;
-        var inString = false;
-        var escape = false;
-        for (; i < json.length; i++) {
-          final ch = json[i];
-          if (inString) {
-            if (escape) {
-              escape = false;
-            } else if (ch == '\\') {
-              escape = true;
-            } else if (ch == '"') {
-              inString = false;
+      if (character == '"') {
+        if (depth == 1) {
+          final keyEnd = _findJsonStringEnd(json, index);
+          if (keyEnd == null) {
+            return null;
+          }
+          final propertyName = json.substring(index + 1, keyEnd);
+          var valueStart = keyEnd + 1;
+          while (valueStart < json.length &&
+              _isJsonWhitespace(json.codeUnitAt(valueStart))) {
+            valueStart++;
+          }
+          if (propertyName == property &&
+              valueStart < json.length &&
+              json[valueStart] == ':') {
+            valueStart++;
+            while (valueStart < json.length &&
+                _isJsonWhitespace(json.codeUnitAt(valueStart))) {
+              valueStart++;
             }
-            continue;
+            return _extractJsonValue(json, valueStart);
           }
-          if (ch == '"') {
-            inString = true;
-            continue;
-          }
-          if (ch == open) {
-            depth++;
-          } else if (ch == close) {
-            depth--;
-            if (depth == 0) {
-              return json.substring(start, i + 1);
-            }
-          }
+          index = keyEnd + 1;
+          continue;
         }
-        return null;
+        inString = true;
+        index++;
+        continue;
       }
 
+      if (character == '{' || character == '[') {
+        depth++;
+      } else if (character == '}' || character == ']') {
+        depth--;
+      }
+      index++;
+    }
+
+    return null;
+  }
+
+  static int? _findJsonStringEnd(String text, int startQuote) {
+    var escape = false;
+    for (var i = startQuote + 1; i < text.length; i++) {
+      final c = text[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (c == '\\') {
+        escape = true;
+        continue;
+      }
       if (c == '"') {
-        i++;
-        var escape = false;
-        for (; i < json.length; i++) {
-          final ch = json[i];
+        return i;
+      }
+    }
+    return null;
+  }
+
+  static String? _extractJsonValue(String text, int start) {
+    if (start >= text.length) {
+      return null;
+    }
+
+    final first = text[start];
+    if (first == '{' || first == '[') {
+      var depth = 0;
+      var inString = false;
+      var escape = false;
+      for (var j = start; j < text.length; j++) {
+        final c = text[j];
+        if (inString) {
           if (escape) {
             escape = false;
-            continue;
-          }
-          if (ch == '\\') {
+          } else if (c == '\\') {
             escape = true;
-            continue;
+          } else if (c == '"') {
+            inString = false;
           }
-          if (ch == '"') {
-            return json.substring(start, i + 1);
+          continue;
+        }
+        if (c == '"') {
+          inString = true;
+        } else if (c == '{' || c == '[') {
+          depth++;
+        } else if (c == '}' || c == ']') {
+          depth--;
+          if (depth == 0) {
+            return text.substring(start, j + 1);
           }
         }
-        return null;
       }
-
-      // number / true / false / null
-      while (i < json.length) {
-        final ch = json[i];
-        if (ch == ',' ||
-            ch == '}' ||
-            ch == ']' ||
-            _isJsonWhitespace(ch.codeUnitAt(0))) {
-          break;
-        }
-        i++;
-      }
-      return json.substring(start, i);
+      return null;
     }
+
+    if (first == '"') {
+      final end = _findJsonStringEnd(text, start);
+      return end == null ? null : text.substring(start, end + 1);
+    }
+
+    var j = start;
+    while (j < text.length) {
+      final ch = text[j];
+      if (ch == ',' ||
+          ch == '}' ||
+          ch == ']' ||
+          _isJsonWhitespace(ch.codeUnitAt(0))) {
+        break;
+      }
+      j++;
+    }
+    return text.substring(start, j);
   }
 
   static bool _isJsonWhitespace(int codeUnit) =>
@@ -1243,6 +1300,15 @@ class Toggly with WidgetsBindingObserver {
   /// Verifies the signature of feature flags data
   static Future<bool> _verifySignature(String flags, String signature,
       int timestamp, bool allowOfflineValidation, String keyId) async {
+    if (signature.isEmpty || keyId.isEmpty) {
+      _reportError(
+        'Signature verification failed',
+        Exception('Empty signature or key ID'),
+        StackTrace.current,
+      );
+      throw Exception('Empty signature or key ID');
+    }
+
     // Check if keyId is in whitelist if one is provided
     if (Toggly._config.trustedKeyIds != null &&
         !Toggly._config.trustedKeyIds!.contains(keyId)) {

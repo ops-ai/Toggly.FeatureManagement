@@ -76,8 +76,9 @@ class DetailedTogglyBenchmark extends BenchmarkBase {
     final median = _measurements[_measurements.length ~/ 2];
     final p95 = _measurements[(_measurements.length * 0.95).floor()];
 
-    developer.log('''
-Benchmark Results:
+    // ignore: avoid_print
+    print('''
+$name — Benchmark Results:
   Average: ${avg.toStringAsFixed(2)}µs
   Median: ${median}µs
   P95: ${p95}µs

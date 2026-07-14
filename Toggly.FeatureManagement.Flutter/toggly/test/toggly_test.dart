@@ -6,6 +6,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
     await Toggly.init(
+      useSignedDefinitions: false,
       flagDefaults: {
         "TrueFeatureKey": true,
         "FalseFeatureKey": false,
@@ -58,6 +59,7 @@ void main() {
     test('getVariant returns disabled when enableVariants is false', () async {
       Toggly.dispose();
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'TrueFeatureKey': true},
         config: const TogglyConfig(enableVariants: false),
       );
@@ -71,6 +73,7 @@ void main() {
       Toggly.dispose();
       var gateEnabled = false;
       await Toggly.init(
+        useSignedDefinitions: false,
         flagDefaults: {'ApiV2Checkout': true, 'Other': true},
         config: TogglyConfig(
           localGates: [

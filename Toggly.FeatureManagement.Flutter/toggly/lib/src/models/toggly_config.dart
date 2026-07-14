@@ -18,8 +18,10 @@ class TogglyConfig {
   /// Whitelist of trusted key IDs
   final List<String>? trustedKeyIds;
 
-  /// Whether signatures should be verified on signed responses.
-  final bool verifySignatures;
+  /// How long fetched JWKS keys remain valid before the SDK refreshes them.
+  ///
+  /// Defaults to 30 days. Values under one minute are clamped to one minute.
+  final Duration jwksCacheDuration;
 
   /// Whether to enable WebSocket-based live updates for feature flags.
   /// When enabled, a WebSocket connection is maintained to receive
@@ -37,6 +39,10 @@ class TogglyConfig {
   /// `feature_flags_toggly_*` companion packages) to persist caches across
   /// app restarts. Offline restart also requires a stable [identity] passed
   /// to `Toggly.init` / `Toggly.setIdentity`.
+  ///
+  /// When [Toggly.init] is called with `useSignedDefinitions: true` (the
+  /// default), flags and variants loaded from this store are re-verified
+  /// against JWKS before use.
   final TogglyCacheProvider? cacheProvider;
 
   /// Optional cap on identity-scoped cache entries (flags, variants, and
@@ -61,7 +67,7 @@ class TogglyConfig {
     this.connectTimeout = 5 * 1000,
     this.featureFlagsRefreshInterval = 3 * 60 * 1000,
     this.trustedKeyIds,
-    this.verifySignatures = false,
+    this.jwksCacheDuration = const Duration(days: 30),
     this.enableLiveUpdates = true,
     this.enableVariants = false,
     this.cacheProvider,

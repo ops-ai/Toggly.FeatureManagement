@@ -84,7 +84,6 @@ void main() {
           baseURI: 'https://example.test',
           enableLiveUpdates: false,
           featureFlagsRefreshInterval: 3600000,
-          verifySignatures: false,
         ),
       );
 
@@ -162,7 +161,6 @@ void main() {
           baseURI: 'https://example.test',
           enableLiveUpdates: false,
           featureFlagsRefreshInterval: 100,
-          verifySignatures: false,
         ),
       );
 

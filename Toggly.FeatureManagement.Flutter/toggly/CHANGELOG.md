@@ -1,3 +1,31 @@
+## 1.10.0
+
+2026-07-13
+
+### Breaking
+- Removed `TogglyConfig.verifySignatures`. Signature verification is always
+  performed when `useSignedDefinitions` is enabled (including when loading
+  flags/variants from a persistence backend).
+- `useSignedDefinitions` now defaults to `true`. Pass
+  `useSignedDefinitions: false` only when you intentionally want unsigned
+  definitions.
+
+### Added
+- `TogglyConfig.jwksCacheDuration` (default 30 days, minimum 1 minute) to
+  configure JWKS cache TTL.
+
+### Changed
+- `Toggly.debug()` masks `appKey` (last 6 characters) so secrets are not
+  exposed in debug/diagnostics surfaces.
+
+### Fixed
+- Invalid persisted signatures fail closed: cache is cleared and
+  `flagDefaults` are used instead of applying tampered flags.
+- Raw `defs`/`data` extraction for signature verification is **top-level
+  only**, matching the JS SDKs — nested keys cannot be used to swap verified
+  bytes for unsigned outer fields.
+- Empty `signature` or `kid` values are rejected during verification.
+
 ## 1.9.2
 
 2026-07-13

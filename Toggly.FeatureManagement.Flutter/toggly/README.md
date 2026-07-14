@@ -51,7 +51,7 @@ void initToggly() async {
   await Toggly.init(
     appKey: '<your_app_key>',
     environment: '<your_app_environment>',
-    useSignedDefinitions: true,
+    // useSignedDefinitions defaults to true (ECDSA-verified definitions)
     flagDefaults: {
       "ExampleFeatureKey1": true,
       "ExampleFeatureKey2": false,
@@ -206,18 +206,30 @@ await Toggly.evaluateFeatureGate(
 
 When using Toggly.io, feature flag definitions can be cryptographically signed using ECDSA (ES256) to ensure their authenticity and integrity. This prevents tampering with feature flag values during transmission.
 
-To enable signature verification, set `useSignedDefinitions` to `true` during initialization:
+Signed definitions are **enabled by default**. The SDK verifies ECDSA signatures
+on every fetch and when loading flags from a persistence backend. Opt out only
+if you intentionally need unsigned definitions:
 
 ```dart
 await Toggly.init(
   appKey: '<your_app_key>',
   environment: '<your_app_environment>',
-  useSignedDefinitions: true,
+  useSignedDefinitions: false, // not recommended for production
   flagDefaults: {
     "ExampleFeatureKey1": true,
     "ExampleFeatureKey2": false,
   },
 );
+```
+
+Optional hardening via `TogglyConfig`:
+
+```dart
+config: TogglyConfig(
+  trustedKeyIds: ['TRUSTED_KEY_ID'], // optional allowlist
+  jwksCacheDuration: Duration(days: 30), // default; minimum 1 minute
+  cacheProvider: SecureStorageCacheProvider(), // re-verified on load
+),
 ```
 
 #### How It Works

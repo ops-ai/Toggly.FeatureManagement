@@ -152,7 +152,7 @@ void main() {
   });
 
   test(
-    'verifySignatures accepts Web Crypto double-SHA256 signatures',
+    'useSignedDefinitions accepts Web Crypto double-SHA256 signatures',
     () async {
       final fixture = _buildWebCryptoSignedFixture();
       _installInterceptors(
@@ -170,7 +170,6 @@ void main() {
           baseURI: 'https://example.test',
           enableLiveUpdates: false,
           featureFlagsRefreshInterval: 3600000,
-          verifySignatures: true,
         ),
       );
 
@@ -182,7 +181,7 @@ void main() {
   );
 
   test(
-    'verifySignatures rejects single-SHA256 signatures (production mismatch)',
+    'useSignedDefinitions rejects single-SHA256 signatures (production mismatch)',
     () async {
       final fixture = _buildWebCryptoSignedFixture();
       // Replace the valid double-hash signature with a single-hash one.
@@ -209,7 +208,6 @@ void main() {
           baseURI: 'https://example.test',
           enableLiveUpdates: false,
           featureFlagsRefreshInterval: 3600000,
-          verifySignatures: true,
           onError: (message, error, stack) {
             errors.add(message);
           },
@@ -222,4 +220,56 @@ void main() {
       expect(Toggly.featureFlagsSnapshot['PresalePhotos'], false);
     },
   );
+
+  test(
+    'rejects envelopes that nest signed defs under data (top-level only)',
+    () async {
+      final fixture = _buildWebCryptoSignedFixture();
+      // Signature covers honest top-level defs bytes. Place those bytes under
+      // data.defs and put attacker-controlled top-level defs first in the
+      // object — a naive indexOf("defs") would verify the nested payload
+      // while applying the outer Evil map.
+      const honestDefs = '{"PresalePhotos":true,"PuppySales":false}';
+      final envelope = jsonDecode(fixture.rawBody) as Map<String, dynamic>;
+      final nestedAttackBody =
+          '{"data":{"defs":$honestDefs},"defs":{"PresalePhotos":false,"Evil":true},"signature":"${envelope['signature']}","timestamp":${envelope['timestamp']},"kid":"${envelope['kid']}"}';
+
+      _installInterceptors(
+        definitionsBody: nestedAttackBody,
+        jwks: fixture.jwks,
+      );
+
+      await Toggly.init(
+        appKey: 'app-key',
+        environment: 'TestFlight',
+        identity: 'ApplicationUsers/1-C',
+        useSignedDefinitions: true,
+        flagDefaults: {'PresalePhotos': false, 'Evil': false},
+        config: const TogglyConfig(
+          baseURI: 'https://example.test',
+          enableLiveUpdates: false,
+          featureFlagsRefreshInterval: 3600000,
+        ),
+      );
+
+      expect(Toggly.debug()['lastSynced'], isNull);
+      expect(Toggly.featureFlagsSnapshot['PresalePhotos'], false);
+      expect(Toggly.featureFlagsSnapshot['Evil'], false);
+    },
+  );
+
+  test('debug() masks appKey', () async {
+    await Toggly.init(
+      appKey: 'abcdefghijklmnop',
+      environment: 'Production',
+      useSignedDefinitions: false,
+      flagDefaults: const {},
+      config: const TogglyConfig(
+        baseURI: 'https://example.test',
+        enableLiveUpdates: false,
+      ),
+    );
+
+    expect(Toggly.debug()['appKey'], '***klmnop');
+  });
 }

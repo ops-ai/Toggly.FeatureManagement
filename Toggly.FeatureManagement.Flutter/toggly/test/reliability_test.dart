@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:ecdsa/ecdsa.dart';
+import 'package:elliptic/elliptic.dart';
 import 'package:feature_flags_toggly/feature_flags_toggly.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -169,6 +171,80 @@ Map<String, dynamic> _jwks(String keyId) {
   };
 }
 
+List<int> _pad32(BigInt value) {
+  final bytes = value.toRadixString(16).padLeft(64, '0');
+  final out = <int>[];
+  for (var i = 0; i < bytes.length; i += 2) {
+    out.add(int.parse(bytes.substring(i, i + 2), radix: 16));
+  }
+  return out;
+}
+
+class _SignedFlagsFixture {
+  _SignedFlagsFixture({
+    required this.defsJson,
+    required this.rawBody,
+    required this.signature,
+    required this.kid,
+    required this.timestamp,
+    required this.jwks,
+  });
+
+  final String defsJson;
+  final String rawBody;
+  final String signature;
+  final String kid;
+  final int timestamp;
+  final Map<String, dynamic> jwks;
+}
+
+/// Valid Web Crypto double-SHA256 signed envelope for reliability tests.
+_SignedFlagsFixture _buildSignedFlagsFixture({
+  String defsJson = '{"FeatureA":true}',
+  int timestamp = 200,
+}) {
+  final ec = getP256();
+  final priv = ec.generatePrivateKey();
+  final pub = priv.publicKey;
+  final dataToVerify = '$defsJson|$timestamp';
+  final first = sha256.convert(utf8.encode(dataToVerify)).bytes;
+  final digest = sha256.convert(first).bytes;
+  final sig = signature(priv, digest);
+  final sigBytes = <int>[..._pad32(sig.R), ..._pad32(sig.S)];
+  final signatureB64 = base64.encode(sigBytes);
+
+  final xBytes = _pad32(pub.X);
+  final yBytes = _pad32(pub.Y);
+  final kidHash = sha1.convert([...xBytes, ...yBytes]);
+  final kid =
+      '${kidHash.bytes.map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase()).join()}ES256';
+
+  final rawBody =
+      '{"defs":$defsJson,"signature":"$signatureB64","timestamp":$timestamp,"kid":"$kid"}';
+  final jwks = {
+    'keys': [
+      {
+        'kty': 'EC',
+        'use': 'sig',
+        'kid': kid,
+        'crv': 'P-256',
+        'alg': 'ES256',
+        'x': _b64(xBytes),
+        'y': _b64(yBytes),
+      },
+    ],
+  };
+
+  return _SignedFlagsFixture(
+    defsJson: defsJson,
+    rawBody: rawBody,
+    signature: signatureB64,
+    kid: kid,
+    timestamp: timestamp,
+    jwks: jwks,
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -206,7 +282,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: true,
         cacheProvider: provider,
         onError: (message, error, stackTrace) => errors.add(message),
       ),
@@ -221,7 +296,7 @@ void main() {
     HttpService.getInstance.http.interceptors.remove(interceptor);
   });
 
-  test('reports cached signature failure without deleting valid cache',
+  test('clears cache when persisted signature verification fails',
       () async {
     final provider = _MemoryCacheProvider();
     final errors = <String>[];
@@ -255,7 +330,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: true,
         cacheProvider: provider,
         onError: (message, error, stackTrace) => errors.add(message),
       ),
@@ -263,8 +337,8 @@ void main() {
 
     final flags = await Toggly.cachedFeatureFlags;
 
-    expect(flags['FeatureA'], true);
-    expect(provider.deletedFlags, 0);
+    expect(flags['FeatureA'], false);
+    expect(provider.deletedFlags, greaterThan(0));
     expect(errors, contains('Signature verification failed'));
 
     HttpService.getInstance.http.interceptors.remove(interceptor);
@@ -320,7 +394,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: true,
         cacheProvider: provider,
         onError: (message, error, stackTrace) => errors.add(message),
       ),
@@ -340,17 +413,23 @@ void main() {
     // Toggly's signed `timestamp` is the definitions publish time — it stays
     // constant across fetches of unchanged definitions. A re-fetch that
     // returns the same timestamp must NOT be treated as a rollback.
+    final fixture = _buildSignedFlagsFixture();
     final interceptor = InterceptorsWrapper(
       onRequest: (options, handler) {
+        if (options.path.endsWith('/.well-known/jwks')) {
+          handler.resolve(
+            Response<dynamic>(
+              requestOptions: options,
+              data: fixture.jwks,
+              statusCode: 200,
+            ),
+          );
+          return;
+        }
         handler.resolve(
           Response<dynamic>(
             requestOptions: options,
-            data: {
-              'defs': {'FeatureA': true},
-              'signature': base64Encode(List<int>.filled(64, 0)),
-              'timestamp': 200,
-              'kid': 'kid-1',
-            },
+            data: fixture.rawBody,
             statusCode: 200,
           ),
         );
@@ -360,10 +439,10 @@ void main() {
 
     provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
       identity: 'u:user-1',
-      flags: '{"FeatureA":true}',
-      timestamp: 200,
-      signature: base64Encode(List<int>.filled(64, 0)),
-      keyId: 'kid-1',
+      flags: fixture.defsJson,
+      timestamp: fixture.timestamp,
+      signature: fixture.signature,
+      keyId: fixture.kid,
     );
 
     await Toggly.init(
@@ -373,7 +452,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         cacheProvider: provider,
         onError: (message, error, stackTrace) => errors.add(message),
       ),
@@ -424,7 +502,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         cacheProvider: provider,
         onError: (message, error, stackTrace) => errors.add(message),
       ),
@@ -481,11 +558,10 @@ void main() {
     await Toggly.init(
       appKey: 'app',
       identity: 'user-a',
-      useSignedDefinitions: true,
+      useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         cacheProvider: provider,
       ),
     );
@@ -529,7 +605,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         cacheProvider: provider,
       ),
     );
@@ -571,7 +646,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         cacheProvider: provider,
       ),
     );
@@ -605,7 +679,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         cacheProvider: provider,
       ),
     );
@@ -622,6 +695,7 @@ void main() {
 
   test('setContext with no changes returns cached', () async {
     await Toggly.init(
+      useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
     );
 
@@ -648,6 +722,7 @@ void main() {
     await Toggly.init(
       appKey: 'app',
       identity: 'user-1',
+      useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
@@ -688,6 +763,7 @@ void main() {
     await Toggly.init(
       appKey: 'app',
       identity: 'user-1',
+      useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
@@ -726,7 +802,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         cacheProvider: provider,
       ),
     );
@@ -752,6 +827,7 @@ void main() {
     await Toggly.init(
       appKey: 'app',
       identity: 'user-1',
+      useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
@@ -783,11 +859,10 @@ void main() {
     await Toggly.init(
       appKey: 'app',
       identity: 'user-1',
-      useSignedDefinitions: true,
+      useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         cacheProvider: provider,
       ),
     );
@@ -818,11 +893,10 @@ void main() {
     await Toggly.init(
       appKey: 'app',
       identity: 'user-1',
-      useSignedDefinitions: true,
+      useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         cacheProvider: provider,
       ),
     );
@@ -873,7 +947,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         enableVariants: true,
         cacheProvider: provider,
       ),
@@ -925,7 +998,6 @@ void main() {
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
         baseURI: 'https://example.test',
-        verifySignatures: false,
         enableVariants: true,
         cacheProvider: provider,
       ),
@@ -940,6 +1012,7 @@ void main() {
   testWidgets('Feature rebuilds when feature flags stream emits',
       (tester) async {
     await Toggly.init(
+      useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
     );
 
