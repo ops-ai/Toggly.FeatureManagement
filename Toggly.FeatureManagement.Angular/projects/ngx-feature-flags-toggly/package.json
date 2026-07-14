@@ -1,7 +1,7 @@
 {
   "name": "@ops-ai/ngx-feature-flags-toggly",
   "description": "Provides feature flags support for Angular applications allowing you to check feature status and enable/disable them easily.",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "license": "MIT",
   "author": {
     "name": "Ops.AI",

@@ -17,7 +17,6 @@ import java.security.spec.ECGenParameterSpec
 import java.security.spec.ECParameterSpec
 import java.security.spec.ECPoint
 import java.security.spec.ECPublicKeySpec
-import java.util.Base64
 
 /**
  * Verifies signed definitions without altering the signed JSON bytes.
@@ -258,9 +257,45 @@ internal object SignedDefsVerify {
         return sha1.joinToString(separator = "") { "%02X".format(it) } + "ES256"
     }
 
+    /**
+     * Decode standard or URL-safe Base64 without java.util.Base64 (API 26+)
+     * or android.util.Base64 (unavailable in plain JVM unit tests).
+     */
     private fun decodeBase64(value: String): ByteArray {
         val normalized = value.replace('-', '+').replace('_', '/')
-        return Base64.getDecoder().decode(normalized.padEnd((normalized.length + 3) / 4 * 4, '='))
+        val padded = normalized.padEnd((normalized.length + 3) / 4 * 4, '=')
+        require(padded.length % 4 == 0) { "Invalid base64 length" }
+
+        val out = ArrayList<Byte>(padded.length / 4 * 3)
+        var index = 0
+        while (index < padded.length) {
+            val n0 = base64AlphabetValue(padded[index++])
+            val n1 = base64AlphabetValue(padded[index++])
+            val c2 = padded[index++]
+            val c3 = padded[index++]
+            val n2 = if (c2 == '=') 0 else base64AlphabetValue(c2)
+            val n3 = if (c3 == '=') 0 else base64AlphabetValue(c3)
+            val triple = (n0 shl 18) or (n1 shl 12) or (n2 shl 6) or n3
+            out.add((triple shr 16).toByte())
+            if (c2 != '=') {
+                out.add((triple shr 8).toByte())
+            }
+            if (c3 != '=') {
+                out.add(triple.toByte())
+            }
+        }
+        return out.toByteArray()
+    }
+
+    private fun base64AlphabetValue(character: Char): Int {
+        return when (character) {
+            in 'A'..'Z' -> character - 'A'
+            in 'a'..'z' -> character - 'a' + 26
+            in '0'..'9' -> character - '0' + 52
+            '+' -> 62
+            '/' -> 63
+            else -> throw IllegalArgumentException("Invalid base64 character: $character")
+        }
     }
 
     private fun p1363ToDer(signature: ByteArray): ByteArray {

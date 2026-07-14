@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.2
+
+2026-07-14
+
+### Fixed
+
+- Decode signed-defs Base64 with a pure decoder so lint passes on minSdk 24
+  (java.util.Base64 requires API 26) and JVM unit tests keep working.
+
 ## 1.0.1
 
 2026-07-13

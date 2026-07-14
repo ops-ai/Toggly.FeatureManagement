@@ -1,3 +1,11 @@
+## 2.6.1
+
+2026-07-14
+
+### Fixed
+- Include Node typings in the library tsconfig so signed-defs verify compiles
+  (`process`/`require` for Jest/Node crypto path).
+
 ## 2.6.0
 
 2026-07-13

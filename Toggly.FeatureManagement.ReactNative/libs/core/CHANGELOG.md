@@ -1,3 +1,11 @@
+## 1.6.1
+
+2026-07-14
+
+### Fixed
+- Type `getJwks()` as `JwkSet` so the core package builds under strict TypeScript
+  (fixes CI `tsc` on develop).
+
 ## 1.6.0
 
 2026-07-13

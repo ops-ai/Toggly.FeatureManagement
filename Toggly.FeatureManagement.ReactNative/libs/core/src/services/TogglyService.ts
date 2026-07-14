@@ -725,10 +725,10 @@ export class TogglyService {
     }
   }
 
-  private async getJwks(): Promise<{ keys?: Array<Record<string, string>> }> {
+  private async getJwks(): Promise<JwkSet> {
     const cached = await this.storage.get(STORAGE_KEYS.JWKS);
     if (cached) {
-      return JSON.parse(cached);
+      return JSON.parse(cached) as JwkSet;
     }
 
     const response = await fetch(`${this.config.baseURI}/.well-known/jwks`);
@@ -736,7 +736,7 @@ export class TogglyService {
       throw new Error(`Failed to fetch JWKs: ${response.status}`);
     }
 
-    const jwks = await response.json();
+    const jwks = (await response.json()) as JwkSet;
     await this.storage.set(STORAGE_KEYS.JWKS, JSON.stringify(jwks));
     return jwks;
   }
@@ -762,7 +762,7 @@ export class TogglyService {
       throw new Error('Signed definitions key is not trusted');
     }
 
-    const jwks = (await this.getJwks()) as JwkSet;
+    const jwks = await this.getJwks();
     await verifySignedEnvelope(
       defsRaw,
       { signature, timestamp, kid: keyId },
