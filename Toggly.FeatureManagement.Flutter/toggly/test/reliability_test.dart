@@ -296,8 +296,7 @@ void main() {
     HttpService.getInstance.http.interceptors.remove(interceptor);
   });
 
-  test('clears cache when persisted signature verification fails',
-      () async {
+  test('clears cache when persisted signature verification fails', () async {
     final provider = _MemoryCacheProvider();
     final errors = <String>[];
     const keyId = 'computed';

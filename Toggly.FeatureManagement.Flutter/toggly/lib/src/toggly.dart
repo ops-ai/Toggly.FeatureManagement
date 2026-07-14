@@ -94,7 +94,9 @@ class Toggly with WidgetsBindingObserver {
     if (appKey == null || appKey.isEmpty) {
       return '***';
     }
-    return appKey.length > 6 ? '***${appKey.substring(appKey.length - 6)}' : '***';
+    return appKey.length > 6
+        ? '***${appKey.substring(appKey.length - 6)}'
+        : '***';
   }
 
   static Duration get _jwksCacheDuration {
