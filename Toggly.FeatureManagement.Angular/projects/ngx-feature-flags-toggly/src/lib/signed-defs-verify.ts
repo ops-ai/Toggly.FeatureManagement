@@ -293,43 +293,17 @@ function toP1363Signature(signature: Uint8Array): Uint8Array {
   return derSignatureToP1363(signature)
 }
 
-function isNodeRuntime(): boolean {
-  return (
-    typeof process !== 'undefined' &&
-    typeof (process as { versions?: { node?: string } }).versions?.node === 'string'
-  )
-}
-
 async function sha1HexUpper(bytes: Uint8Array): Promise<string> {
-  if (isNodeRuntime()) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeCrypto = require('crypto') as {
-      createHash: (alg: string) => {
-        update: (d: Uint8Array) => { digest: (enc: string) => string }
-      }
-    }
-    return nodeCrypto.createHash('sha1').update(bytes).digest('hex').toUpperCase()
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    throw new Error('WebCrypto is required to validate JWKs')
   }
-  if (typeof crypto !== 'undefined' && crypto.subtle) {
-    const exact = bytes.slice()
-    const digest = await crypto.subtle.digest('SHA-1', exact)
-    return Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
-      .join('')
-  }
-  throw new Error('WebCrypto is required to validate JWKs')
+  const digest = await crypto.subtle.digest('SHA-1', bytes.slice())
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
+    .join('')
 }
 
 async function sha256Bytes(data: Uint8Array): Promise<Uint8Array> {
-  if (isNodeRuntime()) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeCrypto = require('crypto') as {
-      createHash: (alg: string) => {
-        update: (d: Uint8Array) => { digest: () => Uint8Array }
-      }
-    }
-    return Uint8Array.from(nodeCrypto.createHash('sha256').update(data).digest())
-  }
   if (typeof crypto === 'undefined' || !crypto.subtle) {
     throw new Error('WebCrypto is required to hash signed definitions')
   }
@@ -385,41 +359,7 @@ export async function verifySignedDefinitions(
 
   const payloadBytes = new TextEncoder().encode(`${defsRaw}|${envelope.timestamp}`)
   const firstDigest = await sha256Bytes(payloadBytes)
-  const doubleDigest = await sha256Bytes(firstDigest)
   const signature = base64ToBytes(envelope.signature)
-
-  if (isNodeRuntime()) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeCrypto = require('crypto') as {
-      createPublicKey: (key: unknown) => unknown
-      verify: (
-        algorithm: null,
-        data: Uint8Array,
-        key: { key: unknown; dsaEncoding: string },
-        signature: Uint8Array
-      ) => boolean
-    }
-    const key = nodeCrypto.createPublicKey({
-      key: {
-        kty: matching.kty ?? 'EC',
-        crv: matching.crv ?? 'P-256',
-        x: matching.x,
-        y: matching.y,
-      },
-      format: 'jwk',
-    })
-    const encoding = signature.length === 64 ? 'ieee-p1363' : 'der'
-    const ok = nodeCrypto.verify(
-      null,
-      doubleDigest,
-      { key, dsaEncoding: encoding },
-      signature
-    )
-    if (!ok) {
-      throw new Error('invalid signature')
-    }
-    return
-  }
 
   if (typeof crypto === 'undefined' || !crypto.subtle) {
     throw new Error('WebCrypto is required to verify signed definitions')

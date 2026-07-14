@@ -3,8 +3,8 @@
 2026-07-14
 
 ### Fixed
-- Include Node typings in the library tsconfig so signed-defs verify compiles
-  (`process`/`require` for Jest/Node crypto path).
+- Keep signed-defs verification WebCrypto-only so Angular library/Karma builds
+  do not pull Node `process`/`require`/`crypto` into the browser bundle.
 
 ## 2.6.0
 
