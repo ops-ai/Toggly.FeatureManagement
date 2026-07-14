@@ -44,6 +44,12 @@ import {
   type WsSyncMessage,
 } from '../ws-sync';
 import { buildDefinitionFetchHeaders } from '../sdk-identity';
+import {
+  parseDefinitionsFromRaw,
+  parseSignedEnvelope,
+  verifySignedDefinitions as verifySignedEnvelope,
+  type JwkSet,
+} from '../crypto/signedDefsVerify';
 
 /**
  * Storage keys used by Toggly
@@ -98,22 +104,6 @@ function generateUUID(): string {
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
-}
-
-function base64UrlToBytes(value: string): Uint8Array {
-  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), '=');
-  const maybeBuffer = (globalThis as unknown as {
-    Buffer?: { from(value: string, encoding: string): { toString(encoding: string): string } };
-  }).Buffer;
-  const binary = typeof atob === 'function'
-    ? atob(padded)
-    : maybeBuffer?.from(padded, 'base64').toString('binary') ?? '';
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
 }
 
 /**
@@ -279,11 +269,16 @@ export class TogglyService {
     }
     this._refreshDebounceTimer = setTimeout(() => {
       this._refreshDebounceTimer = null;
-      if (forceRevisionReset) {
-        this.cachedDefinitionsRevision = null;
-        void this.storage.delete(STORAGE_KEYS.ETAG);
-      }
-      void this.refresh();
+      const run = async () => {
+        if (forceRevisionReset) {
+          this.cachedDefinitionsRevision = null;
+          // Await deletes so refresh cannot rehydrate retired signing keys.
+          await this.storage.delete(STORAGE_KEYS.ETAG);
+          await this.storage.delete(STORAGE_KEYS.JWKS);
+        }
+        await this.refresh();
+      };
+      void run();
     }, REFRESH_DEBOUNCE_MS);
   }
 
@@ -495,18 +490,24 @@ export class TogglyService {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const bodyText = await this.readResponseBody(response);
       let flags: FeatureFlags;
 
-      flags = (data?.defs ?? data?.data ?? data) as FeatureFlags;
-
-      if (this.config.useSignedDefinitions && this.config.verifySignatures) {
+      if (this.config.verifySignatures) {
+        const { envelope, defsRaw } = parseSignedEnvelope(bodyText);
         await this.verifySignedDefinitions(
-          flags,
-          data?.signature,
-          data?.timestamp,
-          data?.kid ?? data?.keyId
+          defsRaw,
+          envelope.signature,
+          envelope.timestamp,
+          envelope.kid
         );
+        flags = parseDefinitionsFromRaw(defsRaw) as FeatureFlags;
+      } else {
+        const data = JSON.parse(bodyText) as {
+          defs?: FeatureFlags;
+          data?: FeatureFlags;
+        } & FeatureFlags;
+        flags = (data?.defs ?? data?.data ?? data) as FeatureFlags;
       }
 
       // Track changes
@@ -740,8 +741,16 @@ export class TogglyService {
     return jwks;
   }
 
+  private async readResponseBody(response: Response): Promise<string> {
+    if (typeof response.text === 'function') {
+      return response.text();
+    }
+    // Some test doubles only implement json().
+    return JSON.stringify(await response.json());
+  }
+
   private async verifySignedDefinitions(
-    flags: FeatureFlags,
+    defsRaw: string,
     signature: string | undefined,
     timestamp: number | undefined,
     keyId: string | undefined
@@ -752,33 +761,14 @@ export class TogglyService {
     if (this.config.trustedKeyIds?.length && !this.config.trustedKeyIds.includes(keyId)) {
       throw new Error('Signed definitions key is not trusted');
     }
-    if (typeof crypto === 'undefined' || !crypto.subtle) {
-      throw new Error('WebCrypto is required to verify signed definitions');
-    }
 
-    const jwks = await this.getJwks();
-    const jwk = jwks.keys?.find((key) => key.kid === keyId);
-    if (!jwk) {
-      throw new Error(`No JWK found for key ${keyId}`);
-    }
-
-    const cryptoKey = await crypto.subtle.importKey(
-      'jwk',
-      { ...jwk, kty: jwk.kty ?? 'EC', crv: jwk.crv ?? 'P-256', ext: true },
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false,
-      ['verify']
+    const jwks = (await this.getJwks()) as JwkSet;
+    await verifySignedEnvelope(
+      defsRaw,
+      { signature, timestamp, kid: keyId },
+      jwks,
+      this.config.trustedKeyIds
     );
-    const payload = new TextEncoder().encode(`${JSON.stringify(flags)}|${timestamp}`);
-    const isValid = await crypto.subtle.verify(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      cryptoKey,
-      base64UrlToBytes(signature) as Uint8Array<ArrayBuffer>,
-      payload
-    );
-    if (!isValid) {
-      throw new Error('Invalid signed definitions signature');
-    }
   }
 
   /**
@@ -792,6 +782,7 @@ export class TogglyService {
       const cacheKey = await this.buildFeatureFlagsCacheKey();
       await this.storage.delete(cacheKey);
       await this.storage.delete(STORAGE_KEYS.ETAG);
+      await this.storage.delete(STORAGE_KEYS.JWKS);
       await this.removeCacheKeysFromLruIndex([cacheKey]);
     } catch (error) {
       this.reportError('Error clearing feature flags cache', error);

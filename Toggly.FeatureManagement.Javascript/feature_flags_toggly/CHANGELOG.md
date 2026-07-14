@@ -1,3 +1,14 @@
+## 1.6.0
+
+2026-07-13
+
+### Fixed
+- Reject empty `signature`/`kid` in signed envelopes.
+- Harden signed-defs verification: top-level-only `defs` extraction, apply
+  verified raw bytes (not `envelope.defs`), and accept DER→P1363 on WebCrypto.
+- `verifySignatures` now verifies ES256 signed envelopes using exact raw `defs`
+  JSON and Web Crypto double SHA-256 (was previously a no-op config flag).
+
 ## 1.5.0
 
 2026-07-11

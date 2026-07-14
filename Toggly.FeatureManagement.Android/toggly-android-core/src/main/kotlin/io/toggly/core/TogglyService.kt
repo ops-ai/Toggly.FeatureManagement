@@ -437,11 +437,18 @@ class TogglyService(
                 val body = resp.body?.string()
                     ?: throw TogglyException.InvalidResponse("Empty response body")
 
-                val flags: FeatureFlags = runCatching {
-                    val signedResponse = json.decodeFromString<SignedDefinitionsResponse>(body)
-                    signedResponse.defs ?: signedResponse.data ?: emptyMap()
-                }.getOrElse {
-                    json.decodeFromString<Map<String, Boolean>>(body)
+                val flags: FeatureFlags = if (config.verifySignatures) {
+                    val envelope = SignedDefsVerify.parseSignedEnvelope(body)
+                    val jwks = fetchJwks()
+                    SignedDefsVerify.verify(envelope, jwks)
+                    SignedDefsVerify.parseDefinitions(envelope.defsRaw)
+                } else {
+                    runCatching {
+                        val signedResponse = json.decodeFromString<SignedDefinitionsResponse>(body)
+                        signedResponse.defs ?: signedResponse.data ?: emptyMap()
+                    }.getOrElse {
+                        json.decodeFromString<Map<String, Boolean>>(body)
+                    }
                 }
 
                 // Track changes
@@ -499,6 +506,17 @@ class TogglyService(
         }
 
         return url
+    }
+
+    private suspend fun fetchJwks(): String {
+        val request = Request.Builder()
+            .url("${config.baseUri.trimEnd('/')}/.well-known/jwks")
+            .get()
+            .build()
+
+        return withContext(Dispatchers.IO) {
+            httpClient.newCall(request).execute().use(SignedDefsVerify::fetchJwks)
+        }
     }
 
     private suspend fun waitForFeaturesLoaded() {
@@ -649,7 +667,7 @@ class TogglyService(
 
                     if (type == "ping") return
 
-                    if (type == "flags-updated" || type == "update") {
+                    if (type == "signing-key-updated" || type == "flags-updated" || type == "update") {
                         CoroutineScope(Dispatchers.Default).launch {
                             refresh()
                         }

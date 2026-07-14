@@ -9,6 +9,7 @@ import {
   createMemoryCache,
   createFileCache,
 } from '../src/cache'
+import { CACHE_KEYS } from '../src/constants'
 
 describe('MemoryCacheProvider', () => {
   let cache: MemoryCacheProvider
@@ -243,6 +244,14 @@ describe('DefinitionsCache', () => {
 
       const result = await cache.getDefinitions('defs')
       expect(result).toBeNull()
+    })
+
+    it('should clear durable JWKS entries used after signing-key rotation', async () => {
+      await cache.setJwks(CACHE_KEYS.JWKS, '{"keys":[]}')
+      expect(await cache.getJwks(CACHE_KEYS.JWKS)).toBe('{"keys":[]}')
+
+      await cache.clear(CACHE_KEYS.JWKS)
+      expect(await cache.getJwks(CACHE_KEYS.JWKS)).toBeNull()
     })
   })
 })

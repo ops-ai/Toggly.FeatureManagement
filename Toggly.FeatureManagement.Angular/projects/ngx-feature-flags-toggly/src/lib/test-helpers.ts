@@ -8,5 +8,6 @@ export function createMockFetchResponse(
     status,
     statusText,
     json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
   };
 }

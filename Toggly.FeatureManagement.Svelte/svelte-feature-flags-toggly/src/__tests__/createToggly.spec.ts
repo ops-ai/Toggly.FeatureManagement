@@ -40,6 +40,7 @@ describe('createToggly', () => {
       status: 200,
       statusText: 'OK',
       json: () => Promise.resolve({ F1: true, F2: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true, F2: true })),
     } as Response);
 
     await createToggly({
@@ -63,6 +64,11 @@ describe('createToggly', () => {
             V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
           },
         }),
+      text: () => Promise.resolve(JSON.stringify({
+          defs: {
+            V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+          },
+        })),
     } as Response);
 
     await createToggly({
@@ -100,6 +106,7 @@ describe('createToggly', () => {
       status: 200,
       statusText: 'OK',
       json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })),
     } as Response);
 
     await createToggly({
@@ -138,7 +145,8 @@ describe('createToggly', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
       callCount++;
       if (callCount === 1) {
-        return { json: () => Promise.resolve({ F1: true }) } as Response;
+        return { json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })) } as Response;
       }
       throw new Error('Refresh failed');
     });
@@ -164,6 +172,7 @@ describe('createToggly', () => {
       status: 200,
       statusText: 'OK',
       json: () => Promise.resolve(null),
+      text: () => Promise.resolve(JSON.stringify(null)),
     } as Response);
 
     await createToggly({
@@ -199,6 +208,7 @@ describe('createToggly', () => {
       status: 200,
       statusText: 'OK',
       json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })),
     } as Response);
 
     await createToggly({

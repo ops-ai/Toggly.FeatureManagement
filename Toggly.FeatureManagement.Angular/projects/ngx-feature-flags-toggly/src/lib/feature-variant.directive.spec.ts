@@ -32,6 +32,10 @@ describe('FeatureVariantDirective', () => {
         Exp1: { enabled: true, variant: 'control', configurationValue: null },
         Exp2: { enabled: true, variant: 'treatment', configurationValue: null },
       }),
+          text: () => Promise.resolve(JSON.stringify({
+        Exp1: { enabled: true, variant: 'control', configurationValue: null },
+        Exp2: { enabled: true, variant: 'treatment', configurationValue: null },
+      })),
     } as any);
   });
 

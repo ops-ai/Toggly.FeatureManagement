@@ -111,7 +111,8 @@ describe('Toggly Service', () => {
     });
 
     it('should fetch from API when appKey set', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ ApiFlag: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ ApiFlag: true }),
+      text: () => Promise.resolve(JSON.stringify({ ApiFlag: true })) });
       const service = new Toggly();
       service.init({ appKey: 'key', environment: 'Production' });
 
@@ -121,7 +122,8 @@ describe('Toggly Service', () => {
     });
 
     it('should include identity in API URL', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const service = new Toggly();
       service.init({ appKey: 'key', environment: 'Production', identity: 'user-1' });
 
@@ -133,7 +135,8 @@ describe('Toggly Service', () => {
     });
 
     it('should use custom baseURI', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const service = new Toggly();
       service.init({ baseURI: 'https://custom.api', appKey: 'key', environment: 'Staging' });
 
@@ -164,7 +167,8 @@ describe('Toggly Service', () => {
       const slowPromise = new Promise((r) => { resolveFirst = r; });
 
       mockFetch.mockReturnValueOnce(
-        slowPromise.then(() => ({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) }))
+        slowPromise.then(() => ({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })) }))
       );
 
       const service = new Toggly();
@@ -181,7 +185,8 @@ describe('Toggly Service', () => {
     });
 
     it('should cache features after first load', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const service = new Toggly();
       service.init({ appKey: 'key', environment: 'Production' });
 
@@ -191,7 +196,8 @@ describe('Toggly Service', () => {
     });
 
     it('should trigger afterRefresh hooks', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       let refreshed: any = null;
       const service = new Toggly();
       service.init({
@@ -217,7 +223,8 @@ describe('Toggly Service', () => {
     });
 
     it('should load features if not yet loaded', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ ApiFlag: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ ApiFlag: true }),
+      text: () => Promise.resolve(JSON.stringify({ ApiFlag: true })) });
       const service = new Toggly();
       service.init({ appKey: 'key', environment: 'Production' });
 
@@ -399,6 +406,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly();
@@ -430,6 +438,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly();
@@ -453,6 +462,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly();
@@ -477,6 +487,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly();
@@ -501,6 +512,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: false }),
+        text: () => Promise.resolve(JSON.stringify({ F1: false })),
       });
 
       const service = new Toggly();
@@ -528,6 +540,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly();
@@ -552,6 +565,7 @@ describe('Toggly Service', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
           headers: { get: () => '"rev-1"' },
         })
         .mockResolvedValueOnce({
@@ -559,6 +573,7 @@ describe('Toggly Service', () => {
           status: 304,
           statusText: 'Not Modified',
           json: () => Promise.resolve({}),
+          text: () => Promise.resolve(JSON.stringify({})),
           headers: { get: () => null },
         });
 
@@ -643,7 +658,8 @@ describe('Toggly Service', () => {
     });
 
     it('should refresh features on JSON flags-updated message', () => {
-      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'flags-updated' }) });
@@ -652,7 +668,8 @@ describe('Toggly Service', () => {
     });
 
     it('should refresh features on JSON update message', () => {
-      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) });
@@ -675,7 +692,8 @@ describe('Toggly Service', () => {
     });
 
     it('should refresh features on JSON sync message', () => {
-      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'sync', etag: 'new-rev' }) });
@@ -684,7 +702,8 @@ describe('Toggly Service', () => {
     });
 
     it('should refresh features on signing-key-updated message', () => {
-      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'signing-key-updated' }) });
@@ -693,7 +712,8 @@ describe('Toggly Service', () => {
     });
 
     it('should cancel debounced refresh on stopWebSocket', () => {
-      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockFetch.mockClear();
@@ -704,7 +724,8 @@ describe('Toggly Service', () => {
     });
 
     it('should refresh features on plain text "update"', () => {
-      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: 'update' });
@@ -713,7 +734,8 @@ describe('Toggly Service', () => {
     });
 
     it('should refresh features on plain text "flags-updated"', () => {
-      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const s = createWsService({ appKey: 'k', environment: 'Prod' });
       s.startWebSocket();
       mockWsInstances[0].onmessage!({ data: 'flags-updated' });
@@ -782,6 +804,11 @@ describe('Toggly Service', () => {
               V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
             },
           }),
+        text: () => Promise.resolve(JSON.stringify({
+            defs: {
+              V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+            },
+          })),
       });
       const service = new Toggly();
       service.init({
@@ -807,6 +834,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ defs: {} }),
+        text: () => Promise.resolve(JSON.stringify({ defs: {} })),
       });
       const service = new Toggly();
       service.init({
@@ -857,6 +885,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ defs: { V: { enabled: true } } }),
+        text: () => Promise.resolve(JSON.stringify({ defs: { V: { enabled: true } } })),
       });
       const service = new Toggly();
       service.init({
@@ -871,7 +900,8 @@ describe('Toggly Service', () => {
     });
 
     it('subscribeFeaturesRefresh runs after successful load', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const service = new Toggly();
       service.init({
         appKey: 'test-key',
@@ -886,7 +916,8 @@ describe('Toggly Service', () => {
     });
 
     it('subscribeFeaturesRefresh can be unsubscribed', async () => {
-      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const service = new Toggly();
       service.init({
         appKey: 'test-key',
@@ -905,7 +936,8 @@ describe('Toggly Service', () => {
 
     it('subscribeFeaturesRefresh continues when a listener throws', async () => {
       const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) });
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) });
       const service = new Toggly();
       service.init({
         appKey: 't',

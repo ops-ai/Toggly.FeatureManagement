@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-node-core",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Core Toggly feature flags SDK for Node.js - zero browser dependencies",
   "keywords": [
     "feature-flags",

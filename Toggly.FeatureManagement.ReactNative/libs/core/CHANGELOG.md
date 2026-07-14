@@ -1,3 +1,22 @@
+## 1.6.0
+
+2026-07-13
+
+### Fixed
+- Clear persisted JWKS on `signing-key-updated` and `clearCache` so retired keys
+  cannot remain trusted after rotation (awaits storage delete before refresh).
+- Reject empty `signature`/`kid` in signed envelopes.
+- Harden signed-defs verification: top-level-only `defs` extraction, apply
+  verified raw bytes (not `envelope.defs`), and accept DER→P1363 on WebCrypto.
+- Signed definitions verification now uses exact raw `defs` JSON and Web Crypto
+  **double SHA-256** (pre-hash then `subtle.verify` ECDSA SHA-256), matching
+  Toggly.Definitions / Go / Node. Previously `JSON.stringify(flags)` + a single
+  hash rejected every production signature when `verifySignatures` was enabled.
+
+### Added
+- `signedDefsVerify` helpers and regression tests (accept double-hash, reject
+  single-hash / re-serialized defs / empty envelope fields).
+
 # Changelog
 
 ## 1.5.0

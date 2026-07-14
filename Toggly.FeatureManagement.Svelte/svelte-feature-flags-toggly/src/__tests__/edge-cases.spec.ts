@@ -39,6 +39,7 @@ describe('Edge Cases & Error Handling', () => {
         ok: false,
         status: 500,
         json: () => Promise.resolve({}),
+        text: () => Promise.resolve(JSON.stringify({})),
       } as any);
 
       await createToggly({
@@ -97,6 +98,7 @@ describe('Edge Cases & Error Handling', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve(null),
+        text: () => Promise.resolve(JSON.stringify(null)),
       } as any);
 
       await createToggly({
@@ -113,6 +115,7 @@ describe('Edge Cases & Error Handling', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({}),
+        text: () => Promise.resolve(JSON.stringify({})),
       } as any);
 
       await createToggly({
@@ -151,6 +154,7 @@ describe('Edge Cases & Error Handling', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
         } as any)
         .mockRejectedValueOnce(new Error('network down'));
 
@@ -172,6 +176,7 @@ describe('Edge Cases & Error Handling', () => {
         status: 403,
         statusText: 'Forbidden',
         json: () => Promise.resolve({ defs: { BadFlag: true } }),
+        text: () => Promise.resolve(JSON.stringify({ defs: { BadFlag: true } })),
       } as any);
 
       const service = new Toggly({
@@ -192,6 +197,7 @@ describe('Edge Cases & Error Handling', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({}),
+        text: () => Promise.resolve(JSON.stringify({})),
       } as any);
 
       const service = new Toggly({
@@ -373,6 +379,7 @@ describe('Edge Cases & Error Handling', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as any);
 
       await createToggly({

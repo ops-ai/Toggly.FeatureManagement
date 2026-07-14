@@ -35,6 +35,7 @@ import {
 import { buildDefinitionFetchHeaders } from './sdk-identity.js'
 import {
   parseSignedEnvelope,
+  parseDefinitionsFromRaw,
   verifySignedDefinitions,
   type JwkSet,
 } from './verify.js'
@@ -117,6 +118,14 @@ export function createTogglyClient(
     cachedJwksExpiry = 0
   }
 
+  async function clearPersistedJwks(): Promise<void> {
+    clearJwksCache()
+    if (cache) {
+      // Retired signing keys must not rehydrate from durable cache after rotation.
+      await cache.clear(CACHE_KEYS.JWKS)
+    }
+  }
+
   async function reportError(error: Error, context: string): Promise<void> {
     state.error = error
     await hookExecutor.executeOnError(error, context)
@@ -174,12 +183,15 @@ export function createTogglyClient(
     }
     refreshDebounceTimer = setTimeout(() => {
       refreshDebounceTimer = null
-      if (forceJwksRefresh) {
-        clearJwksCache()
-        cachedDefinitionsRevision = null
-        state.etag = null
+      const run = async () => {
+        if (forceJwksRefresh) {
+          await clearPersistedJwks()
+          cachedDefinitionsRevision = null
+          state.etag = null
+        }
+        await refresh()
       }
-      refresh().catch((error) => {
+      run().catch((error) => {
         logger.error('WebSocket-triggered refresh failed:', error)
       })
     }, REFRESH_DEBOUNCE_MS)
@@ -287,15 +299,15 @@ export function createTogglyClient(
 
       if (config.verifySignatures) {
         const { envelope, defsRaw } = parseSignedEnvelope(bodyText)
-        if (envelope.signature && envelope.kid) {
-          const jwks = await loadOrFetchJwks()
-          verifySignedDefinitions(defsRaw, envelope, jwks, config.allowedKeyIds)
-        }
+        const jwks = await loadOrFetchJwks()
+        verifySignedDefinitions(defsRaw, envelope, jwks, config.allowedKeyIds)
 
-        if (envelope.defs && typeof envelope.defs === 'object' && !Array.isArray(envelope.defs)) {
-          Object.assign(features, envelope.defs as FeatureDefinitions)
-        } else if (Array.isArray(envelope.defs)) {
-          for (const definition of envelope.defs as Array<{
+        // Apply verified raw bytes — never envelope.defs from the outer parse.
+        const defs = parseDefinitionsFromRaw(defsRaw)
+        if (defs && typeof defs === 'object' && !Array.isArray(defs)) {
+          Object.assign(features, defs as FeatureDefinitions)
+        } else if (Array.isArray(defs)) {
+          for (const definition of defs as Array<{
             featureKey: string
             filters?: Array<{ name?: string }>
           }>) {

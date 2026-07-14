@@ -127,6 +127,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ ApiFlag: true }),
+        text: () => Promise.resolve(JSON.stringify({ ApiFlag: true })),
       });
 
       const service = new Toggly({
@@ -179,6 +180,7 @@ describe('Toggly Service', () => {
         status: 403,
         statusText: 'Forbidden',
         json: () => Promise.resolve({ error: 'forbidden' }),
+        text: () => Promise.resolve(JSON.stringify({ error: 'forbidden' })),
       });
       const onError = jest.fn();
 
@@ -200,6 +202,7 @@ describe('Toggly Service', () => {
         status: 500,
         statusText: 'Internal Server Error',
         json: () => Promise.resolve({ error: 'server error' }),
+        text: () => Promise.resolve(JSON.stringify({ error: 'server error' })),
       });
 
       const service = new Toggly({
@@ -229,6 +232,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -250,6 +254,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -282,12 +287,14 @@ describe('Toggly Service', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
         })
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: false }),
+          text: () => Promise.resolve(JSON.stringify({ F1: false })),
         });
 
       const service = new Toggly({
@@ -311,6 +318,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -340,6 +348,9 @@ describe('Toggly Service', () => {
           Promise.resolve({
             defs: { V: { enabled: true, variant: 'A' } },
           }),
+        text: () => Promise.resolve(JSON.stringify({
+            defs: { V: { enabled: true, variant: 'A' } },
+          })),
       });
 
       const service = new Toggly({
@@ -368,6 +379,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -387,6 +399,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -407,6 +420,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -463,6 +477,7 @@ describe('Toggly Service', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
         }))
       );
 
@@ -492,6 +507,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -513,6 +529,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       let refreshedFlags: any = null;
@@ -554,6 +571,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ ApiFlag: true }),
+        text: () => Promise.resolve(JSON.stringify({ ApiFlag: true })),
       });
 
       const service = new Toggly({
@@ -804,6 +822,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ RemoteFlag: true }),
+        text: () => Promise.resolve(JSON.stringify({ RemoteFlag: true })),
       });
 
       const service = new Toggly({
@@ -1047,6 +1066,7 @@ describe('Toggly Service', () => {
         statusText: 'OK',
         headers: { get: () => 'new-rev' },
         json: () => Promise.resolve({ defs: { F1: false } }),
+        text: () => Promise.resolve(JSON.stringify({ defs: { F1: false } })),
       });
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({
@@ -1147,6 +1167,7 @@ describe('Toggly Service', () => {
         statusText: 'OK',
         headers: { get: () => 'new-rev' },
         json: () => Promise.resolve({ defs: { F1: false } }),
+        text: () => Promise.resolve(JSON.stringify({ defs: { F1: false } })),
       });
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({
@@ -1165,6 +1186,7 @@ describe('Toggly Service', () => {
         statusText: 'OK',
         headers: { get: () => 'rev-new' },
         json: () => Promise.resolve({ defs: { F1: false } }),
+        text: () => Promise.resolve(JSON.stringify({ defs: { F1: false } })),
       });
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({
@@ -1237,7 +1259,8 @@ describe('Toggly Service', () => {
       (service as any)._features = { F1: true };
       service._wsConnected = true;
       service._lastFallbackRefresh = Date.now();
-      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: false }) });
+      mockFetch.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: false }),
+      text: () => Promise.resolve(JSON.stringify({ F1: false })) });
 
       await service._loadFeatures();
       expect(mockFetch).not.toHaveBeenCalled();
@@ -1270,6 +1293,11 @@ describe('Toggly Service', () => {
               V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
             },
           }),
+        text: () => Promise.resolve(JSON.stringify({
+            defs: {
+              V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+            },
+          })),
       });
 
       const service = new Toggly({
@@ -1294,6 +1322,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ defs: {} }),
+        text: () => Promise.resolve(JSON.stringify({ defs: {} })),
       });
 
       const service = new Toggly({
@@ -1335,6 +1364,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -1355,6 +1385,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -1402,6 +1433,7 @@ describe('Toggly Service', () => {
         status: 500,
         statusText: 'Internal Server Error',
         json: () => Promise.resolve({ error: 'server error' }),
+        text: () => Promise.resolve(JSON.stringify({ error: 'server error' })),
       });
 
       const service = new Toggly({
@@ -1425,6 +1457,7 @@ describe('Toggly Service', () => {
         status: 500,
         statusText: 'Internal Server Error',
         json: () => Promise.resolve({ error: 'server error' }),
+        text: () => Promise.resolve(JSON.stringify({ error: 'server error' })),
       });
 
       const service = new Toggly({
@@ -1445,6 +1478,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ defs: { V: { enabled: true } } }),
+        text: () => Promise.resolve(JSON.stringify({ defs: { V: { enabled: true } } })),
       });
 
       const service = new Toggly({
@@ -1464,6 +1498,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ defs: { V: { enabled: true, variant: 'A' } } }),
+        text: () => Promise.resolve(JSON.stringify({ defs: { V: { enabled: true, variant: 'A' } } })),
       });
 
       const service = new Toggly({
@@ -1488,6 +1523,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -1546,6 +1582,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve([]),
+        text: () => Promise.resolve(JSON.stringify([])),
       });
 
       const service = new Toggly({
@@ -1566,6 +1603,7 @@ describe('Toggly Service', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ defs: { V: { enabled: true, variant: 'A' } } }),
+          text: () => Promise.resolve(JSON.stringify({ defs: { V: { enabled: true, variant: 'A' } } })),
         })
         .mockRejectedValueOnce(new Error('network'));
 
@@ -1590,6 +1628,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const service = new Toggly({
@@ -1613,6 +1652,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ ApiV2Checkout: true, Other: true }),
+        text: () => Promise.resolve(JSON.stringify({ ApiV2Checkout: true, Other: true })),
       });
 
       let gateEnabled = false;
@@ -1639,6 +1679,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ ApiV2Checkout: true }),
+        text: () => Promise.resolve(JSON.stringify({ ApiV2Checkout: true })),
       });
 
       let gateEnabled = true;

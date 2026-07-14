@@ -42,6 +42,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as Response);
       const toggly = new Toggly({ appKey: 'test-key' });
       expect(warnSpy).toHaveBeenCalledWith(
@@ -99,6 +100,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true, F2: false }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true, F2: false })),
       } as Response);
       vi.spyOn(console, 'warn').mockImplementation(() => {});
     });
@@ -185,6 +187,7 @@ describe('Toggly Service', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
         })) as any
       );
 
@@ -242,6 +245,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as Response);
       vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -272,6 +276,11 @@ describe('Toggly Service', () => {
               V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
             },
           }),
+        text: () => Promise.resolve(JSON.stringify({
+            defs: {
+              V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+            },
+          })),
       } as Response);
       vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -296,6 +305,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ defs: {} }),
+        text: () => Promise.resolve(JSON.stringify({ defs: {} })),
       } as Response);
       vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -332,6 +342,9 @@ describe('Toggly Service', () => {
           Promise.resolve({
             defs: { V: { enabled: true, variant: 'B' } },
           }),
+        text: () => Promise.resolve(JSON.stringify({
+            defs: { V: { enabled: true, variant: 'B' } },
+          })),
       } as Response);
       vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -553,6 +566,7 @@ describe('Toggly Service', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
         } as Response)
         .mockRejectedValueOnce(new Error('fail'));
       vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -584,6 +598,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as Response);
 
       const toggly = new Toggly({
@@ -612,6 +627,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as Response);
 
       const toggly = new Toggly({
@@ -634,6 +650,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as Response);
 
       const toggly = new Toggly({
@@ -657,6 +674,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: false }),
+        text: () => Promise.resolve(JSON.stringify({ F1: false })),
       } as Response);
 
       const toggly = new Toggly({
@@ -682,6 +700,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as Response);
 
       const toggly = new Toggly({
@@ -706,6 +725,7 @@ describe('Toggly Service', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
           headers: { get: () => '"rev-1"' },
         } as Response)
         .mockResolvedValueOnce({
@@ -713,6 +733,7 @@ describe('Toggly Service', () => {
           status: 304,
           statusText: 'Not Modified',
           json: () => Promise.resolve({}),
+          text: () => Promise.resolve(JSON.stringify({})),
           headers: { get: () => null },
         } as Response);
 
@@ -759,6 +780,7 @@ describe('Toggly Service', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as Response);
     });
 

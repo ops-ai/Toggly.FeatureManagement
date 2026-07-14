@@ -183,6 +183,11 @@ describe('Feature Component', () => {
               Rollout: { enabled: true, variant: 'B' },
             },
           }),
+        text: () => Promise.resolve(JSON.stringify({
+            defs: {
+              Rollout: { enabled: true, variant: 'B' },
+            },
+          })),
       });
 
       const variantService = new Toggly({
@@ -215,6 +220,11 @@ describe('Feature Component', () => {
               Rollout: { enabled: true, variant: 'A' },
             },
           }),
+        text: () => Promise.resolve(JSON.stringify({
+            defs: {
+              Rollout: { enabled: true, variant: 'A' },
+            },
+          })),
       });
 
       const variantService = new Toggly({

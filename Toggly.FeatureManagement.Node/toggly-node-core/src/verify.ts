@@ -38,31 +38,97 @@ export interface JwkSet {
 }
 
 /**
- * Extract the exact raw JSON text of a top-level property without re-serializing.
+ * Extract the exact raw JSON text of a **top-level** property only.
+ * Nested keys (e.g. data.defs) are ignored so unsigned outer fields cannot
+ * be swapped in after verifying nested signed bytes.
  */
 export function extractRawJsonProperty(text: string, key: string): string | null {
-  const keyPattern = new RegExp(`"${key}"\\s*:\\s*`)
-  const match = keyPattern.exec(text)
-  if (!match) {
+  let index = 0
+  let depth = 0
+  let inString = false
+  let escape = false
+
+  while (index < text.length) {
+    const character = text[index]!
+    if (inString) {
+      if (escape) {
+        escape = false
+      } else if (character === '\\') {
+        escape = true
+      } else if (character === '"') {
+        inString = false
+      }
+      index += 1
+      continue
+    }
+
+    if (character === '"') {
+      if (depth === 1) {
+        const keyEnd = findStringEnd(text, index)
+        if (keyEnd == null) {
+          return null
+        }
+        const propertyName = text.slice(index + 1, keyEnd)
+        let valueStart = keyEnd + 1
+        while (valueStart < text.length && /\s/.test(text[valueStart]!)) {
+          valueStart += 1
+        }
+        if (propertyName === key && valueStart < text.length && text[valueStart] === ':') {
+          valueStart += 1
+          while (valueStart < text.length && /\s/.test(text[valueStart]!)) {
+            valueStart += 1
+          }
+          return extractJsonValue(text, valueStart)
+        }
+        index = keyEnd + 1
+        continue
+      }
+      inString = true
+      index += 1
+      continue
+    }
+
+    if (character === '{' || character === '[') {
+      depth += 1
+    } else if (character === '}' || character === ']') {
+      depth -= 1
+    }
+    index += 1
+  }
+
+  return null
+}
+
+function findStringEnd(text: string, startQuote: number): number | null {
+  let escape = false
+  for (let i = startQuote + 1; i < text.length; i++) {
+    const c = text[i]!
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (c === '\\') {
+      escape = true
+      continue
+    }
+    if (c === '"') {
+      return i
+    }
+  }
+  return null
+}
+
+function extractJsonValue(text: string, start: number): string | null {
+  if (start >= text.length) {
     return null
   }
 
-  let i = match.index + match[0].length
-  while (i < text.length && /\s/.test(text[i]!)) {
-    i += 1
-  }
-  if (i >= text.length) {
-    return null
-  }
-
-  const start = i
-  const first = text[i]!
-
+  const first = text[start]!
   if (first === '{' || first === '[') {
     let depth = 0
     let inString = false
     let escape = false
-    for (let j = i; j < text.length; j++) {
+    for (let j = start; j < text.length; j++) {
       const c = text[j]!
       if (inString) {
         if (escape) {
@@ -89,27 +155,12 @@ export function extractRawJsonProperty(text: string, key: string): string | null
   }
 
   if (first === '"') {
-    let escape = false
-    for (let j = i + 1; j < text.length; j++) {
-      const c = text[j]!
-      if (escape) {
-        escape = false
-        continue
-      }
-      if (c === '\\') {
-        escape = true
-        continue
-      }
-      if (c === '"') {
-        return text.slice(start, j + 1)
-      }
-    }
-    return null
+    const end = findStringEnd(text, start)
+    return end == null ? null : text.slice(start, end + 1)
   }
 
-  // number / true / false / null
-  let j = i
-  while (j < text.length && /[^\s,\}\]]/.test(text[j]!)) {
+  let j = start
+  while (j < text.length && /[^\s,}\]]/.test(text[j]!)) {
     j += 1
   }
   return text.slice(start, j)
@@ -124,7 +175,9 @@ export function parseSignedEnvelope(bodyText: string): {
     parsed == null ||
     typeof parsed !== 'object' ||
     typeof parsed.signature !== 'string' ||
+    parsed.signature.length === 0 ||
     typeof parsed.kid !== 'string' ||
+    parsed.kid.length === 0 ||
     typeof parsed.timestamp !== 'number'
   ) {
     throw new Error('Invalid signed definitions envelope')
@@ -136,6 +189,11 @@ export function parseSignedEnvelope(bodyText: string): {
   }
 
   return { envelope: parsed, defsRaw }
+}
+
+/** Parse the verified raw defs JSON — never use envelope.defs after verify. */
+export function parseDefinitionsFromRaw(defsRaw: string): unknown {
+  return JSON.parse(defsRaw)
 }
 
 function doubleSha256(payload: string): Buffer {
@@ -195,6 +253,9 @@ export function validateAndParseEs256Key(
 
 /**
  * Verify a signed definitions / evaluated-signed envelope using raw defs bytes.
+ *
+ * After a successful verify, callers MUST apply `parseDefinitionsFromRaw(defsRaw)`
+ * — never `envelope.defs` from JSON.parse of the outer body.
  */
 export function verifySignedDefinitions(
   defsRaw: string,

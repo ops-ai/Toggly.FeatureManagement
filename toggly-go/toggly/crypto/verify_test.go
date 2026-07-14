@@ -144,6 +144,48 @@ func TestVerifySignedDefinitions_BadSignature(t *testing.T) {
 	}
 }
 
+func TestVerifySignedDefinitions_RejectsSingleHash(t *testing.T) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+
+	xBytes := pad32(priv.X.Bytes())
+	yBytes := pad32(priv.Y.Bytes())
+	kid := computeKid(xBytes, yBytes)
+
+	jwk := definitions.JWK{
+		Kty: "EC",
+		Use: "sig",
+		Alg: "ES256",
+		Crv: "P-256",
+		X:   base64.RawURLEncoding.EncodeToString(xBytes),
+		Y:   base64.RawURLEncoding.EncodeToString(yBytes),
+		Kid: kid,
+	}
+	jwks := &definitions.JWKSet{Keys: []definitions.JWK{jwk}}
+
+	defs := []byte(`{"PresalePhotos":true}`)
+	ts := int64(1783915396)
+	payload := string(defs) + "|" + strconv.FormatInt(ts, 10)
+	first := sha256.Sum256([]byte(payload))
+	sig, err := signP1363(priv, first[:])
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	env := &definitions.SignedDefinitionsResponse{
+		Defs:      defs,
+		Signature: base64.StdEncoding.EncodeToString(sig),
+		Timestamp: ts,
+		Kid:       kid,
+	}
+
+	if err := VerifySignedDefinitions(env, jwks, nil); err == nil {
+		t.Fatalf("expected single-SHA256 signature to be rejected")
+	}
+}
+
 func pad32(b []byte) []byte {
 	if len(b) >= 32 {
 		return b

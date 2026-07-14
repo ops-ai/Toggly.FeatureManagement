@@ -1,3 +1,23 @@
+## 0.3.1
+
+2026-07-13
+
+### Fixed
+- Always verify when `verifySignatures` is enabled (empty `signature`/`kid` no longer
+  bypasses crypto and applies unsigned defs).
+- `parseSignedEnvelope` rejects empty `signature` or `kid`.
+- Clear durable JWKS cache on `signing-key-updated` (not only in-memory), so retired
+  keys cannot rehydrate after rotation.
+- `extractRawJsonProperty` only matches top-level keys (depth==1), so nested
+  `data.defs` cannot be mistaken for the signed payload.
+- After signature verify, the client applies flags from `parseDefinitionsFromRaw(defsRaw)`
+  (verified bytes), never `envelope.defs` from the outer JSON parse.
+
+### Added
+- Regression test rejecting single-SHA256 signatures (double-hash contract).
+- Public `parseDefinitionsFromRaw` helper for applying verified defs bytes.
+- Client regression: empty signature with `verifySignatures` falls back to defaults.
+
 # Changelog
 
 ## 0.3.0

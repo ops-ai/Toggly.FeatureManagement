@@ -83,6 +83,7 @@ describe('Edge Cases & Error Handling', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve(null),
+        text: () => Promise.resolve(JSON.stringify(null)),
       });
 
       const service = new Toggly().init({
@@ -99,6 +100,7 @@ describe('Edge Cases & Error Handling', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({}),
+        text: () => Promise.resolve(JSON.stringify({})),
       });
 
       const service = new Toggly().init({
@@ -251,6 +253,7 @@ describe('Edge Cases & Error Handling', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const [r1, r2] = await Promise.all([p1, p2]);

@@ -58,6 +58,7 @@ export {
 export {
   extractRawJsonProperty,
   parseSignedEnvelope,
+  parseDefinitionsFromRaw,
   verifySignedDefinitions,
   validateAndParseEs256Key,
 } from './verify.js'

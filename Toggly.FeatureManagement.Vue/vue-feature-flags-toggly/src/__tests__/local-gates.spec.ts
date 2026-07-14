@@ -22,6 +22,7 @@ describe('Local gates', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ ApiV2Checkout: true, Other: true }),
+        text: () => Promise.resolve(JSON.stringify({ ApiV2Checkout: true, Other: true })),
     });
 
     let gateEnabled = false;
@@ -49,6 +50,7 @@ describe('Local gates', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ ApiV2Checkout: true }),
+        text: () => Promise.resolve(JSON.stringify({ ApiV2Checkout: true })),
     });
 
     let gateEnabled = true;

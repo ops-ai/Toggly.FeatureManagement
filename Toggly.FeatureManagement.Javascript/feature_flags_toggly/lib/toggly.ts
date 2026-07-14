@@ -30,6 +30,12 @@ import {
   type WsSyncMessage,
 } from './ws-sync';
 import { buildDefinitionFetchHeaders } from './sdk-identity';
+import {
+  parseDefinitionsFromRaw,
+  parseSignedEnvelope,
+  verifySignedDefinitions,
+  type JwkSet,
+} from './signed-defs-verify';
 
 const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
@@ -38,6 +44,7 @@ export class Toggly {
   private static _refreshInterval: number | undefined;
   private static _hookExecutor = new HookExecutor();
   private static _localGates: LocalGate[] = [];
+  private static _inMemoryJwks: JwkSet | null = null;
   private static _localGateIndex: FlagGateIndex = new Map();
   private static _localGatesChangedListeners = new Set<() => void>();
   private static _inMemoryFlags: { [key: string]: boolean } | null = null;
@@ -98,6 +105,7 @@ export class Toggly {
       if (forceJwksRefresh && Toggly._config.verifySignatures) {
         // Force re-fetch by clearing revision so signing key rotation always pulls fresh defs.
         Toggly._cachedDefinitionsRevision = null;
+        Toggly._inMemoryJwks = null;
       }
       Toggly.refresh();
     }, REFRESH_DEBOUNCE_MS);
@@ -344,6 +352,54 @@ export class Toggly {
     return url.toString();
   }
 
+  private static async fetchJwks(forceRefresh = false): Promise<JwkSet> {
+    if (!forceRefresh && Toggly._inMemoryJwks) {
+      return Toggly._inMemoryJwks;
+    }
+    const response = await fetch(`${Toggly._config.baseURI}/.well-known/jwks`, {
+      headers: Toggly.buildFetchHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch JWKs: ${response.status} ${response.statusText}`);
+    }
+    const jwks = (await response.json()) as JwkSet;
+    Toggly._inMemoryJwks = jwks;
+    return jwks;
+  }
+
+  /** Prefer text() for raw defs verification; fall back to json() for test doubles. */
+  private static async readResponseBody(response: Response): Promise<string> {
+    if (typeof response.text === 'function') {
+      return response.text();
+    }
+    return JSON.stringify(await response.json());
+  }
+
+  /**
+   * Parse evaluated-signed body. When verifySignatures is enabled, verify ES256
+   * against the exact raw defs JSON (Web Crypto double-hash), matching Go/Node.
+   */
+  private static async parseEvaluatedSignedBody(bodyText: string): Promise<{
+    defs: unknown;
+  }> {
+    if (!Toggly._config.verifySignatures) {
+      const payload = JSON.parse(bodyText) as { defs?: unknown };
+      return { defs: payload?.defs ?? payload };
+    }
+    const { envelope, defsRaw } = parseSignedEnvelope(bodyText);
+    const jwks = await Toggly.fetchJwks();
+    await verifySignedDefinitions(
+      defsRaw,
+      {
+        signature: envelope.signature,
+        timestamp: envelope.timestamp,
+        kid: envelope.kid,
+      },
+      jwks
+    );
+    return { defs: parseDefinitionsFromRaw(defsRaw) };
+  }
+
   private static get _cachedFeatureFlags(): { [key: string]: boolean } | null {
     if (!Toggly._persistCache) return null;
     try {
@@ -539,15 +595,16 @@ export class Toggly {
           if (!response.ok) {
             throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
           }
-          return response.json();
+          return Toggly.readResponseBody(response);
         })
-        .then((payload) => {
-          if (!payload) {
+        .then(async (bodyText) => {
+          if (!bodyText) {
             const flags = Toggly._getFallbackFlags();
             resolve(flags);
             return;
           }
-          const flags = (payload && payload.defs) ? payload.defs : payload;
+          const { defs } = await Toggly.parseEvaluatedSignedBody(bodyText);
+          const flags = (defs && typeof defs === 'object' ? defs : {}) as { [key: string]: boolean };
           Toggly.cacheFeatureFlags(flags);
           resolve(flags);
 
@@ -579,15 +636,19 @@ export class Toggly {
           if (!response.ok) {
             throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
           }
-          return response.json();
+          return Toggly.readResponseBody(response);
         })
-        .then((payload) => {
-          if (!payload) {
+        .then(async (bodyText) => {
+          if (!bodyText) {
             const flags = Toggly._getFallbackFlags();
             resolve(flags);
             return;
           }
-          const defs: { [key: string]: EvaluatedVariantDef } = (payload && payload.defs) ? payload.defs : payload;
+          const { defs: rawDefs } = await Toggly.parseEvaluatedSignedBody(bodyText);
+          const defs: { [key: string]: EvaluatedVariantDef } =
+            rawDefs && typeof rawDefs === 'object' && !Array.isArray(rawDefs)
+              ? (rawDefs as { [key: string]: EvaluatedVariantDef })
+              : {};
           Toggly.cacheVariants(defs);
 
           const boolFlags: { [key: string]: boolean } = {};

@@ -70,6 +70,7 @@ describe('maxCacheKeys LRU', () => {
       statusText: 'OK',
       headers: { get: () => null },
       json: () => Promise.resolve(flags),
+      text: () => Promise.resolve(JSON.stringify(flags)),
     } as any)
     await service.setContext({ identity })
   }
@@ -185,6 +186,9 @@ describe('maxCacheKeys LRU', () => {
         Promise.resolve({
           defs: { A: { enabled: true, variant: 'control' } },
         }),
+      text: () => Promise.resolve(JSON.stringify({
+          defs: { A: { enabled: true, variant: 'control' } },
+        })),
     } as any)
 
     TestBed.configureTestingModule({

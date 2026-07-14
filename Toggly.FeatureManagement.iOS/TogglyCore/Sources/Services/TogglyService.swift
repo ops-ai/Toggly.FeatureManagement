@@ -31,6 +31,10 @@ public actor TogglyService {
     private let wsReconnectDelay: TimeInterval = 5
     private var wsListenTask: Task<Void, Never>?
 
+    // MARK: - JWKS
+
+    private var inMemoryJwks: JwkSet?
+
     // MARK: - Event Handling
 
     private var eventListeners: [UUID: TogglyEventListener] = [:]
@@ -138,6 +142,7 @@ public actor TogglyService {
         eventListeners.removeAll()
         stateChangeHandlers.removeAll()
         features = nil
+        inMemoryJwks = nil
         isInitialized = false
     }
 
@@ -370,12 +375,7 @@ public actor TogglyService {
                 throw TogglyError.httpError(statusCode: httpResponse.statusCode)
             }
 
-            let flags: FeatureFlags
-            if let signedResponse = try? JSONDecoder().decode(SignedDefinitionsResponse.self, from: data) {
-                flags = signedResponse.defs ?? signedResponse.data ?? [:]
-            } else {
-                flags = try JSONDecoder().decode(FeatureFlags.self, from: data)
-            }
+            let flags = try await parseFeatureFlagsResponse(data)
 
             // Track changes
             let previousFlags = features
@@ -423,6 +423,66 @@ public actor TogglyService {
         }
 
         return URL(string: urlString)!
+    }
+
+    /// Parse definitions response. When `verifySignatures` is enabled, verify ES256
+    /// against the exact raw defs JSON (Security digest-level double-hash).
+    private func parseFeatureFlagsResponse(_ data: Data) async throws -> FeatureFlags {
+        if !config.verifySignatures {
+            if let signedResponse = try? JSONDecoder().decode(SignedDefinitionsResponse.self, from: data) {
+                return signedResponse.defs ?? signedResponse.data ?? [:]
+            }
+            return try JSONDecoder().decode(FeatureFlags.self, from: data)
+        }
+
+        guard let bodyText = String(data: data, encoding: .utf8) else {
+            throw TogglyError.invalidResponse
+        }
+
+        do {
+            let (envelope, defsRaw) = try SignedDefsVerify.parseSignedEnvelope(bodyText)
+            let jwks = try await fetchJwks()
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: defsRaw,
+                signature: envelope.signature,
+                timestamp: envelope.timestamp,
+                kid: envelope.kid,
+                jwks: jwks
+            )
+            // Apply verified raw bytes only — never re-decode envelope.defs/data.
+            return try SignedDefsVerify.parseDefinitions(defsRaw)
+        } catch let error as SignedDefsVerifyError {
+            throw TogglyError.signatureVerificationFailed(error.localizedDescription)
+        } catch let error as TogglyError {
+            throw error
+        } catch {
+            throw TogglyError.signatureVerificationFailed(error.localizedDescription)
+        }
+    }
+
+    private func fetchJwks(forceRefresh: Bool = false) async throws -> JwkSet {
+        if !forceRefresh, let cached = inMemoryJwks {
+            return cached
+        }
+
+        guard let url = URL(string: "\(config.baseURI)/.well-known/jwks") else {
+            throw TogglyError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = config.requestTimeout
+        request.setValue(SdkIdentity.userAgent, forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw TogglyError.httpError(statusCode: status)
+        }
+
+        let jwks = try JSONDecoder().decode(JwkSet.self, from: data)
+        inMemoryJwks = jwks
+        return jwks
     }
 
     private func waitForFeaturesLoaded() async {
@@ -594,6 +654,13 @@ public actor TogglyService {
         // Skip ping messages
         if type == "ping" { return }
 
+        // Key rotation: drop cached JWKS so the next verify uses fresh keys.
+        if type == "signing-key-updated" {
+            inMemoryJwks = nil
+            await refresh()
+            return
+        }
+
         // Refresh on flags-updated or update messages
         if type == "flags-updated" || type == "update" {
             await refresh()
@@ -663,6 +730,7 @@ private struct SignedDefinitionsResponse: Codable {
 public enum TogglyError: LocalizedError {
     case invalidResponse
     case httpError(statusCode: Int)
+    case signatureVerificationFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -670,6 +738,8 @@ public enum TogglyError: LocalizedError {
             return "Invalid response from server"
         case .httpError(let statusCode):
             return "HTTP error: \(statusCode)"
+        case .signatureVerificationFailed(let message):
+            return "Signature verification failed: \(message)"
         }
     }
 }

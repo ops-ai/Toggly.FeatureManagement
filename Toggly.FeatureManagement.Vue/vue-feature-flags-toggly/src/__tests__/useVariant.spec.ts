@@ -29,6 +29,11 @@ describe('useVariant', () => {
             MyFeature: { enabled: true, variant: 'B', configurationValue: 'hello' },
           },
         }),
+      text: () => Promise.resolve(JSON.stringify({
+          defs: {
+            MyFeature: { enabled: true, variant: 'B', configurationValue: 'hello' },
+          },
+        })),
     });
 
     const service = new Toggly();

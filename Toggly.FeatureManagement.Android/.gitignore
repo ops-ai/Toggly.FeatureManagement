@@ -14,6 +14,7 @@ local.properties
 
 # Kotlin
 *.kotlin_module
+.kotlin/
 
 # OS-specific
 .DS_Store

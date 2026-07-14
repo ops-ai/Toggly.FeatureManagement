@@ -95,6 +95,7 @@ describe('Edge Cases & Error Handling', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({}),
+          text: () => Promise.resolve(JSON.stringify({})),
         })
       );
 
@@ -221,6 +222,7 @@ describe('Edge Cases & Error Handling', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
         })
       );
 
@@ -267,6 +269,7 @@ describe('Edge Cases & Error Handling', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
       });
 
       const [r1, r2] = await Promise.all([p1, p2]);
@@ -299,6 +302,7 @@ describe('Edge Cases & Error Handling', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
         }),
         Promise.reject(new Error('network down')),
       );
@@ -341,6 +345,7 @@ describe('Edge Cases & Error Handling', () => {
           status: 403,
           statusText: 'Forbidden',
           json: () => Promise.resolve({ defs: { BadFlag: true } }),
+          text: () => Promise.resolve(JSON.stringify({ defs: { BadFlag: true } })),
         }),
       );
 
@@ -360,6 +365,7 @@ describe('Edge Cases & Error Handling', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
         }),
       );
 

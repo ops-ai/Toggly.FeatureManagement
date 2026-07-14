@@ -125,6 +125,7 @@ describe('createTogglyProvider', () => {
         status: 200,
         statusText: 'OK',
         json: () => Promise.resolve({ ApiFlag: true }),
+        text: () => Promise.resolve(JSON.stringify({ ApiFlag: true })),
     });
 
     const TogglyProvider = await createTogglyProvider({

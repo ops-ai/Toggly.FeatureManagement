@@ -3,6 +3,7 @@ import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 import {
   extractRawJsonProperty,
   parseSignedEnvelope,
+  parseDefinitionsFromRaw,
   verifySignedDefinitions,
   validateAndParseEs256Key,
   type Jwk,
@@ -55,6 +56,16 @@ function signP1363(
   })
 }
 
+function signDer(
+  privateKey: ReturnType<typeof generateKeyPairSync>['privateKey'],
+  hash: Buffer
+): Buffer {
+  return sign(null, hash, {
+    key: privateKey,
+    dsaEncoding: 'der',
+  })
+}
+
 describe('extractRawJsonProperty', () => {
   it('extracts exact defs bytes including compact formatting', () => {
     const body = '{"defs":{"a":1},"signature":"x","timestamp":1,"kid":"k"}'
@@ -64,6 +75,12 @@ describe('extractRawJsonProperty', () => {
   it('preserves whitespace inside defs', () => {
     const body = '{"defs":{\n  "a": 1\n},"signature":"x","timestamp":1,"kid":"k"}'
     expect(extractRawJsonProperty(body, 'defs')).toBe('{\n  "a": 1\n}')
+  })
+
+  it('ignores nested defs under data', () => {
+    const body =
+      '{"data":{"defs":{"innocent":true}},"defs":{"Evil":true},"signature":"x","timestamp":1,"kid":"k"}'
+    expect(extractRawJsonProperty(body, 'defs')).toBe('{"Evil":true}')
   })
 })
 
@@ -75,6 +92,20 @@ describe('verifySignedDefinitions', () => {
     const timestamp = 1730000000
     const payload = `${defs}|${timestamp}`
     const signature = signP1363(privateKey, doubleSha256(payload)).toString('base64')
+
+    expect(() =>
+      verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, jwks)
+    ).not.toThrow()
+  })
+
+  it('accepts DER signatures (Key Vault style)', () => {
+    const { privateKey, jwk } = makeSignedKey()
+    const jwks: JwkSet = { keys: [jwk] }
+    const defs = '{"PresalePhotos":true}'
+    const timestamp = 1783915396
+    const signature = signDer(privateKey, doubleSha256(`${defs}|${timestamp}`)).toString(
+      'base64'
+    )
 
     expect(() =>
       verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, jwks)
@@ -118,6 +149,19 @@ describe('verifySignedDefinitions', () => {
     ).toThrow(/invalid signature/)
   })
 
+  it('rejects single-SHA256 signatures (Web Crypto production mismatch)', () => {
+    const { privateKey, jwk } = makeSignedKey()
+    const jwks: JwkSet = { keys: [jwk] }
+    const defs = '{"PresalePhotos":true}'
+    const timestamp = 1783915396
+    const singleHash = createHash('sha256').update(`${defs}|${timestamp}`, 'utf8').digest()
+    const signature = signP1363(privateKey, singleHash).toString('base64')
+
+    expect(() =>
+      verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, jwks)
+    ).toThrow(/invalid signature/)
+  })
+
   it('enforces allowedKeyIds', () => {
     const { privateKey, jwk } = makeSignedKey()
     const jwks: JwkSet = { keys: [jwk] }
@@ -137,7 +181,7 @@ describe('verifySignedDefinitions', () => {
     ).toThrow(/kid not allowed/)
   })
 
-  it('parseSignedEnvelope keeps raw defs for verify', () => {
+  it('parseSignedEnvelope keeps raw defs for verify and apply', () => {
     const { privateKey, jwk } = makeSignedKey()
     const jwks: JwkSet = { keys: [jwk] }
     const defs = '{"feature-a":true}'
@@ -151,6 +195,36 @@ describe('verifySignedDefinitions', () => {
     const { envelope, defsRaw } = parseSignedEnvelope(body)
     expect(defsRaw).toBe(defs)
     verifySignedDefinitions(defsRaw, envelope, jwks)
+    expect(parseDefinitionsFromRaw(defsRaw)).toEqual({ 'feature-a': true })
+  })
+
+  it('nested innocent defs cannot authenticate unsigned outer defs', () => {
+    const { privateKey, jwk } = makeSignedKey()
+    const jwks: JwkSet = { keys: [jwk] }
+    const innocent = '{"innocent":true}'
+    const evil = '{"Evil":true}'
+    const timestamp = 99
+    // Signature covers nested/innocent bytes only.
+    const signature = signP1363(
+      privateKey,
+      doubleSha256(`${innocent}|${timestamp}`)
+    ).toString('base64')
+    const body = `{"data":{"defs":${innocent}},"defs":${evil},"signature":"${signature}","timestamp":${timestamp},"kid":"${jwk.kid}"}`
+
+    const { envelope, defsRaw } = parseSignedEnvelope(body)
+    expect(defsRaw).toBe(evil)
+    expect(() => verifySignedDefinitions(defsRaw, envelope, jwks)).toThrow(/invalid signature/)
+    // Callers must apply defsRaw after verify — never envelope.defs from a forged body alone.
+    expect(parseDefinitionsFromRaw(defsRaw)).toEqual({ Evil: true })
+  })
+
+  it('rejects empty signature or kid in the envelope', () => {
+    expect(() =>
+      parseSignedEnvelope('{"defs":{"a":1},"signature":"","timestamp":1,"kid":"k"}')
+    ).toThrow(/Invalid signed definitions envelope/)
+    expect(() =>
+      parseSignedEnvelope('{"defs":{"a":1},"signature":"x","timestamp":1,"kid":""}')
+    ).toThrow(/Invalid signed definitions envelope/)
   })
 })
 

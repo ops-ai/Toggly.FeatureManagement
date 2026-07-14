@@ -273,6 +273,7 @@ describe('TogglyService', () => {
     });
 
     it('should clear cache when requested', async () => {
+      await mockStorage.set('@toggly:jwks', '{"keys":[]}');
       service = new TogglyService({
         featureDefaults: { feature1: true },
         storage: mockStorage,
@@ -282,6 +283,7 @@ describe('TogglyService', () => {
       await service.clearCache();
 
       expect(service.currentFeatures).toBeNull();
+      expect(await mockStorage.get('@toggly:jwks')).toBeNull();
     });
   });
 
@@ -660,20 +662,24 @@ describe('TogglyService', () => {
 
     it('should handle signed definitions response', async () => {
       const mockSignedData = {
-        data: { signedFeature: true },
+        defs: { signedFeature: true },
         signature: 'mock-signature',
+        timestamp: 1,
+        kid: 'mock-kid',
       };
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: async () => mockSignedData,
+        text: async () => JSON.stringify(mockSignedData),
         headers: new Map(),
       });
 
       service = new TogglyService({
         appKey: 'test-key',
         useSignedDefinitions: true,
+        verifySignatures: false,
         storage: mockStorage,
       });
 

@@ -20,6 +20,7 @@ describe('Local gates', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ ApiV2Checkout: true, Other: true }),
+      text: () => Promise.resolve(JSON.stringify({ ApiV2Checkout: true, Other: true })),
     });
 
     let gateEnabled = false;
@@ -44,6 +45,7 @@ describe('Local gates', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ ApiV2Checkout: true }),
+      text: () => Promise.resolve(JSON.stringify({ ApiV2Checkout: true })),
     });
 
     let gateEnabled = true;

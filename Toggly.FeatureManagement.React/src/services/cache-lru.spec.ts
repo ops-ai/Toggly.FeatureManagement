@@ -19,6 +19,7 @@ function okResponse(body: unknown) {
     statusText: 'OK',
     headers: { get: () => null },
     json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
   }
 }
 

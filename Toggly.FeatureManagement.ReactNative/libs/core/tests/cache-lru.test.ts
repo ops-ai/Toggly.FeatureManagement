@@ -175,9 +175,11 @@ describe('maxCacheKeys LRU', () => {
     mockFetch.mockResolvedValueOnce(okResponse({ C: true }));
     await service.setContext({ identity: 'user-c' });
 
-    // deviceId / jwks are unrelated to feature-flag cache clears
+    // deviceId is unrelated to feature-flag LRU eviction
     expect(await storage.get('@toggly:deviceId')).toBe('device-keep');
-    expect(await storage.get('@toggly:jwks')).toBe('{"keys":[]}');
+    // JWKS is intentionally cleared by clearCache on context changes; it must
+    // never appear in the feature-flag LRU index.
+    expect(await storage.get('@toggly:jwks')).toBeNull();
 
     const index = JSON.parse((await storage.get(CACHE_LRU_KEY))!);
     expect(index.entries['@toggly:deviceId']).toBeUndefined();

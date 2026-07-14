@@ -139,7 +139,8 @@ describe('TogglyService', () => {
     });
 
     it('should fetch from API when appKey set', async () => {
-      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ ApiFlag: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ ApiFlag: true }),
+      text: () => Promise.resolve(JSON.stringify({ ApiFlag: true })) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Production' })],
       });
@@ -150,7 +151,8 @@ describe('TogglyService', () => {
     });
 
     it('should include identity in API URL', async () => {
-      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
           appKey: 'key', environment: 'Production', identity: 'user-1',
@@ -162,7 +164,8 @@ describe('TogglyService', () => {
     });
 
     it('should use custom baseURI', async () => {
-      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
           baseURI: 'https://custom.api', appKey: 'key', environment: 'Staging',
@@ -174,7 +177,8 @@ describe('TogglyService', () => {
     });
 
     it('should use customDefinitionsUrl when set', async () => {
-      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
           customDefinitionsUrl: 'https://my-custom.api/flags',
@@ -210,7 +214,8 @@ describe('TogglyService', () => {
     });
 
     it('should cache features after first load', async () => {
-      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Production' })],
       });
@@ -225,7 +230,8 @@ describe('TogglyService', () => {
       const slowPromise = new Promise((r) => { resolveFirst = r; });
 
       fetchSpy.and.returnValue(
-        slowPromise.then(() => ({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) }))
+        slowPromise.then(() => ({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })) }))
       );
 
       TestBed.configureTestingModule({
@@ -245,7 +251,8 @@ describe('TogglyService', () => {
     });
 
     it('should trigger afterRefresh hooks', async () => {
-      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }) } as any);
+      fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
+      text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any);
       let refreshed: any = null;
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
@@ -292,6 +299,7 @@ describe('TogglyService', () => {
         status: 503,
         statusText: 'Service Unavailable',
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as any);
 
       TestBed.configureTestingModule({
@@ -313,6 +321,7 @@ describe('TogglyService', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
           headers: { get: () => '"rev-1"' },
         } as any,
         {
@@ -320,6 +329,7 @@ describe('TogglyService', () => {
           status: 304,
           statusText: 'Not Modified',
           json: () => Promise.resolve({}),
+          text: () => Promise.resolve(JSON.stringify({})),
           headers: { get: () => null },
         } as any,
       );
@@ -345,6 +355,9 @@ describe('TogglyService', () => {
         json: () => Promise.resolve({
           defs: { Checkout: { enabled: true, variant: 'B' } },
         }),
+        text: () => Promise.resolve(JSON.stringify({
+          defs: { Checkout: { enabled: true, variant: 'B' } },
+        })),
       } as any);
 
       TestBed.configureTestingModule({
@@ -390,6 +403,7 @@ describe('TogglyService', () => {
           status: 200,
           statusText: 'OK',
           json: () => Promise.resolve({ F1: true }),
+          text: () => Promise.resolve(JSON.stringify({ F1: true })),
         }),
         Promise.reject(new Error('network down')),
       );
@@ -562,6 +576,9 @@ describe('TogglyService', () => {
           json: () => Promise.resolve({
           F1: { enabled: true, variant: 'treatment-a', configurationValue: { x: 1 } },
         }),
+          text: () => Promise.resolve(JSON.stringify({
+          F1: { enabled: true, variant: 'treatment-a', configurationValue: { x: 1 } },
+        })),
       } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
@@ -588,6 +605,9 @@ describe('TogglyService', () => {
           json: () => Promise.resolve({
           F1: { enabled: true },
         }),
+          text: () => Promise.resolve(JSON.stringify({
+          F1: { enabled: true },
+        })),
       } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
@@ -659,7 +679,8 @@ describe('TogglyService', () => {
     it('should default environment to Production in fetch URL', async () => {
       spyOn(console, 'warn');
       const fetchSpy = spyOn(globalThis, 'fetch').and.resolveTo(
-        { json: () => Promise.resolve({ F1: true }) } as any
+        { json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any
       );
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key' })],
@@ -678,6 +699,7 @@ describe('TogglyService', () => {
         ok: true,
         status: 200,
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as any);
 
       TestBed.configureTestingModule({
@@ -708,6 +730,7 @@ describe('TogglyService', () => {
         ok: true,
         status: 200,
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as any);
 
       TestBed.configureTestingModule({
@@ -732,6 +755,7 @@ describe('TogglyService', () => {
         ok: true,
         status: 200,
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as any);
 
       TestBed.configureTestingModule({
@@ -757,6 +781,7 @@ describe('TogglyService', () => {
         ok: true,
         status: 200,
         json: () => Promise.resolve({ F1: false }),
+        text: () => Promise.resolve(JSON.stringify({ F1: false })),
       } as any);
 
       TestBed.configureTestingModule({
@@ -785,6 +810,7 @@ describe('TogglyService', () => {
         ok: true,
         status: 200,
         json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })),
       } as any);
 
       TestBed.configureTestingModule({
@@ -842,7 +868,8 @@ describe('TogglyService', () => {
     async function createWsService(baseURI?: string) {
       TestBed.resetTestingModule();
       spyOn(globalThis, 'fetch').and.resolveTo(
-        { json: () => Promise.resolve({ F1: true }) } as any
+        { json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any
       );
       const config: any = { appKey: 'key', environment: 'Test' };
       if (baseURI) config.baseURI = baseURI;
@@ -885,7 +912,8 @@ describe('TogglyService', () => {
       (globalThis as any).WebSocket = function() { throw new Error('WS not supported'); };
       TestBed.resetTestingModule();
       spyOn(globalThis, 'fetch').and.resolveTo(
-        { json: () => Promise.resolve({ F1: true }) } as any
+        { json: () => Promise.resolve({ F1: true }),
+        text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any
       );
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Test' })],

@@ -667,6 +667,30 @@ describe('API request', () => {
     expect(client.state.error).not.toBeNull()
     expect(await client.isFeatureOn('fallback')).toBe(true)
   })
+
+  it('rejects empty signature when verifySignatures is enabled', async () => {
+    // Empty signature must not bypass verification and apply unsigned defs.
+    const body =
+      '{"defs":{"evil":true},"signature":"","timestamp":1,"kid":"some-kid"}'
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Map(),
+      text: async () => body,
+      json: async () => JSON.parse(body),
+    })
+
+    const client = createTogglyClient({
+      appKey: 'test-app',
+      verifySignatures: true,
+      featureDefaults: { fallback: true },
+    })
+    await client.init()
+
+    expect(await client.isFeatureOn('evil')).toBe(false)
+    expect(await client.isFeatureOn('fallback')).toBe(true)
+    expect(client.state.error).not.toBeNull()
+  })
 })
 
 describe('clearCache and reliability', () => {
