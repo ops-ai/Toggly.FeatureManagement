@@ -1,3 +1,11 @@
+## 1.6.1
+
+2026-07-14
+
+### Fixed
+- Configure webpack `resolve.fallback.crypto = false` so the browser bundle
+  builds while signed-defs verify still uses Node `crypto` under Jest.
+
 ## 1.6.0
 
 2026-07-13
