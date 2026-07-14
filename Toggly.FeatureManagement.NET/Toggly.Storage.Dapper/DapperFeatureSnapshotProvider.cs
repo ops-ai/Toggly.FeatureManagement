@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Toggly.FeatureManagement;
@@ -16,6 +17,10 @@ namespace Toggly.FeatureManagement.Storage.Dapper
     /// </summary>
     public class DapperFeatureSnapshotProvider : IFeatureSnapshotProvider
     {
+        private static readonly Regex SqlIdentifierRegex = new Regex(
+            @"^[A-Za-z_][A-Za-z0-9_]*$",
+            RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
         private readonly Func<IDbConnection> _connectionFactory;
         private readonly IOptions<TogglySnapshotSettings> _snapshotSettings;
         private bool _tableEnsured;
@@ -31,6 +36,20 @@ namespace Toggly.FeatureManagement.Storage.Dapper
         {
             _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
             _snapshotSettings = snapshotSettings;
+            ValidateTableName(_snapshotSettings.Value.TableName);
+        }
+
+        /// <summary>
+        /// Ensures <paramref name="tableName"/> is a safe SQL identifier (letters, digits, underscore).
+        /// </summary>
+        internal static void ValidateTableName(string tableName)
+        {
+            if (string.IsNullOrWhiteSpace(tableName) || tableName.Length > 128 || !SqlIdentifierRegex.IsMatch(tableName))
+            {
+                throw new ArgumentException(
+                    "TableName must be a SQL identifier: start with a letter or underscore, then letters/digits/underscores only (max 128 chars).",
+                    nameof(tableName));
+            }
         }
 
         private async Task EnsureTableExistsAsync()
@@ -84,6 +103,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
         private IEnumerable<string> GetEnsureColumnsSql()
         {
             var tableName = _snapshotSettings.Value.TableName;
+            ValidateTableName(tableName);
 
             return _snapshotSettings.Value.Provider switch
             {
@@ -114,6 +134,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
         private string GetCreateTableSql()
         {
             var tableName = _snapshotSettings.Value.TableName;
+            ValidateTableName(tableName);
 
             return _snapshotSettings.Value.Provider switch
             {
@@ -168,6 +189,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
         private string GetSelectSql(string id)
         {
             var tableName = _snapshotSettings.Value.TableName;
+            ValidateTableName(tableName);
 
             return _snapshotSettings.Value.Provider switch
             {
@@ -181,6 +203,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
         private string GetUpsertSql()
         {
             var tableName = _snapshotSettings.Value.TableName;
+            ValidateTableName(tableName);
 
             return _snapshotSettings.Value.Provider switch
             {
@@ -224,6 +247,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
         private string GetDeleteSql()
         {
             var tableName = _snapshotSettings.Value.TableName;
+            ValidateTableName(tableName);
 
             return _snapshotSettings.Value.Provider switch
             {

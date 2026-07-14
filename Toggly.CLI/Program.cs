@@ -8,11 +8,11 @@ var rootCommand = new RootCommand("Toggly CLI - Command-line interface for Toggl
 // Global options
 var clientIdOption = new Option<string?>(
     "--client-id",
-    description: "OAuth2 client ID");
+    description: "OAuth2 client ID (or set TOGGLY_CLIENT_ID)");
 
 var clientSecretOption = new Option<string?>(
     "--client-secret",
-    description: "OAuth2 client secret (required with --client-id)");
+    description: "OAuth2 client secret (or set TOGGLY_CLIENT_SECRET)");
 
 var authorityOption = new Option<string?>(
     "--authority",

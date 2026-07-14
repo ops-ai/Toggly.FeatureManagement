@@ -352,7 +352,7 @@ public class SignedSnapshotReliabilityTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadSnapshot_WithoutSignedDefsJson_LegacySoftLoadsFeatures()
+    public async Task LoadSnapshot_WithoutSignedDefsJson_RefusesToLoadFeatures()
     {
         var (_, kid, jwks, signature, defsJson, timestamp) = CreateSignedDefs();
         var features = ParseDefs(defsJson);
@@ -369,8 +369,10 @@ public class SignedSnapshotReliabilityTests : IDisposable
             timestamp);
 
         var result = await provider.GetFeatureDefinitionAsync("flag-a");
-        result.EnabledFor.Should().Contain(f => f.Name == "AlwaysOn");
+        // Fail closed: legacy snapshots without SignedDefsJson must not enable flags.
+        result.EnabledFor.Should().BeEmpty();
         onError.Should().NotBeNull().And.Contain("SignedDefsJson");
+        onError.Should().Contain("refusing to load");
         provider.GetDebugInfo().LastError.Should().Contain("SignedDefsJson");
     }
 

@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
 using Toggly.CLI.Models;
-using Toggly.CLI.Services;
 
 namespace Toggly.CLI;
 
@@ -10,7 +9,6 @@ namespace Toggly.CLI;
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     WriteIndented = false)]
-[JsonSerializable(typeof(TogglyConfig))]
 [JsonSerializable(typeof(CreateReleaseRequest))]
 [JsonSerializable(typeof(AssociateBuildRequest))]
 [JsonSerializable(typeof(ReleaseModel))]

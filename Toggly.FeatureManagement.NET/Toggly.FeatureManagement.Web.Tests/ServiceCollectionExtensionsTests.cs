@@ -304,7 +304,12 @@ public class ServiceCollectionExtensionsTests
         var settings = new TogglySettings
         {
             AppKey = "settings-app-key",
-            Environment = "Production"
+            Environment = "Production",
+            UseSignedDefinitions = true,
+            AllowedKeyIds = new HashSet<string> { "key1ES256" },
+            UndefinedEnabledOnDevelopment = true,
+            JwksCacheDuration = TimeSpan.FromHours(6),
+            DefinitionsBaseUrl = "https://definitions.example.test/"
         };
 
         // Act
@@ -317,6 +322,32 @@ public class ServiceCollectionExtensionsTests
         options.Should().NotBeNull();
         options!.Value.AppKey.Should().Be("settings-app-key");
         options.Value.Environment.Should().Be("Production");
+        options.Value.UseSignedDefinitions.Should().BeTrue();
+        options.Value.AllowedKeyIds.Should().Contain("key1ES256");
+        options.Value.UndefinedEnabledOnDevelopment.Should().BeTrue();
+        options.Value.JwksCacheDuration.Should().Be(TimeSpan.FromHours(6));
+        options.Value.DefinitionsBaseUrl.Should().Be("https://definitions.example.test/");
+    }
+
+    [Fact]
+    public void AddTogglyWeb_DefaultsToFailClosedMissingFeatureFilters()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        services.AddTogglyWeb(options =>
+        {
+            options.AppKey = "app-key";
+            options.Environment = "Production";
+        });
+
+        var serviceProvider = services.BuildServiceProvider();
+        var featureOptions = serviceProvider.GetRequiredService<IOptions<FeatureManagementOptions>>();
+
+        // Assert
+        featureOptions.Value.IgnoreMissingFeatureFilters.Should().BeFalse();
     }
 
     [Fact]

@@ -1,22 +1,22 @@
-using System.Text.Json;
 using Toggly.CLI.Models;
-using Toggly.CLI;
 
 namespace Toggly.CLI.Services;
 
 /// <summary>
-/// Service for managing configuration and credentials
+/// Resolves CLI auth configuration from command-line arguments and environment variables.
+/// Secrets are never persisted to disk.
 /// </summary>
 public class ConfigService
 {
-    private static readonly string ConfigDirectory = Path.Combine(
+    private static readonly string LegacyConfigDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".toggly");
-    
-    private static readonly string ConfigFilePath = Path.Combine(ConfigDirectory, "config.json");
+
+    private static readonly string LegacyConfigFilePath = Path.Combine(LegacyConfigDirectory, "config.json");
 
     /// <summary>
-    /// Load configuration from file, environment variables, and command-line arguments
+    /// Load configuration from command-line arguments and environment variables.
+    /// Priority: command-line arguments, then environment variables, then defaults for non-secret URLs.
     /// </summary>
     public TogglyConfig LoadConfig(
         string? clientId = null,
@@ -24,22 +24,23 @@ public class ConfigService
         string? authority = null,
         string? baseUrl = null)
     {
-        var config = LoadFromFile();
+        // Best-effort cleanup of the deprecated on-disk credential store.
+        RemoveLegacyConfigFile();
 
-        // Override with environment variables (lower priority than command-line)
+        var config = new TogglyConfig();
+
         if (string.IsNullOrEmpty(clientId))
             clientId = Environment.GetEnvironmentVariable("TOGGLY_CLIENT_ID");
-        
+
         if (string.IsNullOrEmpty(clientSecret))
             clientSecret = Environment.GetEnvironmentVariable("TOGGLY_CLIENT_SECRET");
-        
+
         if (string.IsNullOrEmpty(authority))
             authority = Environment.GetEnvironmentVariable("TOGGLY_AUTHORITY");
 
         if (string.IsNullOrEmpty(baseUrl))
             baseUrl = Environment.GetEnvironmentVariable("TOGGLY_BASE_URL");
 
-        // Override with command-line arguments (highest priority)
         if (!string.IsNullOrEmpty(clientId))
             config.ClientId = clientId;
 
@@ -52,7 +53,6 @@ public class ConfigService
         if (!string.IsNullOrEmpty(baseUrl))
             config.BaseUrl = baseUrl;
 
-        // Set defaults
         if (string.IsNullOrEmpty(config.BaseUrl))
             config.BaseUrl = "https://app.toggly.io/api";
 
@@ -63,49 +63,40 @@ public class ConfigService
     }
 
     /// <summary>
-    /// Save configuration to file
-    /// </summary>
-    public void SaveConfig(TogglyConfig config)
-    {
-        if (!Directory.Exists(ConfigDirectory))
-            Directory.CreateDirectory(ConfigDirectory);
-
-        // Serialize with indentation for readability
-        var options = new JsonSerializerOptions(TogglyJsonSerializerContext.Default.Options)
-        {
-            WriteIndented = true
-        };
-        var json = JsonSerializer.Serialize(config, typeof(TogglyConfig), new TogglyJsonSerializerContext(options));
-        File.WriteAllText(ConfigFilePath, json);
-    }
-
-    /// <summary>
-    /// Validate that OAuth2 credentials are specified
+    /// Validate that OAuth2 credentials are specified via CLI args or environment variables.
     /// </summary>
     public void ValidateAuthConfig(TogglyConfig config)
     {
         var hasOAuth2 = !string.IsNullOrEmpty(config.ClientId) && !string.IsNullOrEmpty(config.ClientSecret);
 
         if (!hasOAuth2)
-            throw new InvalidOperationException("No authentication method specified. Please provide --client-id and --client-secret.");
+        {
+            throw new InvalidOperationException(
+                "No authentication method specified. Provide --client-id and --client-secret, " +
+                "or set TOGGLY_CLIENT_ID and TOGGLY_CLIENT_SECRET environment variables.");
+        }
     }
 
-    private TogglyConfig LoadFromFile()
+    /// <summary>
+    /// Deletes the deprecated <c>~/.toggly/config.json</c> (and empty <c>~/.toggly</c> directory)
+    /// so plaintext client secrets are not left on disk.
+    /// </summary>
+    public static void RemoveLegacyConfigFile()
     {
-        if (!File.Exists(ConfigFilePath))
-            return new TogglyConfig();
-
         try
         {
-            var json = File.ReadAllText(ConfigFilePath);
-            var config = JsonSerializer.Deserialize<TogglyConfig>(json, TogglyJsonSerializerContext.Default.TogglyConfig);
-            return config ?? new TogglyConfig();
+            if (File.Exists(LegacyConfigFilePath))
+                File.Delete(LegacyConfigFilePath);
+
+            if (Directory.Exists(LegacyConfigDirectory) &&
+                !Directory.EnumerateFileSystemEntries(LegacyConfigDirectory).Any())
+            {
+                Directory.Delete(LegacyConfigDirectory);
+            }
         }
-        catch (JsonException)
+        catch
         {
-            // If config file is invalid, return default config
-            return new TogglyConfig();
+            // Best effort — credentials may still be provided via CLI/env.
         }
     }
 }
-

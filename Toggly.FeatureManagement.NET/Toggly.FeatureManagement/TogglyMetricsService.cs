@@ -335,7 +335,7 @@ namespace Toggly.FeatureManagement
         {
             return new MetricsDebugInfo
             {
-                AppKey = _appKey,
+                AppKey = AppKeySanitizer.Sanitize(_appKey),
                 BaseUrl = _baseUrl,
                 Environment = _environment,
                 //Stats = _stats,

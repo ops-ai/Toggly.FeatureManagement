@@ -207,7 +207,7 @@ app.UseForFeature(featureName, appBuilder =>
 
 ### Missing Feature Filters
 
-If a feature is configured to be enabled for a specific feature filter and that feature filter hasn't been registered, then an exception will be thrown when the feature is evaluated. The exception can be disabled by using the feature management options. 
+If a feature is configured to be enabled for a specific feature filter and that feature filter hasn't been registered, an exception is thrown when the feature is evaluated (fail closed). This is the default. Only opt into ignoring missing filters if you accept that risk:
 
 ``` C#
 services.Configure<FeatureManagementOptions>(options =>
@@ -285,8 +285,11 @@ builder.Services.AddTogglyWeb(options =>
     options.Environment = builder.Configuration["Toggly:Environment"]!;
     options.UseSignedDefinitions = true;
     options.AllowedKeyIds = new HashSet<string> { "key1ES256", "key2ES256" }; // Optional
+    // options.JwksCacheDuration = TimeSpan.FromDays(30); // Optional; default 30 days
 });
 ```
+
+> **Note:** `BaseUrl` and `DefinitionsBaseUrl` are trusted configuration. Only override them for deployments you control.
 
 #### How It Works
 
@@ -320,7 +323,7 @@ The implementation includes several optimizations:
    - Verified feature definitions
    - JWKS public keys
    - Latest verified timestamp
-2. 30-day caching of JWKS keys
+2. Configurable JWKS key caching (`JwksCacheDuration`, default 30 days)
 3. Efficient key lookup using key IDs
 4. Early validation checks before processing signatures
 
@@ -330,21 +333,24 @@ If you encounter issues with signed definitions:
 
 1. Ensure your application can access both:
    - The feature definitions endpoint (`https://definitions.toggly.io/definitions-signed/{appKey}/{environment}`)
-   - The JWKS endpoint (`https://app.toggly.io/.well-known/jwks`)
+   - The JWKS endpoint (`https://definitions.toggly.io/.well-known/jwks`)
 2. Check that your network allows HTTPS connections to these endpoints
-3. Enable debug logging to see detailed verification information:
+3. Enable debug logging for verification details and HTTP response bodies:
    ```csharp
    builder.Logging.AddFilter("Toggly.FeatureManagement", LogLevel.Debug);
    ```
 4. Verify that any whitelisted key IDs match the expected format (SHA1 hash + "ES256")
+5. If signed mode refuses a legacy snapshot missing `SignedDefsJson`, call `ClearPersistedSnapshotsAsync()` and refresh
 
 #### Best Practices
 
-1. Always use HTTPS in production environments
-2. Keep your Toggly app key secure
-3. Consider using environment-specific settings
-4. Monitor logs for signature verification failures
-5. Use key whitelisting in production environments
-6. Regularly rotate signing keys
+1. Enable `UseSignedDefinitions` in production when flags gate security-sensitive behavior
+2. Always use HTTPS in production environments
+3. Keep your Toggly app key secure
+4. Consider using environment-specific settings
+5. Monitor logs for signature verification failures
+6. Use key whitelisting (`AllowedKeyIds`) in production environments
+7. Regularly rotate signing keys
+8. Pair Hangfire `AddOrUpdateJob` registrations with signed definitions
 
 This ensures that your feature flags are securely managed and protected against tampering.

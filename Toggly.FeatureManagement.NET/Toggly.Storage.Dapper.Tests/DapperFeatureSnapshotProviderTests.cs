@@ -343,6 +343,21 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Constructor_ThrowsArgumentException_WhenTableNameIsUnsafe()
+    {
+        var unsafeSettings = Options.Create(new TogglySnapshotSettings
+        {
+            TableName = "TogglySnapshots; DROP TABLE Users--"
+        });
+
+        var act = () => new DapperFeatureSnapshotProvider(
+            () => new SqliteConnection(_connectionString),
+            unsafeSettings);
+
+        act.Should().Throw<ArgumentException>().WithParameterName("tableName");
+    }
+
+    [Fact]
     public void Constructor_ThrowsArgumentNullException_WhenConnectionFactoryIsNull()
     {
         // Act & Assert

@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.4.0
+
+2026-07-13
+
+### Fixed
+- `AddToggly(TogglySettings)` now copies `UseSignedDefinitions`, `AllowedKeyIds`, `UndefinedEnabledOnDevelopment`, `OnError`, and `JwksCacheDuration` (previously dropped silently).
+- Signed mode refuses snapshots missing `SignedDefsJson` instead of soft-loading unverified typed `Features`.
+- Dapper snapshot `TableName` is validated as a SQL identifier to prevent SQL injection via configuration.
+- Metrics and usage `GetDebugInfo()` mask the AppKey (same as the feature provider).
+- Definitions and JWKS HTTP error logs no longer include remote response bodies at Error level (bodies are Debug-only).
+
+### Changed
+- Missing feature filters fail closed by default (`IgnoreMissingFeatureFilters = false`). Opt in to ignore if needed.
+- Startup warns when `UseSignedDefinitions` is disabled.
+
+### Added
+- `TogglySettings.JwksCacheDuration` (default 30 days) to configure JWKS in-memory/snapshot cache TTL.
+- Documentation for trusted `BaseUrl` / `DefinitionsBaseUrl`, signed-defs recommendations, and Debug logging.
+
 ## 3.3.0
 
 2026-07-11

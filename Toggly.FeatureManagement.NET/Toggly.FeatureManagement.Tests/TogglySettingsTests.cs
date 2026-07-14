@@ -21,6 +21,7 @@ public class TogglySettingsTests
         settings.InstanceName.Should().BeNull();
         settings.UndefinedEnabledOnDevelopment.Should().BeFalse();
         settings.AllowedKeyIds.Should().BeNull();
+        settings.JwksCacheDuration.Should().Be(TimeSpan.FromDays(30));
     }
 
     [Fact]
@@ -37,7 +38,8 @@ public class TogglySettingsTests
             AppVersion = "1.0.0",
             InstanceName = "instance-1",
             UndefinedEnabledOnDevelopment = true,
-            AllowedKeyIds = new HashSet<string> { "key1", "key2" }
+            AllowedKeyIds = new HashSet<string> { "key1", "key2" },
+            JwksCacheDuration = TimeSpan.FromHours(12)
         };
 
         // Assert
@@ -51,6 +53,7 @@ public class TogglySettingsTests
         settings.UndefinedEnabledOnDevelopment.Should().BeTrue();
         settings.AllowedKeyIds.Should().Contain("key1");
         settings.AllowedKeyIds.Should().Contain("key2");
+        settings.JwksCacheDuration.Should().Be(TimeSpan.FromHours(12));
     }
 
     [Fact]

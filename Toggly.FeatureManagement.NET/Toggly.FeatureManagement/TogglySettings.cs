@@ -16,17 +16,21 @@ namespace Toggly.FeatureManagement
         public string Environment { get; set; } = "Production";
 
         /// <summary>
-        /// Use signed definitions to get feature updates
+        /// Use signed definitions to get feature updates.
+        /// Strongly recommended in production when flags gate security-sensitive behavior.
         /// </summary>
         public bool UseSignedDefinitions { get; set; }
 
         /// <summary>
-        /// Base URL of the toggly instance. Leave blank unless you have a reason to change
+        /// Base URL for metrics/usage gRPC (trusted configuration). Defaults to https://app.toggly.io/.
+        /// Only override for self-hosted or private deployments you control.
         /// </summary>
         public string? BaseUrl { get; set; }
 
         /// <summary>
-        /// Base URL for definitions and JWKS. Defaults to the Cloudflare worker.
+        /// Base URL for definitions, WebSocket, and JWKS (trusted configuration).
+        /// Defaults to https://definitions.toggly.io/. Only override for deployments you control;
+        /// a malicious value can redirect fetch/JWKS traffic (SSRF-style misconfiguration risk).
         /// </summary>
         public string? DefinitionsBaseUrl { get; set; }
 
@@ -49,9 +53,15 @@ namespace Toggly.FeatureManagement
         public bool UndefinedEnabledOnDevelopment { get; set; }
 
         /// <summary>
-        /// New property for whitelisting
+        /// Optional whitelist of JWKS key IDs trusted for signed definitions.
         /// </summary>
         public HashSet<string>? AllowedKeyIds { get; set; }
+
+        /// <summary>
+        /// How long verified JWKS keys are cached in memory and in the snapshot store.
+        /// Default is 30 days. Minimum effective value is 1 minute.
+        /// </summary>
+        public TimeSpan JwksCacheDuration { get; set; } = TimeSpan.FromDays(30);
 
         /// <summary>
         /// Optional callback invoked when fetch, cache, signature, JWKS, or storage

@@ -84,7 +84,7 @@ services.AddTogglyDapperSnapshotProvider(
     () => new SqlConnection(connectionString),
     options => {
         options.Provider = DatabaseProvider.SqlServer;
-        options.TableName = "MyFeatureSnapshots";    // Default: "TogglySnapshots"
+        options.TableName = "MyFeatureSnapshots";    // SQL identifier only (A-Z, a-z, 0-9, _)
         options.DocumentName = "my_features";        // Default: "toggly_features"
         options.JwkDocumentName = "my_jwks";         // Default: "toggly_jwks"
         options.AutoCreateTable = true;              // Default: true

@@ -44,16 +44,34 @@ namespace Toggly.FeatureManagement.Configuration
         /// <returns><paramref name="services"/> for chaining.</returns>
         public static IServiceCollection AddToggly(this IServiceCollection services, TogglySettings togglyOptions)
         {
+            if (togglyOptions == null)
+                throw new ArgumentNullException(nameof(togglyOptions));
+
             services.AddOptions<TogglySettings>()
                 .Configure(options =>
                 {
-                    if (!string.IsNullOrEmpty(togglyOptions.AppKey)) options.AppKey = togglyOptions.AppKey;
-                    options.BaseUrl = !string.IsNullOrEmpty(togglyOptions.BaseUrl) ? togglyOptions.BaseUrl : "https://app.toggly.io/";
+                    if (!string.IsNullOrEmpty(togglyOptions.AppKey))
+                        options.AppKey = togglyOptions.AppKey;
+                    options.BaseUrl = !string.IsNullOrEmpty(togglyOptions.BaseUrl)
+                        ? togglyOptions.BaseUrl
+                        : "https://app.toggly.io/";
                     if (!string.IsNullOrEmpty(togglyOptions.DefinitionsBaseUrl))
                         options.DefinitionsBaseUrl = togglyOptions.DefinitionsBaseUrl;
-                    if (!string.IsNullOrEmpty(togglyOptions.Environment)) options.Environment = togglyOptions.Environment;
-                    if (!string.IsNullOrEmpty(togglyOptions.AppVersion)) options.AppVersion = togglyOptions.AppVersion;
-                    if (!string.IsNullOrEmpty(togglyOptions.InstanceName)) options.InstanceName = togglyOptions.InstanceName;
+                    if (!string.IsNullOrEmpty(togglyOptions.Environment))
+                        options.Environment = togglyOptions.Environment;
+                    if (!string.IsNullOrEmpty(togglyOptions.AppVersion))
+                        options.AppVersion = togglyOptions.AppVersion;
+                    if (!string.IsNullOrEmpty(togglyOptions.InstanceName))
+                        options.InstanceName = togglyOptions.InstanceName;
+
+                    // Security-sensitive settings must be copied (previously dropped silently).
+                    options.UseSignedDefinitions = togglyOptions.UseSignedDefinitions;
+                    options.UndefinedEnabledOnDevelopment = togglyOptions.UndefinedEnabledOnDevelopment;
+                    options.JwksCacheDuration = togglyOptions.JwksCacheDuration;
+                    if (togglyOptions.AllowedKeyIds != null)
+                        options.AllowedKeyIds = togglyOptions.AllowedKeyIds;
+                    if (togglyOptions.OnError != null)
+                        options.OnError = togglyOptions.OnError;
                 });
 
             AddCoreServices(services);
@@ -163,9 +181,11 @@ namespace Toggly.FeatureManagement.Configuration
                 featureManagement.AddFeatureFilter<TargetingFilter>();
 
             services.Decorate<IFeatureManager, TogglyFeatureManager>();
+            // Fail closed: unknown filters throw instead of being ignored (which can enable flags).
+            // Opt into IgnoreMissingFeatureFilters = true only if you intentionally accept that risk.
             services.Configure<FeatureManagementOptions>(options =>
             {
-                options.IgnoreMissingFeatureFilters = true;
+                options.IgnoreMissingFeatureFilters = false;
             });
 
             return featureManagement;

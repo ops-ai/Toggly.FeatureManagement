@@ -37,7 +37,16 @@ namespace Toggly.FeatureManagement
 
         private readonly string _environment;
 
-        private string SanitizedAppKey => _appKey.Length > 6 ? $"***{_appKey[^6..]}" : "***";
+        private string SanitizedAppKey => AppKeySanitizer.Sanitize(_appKey);
+
+        private TimeSpan JwksCacheDuration
+        {
+            get
+            {
+                var configured = _settings.Value.JwksCacheDuration;
+                return configured < TimeSpan.FromMinutes(1) ? TimeSpan.FromMinutes(1) : configured;
+            }
+        }
 
         private volatile EntityTagHeaderValue? _lastETag = null;
 
@@ -154,6 +163,13 @@ namespace Toggly.FeatureManagement
                 _logger.LogInformation("Toggly initialized — DefinitionsUrl: {DefinitionsUrl}{DefinitionsPath}/{AppKey}/{Environment}, Signed: {UseSigned}",
                     definitionsUrl, definitionsPath, SanitizedAppKey, _environment, _useSignedDefinitions);
 
+            if (!_useSignedDefinitions)
+            {
+                _logger.LogWarning(
+                    "Toggly UseSignedDefinitions is disabled. Feature definitions are not cryptographically verified. " +
+                    "Enable UseSignedDefinitions (and optionally AllowedKeyIds) in production when flags gate security-sensitive behavior.");
+            }
+
             _timer = new Timer(TimerCallback, null, TimeSpan.Zero, _refreshInterval);
         }
 
@@ -235,17 +251,11 @@ namespace Toggly.FeatureManagement
 
                         featuresToApply = verifiedFeatures;
                     }
-                    else if (featuresToApply != null)
-                    {
-                        // Legacy snapshot without raw defs — soft-load typed features once.
-                        // The ongoing RefreshFeatures HTTP path upgrades the snapshot with SignedDefsJson.
-                        ReportError(
-                            "Snapshot is missing SignedDefsJson; loaded without cryptographic re-verification. Clear and refresh to upgrade the snapshot.",
-                            level: LogLevel.Warning);
-                    }
                     else
                     {
-                        ReportError("Snapshot is missing SignedDefsJson and Features");
+                        // Fail closed: typed Features alone are not trusted under signed mode.
+                        ReportError(
+                            "Snapshot is missing SignedDefsJson; refusing to load. Clear persisted snapshots and refresh to upgrade the snapshot.");
                         return;
                     }
                 }
@@ -863,37 +873,37 @@ namespace Toggly.FeatureManagement
                 // Best effort — response body may not be readable
             }
 
+            // Server response bodies can contain sensitive details; keep them at Debug only.
+            if (!string.IsNullOrEmpty(responseBody))
+                _logger.LogDebug("Definitions request error response body: {ResponseBody}", responseBody);
+
             var rawUrl = $"{response.RequestMessage?.RequestUri ?? new Uri(requestPath, UriKind.RelativeOrAbsolute)}";
             var sanitizedUrl = rawUrl.Replace(_appKey, SanitizedAppKey);
+            var bodyHintsEnvMismatch = responseBody.Contains("does not match", StringComparison.OrdinalIgnoreCase);
             var message = response.StatusCode switch
             {
                 HttpStatusCode.Forbidden =>
                     $"Access denied (403) fetching definitions from {sanitizedUrl}. " +
-                    (responseBody.Contains("does not match", StringComparison.OrdinalIgnoreCase)
+                    (bodyHintsEnvMismatch
                         ? $"The Environment \"{_environment}\" does not match the environment mapped to your AppKey. Verify the Environment name is correct and matches the app key configuration in your Toggly dashboard."
                         : $"This usually means you are using a Frontend/Mobile app key with the .NET SDK. The .NET SDK requires a Backend-type app key. " +
-                          "Check your AppKey type in the Toggly dashboard under App Settings > App Keys.") +
-                    (!string.IsNullOrEmpty(responseBody) ? $" Server response: {responseBody}" : string.Empty),
+                          "Check your AppKey type in the Toggly dashboard under App Settings > App Keys."),
 
                 HttpStatusCode.NotFound =>
                     $"Definitions not found (404) at {sanitizedUrl}. " +
                     $"Verify that AppKey \"{SanitizedAppKey}\" exists and Environment \"{_environment}\" is correct. " +
-                    "Check your app key in the Toggly dashboard under App Settings > App Keys." +
-                    (!string.IsNullOrEmpty(responseBody) ? $" Server response: {responseBody}" : string.Empty),
+                    "Check your app key in the Toggly dashboard under App Settings > App Keys.",
 
                 HttpStatusCode.Unauthorized =>
                     $"Authentication failed (401) fetching definitions from {sanitizedUrl}. " +
-                    "Verify your AppKey is valid and has not been revoked." +
-                    (!string.IsNullOrEmpty(responseBody) ? $" Server response: {responseBody}" : string.Empty),
+                    "Verify your AppKey is valid and has not been revoked.",
 
                 HttpStatusCode.BadRequest =>
-                    $"Bad request (400) fetching definitions from {sanitizedUrl}. " +
-                    (!string.IsNullOrEmpty(responseBody) ? $"Server response: {responseBody}" : "The request was malformed."),
+                    $"Bad request (400) fetching definitions from {sanitizedUrl}. The request was malformed.",
 
                 _ =>
                     $"HTTP {statusCode} ({response.StatusCode}) fetching definitions from {sanitizedUrl} " +
-                    $"for AppKey={SanitizedAppKey}, Environment={_environment}." +
-                    (!string.IsNullOrEmpty(responseBody) ? $" Server response: {responseBody}" : string.Empty)
+                    $"for AppKey={SanitizedAppKey}, Environment={_environment}."
             };
 
             ReportError(message);
@@ -1143,7 +1153,7 @@ namespace Toggly.FeatureManagement
                                 };
 
                                 ecdsa.ImportParameters(ecParameters);
-                                _ecDsaKeys.TryAdd(keyId, (ecdsa, DateTime.UtcNow.AddDays(30)));
+                                _ecDsaKeys.TryAdd(keyId, (ecdsa, DateTime.UtcNow.Add(JwksCacheDuration)));
                                 return ecdsa;
                             }
                         }
@@ -1162,8 +1172,11 @@ namespace Toggly.FeatureManagement
                 {
                     var body = string.Empty;
                     try { body = await jwksResponse.Content.ReadAsStringAsync().ConfigureAwait(false); } catch { }
-                    _logger.LogError("Failed to fetch JWKS from {Url}: HTTP {StatusCode}. {ResponseBody}",
-                        jwksResponse.RequestMessage?.RequestUri, (int)jwksResponse.StatusCode, body);
+                    // Response bodies can contain sensitive details; keep them at Debug only.
+                    if (!string.IsNullOrEmpty(body))
+                        _logger.LogDebug("JWKS request error response body: {ResponseBody}", body);
+                    _logger.LogError("Failed to fetch JWKS from {Url}: HTTP {StatusCode}",
+                        jwksResponse.RequestMessage?.RequestUri, (int)jwksResponse.StatusCode);
                     return null;
                 }
                 var jwks = await jwksResponse.Content.ReadFromJsonAsync<JsonWebKeySet>(SystemJsonCaseInsensitive).ConfigureAwait(false);
@@ -1173,7 +1186,10 @@ namespace Toggly.FeatureManagement
                     return null;
                 }
                 if (_snapshotProvider != null)
-                    await _snapshotProvider.SaveJwkSnapshot(jwks, ((DateTimeOffset)DateTime.UtcNow.AddDays(30)).ToUnixTimeSeconds(), CancellationToken.None).ConfigureAwait(false);
+                    await _snapshotProvider.SaveJwkSnapshot(
+                        jwks,
+                        ((DateTimeOffset)DateTime.UtcNow.Add(JwksCacheDuration)).ToUnixTimeSeconds(),
+                        CancellationToken.None).ConfigureAwait(false);
                 
                 if (jwks.Keys == null || jwks.Keys.Count == 0)
                 {
@@ -1226,7 +1242,7 @@ namespace Toggly.FeatureManagement
                         };
 
                         ecdsa.ImportParameters(ecParameters);
-                        _ecDsaKeys.TryAdd(keyId, (ecdsa, DateTime.UtcNow.AddDays(30)));
+                        _ecDsaKeys.TryAdd(keyId, (ecdsa, DateTime.UtcNow.Add(JwksCacheDuration)));
                         return ecdsa;
                     }
                 }

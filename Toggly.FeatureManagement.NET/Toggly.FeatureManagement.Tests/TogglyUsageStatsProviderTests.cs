@@ -397,7 +397,7 @@ public class TogglyUsageStatsProviderTests : IDisposable
         var debugInfo = _provider.GetDebugInfo();
 
         // Assert
-        debugInfo.AppKey.Should().Be("test-app-key");
+        debugInfo.AppKey.Should().Be("***pp-key");
         debugInfo.Environment.Should().Be("Test");
         debugInfo.BaseUrl.Should().Be("https://test.toggly.io/");
         debugInfo.UserAgent.Should().StartWith("Toggly.FeatureManagement/");

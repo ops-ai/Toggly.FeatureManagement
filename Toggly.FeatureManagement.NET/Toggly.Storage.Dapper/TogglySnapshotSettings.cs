@@ -16,7 +16,8 @@ namespace Toggly.FeatureManagement.Storage.Dapper
         public string JwkDocumentName { get; set; } = "toggly_jwks";
 
         /// <summary>
-        /// Table name for storing snapshots (default: "TogglySnapshots")
+        /// Table name for storing snapshots (default: "TogglySnapshots").
+        /// Must be a SQL identifier: letter/underscore then letters, digits, or underscores (max 128).
         /// </summary>
         public string TableName { get; set; } = "TogglySnapshots";
 

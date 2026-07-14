@@ -795,7 +795,7 @@ namespace Toggly.FeatureManagement
         {
             return new UsageStatsDebugInfo
             {
-                AppKey = _appKey,
+                AppKey = AppKeySanitizer.Sanitize(_appKey),
                 BaseUrl = _baseUrl,
                 Environment = _environment,
                 //Stats = _stats,

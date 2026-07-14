@@ -34,46 +34,33 @@ Where `<RID>` is one of:
 
 ### Authentication
 
-The CLI uses OAuth2 client credentials for authentication.
+The CLI uses OAuth2 client credentials for authentication. Prefer command-line
+arguments for interactive use and environment variables for CI/CD. Secrets are
+**never written to disk**. A legacy `~/.toggly/config.json` (if present) is
+deleted automatically on use — switch to CLI args or env vars.
 
-Set your OAuth2 credentials using one of these methods:
+Priority order:
 
-1. **Command-line arguments**:
-   ```bash
-   toggly-cli --client-id <id> --client-secret <secret> <command>
-   ```
+1. **Command-line arguments** (highest priority)
+2. **Environment variables**
 
-2. **Environment variables**:
-   ```bash
-   export TOGGLY_CLIENT_ID=<id>
-   export TOGGLY_CLIENT_SECRET=<secret>
-   export TOGGLY_AUTHORITY=https://auth.toggly.io  # Optional, defaults to https://auth.toggly.io
-   toggly-cli <command>
-   ```
+#### Command-line arguments
 
-3. **Config file**:
-   ```json
-   {
-     "clientId": "your-client-id",
-     "clientSecret": "your-client-secret",
-     "authority": "https://auth.toggly.io"
-   }
-   ```
-
-### Config File Format
-
-Create a config file at `~/.toggly/config.json` (Linux/macOS) or `%USERPROFILE%\.toggly\config.json` (Windows):
-
-```json
-{
-  "clientId": "your-client-id",
-  "clientSecret": "your-client-secret",
-  "authority": "https://auth.toggly.io",
-  "baseUrl": "https://app.toggly.io/api"
-}
+```bash
+toggly-cli --client-id <id> --client-secret <secret> <command>
 ```
 
-**Note**: You must specify both `clientId` and `clientSecret`.
+#### Environment variables
+
+```bash
+export TOGGLY_CLIENT_ID=<id>
+export TOGGLY_CLIENT_SECRET=<secret>
+export TOGGLY_AUTHORITY=https://auth.toggly.io  # Optional
+export TOGGLY_BASE_URL=https://app.toggly.io/api  # Optional
+toggly-cli <command>
+```
+
+You must provide both client ID and client secret (via args and/or env vars).
 
 ## Commands
 
@@ -179,10 +166,10 @@ toggly-cli update-feature-environment \
 
 All commands support these global options:
 
-- `--client-id <id>`: OAuth2 client ID (required)
-- `--client-secret <secret>`: OAuth2 client secret (required)
-- `--authority <url>`: OAuth2 authority URL (defaults to https://auth.toggly.io)
-- `--base-url <url>`: Base URL for Toggly API (defaults to https://app.toggly.io/api)
+- `--client-id <id>`: OAuth2 client ID (or `TOGGLY_CLIENT_ID`)
+- `--client-secret <secret>`: OAuth2 client secret (or `TOGGLY_CLIENT_SECRET`)
+- `--authority <url>`: OAuth2 authority URL (or `TOGGLY_AUTHORITY`; default https://auth.toggly.io)
+- `--base-url <url>`: Base URL for Toggly API (or `TOGGLY_BASE_URL`; default https://app.toggly.io/api)
 - `--verbose`: Enable verbose output
 
 ## Exit Codes
@@ -225,8 +212,9 @@ In a GitHub Actions workflow:
 
 ### Authentication Errors
 
-If you see "No authentication method specified", ensure you've provided:
-- `--client-id` and `--client-secret`
+If you see "No authentication method specified", ensure you've provided both
+`--client-id` and `--client-secret`, or set `TOGGLY_CLIENT_ID` and
+`TOGGLY_CLIENT_SECRET`.
 
 ### Network Errors
 
