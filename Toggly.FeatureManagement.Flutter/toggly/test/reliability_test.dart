@@ -248,8 +248,13 @@ _SignedFlagsFixture _buildSignedFlagsFixture({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUp(() {
+    HttpService.getInstance.http.interceptors.clear();
+  });
+
   tearDown(() {
     Toggly.dispose();
+    HttpService.getInstance.http.interceptors.clear();
   });
 
   test('reports JWK fetch failure while preserving cached flags', () async {
@@ -281,6 +286,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
         onError: (message, error, stackTrace) => errors.add(message),
@@ -299,15 +305,15 @@ void main() {
   test('clears cache when persisted signature verification fails', () async {
     final provider = _MemoryCacheProvider();
     final errors = <String>[];
-    const keyId = 'computed';
-    final jwks = _jwks(keyId);
-    final computedKeyId = (jwks['keys'] as List).first['kid'] as String;
+    // Valid curve points + kid, but a zeroed signature so ECDSA returns false
+    // (not a SchnorrException that soft-keeps last-known-good).
+    final fixture = _buildSignedFlagsFixture(timestamp: 100);
     final interceptor = InterceptorsWrapper(
       onRequest: (options, handler) {
         handler.resolve(
           Response<dynamic>(
             requestOptions: options,
-            data: jwks,
+            data: fixture.jwks,
             statusCode: 200,
           ),
         );
@@ -317,10 +323,10 @@ void main() {
 
     provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
       identity: 'u:user-1',
-      flags: '{"FeatureA":true}',
-      timestamp: 100,
+      flags: fixture.defsJson,
+      timestamp: fixture.timestamp,
       signature: base64Encode(List<int>.filled(64, 0)),
-      keyId: computedKeyId,
+      keyId: fixture.kid,
     );
 
     await Toggly.init(
@@ -328,6 +334,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
         onError: (message, error, stackTrace) => errors.add(message),
@@ -392,6 +399,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
         onError: (message, error, stackTrace) => errors.add(message),
@@ -450,6 +458,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
         onError: (message, error, stackTrace) => errors.add(message),
@@ -500,6 +509,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
         onError: (message, error, stackTrace) => errors.add(message),
@@ -560,6 +570,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
       ),
@@ -603,6 +614,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
       ),
@@ -644,6 +656,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
       ),
@@ -677,6 +690,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
       ),
@@ -724,6 +738,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
       ),
@@ -765,6 +780,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
       ),
@@ -800,6 +816,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
       ),
@@ -829,6 +846,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
       ),
@@ -861,6 +879,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
       ),
@@ -895,6 +914,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
       ),
@@ -945,6 +965,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         enableVariants: true,
         cacheProvider: provider,
@@ -996,6 +1017,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableLiveUpdates: false,
         baseURI: 'https://example.test',
         enableVariants: true,
         cacheProvider: provider,
