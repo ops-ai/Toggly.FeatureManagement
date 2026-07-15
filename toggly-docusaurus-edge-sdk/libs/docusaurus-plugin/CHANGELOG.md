@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.2
+
+2026-07-14
+
+### Fixed
+- Escape `</script` sequences in `injectHtmlTags` inline JSON scripts (`__TOGGLY_CONFIG__`, `__TOGGLY_PAGE_FEATURES__`, `__TOGGLY_BUILD_FLAGS__`) via `@ops-ai/toggly-hooks-types` `serializeJsonForInlineScript` (same contract as the Cloudflare edge rewriter).
+
 ## 0.6.1
 
 2026-06-22

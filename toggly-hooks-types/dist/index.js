@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.touchCacheLruKey = exports.serializeCacheLruIndex = exports.selectCacheLruKeysToEvict = exports.removeCacheLruKeys = exports.parseCacheLruIndex = exports.isCacheLruEnabled = exports.emptyCacheLruIndex = exports.normalizeEvaluationClaims = exports.evaluationContextCacheKey = exports.appendEvaluationContext = exports.MAX_EVALUATION_CLAIMS = void 0;
+exports.serializeJsonForInlineScript = exports.touchCacheLruKey = exports.serializeCacheLruIndex = exports.selectCacheLruKeysToEvict = exports.removeCacheLruKeys = exports.parseCacheLruIndex = exports.isCacheLruEnabled = exports.emptyCacheLruIndex = exports.normalizeEvaluationClaims = exports.evaluationContextCacheKey = exports.appendEvaluationContext = exports.MAX_EVALUATION_CLAIMS = void 0;
 var evaluation_context_1 = require("./evaluation-context");
 Object.defineProperty(exports, "MAX_EVALUATION_CLAIMS", { enumerable: true, get: function () { return evaluation_context_1.MAX_EVALUATION_CLAIMS; } });
 Object.defineProperty(exports, "appendEvaluationContext", { enumerable: true, get: function () { return evaluation_context_1.appendEvaluationContext; } });
@@ -14,3 +14,5 @@ Object.defineProperty(exports, "removeCacheLruKeys", { enumerable: true, get: fu
 Object.defineProperty(exports, "selectCacheLruKeysToEvict", { enumerable: true, get: function () { return cache_lru_1.selectCacheLruKeysToEvict; } });
 Object.defineProperty(exports, "serializeCacheLruIndex", { enumerable: true, get: function () { return cache_lru_1.serializeCacheLruIndex; } });
 Object.defineProperty(exports, "touchCacheLruKey", { enumerable: true, get: function () { return cache_lru_1.touchCacheLruKey; } });
+var serialize_for_inline_script_1 = require("./serialize-for-inline-script");
+Object.defineProperty(exports, "serializeJsonForInlineScript", { enumerable: true, get: function () { return serialize_for_inline_script_1.serializeJsonForInlineScript; } });

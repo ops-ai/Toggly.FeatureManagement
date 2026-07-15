@@ -201,14 +201,16 @@ describe('Middleware', () => {
       expect(getServerToggly()?.identity).toBe('user-123')
     })
 
-    it('should warn and allow if client not initialized', async () => {
+    it('should warn and reject if client not initialized', async () => {
       const middleware = defineFeatureMiddleware({
         featureKey: 'feature-a',
       })
 
       const event = createMockEvent()
 
-      await expect(middleware(event)).resolves.not.toThrow()
+      await expect(middleware(event)).rejects.toMatchObject({
+        statusCode: 503,
+      })
       expect(console.warn).toHaveBeenCalledWith(
         '[Toggly] Server client not initialized in middleware'
       )
@@ -258,16 +260,20 @@ describe('Middleware', () => {
       expect(handler).not.toHaveBeenCalled()
     })
 
-    it('should call handler if client not initialized', async () => {
+    it('should reject and not call handler if client not initialized', async () => {
       const handler = vi.fn().mockResolvedValue({ success: true })
 
       const wrappedHandler = defineFeatureHandler('feature-a', handler)
 
       const event = createMockEvent()
-      const result = await wrappedHandler(event)
 
-      expect(handler).toHaveBeenCalled()
-      expect(result).toEqual({ success: true })
+      await expect(wrappedHandler(event)).rejects.toMatchObject({
+        statusCode: 503,
+      })
+      expect(handler).not.toHaveBeenCalled()
+      expect(console.warn).toHaveBeenCalledWith(
+        '[Toggly] Server client not initialized in handler'
+      )
     })
   })
 

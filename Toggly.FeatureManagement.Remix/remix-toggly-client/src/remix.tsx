@@ -11,6 +11,7 @@ import {
 } from '@ops-ai/remix-toggly-core';
 import type { ReactElement } from 'react';
 import type { ServerFeatureContext, TogglyConfig } from '@ops-ai/remix-toggly-core';
+import { serializeJsonForInlineScript } from '@ops-ai/toggly-hooks-types';
 import { TogglyProvider, type TogglyProviderProps } from './context';
 
 /**
@@ -167,7 +168,8 @@ export function TogglyScript({
     return null;
   }
 
-  const script = `window.__TOGGLY_DATA__=${JSON.stringify(serverContext)};`;
+  // Prefer shared helper so escape stays consistent with Docusaurus / edge.
+  const script = `window.__TOGGLY_DATA__=${serializeJsonForInlineScript(serverContext)};`;
 
   return (
     <script

@@ -35,9 +35,13 @@ export function defineFeatureMiddleware(
     const client = getServerToggly()
 
     if (!client) {
-      // If client is not initialized, allow access (fail open)
+      // Fail closed: gated routes must not proceed without an initialized client
       console.warn('[Toggly] Server client not initialized in middleware')
-      return
+      throw createError({
+        statusCode: 503,
+        statusMessage: 'Feature flags unavailable',
+        message: 'Feature flags unavailable',
+      })
     }
 
     // Get identity from header if present
@@ -97,7 +101,11 @@ export function defineFeatureHandler(
 
     if (!client) {
       console.warn('[Toggly] Server client not initialized in handler')
-      return handler(event)
+      throw createError({
+        statusCode: 503,
+        statusMessage: 'Feature flags unavailable',
+        message: 'Feature flags unavailable',
+      })
     }
 
     // Get identity from header if present

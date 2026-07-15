@@ -227,6 +227,55 @@ describe('togglyPlugin contentLoaded -> page feature mapping (integration)', () 
   });
 });
 
+describe('togglyPlugin injectHtmlTags script escaping', () => {
+  it('escapes </script sequences in injected config and page feature scripts', async () => {
+    writeFile('docs/intro.mdx', frontmatter('Features'));
+
+    const context = makeContext(tmpDir, []);
+    const plugin = togglyPlugin(context, {
+      appKey: 'key</script><script>alert(1)',
+      identity: 'user</script><script>alert(1)',
+      staticGating: false,
+    });
+
+    const content = await (plugin.loadContent as () => Promise<unknown>)();
+    const thisRef: {
+      __togglyPluginData?: {
+        config: unknown;
+        pageFeatureMapping: Record<string, string>;
+        buildTimeFlags: Record<string, boolean>;
+      };
+    } = {};
+    await (plugin.contentLoaded as (args: { content: unknown; actions: unknown }) => Promise<void>).call(
+      thisRef,
+      { content, actions: {} as never },
+    );
+
+    expect(thisRef.__togglyPluginData).toBeDefined();
+
+    const tags = (
+      plugin.injectHtmlTags as (this: typeof thisRef) => {
+        headTags?: { tagName: string; innerHTML: string }[];
+      }
+    ).call(thisRef);
+
+    const scripts = (tags.headTags ?? [])
+      .filter((t) => t.tagName === 'script')
+      .map((t) => t.innerHTML);
+
+    expect(scripts.length).toBe(2);
+
+    const configScript = scripts.find((s) => s.includes('__TOGGLY_CONFIG__'));
+    expect(configScript).toBeDefined();
+    expect(configScript).not.toMatch(/<\/script/i);
+    expect(configScript).toContain('<\\/script');
+
+    for (const html of scripts) {
+      expect(html).not.toMatch(/<\/script/i);
+    }
+  });
+});
+
 /**
  * Drive togglyPlugin.contentLoaded with a minimal LoadContext + actions and
  * return whatever the plugin would inject as `__TOGGLY_PAGE_FEATURES__`.

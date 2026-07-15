@@ -124,6 +124,20 @@ describe('TogglyScript', () => {
     const script = container.querySelector('script');
     expect(script).not.toBeInTheDocument();
   });
+
+  it('should escape </script sequences in serialized context', () => {
+    const serverContext: ServerFeatureContext = {
+      flags: { 'evil</script><script>alert(1)': true },
+      identity: 'user</script><script>alert(1)',
+      fetchedAt: 12345,
+    };
+
+    const { container } = render(<TogglyScript serverContext={serverContext} />);
+
+    const script = container.querySelector('script');
+    expect(script?.innerHTML).not.toMatch(/<\/script/i);
+    expect(script?.innerHTML).toContain('<\\/script');
+  });
 });
 
 describe('getWindowTogglyData', () => {

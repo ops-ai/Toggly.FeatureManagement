@@ -98,3 +98,4 @@ export {
   serializeCacheLruIndex,
   touchCacheLruKey,
 } from './cache-lru';
+export { serializeJsonForInlineScript } from './serialize-for-inline-script';

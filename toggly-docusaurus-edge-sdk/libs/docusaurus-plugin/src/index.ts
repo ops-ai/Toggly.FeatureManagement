@@ -13,6 +13,7 @@ import webpack from 'webpack';
 import { fetchBuildTimeFlags } from './lib/fetch-build-flags';
 import { routeToHtmlPath } from './lib/route-to-html-path';
 import type { Flags } from './lib/toggly-client';
+import { serializeJsonForInlineScript } from '@ops-ai/toggly-hooks-types';
 
 /**
  * A docs-style content directory that the plugin should scan for x-feature frontmatter.
@@ -326,21 +327,22 @@ export default function togglyPlugin(
         buildTimeFlags: flags,
       } = pluginData;
 
+      // Keep in sync with @ops-ai/toggly-hooks-types serializeJsonForInlineScript
       const headTags: { tagName: string; innerHTML: string }[] = [
         {
           tagName: 'script',
-          innerHTML: `window.__TOGGLY_CONFIG__ = ${JSON.stringify(pluginConfig)};`,
+          innerHTML: `window.__TOGGLY_CONFIG__ = ${serializeJsonForInlineScript(pluginConfig)};`,
         },
         {
           tagName: 'script',
-          innerHTML: `window.__TOGGLY_PAGE_FEATURES__ = ${JSON.stringify(pageFeatureMapping)};`,
+          innerHTML: `window.__TOGGLY_PAGE_FEATURES__ = ${serializeJsonForInlineScript(pageFeatureMapping)};`,
         },
       ];
 
       if (pluginConfig.staticGating) {
         headTags.push({
           tagName: 'script',
-          innerHTML: `window.__TOGGLY_BUILD_FLAGS__ = ${JSON.stringify(flags)};`,
+          innerHTML: `window.__TOGGLY_BUILD_FLAGS__ = ${serializeJsonForInlineScript(flags)};`,
         });
       }
 

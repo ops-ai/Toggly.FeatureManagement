@@ -20,9 +20,10 @@ const SNAPSHOT_GLOBAL = '__TOGGLY_EDGE_FLAGS__';
  * Build the inline script element that pins `flags` onto the snapshot global.
  *
  * `</script` is escaped defensively so a flag key/value containing the
- * sequence cannot break out of the script tag. `JSON.stringify` already
- * handles HTML-significant characters inside string values; this guards the
- * one structural sequence that JSON would not otherwise escape.
+ * sequence cannot break out of the script tag. Keep this replace in sync with
+ * `@ops-ai/toggly-hooks-types` `serializeJsonForInlineScript`.
+ * `JSON.stringify` already handles HTML-significant characters inside string
+ * values; this guards the one structural sequence that JSON would not otherwise escape.
  */
 function buildSnapshotScript(flags: Record<string, boolean>): string {
   const safeJson = JSON.stringify(flags).replace(/<\/script/gi, '<\\/script');

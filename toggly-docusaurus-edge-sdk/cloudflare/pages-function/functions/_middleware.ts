@@ -206,7 +206,8 @@ async function loadFlags(env: Env): Promise<Flags> {
 /**
  * Build the inline script that pins `flags` onto the snapshot global.
  * `</script` is escaped defensively so a flag key/value containing the
- * sequence cannot break out of the script tag.
+ * sequence cannot break out of the script tag. Keep in sync with
+ * `@ops-ai/toggly-hooks-types` `serializeJsonForInlineScript`.
  */
 function buildSnapshotScript(flags: Flags): string {
   const safeJson = JSON.stringify(flags).replace(/<\/script/gi, '<\\/script');
