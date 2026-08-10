@@ -62,7 +62,32 @@ namespace Toggly.FeatureManagement
 
         private readonly Timer _timer;
         private readonly TimeSpan _refreshInterval = new TimeSpan(0, 5, 0);
+        private static readonly TimeSpan FallbackRefreshInterval = TimeSpan.FromMinutes(20);
+        private DateTime _lastFallbackRefresh = DateTime.MinValue;
         private volatile bool _webSocketConnected = false;
+        private bool _wsConnecting;
+        private volatile bool _disposed;
+
+        /// <summary>
+        /// Test seam for creating the WebSocket client. Defaults to <see cref="WebsocketClient"/>.
+        /// Prefer <see cref="WebSocketClientFactoryOverride"/> in unit tests so it is set before the startup timer fires.
+        /// Static override is test-only; production hosts must not set it.
+        /// </summary>
+        internal Func<Uri, WebsocketClient> WebSocketClientFactory { get; set; } = uri => new WebsocketClient(uri);
+
+        /// <summary>
+        /// Optional static override used by unit tests (must be set before constructing the provider).
+        /// Tests that mutate this must share a collection so xUnit does not run them in parallel.
+        /// </summary>
+        internal static Func<Uri, WebsocketClient>? WebSocketClientFactoryOverride { get; set; }
+
+        /// <summary>Number of times WebSocket initialization was attempted (not mere Ensure checks).</summary>
+        internal int WebSocketEnsureAttemptCount => Volatile.Read(ref _webSocketEnsureAttemptCount);
+
+        private int _webSocketEnsureAttemptCount;
+
+        /// <summary>When true, Ensure treats the socket as already running (test seam).</summary>
+        internal bool ForceWebSocketConsideredRunningForTests { get; set; }
 
         private readonly string Version;
 
@@ -179,7 +204,11 @@ namespace Toggly.FeatureManagement
             {
                 try
                 {
-                    if (_webSocketConnected)
+                    // Skip frequent polls while live, but keep a reduced-rate safety poll
+                    // so a half-open WebSocket cannot leave definitions permanently stale.
+                    // Only successful 200/304 (and WS apply) update _lastFallbackRefresh.
+                    if (_webSocketConnected &&
+                        DateTime.UtcNow - _lastFallbackRefresh < FallbackRefreshInterval)
                         return;
 
                     await RefreshFeatures(_refreshInterval.Ticks).ConfigureAwait(false);
@@ -379,6 +408,7 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
+            var shouldEnsureWebSocket = false;
             HttpClient? httpClient = null;
             try
             {
@@ -437,307 +467,7 @@ namespace Toggly.FeatureManagement
                     _logger.LogDebug("No ETag available, making full request");
                 }
 
-                List<FeatureDefinitionModel>? newDefinitions;
-                if (_useSignedDefinitions)
-                {
-                    var requestPath = $"definitions-signed/{_appKey}/{_environment}";
-                    var newDefinitionsRequest = await httpClient.GetAsync(requestPath).ConfigureAwait(false);
-                    if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
-                    {
-                        _lastDefinitionsCheck = DateTime.UtcNow;
-                        return;
-                    }
-
-                    if (!newDefinitionsRequest.IsSuccessStatusCode)
-                    {
-                        await HandleDefinitionsRequestError(newDefinitionsRequest, requestPath).ConfigureAwait(false);
-                        return;
-                    }
-
-                    // Get the raw JSON string first
-                    var rawJson = await newDefinitionsRequest.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    var signedDefinitionsResponse = System.Text.Json.JsonSerializer.Deserialize<SignedDefinitionsResponse>(rawJson, SystemJsonCaseInsensitive);
-                    if (signedDefinitionsResponse == null)
-                    {
-                        _logger.LogWarning("Received empty response from toggly");
-                        return;
-                    }
-
-                    if (signedDefinitionsResponse.Defs == null)
-                    {
-                        ReportError("Signed definitions response missing defs", level: LogLevel.Warning);
-                        return;
-                    }
-
-                    if (string.IsNullOrEmpty(signedDefinitionsResponse.Signature))
-                    {
-                        ReportError("Signed definitions response missing signature", level: LogLevel.Warning);
-                        return;
-                    }
-
-                    if (string.IsNullOrEmpty(signedDefinitionsResponse.Kid))
-                    {
-                        ReportError("Signed definitions response missing kid", level: LogLevel.Warning);
-                        return;
-                    }
-
-                    // Check timestamp (thread-safe read)
-                    var currentTimestamp = Interlocked.Read(ref _lastDefinitionsTimestamp);
-                    if (signedDefinitionsResponse.Timestamp < currentTimestamp)
-                    {
-                        ReportError(
-                            $"Received definitions with older timestamp. Current: {currentTimestamp}, Received: {signedDefinitionsResponse.Timestamp}",
-                            level: LogLevel.Warning);
-                        return;
-                    }
-
-                    // Extract the raw data portion from the JSON
-                    string rawData;
-                    using (var jsonDoc = JsonDocument.Parse(rawJson))
-                    {
-                        if (!jsonDoc.RootElement.TryGetProperty("defs", out var dataElement))
-                        {
-                            ReportError("Signed definitions response missing defs property");
-                            return;
-                        }
-
-                        rawData = dataElement.GetRawText();
-                    }
-
-                    var dataToVerify = $"{rawData}|{signedDefinitionsResponse.Timestamp}";
-                    _logger.LogDebug(
-                        "Verifying signed definitions payload length {Length}, timestamp {Timestamp}",
-                        rawData.Length, signedDefinitionsResponse.Timestamp);
-
-                    var hash = ComputeSignedDefinitionsPayloadHash(dataToVerify);
-
-                    var signature = Convert.FromBase64String(signedDefinitionsResponse.Signature);
-
-                    var ecdsa = await GetEcdsaKey(signedDefinitionsResponse.Kid).ConfigureAwait(false);
-                    if (ecdsa == null)
-                    {
-                        ReportError("No ES256 key found in JWKS");
-                        return;
-                    }
-
-                    if (!ecdsa.VerifyHash(hash, signature))
-                    {
-                        ReportError("Invalid signature");
-                        return;
-                    }
-
-                    // Prefer verified raw defs for evaluation and persistence (same bytes that were signed).
-                    newDefinitions = System.Text.Json.JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
-                        rawData, SystemJsonCaseInsensitive) ?? signedDefinitionsResponse.Defs;
-                    var revision = ReadDefinitionsRevision(newDefinitionsRequest);
-                    StoreDefinitionsRevision(revision);
-                    Interlocked.Exchange(ref _lastDefinitionsTimestamp, signedDefinitionsResponse.Timestamp);
-
-                    if (_snapshotProvider != null)
-                        await _snapshotProvider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
-                        {
-                            // Always persist Features derived from verified SignedDefsJson — never a
-                            // separately mutable typed copy that could diverge in storage.
-                            Features = newDefinitions,
-                            Signature = signedDefinitionsResponse.Signature,
-                            KeyId = signedDefinitionsResponse.Kid,
-                            Timestamp = signedDefinitionsResponse.Timestamp,
-                            SignedDefsJson = rawData,
-                            ETag = revision
-                        }).ConfigureAwait(false);
-                }
-                else
-                {
-                    var requestPath = $"definitions/{_appKey}/{_environment}";
-                    var newDefinitionsRequest = await httpClient.GetAsync(requestPath).ConfigureAwait(false);
-                    if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
-                    {
-                        _lastDefinitionsCheck = DateTime.UtcNow;
-                        return;
-                    }
-
-                    if (!newDefinitionsRequest.IsSuccessStatusCode)
-                    {
-                        await HandleDefinitionsRequestError(newDefinitionsRequest, requestPath).ConfigureAwait(false);
-                        return;
-                    }
-
-                    newDefinitions = await newDefinitionsRequest.Content.ReadFromJsonAsync<List<FeatureDefinitionModel>>().ConfigureAwait(false);
-                    if (newDefinitions == null)
-                    {
-                        _logger.LogWarning("Received empty response from toggly");
-                        return;
-                    }
-
-                    var revision = ReadDefinitionsRevision(newDefinitionsRequest);
-                    StoreDefinitionsRevision(revision);
-                    if (_snapshotProvider != null)
-                        await _snapshotProvider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
-                        {
-                            Features = newDefinitions,
-                            ETag = revision
-                        }).ConfigureAwait(false);
-                }
-
-                ApplyNewDefinitions(newDefinitions);
-                
-                _loaded = true;
-                
-                // Thread-safe websocket client check and initialization
-                var shouldInitializeWebSocket = false;
-                lock (_webSocketLock)
-                {
-                    if (_webSocketClient == null || !_webSocketClient.IsRunning)
-                    {
-                        shouldInitializeWebSocket = true;
-                    }
-                }
-                
-                if (shouldInitializeWebSocket)
-                {
-                    try
-                    {
-                        var baseUri = new Uri(_settings.Value.DefinitionsBaseUrl ?? "https://definitions.toggly.io/");
-                        var wsBuilder = new UriBuilder(new Uri(baseUri, $"{_appKey}/{_environment}/ws"))
-                        {
-                            Scheme = baseUri.Scheme == Uri.UriSchemeHttps ? "wss" : "ws",
-                            Port = baseUri.IsDefaultPort ? -1 : baseUri.Port
-                        };
-                        var queryParts = new List<string>
-                        {
-                            "sdk=dotnet",
-                            $"sdkVersion={Uri.EscapeDataString(Version)}"
-                        };
-                        if (_lastETag != null)
-                        {
-                            queryParts.Insert(0, $"rev={Uri.EscapeDataString(_lastETag.Tag.Trim('"'))}");
-                        }
-                        wsBuilder.Query = string.Join("&", queryParts);
-                        var liveConnectionUri = wsBuilder.Uri;
-
-                        var newWebSocketClient = new WebsocketClient(liveConnectionUri) { ReconnectTimeout = null };
-                        newWebSocketClient.MessageReceived.Subscribe(msg =>
-                        {
-                            if (string.IsNullOrEmpty(msg.Text)) return;
-
-                            var text = msg.Text.Trim();
-
-                            if (text == "pong") return;
-
-                            if (text == "update" || text == "flags-updated")
-                            {
-                                TriggerHttpRefresh();
-                                return;
-                            }
-
-                            if (!text.StartsWith("{")) return;
-
-                            try
-                            {
-                                using var doc = JsonDocument.Parse(text);
-                                if (!doc.RootElement.TryGetProperty("type", out var typeProp)) return;
-                                var type = typeProp.GetString();
-
-                                if (type == "signing-key-updated")
-                                {
-                                    ClearCachedJwks();
-                                    var snapshotProvider = _snapshotProvider;
-                                    // Clear JWKS snapshot before refresh so the refresh cannot
-                                    // race with ClearJwkSnapshotAsync deleting a newly saved JWKS.
-                                    _ = Task.Run(async () =>
-                                    {
-                                        try
-                                        {
-                                            if (snapshotProvider != null)
-                                                await snapshotProvider.ClearJwkSnapshotAsync().ConfigureAwait(false);
-                                            await RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
-                                        }
-                                        catch (Exception clearEx)
-                                        {
-                                            ReportError("Failed to process signing-key-updated", clearEx);
-                                        }
-                                    });
-                                    return;
-                                }
-
-                                if (type == "definitions" && !_useSignedDefinitions
-                                    && doc.RootElement.TryGetProperty("data", out var dataElement))
-                                {
-                                    var definitions = System.Text.Json.JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
-                                        dataElement.GetRawText(),
-                                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                                    if (definitions != null)
-                                    {
-                                        ApplyNewDefinitions(definitions);
-                                        _loaded = true;
-                                        _lastRefresh = DateTime.UtcNow;
-                                        _lastDefinitionsCheck = DateTime.UtcNow;
-                                        _logger.LogDebug("Applied definitions directly from WebSocket message");
-                                    }
-                                }
-                                else if (type == "update" || type == "flags-updated" || type == "definitions")
-                                {
-                                    TriggerHttpRefresh();
-                                }
-                            }
-                            catch
-                            {
-                                // Not valid JSON — ignore
-                            }
-                        });
-                        newWebSocketClient.DisconnectionHappened.Subscribe(info =>
-                        {
-                            _webSocketConnected = false;
-                            _logger.LogWarning("Websocket disconnected: {Reason}", info.Type);
-                        });
-                        newWebSocketClient.ReconnectionHappened.Subscribe(_ =>
-                        {
-                            _webSocketConnected = true;
-                        });
-                        newWebSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
-
-                        var wsConnectTask = newWebSocketClient.StartOrFail();
-                        var completed = await Task.WhenAny(wsConnectTask, Task.Delay(TimeSpan.FromSeconds(10))).ConfigureAwait(false);
-                        if (completed != wsConnectTask)
-                        {
-                            _logger.LogWarning("WebSocket connection timed out after 10 seconds — disposing client");
-                            try { newWebSocketClient.Dispose(); } catch { /* best-effort cleanup */ }
-                            throw new TimeoutException("WebSocket connection timed out after 10 seconds");
-                        }
-                        await wsConnectTask.ConfigureAwait(false); // propagate any exception
-                        _webSocketConnected = true;
-
-                        // Only assign if successfully started
-                        lock (_webSocketLock)
-                        {
-                            _webSocketClient?.Dispose();
-                            _webSocketClient = newWebSocketClient;
-                        }
-
-                        // Send text "ping" every 30s to keep the connection alive through proxies/NATs.
-                        // The DO's setWebSocketAutoResponse auto-replies "pong" without waking from hibernation.
-                        _wsPingTimer?.Dispose();
-                        _wsPingTimer = new Timer(_ =>
-                        {
-                            try
-                            {
-                                lock (_webSocketLock)
-                                {
-                                    if (_webSocketClient?.IsRunning == true)
-                                        _webSocketClient.Send("ping");
-                                }
-                            }
-                            catch { /* connection may be closed — will reconnect */ }
-                        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Websocket not available, continuing without it");
-                    }
-                }
-
-                _lastRefresh = DateTime.UtcNow;
-                _lastDefinitionsCheck = DateTime.UtcNow;
+                shouldEnsureWebSocket = await FetchAndApplyDefinitionsAsync(httpClient).ConfigureAwait(false);
             }
             catch (HttpRequestException ex)
             {
@@ -768,6 +498,379 @@ namespace Toggly.FeatureManagement
                 catch (ObjectDisposedException)
                 {
                     // Semaphore was disposed during execution (e.g., during application shutdown), ignore
+                }
+            }
+
+            // Connect outside the refresh semaphore so WS-triggered refreshes are not blocked
+            // for the full connect timeout (up to 10s).
+            if (shouldEnsureWebSocket)
+                await EnsureWebSocketConnectedAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Fetches definitions and applies them when changed.
+        /// Returns true when WebSocket should be ensured (HTTP 304 or successful apply).
+        /// </summary>
+        private async Task<bool> FetchAndApplyDefinitionsAsync(HttpClient httpClient)
+        {
+            if (_useSignedDefinitions)
+            {
+                var requestPath = $"definitions-signed/{_appKey}/{_environment}";
+                var newDefinitionsRequest = await httpClient.GetAsync(requestPath).ConfigureAwait(false);
+                if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
+                {
+                    _lastDefinitionsCheck = DateTime.UtcNow;
+                    _lastFallbackRefresh = DateTime.UtcNow;
+                    return true;
+                }
+
+                if (!newDefinitionsRequest.IsSuccessStatusCode)
+                {
+                    await HandleDefinitionsRequestError(newDefinitionsRequest, requestPath).ConfigureAwait(false);
+                    return false;
+                }
+
+                // Get the raw JSON string first
+                var rawJson = await newDefinitionsRequest.Content.ReadAsStringAsync().ConfigureAwait(false);
+                var signedDefinitionsResponse = System.Text.Json.JsonSerializer.Deserialize<SignedDefinitionsResponse>(rawJson, SystemJsonCaseInsensitive);
+                if (signedDefinitionsResponse == null)
+                {
+                    _logger.LogWarning("Received empty response from toggly");
+                    return false;
+                }
+
+                if (signedDefinitionsResponse.Defs == null)
+                {
+                    ReportError("Signed definitions response missing defs", level: LogLevel.Warning);
+                    return false;
+                }
+
+                if (string.IsNullOrEmpty(signedDefinitionsResponse.Signature))
+                {
+                    ReportError("Signed definitions response missing signature", level: LogLevel.Warning);
+                    return false;
+                }
+
+                if (string.IsNullOrEmpty(signedDefinitionsResponse.Kid))
+                {
+                    ReportError("Signed definitions response missing kid", level: LogLevel.Warning);
+                    return false;
+                }
+
+                // Check timestamp (thread-safe read)
+                var currentTimestamp = Interlocked.Read(ref _lastDefinitionsTimestamp);
+                if (signedDefinitionsResponse.Timestamp < currentTimestamp)
+                {
+                    ReportError(
+                        $"Received definitions with older timestamp. Current: {currentTimestamp}, Received: {signedDefinitionsResponse.Timestamp}",
+                        level: LogLevel.Warning);
+                    return false;
+                }
+
+                // Extract the raw data portion from the JSON
+                string rawData;
+                using (var jsonDoc = JsonDocument.Parse(rawJson))
+                {
+                    if (!jsonDoc.RootElement.TryGetProperty("defs", out var dataElement))
+                    {
+                        ReportError("Signed definitions response missing defs property");
+                        return false;
+                    }
+
+                    rawData = dataElement.GetRawText();
+                }
+
+                var dataToVerify = $"{rawData}|{signedDefinitionsResponse.Timestamp}";
+                _logger.LogDebug(
+                    "Verifying signed definitions payload length {Length}, timestamp {Timestamp}",
+                    rawData.Length, signedDefinitionsResponse.Timestamp);
+
+                var hash = ComputeSignedDefinitionsPayloadHash(dataToVerify);
+
+                var signature = Convert.FromBase64String(signedDefinitionsResponse.Signature);
+
+                var ecdsa = await GetEcdsaKey(signedDefinitionsResponse.Kid).ConfigureAwait(false);
+                if (ecdsa == null)
+                {
+                    ReportError("No ES256 key found in JWKS");
+                    return false;
+                }
+
+                if (!ecdsa.VerifyHash(hash, signature))
+                {
+                    ReportError("Invalid signature");
+                    return false;
+                }
+
+                // Prefer verified raw defs for evaluation and persistence (same bytes that were signed).
+                var newDefinitions = System.Text.Json.JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
+                    rawData, SystemJsonCaseInsensitive) ?? signedDefinitionsResponse.Defs;
+                var revision = ReadDefinitionsRevision(newDefinitionsRequest);
+                StoreDefinitionsRevision(revision);
+                Interlocked.Exchange(ref _lastDefinitionsTimestamp, signedDefinitionsResponse.Timestamp);
+
+                if (_snapshotProvider != null)
+                    await _snapshotProvider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+                    {
+                        // Always persist Features derived from verified SignedDefsJson — never a
+                        // separately mutable typed copy that could diverge in storage.
+                        Features = newDefinitions,
+                        Signature = signedDefinitionsResponse.Signature,
+                        KeyId = signedDefinitionsResponse.Kid,
+                        Timestamp = signedDefinitionsResponse.Timestamp,
+                        SignedDefsJson = rawData,
+                        ETag = revision
+                    }).ConfigureAwait(false);
+
+                ApplyNewDefinitions(newDefinitions);
+                _loaded = true;
+                _lastRefresh = DateTime.UtcNow;
+                _lastDefinitionsCheck = DateTime.UtcNow;
+                _lastFallbackRefresh = DateTime.UtcNow;
+                return true;
+            }
+            else
+            {
+                var requestPath = $"definitions/{_appKey}/{_environment}";
+                var newDefinitionsRequest = await httpClient.GetAsync(requestPath).ConfigureAwait(false);
+                if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
+                {
+                    _lastDefinitionsCheck = DateTime.UtcNow;
+                    _lastFallbackRefresh = DateTime.UtcNow;
+                    return true;
+                }
+
+                if (!newDefinitionsRequest.IsSuccessStatusCode)
+                {
+                    await HandleDefinitionsRequestError(newDefinitionsRequest, requestPath).ConfigureAwait(false);
+                    return false;
+                }
+
+                var newDefinitions = await newDefinitionsRequest.Content.ReadFromJsonAsync<List<FeatureDefinitionModel>>().ConfigureAwait(false);
+                if (newDefinitions == null)
+                {
+                    _logger.LogWarning("Received empty response from toggly");
+                    return false;
+                }
+
+                var revision = ReadDefinitionsRevision(newDefinitionsRequest);
+                StoreDefinitionsRevision(revision);
+                if (_snapshotProvider != null)
+                    await _snapshotProvider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+                    {
+                        Features = newDefinitions,
+                        ETag = revision
+                    }).ConfigureAwait(false);
+
+                ApplyNewDefinitions(newDefinitions);
+                _loaded = true;
+                _lastRefresh = DateTime.UtcNow;
+                _lastDefinitionsCheck = DateTime.UtcNow;
+                _lastFallbackRefresh = DateTime.UtcNow;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Ensures a live WebSocket is running after any successful definitions check (200 or 304).
+        /// </summary>
+        private async Task EnsureWebSocketConnectedAsync()
+        {
+            lock (_webSocketLock)
+            {
+                if (_disposed || ForceWebSocketConsideredRunningForTests)
+                    return;
+
+                if (_wsConnecting || (_webSocketClient != null && _webSocketClient.IsRunning))
+                    return;
+
+                _wsConnecting = true;
+            }
+
+            Interlocked.Increment(ref _webSocketEnsureAttemptCount);
+
+            WebsocketClient? newWebSocketClient = null;
+            try
+            {
+                var baseUri = new Uri(_settings.Value.DefinitionsBaseUrl ?? "https://definitions.toggly.io/");
+                var wsBuilder = new UriBuilder(new Uri(baseUri, $"{_appKey}/{_environment}/ws"))
+                {
+                    Scheme = baseUri.Scheme == Uri.UriSchemeHttps ? "wss" : "ws",
+                    Port = baseUri.IsDefaultPort ? -1 : baseUri.Port
+                };
+                var queryParts = new List<string>
+                {
+                    "sdk=dotnet",
+                    $"sdkVersion={Uri.EscapeDataString(Version)}"
+                };
+                if (_lastETag != null)
+                {
+                    queryParts.Insert(0, $"rev={Uri.EscapeDataString(_lastETag.Tag.Trim('"'))}");
+                }
+                wsBuilder.Query = string.Join("&", queryParts);
+                var liveConnectionUri = wsBuilder.Uri;
+
+                // Use library default ReconnectTimeout (1 minute) so inactivity / half-open
+                // connections trigger reconnect. Compatible with 30s text ping/pong below.
+                var factory = WebSocketClientFactoryOverride ?? WebSocketClientFactory;
+                newWebSocketClient = factory(liveConnectionUri);
+                newWebSocketClient.ErrorReconnectTimeout = new TimeSpan(0, 0, 5);
+                newWebSocketClient.MessageReceived.Subscribe(msg =>
+                {
+                    if (string.IsNullOrEmpty(msg.Text)) return;
+
+                    var text = msg.Text.Trim();
+
+                    if (text == "pong") return;
+
+                    if (text == "update" || text == "flags-updated")
+                    {
+                        TriggerHttpRefresh();
+                        return;
+                    }
+
+                    if (!text.StartsWith("{")) return;
+
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(text);
+                        if (!doc.RootElement.TryGetProperty("type", out var typeProp)) return;
+                        var type = typeProp.GetString();
+
+                        if (type == "signing-key-updated")
+                        {
+                            ClearCachedJwks();
+                            var snapshotProvider = _snapshotProvider;
+                            // Clear JWKS snapshot before refresh so the refresh cannot
+                            // race with ClearJwkSnapshotAsync deleting a newly saved JWKS.
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    if (snapshotProvider != null)
+                                        await snapshotProvider.ClearJwkSnapshotAsync().ConfigureAwait(false);
+                                    await RefreshFeatures(new TimeSpan(0, 0, 10).Ticks).ConfigureAwait(false);
+                                }
+                                catch (Exception clearEx)
+                                {
+                                    ReportError("Failed to process signing-key-updated", clearEx);
+                                }
+                            });
+                            return;
+                        }
+
+                        if (type == "definitions" && !_useSignedDefinitions
+                            && doc.RootElement.TryGetProperty("data", out var dataElement))
+                        {
+                            var definitions = System.Text.Json.JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
+                                dataElement.GetRawText(),
+                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            if (definitions != null)
+                            {
+                                ApplyNewDefinitions(definitions);
+                                _loaded = true;
+                                _lastRefresh = DateTime.UtcNow;
+                                _lastDefinitionsCheck = DateTime.UtcNow;
+                                _lastFallbackRefresh = DateTime.UtcNow;
+                                _logger.LogDebug("Applied definitions directly from WebSocket message");
+                            }
+                        }
+                        else if (type == "update" || type == "flags-updated" || type == "definitions")
+                        {
+                            TriggerHttpRefresh();
+                        }
+                    }
+                    catch
+                    {
+                        // Not valid JSON — ignore
+                    }
+                });
+                // Do not take _webSocketLock in these handlers: Websocket.Client.Dispose()
+                // synchronously raises DisconnectionHappened on the disposing thread.
+                newWebSocketClient.DisconnectionHappened.Subscribe(info =>
+                {
+                    _webSocketConnected = false;
+                    _logger.LogWarning("Websocket disconnected: {Reason}", info.Type);
+                });
+                newWebSocketClient.ReconnectionHappened.Subscribe(_ =>
+                {
+                    if (!_disposed)
+                        _webSocketConnected = true;
+                });
+
+                var wsConnectTask = newWebSocketClient.StartOrFail();
+                var completed = await Task.WhenAny(wsConnectTask, Task.Delay(TimeSpan.FromSeconds(10))).ConfigureAwait(false);
+                if (completed != wsConnectTask)
+                {
+                    _logger.LogWarning("WebSocket connection timed out after 10 seconds — disposing client");
+                    try { newWebSocketClient.Dispose(); } catch { /* best-effort cleanup */ }
+                    newWebSocketClient = null;
+                    throw new TimeoutException("WebSocket connection timed out after 10 seconds");
+                }
+                await wsConnectTask.ConfigureAwait(false); // propagate any exception
+
+                // Only assign if successfully started and provider is still alive.
+                // Dispose clients outside the lock — Dispose sync-fires DisconnectionHappened.
+                WebsocketClient? previousClient = null;
+                var abandonNewClient = false;
+                lock (_webSocketLock)
+                {
+                    if (_disposed)
+                    {
+                        abandonNewClient = true;
+                    }
+                    else
+                    {
+                        previousClient = _webSocketClient;
+                        _webSocketClient = newWebSocketClient;
+                        newWebSocketClient = null;
+                        _webSocketConnected = true;
+                    }
+                }
+
+                if (abandonNewClient)
+                {
+                    try { newWebSocketClient?.Dispose(); } catch { /* best-effort cleanup */ }
+                    newWebSocketClient = null;
+                    return;
+                }
+
+                if (previousClient != null)
+                {
+                    try { previousClient.Dispose(); } catch { /* best-effort cleanup */ }
+                }
+
+                // Send text "ping" every 30s to keep the connection alive through proxies/NATs.
+                // The DO's setWebSocketAutoResponse auto-replies "pong" without waking from hibernation.
+                _wsPingTimer?.Dispose();
+                _wsPingTimer = new Timer(_ =>
+                {
+                    try
+                    {
+                        lock (_webSocketLock)
+                        {
+                            if (_disposed)
+                                return;
+                            if (_webSocketClient?.IsRunning == true)
+                                _webSocketClient.Send("ping");
+                        }
+                    }
+                    catch { /* connection may be closed — will reconnect */ }
+                }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+            }
+            catch (Exception ex)
+            {
+                if (newWebSocketClient != null)
+                {
+                    try { newWebSocketClient.Dispose(); } catch { /* best-effort cleanup */ }
+                }
+                _logger.LogWarning(ex, "Websocket not available, continuing without it");
+            }
+            finally
+            {
+                lock (_webSocketLock)
+                {
+                    _wsConnecting = false;
                 }
             }
         }
@@ -1321,12 +1424,19 @@ namespace Toggly.FeatureManagement
         {
             _timer?.Dispose();
             _wsPingTimer?.Dispose();
-            
+
+            // Dispose the client outside the lock: Websocket.Client.Dispose() synchronously
+            // raises DisconnectionHappened, whose handler must not re-enter _webSocketLock.
+            WebsocketClient? clientToDispose;
             lock (_webSocketLock)
             {
-                _webSocketClient?.Dispose();
+                _disposed = true;
+                _webSocketConnected = false;
+                _wsConnecting = false;
+                clientToDispose = _webSocketClient;
                 _webSocketClient = null;
             }
+            try { clientToDispose?.Dispose(); } catch { /* best-effort cleanup */ }
             
             _refreshSemaphore?.Dispose();
             _loadSemaphore?.Dispose();
@@ -1381,6 +1491,18 @@ namespace Toggly.FeatureManagement
                 Loaded = _loaded
             };
         }
+
+        // --- Test helpers (InternalsVisibleTo) ---
+
+        internal static TimeSpan FallbackRefreshIntervalForTests => FallbackRefreshInterval;
+
+        internal void SetWebSocketConnectedForTests(bool connected) => _webSocketConnected = connected;
+
+        internal void SetLastFallbackRefreshForTests(DateTime value) => _lastFallbackRefresh = value;
+
+        internal DateTime GetLastFallbackRefreshForTests() => _lastFallbackRefresh;
+
+        internal void InvokeTimerCallbackForTests() => TimerCallback(null);
         
         /// <summary>
         /// Check if a feature requires a security check

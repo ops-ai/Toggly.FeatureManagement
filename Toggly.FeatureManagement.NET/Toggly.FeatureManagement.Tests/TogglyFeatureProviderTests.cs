@@ -10,11 +10,13 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using Toggly.FeatureManagement.Data;
 using Xunit;
 
 namespace Toggly.FeatureManagement.Tests;
 
+[Collection(TogglyFeatureProviderCollection.Name)]
 public class TogglyFeatureProviderTests : IDisposable
 {
     private readonly Mock<ILoggerFactory> _loggerFactoryMock;
@@ -27,6 +29,10 @@ public class TogglyFeatureProviderTests : IDisposable
 
     public TogglyFeatureProviderTests()
     {
+        // Avoid real WebSocket connects (and 10s timeouts) from the startup timer / 304 path.
+        TogglyFeatureProvider.WebSocketClientFactoryOverride = _ =>
+            throw new InvalidOperationException("WebSocket disabled in unit tests");
+
         _loggerFactoryMock = new Mock<ILoggerFactory>();
         _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
             .Returns(new Mock<ILogger>().Object);
@@ -50,6 +56,7 @@ public class TogglyFeatureProviderTests : IDisposable
     public void Dispose()
     {
         _provider?.Dispose();
+        TogglyFeatureProvider.WebSocketClientFactoryOverride = null;
     }
 
     private IOptions<TogglySettings> CreateSettings(
@@ -645,6 +652,345 @@ public class TogglyFeatureProviderTests : IDisposable
         // Assert
         debugInfo.Loaded.Should().BeTrue();
         debugInfo.Definitions.Should().ContainKey("test-feature");
+    }
+
+    [Fact]
+    public async Task RefreshFeatures_WhenNotModified_EnsuresWebSocket_WithoutSettingLastRefresh()
+    {
+        // Issue #220: snapshot-warmed ETag → 304 must still initialize WebSocket.
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "snapshot-feature",
+                Filters = new List<FeatureFilter>()
+            }
+        };
+
+        var snapshotProviderMock = new Mock<IFeatureSnapshotProvider>();
+        snapshotProviderMock
+            .Setup(x => x.GetFeaturesSnapshotAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FeatureDefinitionsSnapshot
+            {
+                Features = definitions,
+                ETag = "\"etag-snapshot\""
+            });
+
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureSnapshotProvider)))
+            .Returns(snapshotProviderMock.Object);
+
+        var httpCallCount = 0;
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                httpCallCount++;
+                return new HttpResponseMessage(HttpStatusCode.NotModified);
+            });
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(() => new HttpClient(handlerMock.Object)
+            {
+                BaseAddress = new Uri("https://definitions.toggly.io/")
+            });
+
+        Uri? requestedWsUri = null;
+        var factoryCalls = 0;
+        TogglyFeatureProvider.WebSocketClientFactoryOverride = uri =>
+        {
+            factoryCalls++;
+            requestedWsUri = uri;
+            throw new InvalidOperationException("WebSocket connect skipped in test");
+        };
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await WaitForConditionAsync(() => _provider.WebSocketEnsureAttemptCount > 0, TimeSpan.FromSeconds(5));
+
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Loaded.Should().BeTrue();
+        debugInfo.LastDefinitionsCheck.Should().NotBeNull();
+        debugInfo.LastRefresh.Should().BeNull("304 must not set LastRefresh");
+        _provider.WebSocketEnsureAttemptCount.Should().BeGreaterThan(0);
+        factoryCalls.Should().BeGreaterThan(0);
+        requestedWsUri.Should().NotBeNull();
+        requestedWsUri!.AbsolutePath.Should().Contain("/ws");
+        httpCallCount.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task RefreshFeatures_SignedWhenNotModified_EnsuresWebSocket()
+    {
+        // No snapshot — signed path still returns 304 and must ensure WebSocket.
+        var httpCallCount = 0;
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                httpCallCount++;
+                return new HttpResponseMessage(HttpStatusCode.NotModified);
+            });
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(() => new HttpClient(handlerMock.Object)
+            {
+                BaseAddress = new Uri("https://definitions.toggly.io/")
+            });
+
+        var factoryCalls = 0;
+        TogglyFeatureProvider.WebSocketClientFactoryOverride = _ =>
+        {
+            factoryCalls++;
+            throw new InvalidOperationException("WebSocket connect skipped in test");
+        };
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(useSignedDefinitions: true),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await WaitForConditionAsync(() => _provider.WebSocketEnsureAttemptCount > 0, TimeSpan.FromSeconds(5));
+
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.LastDefinitionsCheck.Should().NotBeNull();
+        debugInfo.LastRefresh.Should().BeNull();
+        _provider.WebSocketEnsureAttemptCount.Should().BeGreaterThan(0);
+        factoryCalls.Should().BeGreaterThan(0);
+        httpCallCount.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task TimerCallback_WhenWebSocketConnected_SkipsUntilFallbackIntervalElapses()
+    {
+        var httpCallCount = 0;
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                Interlocked.Increment(ref httpCallCount);
+                return new HttpResponseMessage(HttpStatusCode.NotModified);
+            });
+
+        // New HttpClient per CreateClient — reused clients fail on duplicate User-Agent headers.
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(() => new HttpClient(handlerMock.Object)
+            {
+                BaseAddress = new Uri("https://definitions.toggly.io/")
+            });
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await WaitForConditionAsync(() => Volatile.Read(ref httpCallCount) > 0, TimeSpan.FromSeconds(5));
+
+        var callsAfterStartup = Volatile.Read(ref httpCallCount);
+        _provider.SetWebSocketConnectedForTests(true);
+        var recentFallback = DateTime.UtcNow - TimeSpan.FromMinutes(1);
+        _provider.SetLastFallbackRefreshForTests(recentFallback);
+
+        _provider.InvokeTimerCallbackForTests();
+        await WaitForUnchangedAsync(
+            () => Volatile.Read(ref httpCallCount),
+            callsAfterStartup,
+            TimeSpan.FromMilliseconds(500));
+
+        Volatile.Read(ref httpCallCount).Should().Be(callsAfterStartup,
+            "recent fallback refresh should skip while WebSocket is connected");
+        _provider.GetLastFallbackRefreshForTests().Should().Be(recentFallback,
+            "skip path must not rewrite last fallback refresh");
+
+        _provider.SetLastFallbackRefreshForTests(
+            DateTime.UtcNow - TogglyFeatureProvider.FallbackRefreshIntervalForTests - TimeSpan.FromSeconds(1));
+
+        _provider.InvokeTimerCallbackForTests();
+        await WaitForConditionAsync(
+            () => Volatile.Read(ref httpCallCount) > callsAfterStartup,
+            TimeSpan.FromSeconds(5));
+
+        Volatile.Read(ref httpCallCount).Should().BeGreaterThan(callsAfterStartup,
+            "safety poll should run after the fallback interval elapses");
+        _provider.GetLastFallbackRefreshForTests().Should().BeAfter(recentFallback,
+            "successful safety poll should refresh the fallback timestamp");
+    }
+
+    [Fact]
+    public async Task RefreshFeatures_WhenOk_EnsuresWebSocket_AndSetsLastRefresh()
+    {
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new FeatureDefinitionModel
+            {
+                FeatureKey = "ok-feature",
+                Filters = new List<FeatureFilter>()
+            }
+        };
+        var jsonContent = JsonSerializer.Serialize(definitions);
+
+        var factoryCalls = 0;
+        TogglyFeatureProvider.WebSocketClientFactoryOverride = uri =>
+        {
+            factoryCalls++;
+            var client = new Websocket.Client.WebsocketClient(uri);
+            client.ReconnectTimeout.Should().NotBeNull("inactivity reconnect must remain enabled");
+            client.ReconnectTimeout.Should().Be(TimeSpan.FromMinutes(1));
+            client.Dispose();
+            throw new InvalidOperationException("WebSocket connect skipped in test");
+        };
+
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(jsonContent)
+                };
+                response.Headers.ETag = new EntityTagHeaderValue("\"etag-ok\"");
+                return response;
+            });
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(() => new HttpClient(handlerMock.Object)
+            {
+                BaseAddress = new Uri("https://definitions.toggly.io/")
+            });
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await WaitForConditionAsync(() => _provider.WebSocketEnsureAttemptCount > 0, TimeSpan.FromSeconds(5));
+
+        var debugInfo = _provider.GetDebugInfo();
+        debugInfo.Loaded.Should().BeTrue();
+        debugInfo.LastRefresh.Should().NotBeNull("200 apply must set LastRefresh");
+        debugInfo.LastDefinitionsCheck.Should().NotBeNull();
+        debugInfo.Definitions.Should().ContainKey("ok-feature");
+        factoryCalls.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task EnsureWebSocket_WhenAlreadyRunning_DoesNotCreateAnotherClient()
+    {
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Loose);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() => new HttpResponseMessage(HttpStatusCode.NotModified));
+
+        _httpClientFactoryMock.Setup(x => x.CreateClient("toggly"))
+            .Returns(() => new HttpClient(handlerMock.Object)
+            {
+                BaseAddress = new Uri("https://definitions.toggly.io/")
+            });
+
+        var factoryCalls = 0;
+        TogglyFeatureProvider.WebSocketClientFactoryOverride = _ =>
+        {
+            factoryCalls++;
+            throw new InvalidOperationException("WebSocket connect skipped in test");
+        };
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await WaitForConditionAsync(() => Volatile.Read(ref factoryCalls) > 0, TimeSpan.FromSeconds(5));
+        var callsAfterFirstEnsure = Volatile.Read(ref factoryCalls);
+        var attemptsAfterFirst = _provider.WebSocketEnsureAttemptCount;
+
+        _provider.ForceWebSocketConsideredRunningForTests = true;
+        _provider.SetLastFallbackRefreshForTests(
+            DateTime.UtcNow - TogglyFeatureProvider.FallbackRefreshIntervalForTests - TimeSpan.FromSeconds(1));
+        _provider.SetWebSocketConnectedForTests(true);
+        _provider.InvokeTimerCallbackForTests();
+
+        await WaitForConditionAsync(
+            () => DateTime.UtcNow - _provider.GetLastFallbackRefreshForTests() < TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(5));
+
+        await WaitForUnchangedAsync(
+            () => Volatile.Read(ref factoryCalls),
+            callsAfterFirstEnsure,
+            TimeSpan.FromMilliseconds(300));
+
+        Volatile.Read(ref factoryCalls).Should().Be(callsAfterFirstEnsure,
+            "already-running Ensure must not create another WebSocket client");
+        _provider.WebSocketEnsureAttemptCount.Should().Be(attemptsAfterFirst,
+            "already-running Ensure must not count as an init attempt");
+    }
+
+    [Fact]
+    public void DefaultWebsocketClient_HasOneMinuteReconnectTimeout()
+    {
+        using var client = new Websocket.Client.WebsocketClient(new Uri("ws://127.0.0.1:1/ws"));
+        client.ReconnectTimeout.Should().NotBeNull();
+        client.ReconnectTimeout.Should().Be(TimeSpan.FromMinutes(1));
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition())
+                return;
+            await Task.Delay(50);
+        }
+
+        condition().Should().BeTrue("condition was not met within timeout");
+    }
+
+    private static async Task WaitForUnchangedAsync<T>(Func<T> read, T expected, TimeSpan duration)
+    {
+        var deadline = DateTime.UtcNow + duration;
+        while (DateTime.UtcNow < deadline)
+        {
+            read().Should().Be(expected, "value changed before idle window elapsed");
+            await Task.Delay(50);
+        }
+
+        read().Should().Be(expected);
     }
 
     #endregion

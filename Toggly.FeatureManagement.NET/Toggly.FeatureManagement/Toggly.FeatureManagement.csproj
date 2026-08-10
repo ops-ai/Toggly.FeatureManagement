@@ -68,7 +68,7 @@
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="System.Net.Http.Json" Version="5.0.0" />
-		<PackageReference Include="Websocket.Client" Version="*" />
+		<PackageReference Include="Websocket.Client" Version="5.5.0" />
 	</ItemGroup>
 
 	<!-- Microsoft.Extensions.Http.Polly - use version matching target framework for maximum compatibility -->

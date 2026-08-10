@@ -18,6 +18,7 @@ namespace Toggly.FeatureManagement.Tests;
 /// Golden regression tests for signed snapshot load — would have caught the
 /// historical Invalid signature bug from re-serializing stored features.
 /// </summary>
+[Collection(TogglyFeatureProviderCollection.Name)]
 public class SignedSnapshotReliabilityTests : IDisposable
 {
     private readonly Mock<IHostEnvironment> _hostEnvironmentMock = new();
@@ -31,6 +32,9 @@ public class SignedSnapshotReliabilityTests : IDisposable
 
     public SignedSnapshotReliabilityTests()
     {
+        TogglyFeatureProvider.WebSocketClientFactoryOverride = _ =>
+            throw new InvalidOperationException("WebSocket disabled in unit tests");
+
         _hostEnvironmentMock.Setup(x => x.EnvironmentName).Returns("Production");
         _hostEnvironmentMock.Setup(x => x.ApplicationName).Returns("Tests");
         _hostEnvironmentMock.Setup(x => x.ContentRootPath).Returns("/");
@@ -46,6 +50,7 @@ public class SignedSnapshotReliabilityTests : IDisposable
     {
         _provider?.Dispose();
         _httpClient?.Dispose();
+        TogglyFeatureProvider.WebSocketClientFactoryOverride = null;
     }
 
     private static (ECDsa Key, string Kid, JsonWebKeySet Jwks, string Signature, string DefsJson, long Timestamp) CreateSignedDefs(

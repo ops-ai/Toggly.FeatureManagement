@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.4.1
+
+2026-08-10
+
+### Fixed
+- WebSocket live refresh now initializes after HTTP 304 (Not Modified), so
+  snapshot-warmed instances are not stuck on 5-minute polling (#220).
+- While WebSocket is connected, a 20-minute safety poll still runs so a
+  half-open connection cannot leave definitions permanently stale.
+- Restored Websocket.Client inactivity reconnect (1 minute) instead of
+  disabling it with ReconnectTimeout = null.
+
 ## 3.4.0
 
 2026-07-13
