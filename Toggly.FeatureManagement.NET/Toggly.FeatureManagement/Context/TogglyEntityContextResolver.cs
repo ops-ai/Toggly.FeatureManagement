@@ -20,7 +20,7 @@ namespace Toggly.FeatureManagement
         public bool TryResolve<T>(T instance, out TogglyEntityContext? context)
         {
             context = null;
-            if (instance == null)
+            if (instance is null)
                 return false;
 
             if (instance is TogglyEvaluationContext evaluationContext)

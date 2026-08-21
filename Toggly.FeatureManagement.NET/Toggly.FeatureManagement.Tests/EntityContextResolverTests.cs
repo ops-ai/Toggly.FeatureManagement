@@ -71,4 +71,39 @@ public class EntityContextResolverTests
         resolver.TryResolve(new Puppy { Id = 1, Color = "red" }, out var context).Should().BeTrue();
         context!.Attributes["Color"].Should().Be("RED");
     }
+
+    [Fact]
+    public void TryResolve_NullInstance_FailsClosed()
+    {
+        var resolver = CreateResolver();
+        Puppy? puppy = null;
+        resolver.TryResolve(puppy, out var context).Should().BeFalse();
+        context.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryResolve_PassesThroughEntityAndEvaluationContext()
+    {
+        var resolver = CreateResolver();
+        var entity = new TogglyEntityContext("Puppy", "1", new Dictionary<string, object?>());
+        resolver.TryResolve(entity, out var resolved).Should().BeTrue();
+        resolved.Should().BeSameAs(entity);
+
+        resolver.TryResolve(new TogglyEvaluationContext(entity), out var fromEval).Should().BeTrue();
+        fromEval.Should().BeSameAs(entity);
+
+        resolver.TryResolve(new TogglyEvaluationContext(), out var emptyEval).Should().BeFalse();
+        emptyEval.Should().BeNull();
+    }
+
+    private static ITogglyEntityContextResolver CreateResolver()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<ITogglyEntityContextResolver>(sp =>
+            new TogglyEntityContextResolver(
+                new EntityContextRegistry(),
+                sp.GetRequiredService<ILogger<TogglyEntityContextResolver>>()));
+        return services.BuildServiceProvider().GetRequiredService<ITogglyEntityContextResolver>();
+    }
 }
