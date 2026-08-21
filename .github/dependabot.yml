@@ -1,0 +1,236 @@
+# Dependabot policy for Toggly.FeatureManagement (OPS-693)
+#
+# Version updates stay inside declared SDK support ranges. Framework majors
+# (Astro 6, Next 16, Nuxt 4, Spring Boot 4, uuid 10+, PerformanceCounter 6+, …) are product
+# decisions, not bot merges. Example apps are excluded — they are not published.
+#
+# Do not set target-branch here: develop is the default branch. Setting
+# target-branch would disable Dependabot security updates for that ecosystem.
+# See https://docs.github.com/code-security/reference/supply-chain-security/dependabot-options-reference
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directories:
+      - "**/*"
+    exclude-paths:
+      - "**/example/**"
+      - "**/examples/**"
+      - "**/dist/**"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 8
+    labels:
+      - dependencies
+    groups:
+      npm-patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: astro
+        update-types: ["version-update:semver-major"]
+      - dependency-name: nuxt
+        update-types: ["version-update:semver-major"]
+      - dependency-name: next
+        update-types: ["version-update:semver-major"]
+      - dependency-name: svelte
+        update-types: ["version-update:semver-major"]
+      - dependency-name: gatsby
+        update-types: ["version-update:semver-major"]
+      - dependency-name: vue
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@angular/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@remix-run/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-dom
+        update-types: ["version-update:semver-major"]
+      - dependency-name: uuid
+        update-types: ["version-update:semver-major"]
+      - dependency-name: vite
+        update-types: ["version-update:semver-major"]
+      - dependency-name: hono
+        update-types: ["version-update:semver-major"]
+      - dependency-name: fastify
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: nuget
+    directories:
+      - "**/*"
+    exclude-paths:
+      - "**/examples/**"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      nuget-patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: System.Diagnostics.PerformanceCounter
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: gomod
+    directories:
+      - "**/*"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      go-patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: maven
+    directories:
+      - "**/*"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      maven-patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Maven names are groupId:artifactId. org.springframework* covers
+      # org.springframework:*, org.springframework.boot:*, and other Spring
+      # groupIds. The narrower org.springframework:* misses the Boot starter.
+      - dependency-name: "org.springframework*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: bundler
+    directories:
+      - "**/*"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      bundler-patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: pip
+    directories:
+      - "**/*"
+    exclude-paths:
+      - "**/.pytest_cache/**"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      pip-patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: flask
+        update-types: ["version-update:semver-major"]
+      - dependency-name: django
+        update-types: ["version-update:semver-major"]
+      - dependency-name: fastapi
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: pub
+    directories:
+      - "**/*"
+    exclude-paths:
+      - "**/example/**"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      pub-patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: cargo
+    directories:
+      - "**/*"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      cargo-patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: gradle
+    directories:
+      - "**/*"
+    exclude-paths:
+      - "**/example/**"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      gradle-patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: swift
+    directory: "/Toggly.FeatureManagement.iOS"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
