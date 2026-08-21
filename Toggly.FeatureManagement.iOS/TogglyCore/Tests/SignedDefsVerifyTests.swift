@@ -4,6 +4,59 @@ import XCTest
 @testable import TogglyCore
 
 final class SignedDefsVerifyTests: XCTestCase {
+    func testExtractRawJsonPropertyReadsScalarsAndMissingKeys() {
+        let body = #"{"defs":{"A":true},"data":[1,2],"name":"x\"y","count":42,"empty":null}"#
+        XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "defs"), #"{"A":true}"#)
+        XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "data"), "[1,2]")
+        XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "name"), #""x\"y""#)
+        XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "count"), "42")
+        XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "empty"), "null")
+        XCTAssertNil(SignedDefsVerify.extractRawJsonProperty(from: body, key: "missing"))
+        XCTAssertNil(SignedDefsVerify.extractRawJsonProperty(from: "not-json", key: "defs"))
+    }
+
+    func testParseSignedEnvelopeFallsBackToData() throws {
+        let parsed = try SignedDefsVerify.parseSignedEnvelope(
+            #"{"data":{"A":true},"signature":"sig","timestamp":1,"kid":"k"}"#
+        )
+        XCTAssertEqual(parsed.defsRaw, #"{"A":true}"#)
+        XCTAssertEqual(parsed.envelope.signature, "sig")
+        XCTAssertEqual(parsed.envelope.timestamp, 1)
+        XCTAssertEqual(parsed.envelope.kid, "k")
+    }
+
+    func testParseSignedEnvelopeRejectsMissingDefsAndBadTimestamp() {
+        XCTAssertThrowsError(
+            try SignedDefsVerify.parseSignedEnvelope(#"{"signature":"sig","timestamp":1,"kid":"k"}"#)
+        )
+        XCTAssertThrowsError(
+            try SignedDefsVerify.parseSignedEnvelope(
+                #"{"defs":{"A":true},"signature":"sig","timestamp":"nope","kid":"k"}"#
+            )
+        )
+    }
+
+    func testErrorDescriptionsCoverAllCases() {
+        let cases: [SignedDefsVerifyError] = [
+            .invalidEnvelope,
+            .missingDefs,
+            .kidNotAllowed("k"),
+            .noMatchingJwk("k"),
+            .unsupportedAlg("RS256"),
+            .unsupportedCurve("P-384"),
+            .missingCoordinates,
+            .invalidKid(expected: "a", got: "b"),
+            .invalidSignature,
+            .invalidKey,
+            .invalidBase64,
+            .signatureTimestampExpired,
+            .signatureTimestampInFuture,
+        ]
+        for error in cases {
+            XCTAssertFalse(error.errorDescription?.isEmpty ?? true, String(describing: error))
+        }
+    }
+
     func testExtractsExactDefsBytes() {
         let body = "{\"defs\":{\"a\":1},\"signature\":\"x\",\"timestamp\":1,\"kid\":\"k\"}"
         XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "defs"), "{\"a\":1}")

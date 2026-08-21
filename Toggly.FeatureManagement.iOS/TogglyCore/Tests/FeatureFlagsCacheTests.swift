@@ -209,6 +209,107 @@ final class FeatureFlagsCacheTests: XCTestCase {
         XCTAssertNil(remaining)
     }
 
+    func testColdStartUsesDefaultsWhenCachedFlagsAreNotJson() async throws {
+        let identity = "user-1"
+        let storage = MemoryStorage()
+        let cacheKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity)
+        let cache = TogglyFeatureFlagsCache(identity: identity, flags: "not-json")
+        let cacheData = try JSONEncoder().encode(cache)
+        await storage.set(cacheKey, value: String(data: cacheData, encoding: .utf8)!)
+
+        let service = TogglyService(
+            config: TogglyConfig(
+                appKey: "app",
+                baseURI: "https://127.0.0.1:9",
+                identity: identity,
+                featureDefaults: ["PresalePhotos": false],
+                refreshInterval: 0,
+                verifySignatures: false,
+                connectTimeout: 1,
+                requestTimeout: 1,
+                storage: storage,
+                enableLiveUpdates: false
+            )
+        )
+
+        _ = await service.initialize()
+        let isOn = await service.isFeatureOn("PresalePhotos")
+        XCTAssertFalse(isOn)
+        let remaining = await storage.get(cacheKey)
+        XCTAssertNil(remaining)
+    }
+
+    func testColdStartClearsStaleSignedCache() async throws {
+        let fixture = try makeSignedFixture(
+            defs: #"{"PresalePhotos":true}"#,
+            timestamp: 1_000
+        )
+        let identity = "user-1"
+        let storage = MemoryStorage()
+        let cacheKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity)
+        let cache = TogglyFeatureFlagsCache(
+            identity: identity,
+            flags: fixture.defs,
+            timestamp: fixture.timestamp,
+            signature: fixture.signatureBase64,
+            keyId: fixture.jwk.kid
+        )
+        let cacheData = try JSONEncoder().encode(cache)
+        await storage.set(cacheKey, value: String(data: cacheData, encoding: .utf8)!)
+        let jwksData = try JSONEncoder().encode(JwkSet(keys: [fixture.jwk]))
+        await storage.set(TogglyStorageKeys.jwks, value: String(data: jwksData, encoding: .utf8)!)
+
+        let service = TogglyService(
+            config: TogglyConfig(
+                appKey: "app",
+                baseURI: "https://127.0.0.1:9",
+                identity: identity,
+                featureDefaults: ["PresalePhotos": false],
+                refreshInterval: 0,
+                verifySignatures: true,
+                connectTimeout: 1,
+                requestTimeout: 1,
+                storage: storage,
+                enableLiveUpdates: false,
+                maxSignatureAgeSeconds: 60
+            )
+        )
+
+        _ = await service.initialize()
+        let isOn = await service.isFeatureOn("PresalePhotos")
+        XCTAssertFalse(isOn)
+        let remaining = await storage.get(cacheKey)
+        XCTAssertNil(remaining)
+    }
+
+    func testUnsignedCacheIsTrustedWhenVerificationIsOff() async throws {
+        let identity = "user-1"
+        let storage = MemoryStorage()
+        await storage.set(
+            TogglyStorageKeys.featureFlagsCache + hashIdentity(identity),
+            value: #"{"identity":"user-1","flags":"{\"PresalePhotos\":true}"}"#
+        )
+
+        let service = TogglyService(
+            config: TogglyConfig(
+                appKey: "app",
+                baseURI: "https://127.0.0.1:9",
+                identity: identity,
+                featureDefaults: ["PresalePhotos": false],
+                refreshInterval: 0,
+                verifySignatures: false,
+                connectTimeout: 1,
+                requestTimeout: 1,
+                storage: storage,
+                enableLiveUpdates: false
+            )
+        )
+
+        _ = await service.initialize()
+        let isOn = await service.isFeatureOn("PresalePhotos")
+        XCTAssertTrue(isOn)
+    }
+
     func testColdStartClearsUnsignedLegacyCacheWhenVerifyEnabled() async throws {
         let identity = "user-1"
         let storage = MemoryStorage()
