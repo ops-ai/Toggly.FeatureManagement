@@ -197,6 +197,45 @@ class SignedDefsVerifyTest {
     }
 
     @Test
+    fun `extractRawJsonProperty accepts spaced keys and rejects truncated strings`() {
+        val pretty = """{ "defs" : { "A" : true } }"""
+        assertEquals("""{ "A" : true }""", SignedDefsVerify.extractRawJsonProperty(pretty, "defs"))
+        assertNull(SignedDefsVerify.extractRawJsonProperty("""{"defs":"unterminated""", "defs"))
+        assertNull(SignedDefsVerify.extractRawJsonProperty("""{"defs":""", "defs"))
+    }
+
+    @Test
+    fun `verify rejects jwk kid that does not match coordinates`() {
+        val key = createKey()
+        val envelope = SignedDefsVerify.SignedEnvelope(
+            defsRaw = """{"A":true}""",
+            signature = "c2ln",
+            timestamp = 1L,
+            kid = "WRONGKIDES256"
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.verify(
+                envelope,
+                """{"keys":[{"kty":"EC","alg":"ES256","crv":"P-256","x":"${key.x}","y":"${key.y}","kid":"WRONGKIDES256"}]}"""
+            )
+        }
+    }
+
+    @Test
+    fun `verify rejects invalid base64 signatures`() {
+        val key = createKey()
+        val envelope = SignedDefsVerify.SignedEnvelope(
+            defsRaw = """{"A":true}""",
+            signature = "%%%not-base64%%%",
+            timestamp = 1L,
+            kid = key.kid
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.verify(envelope, jwks(key))
+        }
+    }
+
+    @Test
     fun `assertEnvelopeFreshness rejects stale and future timestamps`() {
         assertThrows(IllegalArgumentException::class.java) {
             SignedDefsVerify.assertEnvelopeFreshness(
