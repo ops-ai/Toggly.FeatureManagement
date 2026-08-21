@@ -17,6 +17,9 @@ import {
   fetchWithTimeout,
   createTimeout,
   DEFAULT_CONFIG,
+  registerContext,
+  clearRegisteredContexts,
+  normalizeEntityContext,
 } from '../src/utils';
 import type { FeatureFlags, TogglyConfig } from '../src/types';
 
@@ -451,6 +454,32 @@ describe('utils', () => {
 
       await expect(fetchPromise).rejects.toThrow();
     });
+
+    it('evaluates entity gates and registers context mappers', () => {
+      const flags: FeatureFlags = {
+        badge: {
+          requirement: 'all',
+          rules: [{ property: 'color', op: 'eq', value: 'red' }],
+        },
+      }
+
+      expect(isFeatureEnabled(flags, 'badge')).toBe(false)
+      expect(
+        isFeatureEnabled(flags, 'badge', false, { kind: 'Puppy', key: '1', attributes: { color: 'red' } }),
+      ).toBe(true)
+
+      registerContext('Puppy', (entity: { id: string; color: string }) => ({
+        kind: 'Puppy',
+        key: entity.id,
+        attributes: { color: entity.color },
+      }))
+      expect(normalizeEntityContext({ id: '1', color: 'red' }, 'Puppy')).toEqual({
+        kind: 'Puppy',
+        key: '1',
+        attributes: { color: 'red' },
+      })
+      clearRegisteredContexts()
+    })
 
     it('should use default options and timeout', async () => {
       const mockResponse = new Response(JSON.stringify({ success: true }));
