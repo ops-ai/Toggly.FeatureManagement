@@ -120,6 +120,28 @@ internal object SignedDefsVerify {
         return MessageDigest.getInstance("SHA-256").digest(firstDigest)
     }
 
+    /**
+     * Reject envelopes older than [maxSignatureAgeSeconds] (Unix seconds).
+     * Null or <= 0 disables the check. Allows a small future clock-skew window.
+     */
+    internal fun assertEnvelopeFreshness(
+        timestamp: Long,
+        maxSignatureAgeSeconds: Long? = null,
+        nowSeconds: Long = System.currentTimeMillis() / 1000L,
+        maxClockSkewSeconds: Long = 60L
+    ) {
+        val maxAge = maxSignatureAgeSeconds ?: return
+        if (maxAge <= 0L) {
+            return
+        }
+        if (timestamp > nowSeconds + maxClockSkewSeconds) {
+            throw IllegalArgumentException("signature timestamp is in the future")
+        }
+        if (nowSeconds - timestamp > maxAge) {
+            throw IllegalArgumentException("signature timestamp exceeded maxSignatureAgeSeconds")
+        }
+    }
+
     internal fun verify(
         envelope: SignedEnvelope,
         jwksBody: String

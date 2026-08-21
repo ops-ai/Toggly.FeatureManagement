@@ -39,6 +39,17 @@ namespace Toggly.FeatureManagement.Data
         public RequirementType RequirementType { get; set; } = RequirementType.Any;
 
         /// <summary>
+        /// Optional entity context kind bound to this feature (Order, Puppy, etc.).
+        /// </summary>
+        public string? ContextKind { get; set; }
+
+        /// <summary>
+        /// Any/All requirement for ContextProperty filters. Falls back to <see cref="RequirementType"/>.
+        /// </summary>
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public RequirementType? ContextRequirementType { get; set; }
+
+        /// <summary>
         /// Named variants (Microsoft Feature Management schema); used by <see cref="IVariantFeatureManager"/>.
         /// </summary>
         public List<VariantDefinition>? Variants { get; set; }

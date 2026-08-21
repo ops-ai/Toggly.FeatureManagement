@@ -9,3 +9,5 @@ export {
   type UseFeatureFlagResult,
   type UseFeatureGateOptions,
 } from './hooks/useFeatureFlag'
+export type { EvaluatedDefinitions, TogglyEntityContext } from './services/toggly.service'
+export { isEntityGate, mapEntityContext, registerContext } from './services/toggly.service'

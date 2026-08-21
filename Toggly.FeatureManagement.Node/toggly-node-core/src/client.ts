@@ -39,6 +39,15 @@ import {
   verifySignedDefinitions,
   type JwkSet,
 } from './verify.js'
+import {
+  normalizeEntityContext,
+  resolveEvaluatedDefinition,
+  type TogglyEntityContext,
+} from '@ops-ai/toggly-hooks-types'
+import {
+  registerContext as registerEntityContext,
+  registerEntityContextsAtStartup,
+} from './entity-context-registration.js'
 
 /**
  * Create a new Toggly client
@@ -300,7 +309,9 @@ export function createTogglyClient(
       if (config.verifySignatures) {
         const { envelope, defsRaw } = parseSignedEnvelope(bodyText)
         const jwks = await loadOrFetchJwks()
-        verifySignedDefinitions(defsRaw, envelope, jwks, config.allowedKeyIds)
+        verifySignedDefinitions(defsRaw, envelope, jwks, config.allowedKeyIds, {
+          maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
+        })
 
         // Apply verified raw bytes — never envelope.defs from the outer parse.
         const defs = parseDefinitionsFromRaw(defsRaw)
@@ -642,6 +653,14 @@ export function createTogglyClient(
 
     logger.debug('Toggly client initialized')
 
+    await registerEntityContextsAtStartup({
+      baseUrl: config.baseUrl ?? DEFAULT_CONFIG.baseUrl,
+      appKey: config.appKey ?? '',
+      registerOnStartup: config.registerContextsOnStartup ?? true,
+      debug: config.debug ?? false,
+      timeout: config.timeout ?? DEFAULT_CONFIG.timeout,
+    })
+
     return features
   }
 
@@ -650,13 +669,16 @@ export function createTogglyClient(
    */
   async function isFeatureOn(
     featureKey: string,
-    context?: EvaluationContext
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean> {
     const evalContext: EvaluationContext = {
       identity: context?.identity ?? config.identity,
       groups: context?.groups,
       traits: context?.traits,
     }
+    const entityContext = normalizeEntityContext(entity, kind)
 
     // Execute beforeEvaluation hooks
     const hookData = await hookExecutor.executeBeforeEvaluation(
@@ -665,8 +687,7 @@ export function createTogglyClient(
       config.featureDefaults?.[featureKey]
     )
 
-    // Get feature value
-    const result = state.features[featureKey] === true
+    const result = resolveEvaluatedDefinition(state.features[featureKey], entityContext)
 
     // Execute afterEvaluation hooks
     await hookExecutor.executeAfterEvaluation(featureKey, evalContext, hookData, result)
@@ -674,26 +695,26 @@ export function createTogglyClient(
     return result
   }
 
-  /**
-   * Evaluate if a feature is off
-   */
   async function isFeatureOff(
     featureKey: string,
-    context?: EvaluationContext
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean> {
-    const isOn = await isFeatureOn(featureKey, context)
+    const isOn = await isFeatureOn(featureKey, context, entity, kind)
     return !isOn
   }
 
-  /**
-   * Evaluate a feature gate with multiple features
-   */
   async function evaluateFeatureGate(
     featureKeys: string[],
     requirement: FeatureRequirement = 'all',
     negate = false,
-    context?: EvaluationContext
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean> {
+    const entityContext = normalizeEntityContext(entity, kind)
+
     // Execute hooks for each feature
     for (const key of featureKeys) {
       const evalContext: EvaluationContext = {
@@ -709,7 +730,7 @@ export function createTogglyClient(
       )
     }
 
-    const result = evaluateGate(state.features, featureKeys, requirement, negate)
+    const result = evaluateGate(state.features, featureKeys, requirement, negate, entityContext)
 
     // Execute after hooks
     for (const key of featureKeys) {
@@ -719,11 +740,23 @@ export function createTogglyClient(
         traits: context?.traits,
       }
 
-      const featureResult = state.features[key] === true
+      const featureResult = resolveEvaluatedDefinition(state.features[key], entityContext)
       await hookExecutor.executeAfterEvaluation(key, evalContext, [], featureResult)
     }
 
     return result
+  }
+
+  function registerContext<T>(
+    kind: string,
+    mapper: (entity: T) => TogglyEntityContext,
+    schema?: {
+      keyProperty: string
+      displayName?: string
+      properties: Array<{ name: string; type: string }>
+    },
+  ): void {
+    registerEntityContext(kind, mapper, schema)
   }
 
   /**
@@ -790,6 +823,7 @@ export function createTogglyClient(
     isFeatureOn,
     isFeatureOff,
     evaluateFeatureGate,
+    registerContext,
     setIdentity,
     addHook,
     removeHook,

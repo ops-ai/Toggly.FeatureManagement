@@ -102,6 +102,35 @@ class SignedDefsVerifyTest {
         }
     }
 
+    @Test
+    fun `assertEnvelopeFreshness no-ops when max age unset`() {
+        SignedDefsVerify.assertEnvelopeFreshness(1L, maxSignatureAgeSeconds = null)
+        SignedDefsVerify.assertEnvelopeFreshness(1L, maxSignatureAgeSeconds = 0L)
+    }
+
+    @Test
+    fun `assertEnvelopeFreshness rejects stale and future timestamps`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp = 100L,
+                maxSignatureAgeSeconds = 300L,
+                nowSeconds = 1000L
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp = 2000L,
+                maxSignatureAgeSeconds = 300L,
+                nowSeconds = 1000L
+            )
+        }
+        SignedDefsVerify.assertEnvelopeFreshness(
+            timestamp = 900L,
+            maxSignatureAgeSeconds = 300L,
+            nowSeconds = 1000L
+        )
+    }
+
     private fun createKey(): TestKey {
         val generator = KeyPairGenerator.getInstance("EC")
         generator.initialize(ECGenParameterSpec("secp256r1"))

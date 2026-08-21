@@ -401,6 +401,16 @@ export class FeatureFlagAnalyticsService {
 }
 ```
 
+## Entity context
+
+Use `*featureFlag` and `TogglyService.isFeatureOn` with a **per-row entity** and optional `contextKind`. User identity remains on `setContext()`. See [Angular entity context](https://docs.toggly.io/sdks/javascript/angular#entity-context).
+
+```html
+<div *featureFlag="'ExpressCheckout'; context: order; contextKind: 'Order'">
+  Express checkout available
+</div>
+```
+
 ## License
 
 MIT

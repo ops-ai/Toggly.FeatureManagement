@@ -2,6 +2,22 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.1.0
+
+2026-07-14
+
+### Added
+- Persist signed-envelope metadata (`timestamp`, `signature`, `keyId`) with the
+  exact raw defs JSON when `verifySignatures` succeeds, and re-verify on cold
+  start before trusting cache (Flutter parity).
+- Optional `maxSignatureAgeSeconds` on `TogglyConfig` to reject stale envelopes.
+- Persist JWKS for offline cold-start re-verify; soft-fail (keep last-known-good)
+  when JWKS/network is unavailable, fail closed on invalid signatures.
+
+### Fixed
+- When JWKS is available on cold-start re-verify, fail closed for all verification
+  errors (unknown kid, key material issues), not only `invalidSignature`.
+
 ## 1.0.1
 
 2026-07-13

@@ -1,4 +1,5 @@
 import type { FeatureDefinitions, FeatureRequirement } from './types.js'
+import { evaluateEvaluatedGate, type TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 
 /**
  * Generate a UUID v4
@@ -24,23 +25,14 @@ export function evaluateGate(
   features: FeatureDefinitions,
   featureKeys: string[],
   requirement: FeatureRequirement = 'all',
-  negate = false
+  negate = false,
+  entityContext?: TogglyEntityContext | null,
 ): boolean {
   if (featureKeys.length === 0) {
     return negate ? true : false
   }
 
-  let result: boolean
-
-  if (requirement === 'all') {
-    // All features must be enabled
-    result = featureKeys.every((key) => features[key] === true)
-  } else {
-    // Any feature must be enabled
-    result = featureKeys.some((key) => features[key] === true)
-  }
-
-  return negate ? !result : result
+  return evaluateEvaluatedGate(features, featureKeys, requirement, negate, entityContext)
 }
 
 /**

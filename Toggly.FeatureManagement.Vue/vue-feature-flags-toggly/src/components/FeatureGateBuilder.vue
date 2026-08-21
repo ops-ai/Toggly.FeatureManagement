@@ -20,6 +20,13 @@ export default {
       type: Boolean,
       default: false,
     },
+    context: {
+      type: Object,
+      default: null,
+    },
+    contextKind: {
+      type: String,
+    },
   },
 
   data() {
@@ -52,6 +59,8 @@ export default {
     featureKeys: 'evaluateGate',
     requirement: 'evaluateGate',
     negate: 'evaluateGate',
+    context: 'evaluateGate',
+    contextKind: 'evaluateGate',
   },
 
   methods: {
@@ -75,6 +84,8 @@ export default {
         gate,
         this.requirement,
         this.negate,
+        this.context,
+        this.contextKind,
       )
     },
   },

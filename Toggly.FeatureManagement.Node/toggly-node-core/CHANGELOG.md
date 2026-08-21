@@ -1,3 +1,11 @@
+## 0.3.2
+
+2026-07-14
+
+### Added
+- Optional `maxSignatureAgeSeconds` freshness check when `verifySignatures` is
+  enabled (rejects stale signed envelopes; omit / <=0 keeps prior behavior).
+
 ## 0.3.1
 
 2026-07-13

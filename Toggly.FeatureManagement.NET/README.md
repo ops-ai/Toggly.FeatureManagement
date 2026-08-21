@@ -168,8 +168,23 @@ In MVC views `<feature>` tags can be used to conditionally render content based 
 
 The `<feature>` tag requires a tag helper to work. This can be done by adding the feature management tag helper to the _ViewImports.cshtml_ file.
 ``` HTML+Razor
-@addTagHelper *, Microsoft.FeatureManagement.AspNetCore
+@addTagHelper *, Toggly.FeatureManagement.Web
+@removeTagHelper Microsoft.FeatureManagement.AspNetCore.TagHelpers.FeatureTagHelper, Microsoft.FeatureManagement.AspNetCore
 ```
+
+Toggly's helper is a drop-in for Microsoft's `<feature>` element and adds `context` for entity targeting. Remove Microsoft's helper so it cannot evaluate the same element without `context`.
+
+#### Entity context on views
+
+Pass a domain object for Context Property filters:
+
+``` HTML+Razor
+<feature name="PuppyBadge" context="@Model.Puppy">
+  <span class="badge">Featured</span>
+</feature>
+```
+
+Register kinds with `AddTogglyEntityContext<T>` and evaluate in controllers via `IsEnabledAsync(feature, entity)`. See [Entity context](https://docs.toggly.io/sdks/dotnet/entity-context).
 
 ### MVC Filters
 

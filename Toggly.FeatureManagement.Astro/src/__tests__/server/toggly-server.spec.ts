@@ -6,11 +6,13 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 function createMockResponse(body: unknown, status = 200) {
+  const bodyText = typeof body === 'string' ? body : JSON.stringify(body);
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? 'OK' : 'Error',
-    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(bodyText),
+    json: () => Promise.resolve(typeof body === 'string' ? JSON.parse(body) : body),
   };
 }
 
@@ -76,6 +78,29 @@ describe('TogglyServer', () => {
       const flags = await server.getFlags();
       expect(flags).toEqual({ Feature1: true, Feature2: false });
       expect(mockFetch).toHaveBeenCalledOnce();
+    });
+
+    it('reads text() and rejects invalid envelope when verifySignatures is true', async () => {
+      const invalidBody = JSON.stringify({ defs: { Feature1: true } });
+      const text = vi.fn().mockResolvedValue(invalidBody);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text,
+        json: () => Promise.resolve(JSON.parse(invalidBody)),
+      });
+
+      const server = new TogglyServer({
+        appKey: 'test-key',
+        verifySignatures: true,
+        flagDefaults: { Feature1: false },
+      });
+
+      // Invalid envelope throws inside fetchFlags; server falls back to defaults
+      const flags = await server.getFlags();
+      expect(text).toHaveBeenCalled();
+      expect(flags).toEqual({ Feature1: false });
     });
 
     it('should construct the correct API URL', async () => {

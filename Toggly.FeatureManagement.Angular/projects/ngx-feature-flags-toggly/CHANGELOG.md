@@ -1,3 +1,27 @@
+## 2.7.0
+
+2026-08-19
+
+### Added
+- Entity context evaluation for per-row/per-entity feature gates from cached
+  `evaluated-signed` mixed `defs` (`true` / `false` / gate objects).
+- `registerContext(kind, mapper)` on `TogglyService` to map domain entities to
+  `TogglyEntityContext`.
+- Optional `context` and `kind` on `isFeatureOn`, `evaluateFeatureGate`,
+  `*featureFlag`, and `*featureGateBuilder` for local entity rule evaluation.
+- Entity gates fail closed without context (gate objects are not treated as
+  truthy booleans).
+
+## 2.6.2
+
+2026-07-14
+
+### Added
+- Optional `maxSignatureAgeSeconds` freshness check when `verifySignatures` is
+  enabled (rejects stale signed envelopes; omit / <=0 keeps prior behavior).
+- Optional `allowedKeyIds` allowlist passed through to signature verification.
+- Uses shared `@ops-ai/toggly-signed-defs` for ES256 verification (single source of truth).
+
 ## 2.6.1
 
 2026-07-14

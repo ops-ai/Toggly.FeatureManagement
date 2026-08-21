@@ -1,3 +1,26 @@
+## 1.9.0
+
+2026-08-19
+
+### Added
+- Entity context evaluation for mixed `evaluated-signed` definitions (`boolean |
+  EntityGate`) via shared `@ops-ai/toggly-hooks-types` helpers.
+- Optional `context` / `contextKind` on `isFeatureOn`, `evaluateFeatureGate`,
+  `getEffectiveFlagValue`, `useFeatureGate`, and `<Feature>`.
+- `registerContext(kind, mapper)` for domain-object → `TogglyEntityContext`
+  mapping.
+- Entity gates fail closed when no context is supplied.
+
+## 1.8.1
+
+2026-07-14
+
+### Added
+- Optional `maxSignatureAgeSeconds` freshness check when `verifySignatures` is
+  enabled (rejects stale signed envelopes; omit / <=0 keeps prior behavior).
+- Optional `allowedKeyIds` allowlist passed through to signature verification.
+- Uses shared `@ops-ai/toggly-signed-defs` for ES256 verification (single source of truth).
+
 ## 1.8.0
 
 2026-07-13

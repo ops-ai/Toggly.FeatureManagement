@@ -5,6 +5,8 @@ import type { TogglyService } from '../services'
 export interface UseFeatureFlagOptions {
   defaultValue?: boolean
   negate?: boolean
+  context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null
+  contextKind?: string
 }
 
 export interface UseFeatureFlagResult {
@@ -39,7 +41,7 @@ export function useFeatureGate(
   featureKeys: string[],
   options: UseFeatureGateOptions = {},
 ): UseFeatureFlagResult {
-  const { requirement = 'all', negate = false, defaultValue = false } = options
+  const { requirement = 'all', negate = false, defaultValue = false, context, contextKind } = options
   const toggly = useTogglyService()
   const [isEnabled, setIsEnabled] = useState(defaultValue)
   const [isLoading, setIsLoading] = useState(true)
@@ -61,14 +63,14 @@ export function useFeatureGate(
 
     setIsLoading(true)
     try {
-      const result = await toggly.evaluateFeatureGate(stableKeys, requirement, negate)
+      const result = await toggly.evaluateFeatureGate(stableKeys, requirement, negate, context, contextKind)
       setIsEnabled(result)
     } catch {
       setIsEnabled(defaultValue)
     } finally {
       setIsLoading(false)
     }
-  }, [toggly, stableKeys, keysKey, requirement, negate, defaultValue])
+  }, [toggly, stableKeys, keysKey, requirement, negate, defaultValue, context, contextKind])
 
   useEffect(() => {
     void evaluate()

@@ -27,6 +27,39 @@ final class SignedDefsVerifyTests: XCTestCase {
         )
     }
 
+    func testAssertEnvelopeFreshnessNoOpsWhenDisabled() throws {
+        try SignedDefsVerify.assertEnvelopeFreshness(timestamp: 1, maxSignatureAgeSeconds: nil)
+        try SignedDefsVerify.assertEnvelopeFreshness(timestamp: 1, maxSignatureAgeSeconds: 0)
+    }
+
+    func testAssertEnvelopeFreshnessRejectsStaleAndFuture() {
+        XCTAssertThrowsError(
+            try SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp: 100,
+                maxSignatureAgeSeconds: 300,
+                nowSeconds: 1000
+            )
+        ) { error in
+            XCTAssertEqual(error as? SignedDefsVerifyError, .signatureTimestampExpired)
+        }
+        XCTAssertThrowsError(
+            try SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp: 2000,
+                maxSignatureAgeSeconds: 300,
+                nowSeconds: 1000
+            )
+        ) { error in
+            XCTAssertEqual(error as? SignedDefsVerifyError, .signatureTimestampInFuture)
+        }
+        XCTAssertNoThrow(
+            try SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp: 900,
+                maxSignatureAgeSeconds: 300,
+                nowSeconds: 1000
+            )
+        )
+    }
+
     func testRejectsSingleSha256Signatures() throws {
         let fixture = try makeSignedFixture(
             defs: "{\"PresalePhotos\":true}",

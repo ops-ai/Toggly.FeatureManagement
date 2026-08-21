@@ -12,11 +12,13 @@ const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
 function createMockResponse(data: unknown, status = 200) {
+  const bodyText = typeof data === 'string' ? data : JSON.stringify(data)
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? 'OK' : 'Error',
-    json: async () => data,
+    text: async () => bodyText,
+    json: async () => (typeof data === 'string' ? JSON.parse(data) : data),
   }
 }
 
@@ -65,6 +67,28 @@ describe('TogglyEdgeClient', () => {
 
       expect(client.isFeatureOnSync('feature-a')).toBe(true)
       expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('reads text() and falls back when verifySignatures gets invalid envelope', async () => {
+      const invalidBody = JSON.stringify({ defs: { 'feature-a': true } })
+      const text = vi.fn().mockResolvedValue(invalidBody)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text,
+        json: async () => JSON.parse(invalidBody),
+      })
+
+      const client = new TogglyEdgeClient({
+        appKey: 'test-key',
+        verifySignatures: true,
+        featureDefaults: { 'feature-a': false },
+      })
+      await client.init()
+
+      expect(text).toHaveBeenCalled()
+      expect(client.isFeatureOnSync('feature-a')).toBe(false)
     })
   })
 

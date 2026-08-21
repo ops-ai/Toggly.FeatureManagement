@@ -18,6 +18,19 @@ export {
 // Constants
 export { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
 
+// Entity context helpers, re-exported so wrapper packages share one implementation
+export {
+  normalizeEntityContext,
+  registerContext,
+  resolveEvaluatedDefinition,
+  toBooleanDefinitions,
+} from '@ops-ai/toggly-hooks-types'
+export type {
+  EntityGate,
+  EvaluatedDefinitions,
+  TogglyEntityContext,
+} from '@ops-ai/toggly-hooks-types'
+
 // Types
 export type {
   TogglyConfig,

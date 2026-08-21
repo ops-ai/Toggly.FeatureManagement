@@ -3,11 +3,16 @@ import {
   appendEvaluationContext,
   evaluationContextCacheKey,
   isCacheLruEnabled,
+  normalizeEntityContext,
   parseCacheLruIndex,
+  registerContext as registerEntityContext,
   removeCacheLruKeys,
+  resolveEvaluatedDefinition,
   selectCacheLruKeysToEvict,
   serializeCacheLruIndex,
+  toBooleanDefinitions,
   touchCacheLruKey,
+  type TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
@@ -522,7 +527,7 @@ export class TogglyService {
       this.lastError = null;
 
       // Execute afterRefresh hooks
-      await this.hookExecutor.executeAfterRefresh(flags);
+      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
 
       // Emit refreshed event
       this.eventEmitter.emit('refreshed', flags);
@@ -767,7 +772,8 @@ export class TogglyService {
       defsRaw,
       { signature, timestamp, kid: keyId },
       jwks,
-      this.config.trustedKeyIds
+      this.config.trustedKeyIds,
+      { maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds }
     );
   }
 
@@ -866,8 +872,17 @@ export class TogglyService {
     this.emitEffectiveFlagsChanged();
   }
 
-  private getEffectiveFlag(featureKey: string, remote: boolean): boolean {
+  private getEffectiveFlag(
+    featureKey: string,
+    entityContext?: TogglyEntityContext | null,
+  ): boolean {
+    const flags = this.features ?? this.config.featureDefaults ?? {};
+    const remote = resolveEvaluatedDefinition(flags[featureKey], entityContext);
     return applyLocalGate(remote, featureKey, this.localGates, this.localGateIndex);
+  }
+
+  registerContext<T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void {
+    registerEntityContext(kind, mapper);
   }
 
   /**
@@ -876,7 +891,9 @@ export class TogglyService {
   async evaluateFeatureGate(
     featureKeys: string[],
     requirement: FeatureRequirement = 'all',
-    negate = false
+    negate = false,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean> {
     await this.ensureFeaturesLoaded();
 
@@ -889,7 +906,13 @@ export class TogglyService {
       featureKeys[0]
     );
 
-    const result = this.evaluateGateInternal(featureKeys, requirement, negate);
+    const entityContext = normalizeEntityContext(entity, kind);
+    const result = this.evaluateGateInternal(
+      featureKeys,
+      requirement,
+      negate,
+      entityContext,
+    );
 
     await this.hookExecutor.executeAfterEvaluation(
       featureKeys[0],
@@ -906,7 +929,8 @@ export class TogglyService {
   private evaluateGateInternal(
     featureKeys: string[],
     requirement: FeatureRequirement,
-    negate: boolean
+    negate: boolean,
+    entityContext?: TogglyEntityContext | null,
   ): boolean {
     const flags = this.features ?? this.config.featureDefaults ?? {};
 
@@ -914,33 +938,28 @@ export class TogglyService {
       return negate;
     }
 
-    // Fast path for single feature
     if (featureKeys.length === 1) {
-      const remote = flags[featureKeys[0]] === true;
-      const isEnabled = this.getEffectiveFlag(featureKeys[0], remote);
+      const isEnabled = this.getEffectiveFlag(featureKeys[0], entityContext);
       return negate ? !isEnabled : isEnabled;
     }
 
     let isEnabled: boolean;
 
     if (requirement === 'any') {
-      isEnabled = featureKeys.some((key) =>
-        this.getEffectiveFlag(key, flags[key] === true)
-      );
+      isEnabled = featureKeys.some((key) => this.getEffectiveFlag(key, entityContext));
     } else {
-      isEnabled = featureKeys.every((key) =>
-        this.getEffectiveFlag(key, flags[key] === true)
-      );
+      isEnabled = featureKeys.every((key) => this.getEffectiveFlag(key, entityContext));
     }
 
     return negate ? !isEnabled : isEnabled;
   }
 
-  /**
-   * Check if a feature is enabled.
-   */
-  async isFeatureOn(featureKey: string): Promise<boolean> {
-    return this.evaluateFeatureGate([featureKey], 'all', false);
+  async isFeatureOn(
+    featureKey: string,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<boolean> {
+    return this.evaluateFeatureGate([featureKey], 'all', false, entity, kind);
   }
 
   /**
@@ -1166,8 +1185,8 @@ export class TogglyService {
     ]);
 
     for (const key of allKeys) {
-      const previousValue = previousFlags[key];
-      const newValue = newFlags[key];
+      const previousValue = resolveEvaluatedDefinition(previousFlags[key]);
+      const newValue = resolveEvaluatedDefinition(newFlags[key]);
 
       if (previousValue !== newValue) {
         this.eventEmitter.emit('featureChanged', {

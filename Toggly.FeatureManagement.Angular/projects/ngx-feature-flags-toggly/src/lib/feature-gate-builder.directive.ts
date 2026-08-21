@@ -8,6 +8,7 @@ import {
   ViewContainerRef,
 } from '@angular/core'
 import { TogglyService } from './toggly.service'
+import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 
 /**
  * Structural directive that always renders its template and exposes the resolved gate boolean.
@@ -29,6 +30,8 @@ import { TogglyService } from './toggly.service'
 export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
   private flag: string[] = []
   private viewRef?: EmbeddedViewRef<{ $implicit: boolean; enabled: boolean }>
+  private entityContext: TogglyEntityContext | Record<string, unknown> | null = null
+  private kind: string | undefined
   private unsubscribeLocalGates: (() => void) | undefined
   private unsubscribeFeaturesRefresh: (() => void) | undefined
 
@@ -56,6 +59,18 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
   @Input('featureGateBuilderNegate')
   set featureGateBuilderNegate(value: boolean) {
     this.negate = value ?? false
+    this.updateView()
+  }
+
+  @Input('featureGateBuilderContext')
+  set featureGateBuilderContext(value: TogglyEntityContext | Record<string, unknown> | null) {
+    this.entityContext = value
+    this.updateView()
+  }
+
+  @Input('featureGateBuilderKind')
+  set featureGateBuilderKind(value: string | undefined) {
+    this.kind = value
     this.updateView()
   }
 
@@ -89,7 +104,7 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
       }
 
       this.toggly
-        .evaluateFeatureGate(this.flag, this.requirement, this.negate)
+        .evaluateFeatureGate(this.flag, this.requirement, this.negate, this.entityContext, this.kind)
         .then((isEnabled) => this.renderEnabled(isEnabled))
     }
 

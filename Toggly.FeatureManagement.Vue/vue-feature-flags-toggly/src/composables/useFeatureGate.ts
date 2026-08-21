@@ -9,6 +9,7 @@ import {
   watch,
   type Ref,
 } from 'vue'
+import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 import defaultToggly, { type Toggly } from '../plugins/toggly.service'
 
 type MaybeRef<T> = T | Ref<T>
@@ -24,6 +25,8 @@ export interface UseFeatureGateOptions {
   featureKeys?: string[]
   requirement?: 'all' | 'any'
   negate?: boolean
+  context?: TogglyEntityContext | Record<string, unknown> | null
+  contextKind?: string
   toggly?: Toggly
 }
 
@@ -72,7 +75,14 @@ export function useFeatureGate(
   const isLoading = ref(true)
 
   const refresh = async () => {
-    const { featureKey, featureKeys, requirement = 'all', negate = false } = resolvedOptions.value
+    const {
+      featureKey,
+      featureKeys,
+      requirement = 'all',
+      negate = false,
+      context,
+      contextKind,
+    } = resolvedOptions.value
     const gate = buildGate(featureKey, featureKeys)
     isLoading.value = true
     try {
@@ -80,7 +90,13 @@ export function useFeatureGate(
         isEnabled.value = !negate
         return
       }
-      isEnabled.value = await toggly.value.evaluateFeatureGate(gate, requirement, negate)
+      isEnabled.value = await toggly.value.evaluateFeatureGate(
+        gate,
+        requirement,
+        negate,
+        context,
+        contextKind,
+      )
     } finally {
       isLoading.value = false
     }

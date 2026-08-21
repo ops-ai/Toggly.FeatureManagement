@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly-core",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "description": "Core feature flag utilities for Nuxt",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -45,7 +45,8 @@
   "homepage": "https://toggly.io",
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "file:../../toggly-hooks-types",
-    "@ops-ai/toggly-local-gates": "file:../../toggly-local-gates"
+    "@ops-ai/toggly-local-gates": "file:../../toggly-local-gates",
+    "@ops-ai/toggly-signed-defs": "file:../../toggly-signed-defs"
   },
   "devDependencies": {
     "@types/node": "^22.13.1",

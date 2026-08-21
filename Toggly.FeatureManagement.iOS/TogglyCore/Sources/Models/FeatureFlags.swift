@@ -41,16 +41,38 @@ public struct TogglyInitResponse: Sendable {
 }
 
 /// Cache data structure for persisted feature flags.
+///
+/// When signed definitions are verified, `flags` holds the exact raw defs JSON
+/// the server signed, plus envelope metadata for cold-start re-verification.
+/// Older caches without metadata still decode (optional fields default to nil).
 public struct TogglyFeatureFlagsCache: Codable, Sendable {
     /// The identity associated with this cache.
     public let identity: String
 
-    /// JSON-encoded feature flags.
+    /// JSON-encoded feature flags (exact signed defs when verification is on).
     public let flags: String
 
+    /// Unix timestamp from the signed envelope.
+    public let timestamp: Int64?
+
+    /// Base64 signature from the signed envelope.
+    public let signature: String?
+
+    /// Key ID (`kid`) from the signed envelope.
+    public let keyId: String?
+
     /// Creates a new cache entry.
-    public init(identity: String, flags: String) {
+    public init(
+        identity: String,
+        flags: String,
+        timestamp: Int64? = nil,
+        signature: String? = nil,
+        keyId: String? = nil
+    ) {
         self.identity = identity
         self.flags = flags
+        self.timestamp = timestamp
+        self.signature = signature
+        self.keyId = keyId
     }
 }

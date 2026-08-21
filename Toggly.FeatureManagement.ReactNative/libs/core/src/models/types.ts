@@ -1,4 +1,4 @@
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { Hook, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
 export type { LocalGate };
@@ -10,9 +10,11 @@ export type { LocalGate };
 export type FeatureRequirement = 'all' | 'any';
 
 /**
- * Feature flags map - key is the feature name, value is enabled state
+ * Feature flags map - boolean or entity gate per flag
  */
-export type FeatureFlags = Record<string, boolean>;
+export type FeatureFlags = EvaluatedDefinitions;
+
+export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 
 /**
  * Storage interface for feature flag caching.
@@ -151,6 +153,12 @@ export interface TogglyConfig {
    * @default false
    */
   verifySignatures?: boolean;
+
+  /**
+   * Reject signed envelopes older than this many seconds when verifySignatures is enabled.
+   * Omit / null / <=0 = disabled (back-compat).
+   */
+  maxSignatureAgeSeconds?: number | null;
 
   /**
    * List of trusted key IDs for signed definitions

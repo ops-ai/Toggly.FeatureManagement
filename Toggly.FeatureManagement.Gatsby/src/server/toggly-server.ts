@@ -13,19 +13,26 @@ import type {
   CachedFlags,
   GateRequirement,
 } from '../types/index.js';
-import { appendEvaluationContext, type Hook } from '@ops-ai/toggly-hooks-types';
+import { appendEvaluationContext, evaluateEvaluatedGate, normalizeEntityContext, registerContext as registerEntityContext, resolveEvaluatedDefinition, type Hook } from '@ops-ai/toggly-hooks-types';
 import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
+import {
+  parseEvaluatedResponseBody,
+  readResponseBody,
+  unwrapDefsPayload,
+} from '../signed-response.js';
 
 /**
  * Server config type with required properties except identity and hooks
  */
-type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | 'claims' | 'hooks' | 'localGates' | 'onError'>> & {
+type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | 'claims' | 'hooks' | 'localGates' | 'onError' | 'allowedKeyIds' | 'maxSignatureAgeSeconds'>> & {
   identity?: string;
   groups?: string[];
   claims?: Record<string, string>;
   hooks?: Hook[];
   localGates?: TogglyPluginOptions['localGates'];
   onError?: TogglyPluginOptions['onError'];
+  allowedKeyIds?: string[];
+  maxSignatureAgeSeconds?: number;
 };
 
 /**
@@ -113,13 +120,15 @@ export class TogglyServer implements TogglyServerClient {
         );
       }
 
-      const payload = (await response.json()) as Record<string, unknown>;
-      let flags: Flags;
-      if (payload.defs && typeof payload.defs === 'object') {
-        flags = payload.defs as Flags;
-      } else {
-        flags = payload as unknown as Flags;
-      }
+      const bodyText = await readResponseBody(response);
+      const payload = await parseEvaluatedResponseBody(bodyText, {
+        verifySignatures: this.config.verifySignatures,
+        baseURI: this.config.baseURI,
+        allowedKeyIds: this.config.allowedKeyIds,
+        maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
+        headers: buildDefinitionFetchHeaders({ Accept: 'application/json' }),
+      });
+      let flags = unwrapDefsPayload(payload) as Flags;
 
       // If allFeaturesEnabledDuringBuild is true and we're in build time,
       // override all flags to true
@@ -215,12 +224,17 @@ export class TogglyServer implements TogglyServerClient {
   /**
    * Get a single feature flag value
    */
-  async getFlag(key: string, defaultValue: boolean = false): Promise<boolean> {
+  async getFlag(
+    key: string,
+    defaultValue: boolean = false,
+    entity?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<boolean> {
     const flags = await this.getFlags();
     const value = flags[key];
 
     if (value !== undefined) {
-      return value;
+      return resolveEvaluatedDefinition(value, normalizeEntityContext(entity, kind));
     }
 
     // Check flagDefaults first, then use provided defaultValue
@@ -233,25 +247,25 @@ export class TogglyServer implements TogglyServerClient {
   async evaluateGate(
     keys: string[],
     requirement: GateRequirement = 'all',
-    negate: boolean = false
+    negate: boolean = false,
+    entity?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean> {
     if (keys.length === 0) {
       return !negate;
     }
 
     const flags = await this.getFlags();
+    const entityContext = normalizeEntityContext(entity, kind);
 
-    let isEnabled: boolean;
+    return evaluateEvaluatedGate(flags, keys, requirement, negate, entityContext);
+  }
 
-    if (requirement === 'any') {
-      // At least one flag must be true
-      isEnabled = keys.some((key) => flags[key] === true);
-    } else {
-      // All flags must be true
-      isEnabled = keys.every((key) => flags[key] === true);
-    }
-
-    return negate ? !isEnabled : isEnabled;
+  registerContext<T>(
+    kind: string,
+    mapper: (entity: T) => import('@ops-ai/toggly-hooks-types').TogglyEntityContext,
+  ): void {
+    registerEntityContext(kind, mapper);
   }
 }
 

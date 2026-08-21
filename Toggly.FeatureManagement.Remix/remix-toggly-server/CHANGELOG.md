@@ -1,3 +1,10 @@
+## 1.3.2
+
+2026-07-14
+
+### Added
+- Honors `verifySignatures` (plus optional `allowedKeyIds` / `maxSignatureAgeSeconds`) when fetching definitions via `@ops-ai/toggly-signed-defs`.
+
 ## 1.3.1
 
 2026-07-05

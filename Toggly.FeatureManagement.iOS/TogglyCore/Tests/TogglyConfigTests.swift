@@ -14,6 +14,7 @@ final class TogglyConfigTests: XCTestCase {
         XCTAssertEqual(config.refreshInterval, 180)
         XCTAssertFalse(config.useSignedDefinitions)
         XCTAssertFalse(config.verifySignatures)
+        XCTAssertNil(config.maxSignatureAgeSeconds)
         XCTAssertEqual(config.connectTimeout, 10)
         XCTAssertEqual(config.requestTimeout, 30)
         XCTAssertNil(config.storage)

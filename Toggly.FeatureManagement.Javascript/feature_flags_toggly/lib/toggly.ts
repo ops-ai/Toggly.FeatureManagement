@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { HookExecutor } from './hooks';
-import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import type { Hook, TogglyEvaluationContext, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 import {
   appendEvaluationContext,
   evaluationContextCacheKey,
@@ -12,6 +12,10 @@ import {
   serializeCacheLruIndex,
   touchCacheLruKey,
   type CacheLruIndex,
+  normalizeEntityContext,
+  registerContext as registerEntityContext,
+  resolveEvaluatedDefinition,
+  toBooleanDefinitions,
 } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
@@ -47,7 +51,7 @@ export class Toggly {
   private static _inMemoryJwks: JwkSet | null = null;
   private static _localGateIndex: FlagGateIndex = new Map();
   private static _localGatesChangedListeners = new Set<() => void>();
-  private static _inMemoryFlags: { [key: string]: boolean } | null = null;
+  private static _inMemoryFlags: EvaluatedDefinitions | null = null;
   private static _hasLoadedFlags = false;
   private static _lastError: string | undefined;
 
@@ -176,7 +180,7 @@ export class Toggly {
     }
   }
 
-  private static _getFallbackFlags(): { [key: string]: boolean } {
+  private static _getFallbackFlags(): EvaluatedDefinitions {
     if (Toggly._hasLoadedFlags && Toggly._inMemoryFlags) {
       return Toggly._inMemoryFlags;
     }
@@ -232,7 +236,7 @@ export class Toggly {
     return Toggly.refresh();
   }
 
-  static get featureFlagsValue(): { [key: string]: boolean } {
+  static get featureFlagsValue(): EvaluatedDefinitions {
     if (Toggly._inMemoryFlags) {
       return Toggly._inMemoryFlags;
     }
@@ -395,16 +399,18 @@ export class Toggly {
         timestamp: envelope.timestamp,
         kid: envelope.kid,
       },
-      jwks
+      jwks,
+      Toggly._config.allowedKeyIds,
+      { maxSignatureAgeSeconds: Toggly._config.maxSignatureAgeSeconds }
     );
     return { defs: parseDefinitionsFromRaw(defsRaw) };
   }
 
-  private static get _cachedFeatureFlags(): { [key: string]: boolean } | null {
+  private static get _cachedFeatureFlags(): EvaluatedDefinitions | null {
     if (!Toggly._persistCache) return null;
     try {
       const raw = localStorage.getItem(Toggly._flagsCacheKey);
-      const parsed = JSON.parse(raw ?? 'null') as { [key: string]: boolean } | null;
+      const parsed = JSON.parse(raw ?? 'null') as EvaluatedDefinitions | null;
       if (raw != null && parsed != null) {
         Toggly._touchCacheKey(Toggly._flagsCacheKey);
       }
@@ -415,7 +421,7 @@ export class Toggly {
     }
   }
 
-  static cacheFeatureFlags(flags: { [key: string]: boolean }) {
+  static cacheFeatureFlags(flags: EvaluatedDefinitions) {
     Toggly._inMemoryFlags = flags;
     Toggly._hasLoadedFlags = true;
     if (!Toggly._persistCache) return;
@@ -589,7 +595,7 @@ export class Toggly {
           Toggly.applyFetchRevision(response);
           if (response.status === 304) {
             const flags = Toggly._getFallbackFlags();
-            resolve(flags);
+            resolve(toBooleanDefinitions(flags));
             return null;
           }
           if (!response.ok) {
@@ -600,20 +606,20 @@ export class Toggly {
         .then(async (bodyText) => {
           if (!bodyText) {
             const flags = Toggly._getFallbackFlags();
-            resolve(flags);
+            resolve(toBooleanDefinitions(flags));
             return;
           }
           const { defs } = await Toggly.parseEvaluatedSignedBody(bodyText);
-          const flags = (defs && typeof defs === 'object' ? defs : {}) as { [key: string]: boolean };
+          const flags = (defs && typeof defs === 'object' ? defs : {}) as EvaluatedDefinitions;
           Toggly.cacheFeatureFlags(flags);
-          resolve(flags);
+          resolve(toBooleanDefinitions(flags));
 
           if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`); }
         })
         .catch((error) => {
           Toggly._reportError('Error fetching feature flags', error);
           var flags = Toggly._getFallbackFlags();
-          resolve(flags);
+          resolve(toBooleanDefinitions(flags));
 
           if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }
         });
@@ -630,7 +636,7 @@ export class Toggly {
           Toggly.applyFetchRevision(response);
           if (response.status === 304) {
             const flags = Toggly._getFallbackFlags();
-            resolve(flags);
+            resolve(toBooleanDefinitions(flags));
             return null;
           }
           if (!response.ok) {
@@ -641,7 +647,7 @@ export class Toggly {
         .then(async (bodyText) => {
           if (!bodyText) {
             const flags = Toggly._getFallbackFlags();
-            resolve(flags);
+            resolve(toBooleanDefinitions(flags));
             return;
           }
           const { defs: rawDefs } = await Toggly.parseEvaluatedSignedBody(bodyText);
@@ -663,7 +669,7 @@ export class Toggly {
         .catch((error) => {
           Toggly._reportError('Error fetching feature flags', error);
           const flags = Toggly._getFallbackFlags();
-          resolve(flags);
+          resolve(toBooleanDefinitions(flags));
 
           if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }
         });
@@ -693,16 +699,33 @@ export class Toggly {
     });
   }
 
-  private static _getEffectiveFlagValue(flags: { [key: string]: boolean }, flagKey: string): boolean {
-    const remote = flags[flagKey] === true;
+  private static _getEffectiveFlagValue(
+    flags: EvaluatedDefinitions,
+    flagKey: string,
+    entityContext?: TogglyEntityContext | null,
+  ): boolean {
+    const remote = resolveEvaluatedDefinition(flags[flagKey], entityContext);
     return applyLocalGate(remote, flagKey, Toggly._localGates, Toggly._localGateIndex);
   }
 
-  private static _isEffectiveFlagEnabled(flagKey: string, remote: boolean): boolean {
-    return applyLocalGate(remote, flagKey, Toggly._localGates, Toggly._localGateIndex);
+  private static _isEffectiveFlagEnabled(
+    flagKey: string,
+    remote: boolean,
+    entityContext?: TogglyEntityContext | null,
+  ): boolean {
+    const resolved = entityContext
+      ? resolveEvaluatedDefinition(Toggly.featureFlagsValue[flagKey], entityContext)
+      : remote;
+    return applyLocalGate(resolved, flagKey, Toggly._localGates, Toggly._localGateIndex);
   }
 
-  private static _evaluateFeatureGate(flags: { [key: string]: boolean } = {}, featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false) {
+  private static _evaluateFeatureGate(
+    flags: EvaluatedDefinitions = {},
+    featureGate: string[],
+    requirement: FeatureRequirement = FeatureRequirement.all,
+    negate: boolean = false,
+    entityContext?: TogglyEntityContext | null,
+  ) {
     if (featureGate.length > 0 && Object.keys(flags).length === 0) {
       return negate;
     }
@@ -712,12 +735,12 @@ export class Toggly {
     if (requirement === FeatureRequirement.any) {
       isEnabled = featureGate.reduce((isEnabled, featureKey) => {
         return isEnabled ||
-          Toggly._getEffectiveFlagValue(flags, featureKey);
+          Toggly._getEffectiveFlagValue(flags, featureKey, entityContext);
       }, false);
     } else {
       isEnabled = featureGate.reduce((isEnabled, featureKey) => {
         return isEnabled &&
-          Toggly._getEffectiveFlagValue(flags, featureKey);
+          Toggly._getEffectiveFlagValue(flags, featureKey, entityContext);
       }, true);
     }
 
@@ -728,14 +751,21 @@ export class Toggly {
     return isEnabled;
   }
 
-  static evaluateFeatureGate(featureGate: string[], requirement: FeatureRequirement = FeatureRequirement.all, negate: boolean = false): boolean {
+  static evaluateFeatureGate(
+    featureGate: string[],
+    requirement: FeatureRequirement = FeatureRequirement.all,
+    negate: boolean = false,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): boolean {
+    const entityContext = normalizeEntityContext(context, kind);
     if (featureGate.length === 0) {
-      return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate);
+      return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate, entityContext);
     }
     
     const firstKey = featureGate[0];
     const dataMapPromise = Toggly._hookExecutor.executeBeforeEvaluation(firstKey);
-    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate);
+    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate, entityContext);
     Promise.resolve(dataMapPromise).then(dataMap =>
       Toggly._hookExecutor.executeAfterEvaluation(firstKey, dataMap, result)
     ).catch(err => console.error('[Toggly] Hook execution error:', err));
@@ -743,13 +773,22 @@ export class Toggly {
     return result;
   }
 
-  static isFeatureOn(featureKey: string): boolean {
+  static isFeatureOn(
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): boolean {
+    const entityContext = normalizeEntityContext(context, kind);
     const dataMapPromise = Toggly._hookExecutor.executeBeforeEvaluation(featureKey);
-    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey]);
+    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey], FeatureRequirement.all, false, entityContext);
     Promise.resolve(dataMapPromise).then(dataMap => 
       Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
     ).catch(err => console.error('[Toggly] Hook execution error:', err));
     return result;
+  }
+
+  static registerContext<T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void {
+    registerEntityContext(kind, mapper);
   }
 
   static isFeatureOff(featureKey: string): boolean {

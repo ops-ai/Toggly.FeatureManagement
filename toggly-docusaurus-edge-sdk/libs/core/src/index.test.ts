@@ -52,6 +52,26 @@ describe('createTogglyClient', () => {
     );
   });
 
+  it('reads text() and falls back on invalid envelope when verifySignatures is true', async () => {
+    const invalidBody = JSON.stringify({ defs: { Test1: true } });
+    const text = vi.fn().mockResolvedValue(invalidBody);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text,
+      json: async () => JSON.parse(invalidBody),
+    } as unknown as Response);
+
+    const client = createTogglyClient({
+      ...defaultConfig,
+      verifySignatures: true,
+      flagDefaults: { Test1: false },
+    });
+    const flags = await client.getFlags();
+
+    expect(text).toHaveBeenCalled();
+    expect(flags).toEqual({ Test1: false });
+  });
+
   it('should use cached flags if within refresh interval', async () => {
     const mockFlags: Flags = {
       Test1: true,

@@ -95,6 +95,27 @@ describe('TogglyServerClient', () => {
       await client.init();
       expect(await client.isEnabled('feature1')).toBe(false);
     });
+
+    it('reads text() and falls back when verifySignatures gets invalid envelope', async () => {
+      const invalidBody = JSON.stringify({ defs: { feature1: true } });
+      const text = jest.fn().mockResolvedValue(invalidBody);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text,
+        json: () => Promise.resolve(JSON.parse(invalidBody)),
+      });
+
+      const client = new TogglyServerClient({
+        ...defaultConfig,
+        verifySignatures: true,
+        featureDefaults: { feature1: false },
+      });
+
+      const flags = await client.init();
+      expect(text).toHaveBeenCalled();
+      expect(flags).toEqual({ feature1: false });
+    });
   });
 
   describe('local gate subscriptions', () => {

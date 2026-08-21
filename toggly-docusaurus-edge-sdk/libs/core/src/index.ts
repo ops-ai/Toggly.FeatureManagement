@@ -6,6 +6,19 @@
  * including browsers and Cloudflare Workers.
  */
 
+import {
+  normalizeEntityContext,
+  registerContext as registerEntityContext,
+  resolveEvaluatedDefinition,
+  type EvaluatedDefinitions,
+  type TogglyEntityContext,
+} from '@ops-ai/toggly-hooks-types';
+import {
+  parseEvaluatedResponseBody,
+  readResponseBody,
+  unwrapDefsPayload,
+} from './signed-response';
+
 /**
  * Configuration options for creating a Toggly client
  * Matches the API structure used in other Toggly SDKs
@@ -29,6 +42,12 @@ export interface TogglyConfig {
   fetch?: typeof fetch;
   /** User identity for targeting (optional) */
   identity?: string;
+  /** When true, verify ES256 signed envelopes via JWKS before applying flags. */
+  verifySignatures?: boolean;
+  /** Optional allow-list of JWKS kid values when verifySignatures is enabled. */
+  allowedKeyIds?: string[];
+  /** Reject envelopes older than this many seconds; unset disables freshness. */
+  maxSignatureAgeSeconds?: number;
 }
 
 
@@ -36,7 +55,7 @@ export interface TogglyConfig {
 /**
  * Map of feature flag keys to their boolean values
  */
-export type Flags = Record<string, boolean>;
+export type Flags = EvaluatedDefinitions;
 
 /**
  * Toggly client instance
@@ -55,7 +74,14 @@ export interface TogglyClient {
    * @param defaultValue - Optional default value if flag is not found (default: false)
    * @returns Promise resolving to the flag's boolean value
    */
-  getFlag(key: string, defaultValue?: boolean): Promise<boolean>;
+  getFlag(
+    key: string,
+    defaultValue?: boolean,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<boolean>;
+
+  registerContext<T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void;
 
   /**
    * Manually refresh the feature flags cache by fetching from the API
@@ -112,6 +138,9 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     connectTimeout = 5 * 1000, // 5 seconds
     fetch: fetchImpl,
     identity,
+    verifySignatures = false,
+    allowedKeyIds,
+    maxSignatureAgeSeconds,
   } = config;
 
   // Resolve fetch implementation: use provided, then globalThis.fetch, then throw
@@ -192,13 +221,23 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
         );
       }
 
-      const payload = (await response.json()) as { defs?: Flags } | Flags;
-      const flags = ('defs' in (payload as Record<string, unknown>) ? (payload as { defs: Flags }).defs : payload) as Flags;
-      
+      const bodyText = await readResponseBody(response);
+      const parsed = await parseEvaluatedResponseBody(bodyText, {
+        verifySignatures,
+        baseURI,
+        allowedKeyIds,
+        maxSignatureAgeSeconds,
+        headers: { Accept: 'application/json' },
+        fetchImpl: resolvedFetch,
+      });
+      const flags = (
+        verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed)
+      ) as Flags;
+
       if (isDebug) {
         console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);
       }
-      
+
       return flags;
     } catch (error) {
       // On error, try to use cached flags, otherwise use flagDefaults
@@ -245,22 +284,32 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     return cache ? { ...cache.flags } : { ...flagDefaults };
   };
 
-  const getFlag = async (key: string, defaultValue?: boolean): Promise<boolean> => {
+  const getFlag = async (
+    key: string,
+    defaultValue?: boolean,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<boolean> => {
     const flags = await getFlags();
     const value = flags[key];
-    
-    // If flag exists in flags, return it; otherwise use provided defaultValue or flagDefaults
+    const entityContext = normalizeEntityContext(entity, kind);
+
     if (value !== undefined) {
-      return value;
+      return resolveEvaluatedDefinition(value, entityContext);
     }
-    
-    // Check flagDefaults first, then use provided defaultValue
+
     if (defaultValue !== undefined) {
       return defaultValue;
     }
-    
-    // Fall back to flagDefaults if available
+
     return flagDefaults[key] ?? false;
+  };
+
+  const registerContext = <T>(
+    kind: string,
+    mapper: (entity: T) => TogglyEntityContext,
+  ): void => {
+    registerEntityContext(kind, mapper);
   };
 
   const startWebSocket = (): void => {
@@ -376,6 +425,7 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   return {
     getFlags,
     getFlag,
+    registerContext,
     refreshFlags,
     startWebSocket,
     stopWebSocket,

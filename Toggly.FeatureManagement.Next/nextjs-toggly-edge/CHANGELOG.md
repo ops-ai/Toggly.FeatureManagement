@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1
+
+2026-07-14
+
+### Added
+- Honors `verifySignatures`, `allowedKeyIds`, and `maxSignatureAgeSeconds` from core config on edge fetches via `@ops-ai/toggly-signed-defs`.
+
 ## 1.1.0
 
 2026-07-03

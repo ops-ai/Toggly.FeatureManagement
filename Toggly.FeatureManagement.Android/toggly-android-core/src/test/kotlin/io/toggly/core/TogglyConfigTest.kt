@@ -17,6 +17,8 @@ class TogglyConfigTest {
         assertTrue(config.featureDefaults.isEmpty())
         assertEquals(180_000L, config.refreshInterval)
         assertFalse(config.useSignedDefinitions)
+        assertFalse(config.verifySignatures)
+        assertNull(config.maxSignatureAgeSeconds)
     }
 
     @Test

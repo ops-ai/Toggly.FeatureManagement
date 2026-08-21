@@ -2,7 +2,7 @@
  * Toggly Astro SDK - Type Definitions
  */
 
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { Hook, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
 /**
@@ -13,6 +13,16 @@ export interface TogglyConfig {
   baseURI?: string;
   /** Whether signatures should be verified on signed responses */
   verifySignatures?: boolean;
+  /**
+   * Optional allow-list of JWKS `kid` values when verifySignatures is enabled.
+   * Empty/undefined accepts any key present in JWKS.
+   */
+  allowedKeyIds?: string[];
+  /**
+   * Reject envelopes whose `timestamp` is older than this many seconds.
+   * Unset or <= 0 disables freshness checks.
+   */
+  maxSignatureAgeSeconds?: number;
   /** Application key from Toggly */
   appKey?: string;
   /** Environment name (e.g., 'Production', 'Staging') (default: 'Production') */
@@ -72,7 +82,10 @@ export interface EvaluatedVariantDef {
 /**
  * Map of feature flag keys to their boolean values
  */
-export type Flags = Record<string, boolean>;
+export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
+
+/** Feature flag definitions (boolean or entity gate per flag) */
+export type Flags = EvaluatedDefinitions;
 
 /**
  * Toggly client instance interface

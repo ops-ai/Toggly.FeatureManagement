@@ -86,6 +86,14 @@ export {
   normalizeEvaluationClaims,
 } from './evaluation-context';
 export type {
+  EntityGate,
+  EntityGateRule,
+  EvaluatedDefinitionValue,
+  EvaluatedDefinitions,
+  TogglyEntityContext,
+  EntityContextMapper,
+} from './entity-gate';
+export type {
   CacheLruEntry,
   CacheLruIndex,
 } from './cache-lru';
@@ -99,3 +107,16 @@ export {
   touchCacheLruKey,
 } from './cache-lru';
 export { serializeJsonForInlineScript } from './serialize-for-inline-script';
+export type { EvaluatedGateRequirement } from './entity-gate';
+export {
+  applyEntityGate,
+  clearRegisteredContexts,
+  evaluateEvaluatedGate,
+  isEntityGate,
+  mapEntityContext,
+  normalizeEntityContext,
+  registerContext,
+  resolveEntityContext,
+  resolveEvaluatedDefinition,
+  toBooleanDefinitions,
+} from './entity-gate';

@@ -31,7 +31,7 @@ namespace Toggly.FeatureManagement
     /// <summary>
     /// Toggly feature provider
     /// </summary>
-    public class TogglyFeatureProvider : IFeatureDefinitionProvider, IDisposable, IFeatureExperimentProvider, IFeatureProviderDebug, ISecureFeatureProvider
+    public class TogglyFeatureProvider : IFeatureDefinitionProvider, IFeatureDefinitionModelProvider, IDisposable, IFeatureExperimentProvider, IFeatureProviderDebug, ISecureFeatureProvider
     {
         private readonly string _appKey;
 
@@ -51,6 +51,8 @@ namespace Toggly.FeatureManagement
         private volatile EntityTagHeaderValue? _lastETag = null;
 
         private readonly ConcurrentDictionary<string, FeatureDefinition> _definitions = new ConcurrentDictionary<string, FeatureDefinition>();
+
+        private readonly ConcurrentDictionary<string, FeatureDefinitionModel> _featureModels = new ConcurrentDictionary<string, FeatureDefinitionModel>();
 
         private readonly ILogger _logger;
 
@@ -879,6 +881,7 @@ namespace Toggly.FeatureManagement
         {
             foreach (var featureDefinition in newDefinitions)
             {
+                _featureModels.AddOrUpdate(featureDefinition.FeatureKey, featureDefinition, (_, __) => featureDefinition);
                 var newDefinition = BuildFeatureDefinition(featureDefinition);
                 if (featureDefinition.SecuredFeature) _secureFeatures.Add(featureDefinition.FeatureKey);
                 else _secureFeatures.TryRemove(featureDefinition.FeatureKey);
@@ -1014,10 +1017,14 @@ namespace Toggly.FeatureManagement
 
         private static FeatureDefinition BuildFeatureDefinition(FeatureDefinitionModel featureDefinition)
         {
+            var userFilters = featureDefinition.Filters
+                .Where(f => !Filters.ContextPropertyEvaluator.IsContextPropertyFilter(f))
+                .ToList();
+
             return new FeatureDefinition
             {
                 Name = featureDefinition.FeatureKey,
-                EnabledFor = featureDefinition.Filters.Select(featureFilter =>
+                EnabledFor = userFilters.Select(featureFilter =>
                     new FeatureFilterConfiguration
                     {
                         Name = featureFilter.Name,
@@ -1027,6 +1034,16 @@ namespace Toggly.FeatureManagement
                 Variants = MapVariantsToMicrosoft(featureDefinition.Variants),
                 Allocation = MapAllocationToMicrosoft(featureDefinition.Allocation)
             };
+        }
+
+        /// <inheritdoc />
+        public bool TryGetFeatureModel(string featureKey, out FeatureDefinitionModel? definition)
+        {
+            if (_featureModels.TryGetValue(featureKey, out definition))
+                return true;
+
+            definition = null;
+            return false;
         }
 
         private static IEnumerable<Microsoft.FeatureManagement.VariantDefinition> MapVariantsToMicrosoft(IReadOnlyList<TogglyVariantDefinition>? variants)

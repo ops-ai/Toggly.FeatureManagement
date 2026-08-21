@@ -3,6 +3,14 @@
  */
 
 import type { LocalGate } from '@ops-ai/toggly-local-gates'
+import type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+
+export type {
+  EntityGate,
+  EntityGateRule,
+  EvaluatedDefinitions,
+  TogglyEntityContext,
+} from '@ops-ai/toggly-hooks-types'
 
 export type { LocalGate }
 
@@ -27,6 +35,19 @@ export interface TogglyConfig {
   timeout?: number;
   /** Enable debug logging */
   debug?: boolean;
+  /**
+   * When true, verify ES256 signed definition envelopes via JWKS before applying flags.
+   */
+  verifySignatures?: boolean;
+  /**
+   * Optional allow-list of JWKS `kid` values when verifySignatures is enabled.
+   */
+  allowedKeyIds?: string[];
+  /**
+   * Reject envelopes whose `timestamp` is older than this many seconds.
+   * Unset or <= 0 disables freshness checks.
+   */
+  maxSignatureAgeSeconds?: number;
   /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
   localGates?: LocalGate[];
   /** Optional SDK error callback for reporting fetch/evaluation failures. */
@@ -52,11 +73,9 @@ export interface IdentityContext {
 }
 
 /**
- * Feature flags state
+ * Feature flags state (boolean or entity gate per flag)
  */
-export interface FeatureFlags {
-  [key: string]: boolean;
-}
+export type FeatureFlags = EvaluatedDefinitions;
 
 /**
  * Feature evaluation options
