@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { Component } from '@angular/core';
 import { FeatureGateBuilderDirective } from './feature-gate-builder.directive';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
+import { TogglyService } from './toggly.service';
 
 @Component({
   standalone: true,
@@ -121,5 +122,57 @@ describe('FeatureGateBuilderDirective', () => {
 
     const button = fixture.nativeElement.querySelector('button');
     expect(button.classList.contains('active')).toBe(false);
+  }));
+});
+
+@Component({
+  standalone: true,
+  imports: [FeatureGateBuilderDirective],
+  template: `
+    <button
+      *featureGateBuilder="flag; context: context; kind: kind; let enabled"
+      [class.active]="enabled"
+    >
+      Badge
+    </button>
+  `,
+})
+class ContextBuilderHostComponent {
+  flag = 'ShowBadge';
+  context: { BirthDate: string } = { BirthDate: '2026-06-15T00:00:00Z' };
+  kind = 'Puppy';
+}
+
+describe('FeatureGateBuilderDirective entity context', () => {
+  it('should expose enabled after a mapped entity context is registered', fakeAsync(() => {
+    spyOn(console, 'warn');
+    const datetimeGate = {
+      requirement: 'all' as const,
+      rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' as const }],
+    };
+    TestBed.configureTestingModule({
+      imports: [
+        ContextBuilderHostComponent,
+        NgxFeatureFlagsTogglyModule.forRoot({
+          featureDefaults: { ShowBadge: datetimeGate as any },
+        }),
+      ],
+    });
+    const fixture = TestBed.createComponent(ContextBuilderHostComponent);
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button').classList.contains('active')).toBe(false);
+
+    TestBed.inject(TogglyService).registerContext('Puppy', (entity: { BirthDate: string }) => ({
+      kind: 'Puppy',
+      key: '1',
+      attributes: { BirthDate: entity.BirthDate },
+    }));
+    fixture.componentInstance.kind = 'Puppy';
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button').classList.contains('active')).toBe(true);
   }));
 });

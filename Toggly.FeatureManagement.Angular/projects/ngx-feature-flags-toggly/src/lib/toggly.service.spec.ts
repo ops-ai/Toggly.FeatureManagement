@@ -867,6 +867,7 @@ describe('TogglyService', () => {
         attributes: { BirthDate: entity.BirthDate },
       }));
       expect(await service.isFeatureOn('ShowBadge', puppy, 'Puppy')).toBe(true);
+      expect(await service.evaluateFeatureGate(['ShowBadge'], 'all', false, puppy, 'Puppy')).toBe(true);
     });
 
     it('should preserve EntityGate objects from evaluated-signed response', async () => {
