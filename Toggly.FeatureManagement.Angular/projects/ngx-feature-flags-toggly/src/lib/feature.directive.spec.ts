@@ -271,6 +271,9 @@ describe('FeatureFlagDirective entity context', () => {
     fixture.detectChanges();
     tick();
     fixture.detectChanges();
+    service.notifyLocalGatesChanged();
+    tick();
+    fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.badge')).toBeTruthy();
   }));
 

@@ -184,4 +184,25 @@ describe('FeatureGateBuilderDirective entity context', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('button').classList.contains('active')).toBe(true);
   }));
+
+  it('should treat a non-string non-array builder flag as an empty gate', fakeAsync(() => {
+    spyOn(console, 'warn');
+    TestBed.configureTestingModule({
+      imports: [
+        BuilderHostComponent,
+        NgxFeatureFlagsTogglyModule.forRoot({
+          featureDefaults: { Enabled: true },
+        }),
+      ],
+    });
+    const fixture = TestBed.createComponent(BuilderHostComponent);
+    fixture.componentInstance.flag = 1 as any;
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+    TestBed.inject(TogglyService).notifyLocalGatesChanged();
+    tick();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button').classList.contains('active')).toBe(true);
+  }));
 });
