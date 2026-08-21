@@ -15,8 +15,10 @@
   per-instance list checks.
 
 ### Fixed
-- Razor tag helper now targets the `<feature>` element (and documents
-  `@removeTagHelper` for Microsoft's helper so `context` is not ignored).
+- Razor tag helper now targets the `<feature>` element, defaults
+  `requirement` to `All`, splits comma-separated `name` values, and
+  documents `@removeTagHelper` for Microsoft's
+  `Microsoft.FeatureManagement.Mvc.TagHelpers.FeatureTagHelper`.
 - Entity-only flags evaluate without a user filter; empty `EnabledFor` after
   stripping `ContextProperty` no longer forces the flag off.
 - `AddToggly` registers an empty `EntityContextRegistry` so existing apps do

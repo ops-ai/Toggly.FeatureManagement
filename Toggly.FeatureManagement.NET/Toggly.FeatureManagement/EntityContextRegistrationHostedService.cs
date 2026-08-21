@@ -33,7 +33,7 @@ namespace Toggly.FeatureManagement
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _ = RegisterSafelyAsync(cancellationToken);
+            _ = RegisterSafelyAsync(CancellationToken.None);
             return Task.CompletedTask;
         }
 

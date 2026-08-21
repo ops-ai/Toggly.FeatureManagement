@@ -36,6 +36,7 @@
     "@angular/compiler-cli": "^21.0.0",
     "@ops-ai/toggly-hooks-types": "file:../toggly-hooks-types",
     "@ops-ai/toggly-local-gates": "file:../toggly-local-gates",
+    "@ops-ai/toggly-signed-defs": "file:../toggly-signed-defs",
     "@types/jasmine": "~5.1.0",
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",

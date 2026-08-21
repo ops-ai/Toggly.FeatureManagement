@@ -19,7 +19,7 @@ namespace Toggly.FeatureManagement.Web
     /// <remarks>
     /// When both this helper and <c>Microsoft.FeatureManagement.AspNetCore</c>
     /// are registered, add
-    /// <c>@removeTagHelper Microsoft.FeatureManagement.AspNetCore.TagHelpers.FeatureTagHelper, Microsoft.FeatureManagement.AspNetCore</c>
+    /// <c>@removeTagHelper Microsoft.FeatureManagement.Mvc.TagHelpers.FeatureTagHelper, Microsoft.FeatureManagement.AspNetCore</c>
     /// so Microsoft's helper does not evaluate <c>&lt;feature&gt;</c> without
     /// <c>context</c>. This helper runs after the default order so it can
     /// restore child content when Microsoft has already suppressed the element.
@@ -41,7 +41,7 @@ namespace Toggly.FeatureManagement.Web
         /// </summary>
         public override int Order => 10;
 
-        /// <summary>Single feature name.</summary>
+        /// <summary>Feature name, or a comma-separated list (Microsoft-compatible).</summary>
         public string? Name { get; set; }
 
         /// <summary>Comma-separated feature names.</summary>
@@ -50,8 +50,8 @@ namespace Toggly.FeatureManagement.Web
         /// <summary>Attribute-form flag name: <c>&lt;div feature="X"&gt;</c>.</summary>
         public string? Feature { get; set; }
 
-        /// <summary>Any (default) or All.</summary>
-        public string Requirement { get; set; } = "Any";
+        /// <summary>All (default, Microsoft-compatible) or Any.</summary>
+        public string Requirement { get; set; } = "All";
 
         /// <summary>When true, renders when the feature is disabled.</summary>
         public bool Negate { get; set; }
@@ -62,6 +62,7 @@ namespace Toggly.FeatureManagement.Web
         public override async Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
         {
             var isFeatureElement = string.Equals(output.TagName, "feature", StringComparison.OrdinalIgnoreCase);
+            RemoveFeatureAttribute(output);
 
             var featureNames = ParseFeatureNames();
             if (featureNames.Count == 0)
@@ -70,7 +71,7 @@ namespace Toggly.FeatureManagement.Web
                 return;
             }
 
-            var all = string.Equals(Requirement, "All", StringComparison.OrdinalIgnoreCase);
+            var all = !string.Equals(Requirement, "Any", StringComparison.OrdinalIgnoreCase);
             var enabled = all
                 ? await EvaluateAllAsync(featureNames).ConfigureAwait(false)
                 : await EvaluateAnyAsync(featureNames).ConfigureAwait(false);
@@ -94,19 +95,33 @@ namespace Toggly.FeatureManagement.Web
         private List<string> ParseFeatureNames()
         {
             if (!string.IsNullOrWhiteSpace(Name))
-                return new List<string> { Name.Trim() };
+                return SplitNames(Name);
 
             if (!string.IsNullOrWhiteSpace(Feature))
-                return new List<string> { Feature.Trim() };
+                return SplitNames(Feature);
 
-            if (string.IsNullOrWhiteSpace(Names))
-                return new List<string>();
+            if (!string.IsNullOrWhiteSpace(Names))
+                return SplitNames(Names);
 
-            return Names
+            return new List<string>();
+        }
+
+        private static List<string> SplitNames(string value)
+        {
+            return value
                 .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(n => n.Trim())
                 .Where(n => !string.IsNullOrWhiteSpace(n))
                 .ToList();
+        }
+
+        private static void RemoveFeatureAttribute(TagHelperOutput output)
+        {
+            for (var i = output.Attributes.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(output.Attributes[i].Name, "feature", StringComparison.OrdinalIgnoreCase))
+                    output.Attributes.RemoveAt(i);
+            }
         }
 
         private async Task<bool> EvaluateAnyAsync(IReadOnlyList<string> featureNames)

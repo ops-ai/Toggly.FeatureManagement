@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@ops-ai/toggly-local-gates": "file:../../../toggly-local-gates",
-    "@ops-ai/toggly-signed-defs": "file:../../../toggly-signed-defs",
+    "@ops-ai/toggly-signed-defs": "^1.1.0",
     "tslib": "^2.3.0"
   },
   "sideEffects": false

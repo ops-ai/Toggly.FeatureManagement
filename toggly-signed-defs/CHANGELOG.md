@@ -2,20 +2,21 @@
 
 ## 1.1.0
 
-2026-08-19
+2026-08-20
 
 ### Added
-- `EvaluatedDefinitions`, `EntityGate`, and `isEntityGate` types for mixed client defs payloads.
-
-## 1.0.0
-
-2026-07-14
-
-### Added
-- Shared ES256 signed-definitions verification for browser and Node (`verifySignedDefinitions`, envelope parse helpers).
-- `assertEnvelopeFreshness` / `maxSignatureAgeSeconds` to reject replay of old-but-still-valid signed envelopes when configured.
-- Shared evaluated-signed response helpers (`parseEvaluatedResponseBody`, `readResponseBody`, `unwrapDefsPayload`) for SSR adapters.
+- First published artifact: ES256 signed-definitions verification for browser and Node
+  (`verifySignedDefinitions`, envelope parse helpers).
+- `assertEnvelopeFreshness` / `maxSignatureAgeSeconds` to reject replay of
+  old-but-still-valid signed envelopes when configured.
+- Shared evaluated-signed response helpers (`parseEvaluatedResponseBody`,
+  `readResponseBody`, `unwrapDefsPayload`) for SSR adapters.
+- `EvaluatedDefinitions`, `EntityGate`, and `isEntityGate` types for mixed
+  client defs payloads.
+- Dual CJS/ESM build with an `exports` map so bundlers resolve named exports.
 
 ### Notes
-- Dependent SDKs must declare `"@ops-ai/toggly-signed-defs": "^1.0.0"` (registry), never `file:`.
 - Publish this package before releasing any SDK that depends on it.
+- Published dependent manifests must use `"@ops-ai/toggly-signed-defs": "^1.1.0"`.
+  Monorepo packages may keep `file:` so local CI can resolve the unpublished
+  workspace copy.

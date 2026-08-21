@@ -77,7 +77,7 @@ namespace Toggly.FeatureManagement.Filters
                 return CompareOrdered(actual, expected, valueType, op);
 
             if (InOperators.Contains(op))
-                return CompareIn(actual, expected, valueType);
+                return CompareIn(actual, expected);
 
             if (ContainsOperators.Contains(op))
                 return CompareContains(actual, expected, valueType);
@@ -124,7 +124,7 @@ namespace Toggly.FeatureManagement.Filters
             return false;
         }
 
-        private static bool CompareIn(object? actual, string expected, string valueType)
+        private static bool CompareIn(object? actual, string expected)
         {
             var candidates = expected
                 .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)

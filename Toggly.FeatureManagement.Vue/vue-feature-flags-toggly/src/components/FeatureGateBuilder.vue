@@ -3,7 +3,11 @@
 </template>
 
 <script lang="ts">
-export default {
+// vue-tsc cannot infer Options API `this` on this SFC; runtime and tests cover it.
+// @ts-nocheck
+import { defineComponent } from 'vue'
+
+export default defineComponent({
   inject: ['$toggly'],
   props: {
     featureKey: {
@@ -89,5 +93,5 @@ export default {
       )
     },
   },
-}
+})
 </script>

@@ -82,6 +82,94 @@ public class FeatureTagHelperTests
         output.Content.GetContent().Should().Be("inner");
     }
 
+    [Fact]
+    public async Task ProcessAsync_AttributeForm_StripsFeatureAttribute()
+    {
+        var featureManager = new Mock<IFeatureManager>();
+        featureManager.Setup(m => m.IsEnabledAsync("PuppyBadge")).ReturnsAsync(true);
+
+        var helper = new FeatureTagHelper(featureManager.Object)
+        {
+            Feature = "PuppyBadge"
+        };
+
+        var output = CreateOutput("div", "inner");
+        output.Attributes.Add("feature", "PuppyBadge");
+        await helper.ProcessAsync(CreateContext(), output);
+
+        output.Attributes.Should().NotContain(a => a.Name == "feature");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DefaultRequirement_RequiresAllNames()
+    {
+        var featureManager = new Mock<IFeatureManager>();
+        featureManager.Setup(m => m.IsEnabledAsync("A")).ReturnsAsync(true);
+        featureManager.Setup(m => m.IsEnabledAsync("B")).ReturnsAsync(false);
+
+        var helper = new FeatureTagHelper(featureManager.Object)
+        {
+            Name = "A,B"
+        };
+
+        var output = CreateOutput("feature", "inner");
+        await helper.ProcessAsync(CreateContext(), output);
+
+        output.Content.GetContent().Should().BeEmpty();
+        featureManager.Verify(m => m.IsEnabledAsync("A"), Times.Once);
+        featureManager.Verify(m => m.IsEnabledAsync("B"), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RequirementAny_RendersWhenOneFlagIsOn()
+    {
+        var featureManager = new Mock<IFeatureManager>();
+        featureManager.Setup(m => m.IsEnabledAsync("A")).ReturnsAsync(false);
+        featureManager.Setup(m => m.IsEnabledAsync("B")).ReturnsAsync(true);
+
+        var helper = new FeatureTagHelper(featureManager.Object)
+        {
+            Names = "A,B",
+            Requirement = "Any"
+        };
+
+        var output = CreateOutput("feature", "inner");
+        await helper.ProcessAsync(CreateContext(), output);
+
+        output.Content.GetContent().Should().Be("inner");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_Negate_RendersWhenFeatureIsOff()
+    {
+        var featureManager = new Mock<IFeatureManager>();
+        featureManager.Setup(m => m.IsEnabledAsync("OffFlag")).ReturnsAsync(false);
+
+        var helper = new FeatureTagHelper(featureManager.Object)
+        {
+            Name = "OffFlag",
+            Negate = true
+        };
+
+        var output = CreateOutput("feature", "hidden-content");
+        await helper.ProcessAsync(CreateContext(), output);
+
+        output.Content.GetContent().Should().Be("hidden-content");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_EmptyName_SuppressesOutput()
+    {
+        var featureManager = new Mock<IFeatureManager>();
+        var helper = new FeatureTagHelper(featureManager.Object);
+
+        var output = CreateOutput("feature", "inner");
+        await helper.ProcessAsync(CreateContext(), output);
+
+        output.Content.GetContent().Should().BeEmpty();
+        featureManager.Verify(m => m.IsEnabledAsync(It.IsAny<string>()), Times.Never);
+    }
+
     private static TagHelperContext CreateContext() =>
         new("feature", new TagHelperAttributeList(), new Dictionary<object, object>(), "test");
 

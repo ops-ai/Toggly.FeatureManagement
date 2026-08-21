@@ -181,9 +181,7 @@ export class TogglyServerClient {
     if (shouldFetchOnSync(message, previousRevision)) {
       this.scheduleDebouncedRefresh();
     }
-    if (message.etag) {
-      this.cacheDefinitionsRevision(message.etag);
-    }
+    this.cacheDefinitionsRevision(message.etag);
   }
 
   private handleWsUpdateMessage(message: WsSyncMessage): void {
@@ -195,9 +193,7 @@ export class TogglyServerClient {
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
       this.scheduleDebouncedRefresh();
     }
-    if (message.etag) {
-      this.cacheDefinitionsRevision(message.etag);
-    }
+    this.cacheDefinitionsRevision(message.etag);
   }
 
   private evaluateGateEffective(
@@ -279,10 +275,7 @@ export class TogglyServerClient {
 
       const response = await fetchWithTimeout(url, { headers }, this.config.timeout);
 
-      const responseRevision = extractDefinitionsRevision(response);
-      if (responseRevision) {
-        this.cacheDefinitionsRevision(responseRevision);
-      }
+      this.cacheDefinitionsRevision(extractDefinitionsRevision(response));
 
       if (response.status === 304) {
         this.logger.debug('Definitions unchanged (304)');

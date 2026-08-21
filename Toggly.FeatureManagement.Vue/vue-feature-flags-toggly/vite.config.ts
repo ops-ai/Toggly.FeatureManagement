@@ -10,11 +10,14 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 
+const signedDefsSrc = path.resolve(__dirname, '../../toggly-signed-defs/src/index.ts')
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
       '@/': new URL('./src/', import.meta.url).pathname,
+      '@ops-ai/toggly-signed-defs': signedDefsSrc,
     },
   },
 
@@ -28,7 +31,7 @@ export default defineConfig({
     },
 
     rollupOptions: {
-      external: ['vue', '@ops-ai/toggly-hooks-types', '@ops-ai/toggly-local-gates'],
+      external: ['vue', '@ops-ai/toggly-hooks-types', '@ops-ai/toggly-local-gates', '@ops-ai/toggly-signed-defs'],
       output: {
         globals: {
           vue: 'Vue',
