@@ -899,6 +899,35 @@ describe('Toggly Service', () => {
       expect(service.getVariant('V')).toBeNull();
     });
 
+    it('getVariant returns null when a local gate closes the variant', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve({
+            defs: { V: { enabled: true, variant: 'A', configurationValue: { x: 1 } } },
+          }),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              defs: { V: { enabled: true, variant: 'A', configurationValue: { x: 1 } } },
+            }),
+          ),
+      });
+      const service = new Toggly();
+      service.init({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+        localGates: [{ id: 'block-v', flagKeys: ['V'], isEnabled: () => false }],
+      });
+
+      await service._loadFeatures();
+      expect(service.getVariant('V')).toBeNull();
+    });
+
     it('subscribeFeaturesRefresh runs after successful load', async () => {
       mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
       text: () => Promise.resolve(JSON.stringify({ F1: true })) });
