@@ -3,8 +3,6 @@
 </template>
 
 <script lang="ts">
-// vue-tsc cannot infer Options API `this` on this SFC; runtime and tests cover it.
-// @ts-nocheck
 import { defineComponent } from 'vue'
 import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 
@@ -26,7 +24,7 @@ export default defineComponent({
       default: false
     },
     context: {
-      type: [Object, null],
+      type: Object,
       default: null
     },
     contextKind: {

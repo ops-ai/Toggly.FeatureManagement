@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import { getServerToggly } from './server-client'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
+import { toBooleanDefinitions } from '@ops-ai/nextjs-toggly-core'
 
 /**
  * Cache tags for feature flags
@@ -135,7 +136,7 @@ export function cachedGetFeatures(options: {
         return {}
       }
 
-      return { ...client.state.features }
+      return toBooleanDefinitions({ ...client.state.features })
     },
     ['toggly:all-features'],
     {

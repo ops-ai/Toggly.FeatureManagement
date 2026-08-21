@@ -11,8 +11,8 @@
  * SHA-256 digest into subtle.verify (effective double-hash). DER signatures
  * are converted to P1363 before subtle.verify.
  */
-import { assertEnvelopeFreshness, } from './freshness';
-export { assertEnvelopeFreshness } from './freshness';
+import { assertEnvelopeFreshness, } from './freshness.js';
+export { assertEnvelopeFreshness } from './freshness.js';
 /**
  * Extract the exact raw JSON text of a **top-level** property only.
  * Nested keys (e.g. data.defs) are ignored so unsigned outer fields cannot

@@ -9,7 +9,7 @@ exports.parseEvaluatedResponseBody = parseEvaluatedResponseBody;
 exports.unwrapDefsPayload = unwrapDefsPayload;
 const signed_defs_verify_1 = require("./signed-defs-verify");
 function resolveBaseUri(options) {
-    const base = options.baseURI ?? options.baseUri;
+    const base = options.baseURI ?? options.baseUri ?? options.baseUrl;
     if (!base) {
         throw new Error('baseURI (or baseUri) is required when verifySignatures is enabled');
     }

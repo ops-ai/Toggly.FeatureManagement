@@ -16,6 +16,8 @@ export interface VerifySignatureOptions {
   baseURI?: string
   /** Alias used by Next.js packages. */
   baseUri?: string
+  /** Alias used by Remix and some server clients. */
+  baseUrl?: string
   allowedKeyIds?: string[]
   maxSignatureAgeSeconds?: number
   headers?: HeadersInit
@@ -24,7 +26,7 @@ export interface VerifySignatureOptions {
 }
 
 function resolveBaseUri(options: VerifySignatureOptions): string {
-  const base = options.baseURI ?? options.baseUri
+  const base = options.baseURI ?? options.baseUri ?? options.baseUrl
   if (!base) {
     throw new Error('baseURI (or baseUri) is required when verifySignatures is enabled')
   }

@@ -3,7 +3,7 @@
  */
 
 import type { LocalGate } from '@ops-ai/toggly-local-gates'
-import type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+import type { EvaluatedDefinitions } from '@ops-ai/toggly-hooks-types'
 
 export type {
   EntityGate,

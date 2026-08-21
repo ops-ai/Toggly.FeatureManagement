@@ -1,4 +1,5 @@
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
+import { toBooleanDefinitions } from '@ops-ai/nextjs-toggly-core'
 import { getServerToggly } from './server-client'
 import type { FeatureGateResult } from './types'
 
@@ -171,7 +172,7 @@ export async function getFeatures(): Promise<Record<string, boolean>> {
     return {}
   }
 
-  return { ...client.state.features }
+  return toBooleanDefinitions({ ...client.state.features })
 }
 
 /**

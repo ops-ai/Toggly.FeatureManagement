@@ -16,7 +16,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "npm run clean && tsc && tsc -p tsconfig.esm.json",
+    "build": "npm run clean && tsc && tsc -p tsconfig.esm.json && node scripts/finalize-esm.mjs",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "prepublishOnly": "npm run clean && npm run build",

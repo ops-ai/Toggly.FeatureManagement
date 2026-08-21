@@ -3,8 +3,6 @@
 </template>
 
 <script lang="ts">
-// vue-tsc cannot infer Options API `this` on this SFC; runtime and tests cover it.
-// @ts-nocheck
 import { defineComponent } from 'vue'
 
 export default defineComponent({

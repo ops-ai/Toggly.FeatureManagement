@@ -10,6 +10,7 @@ import {
   EvaluationSeriesData,
   IdentitySeriesData,
   LocalGate,
+  TogglyNetworkError,
   mergeConfig,
   buildDefinitionsUrl,
   isFeatureEnabled,
@@ -298,7 +299,7 @@ export class TogglyServerClient {
       });
 
       if (this.config.verifySignatures) {
-        this.flags = unwrapDefsPayload(parsed);
+        this.flags = unwrapDefsPayload(parsed) as FeatureFlags;
       } else if (parsed && typeof parsed === 'object' && 'defs' in (parsed as Record<string, unknown>)) {
         this.flags = ((parsed as { defs?: FeatureFlags }).defs ?? {}) as FeatureFlags;
       } else {

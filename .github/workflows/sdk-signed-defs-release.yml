@@ -87,10 +87,11 @@ jobs:
       - name: Verify build outputs
         if: steps.release.outputs.action == 'publish'
         run: |
-          if [ ! -f "dist/index.js" ] || [ ! -f "dist/index.d.ts" ]; then
-            echo "Build verification failed - missing output files"
+          if [ ! -f "dist/index.js" ] || [ ! -f "dist/index.d.ts" ] || [ ! -f "dist/esm/index.js" ] || [ ! -f "dist/esm/package.json" ]; then
+            echo "Build verification failed - missing CJS or ESM output files"
             exit 1
           fi
+          node --input-type=module -e "import { parseSignedEnvelope } from './dist/esm/index.js'; if (typeof parseSignedEnvelope !== 'function') process.exit(1)"
           echo "Build outputs verified"
 
       - name: Verify package contents

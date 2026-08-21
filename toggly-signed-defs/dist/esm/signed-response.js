@@ -2,9 +2,9 @@
  * Shared helpers for parsing evaluated-signed API responses.
  * When verifySignatures is enabled, verifies the ES256 envelope before applying defs.
  */
-import { parseSignedEnvelope, verifySignedDefinitions, parseDefinitionsFromRaw, } from './signed-defs-verify';
+import { parseSignedEnvelope, verifySignedDefinitions, parseDefinitionsFromRaw, } from './signed-defs-verify.js';
 function resolveBaseUri(options) {
-    const base = options.baseURI ?? options.baseUri;
+    const base = options.baseURI ?? options.baseUri ?? options.baseUrl;
     if (!base) {
         throw new Error('baseURI (or baseUri) is required when verifySignatures is enabled');
     }

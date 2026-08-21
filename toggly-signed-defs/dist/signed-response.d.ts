@@ -8,6 +8,8 @@ export interface VerifySignatureOptions {
     baseURI?: string;
     /** Alias used by Next.js packages. */
     baseUri?: string;
+    /** Alias used by Remix and some server clients. */
+    baseUrl?: string;
     allowedKeyIds?: string[];
     maxSignatureAgeSeconds?: number;
     headers?: HeadersInit;

@@ -57,6 +57,10 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
+      - name: Build shared toggly-signed-defs package
+        working-directory: toggly-signed-defs
+        run: (npm ci || npm install) && npm run build
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -95,6 +99,10 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
+
+      - name: Build shared toggly-signed-defs package
+        working-directory: toggly-signed-defs
+        run: (npm ci || npm install) && npm run build
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
