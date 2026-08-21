@@ -1,7 +1,7 @@
 # Dependabot policy for Toggly.FeatureManagement (OPS-693)
 #
 # Version updates stay inside declared SDK support ranges. Framework majors
-# (Astro 6, Next 16, Nuxt 4, uuid 10+, PerformanceCounter 6+, …) are product
+# (Astro 6, Next 16, Nuxt 4, Spring Boot 4, uuid 10+, PerformanceCounter 6+, …) are product
 # decisions, not bot merges. Example apps are excluded — they are not published.
 #
 # Do not set target-branch here: develop is the default branch. Setting
@@ -113,7 +113,10 @@ updates:
           - minor
           - patch
     ignore:
-      - dependency-name: "org.springframework:*"
+      # Maven names are groupId:artifactId. org.springframework* covers
+      # org.springframework:*, org.springframework.boot:*, and other Spring
+      # groupIds. The narrower org.springframework:* misses the Boot starter.
+      - dependency-name: "org.springframework*"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: bundler
