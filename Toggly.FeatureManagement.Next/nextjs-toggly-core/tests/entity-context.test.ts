@@ -125,4 +125,44 @@ describe('entity context evaluation', () => {
 
     client.destroy()
   })
+
+  it('parses a legacy unsigned definition array', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () =>
+        JSON.stringify([{ featureKey: 'legacy-on', filters: [{ name: 'AlwaysOn' }] }]),
+      json: async () => [{ featureKey: 'legacy-on', filters: [{ name: 'AlwaysOn' }] }],
+      headers: { get: () => null },
+    })
+
+    const client = createTogglyClient({ appKey: 'test-key', refreshInterval: 0 })
+    await client.init()
+
+    await expect(client.isFeatureOn('legacy-on')).resolves.toBe(true)
+
+    client.destroy()
+  })
+
+  it('uses feature defaults for gates after destroy', async () => {
+    const client = createClient()
+    await client.init()
+    client.destroy()
+
+    await expect(
+      client.evaluateFeatureGate(['PlainOn'], 'all', false),
+    ).resolves.toBe(false)
+
+    const withDefaults = createTogglyClient({
+      appKey: 'test-key',
+      refreshInterval: 0,
+      featureDefaults: { PlainOn: true },
+    })
+    withDefaults.destroy()
+
+    await expect(
+      withDefaults.evaluateFeatureGate(['PlainOn'], 'all', false),
+    ).resolves.toBe(true)
+  })
 })
