@@ -11,6 +11,7 @@ import {
 } from 'react'
 import {
   createTogglyClient,
+  toBooleanDefinitions,
   type TogglyClient,
   type TogglyConfig,
   type FeatureRequirement,
@@ -116,7 +117,7 @@ export function TogglyProvider({
 
   useEffect(() => {
     return client.subscribeFeaturesRefresh(() => {
-      setFeatures(client.state.features)
+      setFeatures(toBooleanDefinitions(client.state.features))
       setError(client.state.error)
     })
   }, [client])
@@ -128,7 +129,7 @@ export function TogglyProvider({
 
       try {
         const defs = await client.init(newConfig)
-        setFeatures(defs)
+        setFeatures(toBooleanDefinitions(defs))
         setIsReady(true)
         setIdentityState(client.identity)
 
@@ -164,7 +165,7 @@ export function TogglyProvider({
 
     try {
       const defs = await client.refresh()
-      setFeatures(defs)
+      setFeatures(toBooleanDefinitions(defs))
         setError(client.state.error)
 
       // Persist features if enabled

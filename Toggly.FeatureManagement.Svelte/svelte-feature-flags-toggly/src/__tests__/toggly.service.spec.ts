@@ -299,6 +299,34 @@ describe('Toggly Service', () => {
       expect(toggly.getVariantValue('V')).toEqual({ x: 1 });
     });
 
+    it('getVariant returns null when a local gate closes the variant', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve({
+            defs: { V: { enabled: true, variant: 'A', configurationValue: { x: 1 } } },
+          }),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              defs: { V: { enabled: true, variant: 'A', configurationValue: { x: 1 } } },
+            }),
+          ),
+      } as Response);
+
+      const toggly = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        localGates: [{ id: 'block-v', flagKeys: ['V'], isEnabled: () => false }],
+      });
+
+      await toggly._loadFeatures();
+      expect(toggly.getVariant('V')).toBeNull();
+    });
+
     it('should pass userId query when enableVariants and identity are set', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: true,

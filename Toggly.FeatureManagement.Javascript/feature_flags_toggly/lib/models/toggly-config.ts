@@ -4,6 +4,16 @@ import type { LocalGate } from './local-gate';
 export interface TogglyConfig {
   baseURI?: string;
   verifySignatures?: boolean;
+  /**
+   * When verifySignatures is enabled, only accept signatures from these key IDs.
+   * Omit / empty = any kid present in JWKS is accepted.
+   */
+  allowedKeyIds?: string[];
+  /**
+   * Reject signed envelopes older than this many seconds when verifySignatures is enabled.
+   * Omit / null / <=0 = disabled (back-compat).
+   */
+  maxSignatureAgeSeconds?: number | null;
   reloadOnFeatureFlagValidation?: boolean;
   connectTimeout?: number;
   featureFlagsRefreshInterval?: number;

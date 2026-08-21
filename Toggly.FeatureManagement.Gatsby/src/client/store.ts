@@ -7,7 +7,16 @@
 
 import { atom, computed, type ReadableAtom } from 'nanostores';
 import type { TogglyPluginOptions, Flags, GateRequirement } from '../types/index.js';
-import { appendEvaluationContext, type Hook } from '@ops-ai/toggly-hooks-types';
+import {
+  appendEvaluationContext,
+  normalizeEntityContext,
+  registerContext as registerEntityContext,
+  resolveEvaluatedDefinition,
+  toBooleanDefinitions,
+  type EvaluatedDefinitionValue,
+  type Hook,
+  type TogglyEntityContext,
+} from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -16,6 +25,11 @@ import {
 } from '@ops-ai/toggly-local-gates';
 import { HookExecutor } from './hooks.js';
 import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
+import {
+  parseEvaluatedResponseBody,
+  readResponseBody,
+  unwrapDefsPayload,
+} from '../signed-response.js';
 
 /**
  * Atom containing all feature flags
@@ -45,13 +59,15 @@ let clientInstance: TogglyClientInstance | null = null;
 /**
  * Internal config type with required properties except identity
  */
-type ClientConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | 'claims' | 'hooks' | 'localGates' | 'onError'>> & {
+type ClientConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | 'claims' | 'hooks' | 'localGates' | 'onError' | 'allowedKeyIds' | 'maxSignatureAgeSeconds'>> & {
   identity?: string;
   groups?: string[];
   claims?: Record<string, string>;
   hooks?: Hook[];
   localGates?: TogglyPluginOptions['localGates'];
   onError?: TogglyPluginOptions['onError'];
+  allowedKeyIds?: string[];
+  maxSignatureAgeSeconds?: number;
 };
 
 /**
@@ -95,8 +111,21 @@ class TogglyClientInstance {
     this.localGateIndex = buildFlagGateIndex(this.localGates);
   }
 
-  getEffectiveFlag(flagKey: string, remote: boolean): boolean {
+  getEffectiveFlag(
+    flagKey: string,
+    definition?: EvaluatedDefinitionValue,
+    defaultValue = false,
+    entityContext?: TogglyEntityContext | null,
+  ): boolean {
+    const remote = resolveEvaluatedDefinition(definition, entityContext, defaultValue);
     return applyLocalGate(remote, flagKey, this.localGates, this.localGateIndex);
+  }
+
+  registerContext<T>(
+    kind: string,
+    mapper: (entity: T) => TogglyEntityContext,
+  ): void {
+    registerEntityContext(kind, mapper);
   }
 
   notifyLocalGatesChanged(): void {
@@ -146,8 +175,15 @@ class TogglyClientInstance {
         throw new Error(`Failed to fetch flags: ${response.status} ${response.statusText}`);
       }
 
-      const payload = (await response.json()) as { defs?: Flags } | Flags;
-      const flags = ('defs' in (payload as Record<string, unknown>) ? (payload as { defs: Flags }).defs : payload) as Flags;
+      const bodyText = await readResponseBody(response);
+      const payload = await parseEvaluatedResponseBody(bodyText, {
+        verifySignatures: this.config.verifySignatures,
+        baseURI: this.config.baseURI,
+        allowedKeyIds: this.config.allowedKeyIds,
+        maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
+        headers: buildDefinitionFetchHeaders({ Accept: 'application/json' }),
+      });
+      const flags = unwrapDefsPayload(payload) as Flags;
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Fetched flags:', flags);
@@ -190,7 +226,7 @@ class TogglyClientInstance {
       $error.set(this.lastError);
       
       // Trigger afterRefresh hooks
-      this.hookExecutor.executeAfterRefresh(flags);
+      this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
 
       // Start refresh interval if configured
       if (
@@ -214,7 +250,7 @@ class TogglyClientInstance {
       $error.set(this.lastError);
       
       // Trigger afterRefresh hooks
-      await this.hookExecutor.executeAfterRefresh(flags);
+      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Flags refreshed');
@@ -374,15 +410,22 @@ export function notifyLocalGatesChanged(): void {
  * 
  * @param key - Feature flag key
  * @param defaultValue - Default value if flag not found
+ * @param entity - Entity the flag is evaluated against, or a mappable domain object
+ * @param kind - Registered context kind, required when entity is a domain object
  * @returns Readable atom with the flag value
  */
-export function $flag(key: string, defaultValue: boolean = false): ReadableAtom<boolean> {
+export function $flag(
+  key: string,
+  defaultValue: boolean = false,
+  entity?: TogglyEntityContext | Record<string, unknown> | null,
+  kind?: string,
+): ReadableAtom<boolean> {
   return computed([$flags, $localGatesRevision], (flags) => {
-    const remote = flags[key] ?? defaultValue;
+    const entityContext = normalizeEntityContext(entity, kind);
     if (!clientInstance) {
-      return remote === true;
+      return resolveEvaluatedDefinition(flags[key], entityContext, defaultValue);
     }
-    return clientInstance.getEffectiveFlag(key, remote === true);
+    return clientInstance.getEffectiveFlag(key, flags[key], defaultValue, entityContext);
   });
 }
 
@@ -397,30 +440,22 @@ export function $flag(key: string, defaultValue: boolean = false): ReadableAtom<
 export function $gate(
   keys: string[],
   requirement: GateRequirement = 'all',
-  negate: boolean = false
+  negate: boolean = false,
+  entity?: TogglyEntityContext | Record<string, unknown> | null,
+  kind?: string,
 ): ReadableAtom<boolean> {
   return computed([$flags, $localGatesRevision], (flags) => {
     if (keys.length === 0) {
       return !negate;
     }
 
-    let isEnabled: boolean;
+    const entityContext = normalizeEntityContext(entity, kind);
+    const evaluate = (key: string) =>
+      clientInstance
+        ? clientInstance.getEffectiveFlag(key, flags[key], false, entityContext)
+        : resolveEvaluatedDefinition(flags[key], entityContext);
 
-    if (requirement === 'any') {
-      isEnabled = keys.some((key) => {
-        const remote = flags[key] === true;
-        return clientInstance
-          ? clientInstance.getEffectiveFlag(key, remote)
-          : remote;
-      });
-    } else {
-      isEnabled = keys.every((key) => {
-        const remote = flags[key] === true;
-        return clientInstance
-          ? clientInstance.getEffectiveFlag(key, remote)
-          : remote;
-      });
-    }
+    const isEnabled = requirement === 'any' ? keys.some(evaluate) : keys.every(evaluate);
 
     return negate ? !isEnabled : isEnabled;
   });

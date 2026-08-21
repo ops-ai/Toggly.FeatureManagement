@@ -1,4 +1,4 @@
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { Hook, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
 export type { LocalGate };
@@ -18,6 +18,18 @@ export interface TogglyPluginOptions {
   
   /** Whether signatures should be verified on signed responses */
   verifySignatures?: boolean;
+
+  /**
+   * Optional allow-list of JWKS `kid` values when verifySignatures is enabled.
+   * Empty/undefined accepts any key present in JWKS.
+   */
+  allowedKeyIds?: string[];
+
+  /**
+   * Reject envelopes whose `timestamp` is older than this many seconds.
+   * Unset or <= 0 disables freshness checks.
+   */
+  maxSignatureAgeSeconds?: number;
   
   /** Default flag values when API is unavailable */
   flagDefaults?: Record<string, boolean>;
@@ -56,9 +68,10 @@ export interface TogglyPluginOptions {
 /**
  * Feature flags object
  */
-export interface Flags {
-  [key: string]: boolean;
-}
+export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
+
+/** Feature flag definitions (boolean or entity gate per flag) */
+export type Flags = EvaluatedDefinitions;
 
 /**
  * Gate requirement type for multiple flags

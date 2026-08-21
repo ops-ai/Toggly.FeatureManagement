@@ -437,13 +437,27 @@ class TogglyService(
                 val body = resp.body?.string()
                     ?: throw TogglyException.InvalidResponse("Empty response body")
 
-                val flags: FeatureFlags = if (config.verifySignatures) {
+                val flags: FeatureFlags
+                var defsRaw: String? = null
+                var signature: String? = null
+                var timestamp: Long? = null
+                var keyId: String? = null
+
+                if (config.verifySignatures) {
                     val envelope = SignedDefsVerify.parseSignedEnvelope(body)
+                    SignedDefsVerify.assertEnvelopeFreshness(
+                        envelope.timestamp,
+                        config.maxSignatureAgeSeconds
+                    )
                     val jwks = fetchJwks()
                     SignedDefsVerify.verify(envelope, jwks)
-                    SignedDefsVerify.parseDefinitions(envelope.defsRaw)
+                    flags = SignedDefsVerify.parseDefinitions(envelope.defsRaw)
+                    defsRaw = envelope.defsRaw
+                    signature = envelope.signature
+                    timestamp = envelope.timestamp
+                    keyId = envelope.kid
                 } else {
-                    runCatching {
+                    flags = runCatching {
                         val signedResponse = json.decodeFromString<SignedDefinitionsResponse>(body)
                         signedResponse.defs ?: signedResponse.data ?: emptyMap()
                     }.getOrElse {
@@ -456,8 +470,14 @@ class TogglyService(
                 features = flags
                 _featureFlags.value = flags
 
-                // Cache the flags
-                cacheFeatureFlags(flags)
+                // Cache the flags (raw defs + envelope when verified)
+                cacheFeatureFlags(
+                    flags = flags,
+                    defsRaw = defsRaw,
+                    timestamp = timestamp,
+                    signature = signature,
+                    keyId = keyId
+                )
 
                 // Store ETag
                 resp.header("ETag")?.let { newEtag ->
@@ -514,8 +534,23 @@ class TogglyService(
             .get()
             .build()
 
-        return withContext(Dispatchers.IO) {
+        val body = withContext(Dispatchers.IO) {
             httpClient.newCall(request).execute().use(SignedDefsVerify::fetchJwks)
+        }
+        storage.set(TogglyStorageKeys.JWKS, body)
+        return body
+    }
+
+    /**
+     * Prefer the last persisted JWKS for offline cold-start re-verification;
+     * fall back to a network fetch when none is stored (Flutter soft-fail parity).
+     */
+    private suspend fun resolveJwksForCacheVerify(): String? {
+        storage.get(TogglyStorageKeys.JWKS)?.let { return it }
+        return try {
+            fetchJwks()
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -536,7 +571,7 @@ class TogglyService(
             if (cached != null) {
                 val cacheData = json.decodeFromString<TogglyFeatureFlagsCache>(cached)
                 if (cacheData.identity == identity) {
-                    return json.decodeFromString<Map<String, Boolean>>(cacheData.flags)
+                    return trustOrReverifyCachedFlags(cacheData, cacheKey)
                 }
             }
         } catch (e: Exception) {
@@ -546,15 +581,89 @@ class TogglyService(
         return config.featureDefaults
     }
 
-    private suspend fun cacheFeatureFlags(flags: FeatureFlags) {
+    /**
+     * When [TogglyConfig.verifySignatures] is enabled, re-verify persisted
+     * envelope metadata before trusting the cache. Invalid signatures fail
+     * closed (clear cache). Transient JWKS/network failures keep last-known-good.
+     */
+    private suspend fun trustOrReverifyCachedFlags(
+        cacheData: TogglyFeatureFlagsCache,
+        cacheKey: String
+    ): FeatureFlags {
+        val parsedFlags = runCatching {
+            json.decodeFromString<Map<String, Boolean>>(cacheData.flags)
+        }.getOrElse {
+            storage.delete(cacheKey)
+            return config.featureDefaults
+        }
+
+        if (!config.verifySignatures) {
+            return parsedFlags
+        }
+
+        if (cacheData.timestamp == null ||
+            cacheData.signature.isNullOrEmpty() ||
+            cacheData.keyId.isNullOrEmpty()
+        ) {
+            storage.delete(cacheKey)
+            return config.featureDefaults
+        }
+
+        try {
+            SignedDefsVerify.assertEnvelopeFreshness(
+                cacheData.timestamp,
+                config.maxSignatureAgeSeconds
+            )
+        } catch (_: Exception) {
+            storage.delete(cacheKey)
+            return config.featureDefaults
+        }
+
+        val jwks = resolveJwksForCacheVerify()
+        if (jwks == null) {
+            // Soft-fail: keep last-known-good when JWKS cannot be resolved offline.
+            return parsedFlags
+        }
+
+        return try {
+            val envelope = SignedDefsVerify.SignedEnvelope(
+                defsRaw = cacheData.flags,
+                signature = cacheData.signature,
+                timestamp = cacheData.timestamp,
+                kid = cacheData.keyId
+            )
+            SignedDefsVerify.verify(envelope, jwks)
+            parsedFlags
+        } catch (_: Exception) {
+            // JWKS was available — any verify failure (bad sig, unknown kid,
+            // malformed key material) fails closed. Soft-fail only when JWKS
+            // could not be resolved above.
+            storage.delete(cacheKey)
+            config.featureDefaults
+        }
+    }
+
+    private suspend fun cacheFeatureFlags(
+        flags: FeatureFlags,
+        defsRaw: String? = null,
+        timestamp: Long? = null,
+        signature: String? = null,
+        keyId: String? = null
+    ) {
         try {
             val hashedIdentity = hashIdentity(identity ?: "")
             val cacheKey = TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashedIdentity
-            val flagsString = json.encodeToString(
+            val flagsString = defsRaw ?: json.encodeToString(
                 kotlinx.serialization.serializer<Map<String, Boolean>>(),
                 flags
             )
-            val cacheData = TogglyFeatureFlagsCache(identity ?: "", flagsString)
+            val cacheData = TogglyFeatureFlagsCache(
+                identity = identity ?: "",
+                flags = flagsString,
+                timestamp = timestamp,
+                signature = signature,
+                keyId = keyId
+            )
             storage.set(cacheKey, json.encodeToString(TogglyFeatureFlagsCache.serializer(), cacheData))
         } catch (e: Exception) {
             // Cache write failed, continue without caching
@@ -669,6 +778,9 @@ class TogglyService(
 
                     if (type == "signing-key-updated" || type == "flags-updated" || type == "update") {
                         CoroutineScope(Dispatchers.Default).launch {
+                            if (type == "signing-key-updated") {
+                                storage.delete(TogglyStorageKeys.JWKS)
+                            }
                             refresh()
                         }
                     }

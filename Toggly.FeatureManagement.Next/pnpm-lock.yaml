@@ -66,6 +66,9 @@ importers:
       '@ops-ai/toggly-local-gates':
         specifier: file:../../toggly-local-gates
         version: file:../toggly-local-gates
+      '@ops-ai/toggly-signed-defs':
+        specifier: file:../../toggly-signed-defs
+        version: file:../toggly-signed-defs
     devDependencies:
       '@types/node':
         specifier: ^22.13.1
@@ -97,6 +100,9 @@ importers:
       '@ops-ai/nextjs-toggly-core':
         specifier: workspace:*
         version: link:../nextjs-toggly-core
+      '@ops-ai/toggly-signed-defs':
+        specifier: file:../../toggly-signed-defs
+        version: file:../toggly-signed-defs
     devDependencies:
       '@types/node':
         specifier: ^22.13.1
@@ -648,6 +654,10 @@ packages:
 
   '@ops-ai/toggly-local-gates@file:../toggly-local-gates':
     resolution: {directory: ../toggly-local-gates, type: directory}
+    engines: {node: '>=18.0.0'}
+
+  '@ops-ai/toggly-signed-defs@file:../toggly-signed-defs':
+    resolution: {directory: ../toggly-signed-defs, type: directory}
     engines: {node: '>=18.0.0'}
 
   '@pkgjs/parseargs@0.11.0':
@@ -2266,6 +2276,8 @@ snapshots:
   '@ops-ai/toggly-hooks-types@file:../toggly-hooks-types': {}
 
   '@ops-ai/toggly-local-gates@file:../toggly-local-gates': {}
+
+  '@ops-ai/toggly-signed-defs@file:../toggly-signed-defs': {}
 
   '@pkgjs/parseargs@0.11.0':
     optional: true

@@ -3,7 +3,10 @@
 </template>
 
 <script lang="ts">
-export default {
+import { defineComponent } from 'vue'
+import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+
+export default defineComponent({
   inject: ['$toggly'],
   props: {
     featureKey: {
@@ -19,6 +22,14 @@ export default {
     negate: {
       type: Boolean,
       default: false
+    },
+    context: {
+      type: Object,
+      default: null
+    },
+    contextKind: {
+      type: String,
+      default: undefined
     }
   },
 
@@ -48,6 +59,15 @@ export default {
     }
   },
 
+  watch: {
+    featureKey: 'checkIfShouldShow',
+    featureKeys: 'checkIfShouldShow',
+    requirement: 'checkIfShouldShow',
+    negate: 'checkIfShouldShow',
+    context: 'checkIfShouldShow',
+    contextKind: 'checkIfShouldShow',
+  },
+
   methods: {
     async checkIfShouldShow() {
       this.isLoading = true
@@ -65,10 +85,18 @@ export default {
         gate = gate.concat(this.featureKeys as string[])
       }
 
-      this.shouldShow = gate.length > 0 ? await this.$toggly.evaluateFeatureGate(gate, this.requirement, this.negate) : true
+      this.shouldShow = gate.length > 0
+        ? await this.$toggly.evaluateFeatureGate(
+          gate,
+          this.requirement,
+          this.negate,
+          this.context as TogglyEntityContext | Record<string, unknown> | null,
+          this.contextKind,
+        )
+        : true
 
       this.isLoading = false
     }
   }
-}
+})
 </script>

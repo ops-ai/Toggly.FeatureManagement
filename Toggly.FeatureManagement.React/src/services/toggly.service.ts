@@ -1,10 +1,21 @@
-import type { CacheLruIndex, Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import type {
+  CacheLruIndex,
+  EvaluatedDefinitions,
+  Hook,
+  TogglyEntityContext,
+  TogglyEvaluationContext,
+} from '@ops-ai/toggly-hooks-types';
 import {
   appendEvaluationContext,
   evaluationContextCacheKey,
   isCacheLruEnabled,
+  evaluateStoredFeatureKeys,
+  normalizeEntityContext,
+  toBooleanDefinitions,
   parseCacheLruIndex,
+  registerContext as registerEntityContext,
   removeCacheLruKeys,
+  resolveEvaluatedDefinition,
   selectCacheLruKeysToEvict,
   serializeCacheLruIndex,
   touchCacheLruKey,
@@ -36,6 +47,8 @@ import {
 } from '../utils/signed-defs-verify';
 
 export type { EvaluatedVariantDef, VariantResult } from './variant.types';
+export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
+export { isEntityGate, mapEntityContext, normalizeEntityContext, registerContext } from '@ops-ai/toggly-hooks-types';
 
 const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 const CACHE_PREFIX = 'toggly:flags:'
@@ -160,12 +173,12 @@ function readCachedFlags(
   environment: string,
   contextKey = '',
   maxCacheKeys?: number | null,
-): { [key: string]: boolean } | null {
+): EvaluatedDefinitions | null {
   if (!canUseStorage) return null
   try {
     const key = getCacheKey(appKey, environment, contextKey)
     const raw = localStorage.getItem(key)
-    const parsed = raw ? (JSON.parse(raw) as { [key: string]: boolean } | null) : null
+    const parsed = raw ? (JSON.parse(raw) as EvaluatedDefinitions | null) : null
     if (raw != null && parsed != null) {
       touchCacheKey(key, maxCacheKeys)
     }
@@ -176,7 +189,7 @@ function readCachedFlags(
 function writeCachedFlags(
   appKey: string,
   environment: string,
-  flags: { [key: string]: boolean },
+  flags: EvaluatedDefinitions,
   contextKey = '',
   maxCacheKeys?: number | null,
 ): void {
@@ -228,12 +241,22 @@ function writeCachedVariants(
 export interface TogglyOptions {
   baseURI?: string
   verifySignatures?: boolean
+  /**
+   * When verifySignatures is enabled, only accept signatures from these key IDs.
+   * Omit / empty = any kid present in JWKS is accepted.
+   */
+  allowedKeyIds?: string[]
+  /**
+   * Reject signed envelopes older than this many seconds when verifySignatures is enabled.
+   * Omit / null / <=0 = disabled (back-compat).
+   */
+  maxSignatureAgeSeconds?: number | null
   appKey?: string
   environment?: string
   identity?: string
   groups?: string[]
   claims?: Record<string, string>
-  featureDefaults?: { [key: string]: boolean }
+  featureDefaults?: EvaluatedDefinitions
   showFeatureDuringEvaluation?: boolean
   /** Hooks to extend SDK behavior at key lifecycle points */
   hooks?: Hook[]
@@ -262,14 +285,26 @@ export interface TogglyService {
     gate: string[],
     requirement: string,
     negate: boolean,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ) => Promise<boolean>
   evaluateFeatureGate: (
     featureKeys: string[],
     requirement: string,
     negate: boolean,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ) => Promise<boolean>
-  isFeatureOn: (featureKey: string) => Promise<boolean>
-  isFeatureOff: (featureKey: string) => Promise<boolean>
+  isFeatureOn: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<boolean>
+  isFeatureOff: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<boolean>
   getVariant: (featureKey: string) => VariantResult | null
   getVariantValue: (featureKey: string) => unknown | null
   subscribeFeaturesRefresh: (listener: () => void) => () => void
@@ -277,6 +312,7 @@ export interface TogglyService {
   notifyLocalGatesChanged: () => void
   subscribeLocalGatesChanged: (listener: () => void) => () => void
   setContext: (context: TogglyEvaluationContext) => Promise<void>
+  registerContext: <T>(kind: string, mapper: (entity: T) => TogglyEntityContext) => void
 }
 
 export class Toggly implements TogglyService {
@@ -286,7 +322,7 @@ export class Toggly implements TogglyService {
     showFeatureDuringEvaluation: false,
     hooks: []
   }
-  private _features: { [key: string]: boolean } | null = null
+  private _features: EvaluatedDefinitions | null = null
   private _variants: { [key: string]: EvaluatedVariantDef } | null = null
   private _loadingFeatures: boolean = false
   private _hookExecutor = new HookExecutor()
@@ -461,6 +497,8 @@ export class Toggly implements TogglyService {
         kid: envelope.kid,
       },
       jwks,
+      this._config.allowedKeyIds,
+      { maxSignatureAgeSeconds: this._config.maxSignatureAgeSeconds },
     )
     return { defs: parseDefinitionsFromRaw(defsRaw) }
   }
@@ -541,12 +579,12 @@ export class Toggly implements TogglyService {
       if (this._wsConnected) {
         const now = Date.now()
         if (now - this._lastFallbackRefresh < Toggly.FALLBACK_REFRESH_INTERVAL) {
-          return this._features
+          return this._booleanFeatures()
         }
         this._lastFallbackRefresh = now
       }
 
-      return this._features
+      return this._booleanFeatures()
     }
 
     this._loadingFeatures = true
@@ -580,7 +618,7 @@ export class Toggly implements TogglyService {
         this._cacheDefinitionsRevision(responseRevision.replace(/^"+|"+$/g, ''))
       }
       if (response.status === 304) {
-        return this._features
+        return this._booleanFeatures()
       }
       if (!response.ok) {
         throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
@@ -601,14 +639,14 @@ export class Toggly implements TogglyService {
         }
       } else {
         this._variants = null
-        this._features = (parsedDefs ?? {}) as { [key: string]: boolean }
+        this._features = (parsedDefs ?? {}) as EvaluatedDefinitions
         if (this._features && this._canPersist) {
           writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys)
         }
       }
 
       if (this._features) {
-        await this._hookExecutor.executeAfterRefresh(this._features)
+        await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
       }
       this.notifyFeaturesRefresh()
     } catch (error) {
@@ -640,7 +678,7 @@ export class Toggly implements TogglyService {
         'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',
       )
       if (this._features) {
-        await this._hookExecutor.executeAfterRefresh(this._features)
+        await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
       }
       this.notifyFeaturesRefresh()
     } finally {
@@ -652,15 +690,25 @@ export class Toggly implements TogglyService {
       this.startWebSocket()
     }
 
-    return this._features
+    return this._features ? toBooleanDefinitions(this._features) : null
+  }
+
+  private _booleanFeatures(): { [key: string]: boolean } | null {
+    return this._features ? toBooleanDefinitions(this._features) : null
   }
 
   _featuresLoaded = async () => {
-    return this._features ?? (await this._loadFeatures())
+    if (this._features) {
+      return toBooleanDefinitions(this._features)
+    }
+    return await this._loadFeatures()
   }
 
-  private _getEffectiveFlagValue(flagKey: string): boolean {
-    const remote = this._features?.[flagKey] === true
+  private _getEffectiveFlagValue(
+    flagKey: string,
+    entityContext?: TogglyEntityContext | null,
+  ): boolean {
+    const remote = resolveEvaluatedDefinition(this._features?.[flagKey], entityContext)
     return applyLocalGate(remote, flagKey, this._localGates, this._localGateIndex)
   }
 
@@ -668,62 +716,61 @@ export class Toggly implements TogglyService {
     gate: string[],
     requirement = 'all',
     negate = false,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ) => {
     await this._featuresLoaded()
 
-    if (gate.length > 0 && (!this._features || Object.keys(this._features).length === 0)) {
-      return negate
-    }
-
-    var isEnabled: boolean
-
-    if (requirement === 'any') {
-      isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
-        return (
-          isEnabled ||
-          this._getEffectiveFlagValue(String(featureKey))
-        )
-      }, false)
-    } else {
-      isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
-        return (
-          isEnabled &&
-          this._getEffectiveFlagValue(String(featureKey))
-        )
-      }, true)
-    }
-
-    isEnabled = negate ? !isEnabled : isEnabled
-
-    return isEnabled
+    const entityContext = normalizeEntityContext(context, kind)
+    return evaluateStoredFeatureKeys(
+      this._features,
+      gate.map(String),
+      requirement === 'any' ? 'any' : 'all',
+      negate,
+      (key) => this._getEffectiveFlagValue(key, entityContext),
+    )
   }
 
   evaluateFeatureGate = async (
     featureKeys: string[],
     requirement = 'all',
     negate = false,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ) => {
     if (featureKeys.length > 0) {
       const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKeys[0]);
-      const result = await this._evaluateFeatureGate(featureKeys, requirement, negate);
+      const result = await this._evaluateFeatureGate(featureKeys, requirement, negate, context, kind);
       await this._hookExecutor.executeAfterEvaluation(featureKeys[0], dataMap, result);
       return result;
     }
-    return await this._evaluateFeatureGate(featureKeys, requirement, negate);
+    return await this._evaluateFeatureGate(featureKeys, requirement, negate, context, kind);
   }
 
-  isFeatureOn = async (featureKey: string) => {
+  isFeatureOn = async (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => {
     const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKey)
-    const result = await this._evaluateFeatureGate([featureKey])
+    const result = await this._evaluateFeatureGate([featureKey], 'all', false, context, kind)
     await this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
     return result
   }
 
-  isFeatureOff = async (featureKey: string) => {
+  isFeatureOff = async (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => {
     const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKey)
-    const result = await this._evaluateFeatureGate([featureKey], 'all', true)
+    const result = await this._evaluateFeatureGate([featureKey], 'all', true, context, kind)
     await this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
     return result
+  }
+
+  registerContext = <T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void => {
+    registerEntityContext(kind, mapper)
   }
 
   /**
@@ -899,12 +946,12 @@ export class Toggly implements TogglyService {
    * Used by WebSocket handlers to pull fresh definitions on update signals.
    */
   private _refreshFeatures = async () => {
-    const flags = await this._loadFeatures(true)
-    if (flags && this._canPersist) {
+    await this._loadFeatures(true)
+    if (this._features && this._canPersist) {
       writeCachedFlags(
         this._config.appKey ?? '',
         this._config.environment ?? 'Production',
-        flags,
+        this._features,
         this._contextCacheKey(),
         this._config.maxCacheKeys,
       )

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Moq;
+using System.Collections.Generic;
 using System.Net;
 using System.Security.Claims;
 using Toggly.FeatureManagement.Web;
@@ -214,6 +215,30 @@ public class HttpFeatureContextProviderTests
 
         // Assert
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetContextIdentifierAsyncWithContext_AppendsEntityKindAndKey()
+    {
+        var context = CreateHttpContext(userName: "user1");
+        _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(context);
+
+        var entityResolver = new Mock<ITogglyEntityContextResolver>();
+        entityResolver
+            .Setup(r => r.TryResolve(It.IsAny<object>(), out It.Ref<Toggly.FeatureManagement.Context.TogglyEntityContext?>.IsAny))
+            .Returns((object _, out Toggly.FeatureManagement.Context.TogglyEntityContext? entity) =>
+            {
+                entity = new Toggly.FeatureManagement.Context.TogglyEntityContext(
+                    "Puppy",
+                    "42",
+                    new Dictionary<string, object?>());
+                return true;
+            });
+
+        var provider = new HttpFeatureContextProvider(_httpContextAccessorMock.Object, entityResolver.Object);
+        var result = await provider.GetContextIdentifierAsync(new { Id = 42 });
+
+        result.Should().Be("user1|Puppy|42");
     }
 
     #endregion

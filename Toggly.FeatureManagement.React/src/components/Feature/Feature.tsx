@@ -1,4 +1,5 @@
 import React from 'react'
+import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 import { context } from '../../contexts'
 
 type FeatureProps = {
@@ -8,6 +9,10 @@ type FeatureProps = {
   variant?: string
   requirement?: string
   negate?: boolean
+  /** Entity instance or canonical {@link TogglyEntityContext} for entity-gated flags. */
+  context?: TogglyEntityContext | Record<string, unknown> | null
+  /** Context kind for {@link registerContext} mapper lookup when `context` is a domain object. */
+  contextKind?: string
   children?: React.ReactNode
   fallback?: React.ReactNode
   /** Render prop for conditional styling; always invoked with resolved gate boolean. */
@@ -54,7 +59,13 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
       return
     }
     this.context.toggly
-      .evaluateFeatureGate(gate, this.props.requirement ?? 'all', this.props.negate ?? false)
+      .evaluateFeatureGate(
+        gate,
+        this.props.requirement ?? 'all',
+        this.props.negate ?? false,
+        this.props.context,
+        this.props.contextKind,
+      )
       .then((isEnabled) => this.setState({ shouldShow: this.applyVariantFilter(isEnabled) }))
   }
 
@@ -75,8 +86,12 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
     const gateChanged =
       prevProps.featureKey !== this.props.featureKey ||
       prevProps.featureKeys !== this.props.featureKeys
+    const contextChanged =
+      prevProps.context !== this.props.context ||
+      prevProps.contextKind !== this.props.contextKind
     if (
       gateChanged ||
+      contextChanged ||
       prevProps.requirement !== this.props.requirement ||
       prevProps.negate !== this.props.negate ||
       prevProps.variant !== this.props.variant

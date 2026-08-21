@@ -14,8 +14,13 @@ import type {
   EvaluatedVariantDef,
 } from '../types/index.js';
 import { parseVariantDefsPayload, variantDefsToFlags } from '../variant-helpers.js';
-import { appendEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import { appendEvaluationContext, evaluateEvaluatedGate, normalizeEntityContext, registerContext as registerEntityContext, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types';
 import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
+import {
+  parseEvaluatedResponseBody,
+  readResponseBody,
+  unwrapDefsPayload,
+} from '../signed-response.js';
 
 interface CachedFlags {
   flags: Flags;
@@ -36,6 +41,7 @@ export class TogglyServer implements TogglyClient {
   constructor(config: TogglyConfig, isBuildTime: boolean = false) {
     this.config = {
       baseURI: 'https://definitions.toggly.io',
+      verifySignatures: false,
       environment: 'Production',
       flagDefaults: {},
       featureFlagsRefreshInterval: 3 * 60 * 1000, // 3 minutes
@@ -121,18 +127,25 @@ export class TogglyServer implements TogglyClient {
         );
       }
 
-      const payload = await response.json();
+      const bodyText = await readResponseBody(response);
+      const payload = await parseEvaluatedResponseBody(bodyText, {
+        verifySignatures: this.config.verifySignatures,
+        baseURI: this.config.baseURI!,
+        allowedKeyIds: this.config.allowedKeyIds,
+        maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
+        headers: buildDefinitionFetchHeaders({ Accept: 'application/json' }),
+      });
       let flags: Flags;
       let variantDefs: Record<string, EvaluatedVariantDef> | null;
 
       if (enableVariants) {
-        variantDefs = parseVariantDefsPayload(payload);
+        // Verified path returns raw defs; unverified may still be `{ defs }`.
+        variantDefs = parseVariantDefsPayload(
+          this.config.verifySignatures ? { defs: payload } : payload
+        );
         flags = variantDefsToFlags(variantDefs);
-      } else if (typeof payload === 'object' && payload !== null && 'defs' in payload && typeof payload.defs === 'object') {
-        flags = payload.defs as Flags;
-        variantDefs = null;
       } else {
-        flags = payload as Flags;
+        flags = unwrapDefsPayload(payload) as Flags;
         variantDefs = null;
       }
 
@@ -233,12 +246,17 @@ export class TogglyServer implements TogglyClient {
   /**
    * Get a single feature flag value
    */
-  async getFlag(key: string, defaultValue: boolean = false): Promise<boolean> {
+  async getFlag(
+    key: string,
+    defaultValue: boolean = false,
+    entity?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<boolean> {
     const flags = await this.getFlags();
     const value = flags[key];
 
     if (value !== undefined) {
-      return value;
+      return resolveEvaluatedDefinition(value, normalizeEntityContext(entity, kind));
     }
 
     // Check flagDefaults first, then use provided defaultValue
@@ -251,25 +269,25 @@ export class TogglyServer implements TogglyClient {
   async evaluateGate(
     keys: string[],
     requirement: 'all' | 'any' = 'all',
-    negate: boolean = false
+    negate: boolean = false,
+    entity?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean> {
     if (keys.length === 0) {
       return !negate;
     }
 
     const flags = await this.getFlags();
+    const entityContext = normalizeEntityContext(entity, kind);
 
-    let isEnabled: boolean;
+    return evaluateEvaluatedGate(flags, keys, requirement, negate, entityContext);
+  }
 
-    if (requirement === 'any') {
-      // At least one flag must be true
-      isEnabled = keys.some((key) => flags[key] === true);
-    } else {
-      // All flags must be true
-      isEnabled = keys.every((key) => flags[key] === true);
-    }
-
-    return negate ? !isEnabled : isEnabled;
+  registerContext<T>(
+    kind: string,
+    mapper: (entity: T) => import('@ops-ai/toggly-hooks-types').TogglyEntityContext,
+  ): void {
+    registerEntityContext(kind, mapper);
   }
 
   /**

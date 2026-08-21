@@ -69,5 +69,11 @@ namespace Toggly.FeatureManagement
         /// The last error is also available via <see cref="IFeatureProviderDebug.GetDebugInfo"/>.
         /// </summary>
         public Action<string, Exception?>? OnError { get; set; }
+
+        /// <summary>
+        /// When true (default), discovered entity context schemas are registered with Toggly at startup.
+        /// Failures are logged and do not block application startup.
+        /// </summary>
+        public bool RegisterContextsOnStartup { get; set; } = true;
     }
 }

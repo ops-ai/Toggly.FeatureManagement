@@ -7,13 +7,24 @@ import {
 } from './models'
 import { TogglyOptions } from './toggly-options'
 import { HookExecutor } from './hooks'
-import type { CacheLruIndex, Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types'
+import type {
+  CacheLruIndex,
+  EvaluatedDefinitions,
+  Hook,
+  TogglyEntityContext,
+  TogglyEvaluationContext,
+} from '@ops-ai/toggly-hooks-types'
 import {
   appendEvaluationContext,
   evaluationContextCacheKey,
   isCacheLruEnabled,
+  evaluateStoredFeatureKeys,
+  normalizeEntityContext,
+  toBooleanDefinitions,
   parseCacheLruIndex,
+  registerContext as registerEntityContext,
   removeCacheLruKeys,
+  resolveEvaluatedDefinition,
   selectCacheLruKeysToEvict,
   serializeCacheLruIndex,
   touchCacheLruKey,
@@ -63,19 +74,26 @@ function getRevisionCacheKey(appKey: string, environment: string): string {
 
 function boolFlagsFromVariantDefs(
   defs: { [key: string]: EvaluatedVariantDef },
-): { [key: string]: boolean } {
-  const boolFlags: { [key: string]: boolean } = {}
+): EvaluatedDefinitions {
+  const boolFlags: EvaluatedDefinitions = {}
   for (const [key, entry] of Object.entries(defs)) {
     boolFlags[key] = entry.enabled
   }
   return boolFlags
 }
 
+function asEvaluatedDefinitions(raw: unknown): EvaluatedDefinitions {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as EvaluatedDefinitions
+  }
+  return {}
+}
+
 @Injectable({
   providedIn: 'root',
 })
 export class TogglyService implements ITogglyService, OnDestroy {
-  private _features: { [key: string]: boolean } | null = null
+  private _features: EvaluatedDefinitions | null = null
   private _variants: { [key: string]: EvaluatedVariantDef } | null = null
   private _loadingFeatures: boolean = false
   private _hookExecutor = new HookExecutor()
@@ -241,12 +259,12 @@ export class TogglyService implements ITogglyService, OnDestroy {
     await this._refreshFeatures()
   }
 
-  private _readCachedFlags(): { [key: string]: boolean } | null {
+  private _readCachedFlags(): EvaluatedDefinitions | null {
     if (!this._canPersist) return null
     try {
       const key = this._flagsCacheKey
       const raw = localStorage.getItem(key)
-      const parsed = raw ? (JSON.parse(raw) as { [key: string]: boolean } | null) : null
+      const parsed = raw ? (JSON.parse(raw) as EvaluatedDefinitions | null) : null
       if (raw != null && parsed != null) {
         this._touchCacheKey(key)
       }
@@ -254,7 +272,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
     } catch { return null }
   }
 
-  private _writeCachedFlags(flags: { [key: string]: boolean }): void {
+  private _writeCachedFlags(flags: EvaluatedDefinitions): void {
     if (!this._canPersist) return
     try {
       const key = this._flagsCacheKey
@@ -445,7 +463,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private async _parseEvaluatedSignedBody(bodyText: string): Promise<{ defs: unknown }> {
     if (!this._config.verifySignatures) {
       const payload = JSON.parse(bodyText) as { defs?: unknown }
-      return { defs: payload?.defs ?? payload }
+      return { defs: asEvaluatedDefinitions(payload?.defs ?? payload) }
     }
     const { envelope, defsRaw } = parseSignedEnvelope(bodyText)
     const jwks = await this._fetchJwks()
@@ -457,8 +475,10 @@ export class TogglyService implements ITogglyService, OnDestroy {
         kid: envelope.kid,
       },
       jwks,
+      this._config.allowedKeyIds,
+      { maxSignatureAgeSeconds: this._config.maxSignatureAgeSeconds },
     )
-    return { defs: parseDefinitionsFromRaw(defsRaw) }
+    return { defs: asEvaluatedDefinitions(parseDefinitionsFromRaw(defsRaw)) }
   }
 
   private _handleWsSyncMessage(message: WsSyncMessage): void {
@@ -582,14 +602,14 @@ export class TogglyService implements ITogglyService, OnDestroy {
         if (this._features) {
           this._writeCachedVariants(defs)
           this._writeCachedFlags(this._features)
-          this._hookExecutor.executeAfterRefresh(this._features)
+          this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
         }
       } else {
         this._variants = null
-        this._features = raw as { [key: string]: boolean }
+        this._features = asEvaluatedDefinitions(raw)
         if (this._features) {
           this._writeCachedFlags(this._features)
-          this._hookExecutor.executeAfterRefresh(this._features)
+          this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
         }
       }
     } catch (error) {
@@ -643,8 +663,11 @@ export class TogglyService implements ITogglyService, OnDestroy {
     this.startWebSocket()
   }
 
-  private _getEffectiveFlagValue(flagKey: string): boolean {
-    const remote = this._features?.[flagKey] === true
+  private _getEffectiveFlagValue(
+    flagKey: string,
+    entityContext?: TogglyEntityContext | null,
+  ): boolean {
+    const remote = resolveEvaluatedDefinition(this._features?.[flagKey], entityContext)
     return applyLocalGate(remote, flagKey, this._localGates, this._localGateIndex)
   }
 
@@ -652,55 +675,55 @@ export class TogglyService implements ITogglyService, OnDestroy {
     gate: string[],
     requirement = 'all',
     negate = false,
+    entityContext?: TogglyEntityContext | null,
   ) => {
     await this._featuresLoaded()
 
-    if (gate.length > 0 && (!this._features || Object.keys(this._features).length === 0)) {
-      return negate
-    }
-
-    let isEnabled: boolean
-
-    if (requirement === 'any') {
-      isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
-        return (
-          isEnabled ||
-          this._getEffectiveFlagValue(String(featureKey))
-        )
-      }, false)
-    } else {
-      isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
-        return (
-          isEnabled &&
-          this._getEffectiveFlagValue(String(featureKey))
-        )
-      }, true)
-    }
-
-    isEnabled = negate ? !isEnabled : isEnabled
-
-    return isEnabled
+    return evaluateStoredFeatureKeys(
+      this._features,
+      gate.map(String),
+      requirement === 'any' ? 'any' : 'all',
+      negate,
+      (key) => this._getEffectiveFlagValue(key, entityContext),
+    )
   }
 
   evaluateFeatureGate = async (
     featureKeys: string[],
     requirement = 'all',
     negate = false,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ) => {
+    const entityContext = normalizeEntityContext(context, kind)
     if (featureKeys.length > 0) {
       const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKeys[0])
-      const result = await this._evaluateFeatureGate(featureKeys, requirement, negate)
+      const result = await this._evaluateFeatureGate(
+        featureKeys,
+        requirement,
+        negate,
+        entityContext,
+      )
       await this._hookExecutor.executeAfterEvaluation(featureKeys[0], dataMap, result)
       return result
     }
-    return await this._evaluateFeatureGate(featureKeys, requirement, negate)
+    return await this._evaluateFeatureGate(featureKeys, requirement, negate, entityContext)
   }
 
-  isFeatureOn = async (featureKey: string) => {
+  isFeatureOn = async (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => {
+    const entityContext = normalizeEntityContext(context, kind)
     const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKey)
-    const result = await this._evaluateFeatureGate([featureKey])
+    const result = await this._evaluateFeatureGate([featureKey], 'all', false, entityContext)
     await this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
     return result
+  }
+
+  registerContext<T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void {
+    registerEntityContext(kind, mapper)
   }
 
   isFeatureOff = async (featureKey: string) => {

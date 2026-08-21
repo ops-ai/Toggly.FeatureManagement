@@ -5,6 +5,11 @@
  */
 
 import { useStore } from '@nanostores/react';
+import {
+  normalizeEntityContext,
+  resolveEvaluatedDefinition,
+  type TogglyEntityContext,
+} from '@ops-ai/toggly-hooks-types';
 import { $flags, $isReady, $error } from '../client/store.js';
 import type { UseFeatureFlagResult } from '../types/index.js';
 
@@ -29,13 +34,19 @@ import type { UseFeatureFlagResult } from '../types/index.js';
  */
 export function useFeatureFlag(
   flagKey: string,
-  defaultValue: boolean = false
+  defaultValue: boolean = false,
+  entity?: TogglyEntityContext | Record<string, unknown> | null,
+  kind?: string,
 ): UseFeatureFlagResult {
   const flags = useStore($flags);
   const isReady = useStore($isReady);
   const error = useStore($error);
 
-  const isEnabled = flags[flagKey] ?? defaultValue;
+  const isEnabled = resolveEvaluatedDefinition(
+    flags[flagKey],
+    normalizeEntityContext(entity, kind),
+    defaultValue,
+  );
 
   return { isEnabled, isReady, error };
 }

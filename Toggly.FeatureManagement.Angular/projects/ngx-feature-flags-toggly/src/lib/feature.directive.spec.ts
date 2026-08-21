@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { Component } from '@angular/core';
 import { FeatureFlagDirective } from './feature.directive';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
+import { TogglyService } from './toggly.service';
+import { clearRegisteredContexts } from '@ops-ai/toggly-hooks-types';
 
 // Host component for structural directive testing
 @Component({
@@ -212,4 +214,82 @@ describe('FeatureFlagDirective', () => {
       expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
     }));
   });
+});
+
+@Component({
+  standalone: true,
+  imports: [FeatureFlagDirective],
+  template: `
+    <div *featureFlag="flag; context: context; kind: kind">
+      <span class="badge">Badge</span>
+    </div>
+  `,
+})
+class ContextDirectiveHostComponent {
+  flag = 'ShowBadge';
+  context: { BirthDate: string } | null = { BirthDate: '2026-06-15T00:00:00Z' };
+  kind = 'Puppy';
+}
+
+describe('FeatureFlagDirective entity context', () => {
+  const datetimeGate = {
+    requirement: 'all' as const,
+    rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' as const }],
+  };
+
+  beforeEach(() => {
+    clearRegisteredContexts();
+  });
+
+  afterEach(() => {
+    clearRegisteredContexts();
+  });
+
+  it('should hide a gate without mapped context and show it after registerContext', fakeAsync(() => {
+    spyOn(console, 'warn');
+    TestBed.configureTestingModule({
+      imports: [
+        ContextDirectiveHostComponent,
+        NgxFeatureFlagsTogglyModule.forRoot({
+          featureDefaults: { ShowBadge: datetimeGate as any },
+        }),
+      ],
+    });
+    const fixture = TestBed.createComponent(ContextDirectiveHostComponent);
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.badge')).toBeNull();
+
+    const service = TestBed.inject(TogglyService);
+    service.registerContext('Puppy', (entity: { BirthDate: string }) => ({
+      kind: 'Puppy',
+      key: '1',
+      attributes: { BirthDate: entity.BirthDate },
+    }));
+    fixture.componentInstance.context = { BirthDate: '2026-06-15T00:00:00Z' };
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+    service.notifyLocalGatesChanged();
+    tick();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.badge')).toBeTruthy();
+  }));
+
+  it('should treat a non-string non-array flag as an empty gate', fakeAsync(() => {
+    spyOn(console, 'warn');
+    TestBed.configureTestingModule({
+      imports: [DirectiveHostComponent, NgxFeatureFlagsTogglyModule.forRoot({
+        featureDefaults: { Enabled: true },
+      })],
+    });
+    const fixture = TestBed.createComponent(DirectiveHostComponent);
+    const host = fixture.componentInstance;
+    host.flag = 1 as any;
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
+  }));
 });

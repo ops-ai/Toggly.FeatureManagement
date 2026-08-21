@@ -1,3 +1,4 @@
+import { toBooleanDefinitions } from '@ops-ai/toggly-hooks-types'
 import { Toggly, type TogglyOptions } from '../services/toggly.service'
 import { togglyServiceStore, togglyFlagsStore, togglyVariantsStore, togglyLocalGatesRevision } from '../stores/toggly.store'
 
@@ -27,7 +28,7 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
 
   // Wire up flag updates to the Svelte store (used by WebSocket and refreshFlags)
   toggly.onFlagsUpdated = (flags) => {
-    togglyFlagsStore.set(flags)
+    togglyFlagsStore.set(toBooleanDefinitions(flags))
   }
 
   toggly.onVariantsUpdated = (defs) => {
@@ -46,7 +47,7 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
   // The Toggly constructor already seeds _features, so expose them immediately
   const cachedFeatures = await toggly._featuresLoaded()
   if (cachedFeatures) {
-    togglyFlagsStore.set(cachedFeatures)
+    togglyFlagsStore.set(toBooleanDefinitions(cachedFeatures))
   }
   if (config.enableVariants) {
     togglyVariantsStore.set(toggly.getVariantDefinitions() ?? {})
@@ -56,7 +57,7 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
   try {
     const flags = await toggly._loadFeatures()
     if (flags) {
-      togglyFlagsStore.set(flags)
+      togglyFlagsStore.set(toBooleanDefinitions(flags))
     }
     if (config.enableVariants) {
       togglyVariantsStore.set(toggly.getVariantDefinitions() ?? {})
@@ -88,7 +89,7 @@ export async function createToggly(config: TogglyOptions): Promise<void> {
         await toggly.refreshFlags()
         const flags = await toggly._loadFeatures()
         if (flags) {
-          togglyFlagsStore.set(flags)
+          togglyFlagsStore.set(toBooleanDefinitions(flags))
         }
       } catch (error) {
         console.warn('Toggly refresh error:', error)

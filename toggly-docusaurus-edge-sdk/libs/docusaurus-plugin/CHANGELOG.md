@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.3
+
+2026-07-14
+
+### Added
+- `verifySignatures`, `allowedKeyIds`, and `maxSignatureAgeSeconds` on plugin options and build-time flag fetch.
+- Signature verification via `@ops-ai/toggly-signed-defs` when `verifySignatures` is true.
+
 ## 0.6.2
 
 2026-07-14

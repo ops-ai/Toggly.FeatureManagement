@@ -1,3 +1,12 @@
+## 1.6.2
+
+2026-07-14
+
+### Added
+- Optional `maxSignatureAgeSeconds` freshness check when `verifySignatures` is
+  enabled (rejects stale signed envelopes; omit / <=0 keeps prior behavior).
+- Uses shared `@ops-ai/toggly-signed-defs` for ES256 verification (single source of truth).
+
 ## 1.6.1
 
 2026-07-14

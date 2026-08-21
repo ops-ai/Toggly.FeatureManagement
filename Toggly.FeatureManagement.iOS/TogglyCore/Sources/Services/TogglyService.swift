@@ -375,14 +375,21 @@ public actor TogglyService {
                 throw TogglyError.httpError(statusCode: httpResponse.statusCode)
             }
 
-            let flags = try await parseFeatureFlagsResponse(data)
+            let parsed = try await parseFeatureFlagsResponse(data)
+            let flags = parsed.flags
 
             // Track changes
             let previousFlags = features
             features = flags
 
-            // Cache the flags
-            await cacheFeatureFlags(flags)
+            // Cache the flags (raw defs + envelope when verified)
+            await cacheFeatureFlags(
+                flags,
+                defsRaw: parsed.defsRaw,
+                timestamp: parsed.timestamp,
+                signature: parsed.signature,
+                keyId: parsed.keyId
+            )
 
             // Store ETag
             if let newEtag = httpResponse.value(forHTTPHeaderField: "ETag") {
@@ -427,12 +434,13 @@ public actor TogglyService {
 
     /// Parse definitions response. When `verifySignatures` is enabled, verify ES256
     /// against the exact raw defs JSON (Security digest-level double-hash).
-    private func parseFeatureFlagsResponse(_ data: Data) async throws -> FeatureFlags {
+    private func parseFeatureFlagsResponse(_ data: Data) async throws -> ParsedFeatureFlags {
         if !config.verifySignatures {
             if let signedResponse = try? JSONDecoder().decode(SignedDefinitionsResponse.self, from: data) {
-                return signedResponse.defs ?? signedResponse.data ?? [:]
+                return ParsedFeatureFlags(flags: signedResponse.defs ?? signedResponse.data ?? [:])
             }
-            return try JSONDecoder().decode(FeatureFlags.self, from: data)
+            let flags = try JSONDecoder().decode(FeatureFlags.self, from: data)
+            return ParsedFeatureFlags(flags: flags)
         }
 
         guard let bodyText = String(data: data, encoding: .utf8) else {
@@ -441,6 +449,10 @@ public actor TogglyService {
 
         do {
             let (envelope, defsRaw) = try SignedDefsVerify.parseSignedEnvelope(bodyText)
+            try SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp: envelope.timestamp,
+                maxSignatureAgeSeconds: config.maxSignatureAgeSeconds
+            )
             let jwks = try await fetchJwks()
             try SignedDefsVerify.verifySignedDefinitions(
                 defsRaw: defsRaw,
@@ -450,7 +462,14 @@ public actor TogglyService {
                 jwks: jwks
             )
             // Apply verified raw bytes only — never re-decode envelope.defs/data.
-            return try SignedDefsVerify.parseDefinitions(defsRaw)
+            let flags = try SignedDefsVerify.parseDefinitions(defsRaw)
+            return ParsedFeatureFlags(
+                flags: flags,
+                defsRaw: defsRaw,
+                timestamp: envelope.timestamp,
+                signature: envelope.signature,
+                keyId: envelope.kid
+            )
         } catch let error as SignedDefsVerifyError {
             throw TogglyError.signatureVerificationFailed(error.localizedDescription)
         } catch let error as TogglyError {
@@ -482,7 +501,29 @@ public actor TogglyService {
 
         let jwks = try JSONDecoder().decode(JwkSet.self, from: data)
         inMemoryJwks = jwks
+        if let encoded = String(data: data, encoding: .utf8) {
+            await storage.set(TogglyStorageKeys.jwks, value: encoded)
+        }
         return jwks
+    }
+
+    /// Prefer persisted JWKS for offline cold-start re-verification; fall back
+    /// to a network fetch when none is stored (Flutter soft-fail parity).
+    private func resolveJwksForCacheVerify() async -> JwkSet? {
+        if let cached = inMemoryJwks {
+            return cached
+        }
+        if let raw = await storage.get(TogglyStorageKeys.jwks),
+           let data = raw.data(using: .utf8),
+           let jwks = try? JSONDecoder().decode(JwkSet.self, from: data) {
+            inMemoryJwks = jwks
+            return jwks
+        }
+        do {
+            return try await fetchJwks()
+        } catch {
+            return nil
+        }
     }
 
     private func waitForFeaturesLoaded() async {
@@ -499,31 +540,126 @@ public actor TogglyService {
         let hashedIdentity = hashIdentity(identity ?? "")
         let cacheKey = TogglyStorageKeys.featureFlagsCache + hashedIdentity
 
-        if let cached = await storage.get(cacheKey),
-           let data = cached.data(using: .utf8),
-           let cacheData = try? JSONDecoder().decode(TogglyFeatureFlagsCache.self, from: data),
-           cacheData.identity == identity,
-           let flagsData = cacheData.flags.data(using: .utf8),
-           let flags = try? JSONDecoder().decode(FeatureFlags.self, from: flagsData) {
-            return flags
+        guard let cached = await storage.get(cacheKey),
+              let data = cached.data(using: .utf8),
+              let cacheData = try? JSONDecoder().decode(TogglyFeatureFlagsCache.self, from: data),
+              cacheData.identity == identity else {
+            return config.featureDefaults
         }
 
-        return config.featureDefaults
+        return await trustOrReverifyCachedFlags(cacheData, cacheKey: cacheKey)
     }
 
-    private func cacheFeatureFlags(_ flags: FeatureFlags) async {
-        guard let flagsData = try? JSONEncoder().encode(flags),
-              let flagsString = String(data: flagsData, encoding: .utf8) else {
-            return
+    /// When `verifySignatures` is enabled, re-verify persisted envelope metadata
+    /// before trusting the cache. Invalid signatures fail closed (clear cache).
+    /// Transient JWKS/network failures keep last-known-good.
+    private func trustOrReverifyCachedFlags(
+        _ cacheData: TogglyFeatureFlagsCache,
+        cacheKey: String
+    ) async -> FeatureFlags {
+        guard let flagsData = cacheData.flags.data(using: .utf8),
+              let parsedFlags = try? JSONDecoder().decode(FeatureFlags.self, from: flagsData) else {
+            await storage.delete(cacheKey)
+            return config.featureDefaults
+        }
+
+        guard config.verifySignatures else {
+            return parsedFlags
+        }
+
+        guard let timestamp = cacheData.timestamp,
+              let signature = cacheData.signature, !signature.isEmpty,
+              let keyId = cacheData.keyId, !keyId.isEmpty else {
+            await storage.delete(cacheKey)
+            return config.featureDefaults
+        }
+
+        do {
+            try SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp: timestamp,
+                maxSignatureAgeSeconds: config.maxSignatureAgeSeconds
+            )
+        } catch {
+            await storage.delete(cacheKey)
+            return config.featureDefaults
+        }
+
+        guard let jwks = await resolveJwksForCacheVerify() else {
+            // Soft-fail: keep last-known-good when JWKS cannot be resolved offline.
+            return parsedFlags
+        }
+
+        do {
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: cacheData.flags,
+                signature: signature,
+                timestamp: timestamp,
+                kid: keyId,
+                jwks: jwks
+            )
+            return parsedFlags
+        } catch {
+            // JWKS was available — any verify failure (bad sig, unknown kid,
+            // malformed key material) fails closed. Soft-fail only when JWKS
+            // could not be resolved above.
+            await storage.delete(cacheKey)
+            return config.featureDefaults
+        }
+    }
+
+    private func cacheFeatureFlags(
+        _ flags: FeatureFlags,
+        defsRaw: String? = nil,
+        timestamp: Int64? = nil,
+        signature: String? = nil,
+        keyId: String? = nil
+    ) async {
+        let flagsString: String
+        if let defsRaw {
+            flagsString = defsRaw
+        } else {
+            guard let flagsData = try? JSONEncoder().encode(flags),
+                  let encoded = String(data: flagsData, encoding: .utf8) else {
+                return
+            }
+            flagsString = encoded
         }
 
         let hashedIdentity = hashIdentity(identity ?? "")
         let cacheKey = TogglyStorageKeys.featureFlagsCache + hashedIdentity
-        let cacheData = TogglyFeatureFlagsCache(identity: identity ?? "", flags: flagsString)
+        let cacheData = TogglyFeatureFlagsCache(
+            identity: identity ?? "",
+            flags: flagsString,
+            timestamp: timestamp,
+            signature: signature,
+            keyId: keyId
+        )
 
         if let data = try? JSONEncoder().encode(cacheData),
            let string = String(data: data, encoding: .utf8) {
             await storage.set(cacheKey, value: string)
+        }
+    }
+
+    private struct ParsedFeatureFlags {
+        let flags: FeatureFlags
+        let defsRaw: String?
+        let timestamp: Int64?
+        let signature: String?
+        let keyId: String?
+
+        init(
+            flags: FeatureFlags,
+            defsRaw: String? = nil,
+            timestamp: Int64? = nil,
+            signature: String? = nil,
+            keyId: String? = nil
+        ) {
+            self.flags = flags
+            self.defsRaw = defsRaw
+            self.timestamp = timestamp
+            self.signature = signature
+            self.keyId = keyId
         }
     }
 
@@ -657,6 +793,7 @@ public actor TogglyService {
         // Key rotation: drop cached JWKS so the next verify uses fresh keys.
         if type == "signing-key-updated" {
             inMemoryJwks = nil
+            await storage.delete(TogglyStorageKeys.jwks)
             await refresh()
             return
         }

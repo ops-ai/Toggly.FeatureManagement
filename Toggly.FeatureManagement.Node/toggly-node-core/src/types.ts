@@ -63,9 +63,16 @@ export interface TogglyServerConfig extends TogglyConfig {
   /** Optional allow-list of signing key IDs. Empty / omitted allows all keys. */
   allowedKeyIds?: string[]
   /**
+   * Reject signed envelopes older than this many seconds when verifySignatures is enabled.
+   * Omit / null / <=0 = disabled (back-compat).
+   */
+  maxSignatureAgeSeconds?: number | null
+  /**
    * Called on refresh / verification failures while last-known-good flags are preserved.
    */
   onError?: (error: Error, context?: string) => void | Promise<void>
+  /** Register entity context schemas with Toggly on startup (default: true) */
+  registerContextsOnStartup?: boolean
 }
 
 /**
@@ -98,9 +105,13 @@ export interface FeatureDefinitionsResponse {
 }
 
 /**
- * Feature definitions map
+ * Feature definitions map (boolean or entity gate per flag)
  */
-export type FeatureDefinitions = Record<string, boolean>
+import type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+
+export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+
+export type FeatureDefinitions = EvaluatedDefinitions
 
 /**
  * Client state
@@ -179,14 +190,35 @@ export interface TogglyClient {
   init(config?: TogglyServerConfig): Promise<FeatureDefinitions>
   refresh(): Promise<FeatureDefinitions>
   clearCache(): Promise<void>
-  isFeatureOn(featureKey: string, context?: EvaluationContext): Promise<boolean>
-  isFeatureOff(featureKey: string, context?: EvaluationContext): Promise<boolean>
+  isFeatureOn(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<boolean>
+  isFeatureOff(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<boolean>
   evaluateFeatureGate(
     featureKeys: string[],
     requirement?: FeatureRequirement,
     negate?: boolean,
-    context?: EvaluationContext
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean>
+  registerContext<T>(
+    kind: string,
+    mapper: (entity: T) => TogglyEntityContext,
+    schema?: {
+      keyProperty: string
+      displayName?: string
+      properties: Array<{ name: string; type: string }>
+    },
+  ): void
   setIdentity(identity: string): Promise<void>
   addHook(hook: Hook): void
   removeHook(name: string): boolean

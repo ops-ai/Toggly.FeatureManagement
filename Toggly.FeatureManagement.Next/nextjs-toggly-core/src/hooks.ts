@@ -4,6 +4,7 @@ import type {
   IdentitySeriesData,
   FeatureDefinitions,
 } from './types'
+import { resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types'
 
 /**
  * Internal class that manages hook registration and execution
@@ -152,10 +153,15 @@ export class HookExecutor {
    * Execute afterRefresh hooks in registration order (FIFO)
    */
   async executeAfterRefresh(flags: FeatureDefinitions): Promise<void> {
+    const booleanFlags: Record<string, boolean> = {}
+    for (const [key, value] of Object.entries(flags)) {
+      booleanFlags[key] = resolveEvaluatedDefinition(value)
+    }
+
     for (const hook of this.hooks) {
       if (hook.afterRefresh) {
         try {
-          await hook.afterRefresh(flags)
+          await hook.afterRefresh(booleanFlags)
         } catch (error) {
           console.error(
             `[Toggly] Error in hook "${hook.getMetadata().name}.afterRefresh":`,

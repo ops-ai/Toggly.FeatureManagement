@@ -69,6 +69,11 @@ data class TogglyConfig(
     val useSignedDefinitions: Boolean = false,
     /** Whether signatures should be verified on signed responses */
     val verifySignatures: Boolean = false,
+    /**
+     * Reject signed envelopes older than this many seconds (Unix timestamp age).
+     * Null or <= 0 disables freshness enforcement.
+     */
+    val maxSignatureAgeSeconds: Long? = null,
     /** Connection timeout in milliseconds */
     val connectTimeout: Long = 10_000L,
     /** Request timeout in milliseconds */
@@ -126,11 +131,18 @@ interface TogglyStorage {
 
 /**
  * Cache data for feature flags.
+ *
+ * When signed definitions are verified, [flags] holds the exact raw defs JSON
+ * the server signed, plus envelope metadata for cold-start re-verification.
+ * Older caches without metadata still decode (optional fields default to null).
  */
 @Serializable
 internal data class TogglyFeatureFlagsCache(
     val identity: String,
-    val flags: String
+    val flags: String,
+    val timestamp: Long? = null,
+    val signature: String? = null,
+    val keyId: String? = null
 )
 
 /**

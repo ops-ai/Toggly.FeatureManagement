@@ -27,8 +27,9 @@ import {
   shouldFetchOnSync,
   type WsSyncMessage,
 } from './ws-sync'
-import { appendEvaluationContext } from '@ops-ai/toggly-hooks-types'
+import { appendEvaluationContext, normalizeEntityContext, registerContext as registerEntityContext, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
+import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
 
 /**
  * Create a new Toggly client instance
@@ -157,19 +158,19 @@ export function createTogglyClient(
     })
   }
 
-  function getEffectiveFlag(featureKey: string): boolean {
-    return applyLocalGate(
-      state.features[featureKey] === true,
-      featureKey,
-      localGates,
-      localGateIndex,
-    )
+  function getEffectiveFlag(
+    featureKey: string,
+    entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
+  ): boolean {
+    const remote = resolveEvaluatedDefinition(state.features[featureKey], entityContext)
+    return applyLocalGate(remote, featureKey, localGates, localGateIndex)
   }
 
   function evaluateGateEffective(
     featureKeys: string[],
     requirement: FeatureRequirement = 'all',
     negate = false,
+    entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
   ): boolean {
     if (featureKeys.length === 0) {
       return !negate
@@ -177,9 +178,9 @@ export function createTogglyClient(
 
     let result: boolean
     if (requirement === 'any') {
-      result = featureKeys.some((key) => getEffectiveFlag(key))
+      result = featureKeys.some((key) => getEffectiveFlag(key, entityContext))
     } else {
-      result = featureKeys.every((key) => getEffectiveFlag(key))
+      result = featureKeys.every((key) => getEffectiveFlag(key, entityContext))
     }
 
     return negate ? !result : result
@@ -238,20 +239,47 @@ export function createTogglyClient(
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const data = (await response.json()) as
-        | FeatureDefinitionsResponse
-        | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
+      const bodyText = await readResponseBody(response)
+      const parsed = await parseEvaluatedResponseBody(bodyText, {
+        verifySignatures: config.verifySignatures,
+        baseUri: config.baseUri,
+        allowedKeyIds: config.allowedKeyIds,
+        maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
+        headers: buildDefinitionFetchHeaders({
+          'Content-Type': 'application/json',
+        }),
+      })
 
       const definitions: FeatureDefinitions = {}
-      if (Array.isArray(data)) {
-        for (const definition of data) {
-          definitions[definition.featureKey] = !!definition.filters?.some((filter) => filter.name === 'AlwaysOn')
+      if (config.verifySignatures) {
+        const data = parsed as
+          | FeatureDefinitions
+          | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
+        if (Array.isArray(data)) {
+          for (const definition of data) {
+            definitions[definition.featureKey] = !!definition.filters?.some(
+              (filter) => filter.name === 'AlwaysOn'
+            )
+          }
+        } else if (data && typeof data === 'object') {
+          Object.assign(definitions, data)
         }
-      } else if ('defs' in data && data.defs) {
-        Object.assign(definitions, data.defs)
-      } else if ('features' in data && Array.isArray(data.features)) {
-        for (const feature of data.features) {
-          definitions[feature.featureKey] = feature.enabled
+      } else {
+        const data = parsed as
+          | FeatureDefinitionsResponse
+          | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
+        if (Array.isArray(data)) {
+          for (const definition of data) {
+            definitions[definition.featureKey] = !!definition.filters?.some(
+              (filter) => filter.name === 'AlwaysOn'
+            )
+          }
+        } else if ('defs' in data && data.defs) {
+          Object.assign(definitions, data.defs)
+        } else if ('features' in data && Array.isArray(data.features)) {
+          for (const feature of data.features) {
+            definitions[feature.featureKey] = feature.enabled
+          }
         }
       }
 
@@ -512,10 +540,16 @@ export function createTogglyClient(
       }
     },
 
-    async isFeatureOn(featureKey: string): Promise<boolean> {
+    async isFeatureOn(
+      featureKey: string,
+      context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ): Promise<boolean> {
       if (destroyed) {
         return config.featureDefaults?.[featureKey] ?? false
       }
+
+      const entityContext = normalizeEntityContext(context, kind)
 
       // Execute before hooks
       const dataMap = await hookExecutor.executeBeforeEvaluation(
@@ -523,7 +557,7 @@ export function createTogglyClient(
         config.featureDefaults?.[featureKey]
       )
 
-      const result = getEffectiveFlag(featureKey)
+      const result = getEffectiveFlag(featureKey, entityContext)
 
       // Execute after hooks (fire-and-forget)
       hookExecutor.executeAfterEvaluation(featureKey, dataMap, result).catch(() => {
@@ -533,24 +567,32 @@ export function createTogglyClient(
       return result
     },
 
-    async isFeatureOff(featureKey: string): Promise<boolean> {
-      const isOn = await client.isFeatureOn(featureKey)
+    async isFeatureOff(
+      featureKey: string,
+      context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ): Promise<boolean> {
+      const isOn = await client.isFeatureOn(featureKey, context, kind)
       return !isOn
     },
 
     async evaluateFeatureGate(
       featureKeys: string[],
       requirement: FeatureRequirement = 'all',
-      negate: boolean = false
+      negate: boolean = false,
+      context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
     ): Promise<boolean> {
       if (destroyed) {
         return evaluateGate(
           config.featureDefaults ?? {},
           featureKeys,
           requirement,
-          negate
+          negate,
         )
       }
+
+      const entityContext = normalizeEntityContext(context, kind)
 
       // Execute before hooks for each key
       const dataMaps: Array<{
@@ -566,11 +608,11 @@ export function createTogglyClient(
         dataMaps.push({ key, dataMap })
       }
 
-      const result = evaluateGateEffective(featureKeys, requirement, negate)
+      const result = evaluateGateEffective(featureKeys, requirement, negate, entityContext)
 
       // Execute after hooks for each key (fire-and-forget)
       for (const { key, dataMap } of dataMaps) {
-        const keyResult = state.features[key] === true
+        const keyResult = getEffectiveFlag(key, entityContext)
         hookExecutor
           .executeAfterEvaluation(key, dataMap, keyResult)
           .catch(() => {
@@ -579,6 +621,13 @@ export function createTogglyClient(
       }
 
       return result
+    },
+
+    registerContext<T>(
+      kind: string,
+      mapper: (entity: T) => import('@ops-ai/toggly-hooks-types').TogglyEntityContext,
+    ): void {
+      registerEntityContext(kind, mapper)
     },
 
     async setIdentity(identity: string): Promise<void> {

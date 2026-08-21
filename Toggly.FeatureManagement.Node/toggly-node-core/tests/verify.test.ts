@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 import {
+  assertEnvelopeFreshness,
   extractRawJsonProperty,
   parseSignedEnvelope,
   parseDefinitionsFromRaw,
@@ -181,6 +182,24 @@ describe('verifySignedDefinitions', () => {
     ).toThrow(/kid not allowed/)
   })
 
+  it('rejects stale envelopes when maxSignatureAgeSeconds is set', () => {
+    const { privateKey, jwk } = makeSignedKey()
+    const jwks: JwkSet = { keys: [jwk] }
+    const defs = '[]'
+    const timestamp = 100
+    const signature = signP1363(
+      privateKey,
+      doubleSha256(`${defs}|${timestamp}`)
+    ).toString('base64')
+
+    expect(() =>
+      verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, jwks, undefined, {
+        maxSignatureAgeSeconds: 300,
+        nowSeconds: 1000,
+      })
+    ).toThrow(/maxSignatureAgeSeconds/)
+  })
+
   it('parseSignedEnvelope keeps raw defs for verify and apply', () => {
     const { privateKey, jwk } = makeSignedKey()
     const jwks: JwkSet = { keys: [jwk] }
@@ -240,5 +259,39 @@ describe('validateAndParseEs256Key', () => {
         y: 'b',
       })
     ).toThrow(/unsupported alg/)
+  })
+})
+
+describe('assertEnvelopeFreshness', () => {
+  it('no-ops when maxSignatureAgeSeconds is unset or <= 0', () => {
+    expect(() => assertEnvelopeFreshness(1)).not.toThrow()
+    expect(() => assertEnvelopeFreshness(1, {})).not.toThrow()
+    expect(() => assertEnvelopeFreshness(1, { maxSignatureAgeSeconds: 0 })).not.toThrow()
+  })
+
+  it('rejects non-finite timestamps when freshness is enabled', () => {
+    expect(() =>
+      assertEnvelopeFreshness(Number.NaN, { maxSignatureAgeSeconds: 300, nowSeconds: 1000 })
+    ).toThrow(/invalid signature timestamp/)
+  })
+
+  it('rejects timestamps too far in the future', () => {
+    expect(() =>
+      assertEnvelopeFreshness(2000, {
+        maxSignatureAgeSeconds: 300,
+        maxClockSkewSeconds: 60,
+        nowSeconds: 1000,
+      })
+    ).toThrow(/in the future/)
+  })
+
+  it('accepts envelopes within age and skew', () => {
+    expect(() =>
+      assertEnvelopeFreshness(900, {
+        maxSignatureAgeSeconds: 300,
+        maxClockSkewSeconds: 60,
+        nowSeconds: 1000,
+      })
+    ).not.toThrow()
   })
 })

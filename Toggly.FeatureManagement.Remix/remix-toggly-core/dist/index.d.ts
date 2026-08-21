@@ -1,5 +1,7 @@
 import { LocalGate } from '@ops-ai/toggly-local-gates';
 export { LocalGate } from '@ops-ai/toggly-local-gates';
+import { EvaluatedDefinitions, TogglyEvaluationContext, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
+export { EntityGate, EntityGateRule, EvaluatedDefinitions, TogglyEntityContext, clearRegisteredContexts, normalizeEntityContext, registerContext, resolveEvaluatedDefinition, toBooleanDefinitions } from '@ops-ai/toggly-hooks-types';
 
 /**
  * Core types for Toggly Remix SDK
@@ -25,10 +27,27 @@ interface TogglyConfig {
     timeout?: number;
     /** Enable debug logging */
     debug?: boolean;
+    /**
+     * When true, verify ES256 signed definition envelopes via JWKS before applying flags.
+     */
+    verifySignatures?: boolean;
+    /**
+     * Optional allow-list of JWKS `kid` values when verifySignatures is enabled.
+     */
+    allowedKeyIds?: string[];
+    /**
+     * Reject envelopes whose `timestamp` is older than this many seconds.
+     * Unset or <= 0 disables freshness checks.
+     */
+    maxSignatureAgeSeconds?: number;
     /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
     localGates?: LocalGate[];
     /** Optional SDK error callback for reporting fetch/evaluation failures. */
     onError?: (message: string, error?: unknown) => void;
+    /** User groups for targeting */
+    groups?: string[];
+    /** Custom claims for targeting */
+    claims?: Record<string, string>;
 }
 /**
  * User identity context for feature targeting
@@ -40,13 +59,13 @@ interface IdentityContext {
     groups?: string[];
     /** Custom traits for targeting */
     traits?: Record<string, string | number | boolean>;
+    /** Custom claims for targeting */
+    claims?: Record<string, string>;
 }
 /**
- * Feature flags state
+ * Feature flags state (boolean or entity gate per flag)
  */
-interface FeatureFlags {
-    [key: string]: boolean;
-}
+type FeatureFlags = EvaluatedDefinitions;
 /**
  * Feature evaluation options
  */
@@ -185,15 +204,16 @@ declare function mergeConfig(config: TogglyConfig): TogglyConfig;
 /**
  * Build the feature definitions URL
  */
-declare function buildDefinitionsUrl(config: TogglyConfig, identity?: string): string;
+declare function buildDefinitionsUrl(config: TogglyConfig, context?: string | TogglyEvaluationContext): string;
 /**
  * Evaluate a single feature
  */
-declare function isFeatureEnabled(flags: FeatureFlags, featureKey: string, defaultValue?: boolean): boolean;
+declare function isFeatureEnabled(flags: FeatureFlags, featureKey: string, defaultValue?: boolean, entityContext?: TogglyEntityContext | null): boolean;
+
 /**
  * Evaluate multiple features with requirement
  */
-declare function evaluateFeatureGate(flags: FeatureFlags, featureKeys: string[], requirement?: FeatureRequirement, negate?: boolean, defaultValue?: boolean): EvaluationResult;
+declare function evaluateFeatureGate(flags: FeatureFlags, featureKeys: string[], requirement?: FeatureRequirement, negate?: boolean, defaultValue?: boolean, entityContext?: TogglyEntityContext | null): EvaluationResult;
 /**
  * Normalize feature keys from options
  */

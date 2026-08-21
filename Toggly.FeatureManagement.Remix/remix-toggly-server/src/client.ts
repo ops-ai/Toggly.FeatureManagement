@@ -10,13 +10,16 @@ import {
   EvaluationSeriesData,
   IdentitySeriesData,
   LocalGate,
+  TogglyNetworkError,
   mergeConfig,
   buildDefinitionsUrl,
   isFeatureEnabled,
   fetchWithTimeout,
   createLogger,
-  TogglyNetworkError,
+  normalizeEntityContext,
+  registerContext as registerEntityContext,
 } from '@ops-ai/remix-toggly-core';
+import type { TogglyEntityContext } from '@ops-ai/remix-toggly-core';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -34,6 +37,11 @@ import {
   type WsSyncMessage,
 } from './ws-sync';
 import { buildDefinitionFetchHeaders } from './sdk-identity';
+import {
+  parseEvaluatedResponseBody,
+  readResponseBody,
+  unwrapDefsPayload,
+} from './signed-response';
 
 /**
  * Server-side Toggly client for fetching and evaluating feature flags
@@ -136,8 +144,12 @@ export class TogglyServerClient {
     };
   }
 
-  private getEffectiveFlag(featureKey: string, defaultValue = false): boolean {
-    const remote = isFeatureEnabled(this.flags, featureKey, defaultValue);
+  private getEffectiveFlag(
+    featureKey: string,
+    defaultValue = false,
+    entityContext?: TogglyEntityContext | null,
+  ): boolean {
+    const remote = isFeatureEnabled(this.flags, featureKey, defaultValue, entityContext);
     return applyLocalGate(remote, featureKey, this.localGates, this.localGateIndex);
   }
 
@@ -170,9 +182,7 @@ export class TogglyServerClient {
     if (shouldFetchOnSync(message, previousRevision)) {
       this.scheduleDebouncedRefresh();
     }
-    if (message.etag) {
-      this.cacheDefinitionsRevision(message.etag);
-    }
+    this.cacheDefinitionsRevision(message.etag);
   }
 
   private handleWsUpdateMessage(message: WsSyncMessage): void {
@@ -184,16 +194,15 @@ export class TogglyServerClient {
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
       this.scheduleDebouncedRefresh();
     }
-    if (message.etag) {
-      this.cacheDefinitionsRevision(message.etag);
-    }
+    this.cacheDefinitionsRevision(message.etag);
   }
 
   private evaluateGateEffective(
     featureKeys: string[],
     requirement: 'all' | 'any' = 'all',
     negate = false,
-    defaultValue = false
+    defaultValue = false,
+    entityContext?: TogglyEntityContext | null,
   ): boolean {
     if (featureKeys.length === 0) {
       return !negate;
@@ -201,9 +210,9 @@ export class TogglyServerClient {
 
     let result: boolean;
     if (requirement === 'any') {
-      result = featureKeys.some((key) => this.getEffectiveFlag(key, defaultValue));
+      result = featureKeys.some((key) => this.getEffectiveFlag(key, defaultValue, entityContext));
     } else {
-      result = featureKeys.every((key) => this.getEffectiveFlag(key, defaultValue));
+      result = featureKeys.every((key) => this.getEffectiveFlag(key, defaultValue, entityContext));
     }
 
     return negate ? !result : result;
@@ -267,10 +276,7 @@ export class TogglyServerClient {
 
       const response = await fetchWithTimeout(url, { headers }, this.config.timeout);
 
-      const responseRevision = extractDefinitionsRevision(response);
-      if (responseRevision) {
-        this.cacheDefinitionsRevision(responseRevision);
-      }
+      this.cacheDefinitionsRevision(extractDefinitionsRevision(response));
 
       if (response.status === 304) {
         this.logger.debug('Definitions unchanged (304)');
@@ -283,13 +289,23 @@ export class TogglyServerClient {
         );
       }
 
-      const payload = await response.json();
-      if (payload && typeof payload === 'object' && 'defs' in (payload as Record<string, unknown>)) {
-        this.flags = ((payload as { defs?: FeatureFlags }).defs ?? {}) as FeatureFlags;
+      const bodyText = await readResponseBody(response);
+      const parsed = await parseEvaluatedResponseBody(bodyText, {
+        verifySignatures: this.config.verifySignatures,
+        baseUrl: this.config.baseUrl ?? 'https://definitions.toggly.io',
+        allowedKeyIds: this.config.allowedKeyIds,
+        maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
+        headers: buildDefinitionFetchHeaders({}),
+      });
+
+      if (this.config.verifySignatures) {
+        this.flags = unwrapDefsPayload(parsed) as FeatureFlags;
+      } else if (parsed && typeof parsed === 'object' && 'defs' in (parsed as Record<string, unknown>)) {
+        this.flags = ((parsed as { defs?: FeatureFlags }).defs ?? {}) as FeatureFlags;
       } else {
         this.flags =
-          payload && typeof payload === 'object'
-            ? (payload as FeatureFlags)
+          parsed && typeof parsed === 'object'
+            ? (parsed as FeatureFlags)
             : {};
       }
       this.logger.debug(`Fetched ${Object.keys(this.flags).length} flags.`);
@@ -321,17 +337,28 @@ export class TogglyServerClient {
   async isEnabled(
     featureKey: string,
     _context?: IdentityContext,
-    defaultValue = false
+    defaultValue = false,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean> {
+    const entityContext = normalizeEntityContext(entity, kind);
+
     // Execute beforeEvaluation hooks
     const hookData = await this.executeBeforeEvaluation(featureKey, defaultValue);
 
-    const result = this.getEffectiveFlag(featureKey, defaultValue);
+    const result = this.getEffectiveFlag(featureKey, defaultValue, entityContext);
 
     // Execute afterEvaluation hooks
     await this.executeAfterEvaluation(featureKey, hookData, result);
 
     return result;
+  }
+
+  registerContext<T>(
+    kind: string,
+    mapper: (entity: T) => TogglyEntityContext,
+  ): void {
+    registerEntityContext(kind, mapper);
   }
 
   /**
@@ -340,9 +367,11 @@ export class TogglyServerClient {
   async isDisabled(
     featureKey: string,
     context?: IdentityContext,
-    defaultValue = true
+    defaultValue = true,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean> {
-    return !(await this.isEnabled(featureKey, context, !defaultValue));
+    return !(await this.isEnabled(featureKey, context, !defaultValue, entity, kind));
   }
 
   /**
@@ -352,8 +381,12 @@ export class TogglyServerClient {
     featureKeys: string[],
     requirement: 'all' | 'any' = 'all',
     negate = false,
-    defaultValue = false
+    defaultValue = false,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean> {
+    const entityContext = normalizeEntityContext(entity, kind);
+
     // Execute beforeEvaluation for first feature
     const firstKey = featureKeys[0] ?? 'gate';
     const hookData = await this.executeBeforeEvaluation(firstKey, defaultValue);
@@ -362,7 +395,8 @@ export class TogglyServerClient {
       featureKeys,
       requirement,
       negate,
-      defaultValue
+      defaultValue,
+      entityContext,
     );
 
     // Execute afterEvaluation

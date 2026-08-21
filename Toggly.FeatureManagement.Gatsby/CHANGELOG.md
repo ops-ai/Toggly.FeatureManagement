@@ -1,3 +1,14 @@
+## 1.4.1
+
+2026-07-14
+
+### Fixed
+- Honor `verifySignatures` on server and client fetches (previously ignored). Uses `@ops-ai/toggly-signed-defs` with JWKS at `/.well-known/jwks`.
+
+### Added
+- Consolidate evaluated-signed response helpers into `@ops-ai/toggly-signed-defs`.
+- Optional `allowedKeyIds` and `maxSignatureAgeSeconds` on plugin config for signature verification.
+
 ## 1.4.0
 
 2026-07-05

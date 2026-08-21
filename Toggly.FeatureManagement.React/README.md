@@ -349,6 +349,16 @@ function useFeatureFlagAnalytics() {
 }
 ```
 
+## Entity context
+
+Pass a domain object per `<Feature>` or `isFeatureOn` call (list rows, detail pages). Register mappers with `Toggly.registerContext` — see [React entity context](https://docs.toggly.io/sdks/javascript/react#entity-context).
+
+```jsx
+<Feature featureKey="PuppyBadge" context={puppy} contextKind="Puppy">
+  <Badge />
+</Feature>
+```
+
 ## Find out more about Toggly.io
 
 Visit [our official website](https://toggly.io) or [check out a video overview of our product](https://docs.toggly.io/).

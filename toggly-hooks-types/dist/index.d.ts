@@ -60,6 +60,9 @@ export interface Hook {
 }
 export type { TogglyEvaluationContext, EvaluationUrlMode, } from './evaluation-context';
 export { MAX_EVALUATION_CLAIMS, appendEvaluationContext, evaluationContextCacheKey, normalizeEvaluationClaims, } from './evaluation-context';
+export type { EntityGate, EntityGateRule, EvaluatedDefinitionValue, EvaluatedDefinitions, TogglyEntityContext, EntityContextMapper, } from './entity-gate';
 export type { CacheLruEntry, CacheLruIndex, } from './cache-lru';
 export { emptyCacheLruIndex, isCacheLruEnabled, parseCacheLruIndex, removeCacheLruKeys, selectCacheLruKeysToEvict, serializeCacheLruIndex, touchCacheLruKey, } from './cache-lru';
 export { serializeJsonForInlineScript } from './serialize-for-inline-script';
+export type { EvaluatedGateRequirement } from './entity-gate';
+export { applyEntityGate, clearRegisteredContexts, evaluateEvaluatedGate, evaluateResolvedKeys, evaluateStoredFeatureKeys, isEntityGate, mapEntityContext, normalizeEntityContext, registerContext, resolveEntityContext, resolveEvaluatedDefinition, toBooleanDefinitions, } from './entity-gate';

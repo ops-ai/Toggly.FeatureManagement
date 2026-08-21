@@ -1,3 +1,11 @@
+## 1.4.1
+
+2026-07-14
+
+### Added
+- `verifySignatures`, `allowedKeyIds`, and `maxSignatureAgeSeconds` on `TogglyConfig`.
+- Signature verification via `@ops-ai/toggly-signed-defs` (JWKS at `/.well-known/jwks`) when `verifySignatures` is true.
+
 ## 1.4.0
 
 2026-07-05

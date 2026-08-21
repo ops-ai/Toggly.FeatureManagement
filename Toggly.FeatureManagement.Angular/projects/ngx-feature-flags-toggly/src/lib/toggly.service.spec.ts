@@ -2,7 +2,7 @@ import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { TogglyService } from './toggly.service';
 import { TogglyOptions } from './toggly-options';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { clearRegisteredContexts, type Hook } from '@ops-ai/toggly-hooks-types';
 
 function expectFetchCalledWithUrl(fetchSpy: jasmine.Spy, url: string): void {
   expect(fetchSpy).toHaveBeenCalledWith(
@@ -827,6 +827,111 @@ describe('TogglyService', () => {
       const url = fetchSpy.calls.mostRecent().args[0] as string;
       expect(url).toContain('g=beta');
       expect(url).toContain('claim.role=admin');
+    });
+  });
+
+  // ─── Entity context ──────────────────────────────
+  describe('Entity context', () => {
+    const datetimeGate = {
+      requirement: 'all' as const,
+      rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' as const }],
+    };
+
+    beforeEach(() => {
+      clearRegisteredContexts();
+      spyOn(console, 'warn');
+    });
+
+    afterEach(() => {
+      clearRegisteredContexts();
+    });
+
+    it('should fail closed for EntityGate without context', async () => {
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          featureDefaults: { ShowBadge: datetimeGate as any },
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      expect(await service.isFeatureOn('ShowBadge')).toBe(false);
+    });
+
+    it('should pass EntityGate with matching entity context', async () => {
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          featureDefaults: { ShowBadge: datetimeGate as any },
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      const puppy = { BirthDate: '2026-06-15T00:00:00Z' };
+      expect(await service.isFeatureOn('ShowBadge', puppy, 'Puppy')).toBe(false);
+
+      service.registerContext('Puppy', (entity: { BirthDate: string }) => ({
+        kind: 'Puppy',
+        key: '1',
+        attributes: { BirthDate: entity.BirthDate },
+      }));
+      expect(await service.isFeatureOn('ShowBadge', puppy, 'Puppy')).toBe(true);
+      expect(await service.evaluateFeatureGate(['ShowBadge'], 'all', false, puppy, 'Puppy')).toBe(true);
+    });
+
+    it('should preserve EntityGate objects from evaluated-signed response', async () => {
+      const fetchSpy = spyOn(globalThis, 'fetch').and.resolveTo({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({
+          defs: { CheckoutV2: true, ShowBadge: datetimeGate },
+        }),
+        text: () => Promise.resolve(JSON.stringify({
+          defs: { CheckoutV2: true, ShowBadge: datetimeGate },
+        })),
+      } as any);
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      service.registerContext('Puppy', (entity: { id: string; birthDate: string }) => ({
+        kind: 'Puppy',
+        key: entity.id,
+        attributes: { BirthDate: entity.birthDate },
+      }));
+
+      expect(await service.isFeatureOn('ShowBadge')).toBe(false);
+      expect(await service.isFeatureOn('CheckoutV2')).toBe(true);
+      expect(await service.isFeatureOn(
+        'ShowBadge',
+        { id: 'p1', birthDate: '2026-06-15T00:00:00Z' },
+        'Puppy',
+      )).toBe(true);
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    it('should preserve EntityGate objects in localStorage cache', async () => {
+      localStorage.setItem(
+        'toggly:flags:key:Production',
+        JSON.stringify({ ShowBadge: datetimeGate }),
+      );
+
+      TestBed.configureTestingModule({
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'key',
+          environment: 'Production',
+        })],
+      });
+      const service = TestBed.inject(TogglyService);
+      service.registerContext('Puppy', (entity: { birthDate: string }) => ({
+        kind: 'Puppy',
+        key: '1',
+        attributes: { BirthDate: entity.birthDate },
+      }));
+
+      expect(await service.isFeatureOn('ShowBadge')).toBe(false);
+      expect(await service.isFeatureOn('ShowBadge', { birthDate: '2026-06-15T00:00:00Z' }, 'Puppy')).toBe(true);
     });
   });
 

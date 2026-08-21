@@ -10,7 +10,13 @@ import type {
 } from './types';
 import {
   appendEvaluationContext,
+  clearRegisteredContexts,
+  evaluateEvaluatedGate,
+  normalizeEntityContext,
+  registerContext,
+  resolveEvaluatedDefinition,
   type TogglyEvaluationContext,
+  type TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types';
 
 /**
@@ -71,14 +77,22 @@ export function buildDefinitionsUrl(
 export function isFeatureEnabled(
   flags: FeatureFlags,
   featureKey: string,
-  defaultValue = false
+  defaultValue = false,
+  entityContext?: TogglyEntityContext | null,
 ): boolean {
   if (!flags || Object.keys(flags).length === 0) {
     return defaultValue;
   }
 
-  return flags[featureKey] ?? defaultValue;
+  const value = flags[featureKey];
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  return resolveEvaluatedDefinition(value, entityContext);
 }
+
+export { registerContext, clearRegisteredContexts, normalizeEntityContext };
 
 /**
  * Evaluate multiple features with requirement
@@ -88,7 +102,8 @@ export function evaluateFeatureGate(
   featureKeys: string[],
   requirement: FeatureRequirement = 'all',
   negate = false,
-  defaultValue = false
+  defaultValue = false,
+  entityContext?: TogglyEntityContext | null,
 ): EvaluationResult {
   if (!flags || Object.keys(flags).length === 0) {
     return {
@@ -108,17 +123,13 @@ export function evaluateFeatureGate(
     };
   }
 
-  let enabled: boolean;
-
-  if (requirement === 'any') {
-    enabled = featureKeys.some((key) => flags[key] === true);
-  } else {
-    enabled = featureKeys.every((key) => flags[key] === true);
-  }
-
-  if (negate) {
-    enabled = !enabled;
-  }
+  const enabled = evaluateEvaluatedGate(
+    flags,
+    featureKeys,
+    requirement,
+    negate,
+    entityContext,
+  );
 
   return {
     enabled,

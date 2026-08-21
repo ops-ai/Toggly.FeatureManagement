@@ -1,0 +1,184 @@
+name: Signed Defs Package - Build & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
+      bump_type:
+        description: 'Bump type (only used when release_mode is auto_bump)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  SDK_DIR: toggly-signed-defs
+  NPM_PACKAGE: '@ops-ai/toggly-signed-defs'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    defaults:
+      run:
+        working-directory: ${{ env.SDK_DIR }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_DIR }}/package.json
+          registry: npm
+          package_name: ${{ env.NPM_PACKAGE }}
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+
+      - name: Install dependencies
+        if: steps.release.outputs.action == 'publish'
+        run: npm install
+
+      - name: Run type check
+        if: steps.release.outputs.action == 'publish'
+        run: npm run typecheck
+
+      - name: Build package
+        if: steps.release.outputs.action == 'publish'
+        run: npm run build
+
+      - name: Run tests
+        if: steps.release.outputs.action == 'publish'
+        run: npm test
+
+      - name: Verify build outputs
+        if: steps.release.outputs.action == 'publish'
+        run: |
+          if [ ! -f "dist/index.js" ] || [ ! -f "dist/index.d.ts" ] || [ ! -f "dist/esm/index.js" ] || [ ! -f "dist/esm/package.json" ]; then
+            echo "Build verification failed - missing CJS or ESM output files"
+            exit 1
+          fi
+          node --input-type=module -e "import { parseSignedEnvelope } from './dist/esm/index.js'; if (typeof parseSignedEnvelope !== 'function') process.exit(1)"
+          echo "Build outputs verified"
+
+      - name: Verify package contents
+        if: steps.release.outputs.action == 'publish'
+        run: |
+          npm pack --dry-run
+          echo "Package contents verified"
+
+      - name: Publish to npm
+        if: steps.release.outputs.action == 'publish'
+        run: npm publish --provenance --access public || npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Commit version bump
+        if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
+        run: |
+          cd $GITHUB_WORKSPACE
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+          git add ${{ env.SDK_DIR }}/package.json
+          git add ${{ env.SDK_DIR }}/package-lock.json 2>/dev/null || true
+
+          git commit -S -m "Bumped signed-defs package to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              sleep 2
+            fi
+          done
+
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Create GitHub Release
+        if: steps.release.outputs.action == 'publish'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: toggly-signed-defs-v${{ steps.release.outputs.version }}
+          name: Signed Defs v${{ steps.release.outputs.version }}
+          body: |
+            ## @ops-ai/toggly-signed-defs ${{ steps.release.outputs.version }}
+
+            Shared ES256 signed-definitions verification for Toggly SDKs
+
+            ### Installation
+            ```bash
+            npm install @ops-ai/toggly-signed-defs
+            ```
+
+            ### What's Changed
+            See [CHANGELOG.md](https://github.com/ops-ai/Toggly.FeatureManagement/blob/develop/toggly-signed-defs/CHANGELOG.md) for details.
+
+            ### NPM Package
+            https://www.npmjs.com/package/@ops-ai/toggly-signed-defs
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo "## Signed Defs Package Release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ steps.release.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry latest | ${{ steps.release.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Package**: ${{ env.NPM_PACKAGE }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View on NPM](https://www.npmjs.com/package/${{ env.NPM_PACKAGE }})" >> $GITHUB_STEP_SUMMARY

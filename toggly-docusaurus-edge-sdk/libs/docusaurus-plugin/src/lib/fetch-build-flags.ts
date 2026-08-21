@@ -3,6 +3,11 @@
  * Used only from the Docusaurus plugin during `contentLoaded` / `postBuild`.
  */
 import type { Flags } from './toggly-client';
+import {
+  parseEvaluatedResponseBody,
+  readResponseBody,
+  unwrapDefsPayload,
+} from './signed-response.js';
 
 export interface BuildFlagFetchOptions {
   baseURI?: string;
@@ -11,11 +16,10 @@ export interface BuildFlagFetchOptions {
   flagDefaults?: Record<string, boolean>;
   connectTimeout?: number;
   isDebug?: boolean;
-}
-
-interface TogglyApiPayload {
-  defs?: Flags;
-  [key: string]: unknown;
+  /** When true, verify ES256 signed envelopes via JWKS before applying flags. */
+  verifySignatures?: boolean;
+  allowedKeyIds?: string[];
+  maxSignatureAgeSeconds?: number;
 }
 
 /**
@@ -32,6 +36,9 @@ export async function fetchBuildTimeFlags(
     flagDefaults = {},
     connectTimeout = 5_000,
     isDebug = false,
+    verifySignatures = false,
+    allowedKeyIds,
+    maxSignatureAgeSeconds,
   } = options;
 
   const merged: Flags = { ...flagDefaults };
@@ -60,9 +67,17 @@ export async function fetchBuildTimeFlags(
       throw new Error(`Toggly API returned ${response.status}`);
     }
 
-    const payload = (await response.json()) as TogglyApiPayload | Flags;
-    const defs = (payload as TogglyApiPayload).defs;
-    const apiFlags = (defs ?? payload) as Flags;
+    const bodyText = await readResponseBody(response);
+    const parsed = await parseEvaluatedResponseBody(bodyText, {
+      verifySignatures,
+      baseURI,
+      allowedKeyIds,
+      maxSignatureAgeSeconds,
+      headers: { Accept: 'application/json' },
+    });
+    const apiFlags = (
+      verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed)
+    ) as Flags;
 
     for (const [key, value] of Object.entries(apiFlags)) {
       if (typeof value === 'boolean') {

@@ -1,4 +1,5 @@
 import React from 'react';
+import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 import { context } from '../../contexts';
 type FeatureProps = {
     featureKey?: string;
@@ -7,7 +8,14 @@ type FeatureProps = {
     variant?: string;
     requirement?: string;
     negate?: boolean;
-    children: React.ReactNode;
+    /** Entity instance or canonical {@link TogglyEntityContext} for entity-gated flags. */
+    context?: TogglyEntityContext | Record<string, unknown> | null;
+    /** Context kind for {@link registerContext} mapper lookup when `context` is a domain object. */
+    contextKind?: string;
+    children?: React.ReactNode;
+    fallback?: React.ReactNode;
+    /** Render prop for conditional styling; always invoked with resolved gate boolean. */
+    render?: (enabled: boolean) => React.ReactNode;
 };
 declare class Feature extends React.Component<FeatureProps, {
     shouldShow: boolean;
@@ -23,6 +31,6 @@ declare class Feature extends React.Component<FeatureProps, {
     componentDidMount(): void;
     componentDidUpdate(prevProps: FeatureProps): void;
     componentWillUnmount(): void;
-    render(): React.ReactNode;
+    render(): string | number | boolean | React.ReactFragment | JSX.Element | null | undefined;
 }
 export default Feature;

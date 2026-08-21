@@ -4,6 +4,153 @@ import XCTest
 @testable import TogglyCore
 
 final class SignedDefsVerifyTests: XCTestCase {
+    func testExtractRawJsonPropertyReadsScalarsAndMissingKeys() {
+        let body = #"{"defs":{"A":true},"data":[1,2],"name":"x\"y","count":42,"empty":null}"#
+        XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "defs"), #"{"A":true}"#)
+        XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "data"), "[1,2]")
+        XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "name"), #""x\"y""#)
+        XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "count"), "42")
+        XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "empty"), "null")
+        XCTAssertNil(SignedDefsVerify.extractRawJsonProperty(from: body, key: "missing"))
+        XCTAssertNil(SignedDefsVerify.extractRawJsonProperty(from: "not-json", key: "defs"))
+    }
+
+    func testParseSignedEnvelopeFallsBackToData() throws {
+        let parsed = try SignedDefsVerify.parseSignedEnvelope(
+            #"{"data":{"A":true},"signature":"sig","timestamp":1,"kid":"k"}"#
+        )
+        XCTAssertEqual(parsed.defsRaw, #"{"A":true}"#)
+        XCTAssertEqual(parsed.envelope.signature, "sig")
+        XCTAssertEqual(parsed.envelope.timestamp, 1)
+        XCTAssertEqual(parsed.envelope.kid, "k")
+    }
+
+    func testParseSignedEnvelopeRejectsMissingDefsAndBadTimestamp() {
+        XCTAssertThrowsError(
+            try SignedDefsVerify.parseSignedEnvelope(#"{"signature":"sig","timestamp":1,"kid":"k"}"#)
+        )
+        XCTAssertThrowsError(
+            try SignedDefsVerify.parseSignedEnvelope(
+                #"{"defs":{"A":true},"signature":"sig","timestamp":"nope","kid":"k"}"#
+            )
+        )
+    }
+
+    func testVerifyRejectsKidAllowListAndJwksMismatches() throws {
+        let fixture = try makeSignedFixture(
+            defs: #"{"A":true}"#,
+            timestamp: 1,
+            hashMode: .double
+        )
+        XCTAssertThrowsError(
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: fixture.defs,
+                signature: fixture.signatureBase64,
+                timestamp: fixture.timestamp,
+                kid: fixture.jwk.kid,
+                jwks: JwkSet(keys: [fixture.jwk]),
+                allowedKids: ["other"]
+            )
+        ) { error in
+            XCTAssertEqual(error as? SignedDefsVerifyError, .kidNotAllowed(fixture.jwk.kid))
+        }
+        XCTAssertThrowsError(
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: fixture.defs,
+                signature: fixture.signatureBase64,
+                timestamp: fixture.timestamp,
+                kid: fixture.jwk.kid,
+                jwks: JwkSet(keys: [])
+            )
+        ) { error in
+            XCTAssertEqual(error as? SignedDefsVerifyError, .noMatchingJwk(fixture.jwk.kid))
+        }
+        XCTAssertThrowsError(
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: fixture.defs,
+                signature: fixture.signatureBase64,
+                timestamp: fixture.timestamp,
+                kid: fixture.jwk.kid,
+                jwks: JwkSet(keys: [
+                    Jwk(kid: fixture.jwk.kid, x: fixture.jwk.x, y: fixture.jwk.y, alg: "RS256")
+                ])
+            )
+        ) { error in
+            XCTAssertEqual(error as? SignedDefsVerifyError, .unsupportedAlg("RS256"))
+        }
+        XCTAssertThrowsError(
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: fixture.defs,
+                signature: fixture.signatureBase64,
+                timestamp: fixture.timestamp,
+                kid: fixture.jwk.kid,
+                jwks: JwkSet(keys: [
+                    Jwk(kid: fixture.jwk.kid, crv: "P-384", x: fixture.jwk.x, y: fixture.jwk.y)
+                ])
+            )
+        ) { error in
+            XCTAssertEqual(error as? SignedDefsVerifyError, .unsupportedCurve("P-384"))
+        }
+        XCTAssertThrowsError(
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: fixture.defs,
+                signature: fixture.signatureBase64,
+                timestamp: fixture.timestamp,
+                kid: fixture.jwk.kid,
+                jwks: JwkSet(keys: [Jwk(kid: fixture.jwk.kid, x: nil, y: nil)])
+            )
+        ) { error in
+            XCTAssertEqual(error as? SignedDefsVerifyError, .missingCoordinates)
+        }
+        XCTAssertThrowsError(
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: fixture.defs,
+                signature: fixture.signatureBase64,
+                timestamp: fixture.timestamp,
+                kid: "WRONGKIDES256",
+                jwks: JwkSet(keys: [
+                    Jwk(kid: "WRONGKIDES256", x: fixture.jwk.x, y: fixture.jwk.y)
+                ])
+            )
+        ) { error in
+            guard case .invalidKid = error as? SignedDefsVerifyError else {
+                return XCTFail("expected invalidKid, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: fixture.defs,
+                signature: "%%%not-base64%%%",
+                timestamp: fixture.timestamp,
+                kid: fixture.jwk.kid,
+                jwks: JwkSet(keys: [fixture.jwk])
+            )
+        ) { error in
+            XCTAssertEqual(error as? SignedDefsVerifyError, .invalidBase64)
+        }
+    }
+
+    func testErrorDescriptionsCoverAllCases() {
+        let cases: [SignedDefsVerifyError] = [
+            .invalidEnvelope,
+            .missingDefs,
+            .kidNotAllowed("k"),
+            .noMatchingJwk("k"),
+            .unsupportedAlg("RS256"),
+            .unsupportedCurve("P-384"),
+            .missingCoordinates,
+            .invalidKid(expected: "a", got: "b"),
+            .invalidSignature,
+            .invalidKey,
+            .invalidBase64,
+            .signatureTimestampExpired,
+            .signatureTimestampInFuture,
+        ]
+        for error in cases {
+            XCTAssertFalse(error.errorDescription?.isEmpty ?? true, String(describing: error))
+        }
+    }
+
     func testExtractsExactDefsBytes() {
         let body = "{\"defs\":{\"a\":1},\"signature\":\"x\",\"timestamp\":1,\"kid\":\"k\"}"
         XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "defs"), "{\"a\":1}")
@@ -23,6 +170,39 @@ final class SignedDefsVerifyTests: XCTestCase {
                 timestamp: fixture.timestamp,
                 kid: fixture.jwk.kid,
                 jwks: JwkSet(keys: [fixture.jwk])
+            )
+        )
+    }
+
+    func testAssertEnvelopeFreshnessNoOpsWhenDisabled() throws {
+        try SignedDefsVerify.assertEnvelopeFreshness(timestamp: 1, maxSignatureAgeSeconds: nil)
+        try SignedDefsVerify.assertEnvelopeFreshness(timestamp: 1, maxSignatureAgeSeconds: 0)
+    }
+
+    func testAssertEnvelopeFreshnessRejectsStaleAndFuture() {
+        XCTAssertThrowsError(
+            try SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp: 100,
+                maxSignatureAgeSeconds: 300,
+                nowSeconds: 1000
+            )
+        ) { error in
+            XCTAssertEqual(error as? SignedDefsVerifyError, .signatureTimestampExpired)
+        }
+        XCTAssertThrowsError(
+            try SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp: 2000,
+                maxSignatureAgeSeconds: 300,
+                nowSeconds: 1000
+            )
+        ) { error in
+            XCTAssertEqual(error as? SignedDefsVerifyError, .signatureTimestampInFuture)
+        }
+        XCTAssertNoThrow(
+            try SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp: 900,
+                maxSignatureAgeSeconds: 300,
+                nowSeconds: 1000
             )
         )
     }

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.serializeJsonForInlineScript = exports.touchCacheLruKey = exports.serializeCacheLruIndex = exports.selectCacheLruKeysToEvict = exports.removeCacheLruKeys = exports.parseCacheLruIndex = exports.isCacheLruEnabled = exports.emptyCacheLruIndex = exports.normalizeEvaluationClaims = exports.evaluationContextCacheKey = exports.appendEvaluationContext = exports.MAX_EVALUATION_CLAIMS = void 0;
+exports.toBooleanDefinitions = exports.resolveEvaluatedDefinition = exports.resolveEntityContext = exports.registerContext = exports.normalizeEntityContext = exports.mapEntityContext = exports.isEntityGate = exports.evaluateStoredFeatureKeys = exports.evaluateResolvedKeys = exports.evaluateEvaluatedGate = exports.clearRegisteredContexts = exports.applyEntityGate = exports.serializeJsonForInlineScript = exports.touchCacheLruKey = exports.serializeCacheLruIndex = exports.selectCacheLruKeysToEvict = exports.removeCacheLruKeys = exports.parseCacheLruIndex = exports.isCacheLruEnabled = exports.emptyCacheLruIndex = exports.normalizeEvaluationClaims = exports.evaluationContextCacheKey = exports.appendEvaluationContext = exports.MAX_EVALUATION_CLAIMS = void 0;
 var evaluation_context_1 = require("./evaluation-context");
 Object.defineProperty(exports, "MAX_EVALUATION_CLAIMS", { enumerable: true, get: function () { return evaluation_context_1.MAX_EVALUATION_CLAIMS; } });
 Object.defineProperty(exports, "appendEvaluationContext", { enumerable: true, get: function () { return evaluation_context_1.appendEvaluationContext; } });
@@ -16,3 +16,16 @@ Object.defineProperty(exports, "serializeCacheLruIndex", { enumerable: true, get
 Object.defineProperty(exports, "touchCacheLruKey", { enumerable: true, get: function () { return cache_lru_1.touchCacheLruKey; } });
 var serialize_for_inline_script_1 = require("./serialize-for-inline-script");
 Object.defineProperty(exports, "serializeJsonForInlineScript", { enumerable: true, get: function () { return serialize_for_inline_script_1.serializeJsonForInlineScript; } });
+var entity_gate_1 = require("./entity-gate");
+Object.defineProperty(exports, "applyEntityGate", { enumerable: true, get: function () { return entity_gate_1.applyEntityGate; } });
+Object.defineProperty(exports, "clearRegisteredContexts", { enumerable: true, get: function () { return entity_gate_1.clearRegisteredContexts; } });
+Object.defineProperty(exports, "evaluateEvaluatedGate", { enumerable: true, get: function () { return entity_gate_1.evaluateEvaluatedGate; } });
+Object.defineProperty(exports, "evaluateResolvedKeys", { enumerable: true, get: function () { return entity_gate_1.evaluateResolvedKeys; } });
+Object.defineProperty(exports, "evaluateStoredFeatureKeys", { enumerable: true, get: function () { return entity_gate_1.evaluateStoredFeatureKeys; } });
+Object.defineProperty(exports, "isEntityGate", { enumerable: true, get: function () { return entity_gate_1.isEntityGate; } });
+Object.defineProperty(exports, "mapEntityContext", { enumerable: true, get: function () { return entity_gate_1.mapEntityContext; } });
+Object.defineProperty(exports, "normalizeEntityContext", { enumerable: true, get: function () { return entity_gate_1.normalizeEntityContext; } });
+Object.defineProperty(exports, "registerContext", { enumerable: true, get: function () { return entity_gate_1.registerContext; } });
+Object.defineProperty(exports, "resolveEntityContext", { enumerable: true, get: function () { return entity_gate_1.resolveEntityContext; } });
+Object.defineProperty(exports, "resolveEvaluatedDefinition", { enumerable: true, get: function () { return entity_gate_1.resolveEvaluatedDefinition; } });
+Object.defineProperty(exports, "toBooleanDefinitions", { enumerable: true, get: function () { return entity_gate_1.toBooleanDefinitions; } });

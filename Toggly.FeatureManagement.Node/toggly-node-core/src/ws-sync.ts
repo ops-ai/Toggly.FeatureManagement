@@ -1,4 +1,4 @@
-import { appendSdkQueryParams } from './sdk-identity';
+import { appendSdkQueryParams } from './sdk-identity.js';
 
 export const DEFINITIONS_REVISION_HEADER = 'X-Definitions-Revision';
 

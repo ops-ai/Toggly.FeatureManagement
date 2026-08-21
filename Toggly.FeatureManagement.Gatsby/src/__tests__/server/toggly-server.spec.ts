@@ -1,6 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TogglyServer, createTogglyServerClient } from '../../server/toggly-server.js';
 
+function mockOkResponse(body: unknown, status = 200) {
+  const bodyText = typeof body === 'string' ? body : JSON.stringify(body);
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 200 ? 'OK' : 'Error',
+    text: async () => bodyText,
+    json: async () => (typeof body === 'string' ? JSON.parse(body) : body),
+  } as Response;
+}
+
+
 describe('TogglyServer', () => {
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -53,6 +65,27 @@ describe('TogglyServer', () => {
       });
       const flags = await server.getFlags();
       expect(flags).toEqual({ F1: true, F2: true });
+    });
+
+    it('reads text() and rejects invalid envelope when verifySignatures is true', async () => {
+      const invalidBody = JSON.stringify({ defs: { F1: true } });
+      const text = vi.fn().mockResolvedValue(invalidBody);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        text,
+        json: () => Promise.resolve(JSON.parse(invalidBody)),
+      } as unknown as Response);
+
+      const server = new TogglyServer({
+        appKey: 'test-key',
+        verifySignatures: true,
+        flagDefaults: { F1: false },
+      });
+
+      const flags = await server.getFlags();
+      expect(text).toHaveBeenCalled();
+      expect(flags).toEqual({ F1: false });
     });
 
     it('should use cache for subsequent calls', async () => {

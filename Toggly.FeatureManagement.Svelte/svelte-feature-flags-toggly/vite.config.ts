@@ -3,6 +3,8 @@ import { configDefaults } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { resolve } from 'path'
 
+const signedDefsSrc = resolve(__dirname, '../../toggly-signed-defs/src/index.ts')
+
 export default defineConfig({
   plugins: [
     svelte({
@@ -12,7 +14,10 @@ export default defineConfig({
     })
   ],
   resolve: {
-    conditions: ['browser']
+    conditions: ['browser'],
+    alias: {
+      '@ops-ai/toggly-signed-defs': signedDefsSrc,
+    },
   },
   test: {
     globals: true,
@@ -22,8 +27,15 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
-      include: ['src/**/*.ts', 'src/**/*.svelte'],
-      exclude: ['src/**/*.spec.ts', 'src/__tests__/**', 'src/**/index.ts', 'src/**/*.types.ts', 'src/utils/createToggly.ts'],
+      include: ['src/**/*.ts', 'src/**/*.svelte', '../../toggly-signed-defs/src/**/*.ts'],
+      exclude: [
+        'src/**/*.spec.ts',
+        'src/__tests__/**',
+        'src/**/index.ts',
+        'src/**/*.types.ts',
+        'src/utils/createToggly.ts',
+        '../../toggly-signed-defs/src/**/*.test.ts',
+      ],
       thresholds: {
         statements: 90,
         branches: 84,
@@ -40,7 +52,13 @@ export default defineConfig({
       fileName: (format) => `svelte-feature-flags-toggly.${format === 'es' ? 'es' : 'cjs'}`
     },
     rollupOptions: {
-      external: ['svelte', 'svelte/store', '@ops-ai/toggly-hooks-types', '@ops-ai/toggly-local-gates'],
+      external: [
+        'svelte',
+        'svelte/store',
+        '@ops-ai/toggly-hooks-types',
+        '@ops-ai/toggly-local-gates',
+        '@ops-ai/toggly-signed-defs',
+      ],
       output: {
         globals: {
           svelte: 'Svelte',

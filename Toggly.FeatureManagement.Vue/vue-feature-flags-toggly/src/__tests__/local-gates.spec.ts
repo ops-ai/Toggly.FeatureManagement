@@ -82,4 +82,31 @@ describe('Local gates', () => {
     service.notifyLocalGatesChanged();
     expect(listener).toHaveBeenCalledTimes(1);
   });
+
+  it('notifyLocalGatesChanged keeps notifying after a listener throws', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve({ ApiV2Checkout: true }),
+      text: () => Promise.resolve(JSON.stringify({ ApiV2Checkout: true })),
+    });
+
+    const service = new Toggly();
+    service.init({
+      appKey: 'test-key',
+      environment: 'Production',
+      enableLiveUpdates: false,
+    });
+    await service._loadFeatures();
+
+    const second = vi.fn();
+    service.subscribeLocalGatesChanged(() => {
+      throw new Error('listener failed');
+    });
+    service.subscribeLocalGatesChanged(second);
+    service.notifyLocalGatesChanged();
+
+    expect(second).toHaveBeenCalledTimes(1);
+  });
 });

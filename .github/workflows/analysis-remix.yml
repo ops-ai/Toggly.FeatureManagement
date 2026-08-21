@@ -46,6 +46,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/${{ matrix.package }}/package-lock.json
 
+      - name: Build shared toggly-signed-defs package
+        working-directory: toggly-signed-defs
+        run: (npm ci || npm install) && npm run build
+
       - name: Install and build core package
         if: matrix.package != 'remix-toggly-core'
         working-directory: ${{ env.SDK_ROOT }}/remix-toggly-core

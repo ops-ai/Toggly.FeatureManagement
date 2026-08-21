@@ -7,6 +7,7 @@ import {
   ViewContainerRef,
 } from '@angular/core'
 import { TogglyService } from './toggly.service'
+import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 
 /**
  * Structural directive for conditionally rendering content based on feature flags
@@ -45,6 +46,8 @@ import { TogglyService } from './toggly.service'
 export class FeatureFlagDirective implements OnInit, OnDestroy {
   private flag: string[] = []
   private isHidden = true
+  private entityContext: TogglyEntityContext | Record<string, unknown> | null = null
+  private kind: string | undefined
   private unsubscribeLocalGates: (() => void) | undefined
   private unsubscribeFeaturesRefresh: (() => void) | undefined
 
@@ -75,6 +78,18 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
     this.updateView()
   }
 
+  @Input('featureFlagContext')
+  set featureFlagContext(value: TogglyEntityContext | Record<string, unknown> | null) {
+    this.entityContext = value
+    this.updateView()
+  }
+
+  @Input('featureFlagKind')
+  set featureFlagKind(value: string | undefined) {
+    this.kind = value
+    this.updateView()
+  }
+
   constructor(
     private _templateRef: TemplateRef<unknown>,
     private _viewContainer: ViewContainerRef,
@@ -98,7 +113,7 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
 
   private updateView() {
     this._toggly
-      .evaluateFeatureGate(this.flag, this.requirement, this.negate)
+      .evaluateFeatureGate(this.flag, this.requirement, this.negate, this.entityContext, this.kind)
       .then((isEnabled) => {
         if (isEnabled) {
           if (this.isHidden) {

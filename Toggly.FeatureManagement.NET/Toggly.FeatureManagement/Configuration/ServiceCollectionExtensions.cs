@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Toggly.FeatureManagement.Context;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
 using Polly.Extensions.Http;
@@ -72,6 +74,7 @@ namespace Toggly.FeatureManagement.Configuration
                         options.AllowedKeyIds = togglyOptions.AllowedKeyIds;
                     if (togglyOptions.OnError != null)
                         options.OnError = togglyOptions.OnError;
+                    options.RegisterContextsOnStartup = togglyOptions.RegisterContextsOnStartup;
                 });
 
             AddCoreServices(services);
@@ -99,6 +102,13 @@ namespace Toggly.FeatureManagement.Configuration
                 .WaitAndRetryAsync(8, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
         }
 
+        private static IAsyncPolicy<HttpResponseMessage> GetAppRetryPolicy()
+        {
+            return HttpPolicyExtensions
+                .HandleTransientHttpError()
+                .WaitAndRetryAsync(2, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+        }
+
         private static void AddCoreServices(IServiceCollection services)
         {
             services.AddHttpClient("toggly", (sp, config) =>
@@ -119,6 +129,19 @@ namespace Toggly.FeatureManagement.Configuration
 
                 return handler;
             });
+
+            services.AddHttpClient("toggly-app", (sp, config) =>
+            {
+                var settings = sp.GetRequiredService<IOptions<TogglySettings>>().Value;
+                var baseUrl = settings.BaseUrl ?? "https://app.toggly.io/";
+                config.BaseAddress = new Uri(baseUrl);
+            })
+            .SetHandlerLifetime(TimeSpan.FromMinutes(60))
+            .AddPolicyHandler(GetAppRetryPolicy());
+
+            services.AddOptions<EntityContextRegistryOptions>();
+            services.TryAddSingleton<EntityContextRegistry>(EntityContextServiceCollectionExtensions.CreateRegistry);
+            services.TryAddSingleton<ITogglyEntityContextResolver, TogglyEntityContextResolver>();
             
             var defaultMethodConfig = new MethodConfig
             {
@@ -154,8 +177,11 @@ namespace Toggly.FeatureManagement.Configuration
 
             services.AddSingleton<TogglyFeatureProvider>();
             services.AddSingleton<IFeatureDefinitionProvider>(x => x.GetRequiredService<TogglyFeatureProvider>());
+            services.AddSingleton<IFeatureDefinitionModelProvider>(x => x.GetRequiredService<TogglyFeatureProvider>());
             services.AddSingleton<IFeatureProviderDebug>(x => x.GetRequiredService<TogglyFeatureProvider>());
             services.AddSingleton<ISecureFeatureProvider>(x => x.GetRequiredService<TogglyFeatureProvider>());
+
+            services.AddHostedService<EntityContextRegistrationHostedService>();
 
             services.AddSingleton<TogglyUsageStatsProvider>();
             services.AddSingleton<IFeatureUsageStatsProvider>(x => x.GetRequiredService<TogglyUsageStatsProvider>());
@@ -175,7 +201,8 @@ namespace Toggly.FeatureManagement.Configuration
         {
             var featureManagement = services.AddFeatureManagement()
                 .AddFeatureFilter<PercentageFilter>()
-                .AddFeatureFilter<TimeWindowFilter>();
+                .AddFeatureFilter<TimeWindowFilter>()
+                .AddFeatureFilter<ContextPropertyFilter>();
 
             if (services.Any(t => t.ImplementationType?.IsAssignableFrom(typeof(ITargetingContextAccessor)) ?? false))
                 featureManagement.AddFeatureFilter<TargetingFilter>();

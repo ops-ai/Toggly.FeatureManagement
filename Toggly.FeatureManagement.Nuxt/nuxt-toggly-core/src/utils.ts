@@ -1,3 +1,6 @@
+import type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+import { evaluateEvaluatedGate } from '@ops-ai/toggly-hooks-types'
+
 /**
  * Generate a UUID v4
  */
@@ -29,24 +32,13 @@ export function normalizeFeatureKeys(
  * Evaluate a feature gate
  */
 export function evaluateGate(
-  features: Record<string, boolean>,
+  features: EvaluatedDefinitions,
   featureKeys: string[],
   requirement: 'all' | 'any' = 'all',
-  negate: boolean = false
+  negate: boolean = false,
+  entityContext?: TogglyEntityContext | null,
 ): boolean {
-  if (featureKeys.length === 0) {
-    return !negate
-  }
-
-  let result: boolean
-
-  if (requirement === 'all') {
-    result = featureKeys.every((key) => features[key] === true)
-  } else {
-    result = featureKeys.some((key) => features[key] === true)
-  }
-
-  return negate ? !result : result
+  return evaluateEvaluatedGate(features, featureKeys, requirement, negate, entityContext)
 }
 
 /**

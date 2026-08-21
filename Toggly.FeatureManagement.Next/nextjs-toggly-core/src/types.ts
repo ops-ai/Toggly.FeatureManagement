@@ -2,6 +2,9 @@
  * Configuration options for Toggly
  */
 import type { LocalGate } from '@ops-ai/toggly-local-gates'
+import type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+
+export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 
 export type { LocalGate }
 
@@ -28,6 +31,19 @@ export interface TogglyConfig {
   hooks?: Hook[]
   /** Enable WebSocket live updates for real-time feature flag changes (browser only, default: true) */
   enableLiveUpdates?: boolean
+  /**
+   * When true, verify ES256 signed definition envelopes via JWKS before applying flags.
+   */
+  verifySignatures?: boolean
+  /**
+   * Optional allow-list of JWKS `kid` values when verifySignatures is enabled.
+   */
+  allowedKeyIds?: string[]
+  /**
+   * Reject envelopes whose `timestamp` is older than this many seconds.
+   * Unset or <= 0 disables freshness checks.
+   */
+  maxSignatureAgeSeconds?: number
   /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
   localGates?: LocalGate[]
   /** Optional SDK error callback for reporting fetch/evaluation failures. */
@@ -107,12 +123,9 @@ export interface HookMetadata {
 }
 
 /**
- * Feature definitions fetched from API
+ * Feature definitions fetched from API (boolean or entity gate per flag)
  */
-export interface FeatureDefinitions {
-  /** Map of feature keys to their enabled state */
-  [featureKey: string]: boolean
-}
+export type FeatureDefinitions = EvaluatedDefinitions
 
 /**
  * API response for feature definitions
@@ -175,17 +188,33 @@ export interface TogglyClient {
   refresh(): Promise<FeatureDefinitions>
 
   /** Check if a single feature is enabled */
-  isFeatureOn(featureKey: string): Promise<boolean>
+  isFeatureOn(
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<boolean>
 
   /** Check if a single feature is disabled */
-  isFeatureOff(featureKey: string): Promise<boolean>
+  isFeatureOff(
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<boolean>
 
   /** Evaluate a feature gate with multiple features */
   evaluateFeatureGate(
     featureKeys: string[],
     requirement?: FeatureRequirement,
-    negate?: boolean
+    negate?: boolean,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ): Promise<boolean>
+
+  /** Register an entity context mapper for a catalog kind */
+  registerContext<T>(
+    kind: string,
+    mapper: (entity: T) => TogglyEntityContext,
+  ): void
 
   /** Set user identity */
   setIdentity(identity: string): Promise<void>

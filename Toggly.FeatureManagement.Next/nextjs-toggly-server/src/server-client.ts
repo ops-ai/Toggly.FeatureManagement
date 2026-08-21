@@ -1,5 +1,6 @@
 import {
   createTogglyClient,
+  toBooleanDefinitions,
   type TogglyClient,
   type TogglyConfig,
   type FeatureDefinitions,
@@ -108,7 +109,7 @@ export async function initServerToggly(
     if (cached) {
       // Use cached definitions as defaults
       mergedConfig.featureDefaults = {
-        ...cached,
+        ...toBooleanDefinitions(cached),
         ...mergedConfig.featureDefaults,
       }
     }

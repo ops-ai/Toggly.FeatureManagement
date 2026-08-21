@@ -21,10 +21,12 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 function createMockResponse(body: unknown) {
+  const bodyText = typeof body === 'string' ? body : JSON.stringify(body);
   return {
     ok: true,
     status: 200,
-    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(bodyText),
+    json: () => Promise.resolve(typeof body === 'string' ? JSON.parse(body) : body),
   };
 }
 

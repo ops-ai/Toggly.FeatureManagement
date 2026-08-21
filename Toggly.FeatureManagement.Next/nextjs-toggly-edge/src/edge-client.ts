@@ -2,6 +2,7 @@ import {
   evaluateGate,
   generateUUID,
   normalizeFeatureKeys,
+  toBooleanDefinitions,
   DEFAULT_CONFIG,
   API_ENDPOINTS,
   type FeatureDefinitions,
@@ -9,6 +10,7 @@ import {
   type FeatureRequirement,
 } from '@ops-ai/nextjs-toggly-core'
 import type { TogglyEdgeConfig, EdgeClientState } from './types'
+import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
 
 /**
  * Default edge configuration
@@ -124,21 +126,39 @@ export class TogglyEdgeClient {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const data = (await response.json()) as FeatureDefinitionsResponse
+      const bodyText = await readResponseBody(response)
+      const parsed = await parseEvaluatedResponseBody(bodyText, {
+        verifySignatures: this.config.verifySignatures,
+        baseUri: this.config.baseUri ?? DEFAULT_CONFIG.baseUri,
+        allowedKeyIds: this.config.allowedKeyIds,
+        maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
+        headers,
+      })
 
-      // Transform API response to FeatureDefinitions
       const definitions: FeatureDefinitions = {}
-      if (data.features && Array.isArray(data.features)) {
-        for (const feature of data.features) {
-          definitions[feature.featureKey] = feature.enabled
+      if (this.config.verifySignatures) {
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          Object.assign(definitions, parsed as FeatureDefinitions)
+        }
+      } else {
+        const data = parsed as FeatureDefinitionsResponse
+        if (data.features && Array.isArray(data.features)) {
+          for (const feature of data.features) {
+            definitions[feature.featureKey] = feature.enabled
+          }
+        } else if (data.defs) {
+          Object.assign(definitions, data.defs)
+        } else if (parsed && typeof parsed === 'object') {
+          Object.assign(definitions, parsed as FeatureDefinitions)
         }
       }
 
-      // Merge with defaults (API takes precedence)
-      this.state.features = {
+      // Merge with defaults (API takes precedence). Edge middleware has no entity
+      // context, so gated definitions collapse to false rather than leaking objects.
+      this.state.features = toBooleanDefinitions({
         ...this.config.featureDefaults,
         ...definitions,
-      }
+      })
       this.state.lastFetch = Date.now()
       this.state.initialized = true
       this.state.error = null
@@ -211,7 +231,7 @@ export class TogglyEdgeClient {
   /**
    * Get all features
    */
-  getFeatures(): FeatureDefinitions {
+  getFeatures(): Record<string, boolean> {
     return { ...this.state.features }
   }
 

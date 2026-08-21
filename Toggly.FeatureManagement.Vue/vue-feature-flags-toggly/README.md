@@ -299,6 +299,16 @@ const debugHook: Hook = {
 };
 ```
 
+## Entity context
+
+Pass `:context` and `context-kind` on `<Feature>` or call `$toggly.isFeatureOn(key, entity, kind)`. See [Vue entity context](https://docs.toggly.io/sdks/javascript/vue#entity-context).
+
+```html
+<Feature feature-key="NewProductBadge" :context="product" context-kind="Product">
+  <span class="badge">New</span>
+</Feature>
+```
+
 ## Find out more about Toggly.io
 
 Visit [our official website](https://toggly.io) or [check out a video overview of our product](https://docs.toggly.io/).

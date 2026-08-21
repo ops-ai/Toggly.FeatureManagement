@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.5.0
+
+2026-08-19
+
+### Added
+- Entity context evaluation for server-side targeting: `AddTogglyEntityContext<T>`,
+  `ITogglyEntityContextResolver`, `ContextPropertyFilter`, and split user/entity
+  evaluation in `TogglyFeatureManager`.
+- Razor `<feature context="@entity">` tag helper in `Toggly.FeatureManagement.Web`.
+- Optional startup registration of discovered context schemas via
+  `RegisterContextsOnStartup` (default true).
+- Usage stats identifiers now include entity kind/key (`user|Kind|key`) for
+  per-instance list checks.
+
+### Fixed
+- Razor tag helper now targets the `<feature>` element, defaults
+  `requirement` to `All`, splits comma-separated `name` values, and
+  documents `@removeTagHelper` for Microsoft's
+  `Microsoft.FeatureManagement.Mvc.TagHelpers.FeatureTagHelper`.
+- Entity-only flags evaluate without a user filter; empty `EnabledFor` after
+  stripping `ContextProperty` no longer forces the flag off.
+- `AddToggly` registers an empty `EntityContextRegistry` so existing apps do
+  not crash when they have not called `AddTogglyEntityContext`.
+- Startup catalog PUT is fire-and-forget and no longer retries HTTP 404.
+
 ## 3.4.1
 
 2026-08-10

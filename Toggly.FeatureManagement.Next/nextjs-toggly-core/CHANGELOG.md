@@ -1,3 +1,21 @@
+## 1.4.2
+
+2026-08-19
+
+### Added
+- Entity context evaluation for mixed `EvaluatedDefinitions` via `@ops-ai/toggly-hooks-types`.
+- `registerContext(kind, mapper)` and optional `context`/`kind` on `isFeatureOn`, `isFeatureOff`, and `evaluateFeatureGate`.
+- Fail-closed entity gate resolution when no entity context is supplied.
+
+## 1.4.1
+
+2026-07-14
+
+### Added
+- Consolidate evaluated-signed response helpers into `@ops-ai/toggly-signed-defs`.
+- `verifySignatures`, `allowedKeyIds`, and `maxSignatureAgeSeconds` on `TogglyConfig`.
+- Signature verification via `@ops-ai/toggly-signed-defs` (JWKS at `/.well-known/jwks`) when `verifySignatures` is true.
+
 ## 1.4.0
 
 2026-07-05

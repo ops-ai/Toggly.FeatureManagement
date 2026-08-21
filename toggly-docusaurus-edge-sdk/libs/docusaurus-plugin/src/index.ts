@@ -70,6 +70,12 @@ export interface TogglyPluginOptions {
    * Requires `TOGGLY_APP_KEY` (and related env) in the build environment.
    */
   staticGating?: boolean;
+  /** When true, verify ES256 signed envelopes via JWKS before applying flags. */
+  verifySignatures?: boolean;
+  /** Optional allow-list of JWKS kid values when verifySignatures is enabled. */
+  allowedKeyIds?: string[];
+  /** Reject envelopes older than this many seconds; unset disables freshness. */
+  maxSignatureAgeSeconds?: number;
 }
 
 interface PageFeatureMapping {
@@ -108,6 +114,9 @@ export default function togglyPlugin(
     renderAllDuringBuild = true, // Default to true for better DX
     contentRoots,
     staticGating = false,
+    verifySignatures = false,
+    allowedKeyIds,
+    maxSignatureAgeSeconds,
   } = options;
 
   // Store page feature mapping for postBuild
@@ -134,6 +143,9 @@ export default function togglyPlugin(
           identity,
           renderAllDuringBuild,
           staticGating,
+          verifySignatures,
+          allowedKeyIds,
+          maxSignatureAgeSeconds,
         },
       };
     },
@@ -170,6 +182,9 @@ export default function togglyPlugin(
             flagDefaults: pluginConfig.flagDefaults,
             connectTimeout: pluginConfig.connectTimeout,
             isDebug: pluginConfig.isDebug,
+            verifySignatures: pluginConfig.verifySignatures,
+            allowedKeyIds: pluginConfig.allowedKeyIds,
+            maxSignatureAgeSeconds: pluginConfig.maxSignatureAgeSeconds,
           });
         }
 

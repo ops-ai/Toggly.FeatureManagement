@@ -5,6 +5,12 @@
  * Original source: @ops-ai/toggly-client-core
  */
 
+import {
+  parseEvaluatedResponseBody,
+  readResponseBody,
+  unwrapDefsPayload,
+} from './signed-response.js';
+
 /**
  * Configuration options for creating a Toggly client
  * Matches the API structure used in other Toggly SDKs
@@ -28,6 +34,12 @@ export interface TogglyConfig {
   fetch?: typeof fetch;
   /** User identity for targeting (optional) */
   identity?: string;
+  /** When true, verify ES256 signed envelopes via JWKS before applying flags. */
+  verifySignatures?: boolean;
+  /** Optional allow-list of JWKS kid values when verifySignatures is enabled. */
+  allowedKeyIds?: string[];
+  /** Reject envelopes older than this many seconds; unset disables freshness. */
+  maxSignatureAgeSeconds?: number;
 }
 
 /**
@@ -95,6 +107,9 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     connectTimeout = 5 * 1000, // 5 seconds
     fetch: fetchImpl,
     identity,
+    verifySignatures = false,
+    allowedKeyIds,
+    maxSignatureAgeSeconds,
   } = config;
 
   // Resolve fetch implementation: use provided, then globalThis.fetch, then throw
@@ -178,13 +193,23 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
         );
       }
 
-      const payload = await response.json();
-      const flags = (payload && typeof payload === 'object' && 'defs' in payload ? payload.defs : payload) as Flags;
-      
+      const bodyText = await readResponseBody(response);
+      const parsed = await parseEvaluatedResponseBody(bodyText, {
+        verifySignatures,
+        baseURI,
+        allowedKeyIds,
+        maxSignatureAgeSeconds,
+        headers: { Accept: 'application/json' },
+        fetchImpl: resolvedFetch,
+      });
+      const flags = (
+        verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed)
+      ) as Flags;
+
       if (isDebug) {
         console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);
       }
-      
+
       return flags;
     } catch (error) {
       // On error, try to use cached flags, otherwise use flagDefaults

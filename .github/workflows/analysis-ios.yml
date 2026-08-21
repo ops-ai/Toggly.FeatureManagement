@@ -24,6 +24,7 @@ jobs:
   build-and-test:
     runs-on: macos-15
     strategy:
+      fail-fast: false
       matrix:
         xcode: ['16.1', '16.2']
     steps:
@@ -49,10 +50,15 @@ jobs:
 
       - name: Run tests
         working-directory: ${{ env.SDK_ROOT }}
-        run: swift test -v --enable-code-coverage
+        run: |
+          if [ "${{ matrix.xcode }}" = "16.1" ]; then
+            swift test -v --enable-code-coverage
+          else
+            swift test -v
+          fi
 
       - name: Generate code coverage report
-        if: matrix.xcode == '16.2'
+        if: matrix.xcode == '16.1'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           xcrun llvm-cov export \
@@ -68,7 +74,7 @@ jobs:
           grep '^SF:' coverage.lcov | head -20 || true
 
       - name: Upload coverage to Codecov
-        if: matrix.xcode == '16.2'
+        if: matrix.xcode == '16.1'
         uses: codecov/codecov-action@v4
         with:
           file: ${{ env.SDK_ROOT }}/coverage.lcov
@@ -78,7 +84,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage artifact
-        if: matrix.xcode == '16.2'
+        if: matrix.xcode == '16.1'
         uses: actions/upload-artifact@v4
         with:
           name: ios-coverage
@@ -219,6 +225,7 @@ jobs:
           pip install lcov_cobertura 2>/dev/null
           if [ -f sonar-reports/coverage.lcov ]; then
             lcov_cobertura sonar-reports/coverage.lcov -b . -o sonar-reports/coverage.xml
+            python3 scripts/lcov-to-sonar.py sonar-reports/coverage.lcov sonar-reports/coverage-generic.xml
             echo "=== Cobertura filename attributes ==="
             grep 'filename=' sonar-reports/coverage.xml | head -20 || true
           else
@@ -242,6 +249,7 @@ jobs:
             -Dsonar.tests=TogglyCore/Tests,TogglyCombine/Tests,TogglySwiftUI/Tests,TogglyUIKit/Tests
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
             -Dsonar.swift.coverage.reportPaths=sonar-reports/coverage.lcov
+            -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
         continue-on-error: true
 

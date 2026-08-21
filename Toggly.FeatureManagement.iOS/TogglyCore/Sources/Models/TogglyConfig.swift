@@ -29,6 +29,10 @@ public struct TogglyConfig: Sendable {
     /// Whether signatures should be verified on signed responses.
     public let verifySignatures: Bool
 
+    /// Reject signed envelopes older than this many seconds (Unix timestamp age).
+    /// `nil` or `<= 0` disables freshness enforcement.
+    public let maxSignatureAgeSeconds: Int64?
+
     /// Connection timeout in seconds.
     public let connectTimeout: TimeInterval
 
@@ -56,6 +60,7 @@ public struct TogglyConfig: Sendable {
     ///   - requestTimeout: Request timeout in seconds. Defaults to 30.
     ///   - storage: Custom storage implementation.
     ///   - enableLiveUpdates: Whether to enable WebSocket live updates. Defaults to true.
+    ///   - maxSignatureAgeSeconds: Optional max age for signed envelope timestamps.
     public init(
         appKey: String? = nil,
         environment: String = "Production",
@@ -69,7 +74,8 @@ public struct TogglyConfig: Sendable {
         connectTimeout: TimeInterval = 10,
         requestTimeout: TimeInterval = 30,
         storage: TogglyStorage? = nil,
-        enableLiveUpdates: Bool = true
+        enableLiveUpdates: Bool = true,
+        maxSignatureAgeSeconds: Int64? = nil
     ) {
         self.appKey = appKey
         self.environment = environment
@@ -84,5 +90,6 @@ public struct TogglyConfig: Sendable {
         self.requestTimeout = requestTimeout
         self.storage = storage
         self.enableLiveUpdates = enableLiveUpdates
+        self.maxSignatureAgeSeconds = maxSignatureAgeSeconds
     }
 }

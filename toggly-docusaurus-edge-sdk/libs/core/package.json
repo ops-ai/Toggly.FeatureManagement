@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-client-core",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "description": "Framework-agnostic Toggly client for feature flag evaluation",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -20,9 +20,9 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "test": "vitest",
+    "test": "vitest run",
     "test:watch": "vitest --watch",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "toggly",
@@ -32,7 +32,10 @@
   ],
   "author": "Toggly",
   "license": "MIT",
-  "dependencies": {},
+  "dependencies": {
+    "@ops-ai/toggly-hooks-types": "file:../../../toggly-hooks-types",
+    "@ops-ai/toggly-signed-defs": "file:../../../toggly-signed-defs"
+  },
   "devDependencies": {
     "@vitest/coverage-v8": "^1.6.0",
     "typescript": "^5.3.3",

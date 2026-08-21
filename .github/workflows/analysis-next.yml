@@ -47,6 +47,14 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
+      - name: Build shared toggly-signed-defs package
+        working-directory: toggly-signed-defs
+        run: (npm ci || npm install) && npm run build
+
+      - name: Build shared toggly-signed-defs package
+        working-directory: toggly-signed-defs
+        run: (npm ci || npm install) && npm run build
+
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
         run: pnpm install
@@ -82,6 +90,10 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
+      - name: Build shared toggly-signed-defs package
+        working-directory: toggly-signed-defs
+        run: (npm ci || npm install) && npm run build
+
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
         run: pnpm install
@@ -116,6 +128,10 @@ jobs:
           node-version: '20.x'
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
+
+      - name: Build shared toggly-signed-defs package
+        working-directory: toggly-signed-defs
+        run: (npm ci || npm install) && npm run build
 
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
@@ -162,6 +178,10 @@ jobs:
           node-version: '20.x'
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
+
+      - name: Build shared toggly-signed-defs package
+        working-directory: toggly-signed-defs
+        run: (npm ci || npm install) && npm run build
 
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}

@@ -22,7 +22,14 @@ export type {
   TogglyHook,
   StorageOptions,
   LocalGate,
+  EvaluatedDefinitions,
+  EntityGate,
+  EntityGateRule,
+  TogglyEntityContext,
 } from './types';
+
+// Entity context helpers, re-exported so wrapper packages share one implementation
+export { resolveEvaluatedDefinition, toBooleanDefinitions } from '@ops-ai/toggly-hooks-types';
 
 // Error classes
 export {
@@ -39,6 +46,9 @@ export {
   buildDefinitionsUrl,
   isFeatureEnabled,
   evaluateFeatureGate,
+  normalizeEntityContext,
+  registerContext,
+  clearRegisteredContexts,
   normalizeFeatureKeys,
   createLogger,
   parseIdentity,

@@ -11,6 +11,7 @@ npm install @ops-ai/toggly-node-core
 ## Documentation
 
 - [docs.toggly.io](https://docs.toggly.io)
+- [Entity context (Node)](https://docs.toggly.io/sdks/nodejs#entity-context)
 - SDK catalog: [root README](../../README.md)
 
 ## License

@@ -9,6 +9,17 @@ import {
   HookMetadata,
   FeatureFlags,
 } from '@ops-ai/remix-toggly-core';
+import * as signedResponse from '../src/signed-response';
+
+jest.mock('../src/signed-response', () => {
+  const actual = jest.requireActual('../src/signed-response');
+  return {
+    ...actual,
+    parseEvaluatedResponseBody: jest.fn((...args: unknown[]) =>
+      actual.parseEvaluatedResponseBody(...args),
+    ),
+  };
+});
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -94,6 +105,49 @@ describe('TogglyServerClient', () => {
 
       await client.init();
       expect(await client.isEnabled('feature1')).toBe(false);
+    });
+
+    it('reads text() and falls back when verifySignatures gets invalid envelope', async () => {
+      const invalidBody = JSON.stringify({ defs: { feature1: true } });
+      const text = jest.fn().mockResolvedValue(invalidBody);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text,
+        json: () => Promise.resolve(JSON.parse(invalidBody)),
+      });
+
+      const client = new TogglyServerClient({
+        ...defaultConfig,
+        verifySignatures: true,
+        featureDefaults: { feature1: false },
+      });
+
+      const flags = await client.init();
+      expect(text).toHaveBeenCalled();
+      expect(flags).toEqual({ feature1: false });
+    });
+
+    it('unwraps a verified defs envelope when signatures are enabled', async () => {
+      (signedResponse.parseEvaluatedResponseBody as jest.Mock).mockResolvedValueOnce({
+        defs: { feature1: true },
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve('{}'),
+        json: () => Promise.resolve({}),
+        headers: { get: () => null },
+      });
+
+      const client = new TogglyServerClient({
+        ...defaultConfig,
+        verifySignatures: true,
+      });
+
+      const flags = await client.init();
+      expect(flags).toEqual({ feature1: true });
     });
   });
 
@@ -857,6 +911,42 @@ describe('TogglyServerClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
       jest.useRealTimers();
       client.close();
+    });
+
+    it('caches etag from flags-updated without treating an empty revision as a change', async () => {
+      jest.useFakeTimers();
+      const client = await initClient();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: false }),
+      });
+
+      wsHandlers['message']?.(
+        Buffer.from(JSON.stringify({ type: 'update', etag: 'rev-2' })),
+      );
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
+      client.close();
+    });
+
+    it('clears a pending refresh debounce when closed', async () => {
+      jest.useFakeTimers();
+      const client = await initClient();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ feature1: false }),
+      });
+
+      wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'update' })));
+      client.close();
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      jest.useRealTimers();
     });
 
     it('should refresh flags on plain text "update" message', async () => {

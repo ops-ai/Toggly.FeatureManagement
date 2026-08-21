@@ -15,6 +15,8 @@ public enum SignedDefsVerifyError: LocalizedError, Equatable {
     case invalidSignature
     case invalidKey
     case invalidBase64
+    case signatureTimestampExpired
+    case signatureTimestampInFuture
 
     public var errorDescription: String? {
         switch self {
@@ -40,6 +42,10 @@ public enum SignedDefsVerifyError: LocalizedError, Equatable {
             return "invalid verification key"
         case .invalidBase64:
             return "invalid base64"
+        case .signatureTimestampExpired:
+            return "signature timestamp exceeded maxSignatureAgeSeconds"
+        case .signatureTimestampInFuture:
+            return "signature timestamp is in the future"
         }
     }
 }
@@ -221,6 +227,26 @@ enum SignedDefsVerify {
         let digest = Insecure.SHA1.hash(data: combined)
         let hex = digest.map { String(format: "%02X", $0) }.joined()
         return "\(hex)ES256"
+    }
+
+    /// Reject envelopes older than `maxSignatureAgeSeconds` (Unix seconds).
+    /// `nil` or `<= 0` disables the check. Allows a small future clock-skew window.
+    static func assertEnvelopeFreshness(
+        timestamp: Int64,
+        maxSignatureAgeSeconds: Int64? = nil,
+        nowSeconds: Int64? = nil,
+        maxClockSkewSeconds: Int64 = 60
+    ) throws {
+        guard let maxAge = maxSignatureAgeSeconds, maxAge > 0 else {
+            return
+        }
+        let now = nowSeconds ?? Int64(Date().timeIntervalSince1970)
+        if timestamp > now + maxClockSkewSeconds {
+            throw SignedDefsVerifyError.signatureTimestampInFuture
+        }
+        if now - timestamp > maxAge {
+            throw SignedDefsVerifyError.signatureTimestampExpired
+        }
     }
 
     /// Verify a signed definitions envelope using exact raw defs bytes.

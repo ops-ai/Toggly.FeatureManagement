@@ -3,7 +3,9 @@
 </template>
 
 <script lang="ts">
-export default {
+import { defineComponent } from 'vue'
+
+export default defineComponent({
   inject: ['$toggly'],
   props: {
     featureKey: {
@@ -19,6 +21,13 @@ export default {
     negate: {
       type: Boolean,
       default: false,
+    },
+    context: {
+      type: Object,
+      default: null,
+    },
+    contextKind: {
+      type: String,
     },
   },
 
@@ -52,6 +61,8 @@ export default {
     featureKeys: 'evaluateGate',
     requirement: 'evaluateGate',
     negate: 'evaluateGate',
+    context: 'evaluateGate',
+    contextKind: 'evaluateGate',
   },
 
   methods: {
@@ -75,8 +86,10 @@ export default {
         gate,
         this.requirement,
         this.negate,
+        this.context,
+        this.contextKind,
       )
     },
   },
-}
+})
 </script>

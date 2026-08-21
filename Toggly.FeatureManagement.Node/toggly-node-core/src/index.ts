@@ -21,6 +21,8 @@ export type {
   EvaluationContext,
   CacheProvider,
   TogglyRequestContext,
+  TogglyEntityContext,
+  EvaluatedDefinitions,
   Hook,
   HookMetadata,
   EvaluationSeriesData,
@@ -56,12 +58,18 @@ export {
 
 // Signature verification
 export {
+  assertEnvelopeFreshness,
   extractRawJsonProperty,
   parseSignedEnvelope,
   parseDefinitionsFromRaw,
   verifySignedDefinitions,
   validateAndParseEs256Key,
 } from './verify.js'
+export type { VerifyFreshnessOptions } from './verify.js'
 
-// Constants
-export { DEFAULT_CONFIG, INITIAL_STATE, CACHE_KEYS } from './constants.js'
+export {
+  registerContext,
+  registerEntityContextSchema,
+  registerEntityContextsAtStartup,
+} from './entity-context-registration.js'
+export type { EntityContextPropertySchema, EntityContextSchemaRegistration } from './entity-context-registration.js'
