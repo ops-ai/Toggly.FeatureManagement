@@ -16,8 +16,8 @@
     <description>Spring WebFlux integration for Toggly feature flags (reactive, non-blocking)</description>
 
     <properties>
-        <spring.version>6.1.14</spring.version>
-        <reactor.version>3.6.0</reactor.version>
+        <spring.version>6.2.19</spring.version>
+        <reactor.version>3.8.6</reactor.version>
     </properties>
 
     <dependencies>

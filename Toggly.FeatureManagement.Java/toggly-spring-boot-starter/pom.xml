@@ -16,7 +16,7 @@
     <description>Spring Boot auto-configuration for Toggly feature flags</description>
 
     <properties>
-        <spring-boot.version>3.2.0</spring-boot.version>
+        <spring-boot.version>3.5.16</spring-boot.version>
     </properties>
 
     <dependencies>
@@ -38,7 +38,7 @@
         <dependency>
             <groupId>org.aspectj</groupId>
             <artifactId>aspectjweaver</artifactId>
-            <version>1.9.21</version>
+            <version>1.9.25.1</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
