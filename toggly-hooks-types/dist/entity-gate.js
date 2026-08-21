@@ -9,6 +9,8 @@ exports.resolveEntityContext = resolveEntityContext;
 exports.mapEntityContext = mapEntityContext;
 exports.clearRegisteredContexts = clearRegisteredContexts;
 exports.normalizeEntityContext = normalizeEntityContext;
+exports.evaluateResolvedKeys = evaluateResolvedKeys;
+exports.evaluateStoredFeatureKeys = evaluateStoredFeatureKeys;
 exports.evaluateEvaluatedGate = evaluateEvaluatedGate;
 const equalityOps = new Set(['eq', 'neq']);
 const comparisonOps = new Set(['gt', 'gte', 'lt', 'lte']);
@@ -212,17 +214,23 @@ function normalizeEntityContext(context, kind) {
     }
     return null;
 }
-function evaluateEvaluatedGate(features, featureKeys, requirement = 'all', negate = false, entityContext) {
+function evaluateResolvedKeys(featureKeys, requirement, negate, isEnabled) {
     if (featureKeys.length === 0) {
         return !negate;
     }
-    const evaluateKey = (key) => resolveEvaluatedDefinition(features[key], entityContext);
-    let result;
-    if (requirement === 'any') {
-        result = featureKeys.some(evaluateKey);
-    }
-    else {
-        result = featureKeys.every(evaluateKey);
-    }
+    const result = requirement === 'any' ? featureKeys.some(isEnabled) : featureKeys.every(isEnabled);
     return negate ? !result : result;
+}
+/**
+ * Client-SDK gate evaluation over stored mixed defs. An empty definition
+ * set fails closed (`negate`) so a missing payload cannot open a gate.
+ */
+function evaluateStoredFeatureKeys(features, featureKeys, requirement, negate, isEnabled) {
+    if (featureKeys.length > 0 && (!features || Object.keys(features).length === 0)) {
+        return negate;
+    }
+    return evaluateResolvedKeys(featureKeys, requirement, negate, isEnabled);
+}
+function evaluateEvaluatedGate(features, featureKeys, requirement = 'all', negate = false, entityContext) {
+    return evaluateStoredFeatureKeys(features, featureKeys, requirement, negate, (key) => resolveEvaluatedDefinition(features[key], entityContext));
 }

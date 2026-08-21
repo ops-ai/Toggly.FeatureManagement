@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Entity context types and evaluation: `EntityGate`, `applyEntityGate`, `resolveEvaluatedDefinition`, `registerContext`.
 - `normalizeEntityContext()` — resolves a registered kind + entity object or passes through a `TogglyEntityContext`.
 - `evaluateEvaluatedGate()` — evaluates feature gates against mixed `EvaluatedDefinitions` with optional entity context (fail-closed without context).
+- `evaluateResolvedKeys()` / `evaluateStoredFeatureKeys()` — shared any/all gate reduction so client SDKs do not reimplement the mixed-def loop.
 
 ## [1.4.1] - 2026-07-14
 

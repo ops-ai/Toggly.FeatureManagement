@@ -18,6 +18,7 @@ import {
   appendEvaluationContext,
   evaluationContextCacheKey,
   isCacheLruEnabled,
+  evaluateStoredFeatureKeys,
   normalizeEntityContext,
   toBooleanDefinitions,
   parseCacheLruIndex,
@@ -678,31 +679,13 @@ export class TogglyService implements ITogglyService, OnDestroy {
   ) => {
     await this._featuresLoaded()
 
-    if (gate.length > 0 && (!this._features || Object.keys(this._features).length === 0)) {
-      return negate
-    }
-
-    let isEnabled: boolean
-
-    if (requirement === 'any') {
-      isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
-        return (
-          isEnabled ||
-          this._getEffectiveFlagValue(String(featureKey), entityContext)
-        )
-      }, false)
-    } else {
-      isEnabled = gate.reduce((isEnabled: any, featureKey: string | number) => {
-        return (
-          isEnabled &&
-          this._getEffectiveFlagValue(String(featureKey), entityContext)
-        )
-      }, true)
-    }
-
-    isEnabled = negate ? !isEnabled : isEnabled
-
-    return isEnabled
+    return evaluateStoredFeatureKeys(
+      this._features,
+      gate.map(String),
+      requirement === 'any' ? 'any' : 'all',
+      negate,
+      (key) => this._getEffectiveFlagValue(key, entityContext),
+    )
   }
 
   evaluateFeatureGate = async (

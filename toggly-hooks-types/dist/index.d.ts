@@ -65,4 +65,4 @@ export type { CacheLruEntry, CacheLruIndex, } from './cache-lru';
 export { emptyCacheLruIndex, isCacheLruEnabled, parseCacheLruIndex, removeCacheLruKeys, selectCacheLruKeysToEvict, serializeCacheLruIndex, touchCacheLruKey, } from './cache-lru';
 export { serializeJsonForInlineScript } from './serialize-for-inline-script';
 export type { EvaluatedGateRequirement } from './entity-gate';
-export { applyEntityGate, clearRegisteredContexts, evaluateEvaluatedGate, isEntityGate, mapEntityContext, normalizeEntityContext, registerContext, resolveEntityContext, resolveEvaluatedDefinition, toBooleanDefinitions, } from './entity-gate';
+export { applyEntityGate, clearRegisteredContexts, evaluateEvaluatedGate, evaluateResolvedKeys, evaluateStoredFeatureKeys, isEntityGate, mapEntityContext, normalizeEntityContext, registerContext, resolveEntityContext, resolveEvaluatedDefinition, toBooleanDefinitions, } from './entity-gate';

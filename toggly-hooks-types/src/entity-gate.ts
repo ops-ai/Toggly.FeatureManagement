@@ -275,6 +275,38 @@ export function normalizeEntityContext(
 
 export type EvaluatedGateRequirement = 'all' | 'any'
 
+export function evaluateResolvedKeys(
+  featureKeys: string[],
+  requirement: EvaluatedGateRequirement,
+  negate: boolean,
+  isEnabled: (key: string) => boolean,
+): boolean {
+  if (featureKeys.length === 0) {
+    return !negate
+  }
+
+  const result =
+    requirement === 'any' ? featureKeys.some(isEnabled) : featureKeys.every(isEnabled)
+  return negate ? !result : result
+}
+
+/**
+ * Client-SDK gate evaluation over stored mixed defs. An empty definition
+ * set fails closed (`negate`) so a missing payload cannot open a gate.
+ */
+export function evaluateStoredFeatureKeys(
+  features: EvaluatedDefinitions | null | undefined,
+  featureKeys: string[],
+  requirement: EvaluatedGateRequirement,
+  negate: boolean,
+  isEnabled: (key: string) => boolean,
+): boolean {
+  if (featureKeys.length > 0 && (!features || Object.keys(features).length === 0)) {
+    return negate
+  }
+  return evaluateResolvedKeys(featureKeys, requirement, negate, isEnabled)
+}
+
 export function evaluateEvaluatedGate(
   features: EvaluatedDefinitions,
   featureKeys: string[],
@@ -282,18 +314,11 @@ export function evaluateEvaluatedGate(
   negate = false,
   entityContext?: TogglyEntityContext | null,
 ): boolean {
-  if (featureKeys.length === 0) {
-    return !negate
-  }
-
-  const evaluateKey = (key: string) => resolveEvaluatedDefinition(features[key], entityContext)
-
-  let result: boolean
-  if (requirement === 'any') {
-    result = featureKeys.some(evaluateKey)
-  } else {
-    result = featureKeys.every(evaluateKey)
-  }
-
-  return negate ? !result : result
+  return evaluateStoredFeatureKeys(
+    features,
+    featureKeys,
+    requirement,
+    negate,
+    (key) => resolveEvaluatedDefinition(features[key], entityContext),
+  )
 }

@@ -3,6 +3,8 @@ import {
   applyEntityGate,
   clearRegisteredContexts,
   evaluateEvaluatedGate,
+  evaluateResolvedKeys,
+  evaluateStoredFeatureKeys,
   isEntityGate,
   mapEntityContext,
   normalizeEntityContext,
@@ -229,6 +231,12 @@ describe('entity-gate', () => {
     expect(evaluateEvaluatedGate(features, ['On', 'Off'], 'any')).toBe(true)
     expect(evaluateEvaluatedGate(features, ['Gated'], 'all', false, puppy)).toBe(true)
     expect(evaluateEvaluatedGate(features, ['Gated'], 'all', true, puppy)).toBe(false)
+  })
+
+  it('fails closed when stored definitions are empty', () => {
+    expect(evaluateStoredFeatureKeys({}, ['On'], 'all', false, () => true)).toBe(false)
+    expect(evaluateStoredFeatureKeys(null, ['On'], 'all', true, () => true)).toBe(true)
+    expect(evaluateResolvedKeys(['On'], 'any', false, (key) => key === 'On')).toBe(true)
   })
 })
 

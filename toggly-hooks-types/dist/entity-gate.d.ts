@@ -36,4 +36,10 @@ export declare function mapEntityContext<T>(kind: string, entity: T, mapper?: En
 export declare function clearRegisteredContexts(): void;
 export declare function normalizeEntityContext(context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string): TogglyEntityContext | null;
 export type EvaluatedGateRequirement = 'all' | 'any';
+export declare function evaluateResolvedKeys(featureKeys: string[], requirement: EvaluatedGateRequirement, negate: boolean, isEnabled: (key: string) => boolean): boolean;
+/**
+ * Client-SDK gate evaluation over stored mixed defs. An empty definition
+ * set fails closed (`negate`) so a missing payload cannot open a gate.
+ */
+export declare function evaluateStoredFeatureKeys(features: EvaluatedDefinitions | null | undefined, featureKeys: string[], requirement: EvaluatedGateRequirement, negate: boolean, isEnabled: (key: string) => boolean): boolean;
 export declare function evaluateEvaluatedGate(features: EvaluatedDefinitions, featureKeys: string[], requirement?: EvaluatedGateRequirement, negate?: boolean, entityContext?: TogglyEntityContext | null): boolean;

@@ -112,6 +112,8 @@ export {
   applyEntityGate,
   clearRegisteredContexts,
   evaluateEvaluatedGate,
+  evaluateResolvedKeys,
+  evaluateStoredFeatureKeys,
   isEntityGate,
   mapEntityContext,
   normalizeEntityContext,
