@@ -7,7 +7,7 @@ import {
   parseEvaluatedResponseBody,
   readResponseBody,
   unwrapDefsPayload,
-} from './signed-response';
+} from './signed-response.js';
 
 export interface BuildFlagFetchOptions {
   baseURI?: string;

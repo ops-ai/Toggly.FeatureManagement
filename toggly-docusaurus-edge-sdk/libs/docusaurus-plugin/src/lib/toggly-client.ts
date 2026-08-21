@@ -9,7 +9,7 @@ import {
   parseEvaluatedResponseBody,
   readResponseBody,
   unwrapDefsPayload,
-} from './signed-response';
+} from './signed-response.js';
 
 /**
  * Configuration options for creating a Toggly client

@@ -141,6 +141,9 @@ importers:
 
   toggly-node-core:
     dependencies:
+      '@ops-ai/toggly-hooks-types':
+        specifier: file:../../toggly-hooks-types
+        version: file:../toggly-hooks-types
       ws:
         specifier: ^8.0.0
         version: 8.19.0
@@ -442,6 +445,10 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@ops-ai/toggly-hooks-types@file:../toggly-hooks-types':
+    resolution: {directory: ../toggly-hooks-types, type: directory}
+    engines: {node: '>=18.0.0'}
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
@@ -2144,6 +2151,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@ops-ai/toggly-hooks-types@file:../toggly-hooks-types': {}
 
   '@pinojs/redact@0.4.0': {}
 
