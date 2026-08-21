@@ -16,7 +16,7 @@
     <description>Redis-based distributed caching for Toggly feature flag definitions</description>
 
     <properties>
-        <jedis.version>5.1.0</jedis.version>
+        <jedis.version>8.0.0</jedis.version>
     </properties>
 
     <dependencies>
