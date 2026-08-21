@@ -234,6 +234,111 @@ class FeatureFlagsCacheTest {
     }
 
     @Test
+    fun `cold start uses defaults when cached flags are not json`() = runTest {
+        val identity = "user-1"
+        val storage = MemoryStorage()
+        val cacheKey = TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashIdentity(identity)
+        storage.set(
+            cacheKey,
+            json.encodeToString(
+                TogglyFeatureFlagsCache.serializer(),
+                TogglyFeatureFlagsCache(identity = identity, flags = "not-json")
+            )
+        )
+
+        val service = TogglyService(
+            TogglyConfig(
+                appKey = "app",
+                baseUri = "https://127.0.0.1:9",
+                identity = identity,
+                verifySignatures = false,
+                refreshInterval = 0,
+                enableLiveUpdates = false,
+                connectTimeout = 1_000L,
+                requestTimeout = 1_000L,
+                storage = storage,
+                featureDefaults = mapOf("PresalePhotos" to false)
+            )
+        )
+
+        service.init()
+        assertFalse(service.isFeatureOn("PresalePhotos"))
+        assertNull(storage.get(cacheKey))
+    }
+
+    @Test
+    fun `cold start clears stale signed cache`() = runTest {
+        val key = createKey()
+        val identity = "user-1"
+        val defs = """{"PresalePhotos":true}"""
+        val timestamp = 1_000L
+        val storage = MemoryStorage()
+        val cacheKey = TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashIdentity(identity)
+        storage.set(
+            cacheKey,
+            json.encodeToString(
+                TogglyFeatureFlagsCache.serializer(),
+                TogglyFeatureFlagsCache(
+                    identity = identity,
+                    flags = defs,
+                    timestamp = timestamp,
+                    signature = base64(signP1363(key, SignedDefsVerify.doubleSha256("$defs|$timestamp"))),
+                    keyId = key.kid
+                )
+            )
+        )
+        storage.set(TogglyStorageKeys.JWKS, jwks(key))
+
+        val service = TogglyService(
+            TogglyConfig(
+                appKey = "app",
+                baseUri = "https://127.0.0.1:9",
+                identity = identity,
+                verifySignatures = true,
+                maxSignatureAgeSeconds = 60L,
+                refreshInterval = 0,
+                enableLiveUpdates = false,
+                connectTimeout = 1_000L,
+                requestTimeout = 1_000L,
+                storage = storage,
+                featureDefaults = mapOf("PresalePhotos" to false)
+            )
+        )
+
+        service.init()
+        assertFalse(service.isFeatureOn("PresalePhotos"))
+        assertNull(storage.get(cacheKey))
+    }
+
+    @Test
+    fun `unsigned cache is trusted when signature verification is off`() = runTest {
+        val identity = "user-1"
+        val storage = MemoryStorage()
+        storage.set(
+            TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashIdentity(identity),
+            """{"identity":"$identity","flags":"{\"PresalePhotos\":true}"}"""
+        )
+
+        val service = TogglyService(
+            TogglyConfig(
+                appKey = "app",
+                baseUri = "https://127.0.0.1:9",
+                identity = identity,
+                verifySignatures = false,
+                refreshInterval = 0,
+                enableLiveUpdates = false,
+                connectTimeout = 1_000L,
+                requestTimeout = 1_000L,
+                storage = storage,
+                featureDefaults = mapOf("PresalePhotos" to false)
+            )
+        )
+
+        service.init()
+        assertTrue(service.isFeatureOn("PresalePhotos"))
+    }
+
+    @Test
     fun `cold start clears unsigned legacy cache when verifySignatures enabled`() = runTest {
         val identity = "user-1"
         val storage = MemoryStorage()

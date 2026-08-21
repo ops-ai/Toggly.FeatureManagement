@@ -1,6 +1,7 @@
 package io.toggly.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.math.BigInteger
@@ -106,6 +107,93 @@ class SignedDefsVerifyTest {
     fun `assertEnvelopeFreshness no-ops when max age unset`() {
         SignedDefsVerify.assertEnvelopeFreshness(1L, maxSignatureAgeSeconds = null)
         SignedDefsVerify.assertEnvelopeFreshness(1L, maxSignatureAgeSeconds = 0L)
+    }
+
+    @Test
+    fun `extractRawJsonProperty reads objects arrays strings and numbers`() {
+        val body = """{"defs":{"A":true},"data":[1,2],"name":"x\"y","count":42,"empty":null}"""
+        assertEquals("""{"A":true}""", SignedDefsVerify.extractRawJsonProperty(body, "defs"))
+        assertEquals("[1,2]", SignedDefsVerify.extractRawJsonProperty(body, "data"))
+        assertEquals("\"x\\\"y\"", SignedDefsVerify.extractRawJsonProperty(body, "name"))
+        assertEquals("42", SignedDefsVerify.extractRawJsonProperty(body, "count"))
+        assertEquals("null", SignedDefsVerify.extractRawJsonProperty(body, "empty"))
+        assertNull(SignedDefsVerify.extractRawJsonProperty(body, "missing"))
+        assertNull(SignedDefsVerify.extractRawJsonProperty("not-json", "defs"))
+    }
+
+    @Test
+    fun `extractRawJsonProperty skips escaped quotes and nested objects`() {
+        val body = """{"note":"say \"defs\"","defs":{"nested":{"ok":true}}}"""
+        assertEquals("""{"nested":{"ok":true}}""", SignedDefsVerify.extractRawJsonProperty(body, "defs"))
+    }
+
+    @Test
+    fun `parseSignedEnvelope falls back to data when defs is absent`() {
+        val envelope = SignedDefsVerify.parseSignedEnvelope(
+            """{"data":{"A":true},"signature":"sig","timestamp":1,"kid":"k"}"""
+        )
+        assertEquals("""{"A":true}""", envelope.defsRaw)
+        assertEquals("sig", envelope.signature)
+        assertEquals(1L, envelope.timestamp)
+        assertEquals("k", envelope.kid)
+    }
+
+    @Test
+    fun `parseSignedEnvelope rejects missing defs and invalid timestamp`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.parseSignedEnvelope("""{"signature":"sig","timestamp":1,"kid":"k"}""")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.parseSignedEnvelope(
+                """{"defs":{"A":true},"signature":"sig","timestamp":"nope","kid":"k"}"""
+            )
+        }
+    }
+
+    @Test
+    fun `verify rejects missing jwks keys and unknown kid`() {
+        val key = createKey()
+        val envelope = SignedDefsVerify.SignedEnvelope(
+            defsRaw = """{"A":true}""",
+            signature = "c2ln",
+            timestamp = 1L,
+            kid = key.kid
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.verify(envelope, """{"not":"keys"}""")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.verify(envelope, """{"keys":[{"kid":"other","kty":"EC"}]}""")
+        }
+    }
+
+    @Test
+    fun `verify rejects unsupported jwk metadata`() {
+        val key = createKey()
+        val envelope = SignedDefsVerify.SignedEnvelope(
+            defsRaw = """{"A":true}""",
+            signature = "c2ln",
+            timestamp = 1L,
+            kid = key.kid
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.verify(
+                envelope,
+                """{"keys":[{"kty":"RSA","alg":"ES256","crv":"P-256","x":"${key.x}","y":"${key.y}","kid":"${key.kid}"}]}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.verify(
+                envelope,
+                """{"keys":[{"kty":"EC","alg":"RS256","crv":"P-256","x":"${key.x}","y":"${key.y}","kid":"${key.kid}"}]}"""
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            SignedDefsVerify.verify(
+                envelope,
+                """{"keys":[{"kty":"EC","alg":"ES256","crv":"P-384","x":"${key.x}","y":"${key.y}","kid":"${key.kid}"}]}"""
+            )
+        }
     }
 
     @Test

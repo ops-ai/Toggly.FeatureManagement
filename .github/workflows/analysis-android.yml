@@ -214,6 +214,10 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}
         run: chmod +x gradlew
 
+      - name: Compile smoke tests
+        working-directory: ${{ env.SDK_ROOT }}
+        run: ./gradlew :toggly-android-core:compileDebugUnitTestKotlin
+
       - name: Run smoke test
         timeout-minutes: 2
         working-directory: ${{ env.SDK_ROOT }}

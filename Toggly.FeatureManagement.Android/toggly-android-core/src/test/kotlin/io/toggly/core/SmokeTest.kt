@@ -6,11 +6,12 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.time.Duration.Companion.seconds
 
 class SmokeTest {
 
     @Test
-    fun `loads live evaluated flags`() = runTest {
+    fun `loads live evaluated flags`() = runTest(timeout = 20.seconds) {
         val appKey = System.getenv("TOGGLY_SMOKE_APP_KEY_FRONTEND")
         if (appKey.isNullOrBlank()) {
             return@runTest
@@ -33,7 +34,7 @@ class SmokeTest {
     }
 
     @Test
-    fun `WebSocket connects and flags are correct`() = runTest {
+    fun `WebSocket connects and flags are correct`() = runTest(timeout = 20.seconds) {
         val appKey = System.getenv("TOGGLY_SMOKE_APP_KEY_FRONTEND")
         if (appKey.isNullOrBlank()) {
             return@runTest

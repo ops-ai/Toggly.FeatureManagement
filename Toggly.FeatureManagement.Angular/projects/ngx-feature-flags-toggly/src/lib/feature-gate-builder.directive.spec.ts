@@ -3,6 +3,7 @@ import { Component } from '@angular/core';
 import { FeatureGateBuilderDirective } from './feature-gate-builder.directive';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
 import { TogglyService } from './toggly.service';
+import { clearRegisteredContexts } from '@ops-ai/toggly-hooks-types';
 
 @Component({
   standalone: true,
@@ -144,6 +145,14 @@ class ContextBuilderHostComponent {
 }
 
 describe('FeatureGateBuilderDirective entity context', () => {
+  beforeEach(() => {
+    clearRegisteredContexts();
+  });
+
+  afterEach(() => {
+    clearRegisteredContexts();
+  });
+
   it('should expose enabled after a mapped entity context is registered', fakeAsync(() => {
     spyOn(console, 'warn');
     const datetimeGate = {
@@ -169,7 +178,7 @@ describe('FeatureGateBuilderDirective entity context', () => {
       key: '1',
       attributes: { BirthDate: entity.BirthDate },
     }));
-    fixture.componentInstance.kind = 'Puppy';
+    fixture.componentInstance.context = { BirthDate: '2026-06-15T00:00:00Z' };
     fixture.detectChanges();
     tick();
     fixture.detectChanges();

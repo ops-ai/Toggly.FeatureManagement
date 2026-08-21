@@ -3,6 +3,7 @@ import { Component } from '@angular/core';
 import { FeatureFlagDirective } from './feature.directive';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
 import { TogglyService } from './toggly.service';
+import { clearRegisteredContexts } from '@ops-ai/toggly-hooks-types';
 
 // Host component for structural directive testing
 @Component({
@@ -236,6 +237,14 @@ describe('FeatureFlagDirective entity context', () => {
     rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' as const }],
   };
 
+  beforeEach(() => {
+    clearRegisteredContexts();
+  });
+
+  afterEach(() => {
+    clearRegisteredContexts();
+  });
+
   it('should hide a gate without mapped context and show it after registerContext', fakeAsync(() => {
     spyOn(console, 'warn');
     TestBed.configureTestingModule({
@@ -258,10 +267,26 @@ describe('FeatureFlagDirective entity context', () => {
       key: '1',
       attributes: { BirthDate: entity.BirthDate },
     }));
-    fixture.componentInstance.kind = 'Puppy';
+    fixture.componentInstance.context = { BirthDate: '2026-06-15T00:00:00Z' };
     fixture.detectChanges();
     tick();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.badge')).toBeTruthy();
+  }));
+
+  it('should treat a non-string non-array flag as an empty gate', fakeAsync(() => {
+    spyOn(console, 'warn');
+    TestBed.configureTestingModule({
+      imports: [DirectiveHostComponent, NgxFeatureFlagsTogglyModule.forRoot({
+        featureDefaults: { Enabled: true },
+      })],
+    });
+    const fixture = TestBed.createComponent(DirectiveHostComponent);
+    const host = fixture.componentInstance;
+    host.flag = 1 as any;
+    fixture.detectChanges();
+    tick();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
   }));
 });

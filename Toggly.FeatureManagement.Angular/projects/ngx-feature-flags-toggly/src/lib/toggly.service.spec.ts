@@ -2,7 +2,7 @@ import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { TogglyService } from './toggly.service';
 import { TogglyOptions } from './toggly-options';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import { clearRegisteredContexts, type Hook } from '@ops-ai/toggly-hooks-types';
 
 function expectFetchCalledWithUrl(fetchSpy: jasmine.Spy, url: string): void {
   expect(fetchSpy).toHaveBeenCalledWith(
@@ -838,7 +838,12 @@ describe('TogglyService', () => {
     };
 
     beforeEach(() => {
+      clearRegisteredContexts();
       spyOn(console, 'warn');
+    });
+
+    afterEach(() => {
+      clearRegisteredContexts();
     });
 
     it('should fail closed for EntityGate without context', async () => {
