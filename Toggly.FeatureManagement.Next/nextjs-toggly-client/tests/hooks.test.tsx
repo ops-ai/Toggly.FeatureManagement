@@ -58,9 +58,9 @@ describe('useFeatureFlag', () => {
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false)
+      expect(result.current.isEnabled).toBe(true)
     })
 
-    expect(result.current.isEnabled).toBe(true)
     expect(result.current.isDisabled).toBe(false)
   })
 

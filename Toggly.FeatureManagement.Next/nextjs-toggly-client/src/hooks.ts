@@ -24,9 +24,12 @@ import type { UseFeatureFlagReturn } from './types'
  */
 export function useFeatureFlag(featureKey: string): UseFeatureFlagReturn {
   const { features, isReady, isLoading: contextLoading, isFeatureOn, refresh: contextRefresh } = useToggly()
-  const [isChecking, setIsChecking] = useState(false)
   const [checked, setChecked] = useState(false)
   const [isEnabled, setIsEnabled] = useState(() => features[featureKey] === true)
+
+  useEffect(() => {
+    setChecked(false)
+  }, [featureKey])
 
   const checkFeature = useCallback(async () => {
     if (!isReady) {
@@ -34,15 +37,13 @@ export function useFeatureFlag(featureKey: string): UseFeatureFlagReturn {
       return
     }
 
-    setIsChecking(true)
     try {
       const result = await isFeatureOn(featureKey)
       setIsEnabled(result)
       setChecked(true)
     } catch {
       setIsEnabled(false)
-    } finally {
-      setIsChecking(false)
+      setChecked(true)
     }
   }, [featureKey, features, isReady, isFeatureOn])
 
@@ -51,19 +52,20 @@ export function useFeatureFlag(featureKey: string): UseFeatureFlagReturn {
     checkFeature()
   }, [checkFeature])
 
-  // Update when features change
+  // Defaults only apply before the client is ready. After init, isFeatureOn
+  // is the source of truth (mixed boolean + entity-gate defs).
   useEffect(() => {
-    if (isReady && !isChecking) {
+    if (!isReady) {
       setIsEnabled(features[featureKey] === true)
     }
-  }, [features, featureKey, isReady, isChecking])
+  }, [features, featureKey, isReady])
 
   const refresh = useCallback(async () => {
     await contextRefresh()
     await checkFeature()
   }, [contextRefresh, checkFeature])
 
-  const isLoading = contextLoading || (isChecking && !checked)
+  const isLoading = contextLoading || (isReady && !checked)
 
   return useMemo(
     () => ({
@@ -126,7 +128,6 @@ export function useFeatureGate(
   refresh: () => Promise<void>
 } {
   const { features, isReady, isLoading: contextLoading, evaluateFeatureGate } = useToggly()
-  const [isChecking, setIsChecking] = useState(false)
   const [checked, setChecked] = useState(false)
   const [isAllowed, setIsAllowed] = useState(() => {
     if (requirement === 'any') {
@@ -150,15 +151,13 @@ export function useFeatureGate(
       return
     }
 
-    setIsChecking(true)
     try {
       const result = await evaluateFeatureGate(featureKeys, requirement, negate)
       setIsAllowed(result)
       setChecked(true)
     } catch {
       setIsAllowed(negate)
-    } finally {
-      setIsChecking(false)
+      setChecked(true)
     }
   }, [featureKeys, features, isReady, evaluateFeatureGate, requirement, negate])
 
@@ -166,9 +165,10 @@ export function useFeatureGate(
     checkGate()
   }, [checkGate])
 
-  // Update when features change
+  // Defaults only apply before the client is ready. After init, evaluateFeatureGate
+  // is the source of truth (mixed boolean + entity-gate defs).
   useEffect(() => {
-    if (isReady && !isChecking) {
+    if (!isReady) {
       let result: boolean
       if (requirement === 'any') {
         result = featureKeys.some((key) => features[key] === true)
@@ -177,13 +177,13 @@ export function useFeatureGate(
       }
       setIsAllowed(negate ? !result : result)
     }
-  }, [features, featureKeys, isReady, isChecking, requirement, negate])
+  }, [features, featureKeys, isReady, requirement, negate])
 
   const refresh = useCallback(async () => {
     await checkGate()
   }, [checkGate])
 
-  const isLoading = contextLoading || (isChecking && !checked)
+  const isLoading = contextLoading || (isReady && !checked)
 
   return useMemo(
     () => ({

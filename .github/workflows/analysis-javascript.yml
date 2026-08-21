@@ -79,7 +79,7 @@ jobs:
             has-lint: false
           - sdk: Hooks-Types
             path: toggly-hooks-types
-            test-cmd: npm run typecheck
+            test-cmd: npm test -- --coverage
             has-lint: false
           - sdk: Clarity-Hook
             path: toggly-clarity-hook
@@ -376,6 +376,7 @@ jobs:
             ["Clarity-Hook"]="toggly-clarity-hook"
             ["GA4-Hook"]="toggly-ga4-hook"
             ["AppInsights-Hook"]="toggly-appinsights-hook"
+            ["Hooks-Types"]="toggly-hooks-types"
             ["Node-Core"]="Toggly.FeatureManagement.Node/toggly-node-core"
             ["Node-Express"]="Toggly.FeatureManagement.Node/toggly-express"
             ["Node-Fastify"]="Toggly.FeatureManagement.Node/toggly-fastify"
