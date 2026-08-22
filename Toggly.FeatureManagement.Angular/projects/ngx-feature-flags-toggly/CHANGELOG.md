@@ -6,6 +6,7 @@
 - Signed-definitions fetch now uses shared `@ops-ai/toggly-signed-defs`
   `InMemoryJwksCache`, `readAndParseEvaluatedResponse`, and
   `signedDefsClientOptions` instead of a per-SDK JWKS cache.
+- Require `@ops-ai/toggly-signed-defs` `^1.2.0` so those shared helpers resolve.
 
 ## 2.7.0
 
