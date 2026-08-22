@@ -22,7 +22,8 @@ void main() {
     expect(resolveEvaluatedDefinition(datetimeGate), isFalse);
     expect(resolveEvaluatedDefinition(null, defaultValue: true), isTrue);
     expect(resolveEvaluatedDefinition(false, defaultValue: true), isFalse);
-    expect(resolveEvaluatedDefinition(datetimeGate, defaultValue: true), isFalse);
+    expect(
+        resolveEvaluatedDefinition(datetimeGate, defaultValue: true), isFalse);
   });
 
   test('evaluates datetime gt and flattens snapshots', () {
@@ -53,7 +54,8 @@ void main() {
     );
     expect(applyEntityGate(anyGate, {'Color': 'blue'}), isTrue);
     expect(
-      applyEntityGate(EntityGate(requirement: 'all', rules: anyGate.rules), {'Color': 'blue'}),
+      applyEntityGate(EntityGate(requirement: 'all', rules: anyGate.rules),
+          {'Color': 'blue'}),
       isFalse,
     );
     expect(
@@ -83,11 +85,15 @@ void main() {
       ),
       isTrue,
     );
-    expect(applyEntityGate(EntityGate(requirement: 'all', rules: []), {'Color': 'red'}), isFalse);
+    expect(
+        applyEntityGate(
+            EntityGate(requirement: 'all', rules: []), {'Color': 'red'}),
+        isFalse);
     expect(
       applyEntityGate(
         EntityGate(requirement: 'all', rules: [
-          EntityGateRule(property: 'Age', op: 'gte', value: '2', type: 'number'),
+          EntityGateRule(
+              property: 'Age', op: 'gte', value: '2', type: 'number'),
         ]),
         {'Age': 2},
       ),
@@ -114,9 +120,15 @@ void main() {
     expect(
       applyEntityGate(
         EntityGate(requirement: 'all', rules: [
-          EntityGateRule(property: 'Tags', op: 'contains', value: 'beta', type: 'string[]'),
+          EntityGateRule(
+              property: 'Tags',
+              op: 'contains',
+              value: 'beta',
+              type: 'string[]'),
         ]),
-        {'Tags': ['GA', 'Beta']},
+        {
+          'Tags': ['GA', 'Beta']
+        },
       ),
       isTrue,
     );
@@ -145,7 +157,8 @@ void main() {
     expect(
       resolveEvaluatedDefinition(
         parsed['Gated'],
-        context: TogglyEntityContext(kind: 'Puppy', key: '1', attributes: {'Color': 'red'}),
+        context: TogglyEntityContext(
+            kind: 'Puppy', key: '1', attributes: {'Color': 'red'}),
       ),
       isTrue,
     );

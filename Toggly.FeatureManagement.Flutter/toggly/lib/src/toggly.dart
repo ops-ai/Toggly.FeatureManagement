@@ -432,7 +432,8 @@ class Toggly with WidgetsBindingObserver {
         return Map<String, bool>.from(Toggly._flagDefaults);
       }
 
-      final parsed = entity_gate.parseEvaluatedDefinitions(jsonDecode(flagsCache.flags));
+      final parsed =
+          entity_gate.parseEvaluatedDefinitions(jsonDecode(flagsCache.flags));
       final parsedFlags = entity_gate.toBooleanDefinitions(parsed);
 
       // Check if the cache is signed and if the timestamp and signature are present
@@ -497,7 +498,8 @@ class Toggly with WidgetsBindingObserver {
     String? keyId,
   }) async {
     // Update in-memory cache first
-    final parsed = entity_gate.parseEvaluatedDefinitions(jsonDecode(featureFlags));
+    final parsed =
+        entity_gate.parseEvaluatedDefinitions(jsonDecode(featureFlags));
     _inMemoryDefinitions = parsed;
     _inMemoryFlags = entity_gate.toBooleanDefinitions(parsed);
     _featureFlagsSubject?.add(Map<String, bool>.from(_inMemoryFlags!));
@@ -602,8 +604,9 @@ class Toggly with WidgetsBindingObserver {
         final parsed = _parseSignedDefinitionsResponse(response.data);
         final signedResponse = parsed.envelope;
         final signedDefsJson = parsed.signedDefsJson;
-        mixed = entity_gate.parseEvaluatedDefinitions(
-            signedResponse['defs'] ?? signedResponse['data'] ?? <String, dynamic>{});
+        mixed = entity_gate.parseEvaluatedDefinitions(signedResponse['defs'] ??
+            signedResponse['data'] ??
+            <String, dynamic>{});
         flags = entity_gate.toBooleanDefinitions(mixed);
         String signature = signedResponse['signature'];
         int timestamp = signedResponse['timestamp'];
@@ -666,7 +669,8 @@ class Toggly with WidgetsBindingObserver {
         _lastChecked = DateTime.now();
         _lastSynced = DateTime.now();
         final payload = Map<String, dynamic>.from(response.data);
-        mixed = entity_gate.parseEvaluatedDefinitions(payload['defs'] ?? payload);
+        mixed =
+            entity_gate.parseEvaluatedDefinitions(payload['defs'] ?? payload);
         flags = entity_gate.toBooleanDefinitions(mixed);
         Toggly.cacheFeatureFlags(
             featureFlags: jsonEncode(payload['defs'] ?? payload));
@@ -976,11 +980,6 @@ class Toggly with WidgetsBindingObserver {
   /// Stream that fires when [notifyLocalGatesChanged] is called.
   static Stream<void> get onLocalGatesChanged =>
       _localGatesChangedController?.stream ?? const Stream.empty();
-
-  static bool _getEffectiveFlagValue(Map<String, bool> flags, String flagKey) {
-    final remote = flags[flagKey] ?? false;
-    return applyLocalGate(remote, flagKey, _localGates, _localGateIndex);
-  }
 
   /// Returns [VariantResult.configurationValue] for [featureKey], or null if none.
   static Future<dynamic> getVariantValue(String featureKey) async {
@@ -1473,7 +1472,11 @@ class Toggly with WidgetsBindingObserver {
     String? kind,
   }) async {
     return _evaluateFeatureGate(await cachedFeatureFlags,
-        gate: gate, requirement: requirement, negate: negate, context: context, kind: kind);
+        gate: gate,
+        requirement: requirement,
+        negate: negate,
+        context: context,
+        kind: kind);
   }
 
   static Future<bool> isFeatureOn(

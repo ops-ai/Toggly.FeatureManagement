@@ -40,7 +40,8 @@ class EntityGate {
     final rules = rawRules is List
         ? rawRules
             .whereType<Map>()
-            .map((rule) => EntityGateRule.fromJson(Map<String, dynamic>.from(rule)))
+            .map((rule) =>
+                EntityGateRule.fromJson(Map<String, dynamic>.from(rule)))
             .toList()
         : <EntityGateRule>[];
     return EntityGate(
@@ -290,7 +291,8 @@ String _stringifyActual(dynamic actual) {
 }
 
 bool _compareEquality(dynamic actual, String expected, bool shouldEqual) {
-  final equal = _stringifyActual(actual).toLowerCase() == expected.toLowerCase();
+  final equal =
+      _stringifyActual(actual).toLowerCase() == expected.toLowerCase();
   return shouldEqual ? equal : !equal;
 }
 
@@ -340,16 +342,20 @@ bool _compareIn(dynamic actual, String expected) {
       .split(',')
       .map((value) => value.trim())
       .where((value) => value.isNotEmpty)
-      .any((candidate) => candidate.toLowerCase() == actualString.toLowerCase());
+      .any(
+          (candidate) => candidate.toLowerCase() == actualString.toLowerCase());
 }
 
 bool _compareContains(dynamic actual, String expected, String valueType) {
   if (valueType == 'string[]' && actual is Iterable) {
     return actual.any(
-      (value) => _stringifyActual(value).toLowerCase() == expected.toLowerCase(),
+      (value) =>
+          _stringifyActual(value).toLowerCase() == expected.toLowerCase(),
     );
   }
-  return _stringifyActual(actual).toLowerCase().contains(expected.toLowerCase());
+  return _stringifyActual(actual)
+      .toLowerCase()
+      .contains(expected.toLowerCase());
 }
 
 num? _parseDateTime(dynamic value) {
@@ -364,7 +370,9 @@ num? _parseDateTime(dynamic value) {
     return null;
   }
   final asNum = num.tryParse(text);
-  if (asNum != null && !text.contains('T') && !RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(text)) {
+  if (asNum != null &&
+      !text.contains('T') &&
+      !RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(text)) {
     return asNum;
   }
   try {
