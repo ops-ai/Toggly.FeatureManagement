@@ -11,6 +11,7 @@ from typing import Any, AsyncIterator
 from toggly.config import TogglyConfig
 from toggly.context import EvaluationContext
 from toggly.crypto import verify_signed_definitions
+from toggly.entity_context import register_entity_contexts_at_startup
 from toggly.enums import FeatureRequirement, LoadStatus
 from toggly.evaluator import EvaluationEngine, EvaluatorRegistry
 from toggly.exceptions import TogglyConfigError, TogglyNetworkError, TogglySignatureError
@@ -106,6 +107,15 @@ class AsyncTogglyClient:
         # Background refresh
         self._refresh_task: asyncio.Task[None] | None = None
         self._stop_refresh = asyncio.Event()
+
+        if config.app_key:
+            register_entity_contexts_at_startup(
+                base_url=config.base_url,
+                app_key=config.app_key,
+                register_on_startup=config.register_contexts_on_startup,
+                debug=config.debug,
+                timeout=config.connect_timeout,
+            )
 
     @property
     def is_initialized(self) -> bool:
@@ -823,6 +833,8 @@ class AsyncTogglyClient:
                     feature_key=feature_key,
                     filters=filters,
                     requirement_type=item.get("requirementType", "Any"),
+                    context_kind=item.get("contextKind"),
+                    context_requirement_type=item.get("contextRequirementType"),
                     secured_feature=item.get("securedFeature", False),
                     metrics=item.get("metrics"),
                 )

@@ -63,6 +63,11 @@ public class TogglyProperties {
      */
     private boolean enabled = true;
 
+    /**
+     * PUT entity context schemas to the dashboard catalog on client start.
+     */
+    private boolean registerContextsOnStartup = true;
+
     // Getters and Setters
 
     public String getAppKey() {
@@ -127,5 +132,13 @@ public class TogglyProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isRegisterContextsOnStartup() {
+        return registerContextsOnStartup;
+    }
+
+    public void setRegisterContextsOnStartup(boolean registerContextsOnStartup) {
+        this.registerContextsOnStartup = registerContextsOnStartup;
     }
 }

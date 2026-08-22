@@ -21,6 +21,8 @@ Official Go SDK for [Toggly](https://toggly.io) — local feature-flag evaluatio
 | HTTP helpers | `.../toggly-go/togglyhttp` | HTTP integration helpers |
 | Templates | `.../toggly-go/togglytemplate` | Template helpers |
 
+Entity `ContextProperty` filters evaluate `EntityContext` (`kind`, `key`, `attributes`) and are ANDed with user filters. `RegisterContext` optionally PUTs schemas to `sdk/{appKey}/contexts` (opt out with `DisableEntityContextRegistration`).
+
 ## Get started
 
 1. Create a free app at [toggly.io](https://toggly.io).

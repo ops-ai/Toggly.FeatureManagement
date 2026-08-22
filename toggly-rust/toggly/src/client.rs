@@ -56,6 +56,7 @@ impl TogglyClient {
         provider.initialize().await?;
 
         let cache = Cache::new(config.cache_ttl, config.cache_max_entries);
+        crate::entity_context::register_entity_contexts_at_startup(&config).await;
 
         Ok(Self {
             config,

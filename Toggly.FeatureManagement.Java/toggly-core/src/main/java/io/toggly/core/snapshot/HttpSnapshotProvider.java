@@ -602,11 +602,19 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                 ? FeatureRequirement.ALL
                 : FeatureRequirement.ANY;
 
+        String contextKind = extractStringValue(json, "contextKind");
+        String contextReqStr = extractStringValue(json, "contextRequirementType");
+        FeatureRequirement contextRequirement = contextReqStr == null || contextReqStr.isBlank()
+                ? null
+                : FeatureRequirement.fromString(contextReqStr);
+
         List<FeatureFilter> filters = parseFilters(json);
 
         return FeatureDefinition.builder()
                 .featureKey(featureKey)
                 .requirementType(requirement)
+                .contextKind(contextKind)
+                .contextRequirementType(contextRequirement)
                 .filters(filters)
                 .build();
     }

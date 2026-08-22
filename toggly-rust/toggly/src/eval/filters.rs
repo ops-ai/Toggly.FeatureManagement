@@ -358,6 +358,23 @@ impl Evaluator for ContextualTargetingEvaluator {
     }
 }
 
+/// ContextProperty filter evaluator. Fail closed.
+pub struct ContextPropertyEvaluator;
+
+impl Evaluator for ContextPropertyEvaluator {
+    fn evaluate(
+        &self,
+        _feature_key: &str,
+        filter: &FeatureFilter,
+        context: &EvalContext,
+    ) -> crate::Result<bool> {
+        let Some(entity) = &context.entity else {
+            return Ok(false);
+        };
+        Ok(super::engine::evaluate_context_property(filter, entity))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

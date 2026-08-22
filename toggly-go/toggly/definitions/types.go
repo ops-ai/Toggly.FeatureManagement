@@ -28,7 +28,9 @@ type FeatureDefinitionModel struct {
 	Metrics          []string        `json:"metrics"`
 	SecuredFeature   bool            `json:"securedFeature"`
 	ClientSdkEnabled bool            `json:"clientSdkEnabled"`
-	RequirementType  RequirementType `json:"requirementType"`
+	RequirementType         RequirementType `json:"requirementType"`
+	ContextKind             string          `json:"contextKind,omitempty"`
+	ContextRequirementType  RequirementType `json:"contextRequirementType,omitempty"`
 }
 
 // SignedDefinitionsResponse is the envelope returned by /definitions-signed/{appKey}/{env}.

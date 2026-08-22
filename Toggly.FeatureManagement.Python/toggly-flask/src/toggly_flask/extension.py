@@ -465,10 +465,12 @@ def get_context_from_request() -> EvaluationContext:
         except (ImportError, RuntimeError):
             pass
 
+    entity = getattr(g, "toggly_entity", None) if has_request_context() else None
     return EvaluationContext(
         identity=identity,
         groups=groups,
         traits=traits,
+        entity=entity,
     )
 
 

@@ -12,4 +12,7 @@ type Context struct {
 
 	// Traits are arbitrary attributes used by targeting rules.
 	Traits map[string]any
+
+	// Entity is the domain instance for ContextProperty filters.
+	Entity *EntityContext
 }

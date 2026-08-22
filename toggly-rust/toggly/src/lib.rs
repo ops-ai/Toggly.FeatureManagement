@@ -101,13 +101,17 @@ mod error;
 pub mod cache;
 pub mod crypto;
 pub mod definitions;
+pub mod entity_context;
 pub mod eval;
 pub mod provider;
 mod sdk_identity;
 
 pub use client::TogglyClient;
 pub use config::{OnErrorCallback, TogglyConfig, TogglyConfigBuilder};
-pub use context::{EvalContext, EvalContextBuilder};
+pub use context::{EvalContext, EvalContextBuilder, TogglyEntityContext};
+pub use entity_context::{
+    register_context_schema, EntityContextPropertySchema, EntityContextSchemaRegistration,
+};
 pub use error::Error;
 
 /// Requirement type for feature gates.

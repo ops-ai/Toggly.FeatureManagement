@@ -74,6 +74,7 @@ func NewClient(cfg Config) (*Client, error) {
 	if !cfg.DisableBackgroundRefresh {
 		p.start()
 	}
+	go registerEntityContextsAtStartup(cfg)
 	return c, nil
 }
 
@@ -140,11 +141,19 @@ func (c *Client) IsEnabled(ctx context.Context, featureKey string, evalCtx Conte
 		}
 	}
 
-	res, err := c.engine.Evaluate(def, eval.Context{
+	inner := eval.Context{
 		Identity: evalCtx.Identity,
 		Groups:   evalCtx.Groups,
 		Traits:   evalCtx.Traits,
-	})
+	}
+	if evalCtx.Entity != nil {
+		inner.Entity = &eval.EntityContext{
+			Kind:       evalCtx.Entity.Kind,
+			Key:        evalCtx.Entity.Key,
+			Attributes: evalCtx.Entity.Attributes,
+		}
+	}
+	res, err := c.engine.Evaluate(def, inner)
 	if err != nil {
 		return false, err
 	}

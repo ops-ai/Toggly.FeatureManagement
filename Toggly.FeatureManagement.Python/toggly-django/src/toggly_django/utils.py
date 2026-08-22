@@ -88,6 +88,7 @@ def get_context_from_request(
         identity=identity,
         groups=groups,
         traits=traits,
+        entity=getattr(request, "toggly_entity", None),
     )
 
 

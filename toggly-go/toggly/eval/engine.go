@@ -26,16 +26,34 @@ func NewEngine(reg *Registry) *Engine {
 //
 // Missing filters are ignored (treated as false), matching IgnoreMissingFeatureFilters behavior.
 func (e *Engine) Evaluate(def definitions.FeatureDefinitionModel, ctx Context) (bool, error) {
-	req := def.RequirementType
-	if req == "" {
-		req = definitions.RequirementAny
-	}
-
 	filters := def.Filters
 	if len(filters) == 0 {
 		return false, nil
 	}
 
+	entityFilters, userFilters := splitFilters(def)
+	if len(entityFilters) > 0 {
+		if ctx.Entity == nil {
+			return false, nil
+		}
+		if !evaluateEntityFilters(def, ctx.Entity) {
+			return false, nil
+		}
+		if len(userFilters) == 0 {
+			return true, nil
+		}
+		return e.evaluateGroup(def.FeatureKey, userFilters, def.RequirementType, ctx)
+	}
+	return e.evaluateGroup(def.FeatureKey, userFilters, def.RequirementType, ctx)
+}
+
+func (e *Engine) evaluateGroup(featureKey string, filters []definitions.FeatureFilter, req definitions.RequirementType, ctx Context) (bool, error) {
+	if req == "" {
+		req = definitions.RequirementAny
+	}
+	if len(filters) == 0 {
+		return false, nil
+	}
 	switch req {
 	case definitions.RequirementAll:
 		for _, f := range filters {
@@ -43,7 +61,7 @@ func (e *Engine) Evaluate(def definitions.FeatureDefinitionModel, ctx Context) (
 			if !ok {
 				return false, nil
 			}
-			okVal, err := ev.Evaluate(def.FeatureKey, f.Parameters, ctx)
+			okVal, err := ev.Evaluate(featureKey, f.Parameters, ctx)
 			if err != nil || !okVal {
 				return false, nil
 			}
@@ -57,7 +75,7 @@ func (e *Engine) Evaluate(def definitions.FeatureDefinitionModel, ctx Context) (
 			if !ok {
 				continue
 			}
-			okVal, err := ev.Evaluate(def.FeatureKey, f.Parameters, ctx)
+			okVal, err := ev.Evaluate(featureKey, f.Parameters, ctx)
 			if err != nil {
 				continue
 			}

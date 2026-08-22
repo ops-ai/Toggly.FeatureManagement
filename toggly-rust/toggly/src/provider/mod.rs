@@ -731,6 +731,8 @@ mod tests {
                 secured_feature: false,
                 client_sdk_enabled: true,
                 requirement_type: Default::default(),
+                context_kind: None,
+                context_requirement_type: None,
             },
         );
         *provider.etag.write() = Some("rev1".into());

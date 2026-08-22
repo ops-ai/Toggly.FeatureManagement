@@ -75,6 +75,9 @@ type Config struct {
 
 	// EnableLiveUpdates enables WebSocket live updates (direct worker websocket).
 	EnableLiveUpdates bool
+
+	// DisableEntityContextRegistration skips the startup PUT to sdk/{appKey}/contexts.
+	DisableEntityContextRegistration bool
 }
 
 func (c *Config) applyDefaults() {

@@ -20,6 +20,7 @@ High-performance Rust SDK for [Toggly](https://toggly.io) feature flags and expe
 - **Procedural macros**: Declarative feature flag guards
 - **In-memory caching**: Built-in caching with configurable TTL
 - **WebAssembly support**: Works in browser environments
+- **Entity ContextProperty filters**: Evaluate `{kind, key, attributes}` against `ContextProperty` filters (fail closed)
 
 ## Crates
 

@@ -59,6 +59,9 @@ pub struct TogglyConfig {
 
     /// Optional error callback for refresh / signature failures.
     pub on_error: Option<OnErrorCallback>,
+
+    /// Skip startup PUT to sdk/{appKey}/contexts. Default false (registration on).
+    pub disable_entity_context_registration: bool,
 }
 
 impl Default for TogglyConfig {
@@ -80,6 +83,7 @@ impl Default for TogglyConfig {
             cache_max_entries: 10_000,
             allowed_key_ids: None,
             on_error: None,
+            disable_entity_context_registration: false,
         }
     }
 }
@@ -261,6 +265,12 @@ impl TogglyConfigBuilder {
     /// Set an error callback invoked on refresh / verification failures.
     pub fn on_error(mut self, callback: OnErrorCallback) -> Self {
         self.config.on_error = Some(callback);
+        self
+    }
+
+    /// Skip startup PUT of entity context schemas.
+    pub fn disable_entity_context_registration(mut self, disabled: bool) -> Self {
+        self.config.disable_entity_context_registration = disabled;
         self
     }
 

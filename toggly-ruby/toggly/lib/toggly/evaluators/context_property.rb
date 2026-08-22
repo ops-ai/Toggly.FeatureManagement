@@ -1,0 +1,85 @@
+# frozen_string_literal: true
+
+module Toggly
+  module Evaluators
+    class ContextProperty < Base
+      def self.type
+        "contextproperty"
+      end
+
+      def evaluate(rule, context, feature_key: nil)
+        entity = context&.entity
+        return false unless entity
+
+        self.class.evaluate_single(rule, entity)
+      end
+
+      def self.context_property?(rule)
+        type = rule["type"] || rule[:type] || rule["name"] || rule[:name]
+        type.to_s.downcase == "contextproperty"
+      end
+
+      def self.evaluate_single(rule, entity)
+        property = rule_lookup(rule, "Property")
+        op = rule_lookup(rule, "Operator")
+        expected = rule_lookup(rule, "Value")
+        value_type = (rule_lookup(rule, "ValueType") || "string").to_s.downcase
+        return false if property.to_s.strip.empty? || op.to_s.strip.empty? || expected.nil?
+
+        op = op.to_s.downcase
+        return false unless entity.attribute?(property)
+
+        actual = entity.attribute(property)
+        compare(actual, op, expected.to_s, value_type)
+      end
+
+      def self.rule_lookup(rule, key)
+        params = rule["parameters"] || rule[:parameters] || rule
+        params[key] || params[key.to_s] || params[key.to_sym] ||
+          params.find { |k, _| k.to_s.casecmp?(key.to_s) }&.last
+      end
+
+      def self.compare(actual, op, expected, value_type)
+        case op
+        when "eq"
+          actual.to_s.casecmp?(expected)
+        when "neq"
+          !actual.to_s.casecmp?(expected)
+        when "gt", "gte", "lt", "lte"
+          compare_ordered(actual, expected, value_type, op)
+        when "in"
+          expected.split(",").map(&:strip).reject(&:empty?).any? { |c| c.casecmp?(actual.to_s) }
+        when "contains"
+          if value_type == "string[]"
+            Array(actual).any? { |v| v.to_s.casecmp?(expected) }
+          else
+            actual.to_s.downcase.include?(expected.downcase)
+          end
+        else
+          false
+        end
+      end
+
+      def self.compare_ordered(actual, expected, value_type, op)
+        if value_type == "datetime"
+          a = Time.parse(actual.to_s)
+          e = Time.parse(expected.to_s)
+          cmp = a <=> e
+        elsif value_type == "number"
+          cmp = actual.to_f <=> expected.to_f
+        else
+          return false
+        end
+        case op
+        when "gt" then cmp > 0
+        when "gte" then cmp >= 0
+        when "lt" then cmp < 0
+        when "lte" then cmp <= 0
+        else false
+        end
+      rescue ArgumentError
+        false
+      end
+    end
+  end
+end

@@ -3,6 +3,39 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Canonical entity instance for ContextProperty evaluation.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TogglyEntityContext {
+    /// Context kind (Order, Puppy, etc.).
+    pub kind: String,
+    /// Entity key.
+    pub key: String,
+    /// Attribute map used by ContextProperty filters.
+    pub attributes: HashMap<String, serde_json::Value>,
+}
+
+impl TogglyEntityContext {
+    /// Look up an attribute, ignoring key case.
+    pub fn get_attr(&self, name: &str) -> Option<&serde_json::Value> {
+        if let Some(v) = self.attributes.get(name) {
+            return Some(v);
+        }
+        self.attributes
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v)
+    }
+
+    /// Whether the attribute exists (case-insensitive).
+    pub fn contains_attr(&self, name: &str) -> bool {
+        self.attributes.contains_key(name)
+            || self
+                .attributes
+                .keys()
+                .any(|k| k.eq_ignore_ascii_case(name))
+    }
+}
+
 /// Context for feature flag evaluation.
 ///
 /// Provides user information and attributes for targeting rules.
@@ -16,6 +49,9 @@ pub struct EvalContext {
 
     /// Custom attributes for targeting rules.
     pub traits: HashMap<String, serde_json::Value>,
+
+    /// Entity for ContextProperty filters.
+    pub entity: Option<TogglyEntityContext>,
 }
 
 impl EvalContext {
@@ -86,6 +122,12 @@ impl EvalContextBuilder {
         value: impl Into<serde_json::Value>,
     ) -> Self {
         self.context.traits.insert(key.into(), value.into());
+        self
+    }
+
+    /// Attach an entity for ContextProperty evaluation.
+    pub fn entity(mut self, entity: TogglyEntityContext) -> Self {
+        self.context.entity = Some(entity);
         self
     }
 

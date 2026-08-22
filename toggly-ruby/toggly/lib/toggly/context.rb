@@ -11,7 +11,7 @@ module Toggly
   #   )
   class Context
     # @return [String, nil] User identity for percentage rollouts and targeting
-    attr_reader :identity
+    attr_reader :identity, :groups, :traits, :entity
 
     # @return [Array<String>] Groups the user belongs to
     attr_reader :groups
@@ -19,10 +19,14 @@ module Toggly
     # @return [Hash<String, Object>] Custom traits for contextual targeting
     attr_reader :traits
 
-    def initialize(identity: nil, groups: [], traits: {})
+    # @return [EntityContext, nil] Entity for ContextProperty filters
+    attr_reader :entity
+
+    def initialize(identity: nil, groups: [], traits: {}, entity: nil)
       @identity = identity&.to_s
       @groups = Array(groups).map(&:to_s)
       @traits = normalize_traits(traits)
+      @entity = entity
     end
 
     # Create a context with just an identity
@@ -80,7 +84,8 @@ module Toggly
       Context.new(
         identity: @identity,
         groups: @groups,
-        traits: @traits.merge(normalize_traits(new_traits))
+        traits: @traits.merge(normalize_traits(new_traits)),
+        entity: @entity
       )
     end
 
@@ -92,7 +97,8 @@ module Toggly
       Context.new(
         identity: @identity,
         groups: @groups + new_groups.flatten.map(&:to_s),
-        traits: @traits
+        traits: @traits,
+        entity: @entity
       )
     end
 

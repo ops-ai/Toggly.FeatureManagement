@@ -35,6 +35,7 @@ module Toggly
 
     # @return [Boolean] Enable WebSocket live updates (default: true)
     attr_accessor :enable_live_updates
+    attr_accessor :disable_entity_context_registration
 
     # @return [String] Application version
     attr_accessor :app_version
@@ -73,6 +74,7 @@ module Toggly
       @enable_undefined_in_dev = options[:enable_undefined_in_dev] || false
       @disable_background_refresh = options[:disable_background_refresh] || false
       @enable_live_updates = options.fetch(:enable_live_updates, true)
+      @disable_entity_context_registration = options.fetch(:disable_entity_context_registration, false)
       @app_version = options[:app_version]
       @instance_name = options[:instance_name]
       @defaults = options[:defaults] || {}

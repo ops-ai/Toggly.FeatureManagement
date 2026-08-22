@@ -87,6 +87,9 @@ class TogglyConfig:
     debug: bool = False
     """Enable debug logging."""
 
+    register_contexts_on_startup: bool = True
+    """PUT entity context schemas to sdk/{appKey}/contexts on start (default True)."""
+
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
         # Ensure base_url doesn't have trailing slash
@@ -204,6 +207,9 @@ class TogglyConfig:
             enable_live_updates=changes.get("enable_live_updates", self.enable_live_updates),
             on_error=changes.get("on_error", self.on_error),
             debug=changes.get("debug", self.debug),
+            register_contexts_on_startup=changes.get(
+                "register_contexts_on_startup", self.register_contexts_on_startup
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:

@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Ops.ai <contact@ops.ai>"]
 edition = "2021"
 rust-version = "1.88"
@@ -55,5 +55,5 @@ tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 
 # Workspace crates
-toggly = { version = "0.2.0", path = "toggly" }
+toggly = { version = "0.3.0", path = "toggly" }
 toggly-macros = { version = "0.2.0", path = "toggly-macros" }

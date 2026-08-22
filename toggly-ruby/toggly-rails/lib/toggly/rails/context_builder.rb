@@ -25,11 +25,23 @@ module Toggly
         Toggly::Context.new(
           identity: identity,
           groups: groups,
-          traits: traits
+          traits: traits,
+          entity: extract_entity(request, user)
         )
       end
 
       private
+
+      def extract_entity(request, user)
+        if request.respond_to?(:env) && request.env["toggly.entity"]
+          return request.env["toggly.entity"]
+        end
+        if user.respond_to?(:toggly_entity)
+          return user.toggly_entity
+        end
+
+        nil
+      end
 
       def extract_identity(user)
         return nil unless user

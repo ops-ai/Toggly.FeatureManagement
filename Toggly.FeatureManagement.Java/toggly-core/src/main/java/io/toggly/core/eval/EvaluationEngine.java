@@ -58,26 +58,48 @@ public final class EvaluationEngine {
             return false;
         }
 
-        FeatureRequirement requirement = definition.getRequirementType();
+        List<FeatureFilter> entityFilters = ContextPropertyEvaluator.getEntityFilters(definition);
+        List<FeatureFilter> userFilters = ContextPropertyEvaluator.getUserFilters(definition);
         String featureKey = definition.getFeatureKey();
 
+        if (!entityFilters.isEmpty()) {
+            if (context == null || context.getEntity() == null) {
+                return false;
+            }
+            if (!ContextPropertyEvaluator.evaluateEntityFilters(definition, context.getEntity())) {
+                return false;
+            }
+            if (userFilters.isEmpty()) {
+                return true;
+            }
+            return evaluateFilterGroup(userFilters, definition.getRequirementType(), featureKey, context);
+        }
+
+        return evaluateFilterGroup(userFilters, definition.getRequirementType(), featureKey, context);
+    }
+
+    private boolean evaluateFilterGroup(
+            List<FeatureFilter> filters,
+            FeatureRequirement requirement,
+            String featureKey,
+            EvaluationContext context) {
+        if (filters == null || filters.isEmpty()) {
+            return false;
+        }
         if (requirement == FeatureRequirement.ALL) {
-            // All filters must pass
             for (FeatureFilter filter : filters) {
                 if (!registry.evaluateFilter(filter, featureKey, context)) {
                     return false;
                 }
             }
             return true;
-        } else {
-            // Any filter must pass (default)
-            for (FeatureFilter filter : filters) {
-                if (registry.evaluateFilter(filter, featureKey, context)) {
-                    return true;
-                }
-            }
-            return false;
         }
+        for (FeatureFilter filter : filters) {
+            if (registry.evaluateFilter(filter, featureKey, context)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

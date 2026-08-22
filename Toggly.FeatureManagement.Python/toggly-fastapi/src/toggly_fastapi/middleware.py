@@ -393,8 +393,10 @@ def get_context_from_request(request: Request) -> EvaluationContext:
     if session and hasattr(session, "session_id"):
         traits["session_id"] = session.session_id
 
+    entity = getattr(request.state, "toggly_entity", None) if hasattr(request, "state") else None
     return EvaluationContext(
         identity=identity,
         groups=groups,
         traits=traits,
+        entity=entity,
     )

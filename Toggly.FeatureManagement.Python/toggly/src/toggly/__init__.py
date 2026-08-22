@@ -7,7 +7,7 @@ for synchronous and asynchronous APIs.
 from toggly.async_client import AsyncTogglyClient
 from toggly.client import TogglyClient
 from toggly.config import TogglyConfig
-from toggly.context import EvaluationContext
+from toggly.context import EvaluationContext, TogglyEntityContext
 from toggly.decorators import (
     feature_context,
     feature_flag,
@@ -17,9 +17,15 @@ from toggly.decorators import (
 )
 from toggly.enums import AppState, FeatureRequirement, FilterType, LoadStatus
 from toggly.evaluator import (
+    ContextPropertyEvaluator,
     EvaluationEngine,
     EvaluatorRegistry,
     FilterEvaluator,
+)
+from toggly.entity_context import (
+    EntityContextPropertySchema,
+    EntityContextSchemaRegistration,
+    register_context,
 )
 from toggly.exceptions import (
     TogglyConfigError,
@@ -58,6 +64,10 @@ __all__ = [
     "TogglyConfig",
     # Context
     "EvaluationContext",
+    "TogglyEntityContext",
+    "register_context",
+    "EntityContextPropertySchema",
+    "EntityContextSchemaRegistration",
     # Decorators
     "feature_flag",
     "feature_gate",
@@ -70,6 +80,7 @@ __all__ = [
     "FilterType",
     "AppState",
     # Evaluation
+    "ContextPropertyEvaluator",
     "EvaluationEngine",
     "EvaluatorRegistry",
     "FilterEvaluator",

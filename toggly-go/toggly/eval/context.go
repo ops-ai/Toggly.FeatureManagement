@@ -7,4 +7,5 @@ type Context struct {
 	Identity string
 	Groups   []string
 	Traits   map[string]any
+	Entity   *EntityContext
 }

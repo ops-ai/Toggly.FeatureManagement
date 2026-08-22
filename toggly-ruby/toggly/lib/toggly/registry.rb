@@ -81,6 +81,7 @@ module Toggly
       register(Evaluators::Targeting.new)
       register(Evaluators::TimeWindow.new)
       register(Evaluators::ContextualTargeting.new)
+      register(Evaluators::ContextProperty.new)
     end
   end
 end

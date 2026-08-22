@@ -59,6 +59,14 @@ pub struct FeatureDefinition {
     /// Requirement type for multiple filters.
     #[serde(default)]
     pub requirement_type: RequirementType,
+
+    /// Optional entity context kind.
+    #[serde(default)]
+    pub context_kind: Option<String>,
+
+    /// Any/All for ContextProperty filters.
+    #[serde(default)]
+    pub context_requirement_type: Option<RequirementType>,
 }
 
 impl FeatureDefinition {
@@ -182,6 +190,8 @@ mod tests {
             secured_feature: false,
             client_sdk_enabled: true,
             requirement_type: RequirementType::Any,
+            context_kind: None,
+            context_requirement_type: None,
         };
 
         assert!(def.has_filters());

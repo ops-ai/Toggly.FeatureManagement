@@ -2,6 +2,7 @@ package io.toggly.core;
 
 import io.toggly.core.config.TogglyConfig;
 import io.toggly.core.context.ContextHolder;
+import io.toggly.core.context.EntityContextRegistry;
 import io.toggly.core.context.EvaluationContext;
 import io.toggly.core.eval.EvaluationEngine;
 import io.toggly.core.eval.EvaluatorRegistry;
@@ -108,6 +109,7 @@ public final class TogglyClient implements AutoCloseable {
         }
 
         this.evaluationEngine = new EvaluationEngine(registry);
+        EntityContextRegistry.registerAtStartup(config);
     }
 
     /**
