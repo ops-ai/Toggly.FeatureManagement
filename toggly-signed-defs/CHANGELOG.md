@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.0
+
+2026-08-21
+
+### Added
+- `signedDefsClientOptions` to wire client SDKs to a shared `InMemoryJwksCache`
+  (`null` `maxSignatureAgeSeconds` maps to `undefined`).
+- Public `readAndParseEvaluatedResponse` helper for unwrapping unsigned payloads
+  and verifying signed envelopes before applying defs.
+
 ## 1.1.0
 
 2026-08-20
