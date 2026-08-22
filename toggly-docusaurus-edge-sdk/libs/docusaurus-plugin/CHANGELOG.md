@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+2026-08-21
+
+### Changed
+- Widened the `react` and `react-dom` peer ranges to `^18.0.0 || ^19.0.0`. Docusaurus 3.10 supports React 19, and the client bindings use only stable hooks, so the React 18 ceiling was blocking consumers from upgrading.
+
 ## 0.6.3
 
 2026-07-14
