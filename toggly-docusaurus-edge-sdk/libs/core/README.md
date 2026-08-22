@@ -17,7 +17,7 @@ npm install @ops-ai/toggly-client-core
 
 Pass a domain object on each `getFlag` call. User identity is separate from entity context. Register mappers with `registerContext` locally — this client does not PUT entity schemas.
 
-Entity gates fail closed without context. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
+Entity gates fail closed without context. See [Entity & page context](https://github.com/ops-ai/toggly_docs/blob/develop/docs/01-core-concepts/entity-context.mdx).
 
 ```ts
 client.registerContext('Doc', (doc) => ({
