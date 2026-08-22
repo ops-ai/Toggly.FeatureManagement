@@ -20,10 +20,10 @@ npm install @ops-ai/remix-toggly-core
 Entity gates fail closed without context. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
 
 ```ts
-registerContext('Puppy', (puppy) => ({
-  kind: 'Puppy',
-  key: String(puppy.id),
-  attributes: { Color: puppy.color },
+registerContext('Order', (order) => ({
+  kind: 'Order',
+  key: String(order.id),
+  attributes: { Status: order.status },
 }))
 ```
 

@@ -552,13 +552,13 @@ Pass a domain object on each `isFeatureOn` / `evaluateFeatureGate` call (list ro
 Entity gates fail closed when no context is supplied. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
 
 ```ts
-togglyService.registerContext('Puppy', (puppy) => ({
-  kind: 'Puppy',
-  key: String(puppy.id),
-  attributes: { Color: puppy.color },
+togglyService.registerContext('Order', (order) => ({
+  kind: 'Order',
+  key: String(order.id),
+  attributes: { Status: order.status },
 }));
 
-const enabled = await togglyService.isFeatureOn('PuppyBadge', puppy, 'Puppy');
+const enabled = await togglyService.isFeatureOn('OrderBadge', order, 'Order');
 ```
 
 ## Find out more about Toggly.io

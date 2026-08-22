@@ -20,13 +20,13 @@ Pass a domain object on each `isFeatureOn` / `evaluateFeatureGate` call. `setCon
 Entity gates fail closed without context. See [Nuxt SDK](https://docs.toggly.io/sdks/nuxt/).
 
 ```ts
-client.registerContext('Puppy', (puppy) => ({
-  kind: 'Puppy',
-  key: String(puppy.id),
-  attributes: { Color: puppy.color },
+client.registerContext('Order', (order) => ({
+  kind: 'Order',
+  key: String(order.id),
+  attributes: { Status: order.status },
 }))
 
-await client.isFeatureOn('PuppyBadge', puppy, 'Puppy')
+await client.isFeatureOn('OrderBadge', order, 'Order')
 ```
 
 ## License

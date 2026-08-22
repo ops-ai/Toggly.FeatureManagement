@@ -24,16 +24,16 @@ Entity gates fail closed without context. See [Entity context (Node)](https://do
 
 ```ts
 client.registerContext(
-  'Puppy',
-  (puppy) => ({
-    kind: 'Puppy',
-    key: String(puppy.id),
-    attributes: { Color: puppy.color },
+  'Order',
+  (order) => ({
+    kind: 'Order',
+    key: String(order.id),
+    attributes: { Status: order.status },
   }),
   { keyProperty: 'id', properties: [{ name: 'color', type: 'string' }] },
 )
 
-await client.isFeatureOn('PuppyBadge', undefined, puppy, 'Puppy')
+await client.isFeatureOn('OrderBadge', undefined, order, 'Order')
 ```
 
 ## License

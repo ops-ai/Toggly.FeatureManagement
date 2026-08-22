@@ -7,8 +7,8 @@ const datetimeGate: EntityGate = {
   rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' }],
 };
 
-const puppyContext = {
-  kind: 'Puppy',
+const orderContext = {
+  kind: 'Order',
   key: '1',
   attributes: { BirthDate: '2026-06-15T00:00:00Z' },
 };
@@ -60,32 +60,32 @@ describe('Entity context evaluation', () => {
 
   it('evaluates entity gates with matching attributes', async () => {
     const server = createServer();
-    await expect(server.getFlag('EntityGated', false, puppyContext)).resolves.toBe(true);
+    await expect(server.getFlag('EntityGated', false, orderContext)).resolves.toBe(true);
   });
 
   it('fails closed when a mapped entity is missing the rule attribute', async () => {
     const server = createServer();
-    server.registerContext<{ id: string }>('Puppy', (puppy) => ({
-      kind: 'Puppy',
-      key: puppy.id,
+    server.registerContext<{ id: string }>('Order', (order) => ({
+      kind: 'Order',
+      key: order.id,
       attributes: {},
     }));
-    await expect(server.getFlag('EntityGated', false, { id: '9' }, 'Puppy')).resolves.toBe(false);
+    await expect(server.getFlag('EntityGated', false, { id: '9' }, 'Order')).resolves.toBe(false);
   });
 
   it('evaluates entity gates via registerContext mapper', async () => {
     const server = createServer();
-    server.registerContext<{ id: string; birthDate: string }>('Puppy', (puppy) => ({
-      kind: 'Puppy',
-      key: puppy.id,
-      attributes: { BirthDate: puppy.birthDate },
+    server.registerContext<{ id: string; birthDate: string }>('Order', (order) => ({
+      kind: 'Order',
+      key: order.id,
+      attributes: { BirthDate: order.birthDate },
     }));
 
     await expect(
-      server.getFlag('EntityGated', false, { id: '7', birthDate: '2026-06-15T00:00:00Z' }, 'Puppy'),
+      server.getFlag('EntityGated', false, { id: '7', birthDate: '2026-06-15T00:00:00Z' }, 'Order'),
     ).resolves.toBe(true);
     await expect(
-      server.getFlag('EntityGated', false, { id: '8', birthDate: '2020-01-01T00:00:00Z' }, 'Puppy'),
+      server.getFlag('EntityGated', false, { id: '8', birthDate: '2020-01-01T00:00:00Z' }, 'Order'),
     ).resolves.toBe(false);
   });
 });
