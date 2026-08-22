@@ -19,7 +19,7 @@ func ctxFilter(prop, op, value, valueType string) definitions.FeatureFilter {
 func TestContextPropertyOperatorsAndGroups(t *testing.T) {
 	eng := NewEngine(DefaultRegistry())
 	def := definitions.FeatureDefinitionModel{
-		FeatureKey:              "puppies",
+		FeatureKey:              "orders",
 		RequirementType:         definitions.RequirementAny,
 		ContextRequirementType:  definitions.RequirementAll,
 		Filters: []definitions.FeatureFilter{
@@ -28,7 +28,7 @@ func TestContextPropertyOperatorsAndGroups(t *testing.T) {
 			{Name: "AlwaysOn", Parameters: map[string]any{}},
 		},
 	}
-	entity := &EntityContext{Kind: "Puppy", Key: "1", Attributes: map[string]any{"color": "red", "Age": 3}}
+	entity := &EntityContext{Kind: "Order", Key: "1", Attributes: map[string]any{"color": "red", "Age": 3}}
 	on, err := eng.Evaluate(def, Context{Entity: entity})
 	if err != nil || !on {
 		t.Fatalf("expected enabled, err=%v on=%v", err, on)

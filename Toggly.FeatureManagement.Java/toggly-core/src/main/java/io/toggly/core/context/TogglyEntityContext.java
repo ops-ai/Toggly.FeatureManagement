@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Canonical entity instance passed into feature evaluation (Order, Puppy, etc.).
+ * Canonical entity instance passed into feature evaluation (Order, Product, etc.).
  */
 public final class TogglyEntityContext {
 

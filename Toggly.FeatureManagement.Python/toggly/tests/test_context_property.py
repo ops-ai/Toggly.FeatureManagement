@@ -14,7 +14,7 @@ def _filter(prop, op, value, value_type="string"):
 
 def test_eq_in_contains_and_requirement():
     definition = FeatureDefinition(
-        feature_key="puppies",
+        feature_key="orders",
         requirement_type="Any",
         context_requirement_type="All",
         filters=[
@@ -23,7 +23,7 @@ def test_eq_in_contains_and_requirement():
             FeatureFilter(name="AlwaysOn", parameters={}),
         ],
     )
-    entity = TogglyEntityContext("Puppy", "1", {"color": "red", "Age": 3})
+    entity = TogglyEntityContext("Order", "1", {"color": "red", "Age": 3})
     assert ContextPropertyEvaluator.evaluate_entity_filters(definition, entity) is True
     engine = EvaluationEngine()
     assert engine.evaluate(definition, EvaluationContext(entity=entity)) is True
@@ -37,14 +37,14 @@ def test_missing_attr_unknown_op_fail_closed():
         filters=[_filter("Color", "neq", "red")],
     )
     assert ContextPropertyEvaluator.evaluate_entity_filters(
-        definition, TogglyEntityContext("Puppy", "1", {})
+        definition, TogglyEntityContext("Order", "1", {})
     ) is False
     unknown = FeatureDefinition(
         feature_key="f",
         filters=[_filter("Color", "matches", "red")],
     )
     assert ContextPropertyEvaluator.evaluate_entity_filters(
-        unknown, TogglyEntityContext("Puppy", "1", {"Color": "red"})
+        unknown, TogglyEntityContext("Order", "1", {"Color": "red"})
     ) is False
 
 
@@ -55,7 +55,7 @@ def test_in_contains_datetime():
     )
     assert ContextPropertyEvaluator.evaluate_entity_filters(
         FeatureDefinition(feature_key="f", requirement_type="All", filters=[_filter("Name", "contains", "pup")]),
-        TogglyEntityContext("P", "1", {"Name": "Puppy"}),
+        TogglyEntityContext("P", "1", {"Name": "Order"}),
     )
     born = datetime(2026, 7, 1, tzinfo=timezone.utc)
     assert ContextPropertyEvaluator.evaluate_entity_filters(
@@ -78,5 +78,5 @@ def test_any_context_requirement():
             _filter("Color", "eq", "blue"),
         ],
     )
-    entity = TogglyEntityContext("Puppy", "1", {"Color": "red"})
+    entity = TogglyEntityContext("Order", "1", {"Color": "red"})
     assert ContextPropertyEvaluator.evaluate_entity_filters(definition, entity) is True

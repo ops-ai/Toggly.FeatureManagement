@@ -23,13 +23,13 @@ class ContextPropertyEvaluatorTest {
         FeatureFilter age = FeatureFilter.of("ContextProperty", Map.of(
                 "Property", "Age", "Operator", "gte", "Value", "2", "ValueType", "number"));
         FeatureDefinition def = FeatureDefinition.builder()
-                .featureKey("puppies")
+                .featureKey("orders")
                 .requirementType(FeatureRequirement.ANY)
                 .contextRequirementType(FeatureRequirement.ALL)
                 .filters(List.of(color, age, FeatureFilter.alwaysOn()))
                 .build();
 
-        TogglyEntityContext entity = new TogglyEntityContext("Puppy", "1", Map.of("Color", "red", "Age", 3));
+        TogglyEntityContext entity = new TogglyEntityContext("Order", "1", Map.of("Color", "red", "Age", 3));
         assertThat(ContextPropertyEvaluator.evaluateEntityFilters(def, entity)).isTrue();
 
         EvaluationEngine engine = new EvaluationEngine();
@@ -46,7 +46,7 @@ class ContextPropertyEvaluatorTest {
                 .addFilter(FeatureFilter.of("ContextProperty", Map.of(
                         "Property", "Color", "Operator", "neq", "Value", "red", "ValueType", "string")))
                 .build();
-        TogglyEntityContext missing = new TogglyEntityContext("Puppy", "1", Map.of());
+        TogglyEntityContext missing = new TogglyEntityContext("Order", "1", Map.of());
         assertThat(ContextPropertyEvaluator.evaluateEntityFilters(def, missing)).isFalse();
 
         FeatureDefinition unknownOp = FeatureDefinition.builder()
@@ -55,7 +55,7 @@ class ContextPropertyEvaluatorTest {
                         "Property", "Color", "Operator", "matches", "Value", "red", "ValueType", "string")))
                 .build();
         assertThat(ContextPropertyEvaluator.evaluateEntityFilters(
-                unknownOp, new TogglyEntityContext("Puppy", "1", Map.of("Color", "red")))).isFalse();
+                unknownOp, new TogglyEntityContext("Order", "1", Map.of("Color", "red")))).isFalse();
     }
 
     @Test
@@ -65,7 +65,7 @@ class ContextPropertyEvaluatorTest {
                 new TogglyEntityContext("P", "1", Map.of("color", "BLUE")))).isTrue();
         assertThat(ContextPropertyEvaluator.evaluateEntityFilters(
                 definition("Name", "contains", "pup", "string"),
-                new TogglyEntityContext("P", "1", Map.of("Name", "Puppy")))).isTrue();
+                new TogglyEntityContext("P", "1", Map.of("Name", "Order")))).isTrue();
         assertThat(ContextPropertyEvaluator.evaluateEntityFilters(
                 definition("OrderDate", "gt", "2026-06-10T00:00:00Z", "datetime"),
                 new TogglyEntityContext("Order", "42", Map.of(
@@ -83,7 +83,7 @@ class ContextPropertyEvaluatorTest {
                 .addFilter(FeatureFilter.of("ContextProperty", Map.of(
                         "Property", "Color", "Operator", "eq", "Value", "blue", "ValueType", "string")))
                 .build();
-        TogglyEntityContext entity = new TogglyEntityContext("Puppy", "1", Map.of("Color", "red"));
+        TogglyEntityContext entity = new TogglyEntityContext("Order", "1", Map.of("Color", "red"));
         assertThat(ContextPropertyEvaluator.evaluateEntityFilters(def, entity)).isTrue();
     }
 

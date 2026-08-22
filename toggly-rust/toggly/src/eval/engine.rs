@@ -397,7 +397,7 @@ mod tests {
     fn test_context_property_and_user() {
         let engine = Engine::with_defaults();
         let mut def = make_definition(
-            "puppies",
+            "orders",
             vec![
                 (
                     "ContextProperty",
@@ -409,7 +409,7 @@ mod tests {
         );
         def.context_requirement_type = Some(RequirementType::All);
         let entity = crate::context::TogglyEntityContext {
-            kind: "Puppy".into(),
+            kind: "Order".into(),
             key: "1".into(),
             attributes: HashMap::from([("color".into(), serde_json::json!("red"))]),
         };

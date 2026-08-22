@@ -6,7 +6,7 @@ use std::collections::HashMap;
 /// Canonical entity instance for ContextProperty evaluation.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TogglyEntityContext {
-    /// Context kind (Order, Puppy, etc.).
+    /// Context kind (Order, Product, etc.).
     pub kind: String,
     /// Entity key.
     pub key: String,

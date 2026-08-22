@@ -128,7 +128,7 @@ pub fn map_passthrough(kind: impl Into<String>, key: impl Into<String>, attribut
 mod tests {
     use super::*;
 
-    struct Puppy {
+    struct Order {
         id: String,
         color: String,
         age: i32,
@@ -137,15 +137,15 @@ mod tests {
     #[test]
     fn register_context_maps_entity_object() {
         register_context(
-            "Puppy",
+            "Order",
             |obj| {
-                let puppy = obj.downcast_ref::<Puppy>().expect("Puppy");
+                let order = obj.downcast_ref::<Order>().expect("Order");
                 let mut attributes = HashMap::new();
-                attributes.insert("color".to_string(), serde_json::json!(puppy.color));
-                attributes.insert("age".to_string(), serde_json::json!(puppy.age));
+                attributes.insert("color".to_string(), serde_json::json!(order.status));
+                attributes.insert("age".to_string(), serde_json::json!(order.total));
                 TogglyEntityContext {
-                    kind: "Puppy".to_string(),
-                    key: puppy.id.clone(),
+                    kind: "Order".to_string(),
+                    key: order.id.clone(),
                     attributes,
                 }
             },
@@ -160,20 +160,20 @@ mod tests {
             }),
         );
 
-        let puppy = Puppy {
+        let order = Order {
             id: "p1".to_string(),
             color: "red".to_string(),
             age: 3,
         };
-        let mapped = map_entity("Puppy", &puppy).expect("mapper registered");
-        assert_eq!(mapped.kind, "Puppy");
+        let mapped = map_entity("Order", &order).expect("mapper registered");
+        assert_eq!(mapped.kind, "Order");
         assert_eq!(mapped.key, "p1");
         assert_eq!(mapped.attributes.get("color").unwrap(), "red");
         assert_eq!(mapped.attributes.get("age").unwrap(), 3);
 
         let schemas = schemas().lock().unwrap();
-        assert!(schemas.iter().any(|s| s.kind == "Puppy" && s.key_property == "id"));
-        assert!(map_entity("UnknownKind", &puppy).is_none());
+        assert!(schemas.iter().any(|s| s.kind == "Order" && s.key_property == "id"));
+        assert!(map_entity("UnknownKind", &order).is_none());
     }
 
     #[test]
@@ -200,12 +200,12 @@ mod tests {
             None,
         );
 
-        let puppy = Puppy {
+        let order = Order {
             id: "p1".to_string(),
             color: "red".to_string(),
             age: 3,
         };
-        let mapped = map_entity("ReentrancyOuter", &puppy).expect("outer mapper");
+        let mapped = map_entity("ReentrancyOuter", &order).expect("outer mapper");
         assert_eq!(mapped.kind, "ReentrancyOuter");
         assert_eq!(mapped.key, "inner");
     }

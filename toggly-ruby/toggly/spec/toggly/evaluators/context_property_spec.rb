@@ -35,7 +35,7 @@ RSpec.describe Toggly::Evaluators::ContextProperty do
       requirement: "Any",
       context_req: "All"
     )
-    entity = Toggly::EntityContext.new(kind: "Puppy", key: "1", attributes: { "color" => "red", "Age" => 3 })
+    entity = Toggly::EntityContext.new(kind: "Order", key: "1", attributes: { "color" => "red", "Age" => 3 })
     expect(engine.evaluate(defn, Toggly::Context.new(entity: entity))).to be true
     expect(engine.evaluate(defn, Toggly::Context.new)).to be false
   end
