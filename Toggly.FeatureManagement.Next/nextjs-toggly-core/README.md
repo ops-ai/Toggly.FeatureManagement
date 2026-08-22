@@ -17,7 +17,7 @@ npm install @ops-ai/nextjs-toggly-core
 
 Pass a domain object on each `isFeatureOn` / `evaluateFeatureGate` call. User identity is separate from entity context. Register mappers with `registerContext` locally — this client does not PUT entity schemas.
 
-Entity gates fail closed without context. See [Next.js entity context](https://docs.toggly.io/sdks/javascript/nextjs#entity-context).
+Entity gates fail closed without context. See [Next.js SDK](https://docs.toggly.io/sdks/nextjs/).
 
 ```ts
 client.registerContext('Product', (product) => ({

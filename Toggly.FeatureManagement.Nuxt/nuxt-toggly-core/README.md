@@ -17,7 +17,7 @@ npm install @ops-ai/nuxt-toggly-core
 
 Pass a domain object on each `isFeatureOn` / `evaluateFeatureGate` call. `setContext` is the user, not the page entity. Register mappers with `registerContext` locally — this client does not PUT entity schemas.
 
-Entity gates fail closed without context. See [Nuxt entity context](https://docs.toggly.io/sdks/javascript/nuxt#entity-context).
+Entity gates fail closed without context. See [Nuxt SDK](https://docs.toggly.io/sdks/nuxt/).
 
 ```ts
 client.registerContext('Puppy', (puppy) => ({
