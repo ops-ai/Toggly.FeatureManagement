@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly-core",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "Core feature flag utilities for Nuxt",
   "type": "module",
   "main": "./dist/index.cjs",

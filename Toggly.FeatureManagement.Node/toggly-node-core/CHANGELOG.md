@@ -1,3 +1,12 @@
+## 0.4.0
+
+2026-08-21
+
+### Added
+- Read-time entity context on `isFeatureOn` / `evaluateFeatureGate`.
+- `registerContext` maps domain objects and can PUT entity schemas at startup
+  (`registerContextsOnStartup`). Entity gates fail closed without context.
+
 ## 0.3.2
 
 2026-07-14

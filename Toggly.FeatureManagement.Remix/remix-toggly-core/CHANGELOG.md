@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+2026-08-21
+
+### Added
+- Entity context helpers (`registerContext`, `isFeatureEnabled` with optional
+  context). Entity gates fail closed without context.
+
 ## 1.3.1
 
 2026-07-14

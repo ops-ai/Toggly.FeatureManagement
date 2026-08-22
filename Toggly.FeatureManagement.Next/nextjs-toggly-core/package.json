@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nextjs-toggly-core",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Core feature flag functionality for Next.js",
   "type": "module",
   "main": "./dist/index.cjs",

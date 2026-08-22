@@ -14,6 +14,10 @@ Dependent packages in this monorepo declare a **registry** range (not `file:`):
 "@ops-ai/toggly-signed-defs": "^1.0.0"
 ```
 
+## Entity context
+
+Evaluated-signed `defs` may mix booleans and `EntityGate` objects (`EvaluatedDefinitions`). This package parses and verifies the envelope; it does not evaluate gates. Consumers resolve gates with `@ops-ai/toggly-hooks-types` (or an SDK wrapper) and per-eval entity context.
+
 ## Publishing
 
 Publish **`@ops-ai/toggly-signed-defs` first** (workflow: `sdk-signed-defs-release.yml`), then publish SDKs that depend on it.

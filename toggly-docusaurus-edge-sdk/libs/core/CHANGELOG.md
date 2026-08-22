@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+2026-08-21
+
+### Added
+- Entity context evaluation on `getFlag` with `registerContext`. Entity gates
+  fail closed without context.
+
 ## 0.1.6
 
 2026-07-14

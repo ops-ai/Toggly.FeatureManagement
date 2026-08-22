@@ -1,3 +1,11 @@
+## 1.7.0
+
+2026-08-21
+
+### Added
+- Entity context evaluation on `isFeatureOn` / `evaluateFeatureGate` with
+  `registerContext`. Entity gates fail closed without context.
+
 ## 1.6.2
 
 2026-07-14

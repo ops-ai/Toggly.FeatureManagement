@@ -1,3 +1,12 @@
+## 1.9.0
+
+2026-08-21
+
+### Added
+- Entity context evaluation for mixed `boolean | EntityGate` definitions.
+- `registerContext(kind, mapper)` and optional context on `isFeatureOn` /
+  `evaluateFeatureGate`. Entity gates fail closed without context.
+
 ## 1.8.4
 
 2026-08-23

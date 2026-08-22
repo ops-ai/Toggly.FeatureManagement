@@ -45,6 +45,14 @@ interface Hook {
 - **afterIdentify**: Called after identity has been set or changed
 - **afterRefresh**: Called when flags are refreshed from the server
 
+## Entity context
+
+Shared types and evaluation: `EntityGate`, `TogglyEntityContext`, `applyEntityGate`, `resolveEvaluatedDefinition`, `registerContext`, `normalizeEntityContext`.
+
+Pass entity context **per evaluation**. Missing attributes and missing context fail closed. Browser clients register mappers only; they do not PUT schemas.
+
+See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
+
 ## License
 
 MIT

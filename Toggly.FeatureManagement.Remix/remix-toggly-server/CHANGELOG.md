@@ -1,3 +1,11 @@
+## 1.4.0
+
+2026-08-21
+
+### Added
+- Entity context on `isEnabled` / `evaluateGate` with `registerContext`.
+  Entity gates fail closed without context; hydrated flags keep gate objects.
+
 ## 1.3.2
 
 2026-07-14
