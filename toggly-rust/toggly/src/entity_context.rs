@@ -76,9 +76,15 @@ pub fn register_context(
 }
 
 /// Resolve a domain object through the mapper registered for `kind`.
+///
+/// The mapper is cloned under the lock, then invoked after the guard is
+/// dropped so user callbacks can call `register_context` / `map_entity`
+/// without deadlocking or poisoning the registry mutex.
 pub fn map_entity(kind: &str, entity: &dyn Any) -> Option<TogglyEntityContext> {
-    let guard = mappers().lock().ok()?;
-    let mapper = guard.get(kind)?;
+    let mapper = {
+        let guard = mappers().lock().ok()?;
+        guard.get(kind)?.clone()
+    };
     Some(mapper(entity))
 }
 
@@ -168,6 +174,40 @@ mod tests {
         let schemas = schemas().lock().unwrap();
         assert!(schemas.iter().any(|s| s.kind == "Puppy" && s.key_property == "id"));
         assert!(map_entity("UnknownKind", &puppy).is_none());
+    }
+
+    #[test]
+    fn map_entity_releases_lock_before_invoking_mapper() {
+        register_context(
+            "ReentrancyOuter",
+            |obj| {
+                register_context(
+                    "ReentrancyInner",
+                    |_| TogglyEntityContext {
+                        kind: "ReentrancyInner".to_string(),
+                        key: "inner".to_string(),
+                        attributes: HashMap::new(),
+                    },
+                    None,
+                );
+                let nested = map_entity("ReentrancyInner", obj).expect("nested map_entity");
+                TogglyEntityContext {
+                    kind: "ReentrancyOuter".to_string(),
+                    key: nested.key,
+                    attributes: HashMap::new(),
+                }
+            },
+            None,
+        );
+
+        let puppy = Puppy {
+            id: "p1".to_string(),
+            color: "red".to_string(),
+            age: 3,
+        };
+        let mapped = map_entity("ReentrancyOuter", &puppy).expect("outer mapper");
+        assert_eq!(mapped.kind, "ReentrancyOuter");
+        assert_eq!(mapped.key, "inner");
     }
 
     #[test]
