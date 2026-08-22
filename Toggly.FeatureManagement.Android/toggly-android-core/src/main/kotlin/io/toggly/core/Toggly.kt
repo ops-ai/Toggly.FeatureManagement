@@ -110,6 +110,14 @@ object Toggly {
         return shared.isFeatureOn(featureKey)
     }
 
+    suspend fun isFeatureEnabled(
+        featureKey: String,
+        context: Any? = null,
+        kind: String? = null
+    ): Boolean {
+        return shared.isFeatureEnabled(featureKey, context, kind)
+    }
+
     /**
      * Check if a feature is disabled.
      *
@@ -131,9 +139,19 @@ object Toggly {
     suspend fun evaluateFeatureGate(
         featureKeys: List<String>,
         requirement: FeatureRequirement = FeatureRequirement.ALL,
-        negate: Boolean = false
+        negate: Boolean = false,
+        context: Any? = null,
+        kind: String? = null
     ): Boolean {
-        return shared.evaluateFeatureGate(featureKeys, requirement, negate)
+        return shared.evaluateFeatureGate(featureKeys, requirement, negate, context, kind)
+    }
+
+    fun registerContext(kind: String, mapper: EntityContextMapper) {
+        shared.registerContext(kind, mapper)
+    }
+
+    fun <T : Any> registerContext(kind: String, mapper: (T) -> TogglyEntityContext) {
+        shared.registerContext(kind, mapper)
     }
 
     /**
@@ -223,5 +241,6 @@ object Toggly {
         service?.dispose()
         service = null
         config = null
+        clearRegisteredContexts()
     }
 }

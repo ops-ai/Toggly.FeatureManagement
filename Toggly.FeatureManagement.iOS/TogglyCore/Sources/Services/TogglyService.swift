@@ -10,6 +10,7 @@ public actor TogglyService {
 
     // MARK: - State
 
+    private var definitions: EvaluatedDefinitions?
     private var features: FeatureFlags?
     private var featuresLoading = false
     private var identity: String?
@@ -121,13 +122,14 @@ public actor TogglyService {
 
         // Skip refresh if offline
         if networkState?.isConnected == false {
-            let cachedFlags = await getCachedFeatureFlags()
-            return TogglyInitResponse(status: .cached, flags: cachedFlags)
+            let cached = await loadCachedDefinitions()
+            applySnapshot(cached.definitions, flags: cached.flags)
+            return TogglyInitResponse(status: .cached, flags: cached.flags)
         }
 
         // If no app key, use defaults
         guard config.appKey != nil else {
-            features = config.featureDefaults
+            applySnapshot(fromBooleanDefaults(config.featureDefaults), flags: config.featureDefaults)
             return TogglyInitResponse(status: .defaults, flags: features ?? [:])
         }
 
@@ -142,6 +144,7 @@ public actor TogglyService {
         eventListeners.removeAll()
         stateChangeHandlers.removeAll()
         features = nil
+        definitions = nil
         inMemoryJwks = nil
         isInitialized = false
     }
@@ -152,7 +155,22 @@ public actor TogglyService {
     /// - Parameter featureKey: The feature key to check.
     /// - Returns: Whether the feature is enabled.
     public func isFeatureOn(_ featureKey: String) async -> Bool {
-        await evaluateFeatureGate(featureKeys: [featureKey], requirement: .all, negate: false)
+        await isEnabled(featureKey)
+    }
+
+    /// Check if a feature is enabled against an optional per-evaluation entity context.
+    public func isEnabled(
+        _ featureKey: String,
+        context: Any? = nil,
+        kind: String? = nil
+    ) async -> Bool {
+        await evaluateFeatureGate(
+            featureKeys: [featureKey],
+            requirement: .all,
+            negate: false,
+            context: context,
+            kind: kind
+        )
     }
 
     /// Check if a feature is disabled.
@@ -171,31 +189,24 @@ public actor TogglyService {
     public func evaluateFeatureGate(
         featureKeys: [String],
         requirement: FeatureRequirement = .all,
-        negate: Bool = false
+        negate: Bool = false,
+        context: Any? = nil,
+        kind: String? = nil
     ) async -> Bool {
         await ensureFeaturesLoaded()
+        let defs = definitions ?? fromBooleanDefaults(features ?? config.featureDefaults)
+        return evaluateEvaluatedGate(
+            features: defs,
+            featureKeys: featureKeys,
+            requirementAll: requirement == .all,
+            negate: negate,
+            entityContext: normalizeEntityContext(context, kind: kind)
+        )
+    }
 
-        guard !featureKeys.isEmpty else {
-            return true
-        }
-
-        let flags = features ?? config.featureDefaults
-
-        // Fast path for single feature
-        if featureKeys.count == 1 {
-            let isEnabled = flags[featureKeys[0]] == true
-            return negate ? !isEnabled : isEnabled
-        }
-
-        let isEnabled: Bool
-        switch requirement {
-        case .any:
-            isEnabled = featureKeys.contains { flags[$0] == true }
-        case .all:
-            isEnabled = featureKeys.allSatisfy { flags[$0] == true }
-        }
-
-        return negate ? !isEnabled : isEnabled
+    /// Register a local entity mapper. Does not PUT schemas (mobile public keys).
+    public func registerContext(_ kind: String, mapper: @escaping EntityContextMapper) {
+        TogglyCore.registerContext(kind, mapper: mapper)
     }
 
     // MARK: - Identity
@@ -238,6 +249,7 @@ public actor TogglyService {
     /// Clear cached feature flags.
     public func clearCache() async {
         features = nil
+        definitions = nil
         eTag = nil
 
         let hashedIdentity = hashIdentity(identity ?? "")
@@ -364,11 +376,10 @@ public actor TogglyService {
             }
 
             if httpResponse.statusCode == 304 {
-                // Not modified, use cached
                 lastChecked = Date()
-                let cachedFlags = await getCachedFeatureFlags()
-                features = cachedFlags
-                return TogglyInitResponse(status: .cached, flags: cachedFlags)
+                let cached = await loadCachedDefinitions()
+                applySnapshot(cached.definitions, flags: cached.flags)
+                return TogglyInitResponse(status: .cached, flags: cached.flags)
             }
 
             guard httpResponse.statusCode == 200 else {
@@ -377,12 +388,9 @@ public actor TogglyService {
 
             let parsed = try await parseFeatureFlagsResponse(data)
             let flags = parsed.flags
-
-            // Track changes
             let previousFlags = features
-            features = flags
+            applySnapshot(parsed.definitions, flags: flags)
 
-            // Cache the flags (raw defs + envelope when verified)
             await cacheFeatureFlags(
                 flags,
                 defsRaw: parsed.defsRaw,
@@ -415,10 +423,10 @@ public actor TogglyService {
             emitEvent(.error(ErrorEvent(error: lastError ?? "Unknown error")))
 
             // Fall back to cache or defaults
-            let cachedFlags = await getCachedFeatureFlags()
-            features = cachedFlags
+            let cached = await loadCachedDefinitions()
+            applySnapshot(cached.definitions, flags: cached.flags)
 
-            return TogglyInitResponse(status: .defaults, flags: cachedFlags, error: lastError)
+            return TogglyInitResponse(status: .defaults, flags: cached.flags, error: lastError)
         }
     }
 
@@ -436,11 +444,35 @@ public actor TogglyService {
     /// against the exact raw defs JSON (Security digest-level double-hash).
     private func parseFeatureFlagsResponse(_ data: Data) async throws -> ParsedFeatureFlags {
         if !config.verifySignatures {
-            if let signedResponse = try? JSONDecoder().decode(SignedDefinitionsResponse.self, from: data) {
-                return ParsedFeatureFlags(flags: signedResponse.defs ?? signedResponse.data ?? [:])
+            let definitions = try parseEvaluatedDefinitions(from: data)
+            let wrapped: EvaluatedDefinitions
+            if let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if object["defs"] != nil || object["data"] != nil {
+                    let defsValue = object["defs"] ?? object["data"]
+                    if let defsValue {
+                        let defsData = try JSONSerialization.data(withJSONObject: defsValue)
+                        wrapped = try parseEvaluatedDefinitions(from: defsData)
+                    } else {
+                        wrapped = definitions
+                    }
+                } else {
+                    wrapped = definitions
+                }
+            } else {
+                wrapped = definitions
             }
-            let flags = try JSONDecoder().decode(FeatureFlags.self, from: data)
-            return ParsedFeatureFlags(flags: flags)
+            let raw = SignedDefsVerify.extractRawJsonProperty(
+                from: String(data: data, encoding: .utf8) ?? "",
+                key: "defs"
+            ) ?? SignedDefsVerify.extractRawJsonProperty(
+                from: String(data: data, encoding: .utf8) ?? "",
+                key: "data"
+            ) ?? String(data: data, encoding: .utf8)
+            return ParsedFeatureFlags(
+                definitions: wrapped,
+                flags: toBooleanDefinitions(wrapped),
+                defsRaw: raw
+            )
         }
 
         guard let bodyText = String(data: data, encoding: .utf8) else {
@@ -461,10 +493,10 @@ public actor TogglyService {
                 kid: envelope.kid,
                 jwks: jwks
             )
-            // Apply verified raw bytes only — never re-decode envelope.defs/data.
-            let flags = try SignedDefsVerify.parseDefinitions(defsRaw)
+            let definitions = try SignedDefsVerify.parseEvaluatedDefinitions(defsRaw)
             return ParsedFeatureFlags(
-                flags: flags,
+                definitions: definitions,
+                flags: toBooleanDefinitions(definitions),
                 defsRaw: defsRaw,
                 timestamp: envelope.timestamp,
                 signature: envelope.signature,
@@ -532,9 +564,22 @@ public actor TogglyService {
         }
     }
 
-    private func getCachedFeatureFlags() async -> FeatureFlags {
-        if let features = features {
-            return features
+    private struct CachedDefinitions {
+        let definitions: EvaluatedDefinitions
+        let flags: FeatureFlags
+    }
+
+    private func applySnapshot(_ defs: EvaluatedDefinitions, flags: FeatureFlags) {
+        definitions = defs
+        features = flags
+    }
+
+    private func loadCachedDefinitions() async -> CachedDefinitions {
+        if let features, let definitions {
+            return CachedDefinitions(definitions: definitions, flags: features)
+        }
+        if let features {
+            return CachedDefinitions(definitions: fromBooleanDefaults(features), flags: features)
         }
 
         let hashedIdentity = hashIdentity(identity ?? "")
@@ -544,34 +589,40 @@ public actor TogglyService {
               let data = cached.data(using: .utf8),
               let cacheData = try? JSONDecoder().decode(TogglyFeatureFlagsCache.self, from: data),
               cacheData.identity == identity else {
-            return config.featureDefaults
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(config.featureDefaults),
+                flags: config.featureDefaults
+            )
         }
 
         return await trustOrReverifyCachedFlags(cacheData, cacheKey: cacheKey)
     }
 
-    /// When `verifySignatures` is enabled, re-verify persisted envelope metadata
-    /// before trusting the cache. Invalid signatures fail closed (clear cache).
-    /// Transient JWKS/network failures keep last-known-good.
     private func trustOrReverifyCachedFlags(
         _ cacheData: TogglyFeatureFlagsCache,
         cacheKey: String
-    ) async -> FeatureFlags {
-        guard let flagsData = cacheData.flags.data(using: .utf8),
-              let parsedFlags = try? JSONDecoder().decode(FeatureFlags.self, from: flagsData) else {
+    ) async -> CachedDefinitions {
+        guard let parsed = try? parseEvaluatedDefinitions(from: cacheData.flags) else {
             await storage.delete(cacheKey)
-            return config.featureDefaults
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(config.featureDefaults),
+                flags: config.featureDefaults
+            )
         }
+        let flags = toBooleanDefinitions(parsed)
 
         guard config.verifySignatures else {
-            return parsedFlags
+            return CachedDefinitions(definitions: parsed, flags: flags)
         }
 
         guard let timestamp = cacheData.timestamp,
               let signature = cacheData.signature, !signature.isEmpty,
               let keyId = cacheData.keyId, !keyId.isEmpty else {
             await storage.delete(cacheKey)
-            return config.featureDefaults
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(config.featureDefaults),
+                flags: config.featureDefaults
+            )
         }
 
         do {
@@ -581,12 +632,14 @@ public actor TogglyService {
             )
         } catch {
             await storage.delete(cacheKey)
-            return config.featureDefaults
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(config.featureDefaults),
+                flags: config.featureDefaults
+            )
         }
 
         guard let jwks = await resolveJwksForCacheVerify() else {
-            // Soft-fail: keep last-known-good when JWKS cannot be resolved offline.
-            return parsedFlags
+            return CachedDefinitions(definitions: parsed, flags: flags)
         }
 
         do {
@@ -597,13 +650,13 @@ public actor TogglyService {
                 kid: keyId,
                 jwks: jwks
             )
-            return parsedFlags
+            return CachedDefinitions(definitions: parsed, flags: flags)
         } catch {
-            // JWKS was available — any verify failure (bad sig, unknown kid,
-            // malformed key material) fails closed. Soft-fail only when JWKS
-            // could not be resolved above.
             await storage.delete(cacheKey)
-            return config.featureDefaults
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(config.featureDefaults),
+                flags: config.featureDefaults
+            )
         }
     }
 
@@ -642,6 +695,7 @@ public actor TogglyService {
     }
 
     private struct ParsedFeatureFlags {
+        let definitions: EvaluatedDefinitions
         let flags: FeatureFlags
         let defsRaw: String?
         let timestamp: Int64?
@@ -649,12 +703,14 @@ public actor TogglyService {
         let keyId: String?
 
         init(
+            definitions: EvaluatedDefinitions,
             flags: FeatureFlags,
             defsRaw: String? = nil,
             timestamp: Int64? = nil,
             signature: String? = nil,
             keyId: String? = nil
         ) {
+            self.definitions = definitions
             self.flags = flags
             self.defsRaw = defsRaw
             self.timestamp = timestamp
@@ -673,8 +729,8 @@ public actor TogglyService {
             return
         }
 
-        // Load from cache or defaults
-        features = await getCachedFeatureFlags()
+        let cached = await loadCachedDefinitions()
+        applySnapshot(cached.definitions, flags: cached.flags)
     }
 
     private func startRefreshTimer() {

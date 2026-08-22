@@ -82,6 +82,26 @@ class MyApplication : Application() {
 }
 ```
 
+### Entity context (per evaluation)
+
+Entity-gated flags fail closed without a context. `setIdentity` remains user targeting;
+pass an entity on each read. `registerContext` is local only (no schema PUT).
+
+```kotlin
+Toggly.registerContext("Puppy") { puppy: Puppy ->
+    TogglyEntityContext(kind = "Puppy", key = puppy.id, attributes = mapOf("Color" to puppy.color))
+}
+
+lifecycleScope.launch {
+    if (Toggly.isFeatureEnabled("PresalePhotos", puppy, "Puppy")) {
+        showPresalePhotos()
+    }
+}
+```
+
+The `featureFlags` snapshot still maps every key to a boolean: gated flags are `false`
+until you evaluate with context.
+
 ### Jetpack Compose
 
 ```kotlin

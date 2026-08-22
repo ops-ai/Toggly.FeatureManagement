@@ -51,9 +51,9 @@ public enum SignedDefsVerifyError: LocalizedError, Equatable {
 }
 
 /// Signed definitions response envelope.
+/// `defs`/`data` payloads are mixed booleans and entity gates; they are
+/// extracted as raw JSON, not decoded as `[String: Bool]`.
 public struct SignedEnvelope: Codable, Sendable {
-    public let defs: FeatureFlags?
-    public let data: FeatureFlags?
     public let signature: String
     public let timestamp: Int64
     public let kid: String
@@ -65,11 +65,15 @@ public struct SignedEnvelope: Codable, Sendable {
         timestamp: Int64,
         kid: String
     ) {
-        self.defs = defs
-        self.data = data
+        _ = defs
+        _ = data
         self.signature = signature
         self.timestamp = timestamp
         self.kid = kid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case signature, timestamp, kid
     }
 }
 
@@ -178,16 +182,18 @@ enum SignedDefsVerify {
         return nil
     }
 
-    /// Parse verified defs JSON bytes into feature flags (do not use envelope fields).
-    static func parseDefinitions(_ defsRaw: String) throws -> FeatureFlags {
-        guard let data = defsRaw.data(using: .utf8) else {
-            throw SignedDefsVerifyError.invalidEnvelope
-        }
+    /// Parse verified defs JSON into mixed evaluated definitions.
+    static func parseEvaluatedDefinitions(_ defsRaw: String) throws -> EvaluatedDefinitions {
         do {
-            return try JSONDecoder().decode(FeatureFlags.self, from: data)
+            return try TogglyCore.parseEvaluatedDefinitions(from: defsRaw)
         } catch {
             throw SignedDefsVerifyError.invalidEnvelope
         }
+    }
+
+    /// Parse verified defs JSON into a boolean snapshot (gates without context → false).
+    static func parseDefinitions(_ defsRaw: String) throws -> FeatureFlags {
+        toBooleanDefinitions(try parseEvaluatedDefinitions(defsRaw))
     }
 
     /// Parse a signed envelope and return the exact raw defs (or data) JSON substring.

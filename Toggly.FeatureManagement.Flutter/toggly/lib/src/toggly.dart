@@ -11,6 +11,8 @@ import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 import 'package:rxdart/rxdart.dart';
 
+import 'entity_gate.dart' as entity_gate;
+
 /// Static class providing feature flags support.
 ///
 /// Allows enabling and disabling of features easily. Can be used with or without Toggly.io.
@@ -41,6 +43,7 @@ class Toggly with WidgetsBindingObserver {
   static String? _lastError;
   // Add new static field for in-memory cache
   static Map<String, bool>? _inMemoryFlags;
+  static Map<String, dynamic>? _inMemoryDefinitions;
 
   /// True until at least one successful HTTP definitions fetch sets [_lastSynced].
   static bool get _needsInitialHttpSync => _lastSynced == null;
@@ -362,6 +365,7 @@ class Toggly with WidgetsBindingObserver {
   /// persisted flags, variants, or revisions (supports multi-user switch-back).
   static void _clearInMemoryEvaluationState() {
     _inMemoryFlags = null;
+    _inMemoryDefinitions = null;
     _inMemoryVariantDefs = null;
     _definitionsRevision = null;
     _lastSynced = null;
@@ -428,7 +432,8 @@ class Toggly with WidgetsBindingObserver {
         return Map<String, bool>.from(Toggly._flagDefaults);
       }
 
-      final parsedFlags = Map<String, bool>.from(jsonDecode(flagsCache.flags));
+      final parsed = entity_gate.parseEvaluatedDefinitions(jsonDecode(flagsCache.flags));
+      final parsedFlags = entity_gate.toBooleanDefinitions(parsed);
 
       // Check if the cache is signed and if the timestamp and signature are present
       if (Toggly._useSignedDefinitions) {
@@ -472,6 +477,7 @@ class Toggly with WidgetsBindingObserver {
         }
       }
 
+      _inMemoryDefinitions = parsed;
       _inMemoryFlags = parsedFlags;
       _featureFlagsSubject?.add(Map<String, bool>.from(_inMemoryFlags!));
       return _inMemoryFlags!;
@@ -491,7 +497,9 @@ class Toggly with WidgetsBindingObserver {
     String? keyId,
   }) async {
     // Update in-memory cache first
-    _inMemoryFlags = Map<String, bool>.from(jsonDecode(featureFlags));
+    final parsed = entity_gate.parseEvaluatedDefinitions(jsonDecode(featureFlags));
+    _inMemoryDefinitions = parsed;
+    _inMemoryFlags = entity_gate.toBooleanDefinitions(parsed);
     _featureFlagsSubject?.add(Map<String, bool>.from(_inMemoryFlags!));
 
     if (Toggly._useSignedDefinitions) {
@@ -587,15 +595,16 @@ class Toggly with WidgetsBindingObserver {
         print('Raw response: ${response.data}');
       }
 
+      Map<String, dynamic> mixed;
       Map<String, bool> flags;
 
       if (Toggly._useSignedDefinitions) {
         final parsed = _parseSignedDefinitionsResponse(response.data);
         final signedResponse = parsed.envelope;
         final signedDefsJson = parsed.signedDefsJson;
-        flags = Map<String, bool>.from(signedResponse['defs'] ??
-            signedResponse['data'] ??
-            <String, dynamic>{});
+        mixed = entity_gate.parseEvaluatedDefinitions(
+            signedResponse['defs'] ?? signedResponse['data'] ?? <String, dynamic>{});
+        flags = entity_gate.toBooleanDefinitions(mixed);
         String signature = signedResponse['signature'];
         int timestamp = signedResponse['timestamp'];
         String keyId = signedResponse['kid'];
@@ -657,7 +666,8 @@ class Toggly with WidgetsBindingObserver {
         _lastChecked = DateTime.now();
         _lastSynced = DateTime.now();
         final payload = Map<String, dynamic>.from(response.data);
-        flags = Map<String, bool>.from(payload['defs'] ?? payload);
+        mixed = entity_gate.parseEvaluatedDefinitions(payload['defs'] ?? payload);
+        flags = entity_gate.toBooleanDefinitions(mixed);
         Toggly.cacheFeatureFlags(
             featureFlags: jsonEncode(payload['defs'] ?? payload));
 
@@ -665,6 +675,8 @@ class Toggly with WidgetsBindingObserver {
       }
 
       // Cache flags on successful response
+      Toggly._inMemoryDefinitions = mixed;
+      Toggly._inMemoryFlags = flags;
       Toggly._featureFlagsSubject?.add(flags);
 
       if (kDebugMode) {
@@ -1457,10 +1469,23 @@ class Toggly with WidgetsBindingObserver {
     List<String> gate, {
     FeatureRequirement requirement = FeatureRequirement.all,
     bool negate = false,
+    Object? context,
+    String? kind,
   }) async {
-    // Fast path: use in-memory flags if available
     return _evaluateFeatureGate(await cachedFeatureFlags,
-        gate: gate, requirement: requirement, negate: negate);
+        gate: gate, requirement: requirement, negate: negate, context: context, kind: kind);
+  }
+
+  static Future<bool> isFeatureOn(
+    String key, {
+    Object? context,
+    String? kind,
+  }) {
+    return evaluateFeatureGate([key], context: context, kind: kind);
+  }
+
+  static void registerContext(String kind, EntityContextMapper mapper) {
+    entity_gate.registerContext(kind, mapper);
   }
 
   /// Synchronously evaluates a gate against a known flag map.
@@ -1469,57 +1494,57 @@ class Toggly with WidgetsBindingObserver {
     required Map<String, bool> flags,
     FeatureRequirement requirement = FeatureRequirement.all,
     bool negate = false,
+    Object? context,
+    String? kind,
   }) {
     return _evaluateFeatureGate(
       flags,
       gate: gate,
       requirement: requirement,
       negate: negate,
+      context: context,
+      kind: kind,
     );
   }
 
-  // Optimize the evaluation logic
   static bool _evaluateFeatureGate(
     Map<String, bool> flags, {
     required List<String> gate,
     FeatureRequirement requirement = FeatureRequirement.all,
     bool negate = false,
+    Object? context,
+    String? kind,
   }) {
-    // Fast path for single flag
-    if (gate.length == 1) {
-      final isEnabled = _getEffectiveFlagValue(flags, gate.first);
-      return negate ? !isEnabled : isEnabled;
-    }
-
-    // Fast path for ALL requirement
-    if (requirement == FeatureRequirement.all) {
-      for (final featureKey in gate) {
-        if (!_getEffectiveFlagValue(flags, featureKey)) {
-          return negate;
-        }
-      }
-      return !negate;
-    }
-
-    // ANY requirement
-    for (final featureKey in gate) {
-      if (_getEffectiveFlagValue(flags, featureKey)) {
-        return !negate;
-      }
-    }
-    return negate;
+    final entity = entity_gate.normalizeEntityContext(context, kind);
+    final mixed = _inMemoryDefinitions ??
+        {for (final entry in flags.entries) entry.key: entry.value};
+    return entity_gate.evaluateStoredFeatureKeys(
+      mixed,
+      gate,
+      requirement == FeatureRequirement.all,
+      negate,
+      (key) {
+        final remote = entity_gate.resolveEvaluatedDefinition(
+          mixed[key],
+          context: entity,
+        );
+        return applyLocalGate(remote, key, _localGates, _localGateIndex);
+      },
+    );
   }
 
   /// Cancels registered timers and closes the feature flags stream.
   static void dispose() {
     cancelTimers();
     _inMemoryFlags = null;
+    _inMemoryDefinitions = null;
     _inMemoryVariantDefs = null;
     _definitionsRevision = null;
     _lastSynced = null;
     _lastChecked = null;
     _lastError = null;
     _inMemoryJwks = null; // Clear JWKs cache
+    entity_gate.clearRegisteredContexts();
     _featureFlagsSubject?.close();
     _featureFlagsSubject = null;
     _localGatesChangedController?.close();

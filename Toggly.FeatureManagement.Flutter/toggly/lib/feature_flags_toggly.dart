@@ -8,3 +8,4 @@ export 'src/services/services.dart';
 export 'src/toggly.dart';
 export 'src/feature.dart';
 export 'src/local_gates.dart';
+export 'src/entity_gate.dart';

@@ -30,6 +30,7 @@ class TogglyService(
     private val mutex = Mutex()
 
     // State
+    private var definitions: EvaluatedDefinitions? = null
     private var features: FeatureFlags? = null
     private var featuresLoading = false
     private var identity: String? = null
@@ -162,14 +163,14 @@ class TogglyService(
 
         // Skip refresh if offline
         if (networkState?.isConnected == false) {
-            val cachedFlags = getCachedFeatureFlags()
-            return TogglyInitResponse(status = TogglyLoadStatus.CACHED, flags = cachedFlags)
+            val cached = loadCachedDefinitions()
+            applySnapshot(cached.definitions, cached.flags)
+            return TogglyInitResponse(status = TogglyLoadStatus.CACHED, flags = cached.flags)
         }
 
         // If no app key, use defaults
         if (config.appKey == null) {
-            features = config.featureDefaults
-            _featureFlags.value = config.featureDefaults
+            applySnapshot(fromBooleanDefaults(config.featureDefaults), config.featureDefaults)
             return TogglyInitResponse(status = TogglyLoadStatus.DEFAULTS, flags = features!!)
         }
 
@@ -184,7 +185,25 @@ class TogglyService(
      * @return Whether the feature is enabled
      */
     suspend fun isFeatureOn(featureKey: String): Boolean {
-        return evaluateFeatureGate(listOf(featureKey), FeatureRequirement.ALL, false)
+        return isFeatureEnabled(featureKey)
+    }
+
+    /**
+     * Check if a feature is enabled, optionally against a per-evaluation entity context.
+     * Gated flags fail closed when [context] is missing.
+     */
+    suspend fun isFeatureEnabled(
+        featureKey: String,
+        context: Any? = null,
+        kind: String? = null
+    ): Boolean {
+        return evaluateFeatureGate(
+            listOf(featureKey),
+            FeatureRequirement.ALL,
+            false,
+            context,
+            kind
+        )
     }
 
     /**
@@ -208,28 +227,19 @@ class TogglyService(
     suspend fun evaluateFeatureGate(
         featureKeys: List<String>,
         requirement: FeatureRequirement = FeatureRequirement.ALL,
-        negate: Boolean = false
+        negate: Boolean = false,
+        context: Any? = null,
+        kind: String? = null
     ): Boolean {
         ensureFeaturesLoaded()
-
-        if (featureKeys.isEmpty()) {
-            return true
-        }
-
-        val flags = features ?: config.featureDefaults
-
-        // Fast path for single feature
-        if (featureKeys.size == 1) {
-            val isEnabled = flags[featureKeys[0]] == true
-            return if (negate) !isEnabled else isEnabled
-        }
-
-        val isEnabled = when (requirement) {
-            FeatureRequirement.ANY -> featureKeys.any { flags[it] == true }
-            FeatureRequirement.ALL -> featureKeys.all { flags[it] == true }
-        }
-
-        return if (negate) !isEnabled else isEnabled
+        val defs = definitions ?: fromBooleanDefaults(features ?: config.featureDefaults)
+        return evaluateEvaluatedGate(
+            defs,
+            featureKeys,
+            requirement == FeatureRequirement.ALL,
+            negate,
+            normalizeEntityContext(context, kind)
+        )
     }
 
     /**
@@ -310,6 +320,7 @@ class TogglyService(
 
     private suspend fun clearCacheInternal() {
         features = null
+        definitions = null
         eTag = null
 
         val hashedIdentity = hashIdentity(identity ?: "")
@@ -324,6 +335,14 @@ class TogglyService(
      * @param handler The handler to add
      * @return A function to remove the handler
      */
+    fun registerContext(kind: String, mapper: EntityContextMapper) {
+        io.toggly.core.registerContext(kind, mapper)
+    }
+
+    fun <T : Any> registerContext(kind: String, mapper: (T) -> TogglyEntityContext) {
+        io.toggly.core.registerContext(kind, mapper)
+    }
+
     fun addStateChangeHandler(handler: FeatureStateChangeHandler): () -> Unit {
         stateChangeHandlers.add(handler)
         return { stateChangeHandlers.remove(handler) }
@@ -392,6 +411,7 @@ class TogglyService(
         stopRefreshTimer()
         stateChangeHandlers.clear()
         features = null
+        definitions = null
         isInitialized = false
     }
 
@@ -422,12 +442,10 @@ class TogglyService(
 
             response.use { resp ->
                 if (resp.code == 304) {
-                    // Not modified, use cached
                     lastChecked = Date()
-                    val cachedFlags = getCachedFeatureFlags()
-                    features = cachedFlags
-                    _featureFlags.value = cachedFlags
-                    return TogglyInitResponse(status = TogglyLoadStatus.CACHED, flags = cachedFlags)
+                    val cached = loadCachedDefinitions()
+                    applySnapshot(cached.definitions, cached.flags)
+                    return TogglyInitResponse(status = TogglyLoadStatus.CACHED, flags = cached.flags)
                 }
 
                 if (!resp.isSuccessful) {
@@ -437,7 +455,7 @@ class TogglyService(
                 val body = resp.body?.string()
                     ?: throw TogglyException.InvalidResponse("Empty response body")
 
-                val flags: FeatureFlags
+                val loaded: EvaluatedDefinitions
                 var defsRaw: String? = null
                 var signature: String? = null
                 var timestamp: Long? = null
@@ -451,26 +469,22 @@ class TogglyService(
                     )
                     val jwks = fetchJwks()
                     SignedDefsVerify.verify(envelope, jwks)
-                    flags = SignedDefsVerify.parseDefinitions(envelope.defsRaw)
+                    loaded = SignedDefsVerify.parseEvaluatedDefinitions(envelope.defsRaw)
                     defsRaw = envelope.defsRaw
                     signature = envelope.signature
                     timestamp = envelope.timestamp
                     keyId = envelope.kid
                 } else {
-                    flags = runCatching {
-                        val signedResponse = json.decodeFromString<SignedDefinitionsResponse>(body)
-                        signedResponse.defs ?: signedResponse.data ?: emptyMap()
-                    }.getOrElse {
-                        json.decodeFromString<Map<String, Boolean>>(body)
-                    }
+                    loaded = parseBodyDefinitions(body)
+                    defsRaw = SignedDefsVerify.extractRawJsonProperty(body, "defs")
+                        ?: SignedDefsVerify.extractRawJsonProperty(body, "data")
+                        ?: body
                 }
 
-                // Track changes
+                val flags = toBooleanDefinitions(loaded)
                 val previousFlags = features
-                features = flags
-                _featureFlags.value = flags
+                applySnapshot(loaded, flags)
 
-                // Cache the flags (raw defs + envelope when verified)
                 cacheFeatureFlags(
                     flags = flags,
                     defsRaw = defsRaw,
@@ -504,13 +518,12 @@ class TogglyService(
             emitEvent(TogglyEvent.Error(lastError ?: "Unknown error", e))
 
             // Fall back to cache or defaults
-            val cachedFlags = getCachedFeatureFlags()
-            features = cachedFlags
-            _featureFlags.value = cachedFlags
+            val cached = loadCachedDefinitions()
+            applySnapshot(cached.definitions, cached.flags)
 
             return TogglyInitResponse(
                 status = TogglyLoadStatus.DEFAULTS,
-                flags = cachedFlags,
+                flags = cached.flags,
                 error = lastError
             )
         } finally {
@@ -560,8 +573,28 @@ class TogglyService(
         }
     }
 
-    private suspend fun getCachedFeatureFlags(): FeatureFlags {
-        features?.let { return it }
+    private data class CachedDefinitions(
+        val definitions: EvaluatedDefinitions,
+        val flags: FeatureFlags
+    )
+
+    private fun applySnapshot(defs: EvaluatedDefinitions, flags: FeatureFlags) {
+        definitions = defs
+        features = flags
+        _featureFlags.value = flags
+    }
+
+    private fun parseBodyDefinitions(body: String): EvaluatedDefinitions {
+        val element = json.parseToJsonElement(body)
+        val obj = element as? kotlinx.serialization.json.JsonObject
+        val defs = obj?.get("defs") ?: obj?.get("data") ?: element
+        return parseEvaluatedDefinitions(defs)
+    }
+
+    private suspend fun loadCachedDefinitions(): CachedDefinitions {
+        features?.let { snapshot ->
+            return CachedDefinitions(definitions ?: fromBooleanDefaults(snapshot), snapshot)
+        }
 
         try {
             val hashedIdentity = hashIdentity(identity ?: "")
@@ -574,11 +607,12 @@ class TogglyService(
                     return trustOrReverifyCachedFlags(cacheData, cacheKey)
                 }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Cache read failed, use defaults
         }
 
-        return config.featureDefaults
+        val defaults = fromBooleanDefaults(config.featureDefaults)
+        return CachedDefinitions(defaults, config.featureDefaults)
     }
 
     /**
@@ -589,16 +623,17 @@ class TogglyService(
     private suspend fun trustOrReverifyCachedFlags(
         cacheData: TogglyFeatureFlagsCache,
         cacheKey: String
-    ): FeatureFlags {
-        val parsedFlags = runCatching {
-            json.decodeFromString<Map<String, Boolean>>(cacheData.flags)
+    ): CachedDefinitions {
+        val parsed = runCatching {
+            parseEvaluatedDefinitions(cacheData.flags)
         }.getOrElse {
             storage.delete(cacheKey)
-            return config.featureDefaults
+            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults)
         }
+        val flags = toBooleanDefinitions(parsed)
 
         if (!config.verifySignatures) {
-            return parsedFlags
+            return CachedDefinitions(parsed, flags)
         }
 
         if (cacheData.timestamp == null ||
@@ -606,7 +641,7 @@ class TogglyService(
             cacheData.keyId.isNullOrEmpty()
         ) {
             storage.delete(cacheKey)
-            return config.featureDefaults
+            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults)
         }
 
         try {
@@ -616,13 +651,12 @@ class TogglyService(
             )
         } catch (_: Exception) {
             storage.delete(cacheKey)
-            return config.featureDefaults
+            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults)
         }
 
         val jwks = resolveJwksForCacheVerify()
         if (jwks == null) {
-            // Soft-fail: keep last-known-good when JWKS cannot be resolved offline.
-            return parsedFlags
+            return CachedDefinitions(parsed, flags)
         }
 
         return try {
@@ -633,13 +667,10 @@ class TogglyService(
                 kid = cacheData.keyId
             )
             SignedDefsVerify.verify(envelope, jwks)
-            parsedFlags
+            CachedDefinitions(parsed, flags)
         } catch (_: Exception) {
-            // JWKS was available — any verify failure (bad sig, unknown kid,
-            // malformed key material) fails closed. Soft-fail only when JWKS
-            // could not be resolved above.
             storage.delete(cacheKey)
-            config.featureDefaults
+            CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults)
         }
     }
 
@@ -665,7 +696,7 @@ class TogglyService(
                 keyId = keyId
             )
             storage.set(cacheKey, json.encodeToString(TogglyFeatureFlagsCache.serializer(), cacheData))
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Cache write failed, continue without caching
         }
     }
@@ -678,9 +709,8 @@ class TogglyService(
             return
         }
 
-        // Load from cache or defaults
-        features = getCachedFeatureFlags()
-        _featureFlags.value = features!!
+        val cached = loadCachedDefinitions()
+        applySnapshot(cached.definitions, cached.flags)
     }
 
     private fun startRefreshTimer() {

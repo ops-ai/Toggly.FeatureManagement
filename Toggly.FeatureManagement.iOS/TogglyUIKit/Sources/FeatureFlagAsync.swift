@@ -11,10 +11,12 @@ public enum FeatureFlagAsync {
     /// - Returns: Whether the feature is enabled.
     public static func isEnabled(
         _ key: String,
+        context: Any? = nil,
+        kind: String? = nil,
         service: TogglyService? = nil
     ) async -> Bool {
         let toggly = service ?? Toggly.shared
-        return await toggly.isFeatureOn(key)
+        return await toggly.isEnabled(key, context: context, kind: kind)
     }
 
     /// Check if a feature is disabled.
