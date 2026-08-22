@@ -23,7 +23,7 @@ final class EntityGateTests: XCTestCase {
     func testEvaluatesDatetimeAndFlattens() {
         XCTAssertTrue(resolveEvaluatedDefinition(
             .gate(datetimeGate),
-            context: TogglyEntityContext(kind: "Puppy", key: "1", attributes: ["BirthDate": "2026-06-15T00:00:00Z"])
+            context: TogglyEntityContext(kind: "Order", key: "1", attributes: ["BirthDate": "2026-06-15T00:00:00Z"])
         ))
         let flattened = toBooleanDefinitions([
             "On": .boolean(true),
@@ -71,7 +71,7 @@ final class EntityGateTests: XCTestCase {
         ))
         XCTAssertTrue(applyEntityGate(
             EntityGate(requirement: "all", rules: [EntityGateRule(property: "Name", op: "contains", value: "pup")]),
-            attributes: ["Name": "Puppy"]
+            attributes: ["Name": "Order"]
         ))
         XCTAssertTrue(applyEntityGate(
             EntityGate(requirement: "all", rules: [EntityGateRule(property: "Tags", op: "contains", value: "beta", type: "string[]")]),
@@ -93,17 +93,17 @@ final class EntityGateTests: XCTestCase {
         XCTAssertEqual(toBooleanDefinitions(parsed)["Gated"], false)
         XCTAssertTrue(resolveEvaluatedDefinition(
             parsed["Gated"],
-            context: TogglyEntityContext(kind: "Puppy", key: "1", attributes: ["Color": "red"])
+            context: TogglyEntityContext(kind: "Order", key: "1", attributes: ["Color": "red"])
         ))
         XCTAssertEqual(try SignedDefsVerify.parseDefinitions(raw)["On"], true)
     }
 
     func testRegisterContextIsLocalOnly() {
-        registerContext("Puppy") { entity in
-            let puppy = entity as! [String: String]
-            return TogglyEntityContext(kind: "Puppy", key: puppy["id"] ?? "", attributes: ["Color": puppy["color"] as Any])
+        registerContext("Order") { entity in
+            let order = entity as! [String: String]
+            return TogglyEntityContext(kind: "Order", key: order["id"] ?? "", attributes: ["Color": order["color"] as Any])
         }
-        XCTAssertEqual(mapEntityContext(kind: "Puppy", entity: ["id": "1", "color": "red"])?.key, "1")
+        XCTAssertEqual(mapEntityContext(kind: "Order", entity: ["id": "1", "color": "red"])?.key, "1")
         XCTAssertNil(resolveEntityContext(kind: "Kitten", entity: ["id": "1"]))
     }
 }

@@ -88,12 +88,12 @@ Entity-gated flags fail closed without a context. `setIdentity` remains user tar
 pass an entity on each read. `registerContext` is local only (no schema PUT).
 
 ```kotlin
-Toggly.registerContext("Puppy") { puppy: Puppy ->
-    TogglyEntityContext(kind = "Puppy", key = puppy.id, attributes = mapOf("Color" to puppy.color))
+Toggly.registerContext("Order") { order: Order ->
+    TogglyEntityContext(kind = "Order", key = order.id, attributes = mapOf("Color" to order.status))
 }
 
 lifecycleScope.launch {
-    if (Toggly.isFeatureEnabled("PresalePhotos", puppy, "Puppy")) {
+    if (Toggly.isFeatureEnabled("PresalePhotos", order, "Order")) {
         showPresalePhotos()
     }
 }

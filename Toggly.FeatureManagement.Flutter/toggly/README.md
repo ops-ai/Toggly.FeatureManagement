@@ -112,23 +112,23 @@ Entity-gated flags fail closed without a context. Identity (`Toggly.init` user i
 is separate; pass an entity on each read. `registerContext` is local only (no schema PUT).
 
 ```dart
-Toggly.registerContext('Puppy', (entity) {
-  final puppy = entity as Puppy;
+Toggly.registerContext('Order', (entity) {
+  final order = entity as Order;
   return TogglyEntityContext(
-    kind: 'Puppy',
-    key: puppy.id,
-    attributes: {'Color': puppy.color},
+    kind: 'Order',
+    key: order.id,
+    attributes: {'Color': order.status},
   );
 });
 
-if (await Toggly.isFeatureOn('PresalePhotos', context: puppy, kind: 'Puppy')) {
+if (await Toggly.isFeatureOn('PresalePhotos', context: order, kind: 'Order')) {
   // ...
 }
 
 Feature(
   featureKeys: const ['PresalePhotos'],
-  context: puppy,
-  kind: 'Puppy',
+  context: order,
+  kind: 'Order',
   child: const PresalePhotosView(),
 );
 ```

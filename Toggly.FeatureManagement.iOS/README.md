@@ -131,12 +131,12 @@ Entity-gated flags fail closed without a context. `setIdentity` remains user tar
 pass an entity on each read. `registerContext` is local only (no schema PUT).
 
 ```swift
-Toggly.shared.registerContext("Puppy") { entity in
-    let puppy = entity as! Puppy
-    return TogglyEntityContext(kind: "Puppy", key: puppy.id, attributes: ["Color": puppy.color])
+Toggly.shared.registerContext("Order") { entity in
+    let order = entity as! Order
+    return TogglyEntityContext(kind: "Order", key: order.id, attributes: ["Color": order.status])
 }
 
-if await Toggly.shared.isEnabled("PresalePhotos", context: puppy, kind: "Puppy") {
+if await Toggly.shared.isEnabled("PresalePhotos", context: order, kind: "Order") {
     showPresalePhotos()
 }
 ```

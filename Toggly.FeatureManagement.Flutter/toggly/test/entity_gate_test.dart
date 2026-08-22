@@ -31,7 +31,7 @@ void main() {
       resolveEvaluatedDefinition(
         datetimeGate,
         context: TogglyEntityContext(
-          kind: 'Puppy',
+          kind: 'Order',
           key: '1',
           attributes: {'BirthDate': '2026-06-15T00:00:00Z'},
         ),
@@ -113,7 +113,7 @@ void main() {
         EntityGate(requirement: 'all', rules: [
           EntityGateRule(property: 'Name', op: 'contains', value: 'pup'),
         ]),
-        {'Name': 'Puppy'},
+        {'Name': 'Order'},
       ),
       isTrue,
     );
@@ -158,22 +158,22 @@ void main() {
       resolveEvaluatedDefinition(
         parsed['Gated'],
         context: TogglyEntityContext(
-            kind: 'Puppy', key: '1', attributes: {'Color': 'red'}),
+            kind: 'Order', key: '1', attributes: {'Color': 'red'}),
       ),
       isTrue,
     );
   });
 
   test('registerContext is local only', () {
-    registerContext('Puppy', (entity) {
-      final puppy = entity as Map;
+    registerContext('Order', (entity) {
+      final order = entity as Map;
       return TogglyEntityContext(
-        kind: 'Puppy',
-        key: puppy['id'] as String,
-        attributes: {'Color': puppy['color']},
+        kind: 'Order',
+        key: order['id'] as String,
+        attributes: {'Color': order['color']},
       );
     });
-    expect(mapEntityContext('Puppy', {'id': '1', 'color': 'red'})?.key, '1');
+    expect(mapEntityContext('Order', {'id': '1', 'color': 'red'})?.key, '1');
     expect(resolveEntityContext('Kitten', {'id': '1'}), isNull);
   });
 }

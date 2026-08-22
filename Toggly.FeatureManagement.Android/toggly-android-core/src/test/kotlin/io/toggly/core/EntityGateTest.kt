@@ -43,7 +43,7 @@ class EntityGateTest {
     fun `evaluates datetime gt locally`() {
         val enabled = resolveEvaluatedDefinition(
             EvaluatedDefinition.Gate(datetimeGate),
-            TogglyEntityContext("Puppy", "1", mapOf("BirthDate" to "2026-06-15T00:00:00Z"))
+            TogglyEntityContext("Order", "1", mapOf("BirthDate" to "2026-06-15T00:00:00Z"))
         )
         assertTrue(enabled)
     }
@@ -148,7 +148,7 @@ class EntityGateTest {
         assertTrue(
             applyEntityGate(
                 EntityGate("all", listOf(EntityGateRule("Name", "contains", "pup"))),
-                mapOf("Name" to "Puppy")
+                mapOf("Name" to "Order")
             )
         )
         assertTrue(
@@ -170,17 +170,17 @@ class EntityGateTest {
             true,
             resolveEvaluatedDefinition(
                 parsed["Gated"],
-                TogglyEntityContext("Puppy", "1", mapOf("Color" to "red"))
+                TogglyEntityContext("Order", "1", mapOf("Color" to "red"))
             )
         )
     }
 
     @Test
     fun `registerContext maps entities locally`() {
-        registerContext("Puppy") { puppy: Map<String, String> ->
-            TogglyEntityContext("Puppy", puppy.getValue("id"), mapOf("Color" to puppy["color"]))
+        registerContext("Order") { order: Map<String, String> ->
+            TogglyEntityContext("Order", order.getValue("id"), mapOf("Color" to order["color"]))
         }
-        val mapped = mapEntityContext("Puppy", mapOf("id" to "1", "color" to "red"))
+        val mapped = mapEntityContext("Order", mapOf("id" to "1", "color" to "red"))
         assertEquals("1", mapped?.key)
         assertNull(resolveEntityContext("Kitten", mapOf("id" to "1")))
     }
