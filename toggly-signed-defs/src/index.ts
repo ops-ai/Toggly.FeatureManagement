@@ -12,6 +12,9 @@ export {
 } from './signed-defs-verify'
 export type { VerifySignatureOptions } from './signed-response'
 export {
+  InMemoryJwksCache,
+  readAndParseEvaluatedResponse,
+  signedDefsClientOptions,
   readResponseBody,
   parseEvaluatedResponseBody,
   unwrapDefsPayload,

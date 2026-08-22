@@ -1,3 +1,18 @@
+## 1.2.0
+
+2026-08-21
+
+### Added
+- `registerContext(kind, mapper)` on `TogglyProvider` context for domain-object
+  → `TogglyEntityContext` mapping.
+- Optional entity `context` / `kind` on `isEnabled`, `isDisabled`,
+  `evaluateGate`, `useFeature`, `useFeatureGate`, and `<Feature>`.
+
+### Fixed
+- Entity gates in mixed `evaluated-signed` defs fail closed without context
+  and evaluate against supplied entity context (previously `getEffectiveFlag`
+  ignored context, so gated keys stayed false).
+
 ## 1.1.2
 
 2026-07-14

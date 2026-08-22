@@ -40,7 +40,9 @@ export async function parseEvaluatedResponseBody(bodyText, options) {
         return JSON.parse(bodyText);
     }
     const { envelope, defsRaw } = parseSignedEnvelope(bodyText);
-    const jwks = await fetchJwks(resolveBaseUri(options), options.headers, options.fetchImpl ?? fetch);
+    const jwks = options.getJwks
+        ? await options.getJwks()
+        : await fetchJwks(resolveBaseUri(options), options.headers, options.fetchImpl ?? fetch);
     await verifySignedDefinitions(defsRaw, {
         signature: envelope.signature,
         timestamp: envelope.timestamp,
@@ -49,6 +51,44 @@ export async function parseEvaluatedResponseBody(bodyText, options) {
         ? { maxSignatureAgeSeconds: options.maxSignatureAgeSeconds }
         : null);
     return parseDefinitionsFromRaw(defsRaw);
+}
+/** In-memory JWKS cache used by client SDKs across refreshes. */
+export class InMemoryJwksCache {
+    constructor() {
+        this.jwks = null;
+    }
+    clear() {
+        this.jwks = null;
+    }
+    async get(options, forceRefresh = false) {
+        if (!forceRefresh && this.jwks) {
+            return this.jwks;
+        }
+        this.jwks = await fetchJwks(resolveBaseUri(options), options.headers, options.fetchImpl ?? fetch);
+        return this.jwks;
+    }
+}
+/**
+ * Read an evaluated-signed HTTP body and return unwrapped defs.
+ * Unsigned payloads may be `{ defs }` or a bare map; signed payloads are verified first.
+ */
+export async function readAndParseEvaluatedResponse(response, options) {
+    const parsed = await parseEvaluatedResponseBody(await readResponseBody(response), options);
+    return options.verifySignatures ? parsed : unwrapDefsPayload(parsed);
+}
+/** Build parse options that reuse an in-memory JWKS cache. */
+export function signedDefsClientOptions(config, jwks) {
+    const baseURI = config.baseURI ?? config.baseUri;
+    return {
+        ...config,
+        baseURI,
+        maxSignatureAgeSeconds: config.maxSignatureAgeSeconds ?? undefined,
+        getJwks: () => jwks.get({
+            baseURI,
+            headers: config.headers,
+            fetchImpl: config.fetchImpl,
+        }),
+    };
 }
 /** Unwrap `{ defs }` when present; otherwise treat payload as the defs map. */
 export function unwrapDefsPayload(payload) {

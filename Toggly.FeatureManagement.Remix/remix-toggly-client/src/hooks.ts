@@ -4,7 +4,11 @@
 
 import { useMemo } from 'react';
 import { useTogglyContext } from './context';
-import type { FeatureFlags, FeatureRequirement } from '@ops-ai/remix-toggly-core';
+import type {
+  FeatureFlags,
+  FeatureRequirement,
+  TogglyEntityContext,
+} from '@ops-ai/remix-toggly-core';
 
 /**
  * Hook to access the Toggly context
@@ -18,10 +22,12 @@ export function useToggly() {
  */
 export function useFeature(
   featureKey: string,
-  defaultValue = false
+  defaultValue = false,
+  entity?: TogglyEntityContext | Record<string, unknown> | null,
+  kind?: string,
 ): boolean {
   const { isEnabled } = useTogglyContext();
-  return isEnabled(featureKey, defaultValue);
+  return isEnabled(featureKey, defaultValue, entity, kind);
 }
 
 /**
@@ -29,10 +35,12 @@ export function useFeature(
  */
 export function useFeatureDisabled(
   featureKey: string,
-  defaultValue = true
+  defaultValue = true,
+  entity?: TogglyEntityContext | Record<string, unknown> | null,
+  kind?: string,
 ): boolean {
   const { isDisabled } = useTogglyContext();
-  return isDisabled(featureKey, defaultValue);
+  return isDisabled(featureKey, defaultValue, entity, kind);
 }
 
 /**
@@ -41,10 +49,12 @@ export function useFeatureDisabled(
 export function useFeatureGate(
   featureKeys: string[],
   requirement: FeatureRequirement = 'all',
-  negate = false
+  negate = false,
+  entity?: TogglyEntityContext | Record<string, unknown> | null,
+  kind?: string,
 ): boolean {
   const { evaluateGate } = useTogglyContext();
-  return evaluateGate(featureKeys, requirement, negate);
+  return evaluateGate(featureKeys, requirement, negate, entity, kind);
 }
 
 /**

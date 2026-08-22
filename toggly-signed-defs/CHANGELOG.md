@@ -10,7 +10,8 @@
 - `assertEnvelopeFreshness` / `maxSignatureAgeSeconds` to reject replay of
   old-but-still-valid signed envelopes when configured.
 - Shared evaluated-signed response helpers (`parseEvaluatedResponseBody`,
-  `readResponseBody`, `unwrapDefsPayload`) for SSR adapters.
+  `readResponseBody`, `readAndParseEvaluatedResponse`, `unwrapDefsPayload`,
+  `InMemoryJwksCache`) for SSR adapters and client SDKs.
 - `EvaluatedDefinitions`, `EntityGate`, and `isEntityGate` types for mixed
   client defs payloads.
 - Dual CJS/ESM build with an `exports` map so bundlers resolve named exports.

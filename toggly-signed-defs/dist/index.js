@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isEvaluatedDefinitions = exports.isEntityGate = exports.unwrapDefsPayload = exports.parseEvaluatedResponseBody = exports.readResponseBody = exports.verifySignedDefinitions = exports.computeKid = exports.derSignatureToP1363 = exports.base64ToBytes = exports.parseDefinitionsFromRaw = exports.parseSignedEnvelope = exports.extractRawJsonProperty = exports.assertEnvelopeFreshness = void 0;
+exports.isEvaluatedDefinitions = exports.isEntityGate = exports.unwrapDefsPayload = exports.parseEvaluatedResponseBody = exports.readResponseBody = exports.signedDefsClientOptions = exports.readAndParseEvaluatedResponse = exports.InMemoryJwksCache = exports.verifySignedDefinitions = exports.computeKid = exports.derSignatureToP1363 = exports.base64ToBytes = exports.parseDefinitionsFromRaw = exports.parseSignedEnvelope = exports.extractRawJsonProperty = exports.assertEnvelopeFreshness = void 0;
 var freshness_1 = require("./freshness");
 Object.defineProperty(exports, "assertEnvelopeFreshness", { enumerable: true, get: function () { return freshness_1.assertEnvelopeFreshness; } });
 var signed_defs_verify_1 = require("./signed-defs-verify");
@@ -12,6 +12,9 @@ Object.defineProperty(exports, "derSignatureToP1363", { enumerable: true, get: f
 Object.defineProperty(exports, "computeKid", { enumerable: true, get: function () { return signed_defs_verify_1.computeKid; } });
 Object.defineProperty(exports, "verifySignedDefinitions", { enumerable: true, get: function () { return signed_defs_verify_1.verifySignedDefinitions; } });
 var signed_response_1 = require("./signed-response");
+Object.defineProperty(exports, "InMemoryJwksCache", { enumerable: true, get: function () { return signed_response_1.InMemoryJwksCache; } });
+Object.defineProperty(exports, "readAndParseEvaluatedResponse", { enumerable: true, get: function () { return signed_response_1.readAndParseEvaluatedResponse; } });
+Object.defineProperty(exports, "signedDefsClientOptions", { enumerable: true, get: function () { return signed_response_1.signedDefsClientOptions; } });
 Object.defineProperty(exports, "readResponseBody", { enumerable: true, get: function () { return signed_response_1.readResponseBody; } });
 Object.defineProperty(exports, "parseEvaluatedResponseBody", { enumerable: true, get: function () { return signed_response_1.parseEvaluatedResponseBody; } });
 Object.defineProperty(exports, "unwrapDefsPayload", { enumerable: true, get: function () { return signed_response_1.unwrapDefsPayload; } });

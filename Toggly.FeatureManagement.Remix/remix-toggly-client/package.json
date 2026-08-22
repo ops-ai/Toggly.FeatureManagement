@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/remix-toggly-client",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Client-side React components and hooks for Toggly feature flags in Remix",
   "keywords": [
     "toggly",

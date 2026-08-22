@@ -157,6 +157,113 @@ describe('TogglyProvider', () => {
     });
   });
 
+  describe('entity context', () => {
+    const datetimeGate = {
+      requirement: 'all',
+      rules: [
+        {
+          property: 'BirthDate',
+          op: 'gt',
+          value: '2026-01-01',
+          type: 'datetime',
+        },
+      ],
+    };
+
+    const puppyContext = {
+      kind: 'Puppy',
+      key: '1',
+      attributes: { BirthDate: '2026-06-15T00:00:00Z' },
+    };
+
+    const gatedServerContext: ServerFeatureContext = {
+      flags: { PlainOn: true, EntityGated: datetimeGate },
+      fetchedAt: Date.now(),
+    };
+
+    beforeEach(async () => {
+      const { clearRegisteredContexts } = await import('@ops-ai/remix-toggly-core');
+      clearRegisteredContexts();
+    });
+
+    afterEach(async () => {
+      const { clearRegisteredContexts } = await import('@ops-ai/remix-toggly-core');
+      clearRegisteredContexts();
+    });
+
+    it('fails closed for an entity gate evaluated without context', () => {
+      let capturedContext: TogglyContextValue | undefined;
+
+      render(
+        <TogglyProvider serverContext={gatedServerContext}>
+          <TestConsumer onContext={(ctx) => (capturedContext = ctx)} />
+        </TogglyProvider>
+      );
+
+      expect(capturedContext?.isEnabled('EntityGated')).toBe(false);
+      expect(capturedContext?.isDisabled('EntityGated')).toBe(true);
+      expect(capturedContext?.evaluateGate(['EntityGated'], 'all')).toBe(false);
+    });
+
+    it('evaluates an entity gate against a matching context', () => {
+      let capturedContext: TogglyContextValue | undefined;
+
+      render(
+        <TogglyProvider serverContext={gatedServerContext}>
+          <TestConsumer onContext={(ctx) => (capturedContext = ctx)} />
+        </TogglyProvider>
+      );
+
+      expect(capturedContext?.isEnabled('EntityGated', false, puppyContext)).toBe(
+        true
+      );
+      expect(
+        capturedContext?.evaluateGate(
+          ['PlainOn', 'EntityGated'],
+          'all',
+          false,
+          puppyContext
+        )
+      ).toBe(true);
+    });
+
+    it('maps a domain object through registerContext', () => {
+      let capturedContext: TogglyContextValue | undefined;
+
+      render(
+        <TogglyProvider serverContext={gatedServerContext}>
+          <TestConsumer onContext={(ctx) => (capturedContext = ctx)} />
+        </TogglyProvider>
+      );
+
+      capturedContext?.registerContext<{ id: string; birthDate: string }>(
+        'Puppy',
+        (puppy) => ({
+          kind: 'Puppy',
+          key: puppy.id,
+          attributes: { BirthDate: puppy.birthDate },
+        })
+      );
+
+      expect(
+        capturedContext?.isEnabled(
+          'EntityGated',
+          false,
+          { id: '7', birthDate: '2026-06-15T00:00:00Z' },
+          'Puppy'
+        )
+      ).toBe(true);
+      expect(
+        capturedContext?.isEnabled(
+          'EntityGated',
+          false,
+          { id: '8', birthDate: '2020-01-01T00:00:00Z' },
+          'Puppy'
+        )
+      ).toBe(false);
+    });
+  });
+
   describe('isDisabled', () => {
     it('should return true for disabled feature', () => {
       const serverContext: ServerFeatureContext = {
@@ -883,7 +990,7 @@ describe('TogglyProvider', () => {
       await act(async () => {});
 
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/test-key/ws?sdk=remix&sdkVersion=1.1.1');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/test-key/ws?sdk=remix&sdkVersion=1.2.0');
     });
 
     it('should build ws:// URL from http:// baseUrl', async () => {
@@ -895,7 +1002,7 @@ describe('TogglyProvider', () => {
 
       await act(async () => {});
 
-      expect(MockWebSocket.instances[0].url).toBe('ws://localhost:3000/test-key/ws?sdk=remix&sdkVersion=1.1.1');
+      expect(MockWebSocket.instances[0].url).toBe('ws://localhost:3000/test-key/ws?sdk=remix&sdkVersion=1.2.0');
     });
 
     it('should not connect when no appKey provided', async () => {

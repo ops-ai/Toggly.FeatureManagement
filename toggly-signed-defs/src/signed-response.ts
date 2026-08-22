@@ -23,6 +23,8 @@ export interface VerifySignatureOptions {
   headers?: HeadersInit
   /** Optional fetch override (tests / Docusaurus). Defaults to global fetch. */
   fetchImpl?: typeof fetch
+  /** Optional JWKS provider (in-memory cache). Defaults to a one-shot JWKS fetch. */
+  getJwks?: () => Promise<JwkSet>
 }
 
 function resolveBaseUri(options: VerifySignatureOptions): string {
@@ -73,11 +75,13 @@ export async function parseEvaluatedResponseBody(
   }
 
   const { envelope, defsRaw } = parseSignedEnvelope(bodyText)
-  const jwks = await fetchJwks(
-    resolveBaseUri(options),
-    options.headers,
-    options.fetchImpl ?? fetch
-  )
+  const jwks = options.getJwks
+    ? await options.getJwks()
+    : await fetchJwks(
+        resolveBaseUri(options),
+        options.headers,
+        options.fetchImpl ?? fetch
+      )
   await verifySignedDefinitions(
     defsRaw,
     {
@@ -92,6 +96,70 @@ export async function parseEvaluatedResponseBody(
       : null
   )
   return parseDefinitionsFromRaw(defsRaw)
+}
+
+/** In-memory JWKS cache used by client SDKs across refreshes. */
+export class InMemoryJwksCache {
+  private jwks: JwkSet | null = null
+
+  clear(): void {
+    this.jwks = null
+  }
+
+  async get(options: VerifySignatureOptions, forceRefresh = false): Promise<JwkSet> {
+    if (!forceRefresh && this.jwks) {
+      return this.jwks
+    }
+    this.jwks = await fetchJwks(
+      resolveBaseUri(options),
+      options.headers,
+      options.fetchImpl ?? fetch
+    )
+    return this.jwks
+  }
+}
+
+/**
+ * Read an evaluated-signed HTTP body and return unwrapped defs.
+ * Unsigned payloads may be `{ defs }` or a bare map; signed payloads are verified first.
+ */
+export async function readAndParseEvaluatedResponse(
+  response: Response,
+  options: VerifySignatureOptions
+): Promise<unknown> {
+  const parsed = await parseEvaluatedResponseBody(await readResponseBody(response), options)
+  return options.verifySignatures ? parsed : unwrapDefsPayload(parsed)
+}
+
+/** Build parse options that reuse an in-memory JWKS cache. */
+export function signedDefsClientOptions(
+  config: Omit<
+    Pick<
+      VerifySignatureOptions,
+      | 'verifySignatures'
+      | 'baseURI'
+      | 'baseUri'
+      | 'allowedKeyIds'
+      | 'maxSignatureAgeSeconds'
+      | 'headers'
+      | 'fetchImpl'
+    >,
+    'maxSignatureAgeSeconds'
+  > & { maxSignatureAgeSeconds?: number | null },
+  jwks: InMemoryJwksCache
+): VerifySignatureOptions {
+  const baseURI = config.baseURI ?? config.baseUri
+  return {
+    ...config,
+    baseURI,
+    maxSignatureAgeSeconds: config.maxSignatureAgeSeconds ?? undefined,
+    getJwks: () =>
+      jwks.get({
+        baseURI,
+        headers: config.headers,
+        fetchImpl: config.fetchImpl,
+      }),
+  }
 }
 
 /** Unwrap `{ defs }` when present; otherwise treat payload as the defs map. */

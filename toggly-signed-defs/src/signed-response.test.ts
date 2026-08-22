@@ -19,6 +19,20 @@ describe('signed-response helpers', () => {
     expect(unwrapDefsPayload({ A: true })).toEqual({ A: true })
   })
 
+  it('uses getJwks when verifying', async () => {
+    const getJwks = vi.fn(async () => {
+      throw new Error('jwks-from-cache')
+    })
+    await expect(
+      parseEvaluatedResponseBody('{"signature":"x","timestamp":1,"kid":"k","defs":{}}', {
+        verifySignatures: true,
+        baseURI: 'https://example.test',
+        getJwks,
+      })
+    ).rejects.toThrow()
+    expect(getJwks).toHaveBeenCalled()
+  })
+
   it('accepts baseUri alias', async () => {
     const fetchImpl = vi.fn()
     await expect(
