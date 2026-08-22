@@ -10,8 +10,8 @@ const datetimeGate: EntityGate = {
   rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' }],
 }
 
-const puppyContext = {
-  kind: 'Puppy',
+const orderContext = {
+  kind: 'Order',
   key: '1',
   attributes: { BirthDate: '2026-06-15T00:00:00Z' },
 }
@@ -57,8 +57,8 @@ describe('entity context evaluation', () => {
     const client = createClient()
     await client.init()
 
-    await expect(client.isFeatureOn('EntityGated', puppyContext)).resolves.toBe(true)
-    await expect(client.isFeatureOff('EntityGated', puppyContext)).resolves.toBe(false)
+    await expect(client.isFeatureOn('EntityGated', orderContext)).resolves.toBe(true)
+    await expect(client.isFeatureOff('EntityGated', orderContext)).resolves.toBe(false)
 
     client.destroy()
   })
@@ -67,17 +67,17 @@ describe('entity context evaluation', () => {
     const client = createClient()
     await client.init()
 
-    client.registerContext<{ id: string; birthDate: string }>('Puppy', (puppy) => ({
-      kind: 'Puppy',
-      key: puppy.id,
-      attributes: { BirthDate: puppy.birthDate },
+    client.registerContext<{ id: string; birthDate: string }>('Order', (order) => ({
+      kind: 'Order',
+      key: order.id,
+      attributes: { BirthDate: order.birthDate },
     }))
 
     await expect(
-      client.isFeatureOn('EntityGated', { id: '7', birthDate: '2026-06-15T00:00:00Z' }, 'Puppy'),
+      client.isFeatureOn('EntityGated', { id: '7', birthDate: '2026-06-15T00:00:00Z' }, 'Order'),
     ).resolves.toBe(true)
     await expect(
-      client.isFeatureOn('EntityGated', { id: '8', birthDate: '2020-01-01T00:00:00Z' }, 'Puppy'),
+      client.isFeatureOn('EntityGated', { id: '8', birthDate: '2020-01-01T00:00:00Z' }, 'Order'),
     ).resolves.toBe(false)
 
     client.destroy()
@@ -98,13 +98,13 @@ describe('entity context evaluation', () => {
     await client.init()
 
     await expect(
-      client.evaluateFeatureGate(['PlainOn', 'EntityGated'], 'all', false, puppyContext),
+      client.evaluateFeatureGate(['PlainOn', 'EntityGated'], 'all', false, orderContext),
     ).resolves.toBe(true)
     await expect(
       client.evaluateFeatureGate(['PlainOn', 'EntityGated'], 'all'),
     ).resolves.toBe(false)
     await expect(
-      client.evaluateFeatureGate(['PlainOff', 'EntityGated'], 'any', false, puppyContext),
+      client.evaluateFeatureGate(['PlainOff', 'EntityGated'], 'any', false, orderContext),
     ).resolves.toBe(true)
     await expect(
       client.evaluateFeatureGate(['PlainOff', 'EntityGated'], 'any'),
@@ -121,7 +121,7 @@ describe('entity context evaluation', () => {
       { id: 'devicePaired', flagKeys: ['EntityGated'], isEnabled: () => false },
     ])
 
-    await expect(client.isFeatureOn('EntityGated', puppyContext)).resolves.toBe(false)
+    await expect(client.isFeatureOn('EntityGated', orderContext)).resolves.toBe(false)
 
     client.destroy()
   })

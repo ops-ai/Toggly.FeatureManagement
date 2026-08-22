@@ -14,8 +14,8 @@ describe('entity context registration', () => {
 
   it('stores schema registrations from registerContext', () => {
     registerContext(
-      'Puppy',
-      (entity: { id: string }) => ({ kind: 'Puppy', key: entity.id, attributes: {} }),
+      'Order',
+      (entity: { id: string }) => ({ kind: 'Order', key: entity.id, attributes: {} }),
       {
         keyProperty: 'id',
         properties: [{ name: 'color', type: 'string' }],
@@ -24,9 +24,9 @@ describe('entity context registration', () => {
 
     expect(getEntityContextSchemaRegistrations()).toEqual([
       {
-        kind: 'Puppy',
+        kind: 'Order',
         keyProperty: 'id',
-        displayName: 'Puppy',
+        displayName: 'Order',
         properties: [{ name: 'color', type: 'string' }],
       },
     ])

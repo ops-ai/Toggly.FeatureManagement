@@ -10,7 +10,7 @@ namespace Toggly.FeatureManagement.Tests;
 
 public class EntityContextResolverTests
 {
-    private sealed class Puppy
+    private sealed class Order
     {
         public int Id { get; set; }
         public string Color { get; set; } = string.Empty;
@@ -21,8 +21,8 @@ public class EntityContextResolverTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTogglyEntityContext<Puppy>(
-            "Puppy",
+        services.AddTogglyEntityContext<Order>(
+            "Order",
             p => p.Id.ToString(),
             builder => builder
                 .KeyProperty("Id")
@@ -32,8 +32,8 @@ public class EntityContextResolverTests
         var provider = services.BuildServiceProvider();
         var resolver = provider.GetRequiredService<ITogglyEntityContextResolver>();
 
-        resolver.TryResolve(new Puppy { Id = 7, Color = "red" }, out var context).Should().BeTrue();
-        context!.Kind.Should().Be("Puppy");
+        resolver.TryResolve(new Order { Id = 7, Color = "red" }, out var context).Should().BeTrue();
+        context!.Kind.Should().Be("Order");
         context.Key.Should().Be("7");
         context.Attributes["Color"].Should().Be("red");
     }
@@ -50,7 +50,7 @@ public class EntityContextResolverTests
         });
 
         var resolver = services.BuildServiceProvider().GetRequiredService<ITogglyEntityContextResolver>();
-        resolver.TryResolve(new Puppy { Id = 1 }, out var context).Should().BeFalse();
+        resolver.TryResolve(new Order { Id = 1 }, out var context).Should().BeFalse();
         context.Should().BeNull();
     }
 
@@ -59,8 +59,8 @@ public class EntityContextResolverTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTogglyEntityContext<Puppy>(
-            "Puppy",
+        services.AddTogglyEntityContext<Order>(
+            "Order",
             p => p.Id.ToString(),
             builder => builder
                 .KeyProperty("Id")
@@ -68,7 +68,7 @@ public class EntityContextResolverTests
                 .MapAttributes(p => new Dictionary<string, object?> { ["Color"] = p.Color.ToUpperInvariant() }));
 
         var resolver = services.BuildServiceProvider().GetRequiredService<ITogglyEntityContextResolver>();
-        resolver.TryResolve(new Puppy { Id = 1, Color = "red" }, out var context).Should().BeTrue();
+        resolver.TryResolve(new Order { Id = 1, Color = "red" }, out var context).Should().BeTrue();
         context!.Attributes["Color"].Should().Be("RED");
     }
 
@@ -76,8 +76,8 @@ public class EntityContextResolverTests
     public void TryResolve_NullInstance_FailsClosed()
     {
         var resolver = CreateResolver();
-        Puppy? puppy = null;
-        resolver.TryResolve(puppy, out var context).Should().BeFalse();
+        Order? order = null;
+        resolver.TryResolve(order, out var context).Should().BeFalse();
         context.Should().BeNull();
     }
 
@@ -85,7 +85,7 @@ public class EntityContextResolverTests
     public void TryResolve_PassesThroughEntityAndEvaluationContext()
     {
         var resolver = CreateResolver();
-        var entity = new TogglyEntityContext("Puppy", "1", new Dictionary<string, object?>());
+        var entity = new TogglyEntityContext("Order", "1", new Dictionary<string, object?>());
         resolver.TryResolve(entity, out var resolved).Should().BeTrue();
         resolved.Should().BeSameAs(entity);
 

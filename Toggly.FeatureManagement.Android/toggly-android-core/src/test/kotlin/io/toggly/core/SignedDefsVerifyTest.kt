@@ -17,7 +17,7 @@ class SignedDefsVerifyTest {
     @Test
     fun `accepts double hash P1363 signatures over raw defs`() {
         val key = createKey()
-        val defs = """{"PresalePhotos":true,"PuppySales":false}"""
+        val defs = """{"PresalePhotos":true,"OrderSales":false}"""
         val timestamp = 1_783_915_396L
         val signature = signP1363(key, SignedDefsVerify.doubleSha256("$defs|$timestamp"))
         val body = """{"defs":$defs,"signature":"${base64(signature)}","timestamp":$timestamp,"kid":"${key.kid}"}"""
@@ -26,7 +26,7 @@ class SignedDefsVerifyTest {
         SignedDefsVerify.verify(envelope, jwks(key))
 
         assertEquals(defs, envelope.defsRaw)
-        assertEquals(mapOf("PresalePhotos" to true, "PuppySales" to false), SignedDefsVerify.parseDefinitions(defs))
+        assertEquals(mapOf("PresalePhotos" to true, "OrderSales" to false), SignedDefsVerify.parseDefinitions(defs))
     }
 
     @Test

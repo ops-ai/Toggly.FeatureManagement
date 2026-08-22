@@ -465,16 +465,16 @@ describe('utils', () => {
 
       expect(isFeatureEnabled(flags, 'badge')).toBe(false)
       expect(
-        isFeatureEnabled(flags, 'badge', false, { kind: 'Puppy', key: '1', attributes: { color: 'red' } }),
+        isFeatureEnabled(flags, 'badge', false, { kind: 'Order', key: '1', attributes: { color: 'red' } }),
       ).toBe(true)
 
-      registerContext('Puppy', (entity: { id: string; color: string }) => ({
-        kind: 'Puppy',
+      registerContext('Order', (entity: { id: string; color: string }) => ({
+        kind: 'Order',
         key: entity.id,
         attributes: { color: entity.color },
       }))
-      expect(normalizeEntityContext({ id: '1', color: 'red' }, 'Puppy')).toEqual({
-        kind: 'Puppy',
+      expect(normalizeEntityContext({ id: '1', color: 'red' }, 'Order')).toEqual({
+        kind: 'Order',
         key: '1',
         attributes: { color: 'red' },
       })

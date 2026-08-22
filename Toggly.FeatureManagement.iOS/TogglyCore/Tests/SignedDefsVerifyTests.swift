@@ -158,7 +158,7 @@ final class SignedDefsVerifyTests: XCTestCase {
 
     func testAcceptsDoubleSha256SignaturesOverRawDefs() throws {
         let fixture = try makeSignedFixture(
-            defs: "{\"PresalePhotos\":true,\"PuppySales\":false}",
+            defs: "{\"PresalePhotos\":true,\"OrderSales\":false}",
             timestamp: 1783915396,
             hashMode: .double
         )
@@ -347,7 +347,7 @@ final class SignedDefsVerifyTests: XCTestCase {
     }
 
     func testAppliedFlagsComeFromVerifiedDefsRaw() throws {
-        let defs = "{\"PresalePhotos\":true,\"PuppySales\":false}"
+        let defs = "{\"PresalePhotos\":true,\"OrderSales\":false}"
         let fixture = try makeSignedFixture(
             defs: defs,
             timestamp: 1783915396,
@@ -371,7 +371,7 @@ final class SignedDefsVerifyTests: XCTestCase {
             from: Data(defs.utf8)
         )
         XCTAssertEqual(applied, expected)
-        XCTAssertEqual(applied, ["PresalePhotos": true, "PuppySales": false])
+        XCTAssertEqual(applied, ["PresalePhotos": true, "OrderSales": false])
     }
 
     // MARK: - Fixtures

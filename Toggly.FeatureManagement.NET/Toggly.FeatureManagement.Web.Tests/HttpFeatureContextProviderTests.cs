@@ -229,7 +229,7 @@ public class HttpFeatureContextProviderTests
             .Returns((object _, out Toggly.FeatureManagement.Context.TogglyEntityContext? entity) =>
             {
                 entity = new Toggly.FeatureManagement.Context.TogglyEntityContext(
-                    "Puppy",
+                    "Order",
                     "42",
                     new Dictionary<string, object?>());
                 return true;
@@ -238,7 +238,7 @@ public class HttpFeatureContextProviderTests
         var provider = new HttpFeatureContextProvider(_httpContextAccessorMock.Object, entityResolver.Object);
         var result = await provider.GetContextIdentifierAsync(new { Id = 42 });
 
-        result.Should().Be("user1|Puppy|42");
+        result.Should().Be("user1|Order|42");
     }
 
     #endregion

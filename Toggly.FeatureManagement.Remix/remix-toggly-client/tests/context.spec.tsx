@@ -170,8 +170,8 @@ describe('TogglyProvider', () => {
       ],
     };
 
-    const puppyContext = {
-      kind: 'Puppy',
+    const orderContext = {
+      kind: 'Order',
       key: '1',
       attributes: { BirthDate: '2026-06-15T00:00:00Z' },
     };
@@ -214,7 +214,7 @@ describe('TogglyProvider', () => {
         </TogglyProvider>
       );
 
-      expect(capturedContext?.isEnabled('EntityGated', false, puppyContext)).toBe(
+      expect(capturedContext?.isEnabled('EntityGated', false, orderContext)).toBe(
         true
       );
       expect(
@@ -222,7 +222,7 @@ describe('TogglyProvider', () => {
           ['PlainOn', 'EntityGated'],
           'all',
           false,
-          puppyContext
+          orderContext
         )
       ).toBe(true);
     });
@@ -237,11 +237,11 @@ describe('TogglyProvider', () => {
       );
 
       capturedContext?.registerContext<{ id: string; birthDate: string }>(
-        'Puppy',
-        (puppy) => ({
-          kind: 'Puppy',
-          key: puppy.id,
-          attributes: { BirthDate: puppy.birthDate },
+        'Order',
+        (order) => ({
+          kind: 'Order',
+          key: order.id,
+          attributes: { BirthDate: order.birthDate },
         })
       );
 
@@ -250,7 +250,7 @@ describe('TogglyProvider', () => {
           'EntityGated',
           false,
           { id: '7', birthDate: '2026-06-15T00:00:00Z' },
-          'Puppy'
+          'Order'
         )
       ).toBe(true);
       expect(
@@ -258,7 +258,7 @@ describe('TogglyProvider', () => {
           'EntityGated',
           false,
           { id: '8', birthDate: '2020-01-01T00:00:00Z' },
-          'Puppy'
+          'Order'
         )
       ).toBe(false);
     });

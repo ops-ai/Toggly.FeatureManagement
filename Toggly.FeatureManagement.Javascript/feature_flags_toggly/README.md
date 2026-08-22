@@ -282,19 +282,19 @@ const performanceHook = {
 
 ## Entity context
 
-Target features by **page entity** (order, product, puppy) in addition to user rollouts. Pass the entity on each `isFeatureOn` / `evaluateFeatureGate` call — not on global user identity.
+Target features by **page entity** (order, product, account) in addition to user rollouts. Pass the entity on each `isFeatureOn` / `evaluateFeatureGate` call — not on global user identity.
 
 ```js
-Toggly.registerContext('Puppy', function (puppy) {
+Toggly.registerContext('Order', function (order) {
   return {
-    kind: 'Puppy',
-    key: String(puppy.id),
-    attributes: { Color: puppy.color },
+    kind: 'Order',
+    key: String(order.id),
+    attributes: { Status: order.status },
   };
 });
 
-if (Toggly.isFeatureOn('PuppyBadge', puppy, 'Puppy')) {
-  // enabled for this puppy instance
+if (Toggly.isFeatureOn('OrderBadge', order, 'Order')) {
+  // enabled for this order
 }
 ```
 

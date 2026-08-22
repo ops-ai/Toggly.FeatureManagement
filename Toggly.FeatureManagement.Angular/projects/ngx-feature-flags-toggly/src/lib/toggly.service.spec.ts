@@ -863,16 +863,16 @@ describe('TogglyService', () => {
         })],
       });
       const service = TestBed.inject(TogglyService);
-      const puppy = { BirthDate: '2026-06-15T00:00:00Z' };
-      expect(await service.isFeatureOn('ShowBadge', puppy, 'Puppy')).toBe(false);
+      const order = { BirthDate: '2026-06-15T00:00:00Z' };
+      expect(await service.isFeatureOn('ShowBadge', order, 'Order')).toBe(false);
 
-      service.registerContext('Puppy', (entity: { BirthDate: string }) => ({
-        kind: 'Puppy',
+      service.registerContext('Order', (entity: { BirthDate: string }) => ({
+        kind: 'Order',
         key: '1',
         attributes: { BirthDate: entity.BirthDate },
       }));
-      expect(await service.isFeatureOn('ShowBadge', puppy, 'Puppy')).toBe(true);
-      expect(await service.evaluateFeatureGate(['ShowBadge'], 'all', false, puppy, 'Puppy')).toBe(true);
+      expect(await service.isFeatureOn('ShowBadge', order, 'Order')).toBe(true);
+      expect(await service.evaluateFeatureGate(['ShowBadge'], 'all', false, order, 'Order')).toBe(true);
     });
 
     it('should preserve EntityGate objects from evaluated-signed response', async () => {
@@ -895,8 +895,8 @@ describe('TogglyService', () => {
         })],
       });
       const service = TestBed.inject(TogglyService);
-      service.registerContext('Puppy', (entity: { id: string; birthDate: string }) => ({
-        kind: 'Puppy',
+      service.registerContext('Order', (entity: { id: string; birthDate: string }) => ({
+        kind: 'Order',
         key: entity.id,
         attributes: { BirthDate: entity.birthDate },
       }));
@@ -906,7 +906,7 @@ describe('TogglyService', () => {
       expect(await service.isFeatureOn(
         'ShowBadge',
         { id: 'p1', birthDate: '2026-06-15T00:00:00Z' },
-        'Puppy',
+        'Order',
       )).toBe(true);
       expect(fetchSpy).toHaveBeenCalled();
     });
@@ -924,14 +924,14 @@ describe('TogglyService', () => {
         })],
       });
       const service = TestBed.inject(TogglyService);
-      service.registerContext('Puppy', (entity: { birthDate: string }) => ({
-        kind: 'Puppy',
+      service.registerContext('Order', (entity: { birthDate: string }) => ({
+        kind: 'Order',
         key: '1',
         attributes: { BirthDate: entity.birthDate },
       }));
 
       expect(await service.isFeatureOn('ShowBadge')).toBe(false);
-      expect(await service.isFeatureOn('ShowBadge', { birthDate: '2026-06-15T00:00:00Z' }, 'Puppy')).toBe(true);
+      expect(await service.isFeatureOn('ShowBadge', { birthDate: '2026-06-15T00:00:00Z' }, 'Order')).toBe(true);
     });
   });
 

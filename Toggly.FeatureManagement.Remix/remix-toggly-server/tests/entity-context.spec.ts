@@ -23,8 +23,8 @@ const datetimeGate: EntityGate = {
   rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' }],
 };
 
-const puppyContext = {
-  kind: 'Puppy',
+const orderContext = {
+  kind: 'Order',
   key: '1',
   attributes: { BirthDate: '2026-06-15T00:00:00Z' },
 };
@@ -72,8 +72,8 @@ describe('entity context evaluation', () => {
   it('evaluates an entity gate against a supplied context', async () => {
     const client = await createClient();
 
-    expect(await client.isEnabled('EntityGated', undefined, false, puppyContext)).toBe(true);
-    expect(await client.isDisabled('EntityGated', undefined, true, puppyContext)).toBe(false);
+    expect(await client.isEnabled('EntityGated', undefined, false, orderContext)).toBe(true);
+    expect(await client.isDisabled('EntityGated', undefined, true, orderContext)).toBe(false);
 
     client.close();
   });
@@ -81,10 +81,10 @@ describe('entity context evaluation', () => {
   it('maps a domain object through a registered context mapper', async () => {
     const client = await createClient();
 
-    client.registerContext<{ id: string; birthDate: string }>('Puppy', (puppy) => ({
-      kind: 'Puppy',
-      key: puppy.id,
-      attributes: { BirthDate: puppy.birthDate },
+    client.registerContext<{ id: string; birthDate: string }>('Order', (order) => ({
+      kind: 'Order',
+      key: order.id,
+      attributes: { BirthDate: order.birthDate },
     }));
 
     expect(
@@ -93,7 +93,7 @@ describe('entity context evaluation', () => {
         undefined,
         false,
         { id: '7', birthDate: '2026-06-15T00:00:00Z' },
-        'Puppy',
+        'Order',
       ),
     ).toBe(true);
     expect(
@@ -102,7 +102,7 @@ describe('entity context evaluation', () => {
         undefined,
         false,
         { id: '8', birthDate: '2020-01-01T00:00:00Z' },
-        'Puppy',
+        'Order',
       ),
     ).toBe(false);
 
@@ -122,11 +122,11 @@ describe('entity context evaluation', () => {
     const client = await createClient();
 
     expect(
-      await client.evaluateGate(['PlainOn', 'EntityGated'], 'all', false, false, puppyContext),
+      await client.evaluateGate(['PlainOn', 'EntityGated'], 'all', false, false, orderContext),
     ).toBe(true);
     expect(await client.evaluateGate(['PlainOn', 'EntityGated'], 'all')).toBe(false);
     expect(
-      await client.evaluateGate(['PlainOff', 'EntityGated'], 'any', false, false, puppyContext),
+      await client.evaluateGate(['PlainOff', 'EntityGated'], 'any', false, false, orderContext),
     ).toBe(true);
     expect(await client.evaluateGate(['PlainOff', 'EntityGated'], 'any')).toBe(false);
 

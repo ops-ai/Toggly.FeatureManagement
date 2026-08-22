@@ -228,7 +228,7 @@ describe('FeatureFlagDirective', () => {
 class ContextDirectiveHostComponent {
   flag = 'ShowBadge';
   context: { BirthDate: string } | null = { BirthDate: '2026-06-15T00:00:00Z' };
-  kind = 'Puppy';
+  kind = 'Order';
 }
 
 describe('FeatureFlagDirective entity context', () => {
@@ -262,8 +262,8 @@ describe('FeatureFlagDirective entity context', () => {
     expect(fixture.nativeElement.querySelector('.badge')).toBeNull();
 
     const service = TestBed.inject(TogglyService);
-    service.registerContext('Puppy', (entity: { BirthDate: string }) => ({
-      kind: 'Puppy',
+    service.registerContext('Order', (entity: { BirthDate: string }) => ({
+      kind: 'Order',
       key: '1',
       attributes: { BirthDate: entity.BirthDate },
     }));
