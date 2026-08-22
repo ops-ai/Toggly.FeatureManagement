@@ -3,7 +3,12 @@
 use crate::context::TogglyEntityContext;
 use crate::config::TogglyConfig;
 use serde::Serialize;
-use std::sync::{Mutex, OnceLock};
+use std::any::Any;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
+
+/// Maps a domain object to [`TogglyEntityContext`].
+pub type EntityContextMapper = Arc<dyn Fn(&dyn Any) -> TogglyEntityContext + Send + Sync>;
 
 /// Property schema posted to the dashboard catalog.
 #[derive(Clone, Serialize)]
@@ -31,9 +36,14 @@ pub struct EntityContextSchemaRegistration {
 }
 
 static SCHEMAS: OnceLock<Mutex<Vec<EntityContextSchemaRegistration>>> = OnceLock::new();
+static MAPPERS: OnceLock<Mutex<HashMap<String, EntityContextMapper>>> = OnceLock::new();
 
 fn schemas() -> &'static Mutex<Vec<EntityContextSchemaRegistration>> {
     SCHEMAS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn mappers() -> &'static Mutex<HashMap<String, EntityContextMapper>> {
+    MAPPERS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 /// Store a schema for the startup catalog PUT.
@@ -42,6 +52,34 @@ pub fn register_context_schema(registration: EntityContextSchemaRegistration) {
         guard.retain(|s| s.kind != registration.kind);
         guard.push(registration);
     }
+}
+
+/// Register a local mapper from a domain object to `{kind, key, attributes}`.
+///
+/// Optional `schema` is stored for the startup catalog PUT.
+pub fn register_context(
+    kind: impl Into<String>,
+    mapper: impl Fn(&dyn Any) -> TogglyEntityContext + Send + Sync + 'static,
+    schema: Option<EntityContextSchemaRegistration>,
+) {
+    let kind = kind.into();
+    if let Ok(mut guard) = mappers().lock() {
+        guard.insert(kind.clone(), Arc::new(mapper));
+    }
+    if let Some(mut registration) = schema {
+        registration.kind = kind.clone();
+        if registration.display_name.is_none() {
+            registration.display_name = Some(kind);
+        }
+        register_context_schema(registration);
+    }
+}
+
+/// Resolve a domain object through the mapper registered for `kind`.
+pub fn map_entity(kind: &str, entity: &dyn Any) -> Option<TogglyEntityContext> {
+    let guard = mappers().lock().ok()?;
+    let mapper = guard.get(kind)?;
+    Some(mapper(entity))
 }
 
 /// Best-effort PUT of registered schemas. Transport errors are ignored.
@@ -72,10 +110,72 @@ pub async fn register_entity_contexts_at_startup(config: &TogglyConfig) {
 }
 
 /// Placeholder so callers can map domain objects into [`TogglyEntityContext`].
-pub fn map_passthrough(kind: impl Into<String>, key: impl Into<String>, attributes: std::collections::HashMap<String, serde_json::Value>) -> TogglyEntityContext {
+pub fn map_passthrough(kind: impl Into<String>, key: impl Into<String>, attributes: HashMap<String, serde_json::Value>) -> TogglyEntityContext {
     TogglyEntityContext {
         kind: kind.into(),
         key: key.into(),
         attributes,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Puppy {
+        id: String,
+        color: String,
+        age: i32,
+    }
+
+    #[test]
+    fn register_context_maps_entity_object() {
+        register_context(
+            "Puppy",
+            |obj| {
+                let puppy = obj.downcast_ref::<Puppy>().expect("Puppy");
+                let mut attributes = HashMap::new();
+                attributes.insert("color".to_string(), serde_json::json!(puppy.color));
+                attributes.insert("age".to_string(), serde_json::json!(puppy.age));
+                TogglyEntityContext {
+                    kind: "Puppy".to_string(),
+                    key: puppy.id.clone(),
+                    attributes,
+                }
+            },
+            Some(EntityContextSchemaRegistration {
+                kind: String::new(),
+                key_property: "id".to_string(),
+                display_name: None,
+                properties: vec![EntityContextPropertySchema {
+                    name: "color".to_string(),
+                    type_name: "string".to_string(),
+                }],
+            }),
+        );
+
+        let puppy = Puppy {
+            id: "p1".to_string(),
+            color: "red".to_string(),
+            age: 3,
+        };
+        let mapped = map_entity("Puppy", &puppy).expect("mapper registered");
+        assert_eq!(mapped.kind, "Puppy");
+        assert_eq!(mapped.key, "p1");
+        assert_eq!(mapped.attributes.get("color").unwrap(), "red");
+        assert_eq!(mapped.attributes.get("age").unwrap(), 3);
+
+        let schemas = schemas().lock().unwrap();
+        assert!(schemas.iter().any(|s| s.kind == "Puppy" && s.key_property == "id"));
+        assert!(map_entity("UnknownKind", &puppy).is_none());
+    }
+
+    #[test]
+    fn map_passthrough_builds_entity_context() {
+        let mut attributes = HashMap::new();
+        attributes.insert("plan".to_string(), serde_json::json!("pro"));
+        let ctx = map_passthrough("Account", "a1", attributes);
+        assert_eq!(ctx.kind, "Account");
+        assert_eq!(ctx.key, "a1");
     }
 }

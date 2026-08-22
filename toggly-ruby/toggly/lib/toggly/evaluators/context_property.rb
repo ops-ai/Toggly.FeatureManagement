@@ -66,7 +66,11 @@ module Toggly
           e = Time.parse(expected.to_s)
           cmp = a <=> e
         elsif value_type == "number"
-          cmp = actual.to_f <=> expected.to_f
+          a = parse_number(actual)
+          e = parse_number(expected)
+          return false if a.nil? || e.nil?
+
+          cmp = a <=> e
         else
           return false
         end
@@ -77,8 +81,18 @@ module Toggly
         when "lte" then cmp <= 0
         else false
         end
-      rescue ArgumentError
+      rescue ArgumentError, TypeError
         false
+      end
+
+      # Strict numeric parse. Invalid strings must not coerce to 0.0.
+      def self.parse_number(value)
+        n = Float(value)
+        return nil unless n.finite?
+
+        n
+      rescue ArgumentError, TypeError
+        nil
       end
     end
   end

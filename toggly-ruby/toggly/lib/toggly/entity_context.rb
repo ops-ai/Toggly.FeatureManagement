@@ -43,8 +43,22 @@ module Toggly
       end
     end
 
+    def map_entity(kind, entity)
+      mapper = @entity_mutex.synchronize { @entity_mappers[kind] }
+      return nil unless mapper
+
+      mapper.call(entity)
+    end
+
     def entity_schemas
       @entity_mutex.synchronize { @entity_schemas.values.dup }
+    end
+
+    def clear_entity_context_registrations
+      @entity_mutex.synchronize do
+        @entity_mappers.clear
+        @entity_schemas.clear
+      end
     end
 
     def register_entity_contexts_at_startup(config)

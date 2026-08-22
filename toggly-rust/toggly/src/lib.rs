@@ -110,7 +110,8 @@ pub use client::TogglyClient;
 pub use config::{OnErrorCallback, TogglyConfig, TogglyConfigBuilder};
 pub use context::{EvalContext, EvalContextBuilder, TogglyEntityContext};
 pub use entity_context::{
-    register_context_schema, EntityContextPropertySchema, EntityContextSchemaRegistration,
+    map_entity, register_context, register_context_schema, EntityContextMapper,
+    EntityContextPropertySchema, EntityContextSchemaRegistration,
 };
 pub use error::Error;
 

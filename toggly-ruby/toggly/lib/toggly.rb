@@ -91,6 +91,7 @@ module Toggly
     def reset!
       @client&.close
       @client = nil
+      clear_entity_context_registrations if respond_to?(:clear_entity_context_registrations)
     end
   end
 end
