@@ -17,7 +17,7 @@ npm install @ops-ai/nextjs-toggly-edge
 
 Edge middleware has no per-request entity. Mixed `boolean | EntityGate` definitions are collapsed with `toBooleanDefinitions()` **without** entity context, so gated flags evaluate to `false` in middleware.
 
-Evaluate entity gates in Node/server or client code (`@ops-ai/nextjs-toggly-core`) where you can pass per-eval context. See [Entity & page context](https://github.com/ops-ai/toggly_docs/blob/develop/docs/01-core-concepts/entity-context.mdx).
+Evaluate entity gates in Node/server or client code (`@ops-ai/nextjs-toggly-core`) where you can pass per-eval context. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
 
 ## License
 

@@ -298,7 +298,7 @@ if (Toggly.isFeatureOn('OrderBadge', order, 'Order')) {
 }
 ```
 
-Evaluated-signed defs may be `boolean | EntityGate`. Use `isFeatureOn` (not `=== true`) so gate objects resolve offline. See [Entity & page context](https://github.com/ops-ai/toggly_docs/blob/develop/docs/01-core-concepts/entity-context.mdx).
+Evaluated-signed defs may be `boolean | EntityGate`. Use `isFeatureOn` (not `=== true`) so gate objects resolve offline. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
 
 ## Find out more about Toggly.io
 

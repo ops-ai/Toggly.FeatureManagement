@@ -611,7 +611,7 @@ const debugHook: Hook = {
 
 Pass the page entity on each `getFlag` / `evaluateGate` call. User identity is separate from entity context. Register mappers with `registerContext` locally — this client does not PUT entity schemas.
 
-Entity gates fail closed without context. Edge and middleware paths that flatten defs to booleans collapse gated flags to `false`. See [Entity & page context](https://github.com/ops-ai/toggly_docs/blob/develop/docs/01-core-concepts/entity-context.mdx).
+Entity gates fail closed without context. Edge and middleware paths that flatten defs to booleans collapse gated flags to `false`. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
 
 ```ts
 toggly.registerContext('Product', (product) => ({

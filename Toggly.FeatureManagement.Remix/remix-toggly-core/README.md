@@ -17,7 +17,7 @@ npm install @ops-ai/remix-toggly-core
 
 `isFeatureEnabled` / gate helpers accept optional entity context. User identity (`IdentityContext`) is separate from page-entity context. Register mappers with `registerContext` locally — this client does not PUT entity schemas.
 
-Entity gates fail closed without context. See [Entity & page context](https://github.com/ops-ai/toggly_docs/blob/develop/docs/01-core-concepts/entity-context.mdx).
+Entity gates fail closed without context. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
 
 ```ts
 registerContext('Puppy', (puppy) => ({

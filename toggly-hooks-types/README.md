@@ -51,7 +51,7 @@ Shared types and evaluation: `EntityGate`, `TogglyEntityContext`, `applyEntityGa
 
 Pass entity context **per evaluation**. Missing attributes and missing context fail closed. Browser clients register mappers only; they do not PUT schemas.
 
-See [Entity & page context](https://github.com/ops-ai/toggly_docs/blob/develop/docs/01-core-concepts/entity-context.mdx).
+See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
 
 ## License
 
