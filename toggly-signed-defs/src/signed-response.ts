@@ -190,6 +190,29 @@ function revisionFromResponse(response: Response): string | null {
   return headers.get(DEFINITIONS_REVISION_HEADER) ?? headers.get('ETag')
 }
 
+function asHeaderRecord(init?: HeadersInit): Record<string, string> {
+  if (!init) {
+    return {}
+  }
+  if (Array.isArray(init)) {
+    return Object.fromEntries(init)
+  }
+  if (typeof (init as Headers).forEach === 'function') {
+    const record: Record<string, string> = {}
+    ;(init as Headers).forEach((value, key) => {
+      record[key] = value
+    })
+    return record
+  }
+  const record: Record<string, string> = {}
+  for (const [key, value] of Object.entries(init as Record<string, unknown>)) {
+    if (typeof value === 'string') {
+      record[key] = value
+    }
+  }
+  return record
+}
+
 /**
  * Fetch evaluated-signed defs, honor If-None-Match / 304, and parse through the JWKS cache.
  */
@@ -200,9 +223,9 @@ export async function fetchEvaluatedSignedDefinitions(
   request: { revision?: string | null; headers?: HeadersInit } = {}
 ): Promise<EvaluatedSignedFetchResult> {
   const fetchImpl = config.fetchImpl ?? fetch
-  const headers = new Headers(request.headers)
+  const headers = asHeaderRecord(request.headers)
   if (request.revision) {
-    headers.set('If-None-Match', request.revision)
+    headers['If-None-Match'] = request.revision
   }
   const response = await fetchImpl(url, { headers })
   const revision = revisionFromResponse(response)

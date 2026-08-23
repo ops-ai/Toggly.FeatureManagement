@@ -183,7 +183,10 @@ describe('fetchEvaluatedSignedDefinitions', () => {
       { revision: 'rev-0' }
     )
     expect(result).toEqual({ notModified: true, revision: '"rev-1"' })
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://example.test/evaluated-signed/app/Production',
+      { headers: { 'If-None-Match': 'rev-0' } }
+    )
   })
 
   it('parses defs and returns the revision header', async () => {
