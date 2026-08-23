@@ -46,7 +46,7 @@ import {
   type WsSyncMessage,
 } from './ws-sync'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
-import { InMemoryJwksCache, readAndParseEvaluatedResponse, signedDefsClientOptions } from '@ops-ai/toggly-signed-defs'
+import { InMemoryJwksCache, readAndParseEvaluatedResponseCached } from '@ops-ai/toggly-signed-defs'
 
 const CACHE_PREFIX_FLAGS = 'toggly:flags:'
 const CACHE_PREFIX_VARIANTS = 'toggly:variants:'
@@ -537,18 +537,14 @@ export class TogglyService implements ITogglyService, OnDestroy {
       if (!response.ok) {
         throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
       }
-      const raw = await readAndParseEvaluatedResponse(
+      const raw = await readAndParseEvaluatedResponseCached(
         response,
-        signedDefsClientOptions(
-          {
-            verifySignatures: this._config.verifySignatures,
-            baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
-            allowedKeyIds: this._config.allowedKeyIds,
-            maxSignatureAgeSeconds: this._config.maxSignatureAgeSeconds,
-            headers: buildDefinitionFetchHeaders(),
-          },
-          this._jwks,
-        ),
+        this._jwks,
+        {
+          ...this._config,
+          baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
+        },
+        buildDefinitionFetchHeaders(),
       )
 
       this._lastFallbackRefresh = Date.now()

@@ -40,8 +40,21 @@ export declare class InMemoryJwksCache {
  * Unsigned payloads may be `{ defs }` or a bare map; signed payloads are verified first.
  */
 export declare function readAndParseEvaluatedResponse(response: Response, options: VerifySignatureOptions): Promise<unknown>;
+/**
+ * Parse an evaluated-signed response using an in-memory JWKS cache.
+ * Client SDKs pass their existing config object plus optional fetch headers.
+ */
+export declare function readAndParseEvaluatedResponseCached(response: Response, jwks: InMemoryJwksCache, config: {
+    verifySignatures?: boolean;
+    baseURI?: string;
+    baseUri?: string;
+    baseUrl?: string;
+    allowedKeyIds?: string[];
+    maxSignatureAgeSeconds?: number | null;
+    fetchImpl?: typeof fetch;
+}, headers?: HeadersInit): Promise<unknown>;
 /** Build parse options that reuse an in-memory JWKS cache. */
-export declare function signedDefsClientOptions(config: Omit<Pick<VerifySignatureOptions, 'verifySignatures' | 'baseURI' | 'baseUri' | 'allowedKeyIds' | 'maxSignatureAgeSeconds' | 'headers' | 'fetchImpl'>, 'maxSignatureAgeSeconds'> & {
+export declare function signedDefsClientOptions(config: Omit<Pick<VerifySignatureOptions, 'verifySignatures' | 'baseURI' | 'baseUri' | 'baseUrl' | 'allowedKeyIds' | 'maxSignatureAgeSeconds' | 'headers' | 'fetchImpl'>, 'maxSignatureAgeSeconds'> & {
     maxSignatureAgeSeconds?: number | null;
 }, jwks: InMemoryJwksCache): VerifySignatureOptions;
 /** Unwrap `{ defs }` when present; otherwise treat payload as the defs map. */

@@ -76,9 +76,24 @@ export async function readAndParseEvaluatedResponse(response, options) {
     const parsed = await parseEvaluatedResponseBody(await readResponseBody(response), options);
     return options.verifySignatures ? parsed : unwrapDefsPayload(parsed);
 }
+/**
+ * Parse an evaluated-signed response using an in-memory JWKS cache.
+ * Client SDKs pass their existing config object plus optional fetch headers.
+ */
+export async function readAndParseEvaluatedResponseCached(response, jwks, config, headers) {
+    return readAndParseEvaluatedResponse(response, signedDefsClientOptions({
+        verifySignatures: config.verifySignatures,
+        baseURI: config.baseURI,
+        baseUri: config.baseUri ?? config.baseUrl,
+        allowedKeyIds: config.allowedKeyIds,
+        maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
+        headers,
+        fetchImpl: config.fetchImpl,
+    }, jwks));
+}
 /** Build parse options that reuse an in-memory JWKS cache. */
 export function signedDefsClientOptions(config, jwks) {
-    const baseURI = config.baseURI ?? config.baseUri;
+    const baseURI = config.baseURI ?? config.baseUri ?? config.baseUrl;
     return {
         ...config,
         baseURI,

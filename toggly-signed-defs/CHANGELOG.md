@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.1
+
+2026-08-23
+
+### Added
+- `readAndParseEvaluatedResponseCached` so client SDKs can parse evaluated
+  responses through the shared JWKS cache without duplicating option wiring.
+
 ## 1.2.0
 
 2026-08-21

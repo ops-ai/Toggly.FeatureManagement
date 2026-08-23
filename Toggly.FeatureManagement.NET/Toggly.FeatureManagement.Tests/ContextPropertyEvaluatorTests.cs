@@ -169,7 +169,7 @@ public class ContextPropertyEvaluatorTests
             CreateDefinition(RequirementType.All, Filter("Color", "in", "red, blue", "string")),
             Entity("Color", "BLUE")).Should().BeTrue();
         ContextPropertyEvaluator.EvaluateEntityFilters(
-            CreateDefinition(RequirementType.All, Filter("Name", "contains", "pup", "string")),
+            CreateDefinition(RequirementType.All, Filter("Name", "contains", "ord", "string")),
             Entity("Name", "Order")).Should().BeTrue();
         ContextPropertyEvaluator.EvaluateEntityFilters(
             CreateDefinition(RequirementType.All, Filter("Tags", "contains", "beta", "string[]")),

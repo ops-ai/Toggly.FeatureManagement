@@ -14,6 +14,7 @@ export type { VerifySignatureOptions } from './signed-response'
 export {
   InMemoryJwksCache,
   readAndParseEvaluatedResponse,
+  readAndParseEvaluatedResponseCached,
   signedDefsClientOptions,
   readResponseBody,
   parseEvaluatedResponseBody,

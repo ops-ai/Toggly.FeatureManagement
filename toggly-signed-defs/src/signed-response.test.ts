@@ -3,6 +3,7 @@ import {
   InMemoryJwksCache,
   parseEvaluatedResponseBody,
   readAndParseEvaluatedResponse,
+  readAndParseEvaluatedResponseCached,
   signedDefsClientOptions,
   unwrapDefsPayload,
 } from './signed-response'
@@ -148,5 +149,16 @@ describe('signedDefsClientOptions', () => {
       new InMemoryJwksCache()
     )
     expect(options.maxSignatureAgeSeconds).toBe(120)
+  })
+})
+
+describe('readAndParseEvaluatedResponseCached', () => {
+  it('parses a response through the cached helper using a host config object', async () => {
+    const result = await readAndParseEvaluatedResponseCached(
+      jsonResponse({ defs: { On: true } }),
+      new InMemoryJwksCache(),
+      { verifySignatures: false, baseURI: 'https://example.test' }
+    )
+    expect(result).toEqual({ On: true })
   })
 })

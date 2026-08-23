@@ -131,6 +131,41 @@ export async function readAndParseEvaluatedResponse(
   return options.verifySignatures ? parsed : unwrapDefsPayload(parsed)
 }
 
+/**
+ * Parse an evaluated-signed response using an in-memory JWKS cache.
+ * Client SDKs pass their existing config object plus optional fetch headers.
+ */
+export async function readAndParseEvaluatedResponseCached(
+  response: Response,
+  jwks: InMemoryJwksCache,
+  config: {
+    verifySignatures?: boolean
+    baseURI?: string
+    baseUri?: string
+    baseUrl?: string
+    allowedKeyIds?: string[]
+    maxSignatureAgeSeconds?: number | null
+    fetchImpl?: typeof fetch
+  },
+  headers?: HeadersInit
+): Promise<unknown> {
+  return readAndParseEvaluatedResponse(
+    response,
+    signedDefsClientOptions(
+      {
+        verifySignatures: config.verifySignatures,
+        baseURI: config.baseURI,
+        baseUri: config.baseUri ?? config.baseUrl,
+        allowedKeyIds: config.allowedKeyIds,
+        maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
+        headers,
+        fetchImpl: config.fetchImpl,
+      },
+      jwks
+    )
+  )
+}
+
 /** Build parse options that reuse an in-memory JWKS cache. */
 export function signedDefsClientOptions(
   config: Omit<
@@ -139,6 +174,7 @@ export function signedDefsClientOptions(
       | 'verifySignatures'
       | 'baseURI'
       | 'baseUri'
+      | 'baseUrl'
       | 'allowedKeyIds'
       | 'maxSignatureAgeSeconds'
       | 'headers'
@@ -148,7 +184,7 @@ export function signedDefsClientOptions(
   > & { maxSignatureAgeSeconds?: number | null },
   jwks: InMemoryJwksCache
 ): VerifySignatureOptions {
-  const baseURI = config.baseURI ?? config.baseUri
+  const baseURI = config.baseURI ?? config.baseUri ?? config.baseUrl
   return {
     ...config,
     baseURI,

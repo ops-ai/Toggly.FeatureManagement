@@ -39,7 +39,7 @@ import {
   type WsSyncMessage,
 } from '../utils/ws-sync';
 import { buildDefinitionFetchHeaders } from '../utils/sdk-identity'
-import { InMemoryJwksCache, readAndParseEvaluatedResponse, signedDefsClientOptions } from '@ops-ai/toggly-signed-defs'
+import { InMemoryJwksCache, readAndParseEvaluatedResponseCached } from '@ops-ai/toggly-signed-defs'
 
 export type { EvaluatedVariantDef, VariantResult } from '../variant.types';
 export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
@@ -574,18 +574,11 @@ export class Toggly implements TogglyService {
       if (!response.ok) {
         throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
       }
-      const parsedDefs = await readAndParseEvaluatedResponse(
+      const parsedDefs = await readAndParseEvaluatedResponseCached(
         response,
-        signedDefsClientOptions(
-          {
-            verifySignatures: this._config.verifySignatures,
-            baseURI: this._config.baseURI,
-            allowedKeyIds: this._config.allowedKeyIds,
-            maxSignatureAgeSeconds: this._config.maxSignatureAgeSeconds,
-            headers: buildDefinitionFetchHeaders(),
-          },
-          this._jwks,
-        ),
+        this._jwks,
+        this._config,
+        buildDefinitionFetchHeaders(),
       )
 
       if (this._config.enableVariants) {

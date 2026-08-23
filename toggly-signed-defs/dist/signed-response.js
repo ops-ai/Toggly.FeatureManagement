@@ -8,6 +8,7 @@ exports.InMemoryJwksCache = void 0;
 exports.readResponseBody = readResponseBody;
 exports.parseEvaluatedResponseBody = parseEvaluatedResponseBody;
 exports.readAndParseEvaluatedResponse = readAndParseEvaluatedResponse;
+exports.readAndParseEvaluatedResponseCached = readAndParseEvaluatedResponseCached;
 exports.signedDefsClientOptions = signedDefsClientOptions;
 exports.unwrapDefsPayload = unwrapDefsPayload;
 const signed_defs_verify_1 = require("./signed-defs-verify");
@@ -85,9 +86,24 @@ async function readAndParseEvaluatedResponse(response, options) {
     const parsed = await parseEvaluatedResponseBody(await readResponseBody(response), options);
     return options.verifySignatures ? parsed : unwrapDefsPayload(parsed);
 }
+/**
+ * Parse an evaluated-signed response using an in-memory JWKS cache.
+ * Client SDKs pass their existing config object plus optional fetch headers.
+ */
+async function readAndParseEvaluatedResponseCached(response, jwks, config, headers) {
+    return readAndParseEvaluatedResponse(response, signedDefsClientOptions({
+        verifySignatures: config.verifySignatures,
+        baseURI: config.baseURI,
+        baseUri: config.baseUri ?? config.baseUrl,
+        allowedKeyIds: config.allowedKeyIds,
+        maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
+        headers,
+        fetchImpl: config.fetchImpl,
+    }, jwks));
+}
 /** Build parse options that reuse an in-memory JWKS cache. */
 function signedDefsClientOptions(config, jwks) {
-    const baseURI = config.baseURI ?? config.baseUri;
+    const baseURI = config.baseURI ?? config.baseUri ?? config.baseUrl;
     return {
         ...config,
         baseURI,
