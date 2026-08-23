@@ -43,4 +43,37 @@ describe('FeatureGateBuilder', () => {
       expect(getByTestId('state').textContent).toBe('off')
     })
   })
+
+  it('treats an empty gate as enabled unless negated', async () => {
+    const { getByTestId } = render(FeatureGateBuilderHost, {
+      props: { negate: false },
+    })
+
+    await waitFor(() => {
+      expect(getByTestId('state').textContent).toBe('on')
+    })
+  })
+
+  it('evaluates featureKeys as a combined gate', async () => {
+    const { getByTestId } = render(FeatureGateBuilderHost, {
+      props: { featureKeys: ['Enabled', 'Disabled'], requirement: 'any' },
+    })
+
+    await waitFor(() => {
+      expect(getByTestId('state').textContent).toBe('on')
+    })
+  })
+
+  it('fails closed when evaluation throws', async () => {
+    service.evaluateFeatureGate = async () => {
+      throw new Error('Evaluation error')
+    }
+    const { getByTestId } = render(FeatureGateBuilderHost, {
+      props: { featureKey: 'Enabled' },
+    })
+
+    await waitFor(() => {
+      expect(getByTestId('state').textContent).toBe('off')
+    })
+  })
 })

@@ -257,6 +257,38 @@ describe('Toggly Service', () => {
       await toggly.refreshFlags();
       expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
+
+    it('persists variants and notifies listeners on refreshFlags', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve({
+            defs: { V: { enabled: true, variant: 'A' } },
+          }),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({ defs: { V: { enabled: true, variant: 'A' } } }),
+          ),
+      } as Response);
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const onFlagsUpdated = vi.fn();
+      const onVariantsUpdated = vi.fn();
+      const toggly = new Toggly({
+        appKey: 'rf-variants',
+        environment: 'Production',
+        enableVariants: true,
+      });
+      toggly.onFlagsUpdated = onFlagsUpdated;
+      toggly.onVariantsUpdated = onVariantsUpdated;
+      await toggly.refreshFlags();
+      expect(onFlagsUpdated).toHaveBeenCalled();
+      expect(onVariantsUpdated).toHaveBeenCalledWith(
+        expect.objectContaining({ V: expect.objectContaining({ variant: 'A' }) }),
+      );
+      expect(localStorage.getItem('toggly:variants:rf-variants:Production')).toBeTruthy();
+    });
   });
 
   // ─── Variants (enableVariants) ──────────────────────────
@@ -359,6 +391,82 @@ describe('Toggly Service', () => {
       expect(toggly.getVariant('F')).toBeNull();
       expect(toggly.getVariantValue('F')).toBeNull();
       expect(toggly.getVariantDefinitions()).toBeNull();
+    });
+
+    it('getVariant returns null when variants are enabled but not loaded', () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const toggly = new Toggly({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+      });
+      expect(toggly.getVariant('V')).toBeNull();
+    });
+
+    it('uses featureDefaults when variants fetch fails and cache is empty', async () => {
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network'));
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const toggly = new Toggly({
+        appKey: 'empty-cache',
+        environment: 'Production',
+        enableVariants: true,
+        featureDefaults: { Fallback: true },
+      });
+      await toggly._loadFeatures();
+      expect(await toggly.isFeatureOn('Fallback')).toBe(true);
+    });
+
+    it('treats non-object variant defs as empty', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ defs: [] }),
+        text: () => Promise.resolve(JSON.stringify({ defs: [] })),
+      } as Response);
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const toggly = new Toggly({
+        appKey: 'array-defs',
+        environment: 'Production',
+        enableVariants: true,
+      });
+      await toggly._loadFeatures();
+      expect(toggly.getVariant('V')).toBeNull();
+    });
+
+    it('falls back to cached flags when variants cache is missing', async () => {
+      localStorage.setItem(
+        'toggly:flags:flags-only:Production',
+        JSON.stringify({ Fallback: true }),
+      );
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network'));
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const toggly = new Toggly({
+        appKey: 'flags-only',
+        environment: 'Production',
+        enableVariants: true,
+      });
+      await toggly._loadFeatures();
+      expect(await toggly.isFeatureOn('Fallback')).toBe(true);
+    });
+
+    it('skips variant cache when persistCache is false and fetch fails', async () => {
+      localStorage.setItem(
+        'toggly:variants:no-persist:Production',
+        JSON.stringify({ V: { enabled: true, variant: 'cached' } }),
+      );
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network'));
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const toggly = new Toggly({
+        appKey: 'no-persist',
+        environment: 'Production',
+        enableVariants: true,
+        persistCache: false,
+        featureDefaults: { Fallback: true },
+      });
+      await toggly._loadFeatures();
+      expect(toggly.getVariant('V')).toBeNull();
+      expect(await toggly.isFeatureOn('Fallback')).toBe(true);
     });
 
     it('should persist variants under toggly:variants cache key', async () => {
@@ -953,6 +1061,16 @@ describe('Toggly Service', () => {
       s.stopWebSocket();
       expect(ws.closeCalled).toBe(true);
       expect(s._wsConnected).toBe(false);
+    });
+
+    it('should cancel refresh debounce timer on stopWebSocket', () => {
+      vi.useFakeTimers();
+      const s = new Toggly({ appKey: 'k', environment: 'Prod' });
+      s.startWebSocket();
+      mockWsInstances[0].onmessage!({ data: 'update' });
+      expect(s._refreshDebounceTimer).not.toBeNull();
+      s.stopWebSocket();
+      expect(s._refreshDebounceTimer).toBeNull();
     });
 
     it('should cancel reconnect timer on stopWebSocket', () => {
