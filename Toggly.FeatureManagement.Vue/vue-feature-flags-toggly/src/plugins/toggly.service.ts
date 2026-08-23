@@ -548,7 +548,7 @@ export class Toggly implements TogglyService {
 
     try {
       const url = buildEvaluatedSignedUrl(
-        this._config.baseURI,
+        this._config.baseURI ?? 'https://definitions.toggly.io',
         appKey,
         env,
         this._getEvaluationContext(),
