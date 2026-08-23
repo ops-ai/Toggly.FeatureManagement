@@ -91,6 +91,34 @@ export async function readAndParseEvaluatedResponseCached(response, jwks, config
         fetchImpl: config.fetchImpl,
     }, jwks));
 }
+const DEFINITIONS_REVISION_HEADER = 'X-Definitions-Revision';
+function revisionFromResponse(response) {
+    const headers = response.headers;
+    if (!headers || typeof headers.get !== 'function') {
+        return null;
+    }
+    return headers.get(DEFINITIONS_REVISION_HEADER) ?? headers.get('ETag');
+}
+/**
+ * Fetch evaluated-signed defs, honor If-None-Match / 304, and parse through the JWKS cache.
+ */
+export async function fetchEvaluatedSignedDefinitions(url, jwks, config, request = {}) {
+    const fetchImpl = config.fetchImpl ?? fetch;
+    const headers = new Headers(request.headers);
+    if (request.revision) {
+        headers.set('If-None-Match', request.revision);
+    }
+    const response = await fetchImpl(url, { headers });
+    const revision = revisionFromResponse(response);
+    if (response.status === 304) {
+        return { notModified: true, revision };
+    }
+    if (!response.ok) {
+        throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
+    }
+    const defs = await readAndParseEvaluatedResponseCached(response, jwks, config, request.headers);
+    return { notModified: false, defs, revision };
+}
 /** Build parse options that reuse an in-memory JWKS cache. */
 export function signedDefsClientOptions(config, jwks) {
     const baseURI = config.baseURI ?? config.baseUri ?? config.baseUrl;

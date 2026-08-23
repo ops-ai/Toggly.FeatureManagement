@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   InMemoryJwksCache,
+  fetchEvaluatedSignedDefinitions,
   parseEvaluatedResponseBody,
   readAndParseEvaluatedResponse,
   readAndParseEvaluatedResponseCached,
@@ -8,10 +9,19 @@ import {
   unwrapDefsPayload,
 } from './signed-response'
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(
+  body: unknown,
+  status = 200,
+  headerMap: Record<string, string> = {}
+): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
+    statusText: status === 304 ? 'Not Modified' : 'OK',
+    headers: {
+      get: (name: string) =>
+        headerMap[name] ?? headerMap[name.toLowerCase()] ?? null,
+    },
     text: async () => JSON.stringify(body),
     json: async () => body,
   } as Response
@@ -160,5 +170,33 @@ describe('readAndParseEvaluatedResponseCached', () => {
       { verifySignatures: false, baseURI: 'https://example.test' }
     )
     expect(result).toEqual({ On: true })
+  })
+})
+
+describe('fetchEvaluatedSignedDefinitions', () => {
+  it('returns notModified on HTTP 304', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, 304, { ETag: '"rev-1"' }))
+    const result = await fetchEvaluatedSignedDefinitions(
+      'https://example.test/evaluated-signed/app/Production',
+      new InMemoryJwksCache(),
+      { verifySignatures: false, fetchImpl: fetchImpl as unknown as typeof fetch },
+      { revision: 'rev-0' }
+    )
+    expect(result).toEqual({ notModified: true, revision: '"rev-1"' })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('parses defs and returns the revision header', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ defs: { On: true } }, 200, { 'X-Definitions-Revision': 'rev-9' })
+      )
+    const result = await fetchEvaluatedSignedDefinitions(
+      'https://example.test/evaluated-signed/app/Production',
+      new InMemoryJwksCache(),
+      { verifySignatures: false, fetchImpl: fetchImpl as unknown as typeof fetch }
+    )
+    expect(result).toEqual({ notModified: false, defs: { On: true }, revision: 'rev-9' })
   })
 })

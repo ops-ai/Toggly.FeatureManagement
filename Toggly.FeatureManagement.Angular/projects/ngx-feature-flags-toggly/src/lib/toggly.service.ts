@@ -37,7 +37,6 @@ import {
 } from '@ops-ai/toggly-local-gates'
 import {
   buildWebSocketUrl,
-  extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
   shouldFetchOnFlagsUpdated,
@@ -46,7 +45,7 @@ import {
   type WsSyncMessage,
 } from './ws-sync'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
-import { InMemoryJwksCache, readAndParseEvaluatedResponseCached } from '@ops-ai/toggly-signed-defs'
+import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs'
 
 const CACHE_PREFIX_FLAGS = 'toggly:flags:'
 const CACHE_PREFIX_VARIANTS = 'toggly:variants:'
@@ -520,32 +519,26 @@ export class TogglyService implements ITogglyService, OnDestroy {
         url = fetchUrl.toString()
       }
 
-      const revision = this._definitionsRevision
-      const headers: HeadersInit = buildDefinitionFetchHeaders(
-        revision ? { 'If-None-Match': revision } : {},
-      )
-
-      const response = await fetch(url, { headers })
-      const responseRevision = extractDefinitionsRevision(response)
-      if (responseRevision) {
-        this._cacheDefinitionsRevision(responseRevision.replace(/^"+|"+$/g, ''))
-      }
-      if (response.status === 304) {
-        this._lastFallbackRefresh = Date.now()
-        return this._features
-      }
-      if (!response.ok) {
-        throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
-      }
-      const raw = await readAndParseEvaluatedResponseCached(
-        response,
+      const loaded = await fetchEvaluatedSignedDefinitions(
+        url,
         this._jwks,
         {
           ...this._config,
           baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
         },
-        buildDefinitionFetchHeaders(),
+        {
+          revision: this._definitionsRevision,
+          headers: buildDefinitionFetchHeaders(),
+        },
       )
+      if (loaded.revision) {
+        this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
+      }
+      if (loaded.notModified) {
+        this._lastFallbackRefresh = Date.now()
+        return this._features
+      }
+      const raw = loaded.defs
 
       this._lastFallbackRefresh = Date.now()
 

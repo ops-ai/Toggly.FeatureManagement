@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.2
+
+2026-08-23
+
+### Added
+- `fetchEvaluatedSignedDefinitions` to fetch, honor 304/If-None-Match, and parse
+  evaluated-signed defs through the shared JWKS cache.
+
 ## 1.2.1
 
 2026-08-23

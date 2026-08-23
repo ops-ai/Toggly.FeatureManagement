@@ -15,6 +15,7 @@ export {
   InMemoryJwksCache,
   readAndParseEvaluatedResponse,
   readAndParseEvaluatedResponseCached,
+  fetchEvaluatedSignedDefinitions,
   signedDefsClientOptions,
   readResponseBody,
   parseEvaluatedResponseBody,

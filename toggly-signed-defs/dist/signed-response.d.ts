@@ -53,6 +53,30 @@ export declare function readAndParseEvaluatedResponseCached(response: Response, 
     maxSignatureAgeSeconds?: number | null;
     fetchImpl?: typeof fetch;
 }, headers?: HeadersInit): Promise<unknown>;
+export type EvaluatedSignedFetchConfig = {
+    verifySignatures?: boolean;
+    baseURI?: string;
+    baseUri?: string;
+    baseUrl?: string;
+    allowedKeyIds?: string[];
+    maxSignatureAgeSeconds?: number | null;
+    fetchImpl?: typeof fetch;
+};
+export type EvaluatedSignedFetchResult = {
+    notModified: true;
+    revision: string | null;
+} | {
+    notModified: false;
+    defs: unknown;
+    revision: string | null;
+};
+/**
+ * Fetch evaluated-signed defs, honor If-None-Match / 304, and parse through the JWKS cache.
+ */
+export declare function fetchEvaluatedSignedDefinitions(url: string, jwks: InMemoryJwksCache, config: EvaluatedSignedFetchConfig, request?: {
+    revision?: string | null;
+    headers?: HeadersInit;
+}): Promise<EvaluatedSignedFetchResult>;
 /** Build parse options that reuse an in-memory JWKS cache. */
 export declare function signedDefsClientOptions(config: Omit<Pick<VerifySignatureOptions, 'verifySignatures' | 'baseURI' | 'baseUri' | 'baseUrl' | 'allowedKeyIds' | 'maxSignatureAgeSeconds' | 'headers' | 'fetchImpl'>, 'maxSignatureAgeSeconds'> & {
     maxSignatureAgeSeconds?: number | null;

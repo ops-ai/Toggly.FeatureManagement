@@ -9,6 +9,7 @@ exports.readResponseBody = readResponseBody;
 exports.parseEvaluatedResponseBody = parseEvaluatedResponseBody;
 exports.readAndParseEvaluatedResponse = readAndParseEvaluatedResponse;
 exports.readAndParseEvaluatedResponseCached = readAndParseEvaluatedResponseCached;
+exports.fetchEvaluatedSignedDefinitions = fetchEvaluatedSignedDefinitions;
 exports.signedDefsClientOptions = signedDefsClientOptions;
 exports.unwrapDefsPayload = unwrapDefsPayload;
 const signed_defs_verify_1 = require("./signed-defs-verify");
@@ -100,6 +101,34 @@ async function readAndParseEvaluatedResponseCached(response, jwks, config, heade
         headers,
         fetchImpl: config.fetchImpl,
     }, jwks));
+}
+const DEFINITIONS_REVISION_HEADER = 'X-Definitions-Revision';
+function revisionFromResponse(response) {
+    const headers = response.headers;
+    if (!headers || typeof headers.get !== 'function') {
+        return null;
+    }
+    return headers.get(DEFINITIONS_REVISION_HEADER) ?? headers.get('ETag');
+}
+/**
+ * Fetch evaluated-signed defs, honor If-None-Match / 304, and parse through the JWKS cache.
+ */
+async function fetchEvaluatedSignedDefinitions(url, jwks, config, request = {}) {
+    const fetchImpl = config.fetchImpl ?? fetch;
+    const headers = new Headers(request.headers);
+    if (request.revision) {
+        headers.set('If-None-Match', request.revision);
+    }
+    const response = await fetchImpl(url, { headers });
+    const revision = revisionFromResponse(response);
+    if (response.status === 304) {
+        return { notModified: true, revision };
+    }
+    if (!response.ok) {
+        throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
+    }
+    const defs = await readAndParseEvaluatedResponseCached(response, jwks, config, request.headers);
+    return { notModified: false, defs, revision };
 }
 /** Build parse options that reuse an in-memory JWKS cache. */
 function signedDefsClientOptions(config, jwks) {

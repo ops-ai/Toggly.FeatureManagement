@@ -30,7 +30,6 @@ import { HookExecutor } from './hooks';
 import type { EvaluatedVariantDef, VariantResult } from './variant.types';
 import {
   buildWebSocketUrl,
-  extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
   shouldFetchOnFlagsUpdated,
@@ -39,7 +38,7 @@ import {
   type WsSyncMessage,
 } from '../utils/ws-sync';
 import { buildDefinitionFetchHeaders } from '../utils/sdk-identity';
-import { InMemoryJwksCache, readAndParseEvaluatedResponseCached } from '@ops-ai/toggly-signed-defs';
+import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
 
 export type { EvaluatedVariantDef, VariantResult } from './variant.types';
 export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
@@ -552,28 +551,25 @@ export class Toggly implements TogglyService {
         !!this._config.enableVariants,
       )
 
-      const revision = this._definitionsRevision
-      const headers: HeadersInit = buildDefinitionFetchHeaders(
-        revision ? { 'If-None-Match': revision } : {},
+      const loaded = await fetchEvaluatedSignedDefinitions(
+        url,
+        this._jwks,
+        {
+          ...this._config,
+          baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
+        },
+        {
+          revision: this._definitionsRevision,
+          headers: buildDefinitionFetchHeaders(),
+        },
       )
-
-      const response = await fetch(url, { headers })
-      const responseRevision = extractDefinitionsRevision(response)
-      if (responseRevision) {
-        this._cacheDefinitionsRevision(responseRevision.replace(/^"+|"+$/g, ''))
+      if (loaded.revision) {
+        this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
       }
-      if (response.status === 304) {
+      if (loaded.notModified) {
         return this._booleanFeatures()
       }
-      if (!response.ok) {
-        throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
-      }
-      const parsedDefs = await readAndParseEvaluatedResponseCached(
-        response,
-        this._jwks,
-        this._config,
-        buildDefinitionFetchHeaders(),
-      )
+      const parsedDefs = loaded.defs
 
       if (this._config.enableVariants) {
         const defs =
