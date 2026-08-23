@@ -82,6 +82,7 @@ export type {
 export {
   MAX_EVALUATION_CLAIMS,
   appendEvaluationContext,
+  buildEvaluatedSignedUrl,
   evaluationContextCacheKey,
   normalizeEvaluationClaims,
 } from './evaluation-context';

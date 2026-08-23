@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   appendEvaluationContext,
+  buildEvaluatedSignedUrl,
   evaluationContextCacheKey,
   MAX_EVALUATION_CLAIMS,
   normalizeEvaluationClaims,
@@ -101,5 +102,33 @@ describe('evaluationContextCacheKey', () => {
       claims: { a: '2', z: '1' },
     });
     expect(a).toBe(b);
+  });
+});
+
+describe('buildEvaluatedSignedUrl', () => {
+  it('builds an evaluated URL with identity as u', () => {
+    const url = buildEvaluatedSignedUrl(
+      'https://definitions.toggly.io/',
+      'app',
+      'Production',
+      { identity: 'user-1' },
+      false,
+    );
+    expect(url).toBe(
+      'https://definitions.toggly.io/evaluated-signed/app/Production?u=user-1',
+    );
+  });
+
+  it('builds a variants URL with identity as userId', () => {
+    const url = buildEvaluatedSignedUrl(
+      'https://definitions.toggly.io',
+      'app',
+      'Production',
+      { identity: 'user-1' },
+      true,
+    );
+    expect(url).toBe(
+      'https://definitions.toggly.io/evaluated-variants-signed/app/Production?userId=user-1',
+    );
   });
 });

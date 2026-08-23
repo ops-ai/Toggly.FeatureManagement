@@ -6,7 +6,7 @@ import type {
   TogglyEvaluationContext,
 } from '@ops-ai/toggly-hooks-types';
 import {
-  appendEvaluationContext,
+  buildEvaluatedSignedUrl,
   evaluationContextCacheKey,
   isCacheLruEnabled,
   evaluateStoredFeatureKeys,
@@ -544,16 +544,13 @@ export class Toggly implements TogglyService {
     const contextKey = this._contextCacheKey()
 
     try {
-      let url: string
-      if (this._config.enableVariants) {
-        const fetchUrl = new URL(`${this._config.baseURI}/evaluated-variants-signed/${appKey}/${env}`)
-        appendEvaluationContext(fetchUrl, this._getEvaluationContext(), 'variants')
-        url = fetchUrl.toString()
-      } else {
-        const fetchUrl = new URL(`${this._config.baseURI}/evaluated-signed/${appKey}/${env}`)
-        appendEvaluationContext(fetchUrl, this._getEvaluationContext(), 'evaluated')
-        url = fetchUrl.toString()
-      }
+      const url = buildEvaluatedSignedUrl(
+        this._config.baseURI,
+        appKey,
+        env,
+        this._getEvaluationContext(),
+        !!this._config.enableVariants,
+      )
 
       const revision = this._definitionsRevision
       const headers: HeadersInit = buildDefinitionFetchHeaders(

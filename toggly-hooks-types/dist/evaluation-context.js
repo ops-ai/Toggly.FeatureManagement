@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MAX_EVALUATION_CLAIMS = void 0;
 exports.normalizeEvaluationClaims = normalizeEvaluationClaims;
+exports.buildEvaluatedSignedUrl = buildEvaluatedSignedUrl;
 exports.appendEvaluationContext = appendEvaluationContext;
 exports.evaluationContextCacheKey = evaluationContextCacheKey;
 /** Maximum claim entries sent or honored on evaluated-signed requests (worker enforces the same cap). */
@@ -21,6 +22,14 @@ function normalizeEvaluationClaims(claims) {
         return undefined;
     }
     return Object.fromEntries(entries.slice(0, exports.MAX_EVALUATION_CLAIMS));
+}
+/** Build an evaluated-signed (or variants-signed) definitions URL with evaluation context. */
+function buildEvaluatedSignedUrl(baseURI, appKey, environment, context, variants) {
+    const base = baseURI.replace(/\/$/, '');
+    const path = variants ? 'evaluated-variants-signed' : 'evaluated-signed';
+    const url = new URL(`${base}/${path}/${appKey}/${environment}`);
+    appendEvaluationContext(url, context, variants ? 'variants' : 'evaluated');
+    return url.toString();
 }
 /**
  * Append identity, groups, and claims to an evaluated-signed fetch URL.
