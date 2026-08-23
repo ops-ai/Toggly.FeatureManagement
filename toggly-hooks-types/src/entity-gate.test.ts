@@ -190,7 +190,7 @@ describe('entity-gate', () => {
     ).toBe(true)
     expect(
       applyEntityGate(
-        { requirement: 'all', rules: [{ property: 'Name', op: 'contains', value: 'pup' }] },
+        { requirement: 'all', rules: [{ property: 'Name', op: 'contains', value: 'ord' }] },
         { Name: 'Order' },
       ),
     ).toBe(true)
@@ -249,7 +249,7 @@ describe('entity context registration', () => {
     registerContext('Order', (order: { id: string; color: string }) => ({
       kind: 'Order',
       key: order.id,
-      attributes: { Color: order.status },
+      attributes: { Color: order.color },
     }))
 
     expect(mapEntityContext('Order', { id: '1', color: 'red' })).toEqual({

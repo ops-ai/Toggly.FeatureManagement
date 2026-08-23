@@ -72,7 +72,7 @@ describe('entity context evaluation', () => {
     Toggly.registerContext<Order>('Order', (order) => ({
       kind: 'Order',
       key: order.id,
-      attributes: { Color: order.status },
+      attributes: { Color: order.color },
     }));
 
     expect(Toggly.isFeatureOn('OrderFeature', { id: '7', color: 'brown' }, 'Order')).toBe(true);
