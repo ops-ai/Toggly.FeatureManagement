@@ -282,4 +282,49 @@ export function unwrapDefsPayload(payload: unknown): unknown {
   return payload
 }
 
+/** Coerce evaluated-variants payload to a defs map; arrays/primitives become `{}`. */
+export function asVariantDefsRecord<T>(parsedDefs: unknown): Record<string, T> {
+  if (parsedDefs && typeof parsedDefs === 'object' && !Array.isArray(parsedDefs)) {
+    return parsedDefs as Record<string, T>
+  }
+  return {}
+}
+
+export type EvaluatedFetchErrorRecovery<TFlags, TVariants> = {
+  variants: TVariants | null
+  features: TFlags
+}
+
+/**
+ * Shared fallback when evaluated-signed fetch fails: prefer cached variants,
+ * else flags/defaults when features were never loaded. Returns null to keep
+ * in-memory state unchanged.
+ */
+export function resolveEvaluatedFetchErrorState<TFlags, TVariants>(input: {
+  enableVariants: boolean
+  featuresAlreadyLoaded: boolean
+  readVariants: () => TVariants | null | undefined
+  readFlags: () => TFlags | null | undefined
+  defaults: TFlags
+  variantsToFlags: (variants: TVariants) => TFlags
+}): EvaluatedFetchErrorRecovery<TFlags, TVariants> | null {
+  if (input.enableVariants) {
+    const cachedVariants = input.readVariants() ?? null
+    if (cachedVariants) {
+      return {
+        variants: cachedVariants,
+        features: input.variantsToFlags(cachedVariants),
+      }
+    }
+    if (!input.featuresAlreadyLoaded) {
+      return { variants: null, features: input.readFlags() ?? input.defaults }
+    }
+    return null
+  }
+  if (!input.featuresAlreadyLoaded) {
+    return { variants: null, features: input.readFlags() ?? input.defaults }
+  }
+  return null
+}
+
 export type { EvaluatedDefinitions, EvaluatedDefinitionValue, EntityGate, EntityGateRule } from './evaluated-definitions'

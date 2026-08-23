@@ -1,3 +1,11 @@
+## 1.8.4
+
+2026-08-23
+
+### Changed
+- Variant fetch-error fallback and defs-map coercion use shared
+  `@ops-ai/toggly-signed-defs` helpers.
+
 ## 1.8.3
 
 2026-08-21

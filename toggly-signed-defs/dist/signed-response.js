@@ -12,6 +12,8 @@ exports.readAndParseEvaluatedResponseCached = readAndParseEvaluatedResponseCache
 exports.fetchEvaluatedSignedDefinitions = fetchEvaluatedSignedDefinitions;
 exports.signedDefsClientOptions = signedDefsClientOptions;
 exports.unwrapDefsPayload = unwrapDefsPayload;
+exports.asVariantDefsRecord = asVariantDefsRecord;
+exports.resolveEvaluatedFetchErrorState = resolveEvaluatedFetchErrorState;
 const signed_defs_verify_1 = require("./signed-defs-verify");
 function resolveBaseUri(options) {
     const base = options.baseURI ?? options.baseUri ?? options.baseUrl;
@@ -175,4 +177,35 @@ function unwrapDefsPayload(payload) {
         }
     }
     return payload;
+}
+/** Coerce evaluated-variants payload to a defs map; arrays/primitives become `{}`. */
+function asVariantDefsRecord(parsedDefs) {
+    if (parsedDefs && typeof parsedDefs === 'object' && !Array.isArray(parsedDefs)) {
+        return parsedDefs;
+    }
+    return {};
+}
+/**
+ * Shared fallback when evaluated-signed fetch fails: prefer cached variants,
+ * else flags/defaults when features were never loaded. Returns null to keep
+ * in-memory state unchanged.
+ */
+function resolveEvaluatedFetchErrorState(input) {
+    if (input.enableVariants) {
+        const cachedVariants = input.readVariants() ?? null;
+        if (cachedVariants) {
+            return {
+                variants: cachedVariants,
+                features: input.variantsToFlags(cachedVariants),
+            };
+        }
+        if (!input.featuresAlreadyLoaded) {
+            return { variants: null, features: input.readFlags() ?? input.defaults };
+        }
+        return null;
+    }
+    if (!input.featuresAlreadyLoaded) {
+        return { variants: null, features: input.readFlags() ?? input.defaults };
+    }
+    return null;
 }

@@ -20,6 +20,8 @@ export {
   readResponseBody,
   parseEvaluatedResponseBody,
   unwrapDefsPayload,
+  asVariantDefsRecord,
+  resolveEvaluatedFetchErrorState,
 } from './signed-response'
 export type {
   EntityGate,

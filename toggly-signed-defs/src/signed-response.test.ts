@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   InMemoryJwksCache,
+  asVariantDefsRecord,
   fetchEvaluatedSignedDefinitions,
   parseEvaluatedResponseBody,
   readAndParseEvaluatedResponse,
   readAndParseEvaluatedResponseCached,
+  resolveEvaluatedFetchErrorState,
   signedDefsClientOptions,
   unwrapDefsPayload,
 } from './signed-response'
@@ -170,6 +172,56 @@ describe('readAndParseEvaluatedResponseCached', () => {
       { verifySignatures: false, baseURI: 'https://example.test' }
     )
     expect(result).toEqual({ On: true })
+  })
+})
+
+describe('asVariantDefsRecord', () => {
+  it('returns objects and empty maps for arrays', () => {
+    expect(asVariantDefsRecord({ A: { enabled: true } })).toEqual({ A: { enabled: true } })
+    expect(asVariantDefsRecord([])).toEqual({})
+    expect(asVariantDefsRecord(null)).toEqual({})
+  })
+})
+
+describe('resolveEvaluatedFetchErrorState', () => {
+  it('prefers cached variants when enabled', () => {
+    const recovered = resolveEvaluatedFetchErrorState({
+      enableVariants: true,
+      featuresAlreadyLoaded: false,
+      readVariants: () => ({ V: { enabled: true } }),
+      readFlags: () => ({ Fallback: true }),
+      defaults: { Default: true },
+      variantsToFlags: () => ({ V: true }),
+    })
+    expect(recovered).toEqual({
+      variants: { V: { enabled: true } },
+      features: { V: true },
+    })
+  })
+
+  it('uses flags then defaults when variants cache is empty', () => {
+    const recovered = resolveEvaluatedFetchErrorState({
+      enableVariants: true,
+      featuresAlreadyLoaded: false,
+      readVariants: () => null,
+      readFlags: () => ({ Fallback: true }),
+      defaults: { Default: true },
+      variantsToFlags: () => ({}),
+    })
+    expect(recovered).toEqual({ variants: null, features: { Fallback: true } })
+  })
+
+  it('keeps in-memory features when already loaded', () => {
+    expect(
+      resolveEvaluatedFetchErrorState({
+        enableVariants: false,
+        featuresAlreadyLoaded: true,
+        readVariants: () => null,
+        readFlags: () => ({ Cached: true }),
+        defaults: {},
+        variantsToFlags: () => ({}),
+      }),
+    ).toBeNull()
   })
 })
 

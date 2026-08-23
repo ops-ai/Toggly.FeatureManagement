@@ -38,7 +38,12 @@ import {
   type WsSyncMessage,
 } from '../utils/ws-sync';
 import { buildDefinitionFetchHeaders } from '../utils/sdk-identity';
-import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
+import {
+  InMemoryJwksCache,
+  asVariantDefsRecord,
+  fetchEvaluatedSignedDefinitions,
+  resolveEvaluatedFetchErrorState,
+} from '@ops-ai/toggly-signed-defs';
 
 export type { EvaluatedVariantDef, VariantResult } from './variant.types';
 export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
@@ -572,10 +577,7 @@ export class Toggly implements TogglyService {
       const parsedDefs = loaded.defs
 
       if (this._config.enableVariants) {
-        const defs =
-          parsedDefs && typeof parsedDefs === 'object' && !Array.isArray(parsedDefs)
-            ? (parsedDefs as { [key: string]: EvaluatedVariantDef })
-            : {}
+        const defs = asVariantDefsRecord<EvaluatedVariantDef>(parsedDefs)
         this._variants = defs
         this._features = variantDefsToFlags(defs)
         if (this._features && this._canPersist) {
@@ -596,28 +598,23 @@ export class Toggly implements TogglyService {
       this.notifyFeaturesRefresh()
     } catch (error) {
       this._reportError('Error fetching feature flags', error)
-      if (this._config.enableVariants) {
-        const vCached = this._canPersist
-          ? readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys)
-          : null
-        if (vCached) {
-          this._variants = vCached
-          this._features = variantDefsToFlags(vCached)
-        } else if (this._features === null) {
-          this._variants = null
-          const cached = this._canPersist
+      const recovered = resolveEvaluatedFetchErrorState({
+        enableVariants: !!this._config.enableVariants,
+        featuresAlreadyLoaded: this._features !== null,
+        readVariants: () =>
+          this._canPersist
+            ? readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys)
+            : null,
+        readFlags: () =>
+          this._canPersist
             ? readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys)
-            : null
-          this._features = cached ?? this._config.featureDefaults ?? {}
-        }
-      } else {
-        if (this._features === null) {
-          this._variants = null
-          const cached = this._canPersist
-            ? readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys)
-            : null
-          this._features = cached ?? this._config.featureDefaults ?? {}
-        }
+            : null,
+        defaults: this._config.featureDefaults ?? {},
+        variantsToFlags: variantDefsToFlags,
+      })
+      if (recovered) {
+        this._variants = recovered.variants
+        this._features = recovered.features
       }
       console.warn(
         'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',

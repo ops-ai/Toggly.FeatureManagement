@@ -83,4 +83,23 @@ export declare function signedDefsClientOptions(config: Omit<Pick<VerifySignatur
 }, jwks: InMemoryJwksCache): VerifySignatureOptions;
 /** Unwrap `{ defs }` when present; otherwise treat payload as the defs map. */
 export declare function unwrapDefsPayload(payload: unknown): unknown;
+/** Coerce evaluated-variants payload to a defs map; arrays/primitives become `{}`. */
+export declare function asVariantDefsRecord<T>(parsedDefs: unknown): Record<string, T>;
+export type EvaluatedFetchErrorRecovery<TFlags, TVariants> = {
+    variants: TVariants | null;
+    features: TFlags;
+};
+/**
+ * Shared fallback when evaluated-signed fetch fails: prefer cached variants,
+ * else flags/defaults when features were never loaded. Returns null to keep
+ * in-memory state unchanged.
+ */
+export declare function resolveEvaluatedFetchErrorState<TFlags, TVariants>(input: {
+    enableVariants: boolean;
+    featuresAlreadyLoaded: boolean;
+    readVariants: () => TVariants | null | undefined;
+    readFlags: () => TFlags | null | undefined;
+    defaults: TFlags;
+    variantsToFlags: (variants: TVariants) => TFlags;
+}): EvaluatedFetchErrorRecovery<TFlags, TVariants> | null;
 export type { EvaluatedDefinitions, EvaluatedDefinitionValue, EntityGate, EntityGateRule } from './evaluated-definitions';
