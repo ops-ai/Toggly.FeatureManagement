@@ -29,7 +29,7 @@ jobs:
         xcode: ['16.1', '16.2']
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
@@ -75,7 +75,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: matrix.xcode == '16.1'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           file: ${{ env.SDK_ROOT }}/coverage.lcov
           flags: ios-sdk
@@ -85,7 +85,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: matrix.xcode == '16.1'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-coverage
           path: ${{ env.SDK_ROOT }}/coverage.lcov
@@ -96,7 +96,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install SwiftLint
         run: brew install swiftlint
@@ -113,7 +113,7 @@ jobs:
             > swiftlint-report.txt || true
 
       - name: Upload SwiftLint report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ios-swiftlint
@@ -127,7 +127,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
@@ -148,7 +148,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
@@ -170,7 +170,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Dependency Check report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dependency-check-report-ios
@@ -185,26 +185,26 @@ jobs:
     if: always()
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download coverage report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ios-coverage
           path: ${{ env.SDK_ROOT }}/sonar-reports/
         continue-on-error: true
 
       - name: Download SwiftLint report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ios-swiftlint
           path: ${{ env.SDK_ROOT }}/sonar-reports/
         continue-on-error: true
 
       - name: Download Dependency Check report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dependency-check-report-ios
           path: ${{ env.SDK_ROOT }}/sonar-reports/
@@ -234,7 +234,7 @@ jobs:
         continue-on-error: true
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v6.0.0
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -254,7 +254,7 @@ jobs:
         continue-on-error: true
 
       - name: SonarQube Server Scan
-        uses: SonarSource/sonarqube-scan-action@v6.0.0
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -284,7 +284,7 @@ jobs:
           - 'platform=watchOS Simulator,name=Apple Watch Series 10 (46mm),OS=11.1'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.1.app
