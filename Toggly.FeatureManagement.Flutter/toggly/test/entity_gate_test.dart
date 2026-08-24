@@ -111,7 +111,7 @@ void main() {
     expect(
       applyEntityGate(
         EntityGate(requirement: 'all', rules: [
-          EntityGateRule(property: 'Name', op: 'contains', value: 'pup'),
+          EntityGateRule(property: 'Name', op: 'contains', value: 'ord'),
         ]),
         {'Name': 'Order'},
       ),

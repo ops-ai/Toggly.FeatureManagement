@@ -70,7 +70,7 @@ final class EntityGateTests: XCTestCase {
             attributes: ["Color": "BLUE"]
         ))
         XCTAssertTrue(applyEntityGate(
-            EntityGate(requirement: "all", rules: [EntityGateRule(property: "Name", op: "contains", value: "pup")]),
+            EntityGate(requirement: "all", rules: [EntityGateRule(property: "Name", op: "contains", value: "ord")]),
             attributes: ["Name": "Order"]
         ))
         XCTAssertTrue(applyEntityGate(

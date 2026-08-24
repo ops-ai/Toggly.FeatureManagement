@@ -147,7 +147,7 @@ class EntityGateTest {
         )
         assertTrue(
             applyEntityGate(
-                EntityGate("all", listOf(EntityGateRule("Name", "contains", "pup"))),
+                EntityGate("all", listOf(EntityGateRule("Name", "contains", "ord"))),
                 mapOf("Name" to "Order")
             )
         )
