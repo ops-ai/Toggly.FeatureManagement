@@ -134,8 +134,9 @@ jobs:
       - name: Publish packages to npm
         if: steps.release.outputs.action == 'publish'
         run: |
+          ROOT="${GITHUB_WORKSPACE}/${{ env.SDK_ROOT }}"
           for pkg in ${{ steps.packages.outputs.list }}; do
-            cd "${{ env.SDK_ROOT }}/$pkg"
+            cd "$ROOT/$pkg"
             PACKAGE_NAME=$(node -p "require('./package.json').name")
             PACKAGE_VERSION=$(node -p "require('./package.json').version")
             if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
