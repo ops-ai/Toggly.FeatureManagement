@@ -56,7 +56,7 @@ namespace Toggly.FeatureManagement.Web
         /// <summary>When true, renders when the feature is disabled.</summary>
         public bool Negate { get; set; }
 
-        /// <summary>Entity instance for ContextProperty evaluation (Order, Puppy, etc.).</summary>
+        /// <summary>Entity instance for ContextProperty evaluation (Order, Product, etc.).</summary>
         public object? Context { get; set; }
 
         public override async Task ProcessAsync(TagHelperContext context, TagHelperOutput output)

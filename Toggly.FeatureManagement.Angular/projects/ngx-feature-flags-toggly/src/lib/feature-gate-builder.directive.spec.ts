@@ -141,7 +141,7 @@ describe('FeatureGateBuilderDirective', () => {
 class ContextBuilderHostComponent {
   flag = 'ShowBadge';
   context: { BirthDate: string } = { BirthDate: '2026-06-15T00:00:00Z' };
-  kind = 'Puppy';
+  kind = 'Order';
 }
 
 describe('FeatureGateBuilderDirective entity context', () => {
@@ -173,8 +173,8 @@ describe('FeatureGateBuilderDirective entity context', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('button').classList.contains('active')).toBe(false);
 
-    TestBed.inject(TogglyService).registerContext('Puppy', (entity: { BirthDate: string }) => ({
-      kind: 'Puppy',
+    TestBed.inject(TogglyService).registerContext('Order', (entity: { BirthDate: string }) => ({
+      kind: 'Order',
       key: '1',
       attributes: { BirthDate: entity.BirthDate },
     }));

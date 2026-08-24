@@ -25,22 +25,22 @@ public class FeatureTagHelperTests
     {
         var featureManager = new Mock<IFeatureManager>();
         featureManager
-            .Setup(m => m.IsEnabledAsync("PuppyBadge", It.IsAny<object>()))
+            .Setup(m => m.IsEnabledAsync("OrderBadge", It.IsAny<object>()))
             .ReturnsAsync(true);
 
         var helper = new FeatureTagHelper(featureManager.Object)
         {
-            Name = "PuppyBadge",
+            Name = "OrderBadge",
             Context = new { Id = 1, Color = "red" }
         };
 
-        var output = CreateOutput("feature", "Featured puppy");
+        var output = CreateOutput("feature", "Featured order");
         await helper.ProcessAsync(CreateContext(), output);
 
         output.TagName.Should().BeNull();
-        output.Content.GetContent().Should().Be("Featured puppy");
-        featureManager.Verify(m => m.IsEnabledAsync("PuppyBadge", helper.Context!), Times.Once);
-        featureManager.Verify(m => m.IsEnabledAsync("PuppyBadge"), Times.Never);
+        output.Content.GetContent().Should().Be("Featured order");
+        featureManager.Verify(m => m.IsEnabledAsync("OrderBadge", helper.Context!), Times.Once);
+        featureManager.Verify(m => m.IsEnabledAsync("OrderBadge"), Times.Never);
     }
 
     [Fact]
@@ -48,16 +48,16 @@ public class FeatureTagHelperTests
     {
         var featureManager = new Mock<IFeatureManager>();
         featureManager
-            .Setup(m => m.IsEnabledAsync("PuppyBadge", It.IsAny<object>()))
+            .Setup(m => m.IsEnabledAsync("OrderBadge", It.IsAny<object>()))
             .ReturnsAsync(false);
 
         var helper = new FeatureTagHelper(featureManager.Object)
         {
-            Name = "PuppyBadge",
+            Name = "OrderBadge",
             Context = new { Id = 1 }
         };
 
-        var output = CreateOutput("feature", "Featured puppy");
+        var output = CreateOutput("feature", "Featured order");
         await helper.ProcessAsync(CreateContext(), output);
 
         output.IsContentModified.Should().BeTrue();
@@ -68,11 +68,11 @@ public class FeatureTagHelperTests
     public async Task ProcessAsync_AttributeForm_KeepsHostTagName()
     {
         var featureManager = new Mock<IFeatureManager>();
-        featureManager.Setup(m => m.IsEnabledAsync("PuppyBadge")).ReturnsAsync(true);
+        featureManager.Setup(m => m.IsEnabledAsync("OrderBadge")).ReturnsAsync(true);
 
         var helper = new FeatureTagHelper(featureManager.Object)
         {
-            Feature = "PuppyBadge"
+            Feature = "OrderBadge"
         };
 
         var output = CreateOutput("div", "inner");
@@ -86,15 +86,15 @@ public class FeatureTagHelperTests
     public async Task ProcessAsync_AttributeForm_StripsFeatureAttribute()
     {
         var featureManager = new Mock<IFeatureManager>();
-        featureManager.Setup(m => m.IsEnabledAsync("PuppyBadge")).ReturnsAsync(true);
+        featureManager.Setup(m => m.IsEnabledAsync("OrderBadge")).ReturnsAsync(true);
 
         var helper = new FeatureTagHelper(featureManager.Object)
         {
-            Feature = "PuppyBadge"
+            Feature = "OrderBadge"
         };
 
         var output = CreateOutput("div", "inner");
-        output.Attributes.Add("feature", "PuppyBadge");
+        output.Attributes.Add("feature", "OrderBadge");
         await helper.ProcessAsync(CreateContext(), output);
 
         output.Attributes.Should().NotContain(a => a.Name == "feature");

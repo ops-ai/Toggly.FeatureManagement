@@ -59,7 +59,7 @@ export interface Hook {
     }): Promise<void> | void;
 }
 export type { TogglyEvaluationContext, EvaluationUrlMode, } from './evaluation-context';
-export { MAX_EVALUATION_CLAIMS, appendEvaluationContext, evaluationContextCacheKey, normalizeEvaluationClaims, } from './evaluation-context';
+export { MAX_EVALUATION_CLAIMS, appendEvaluationContext, buildEvaluatedSignedUrl, evaluationContextCacheKey, normalizeEvaluationClaims, } from './evaluation-context';
 export type { EntityGate, EntityGateRule, EvaluatedDefinitionValue, EvaluatedDefinitions, TogglyEntityContext, EntityContextMapper, } from './entity-gate';
 export type { CacheLruEntry, CacheLruIndex, } from './cache-lru';
 export { emptyCacheLruIndex, isCacheLruEnabled, parseCacheLruIndex, removeCacheLruKeys, selectCacheLruKeysToEvict, serializeCacheLruIndex, touchCacheLruKey, } from './cache-lru';

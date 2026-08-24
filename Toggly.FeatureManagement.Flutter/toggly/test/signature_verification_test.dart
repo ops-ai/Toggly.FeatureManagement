@@ -43,7 +43,7 @@ _SignedFixture _buildWebCryptoSignedFixture() {
   final ec = getP256();
   final priv = ec.generatePrivateKey();
   final pub = priv.publicKey;
-  const defsJson = '{"PresalePhotos":true,"PuppySales":false}';
+  const defsJson = '{"PresalePhotos":true,"OrderSales":false}';
   const timestamp = 1783915396;
   final dataToVerify = '$defsJson|$timestamp';
 
@@ -165,7 +165,7 @@ void main() {
         environment: 'TestFlight',
         identity: 'ApplicationUsers/1-C',
         useSignedDefinitions: true,
-        flagDefaults: {'PresalePhotos': false, 'PuppySales': false},
+        flagDefaults: {'PresalePhotos': false, 'OrderSales': false},
         config: const TogglyConfig(
           baseURI: 'https://example.test',
           enableLiveUpdates: false,
@@ -188,7 +188,7 @@ void main() {
       final tampered = jsonDecode(fixture.rawBody) as Map<String, dynamic>;
       tampered['signature'] = fixture.singleHashSignatureBase64;
       // Keep exact defs text so only the hash mode differs.
-      const defsJson = '{"PresalePhotos":true,"PuppySales":false}';
+      const defsJson = '{"PresalePhotos":true,"OrderSales":false}';
       final tamperedBody =
           '{"defs":$defsJson,"signature":"${fixture.singleHashSignatureBase64}","timestamp":${tampered['timestamp']},"kid":"${tampered['kid']}"}';
 
@@ -229,7 +229,7 @@ void main() {
       // data.defs and put attacker-controlled top-level defs first in the
       // object — a naive indexOf("defs") would verify the nested payload
       // while applying the outer Evil map.
-      const honestDefs = '{"PresalePhotos":true,"PuppySales":false}';
+      const honestDefs = '{"PresalePhotos":true,"OrderSales":false}';
       final envelope = jsonDecode(fixture.rawBody) as Map<String, dynamic>;
       final nestedAttackBody =
           '{"data":{"defs":$honestDefs},"defs":{"PresalePhotos":false,"Evil":true},"signature":"${envelope['signature']}","timestamp":${envelope['timestamp']},"kid":"${envelope['kid']}"}';

@@ -4,7 +4,7 @@
 
 import type { ReactNode, ReactElement } from 'react';
 import { useFeature, useFeatureGate } from '../hooks';
-import type { FeatureRequirement } from '@ops-ai/remix-toggly-core';
+import type { FeatureRequirement, TogglyEntityContext } from '@ops-ai/remix-toggly-core';
 
 /**
  * Props for Feature component
@@ -26,6 +26,10 @@ export interface FeatureProps {
   fallback?: ReactNode;
   /** Render prop for custom rendering */
   render?: (enabled: boolean) => ReactNode;
+  /** Entity context for mixed evaluated-signed gates */
+  context?: TogglyEntityContext | Record<string, unknown> | null;
+  /** Context kind for registerContext mapper lookup */
+  contextKind?: string;
 }
 
 /**
@@ -70,13 +74,15 @@ export function Feature({
   children,
   fallback = null,
   render,
+  context,
+  contextKind,
 }: FeatureProps): ReactElement | null {
   // Determine which hook to use
   const keys = featureKeys ?? (featureKey ? [featureKey] : []);
 
   // Use single feature hook for single key, gate hook for multiple
-  const singleEnabled = useFeature(keys[0] ?? '', defaultValue);
-  const gateEnabled = useFeatureGate(keys, requirement, false);
+  const singleEnabled = useFeature(keys[0] ?? '', defaultValue, context, contextKind);
+  const gateEnabled = useFeatureGate(keys, requirement, false, context, contextKind);
 
   // Calculate final enabled state
   let enabled: boolean;

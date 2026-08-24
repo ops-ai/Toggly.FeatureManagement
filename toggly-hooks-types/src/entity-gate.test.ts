@@ -45,7 +45,7 @@ describe('entity-gate', () => {
 
   it('ignores the default value once a gate can be evaluated', () => {
     const context = {
-      kind: 'Puppy',
+      kind: 'Order',
       key: '1',
       attributes: { BirthDate: '2025-06-15T00:00:00Z' },
     }
@@ -54,7 +54,7 @@ describe('entity-gate', () => {
 
   it('evaluates datetime gt locally', () => {
     const enabled = resolveEvaluatedDefinition(datetimeGate, {
-      kind: 'Puppy',
+      kind: 'Order',
       key: '1',
       attributes: { BirthDate: '2026-06-15T00:00:00Z' },
     })
@@ -69,7 +69,7 @@ describe('entity-gate', () => {
   it('flattens gated definitions using the supplied context', () => {
     const flattened = toBooleanDefinitions(
       { Gated: datetimeGate },
-      { kind: 'Puppy', key: '1', attributes: { BirthDate: '2026-06-15T00:00:00Z' } },
+      { kind: 'Order', key: '1', attributes: { BirthDate: '2026-06-15T00:00:00Z' } },
     )
     expect(flattened.Gated).toBe(true)
   })
@@ -190,8 +190,8 @@ describe('entity-gate', () => {
     ).toBe(true)
     expect(
       applyEntityGate(
-        { requirement: 'all', rules: [{ property: 'Name', op: 'contains', value: 'pup' }] },
-        { Name: 'Puppy' },
+        { requirement: 'all', rules: [{ property: 'Name', op: 'contains', value: 'ord' }] },
+        { Name: 'Order' },
       ),
     ).toBe(true)
     expect(
@@ -220,8 +220,8 @@ describe('entity-gate', () => {
       Off: false,
       Gated: datetimeGate,
     }
-    const puppy = {
-      kind: 'Puppy',
+    const order = {
+      kind: 'Order',
       key: '1',
       attributes: { BirthDate: '2026-06-15T00:00:00Z' },
     }
@@ -229,8 +229,8 @@ describe('entity-gate', () => {
     expect(evaluateEvaluatedGate(features, [], 'all', true)).toBe(false)
     expect(evaluateEvaluatedGate(features, ['On', 'Off'], 'all')).toBe(false)
     expect(evaluateEvaluatedGate(features, ['On', 'Off'], 'any')).toBe(true)
-    expect(evaluateEvaluatedGate(features, ['Gated'], 'all', false, puppy)).toBe(true)
-    expect(evaluateEvaluatedGate(features, ['Gated'], 'all', true, puppy)).toBe(false)
+    expect(evaluateEvaluatedGate(features, ['Gated'], 'all', false, order)).toBe(true)
+    expect(evaluateEvaluatedGate(features, ['Gated'], 'all', true, order)).toBe(false)
   })
 
   it('fails closed when stored definitions are empty', () => {
@@ -246,14 +246,14 @@ describe('entity context registration', () => {
   })
 
   it('maps a registered entity and ignores an unknown kind', () => {
-    registerContext('Puppy', (puppy: { id: string; color: string }) => ({
-      kind: 'Puppy',
-      key: puppy.id,
-      attributes: { Color: puppy.color },
+    registerContext('Order', (order: { id: string; color: string }) => ({
+      kind: 'Order',
+      key: order.id,
+      attributes: { Color: order.color },
     }))
 
-    expect(mapEntityContext('Puppy', { id: '1', color: 'red' })).toEqual({
-      kind: 'Puppy',
+    expect(mapEntityContext('Order', { id: '1', color: 'red' })).toEqual({
+      kind: 'Order',
       key: '1',
       attributes: { Color: 'red' },
     })
@@ -262,18 +262,18 @@ describe('entity context registration', () => {
   })
 
   it('normalizes a Toggly context or a registered entity', () => {
-    const context = { kind: 'Puppy', key: '1', attributes: { Color: 'red' } }
+    const context = { kind: 'Order', key: '1', attributes: { Color: 'red' } }
     expect(normalizeEntityContext(context)).toEqual(context)
     expect(normalizeEntityContext(null)).toBeNull()
-    expect(normalizeEntityContext({ id: '1' }, 'Puppy')).toBeNull()
+    expect(normalizeEntityContext({ id: '1' }, 'Order')).toBeNull()
 
-    registerContext('Puppy', (puppy: { id: string }) => ({
-      kind: 'Puppy',
-      key: puppy.id,
+    registerContext('Order', (order: { id: string }) => ({
+      kind: 'Order',
+      key: order.id,
       attributes: {},
     }))
-    expect(normalizeEntityContext({ id: '9' }, 'Puppy')).toEqual({
-      kind: 'Puppy',
+    expect(normalizeEntityContext({ id: '9' }, 'Order')).toEqual({
+      kind: 'Order',
       key: '9',
       attributes: {},
     })

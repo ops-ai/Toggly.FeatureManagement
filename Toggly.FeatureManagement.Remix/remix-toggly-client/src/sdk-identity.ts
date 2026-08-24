@@ -1,5 +1,5 @@
 export const SDK_ID = 'remix';
-export const SDK_VERSION = '1.1.1';
+export const SDK_VERSION = '1.2.0';
 
 export const SDK_HEADER_ID = 'X-Toggly-Sdk';
 export const SDK_HEADER_VERSION = 'X-Toggly-Sdk-Version';

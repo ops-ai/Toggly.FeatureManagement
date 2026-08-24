@@ -12,7 +12,7 @@ namespace Toggly.FeatureManagement.Configuration
     public static class EntityContextServiceCollectionExtensions
     {
         /// <summary>
-        /// Registers a domain type as an entity context kind (Order, Puppy, etc.).
+        /// Registers a domain type as an entity context kind (Order, Product, etc.).
         /// </summary>
         /// <typeparam name="T">Domain type rendered on pages or passed to <see cref="Microsoft.FeatureManagement.IFeatureManager.IsEnabledAsync{TContext}(string, TContext)"/>.</typeparam>
         /// <param name="services">Application services.</param>

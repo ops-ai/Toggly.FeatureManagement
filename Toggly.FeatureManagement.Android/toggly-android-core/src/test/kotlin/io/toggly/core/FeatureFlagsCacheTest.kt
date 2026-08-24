@@ -60,7 +60,7 @@ class FeatureFlagsCacheTest {
     fun `cold start re-verifies signed cache with persisted jwks`() = runTest {
         val key = createKey()
         val identity = "user-1"
-        val defs = """{"PresalePhotos":true,"PuppySales":false}"""
+        val defs = """{"PresalePhotos":true,"OrderSales":false}"""
         val timestamp = System.currentTimeMillis() / 1000L
         val signature = base64(signP1363(key, SignedDefsVerify.doubleSha256("$defs|$timestamp")))
         val storage = MemoryStorage()
@@ -95,9 +95,9 @@ class FeatureFlagsCacheTest {
 
         val response = service.init()
         assertTrue(service.isFeatureOn("PresalePhotos"))
-        assertFalse(service.isFeatureOn("PuppySales"))
+        assertFalse(service.isFeatureOn("OrderSales"))
         assertEquals(true, response.flags["PresalePhotos"])
-        assertEquals(false, response.flags["PuppySales"])
+        assertEquals(false, response.flags["OrderSales"])
     }
 
     @Test

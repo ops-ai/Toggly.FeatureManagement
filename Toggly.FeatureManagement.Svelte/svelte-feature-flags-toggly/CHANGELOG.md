@@ -1,3 +1,20 @@
+## 1.8.4
+
+2026-08-23
+
+### Changed
+- Variant fetch-error fallback and defs-map coercion use shared
+  `@ops-ai/toggly-signed-defs` helpers.
+
+## 1.8.3
+
+2026-08-21
+
+### Changed
+- Signed-definitions fetch now uses shared `@ops-ai/toggly-signed-defs`
+  `InMemoryJwksCache`, `readAndParseEvaluatedResponse`, and
+  `signedDefsClientOptions` instead of a per-SDK JWKS cache.
+
 ## 1.8.1
 
 2026-07-14

@@ -6,7 +6,7 @@ import type {
   TogglyEvaluationContext,
 } from '@ops-ai/toggly-hooks-types';
 import {
-  appendEvaluationContext,
+  buildEvaluatedSignedUrl,
   evaluationContextCacheKey,
   isCacheLruEnabled,
   evaluateStoredFeatureKeys,
@@ -30,7 +30,6 @@ import { HookExecutor } from './hooks';
 import type { EvaluatedVariantDef, VariantResult } from './variant.types';
 import {
   buildWebSocketUrl,
-  extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
   shouldFetchOnFlagsUpdated,
@@ -40,11 +39,11 @@ import {
 } from '../utils/ws-sync';
 import { buildDefinitionFetchHeaders } from '../utils/sdk-identity';
 import {
-  parseDefinitionsFromRaw,
-  parseSignedEnvelope,
-  verifySignedDefinitions,
-  type JwkSet,
-} from '../utils/signed-defs-verify';
+  InMemoryJwksCache,
+  asVariantDefsRecord,
+  fetchEvaluatedSignedDefinitions,
+  resolveEvaluatedFetchErrorState,
+} from '@ops-ai/toggly-signed-defs';
 
 export type { EvaluatedVariantDef, VariantResult } from './variant.types';
 export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
@@ -341,7 +340,7 @@ export class Toggly implements TogglyService {
   _refreshDebounceTimer: any = null
   _cachedDefinitionsRevision: string | null = null
   _lastFallbackRefresh: number = 0
-  private _inMemoryJwks: JwkSet | null = null
+  private _jwks = new InMemoryJwksCache()
 
   static readonly FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
 
@@ -449,58 +448,11 @@ export class Toggly implements TogglyService {
       if (forceJwksRefresh) {
         this._cachedDefinitionsRevision = null
         if (this._config.verifySignatures) {
-          this._inMemoryJwks = null
+          this._jwks.clear()
         }
       }
       void this._refreshFeatures()
     }, REFRESH_DEBOUNCE_MS)
-  }
-
-  private async _fetchJwks(forceRefresh = false): Promise<JwkSet> {
-    if (!forceRefresh && this._inMemoryJwks) {
-      return this._inMemoryJwks
-    }
-    const response = await fetch(`${this._config.baseURI}/.well-known/jwks`, {
-      headers: buildDefinitionFetchHeaders(),
-    })
-    if (!response.ok) {
-      throw new Error(`Failed to fetch JWKs: ${response.status} ${response.statusText}`)
-    }
-    const jwks = (await response.json()) as JwkSet
-    this._inMemoryJwks = jwks
-    return jwks
-  }
-
-  /**
-   * Parse evaluated-signed body. When verifySignatures is enabled, verify ES256
-   * against the exact raw defs JSON (Web Crypto double-hash).
-   */
-  private async _readResponseBody(response: Response): Promise<string> {
-    if (typeof response.text === 'function') {
-      return response.text()
-    }
-    return JSON.stringify(await response.json())
-  }
-
-  private async _parseEvaluatedSignedBody(bodyText: string): Promise<{ defs: unknown }> {
-    if (!this._config.verifySignatures) {
-      const payload = JSON.parse(bodyText) as { defs?: unknown }
-      return { defs: payload?.defs ?? payload }
-    }
-    const { envelope, defsRaw } = parseSignedEnvelope(bodyText)
-    const jwks = await this._fetchJwks()
-    await verifySignedDefinitions(
-      defsRaw,
-      {
-        signature: envelope.signature,
-        timestamp: envelope.timestamp,
-        kid: envelope.kid,
-      },
-      jwks,
-      this._config.allowedKeyIds,
-      { maxSignatureAgeSeconds: this._config.maxSignatureAgeSeconds },
-    )
-    return { defs: parseDefinitionsFromRaw(defsRaw) }
   }
 
   private _handleWsSyncMessage(message: WsSyncMessage): void {
@@ -596,41 +548,36 @@ export class Toggly implements TogglyService {
     const contextKey = this._contextCacheKey()
 
     try {
-      let url: string
-      if (this._config.enableVariants) {
-        const fetchUrl = new URL(`${this._config.baseURI}/evaluated-variants-signed/${appKey}/${env}`)
-        appendEvaluationContext(fetchUrl, this._getEvaluationContext(), 'variants')
-        url = fetchUrl.toString()
-      } else {
-        const fetchUrl = new URL(`${this._config.baseURI}/evaluated-signed/${appKey}/${env}`)
-        appendEvaluationContext(fetchUrl, this._getEvaluationContext(), 'evaluated')
-        url = fetchUrl.toString()
-      }
-
-      const revision = this._definitionsRevision
-      const headers: HeadersInit = buildDefinitionFetchHeaders(
-        revision ? { 'If-None-Match': revision } : {},
+      const url = buildEvaluatedSignedUrl(
+        this._config.baseURI ?? 'https://definitions.toggly.io',
+        appKey,
+        env,
+        this._getEvaluationContext(),
+        !!this._config.enableVariants,
       )
 
-      const response = await fetch(url, { headers })
-      const responseRevision = extractDefinitionsRevision(response)
-      if (responseRevision) {
-        this._cacheDefinitionsRevision(responseRevision.replace(/^"+|"+$/g, ''))
+      const loaded = await fetchEvaluatedSignedDefinitions(
+        url,
+        this._jwks,
+        {
+          ...this._config,
+          baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
+        },
+        {
+          revision: this._definitionsRevision,
+          headers: buildDefinitionFetchHeaders(),
+        },
+      )
+      if (loaded.revision) {
+        this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
       }
-      if (response.status === 304) {
+      if (loaded.notModified) {
         return this._booleanFeatures()
       }
-      if (!response.ok) {
-        throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
-      }
-      const bodyText = await this._readResponseBody(response)
-      const { defs: parsedDefs } = await this._parseEvaluatedSignedBody(bodyText)
+      const parsedDefs = loaded.defs
 
       if (this._config.enableVariants) {
-        const defs =
-          parsedDefs && typeof parsedDefs === 'object' && !Array.isArray(parsedDefs)
-            ? (parsedDefs as { [key: string]: EvaluatedVariantDef })
-            : {}
+        const defs = asVariantDefsRecord<EvaluatedVariantDef>(parsedDefs)
         this._variants = defs
         this._features = variantDefsToFlags(defs)
         if (this._features && this._canPersist) {
@@ -651,28 +598,23 @@ export class Toggly implements TogglyService {
       this.notifyFeaturesRefresh()
     } catch (error) {
       this._reportError('Error fetching feature flags', error)
-      if (this._config.enableVariants) {
-        const vCached = this._canPersist
-          ? readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys)
-          : null
-        if (vCached) {
-          this._variants = vCached
-          this._features = variantDefsToFlags(vCached)
-        } else if (this._features === null) {
-          this._variants = null
-          const cached = this._canPersist
+      const recovered = resolveEvaluatedFetchErrorState({
+        enableVariants: !!this._config.enableVariants,
+        featuresAlreadyLoaded: this._features !== null,
+        readVariants: () =>
+          this._canPersist
+            ? readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys)
+            : null,
+        readFlags: () =>
+          this._canPersist
             ? readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys)
-            : null
-          this._features = cached ?? this._config.featureDefaults ?? {}
-        }
-      } else {
-        if (this._features === null) {
-          this._variants = null
-          const cached = this._canPersist
-            ? readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys)
-            : null
-          this._features = cached ?? this._config.featureDefaults ?? {}
-        }
+            : null,
+        defaults: this._config.featureDefaults ?? {},
+        variantsToFlags: variantDefsToFlags,
+      })
+      if (recovered) {
+        this._variants = recovered.variants
+        this._features = recovered.features
       }
       console.warn(
         'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',

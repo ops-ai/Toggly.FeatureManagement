@@ -15,15 +15,15 @@ public class TogglyFeatureManagerEntityContextTests
     public async Task IsEnabledAsync_WithoutContext_FailsClosedWhenEntityFiltersExist()
     {
         var inner = new Mock<IFeatureManager>();
-        inner.Setup(m => m.IsEnabledAsync("PuppyBadge")).ReturnsAsync(true);
+        inner.Setup(m => m.IsEnabledAsync("OrderBadge")).ReturnsAsync(true);
 
         var definitions = new Mock<IFeatureDefinitionModelProvider>();
-        definitions.Setup(m => m.TryGetFeatureModel("PuppyBadge", out It.Ref<FeatureDefinitionModel?>.IsAny))
+        definitions.Setup(m => m.TryGetFeatureModel("OrderBadge", out It.Ref<FeatureDefinitionModel?>.IsAny))
             .Returns((string _, out FeatureDefinitionModel? model) =>
             {
                 model = new FeatureDefinitionModel
                 {
-                    FeatureKey = "PuppyBadge",
+                    FeatureKey = "OrderBadge",
                     Filters = new List<FeatureFilter>
                     {
                         new() { Name = "AlwaysOn" },
@@ -44,7 +44,7 @@ public class TogglyFeatureManagerEntityContextTests
             });
 
         var manager = CreateManager(inner.Object, definitions.Object);
-        var result = await manager.IsEnabledAsync("PuppyBadge");
+        var result = await manager.IsEnabledAsync("OrderBadge");
         result.Should().BeFalse();
     }
 
@@ -52,15 +52,15 @@ public class TogglyFeatureManagerEntityContextTests
     public async Task IsEnabledAsync_WithContext_EvaluatesEntityRules()
     {
         var inner = new Mock<IFeatureManager>();
-        inner.Setup(m => m.IsEnabledAsync("PuppyBadge")).ReturnsAsync(true);
+        inner.Setup(m => m.IsEnabledAsync("OrderBadge")).ReturnsAsync(true);
 
         var definitions = new Mock<IFeatureDefinitionModelProvider>();
-        definitions.Setup(m => m.TryGetFeatureModel("PuppyBadge", out It.Ref<FeatureDefinitionModel?>.IsAny))
+        definitions.Setup(m => m.TryGetFeatureModel("OrderBadge", out It.Ref<FeatureDefinitionModel?>.IsAny))
             .Returns((string _, out FeatureDefinitionModel? model) =>
             {
                 model = new FeatureDefinitionModel
                 {
-                    FeatureKey = "PuppyBadge",
+                    FeatureKey = "OrderBadge",
                     Filters = new List<FeatureFilter>
                     {
                         new() { Name = "AlwaysOn" },
@@ -86,14 +86,14 @@ public class TogglyFeatureManagerEntityContextTests
             .Returns((object _, out Toggly.FeatureManagement.Context.TogglyEntityContext? context) =>
             {
                 context = new Toggly.FeatureManagement.Context.TogglyEntityContext(
-                    "Puppy",
+                    "Order",
                     "1",
                     new Dictionary<string, object?> { ["Color"] = "red" });
                 return true;
             });
 
         var manager = CreateManager(inner.Object, definitions.Object, entityResolver.Object);
-        var result = await manager.IsEnabledAsync("PuppyBadge", new { Id = 1, Color = "red" });
+        var result = await manager.IsEnabledAsync("OrderBadge", new { Id = 1, Color = "red" });
         result.Should().BeTrue();
     }
 
@@ -101,15 +101,15 @@ public class TogglyFeatureManagerEntityContextTests
     public async Task IsEnabledAsync_EntityOnlyDefinition_DoesNotRequireUserFilters()
     {
         var inner = new Mock<IFeatureManager>();
-        inner.Setup(m => m.IsEnabledAsync("PuppyBadge")).ReturnsAsync(false);
+        inner.Setup(m => m.IsEnabledAsync("OrderBadge")).ReturnsAsync(false);
 
         var definitions = new Mock<IFeatureDefinitionModelProvider>();
-        definitions.Setup(m => m.TryGetFeatureModel("PuppyBadge", out It.Ref<FeatureDefinitionModel?>.IsAny))
+        definitions.Setup(m => m.TryGetFeatureModel("OrderBadge", out It.Ref<FeatureDefinitionModel?>.IsAny))
             .Returns((string _, out FeatureDefinitionModel? model) =>
             {
                 model = new FeatureDefinitionModel
                 {
-                    FeatureKey = "PuppyBadge",
+                    FeatureKey = "OrderBadge",
                     Filters = new List<FeatureFilter>
                     {
                         new()
@@ -134,16 +134,16 @@ public class TogglyFeatureManagerEntityContextTests
             .Returns((object _, out Toggly.FeatureManagement.Context.TogglyEntityContext? context) =>
             {
                 context = new Toggly.FeatureManagement.Context.TogglyEntityContext(
-                    "Puppy",
+                    "Order",
                     "1",
                     new Dictionary<string, object?> { ["Color"] = "red" });
                 return true;
             });
 
         var manager = CreateManager(inner.Object, definitions.Object, entityResolver.Object);
-        var result = await manager.IsEnabledAsync("PuppyBadge", new { Id = 1, Color = "red" });
+        var result = await manager.IsEnabledAsync("OrderBadge", new { Id = 1, Color = "red" });
         result.Should().BeTrue();
-        inner.Verify(m => m.IsEnabledAsync("PuppyBadge"), Times.Never);
+        inner.Verify(m => m.IsEnabledAsync("OrderBadge"), Times.Never);
     }
 
     private static TogglyFeatureManager CreateManager(

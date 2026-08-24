@@ -31,6 +31,21 @@ export function normalizeEvaluationClaims(
   return Object.fromEntries(entries.slice(0, MAX_EVALUATION_CLAIMS));
 }
 
+/** Build an evaluated-signed (or variants-signed) definitions URL with evaluation context. */
+export function buildEvaluatedSignedUrl(
+  baseURI: string,
+  appKey: string,
+  environment: string,
+  context: TogglyEvaluationContext | undefined,
+  variants: boolean,
+): string {
+  const base = baseURI.replace(/\/$/, '')
+  const path = variants ? 'evaluated-variants-signed' : 'evaluated-signed'
+  const url = new URL(`${base}/${path}/${appKey}/${environment}`)
+  appendEvaluationContext(url, context, variants ? 'variants' : 'evaluated')
+  return url.toString()
+}
+
 /**
  * Append identity, groups, and claims to an evaluated-signed fetch URL.
  *

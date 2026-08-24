@@ -179,7 +179,7 @@ Toggly's helper is a drop-in for Microsoft's `<feature>` element and adds `conte
 Pass a domain object for Context Property filters:
 
 ``` HTML+Razor
-<feature name="PuppyBadge" context="@Model.Puppy">
+<feature name="OrderBadge" context="@Model.Order">
   <span class="badge">Featured</span>
 </feature>
 ```

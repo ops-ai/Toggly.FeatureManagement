@@ -856,6 +856,87 @@ describe('Toggly Service', () => {
       expect(service.getVariantValue('F')).toBeNull();
     });
 
+    it('getVariant returns null when variants are enabled but not loaded', () => {
+      const service = new Toggly();
+      service.init({
+        appKey: 'k',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+      expect(service.getVariant('V')).toBeNull();
+    });
+
+    it('uses featureDefaults when variants fetch fails and cache is empty', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+      const service = new Toggly();
+      service.init({
+        appKey: 'empty-cache',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+        featureDefaults: { Fallback: true },
+      });
+      await service._loadFeatures();
+      expect(await service.isFeatureOn('Fallback')).toBe(true);
+    });
+
+    it('skips variant cache when persistCache is false and fetch fails', async () => {
+      localStorage.setItem(
+        'toggly:variants:no-persist:Production',
+        JSON.stringify({ V: { enabled: true, variant: 'cached' } }),
+      );
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+      const service = new Toggly();
+      service.init({
+        appKey: 'no-persist',
+        environment: 'Production',
+        enableVariants: true,
+        persistCache: false,
+        enableLiveUpdates: false,
+        featureDefaults: { Fallback: true },
+      });
+      await service._loadFeatures();
+      expect(service.getVariant('V')).toBeNull();
+      expect(await service.isFeatureOn('Fallback')).toBe(true);
+    });
+
+    it('treats non-object variant defs as empty', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ defs: [] }),
+        text: () => Promise.resolve(JSON.stringify({ defs: [] })),
+      });
+      const service = new Toggly();
+      service.init({
+        appKey: 'array-defs',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+      await service._loadFeatures();
+      expect(service.getVariant('V')).toBeNull();
+    });
+
+    it('falls back to cached flags when variants cache is missing', async () => {
+      localStorage.setItem(
+        'toggly:flags:flags-only:Production',
+        JSON.stringify({ Fallback: true }),
+      );
+      mockFetch.mockRejectedValueOnce(new Error('network'));
+      const service = new Toggly();
+      service.init({
+        appKey: 'flags-only',
+        environment: 'Production',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      });
+      await service._loadFeatures();
+      expect(await service.isFeatureOn('Fallback')).toBe(true);
+    });
+
     it('falls back to cached variants on API error when enableVariants', async () => {
       const appKey = 'test-key';
       const env = 'Production';

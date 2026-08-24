@@ -91,7 +91,7 @@ public class ContextPropertyEvaluatorTests
         definition.ContextRequirementType = RequirementType.All;
 
         var entity = new TogglyEntityContext(
-            "Puppy",
+            "Order",
             "1",
             new Dictionary<string, object?> { ["Color"] = "red" });
 
@@ -116,7 +116,7 @@ public class ContextPropertyEvaluatorTests
             });
 
         var entity = new TogglyEntityContext(
-            "Puppy",
+            "Order",
             "1",
             new Dictionary<string, object?>());
 
@@ -127,7 +127,7 @@ public class ContextPropertyEvaluatorTests
     public void EvaluateEntityFilters_EmptyFilterList_FailsClosed()
     {
         var definition = CreateDefinition(RequirementType.All);
-        var entity = new TogglyEntityContext("Puppy", "1", new Dictionary<string, object?>());
+        var entity = new TogglyEntityContext("Order", "1", new Dictionary<string, object?>());
         ContextPropertyEvaluator.EvaluateEntityFilters(definition, entity).Should().BeFalse();
     }
 
@@ -149,7 +149,7 @@ public class ContextPropertyEvaluatorTests
             });
 
         var entity = new TogglyEntityContext(
-            "Puppy",
+            "Order",
             "1",
             new Dictionary<string, object?> { ["Color"] = "red" });
 
@@ -169,8 +169,8 @@ public class ContextPropertyEvaluatorTests
             CreateDefinition(RequirementType.All, Filter("Color", "in", "red, blue", "string")),
             Entity("Color", "BLUE")).Should().BeTrue();
         ContextPropertyEvaluator.EvaluateEntityFilters(
-            CreateDefinition(RequirementType.All, Filter("Name", "contains", "pup", "string")),
-            Entity("Name", "Puppy")).Should().BeTrue();
+            CreateDefinition(RequirementType.All, Filter("Name", "contains", "ord", "string")),
+            Entity("Name", "Order")).Should().BeTrue();
         ContextPropertyEvaluator.EvaluateEntityFilters(
             CreateDefinition(RequirementType.All, Filter("Tags", "contains", "beta", "string[]")),
             Entity("Tags", new object[] { "GA", "Beta" })).Should().BeTrue();
@@ -232,7 +232,7 @@ public class ContextPropertyEvaluatorTests
         };
 
     private static TogglyEntityContext Entity(string property, object? value) =>
-        new("Puppy", "1", new Dictionary<string, object?> { [property] = value });
+        new("Order", "1", new Dictionary<string, object?> { [property] = value });
 
     private static FeatureDefinitionModel CreateDefinition(RequirementType requirementType, params FeatureFilter[] filters)
     {

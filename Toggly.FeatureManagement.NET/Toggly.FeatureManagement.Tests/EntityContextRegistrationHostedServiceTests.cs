@@ -96,8 +96,8 @@ public class EntityContextRegistrationHostedServiceTests
         if (registerKind)
         {
             registry.Register(new EntityContextRegistration(
-                typeof(Puppy),
-                "Puppy",
+                typeof(Order),
+                "Order",
                 "Id",
                 _ => "1",
                 null,
@@ -124,7 +124,7 @@ public class EntityContextRegistrationHostedServiceTests
         return (Task)method!.Invoke(service, new object[] { CancellationToken.None })!;
     }
 
-    private sealed class Puppy
+    private sealed class Order
     {
         public int Id { get; set; }
     }

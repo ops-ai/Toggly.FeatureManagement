@@ -11,6 +11,8 @@ export declare const MAX_EVALUATION_CLAIMS = 20;
  * Extra entries are dropped deterministically (alphabetically last types first).
  */
 export declare function normalizeEvaluationClaims(claims: Record<string, string> | undefined): Record<string, string> | undefined;
+/** Build an evaluated-signed (or variants-signed) definitions URL with evaluation context. */
+export declare function buildEvaluatedSignedUrl(baseURI: string, appKey: string, environment: string, context: TogglyEvaluationContext | undefined, variants: boolean): string;
 /**
  * Append identity, groups, and claims to an evaluated-signed fetch URL.
  *

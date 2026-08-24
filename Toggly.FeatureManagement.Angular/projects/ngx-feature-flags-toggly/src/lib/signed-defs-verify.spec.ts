@@ -139,7 +139,7 @@ describe('signed-defs-verify', () => {
 
   it('accepts Web Crypto double-SHA256 signatures over raw defs', async () => {
     const { privateKey, jwk } = await makeSignedKey();
-    const defs = '{"PresalePhotos":true,"PuppySales":false}';
+    const defs = '{"PresalePhotos":true,"OrderSales":false}';
     const timestamp = 1783915396;
     const signature = bytesToBase64(await signDoubleHashP1363(privateKey, defs, timestamp));
 

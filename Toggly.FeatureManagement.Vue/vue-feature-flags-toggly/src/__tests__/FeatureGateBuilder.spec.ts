@@ -39,4 +39,30 @@ describe('FeatureGateBuilder', () => {
     await flushPromises()
     expect(wrapper.find('.state').text()).toBe('off')
   })
+
+  it('treats an empty gate as enabled unless negated', async () => {
+    const wrapper = mount(FeatureGateBuilder, {
+      props: { negate: false },
+      global: { provide: { $toggly: service } },
+      slots: {
+        default: `<span class="state">{{ enabled ? 'on' : 'off' }}</span>`,
+      },
+    })
+
+    await flushPromises()
+    expect(wrapper.find('.state').text()).toBe('on')
+  })
+
+  it('evaluates featureKeys as a combined gate', async () => {
+    const wrapper = mount(FeatureGateBuilder, {
+      props: { featureKeys: ['Enabled', 'Disabled'], requirement: 'any' },
+      global: { provide: { $toggly: service } },
+      slots: {
+        default: `<span class="state">{{ enabled ? 'on' : 'off' }}</span>`,
+      },
+    })
+
+    await flushPromises()
+    expect(wrapper.find('.state').text()).toBe('on')
+  })
 })

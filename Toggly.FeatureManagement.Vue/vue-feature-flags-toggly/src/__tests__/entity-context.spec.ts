@@ -39,7 +39,7 @@ describe('Entity context evaluation', () => {
   it('evaluates entity gates with TogglyEntityContext', async () => {
     await expect(
       service.isFeatureOn('EntityGated', {
-        kind: 'Puppy',
+        kind: 'Order',
         key: '1',
         attributes: { BirthDate: '2026-06-15T00:00:00Z' },
       }),
@@ -47,14 +47,14 @@ describe('Entity context evaluation', () => {
   });
 
   it('evaluates entity gates via registerContext mapper', async () => {
-    service.registerContext<{ id: string; birthDate: string }>('Puppy', (puppy) => ({
-      kind: 'Puppy',
-      key: puppy.id,
-      attributes: { BirthDate: puppy.birthDate },
+    service.registerContext<{ id: string; birthDate: string }>('Order', (order) => ({
+      kind: 'Order',
+      key: order.id,
+      attributes: { BirthDate: order.birthDate },
     }));
 
     await expect(
-      service.isFeatureOn('EntityGated', { id: '42', birthDate: '2026-06-15T00:00:00Z' }, 'Puppy'),
+      service.isFeatureOn('EntityGated', { id: '42', birthDate: '2026-06-15T00:00:00Z' }, 'Order'),
     ).resolves.toBe(true);
   });
 
@@ -64,14 +64,14 @@ describe('Entity context evaluation', () => {
   });
 
   it('fails closed when the mapped entity misses the rule', async () => {
-    service.registerContext<{ id: string; birthDate: string }>('Puppy', (puppy) => ({
-      kind: 'Puppy',
-      key: puppy.id,
-      attributes: { BirthDate: puppy.birthDate },
+    service.registerContext<{ id: string; birthDate: string }>('Order', (order) => ({
+      kind: 'Order',
+      key: order.id,
+      attributes: { BirthDate: order.birthDate },
     }));
 
     await expect(
-      service.isFeatureOn('EntityGated', { id: '43', birthDate: '2020-01-01T00:00:00Z' }, 'Puppy'),
+      service.isFeatureOn('EntityGated', { id: '43', birthDate: '2020-01-01T00:00:00Z' }, 'Order'),
     ).resolves.toBe(false);
   });
 
@@ -91,7 +91,7 @@ describe('Entity context evaluation', () => {
     await expect(service.isFeatureOff('EntityGated')).resolves.toBe(true);
     await expect(
       service.isFeatureOff('EntityGated', {
-        kind: 'Puppy',
+        kind: 'Order',
         key: '1',
         attributes: { BirthDate: '2026-06-15T00:00:00Z' },
       }),
@@ -100,7 +100,7 @@ describe('Entity context evaluation', () => {
 
   it('applies entity context across all/any gates', async () => {
     const context = {
-      kind: 'Puppy',
+      kind: 'Order',
       key: '1',
       attributes: { BirthDate: '2026-06-15T00:00:00Z' },
     };
@@ -123,7 +123,7 @@ describe('Entity context evaluation', () => {
     expect(service.getEffectiveFlagValue('EntityGated')).toBe(false);
     expect(
       service.getEffectiveFlagValue('EntityGated', {
-        kind: 'Puppy',
+        kind: 'Order',
         key: '1',
         attributes: { BirthDate: '2026-06-15T00:00:00Z' },
       }),
@@ -135,7 +135,7 @@ describe('Entity context evaluation', () => {
       props: {
         featureKey: 'EntityGated',
         context: {
-          kind: 'Puppy',
+          kind: 'Order',
           key: '1',
           attributes: { BirthDate: '2026-06-15T00:00:00Z' },
         },
@@ -162,7 +162,7 @@ describe('Entity context evaluation', () => {
       props: {
         featureKeys: ['PlainOn', 'EntityGated'],
         context: {
-          kind: 'Puppy',
+          kind: 'Order',
           key: '1',
           attributes: { BirthDate: '2026-06-15T00:00:00Z' },
         },
@@ -187,17 +187,17 @@ describe('Entity context evaluation', () => {
   });
 
   it('FeatureGateBuilder maps a domain object through contextKind', async () => {
-    service.registerContext<{ id: string; birthDate: string }>('Puppy', (puppy) => ({
-      kind: 'Puppy',
-      key: puppy.id,
-      attributes: { BirthDate: puppy.birthDate },
+    service.registerContext<{ id: string; birthDate: string }>('Order', (order) => ({
+      kind: 'Order',
+      key: order.id,
+      attributes: { BirthDate: order.birthDate },
     }));
 
     const wrapper = mount(FeatureGateBuilder, {
       props: {
         featureKey: 'EntityGated',
         context: { id: '7', birthDate: '2026-06-15T00:00:00Z' },
-        contextKind: 'Puppy',
+        contextKind: 'Order',
       },
       global: { provide: { $toggly: service } },
       slots: { default: `<span class="state">{{ enabled ? 'on' : 'off' }}</span>` },

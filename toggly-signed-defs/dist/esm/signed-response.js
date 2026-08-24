@@ -40,7 +40,9 @@ export async function parseEvaluatedResponseBody(bodyText, options) {
         return JSON.parse(bodyText);
     }
     const { envelope, defsRaw } = parseSignedEnvelope(bodyText);
-    const jwks = await fetchJwks(resolveBaseUri(options), options.headers, options.fetchImpl ?? fetch);
+    const jwks = options.getJwks
+        ? await options.getJwks()
+        : await fetchJwks(resolveBaseUri(options), options.headers, options.fetchImpl ?? fetch);
     await verifySignedDefinitions(defsRaw, {
         signature: envelope.signature,
         timestamp: envelope.timestamp,
@@ -49,6 +51,109 @@ export async function parseEvaluatedResponseBody(bodyText, options) {
         ? { maxSignatureAgeSeconds: options.maxSignatureAgeSeconds }
         : null);
     return parseDefinitionsFromRaw(defsRaw);
+}
+/** In-memory JWKS cache used by client SDKs across refreshes. */
+export class InMemoryJwksCache {
+    constructor() {
+        this.jwks = null;
+    }
+    clear() {
+        this.jwks = null;
+    }
+    async get(options, forceRefresh = false) {
+        if (!forceRefresh && this.jwks) {
+            return this.jwks;
+        }
+        this.jwks = await fetchJwks(resolveBaseUri(options), options.headers, options.fetchImpl ?? fetch);
+        return this.jwks;
+    }
+}
+/**
+ * Read an evaluated-signed HTTP body and return unwrapped defs.
+ * Unsigned payloads may be `{ defs }` or a bare map; signed payloads are verified first.
+ */
+export async function readAndParseEvaluatedResponse(response, options) {
+    const parsed = await parseEvaluatedResponseBody(await readResponseBody(response), options);
+    return options.verifySignatures ? parsed : unwrapDefsPayload(parsed);
+}
+/**
+ * Parse an evaluated-signed response using an in-memory JWKS cache.
+ * Client SDKs pass their existing config object plus optional fetch headers.
+ */
+export async function readAndParseEvaluatedResponseCached(response, jwks, config, headers) {
+    return readAndParseEvaluatedResponse(response, signedDefsClientOptions({
+        verifySignatures: config.verifySignatures,
+        baseURI: config.baseURI,
+        baseUri: config.baseUri ?? config.baseUrl,
+        allowedKeyIds: config.allowedKeyIds,
+        maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
+        headers,
+        fetchImpl: config.fetchImpl,
+    }, jwks));
+}
+const DEFINITIONS_REVISION_HEADER = 'X-Definitions-Revision';
+function revisionFromResponse(response) {
+    const headers = response.headers;
+    if (!headers || typeof headers.get !== 'function') {
+        return null;
+    }
+    return headers.get(DEFINITIONS_REVISION_HEADER) ?? headers.get('ETag');
+}
+function asHeaderRecord(init) {
+    if (!init) {
+        return {};
+    }
+    if (Array.isArray(init)) {
+        return Object.fromEntries(init);
+    }
+    if (typeof init.forEach === 'function') {
+        const record = {};
+        init.forEach((value, key) => {
+            record[key] = value;
+        });
+        return record;
+    }
+    const record = {};
+    for (const [key, value] of Object.entries(init)) {
+        if (typeof value === 'string') {
+            record[key] = value;
+        }
+    }
+    return record;
+}
+/**
+ * Fetch evaluated-signed defs, honor If-None-Match / 304, and parse through the JWKS cache.
+ */
+export async function fetchEvaluatedSignedDefinitions(url, jwks, config, request = {}) {
+    const fetchImpl = config.fetchImpl ?? fetch;
+    const headers = asHeaderRecord(request.headers);
+    if (request.revision) {
+        headers['If-None-Match'] = request.revision;
+    }
+    const response = await fetchImpl(url, { headers });
+    const revision = revisionFromResponse(response);
+    if (response.status === 304) {
+        return { notModified: true, revision };
+    }
+    if (!response.ok) {
+        throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
+    }
+    const defs = await readAndParseEvaluatedResponseCached(response, jwks, config, request.headers);
+    return { notModified: false, defs, revision };
+}
+/** Build parse options that reuse an in-memory JWKS cache. */
+export function signedDefsClientOptions(config, jwks) {
+    const baseURI = config.baseURI ?? config.baseUri ?? config.baseUrl;
+    return {
+        ...config,
+        baseURI,
+        maxSignatureAgeSeconds: config.maxSignatureAgeSeconds ?? undefined,
+        getJwks: () => jwks.get({
+            baseURI,
+            headers: config.headers,
+            fetchImpl: config.fetchImpl,
+        }),
+    };
 }
 /** Unwrap `{ defs }` when present; otherwise treat payload as the defs map. */
 export function unwrapDefsPayload(payload) {
@@ -59,4 +164,35 @@ export function unwrapDefsPayload(payload) {
         }
     }
     return payload;
+}
+/** Coerce evaluated-variants payload to a defs map; arrays/primitives become `{}`. */
+export function asVariantDefsRecord(parsedDefs) {
+    if (parsedDefs && typeof parsedDefs === 'object' && !Array.isArray(parsedDefs)) {
+        return parsedDefs;
+    }
+    return {};
+}
+/**
+ * Shared fallback when evaluated-signed fetch fails: prefer cached variants,
+ * else flags/defaults when features were never loaded. Returns null to keep
+ * in-memory state unchanged.
+ */
+export function resolveEvaluatedFetchErrorState(input) {
+    if (input.enableVariants) {
+        const cachedVariants = input.readVariants() ?? null;
+        if (cachedVariants) {
+            return {
+                variants: cachedVariants,
+                features: input.variantsToFlags(cachedVariants),
+            };
+        }
+        if (!input.featuresAlreadyLoaded) {
+            return { variants: null, features: input.readFlags() ?? input.defaults };
+        }
+        return null;
+    }
+    if (!input.featuresAlreadyLoaded) {
+        return { variants: null, features: input.readFlags() ?? input.defaults };
+    }
+    return null;
 }

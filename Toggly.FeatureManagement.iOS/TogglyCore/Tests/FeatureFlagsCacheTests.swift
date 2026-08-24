@@ -82,7 +82,7 @@ final class FeatureFlagsCacheTests: XCTestCase {
 
     func testColdStartReVerifiesSignedCacheWithPersistedJwks() async throws {
         let fixture = try makeSignedFixture(
-            defs: #"{"PresalePhotos":true,"PuppySales":false}"#,
+            defs: #"{"PresalePhotos":true,"OrderSales":false}"#,
             timestamp: Int64(Date().timeIntervalSince1970)
         )
         let identity = "user-1"
@@ -119,10 +119,10 @@ final class FeatureFlagsCacheTests: XCTestCase {
 
         let response = await service.initialize()
         let isOn = await service.isFeatureOn("PresalePhotos")
-        let isOff = await service.isFeatureOn("PuppySales")
+        let isOff = await service.isFeatureOn("OrderSales")
 
         XCTAssertEqual(response.flags["PresalePhotos"], true)
-        XCTAssertEqual(response.flags["PuppySales"], false)
+        XCTAssertEqual(response.flags["OrderSales"], false)
         XCTAssertTrue(isOn)
         XCTAssertFalse(isOff)
     }

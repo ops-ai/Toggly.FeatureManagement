@@ -12,9 +12,16 @@ export {
 } from './signed-defs-verify'
 export type { VerifySignatureOptions } from './signed-response'
 export {
+  InMemoryJwksCache,
+  readAndParseEvaluatedResponse,
+  readAndParseEvaluatedResponseCached,
+  fetchEvaluatedSignedDefinitions,
+  signedDefsClientOptions,
   readResponseBody,
   parseEvaluatedResponseBody,
   unwrapDefsPayload,
+  asVariantDefsRecord,
+  resolveEvaluatedFetchErrorState,
 } from './signed-response'
 export type {
   EntityGate,

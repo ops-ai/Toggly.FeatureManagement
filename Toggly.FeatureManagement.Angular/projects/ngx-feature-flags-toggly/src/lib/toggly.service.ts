@@ -37,7 +37,6 @@ import {
 } from '@ops-ai/toggly-local-gates'
 import {
   buildWebSocketUrl,
-  extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
   shouldFetchOnFlagsUpdated,
@@ -46,12 +45,7 @@ import {
   type WsSyncMessage,
 } from './ws-sync'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
-import {
-  parseDefinitionsFromRaw,
-  parseSignedEnvelope,
-  verifySignedDefinitions,
-  type JwkSet,
-} from './signed-defs-verify'
+import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs'
 
 const CACHE_PREFIX_FLAGS = 'toggly:flags:'
 const CACHE_PREFIX_VARIANTS = 'toggly:variants:'
@@ -114,7 +108,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private _cachedDefinitionsRevision: string | null = null
   private _lastFallbackRefresh = 0
   private _webSocketBootstrapped = false
-  private _inMemoryJwks: JwkSet | null = null
+  private _jwks = new InMemoryJwksCache()
   private readonly FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
 
   shouldShowFeatureDuringEvaluation: boolean = false
@@ -426,59 +420,11 @@ export class TogglyService implements ITogglyService, OnDestroy {
       if (forceJwksRefresh) {
         this._cachedDefinitionsRevision = null
         if (this._config.verifySignatures) {
-          this._inMemoryJwks = null
+          this._jwks.clear()
         }
       }
       void this._refreshFeatures()
     }, REFRESH_DEBOUNCE_MS)
-  }
-
-  private async _fetchJwks(forceRefresh = false): Promise<JwkSet> {
-    if (!forceRefresh && this._inMemoryJwks) {
-      return this._inMemoryJwks
-    }
-    const base = this._config.baseURI ?? 'https://definitions.toggly.io'
-    const response = await fetch(`${base}/.well-known/jwks`, {
-      headers: buildDefinitionFetchHeaders(),
-    })
-    if (!response.ok) {
-      throw new Error(`Failed to fetch JWKs: ${response.status} ${response.statusText}`)
-    }
-    const jwks = (await response.json()) as JwkSet
-    this._inMemoryJwks = jwks
-    return jwks
-  }
-
-  /**
-   * Parse evaluated-signed body. When verifySignatures is enabled, verify ES256
-   * against the exact raw defs JSON (Web Crypto double-hash).
-   */
-  private async _readResponseBody(response: Response): Promise<string> {
-    if (typeof response.text === 'function') {
-      return response.text()
-    }
-    return JSON.stringify(await response.json())
-  }
-
-  private async _parseEvaluatedSignedBody(bodyText: string): Promise<{ defs: unknown }> {
-    if (!this._config.verifySignatures) {
-      const payload = JSON.parse(bodyText) as { defs?: unknown }
-      return { defs: asEvaluatedDefinitions(payload?.defs ?? payload) }
-    }
-    const { envelope, defsRaw } = parseSignedEnvelope(bodyText)
-    const jwks = await this._fetchJwks()
-    await verifySignedDefinitions(
-      defsRaw,
-      {
-        signature: envelope.signature,
-        timestamp: envelope.timestamp,
-        kid: envelope.kid,
-      },
-      jwks,
-      this._config.allowedKeyIds,
-      { maxSignatureAgeSeconds: this._config.maxSignatureAgeSeconds },
-    )
-    return { defs: asEvaluatedDefinitions(parseDefinitionsFromRaw(defsRaw)) }
   }
 
   private _handleWsSyncMessage(message: WsSyncMessage): void {
@@ -573,31 +519,31 @@ export class TogglyService implements ITogglyService, OnDestroy {
         url = fetchUrl.toString()
       }
 
-      const revision = this._definitionsRevision
-      const headers: HeadersInit = buildDefinitionFetchHeaders(
-        revision ? { 'If-None-Match': revision } : {},
+      const loaded = await fetchEvaluatedSignedDefinitions(
+        url,
+        this._jwks,
+        {
+          ...this._config,
+          baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
+        },
+        {
+          revision: this._definitionsRevision,
+          headers: buildDefinitionFetchHeaders(),
+        },
       )
-
-      const response = await fetch(url, { headers })
-      const responseRevision = extractDefinitionsRevision(response)
-      if (responseRevision) {
-        this._cacheDefinitionsRevision(responseRevision.replace(/^"+|"+$/g, ''))
+      if (loaded.revision) {
+        this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
       }
-      if (response.status === 304) {
+      if (loaded.notModified) {
         this._lastFallbackRefresh = Date.now()
         return this._features
       }
-      if (!response.ok) {
-        throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
-      }
-      const bodyText = await this._readResponseBody(response)
-      const { defs: parsedDefs } = await this._parseEvaluatedSignedBody(bodyText)
-      const raw = parsedDefs
+      const raw = loaded.defs
 
       this._lastFallbackRefresh = Date.now()
 
       if (useVariantResponse) {
-        const defs = raw as { [key: string]: EvaluatedVariantDef }
+        const defs = raw as unknown as { [key: string]: EvaluatedVariantDef }
         this._applyVariantDefs(defs)
         if (this._features) {
           this._writeCachedVariants(defs)

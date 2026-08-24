@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Toggly.FeatureManagement.Context
 {
     /// <summary>
-    /// Canonical entity instance passed into feature evaluation (Order, Puppy, etc.).
+    /// Canonical entity instance passed into feature evaluation (Order, Product, etc.).
     /// </summary>
     public sealed class TogglyEntityContext
     {

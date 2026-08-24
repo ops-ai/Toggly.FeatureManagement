@@ -53,7 +53,7 @@ void main() {
     _installInterceptor(
       _unsignedFlagsInterceptor({
         'PresalePhotos': true,
-        'PuppySales': true,
+        'OrderSales': true,
       }),
     );
   });
@@ -79,7 +79,7 @@ void main() {
         environment: 'TestFlight',
         identity: 'ApplicationUsers/1-C',
         useSignedDefinitions: false,
-        flagDefaults: {'PresalePhotos': false, 'PuppySales': false},
+        flagDefaults: {'PresalePhotos': false, 'OrderSales': false},
         config: const TogglyConfig(
           baseURI: 'https://example.test',
           enableLiveUpdates: false,

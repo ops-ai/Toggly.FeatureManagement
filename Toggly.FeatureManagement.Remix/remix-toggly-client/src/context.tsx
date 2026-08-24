@@ -19,7 +19,10 @@ import {
   fetchWithTimeout,
   createLogger,
   mergeConfig,
+  normalizeEntityContext,
+  registerContext as registerEntityContext,
 } from '@ops-ai/remix-toggly-core';
+import type { TogglyEntityContext } from '@ops-ai/remix-toggly-core';
 import { appendSdkQueryParams } from './sdk-identity';
 import {
   applyLocalGate,
@@ -46,15 +49,29 @@ export interface TogglyContextValue {
   /** Current identity */
   identity?: string;
   /** Check if a feature is enabled */
-  isEnabled: (featureKey: string, defaultValue?: boolean) => boolean;
+  isEnabled: (
+    featureKey: string,
+    defaultValue?: boolean,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => boolean;
   /** Check if a feature is disabled */
-  isDisabled: (featureKey: string, defaultValue?: boolean) => boolean;
+  isDisabled: (
+    featureKey: string,
+    defaultValue?: boolean,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => boolean;
   /** Evaluate a feature gate */
   evaluateGate: (
     featureKeys: string[],
     requirement?: 'all' | 'any',
-    negate?: boolean
+    negate?: boolean,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ) => boolean;
+  /** Register a domain-object mapper for entity-context evaluation */
+  registerContext: <T>(kind: string, mapper: (entity: T) => TogglyEntityContext) => void;
   /** Set user identity */
   identify: (identity: string, context?: IdentityContext) => Promise<void>;
   /** Clear user identity */
@@ -132,8 +149,17 @@ export function TogglyProvider({
   const localGatesListenersRef = useRef(new Set<() => void>());
 
   const getEffectiveFlag = useCallback(
-    (featureKey: string, defaultValue = false): boolean => {
-      const remote = coreIsFeatureEnabled(flags, featureKey, defaultValue);
+    (
+      featureKey: string,
+      defaultValue = false,
+      entityContext?: TogglyEntityContext | null,
+    ): boolean => {
+      const remote = coreIsFeatureEnabled(
+        flags,
+        featureKey,
+        defaultValue,
+        entityContext,
+      );
       return applyLocalGate(
         remote,
         featureKey,
@@ -142,6 +168,13 @@ export function TogglyProvider({
       );
     },
     [flags, localGatesRevision]
+  );
+
+  const registerContext = useCallback(
+    <T,>(kind: string, mapper: (entity: T) => TogglyEntityContext): void => {
+      registerEntityContext(kind, mapper);
+    },
+    [],
   );
 
   const setLocalGates = useCallback((gates: LocalGate[]): void => {
@@ -240,16 +273,30 @@ export function TogglyProvider({
 
   // Check if feature is enabled (sync for performance)
   const isEnabled = useCallback(
-    (featureKey: string, defaultValue = false): boolean => {
-      return getEffectiveFlag(featureKey, defaultValue);
+    (
+      featureKey: string,
+      defaultValue = false,
+      entity?: TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ): boolean => {
+      return getEffectiveFlag(
+        featureKey,
+        defaultValue,
+        normalizeEntityContext(entity, kind),
+      );
     },
     [getEffectiveFlag]
   );
 
   // Check if feature is disabled
   const isDisabled = useCallback(
-    (featureKey: string, defaultValue = true): boolean => {
-      return !isEnabled(featureKey, !defaultValue);
+    (
+      featureKey: string,
+      defaultValue = true,
+      entity?: TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ): boolean => {
+      return !isEnabled(featureKey, !defaultValue, entity, kind);
     },
     [isEnabled]
   );
@@ -259,17 +306,25 @@ export function TogglyProvider({
     (
       featureKeys: string[],
       requirement: 'all' | 'any' = 'all',
-      negate = false
+      negate = false,
+      entity?: TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
     ): boolean => {
       if (featureKeys.length === 0) {
         return !negate;
       }
 
+      const entityContext = normalizeEntityContext(entity, kind);
+
       let result: boolean;
       if (requirement === 'any') {
-        result = featureKeys.some((key) => getEffectiveFlag(key, false));
+        result = featureKeys.some((key) =>
+          getEffectiveFlag(key, false, entityContext),
+        );
       } else {
-        result = featureKeys.every((key) => getEffectiveFlag(key, false));
+        result = featureKeys.every((key) =>
+          getEffectiveFlag(key, false, entityContext),
+        );
       }
 
       return negate ? !result : result;
@@ -552,6 +607,7 @@ export function TogglyProvider({
       isEnabled,
       isDisabled,
       evaluateGate,
+      registerContext,
       identify,
       reset,
       refresh,
@@ -568,6 +624,7 @@ export function TogglyProvider({
       isEnabled,
       isDisabled,
       evaluateGate,
+      registerContext,
       identify,
       reset,
       refresh,

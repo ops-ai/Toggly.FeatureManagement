@@ -39,7 +39,7 @@ describe('Entity context evaluation', () => {
   it('evaluates entity gates with TogglyEntityContext', async () => {
     await expect(
       service.isFeatureOn('EntityGated', {
-        kind: 'Puppy',
+        kind: 'Order',
         key: '1',
         attributes: { BirthDate: '2026-06-15T00:00:00Z' },
       }),
@@ -47,14 +47,14 @@ describe('Entity context evaluation', () => {
   });
 
   it('evaluates entity gates via registerContext mapper', async () => {
-    service.registerContext<{ id: string; birthDate: string }>('Puppy', (puppy) => ({
-      kind: 'Puppy',
-      key: puppy.id,
-      attributes: { BirthDate: puppy.birthDate },
+    service.registerContext<{ id: string; birthDate: string }>('Order', (order) => ({
+      kind: 'Order',
+      key: order.id,
+      attributes: { BirthDate: order.birthDate },
     }));
 
     await expect(
-      service.isFeatureOn('EntityGated', { id: '42', birthDate: '2026-06-15T00:00:00Z' }, 'Puppy'),
+      service.isFeatureOn('EntityGated', { id: '42', birthDate: '2026-06-15T00:00:00Z' }, 'Order'),
     ).resolves.toBe(true);
   });
 
@@ -69,7 +69,7 @@ describe('Entity context evaluation', () => {
         <Feature
           featureKey="EntityGated"
           context={{
-            kind: 'Puppy',
+            kind: 'Order',
             key: '1',
             attributes: { BirthDate: '2026-06-15T00:00:00Z' },
           }}

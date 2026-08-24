@@ -15,6 +15,10 @@ export {
 } from '@ops-ai/remix-toggly-core';
 
 // Re-export core type exports
+export {
+  registerContext,
+  normalizeEntityContext,
+} from '@ops-ai/remix-toggly-core';
 export type {
   TogglyConfig,
   FeatureFlags,
@@ -26,6 +30,7 @@ export type {
   IdentitySeriesData,
   FeatureRequirement,
   EvaluationResult,
+  TogglyEntityContext,
 } from '@ops-ai/remix-toggly-core';
 
 // Export context and provider

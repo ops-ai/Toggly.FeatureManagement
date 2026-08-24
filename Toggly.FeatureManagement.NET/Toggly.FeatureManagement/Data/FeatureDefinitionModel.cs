@@ -39,7 +39,7 @@ namespace Toggly.FeatureManagement.Data
         public RequirementType RequirementType { get; set; } = RequirementType.Any;
 
         /// <summary>
-        /// Optional entity context kind bound to this feature (Order, Puppy, etc.).
+        /// Optional entity context kind bound to this feature (Order, Product, etc.).
         /// </summary>
         public string? ContextKind { get; set; }
 
