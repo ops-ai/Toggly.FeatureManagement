@@ -56,7 +56,7 @@ def __getattr__(name: str):
 
 
 __all__ = [
-    "__version__",
-    "RedisSnapshotProvider",
     "MemcachedSnapshotProvider",
+    "RedisSnapshotProvider",
+    "__version__",
 ]

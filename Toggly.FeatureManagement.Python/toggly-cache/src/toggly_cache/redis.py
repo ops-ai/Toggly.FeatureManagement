@@ -57,7 +57,7 @@ class RedisSnapshotProvider:
 
     def __init__(
         self,
-        client: "Redis | None" = None,
+        client: Redis | None = None,
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -107,7 +107,7 @@ class RedisSnapshotProvider:
         self._ttl = ttl
 
     @property
-    def client(self) -> "Redis":
+    def client(self) -> Redis:
         """Get the Redis client instance."""
         return self._client
 
@@ -190,7 +190,7 @@ class RedisSnapshotProvider:
         except json.JSONDecodeError as e:
             logger.error("Failed to parse snapshot from Redis: %s", e)
             return None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Failed to load snapshot from Redis: %s", e)
             return None
 
@@ -212,7 +212,7 @@ class RedisSnapshotProvider:
             if deleted:
                 logger.debug("Deleted snapshot from Redis key: %s", key)
             return deleted
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Failed to delete snapshot from Redis: %s", e)
             return False
 
@@ -230,7 +230,7 @@ class RedisSnapshotProvider:
 
         try:
             return bool(self._client.exists(key))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Failed to check snapshot existence in Redis: %s", e)
             return False
 
@@ -243,5 +243,5 @@ class RedisSnapshotProvider:
         """
         try:
             self._client.close()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Error closing Redis connection: %s", e)

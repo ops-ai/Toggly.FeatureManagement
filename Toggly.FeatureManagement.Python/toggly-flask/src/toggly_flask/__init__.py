@@ -24,19 +24,19 @@ from toggly_flask.extension import (
 
 __version__ = "0.1.0"
 __all__ = [
+    "FeatureFlagBlueprint",
+    "FeatureFlagChecker",
+    "TemplateToggly",
     # Extension
     "Toggly",
     "TogglyRequestHelper",
-    "TemplateToggly",
-    "FeatureFlagChecker",
     # Decorators
     "feature_flag_required",
-    "feature_gate_required",
     "feature_flag_switch",
+    "feature_gate_required",
     "feature_variant",
-    "FeatureFlagBlueprint",
-    # Utilities
-    "get_toggly",
     "get_client",
     "get_context_from_request",
+    # Utilities
+    "get_toggly",
 ]

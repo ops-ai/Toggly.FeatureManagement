@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from contextvars import ContextVar
-from typing import Any, Awaitable, Callable, Optional, Union
+from typing import Any, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -19,12 +20,12 @@ from toggly import (
 )
 
 # Context variable to store request-scoped Toggly helper
-_toggly_context: ContextVar[Optional["TogglyRequestHelper"]] = ContextVar(
+_toggly_context: ContextVar[TogglyRequestHelper | None] = ContextVar(
     "toggly_context", default=None
 )
 
 # Module-level client reference
-_client: Optional[Union[TogglyClient, AsyncTogglyClient]] = None
+_client: TogglyClient | AsyncTogglyClient | None = None
 
 
 def configure_toggly(
@@ -115,13 +116,12 @@ def get_toggly_client() -> TogglyClient | AsyncTogglyClient | None:
     Returns:
         The TogglyClient or None if not configured.
     """
-    global _client
     if _client is not None:
         return _client
     return get_default_client()
 
 
-def get_current_toggly() -> "TogglyRequestHelper | None":
+def get_current_toggly() -> TogglyRequestHelper | None:
     """Get the current request's Toggly helper from context.
 
     Returns:
