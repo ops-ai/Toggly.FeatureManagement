@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `buildEvaluatedSignedUrl()` so client SDKs share one evaluated/variants signed-defs URL builder.
+- README notes for per-eval entity context (clients do not PUT schemas).
 
 ## [1.4.2] - 2026-08-19
 

@@ -1,3 +1,14 @@
+## 1.5.0
+
+2026-08-21
+
+### Added
+- Entity context evaluation for mixed definitions via `registerContext` and
+  per-call context. Entity gates fail closed without context.
+
+### Changed
+- README links to `/sdks/nuxt/` (not `/sdks/javascript/nuxt`).
+
 ## 1.4.1
 
 2026-07-14

@@ -13,6 +13,20 @@ npm install @ops-ai/remix-toggly-core
 - [docs.toggly.io](https://docs.toggly.io)
 - SDK catalog: [root README](../../README.md)
 
+## Entity context
+
+`isFeatureEnabled` / gate helpers accept optional entity context. User identity (`IdentityContext`) is separate from page-entity context. Register mappers with `registerContext` locally — this client does not PUT entity schemas.
+
+Entity gates fail closed without context. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
+
+```ts
+registerContext('Order', (order) => ({
+  kind: 'Order',
+  key: String(order.id),
+  attributes: { Status: order.status },
+}))
+```
+
 ## License
 
 [MIT](LICENSE) — see also the [repository LICENSE](https://github.com/ops-ai/Toggly.FeatureManagement/blob/develop/LICENSE).

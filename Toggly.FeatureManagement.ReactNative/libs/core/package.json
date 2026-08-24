@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/react-native-toggly-core",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "description": "Core feature flag logic for React Native applications. Framework-agnostic, minimal dependencies. Can be used with or without Toggly.io.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",

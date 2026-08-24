@@ -1,3 +1,14 @@
+## 1.4.0
+
+2026-08-21
+
+### Added
+- Entity context on `isEnabled` / `evaluateGate` with `registerContext`.
+  Entity gates fail closed without context; hydrated flags keep gate objects.
+
+### Changed
+- README: loader/action `isEnabled` has no entity args; docs link to `/sdks/remix/server`.
+
 ## 1.3.2
 
 2026-07-14

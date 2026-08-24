@@ -13,6 +13,12 @@ npm install @ops-ai/nextjs-toggly-edge
 - [docs.toggly.io](https://docs.toggly.io)
 - SDK catalog: [root README](../../README.md)
 
+## Entity context
+
+Edge middleware has no per-request entity. Mixed `boolean | EntityGate` definitions are collapsed with `toBooleanDefinitions()` **without** entity context, so gated flags evaluate to `false` in middleware.
+
+Evaluate entity gates in Node/server or client code (`@ops-ai/nextjs-toggly-core`) where you can pass per-eval context. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
+
 ## License
 
 [MIT](LICENSE) — see also the [repository LICENSE](https://github.com/ops-ai/Toggly.FeatureManagement/blob/develop/LICENSE).

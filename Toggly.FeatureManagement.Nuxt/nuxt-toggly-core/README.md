@@ -13,6 +13,22 @@ npm install @ops-ai/nuxt-toggly-core
 - [docs.toggly.io](https://docs.toggly.io)
 - SDK catalog: [root README](../../README.md)
 
+## Entity context
+
+Pass a domain object on each `isFeatureOn` / `evaluateFeatureGate` call. `setContext` is the user, not the page entity. Register mappers with `registerContext` locally — this client does not PUT entity schemas.
+
+Entity gates fail closed without context. See [Nuxt SDK](https://docs.toggly.io/sdks/nuxt/).
+
+```ts
+client.registerContext('Order', (order) => ({
+  kind: 'Order',
+  key: String(order.id),
+  attributes: { Status: order.status },
+}))
+
+await client.isFeatureOn('OrderBadge', order, 'Order')
+```
+
 ## License
 
 [MIT](LICENSE) — see also the [repository LICENSE](https://github.com/ops-ai/Toggly.FeatureManagement/blob/develop/LICENSE).

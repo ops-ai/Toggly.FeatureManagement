@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0
+
+2026-08-21
+
+### Changed
+- Document that edge middleware collapses `EntityGate` definitions to `false`
+  because there is no per-request entity context (`toBooleanDefinitions`
+  without context).
+
 ## 1.1.1
 
 2026-07-14

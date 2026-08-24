@@ -545,6 +545,22 @@ const debugHook: Hook = {
 };
 ```
 
+## Entity context
+
+Pass a domain object on each `isFeatureOn` / `evaluateFeatureGate` call (list rows, detail pages). User identity stays on `setContext`; it is not the page entity. Register mappers with `registerContext` locally — this client does not PUT entity schemas.
+
+Entity gates fail closed when no context is supplied. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
+
+```ts
+togglyService.registerContext('Order', (order) => ({
+  kind: 'Order',
+  key: String(order.id),
+  attributes: { Status: order.status },
+}));
+
+const enabled = await togglyService.isFeatureOn('OrderBadge', order, 'Order');
+```
+
 ## Find out more about Toggly.io
 
 Visit [our official website](https://toggly.io) or [check out a video overview of our product](https://docs.toggly.io/).

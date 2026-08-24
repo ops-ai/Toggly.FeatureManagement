@@ -1,3 +1,13 @@
+## 1.4.3
+
+2026-08-21
+
+### Added
+- README notes for per-eval entity context (clients do not PUT schemas).
+
+### Changed
+- README links to `/sdks/nextjs/` (not `/sdks/javascript/nextjs`).
+
 ## 1.4.2
 
 2026-08-19
