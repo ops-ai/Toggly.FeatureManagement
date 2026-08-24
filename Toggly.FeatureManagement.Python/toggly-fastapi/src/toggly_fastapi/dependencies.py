@@ -305,7 +305,7 @@ class FeatureGateDependency:
         self.status_code = status_code
         self.detail = detail
 
-    def __call__(self, toggly: TogglyDep) -> dict[str, bool]:
+    def __call__(self, toggly: TogglyRequestHelper = Depends(get_toggly)) -> dict[str, bool]:  # noqa: B008
         """Evaluate the feature gate.
 
         Args:
