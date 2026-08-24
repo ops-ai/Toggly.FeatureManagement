@@ -8,7 +8,7 @@ group :development, :test do
   gem "parallel", "~> 1.27"
   gem "rake", "~> 13.0"
   gem "rspec", "~> 3.12"
-  gem "rubocop", "~> 1.56", require: false
+  gem "rubocop", "~> 1.89", require: false
   gem "rubocop-rspec", "~> 2.24", require: false
   gem "simplecov", "~> 0.22", require: false
   gem "webmock", "~> 3.18"
