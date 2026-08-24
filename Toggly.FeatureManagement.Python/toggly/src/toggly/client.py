@@ -21,6 +21,7 @@ except ImportError:
 from toggly.config import TogglyConfig
 from toggly.context import EvaluationContext
 from toggly.crypto import verify_signed_definitions
+from toggly.entity_context import register_entity_contexts_at_startup
 from toggly.enums import FeatureRequirement, LoadStatus
 from toggly.evaluator import EvaluationEngine, EvaluatorRegistry
 from toggly.exceptions import (
@@ -52,7 +53,6 @@ from toggly.providers import (
     VariantsSnapshot,
 )
 from toggly.version import __version__
-from toggly.entity_context import register_entity_contexts_at_startup
 
 logger = logging.getLogger("toggly")
 

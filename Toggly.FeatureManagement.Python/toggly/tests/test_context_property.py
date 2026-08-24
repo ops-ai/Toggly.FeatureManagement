@@ -50,11 +50,19 @@ def test_missing_attr_unknown_op_fail_closed():
 
 def test_in_contains_datetime():
     assert ContextPropertyEvaluator.evaluate_entity_filters(
-        FeatureDefinition(feature_key="f", requirement_type="All", filters=[_filter("Color", "in", "red, blue")]),
+        FeatureDefinition(
+            feature_key="f",
+            requirement_type="All",
+            filters=[_filter("Color", "in", "red, blue")],
+        ),
         TogglyEntityContext("P", "1", {"Color": "BLUE"}),
     )
     assert ContextPropertyEvaluator.evaluate_entity_filters(
-        FeatureDefinition(feature_key="f", requirement_type="All", filters=[_filter("Name", "contains", "pup")]),
+        FeatureDefinition(
+            feature_key="f",
+            requirement_type="All",
+            filters=[_filter("Name", "contains", "ord")],
+        ),
         TogglyEntityContext("P", "1", {"Name": "Order"}),
     )
     born = datetime(2026, 7, 1, tzinfo=timezone.utc)

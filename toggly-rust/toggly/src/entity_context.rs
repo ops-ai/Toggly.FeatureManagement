@@ -1,7 +1,7 @@
 //! Entity context mapper registry and startup catalog PUT.
 
-use crate::context::TogglyEntityContext;
 use crate::config::TogglyConfig;
+use crate::context::TogglyEntityContext;
 use serde::Serialize;
 use std::any::Any;
 use std::collections::HashMap;
@@ -116,7 +116,11 @@ pub async fn register_entity_contexts_at_startup(config: &TogglyConfig) {
 }
 
 /// Placeholder so callers can map domain objects into [`TogglyEntityContext`].
-pub fn map_passthrough(kind: impl Into<String>, key: impl Into<String>, attributes: HashMap<String, serde_json::Value>) -> TogglyEntityContext {
+pub fn map_passthrough(
+    kind: impl Into<String>,
+    key: impl Into<String>,
+    attributes: HashMap<String, serde_json::Value>,
+) -> TogglyEntityContext {
     TogglyEntityContext {
         kind: kind.into(),
         key: key.into(),
@@ -141,8 +145,8 @@ mod tests {
             |obj| {
                 let order = obj.downcast_ref::<Order>().expect("Order");
                 let mut attributes = HashMap::new();
-                attributes.insert("color".to_string(), serde_json::json!(order.status));
-                attributes.insert("age".to_string(), serde_json::json!(order.total));
+                attributes.insert("color".to_string(), serde_json::json!(order.color));
+                attributes.insert("age".to_string(), serde_json::json!(order.age));
                 TogglyEntityContext {
                     kind: "Order".to_string(),
                     key: order.id.clone(),
@@ -172,7 +176,9 @@ mod tests {
         assert_eq!(mapped.attributes.get("age").unwrap(), 3);
 
         let schemas = schemas().lock().unwrap();
-        assert!(schemas.iter().any(|s| s.kind == "Order" && s.key_property == "id"));
+        assert!(schemas
+            .iter()
+            .any(|s| s.kind == "Order" && s.key_property == "id"));
         assert!(map_entity("UnknownKind", &order).is_none());
     }
 

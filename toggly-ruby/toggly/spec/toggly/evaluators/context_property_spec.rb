@@ -13,12 +13,12 @@ RSpec.describe Toggly::Evaluators::ContextProperty do
     )
   end
 
-  def ctx_filter(property, op, value, value_type = "string")
+  def ctx_filter(property, operator, value, value_type = "string")
     {
       "name" => "ContextProperty",
       "parameters" => {
         "Property" => property,
-        "Operator" => op,
+        "Operator" => operator,
         "Value" => value,
         "ValueType" => value_type
       }

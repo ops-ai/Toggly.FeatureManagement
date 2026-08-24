@@ -314,26 +314,31 @@ class ContextPropertyEvaluator(FilterEvaluator):
         feature_key: str,
         context: EvaluationContext,
     ) -> bool:
+        """Evaluate a ContextProperty filter against the current entity."""
         if context.entity is None:
             return False
         return self.evaluate_single(filter_, context.entity)
 
     @staticmethod
     def is_context_property_filter(filter_: FeatureFilter) -> bool:
+        """Return whether the filter is a ContextProperty filter."""
         return filter_.name.lower() == FILTER_CONTEXT_PROPERTY.lower()
 
     @classmethod
     def entity_filters(cls, definition: FeatureDefinition) -> list[FeatureFilter]:
+        """Return ContextProperty filters from a definition."""
         return [f for f in definition.filters if cls.is_context_property_filter(f)]
 
     @classmethod
     def user_filters(cls, definition: FeatureDefinition) -> list[FeatureFilter]:
+        """Return non-ContextProperty filters from a definition."""
         return [f for f in definition.filters if not cls.is_context_property_filter(f)]
 
     @classmethod
     def evaluate_entity_filters(
         cls, definition: FeatureDefinition, entity: Any
     ) -> bool:
+        """Evaluate entity filters against an entity, failing closed."""
         filters = cls.entity_filters(definition)
         if not filters or entity is None:
             return False
@@ -345,6 +350,7 @@ class ContextPropertyEvaluator(FilterEvaluator):
 
     @classmethod
     def evaluate_single(cls, filter_: FeatureFilter, entity: Any) -> bool:
+        """Evaluate one ContextProperty filter against an entity."""
         params = filter_.parameters
         property_name = _param(params, "Property")
         op = _param(params, "Operator")
@@ -558,9 +564,19 @@ class EvaluationEngine:
                 return False
             if not user_filters:
                 return True
-            return self._evaluate_group(user_filters, definition.requirement_type, definition.feature_key, context)
+            return self._evaluate_group(
+                user_filters,
+                definition.requirement_type,
+                definition.feature_key,
+                context,
+            )
 
-        return self._evaluate_group(user_filters, definition.requirement_type, definition.feature_key, context)
+        return self._evaluate_group(
+            user_filters,
+            definition.requirement_type,
+            definition.feature_key,
+            context,
+        )
 
     def _evaluate_group(
         self,

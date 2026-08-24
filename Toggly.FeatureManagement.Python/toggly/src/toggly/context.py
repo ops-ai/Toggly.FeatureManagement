@@ -15,6 +15,7 @@ class TogglyEntityContext:
     attributes: dict[str, Any] = field(default_factory=dict)
 
     def get_attribute(self, name: str) -> Any:
+        """Return an attribute by name, matching case-insensitively."""
         if name in self.attributes:
             return self.attributes[name]
         lower = name.lower()
@@ -24,6 +25,7 @@ class TogglyEntityContext:
         return None
 
     def contains_attribute(self, name: str) -> bool:
+        """Return whether an attribute exists, matching case-insensitively."""
         if name in self.attributes:
             return True
         lower = name.lower()
@@ -124,7 +126,11 @@ class EvaluationContext:
             "traits": self.traits,
             "entity": None
             if self.entity is None
-            else {"kind": self.entity.kind, "key": self.entity.key, "attributes": self.entity.attributes},
+            else {
+                "kind": self.entity.kind,
+                "key": self.entity.key,
+                "attributes": self.entity.attributes,
+            },
         }
 
     @classmethod

@@ -2,6 +2,7 @@
 
 module Toggly
   module Evaluators
+    # Evaluator for ContextProperty entity filters. Fail closed.
     class ContextProperty < Base
       def self.type
         "contextproperty"
@@ -21,16 +22,16 @@ module Toggly
 
       def self.evaluate_single(rule, entity)
         property = rule_lookup(rule, "Property")
-        op = rule_lookup(rule, "Operator")
+        operator = rule_lookup(rule, "Operator")
         expected = rule_lookup(rule, "Value")
         value_type = (rule_lookup(rule, "ValueType") || "string").to_s.downcase
-        return false if property.to_s.strip.empty? || op.to_s.strip.empty? || expected.nil?
+        return false if property.to_s.strip.empty? || operator.to_s.strip.empty? || expected.nil?
 
-        op = op.to_s.downcase
+        operator = operator.to_s.downcase
         return false unless entity.attribute?(property)
 
         actual = entity.attribute(property)
-        compare(actual, op, expected.to_s, value_type)
+        compare(actual, operator, expected.to_s, value_type)
       end
 
       def self.rule_lookup(rule, key)
@@ -39,14 +40,14 @@ module Toggly
           params.find { |k, _| k.to_s.casecmp?(key.to_s) }&.last
       end
 
-      def self.compare(actual, op, expected, value_type)
-        case op
+      def self.compare(actual, operator, expected, value_type)
+        case operator
         when "eq"
           actual.to_s.casecmp?(expected)
         when "neq"
           !actual.to_s.casecmp?(expected)
         when "gt", "gte", "lt", "lte"
-          compare_ordered(actual, expected, value_type, op)
+          compare_ordered(actual, expected, value_type, operator)
         when "in"
           expected.split(",").map(&:strip).reject(&:empty?).any? { |c| c.casecmp?(actual.to_s) }
         when "contains"
@@ -60,7 +61,7 @@ module Toggly
         end
       end
 
-      def self.compare_ordered(actual, expected, value_type, op)
+      def self.compare_ordered(actual, expected, value_type, operator)
         if value_type == "datetime"
           a = Time.parse(actual.to_s)
           e = Time.parse(expected.to_s)
@@ -74,10 +75,10 @@ module Toggly
         else
           return false
         end
-        case op
-        when "gt" then cmp > 0
+        case operator
+        when "gt" then cmp.positive?
         when "gte" then cmp >= 0
-        when "lt" then cmp < 0
+        when "lt" then cmp.negative?
         when "lte" then cmp <= 0
         else false
         end

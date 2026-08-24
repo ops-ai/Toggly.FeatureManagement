@@ -64,7 +64,7 @@ class ContextPropertyEvaluatorTest {
                 definition("Color", "in", "red, blue", "string"),
                 new TogglyEntityContext("P", "1", Map.of("color", "BLUE")))).isTrue();
         assertThat(ContextPropertyEvaluator.evaluateEntityFilters(
-                definition("Name", "contains", "pup", "string"),
+                definition("Name", "contains", "ord", "string"),
                 new TogglyEntityContext("P", "1", Map.of("Name", "Order")))).isTrue();
         assertThat(ContextPropertyEvaluator.evaluateEntityFilters(
                 definition("OrderDate", "gt", "2026-06-10T00:00:00Z", "datetime"),

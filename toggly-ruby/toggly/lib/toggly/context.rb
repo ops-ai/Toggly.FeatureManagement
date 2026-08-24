@@ -11,16 +11,8 @@ module Toggly
   #   )
   class Context
     # @return [String, nil] User identity for percentage rollouts and targeting
+    # identity, groups, traits, and optional entity for ContextProperty filters
     attr_reader :identity, :groups, :traits, :entity
-
-    # @return [Array<String>] Groups the user belongs to
-    attr_reader :groups
-
-    # @return [Hash<String, Object>] Custom traits for contextual targeting
-    attr_reader :traits
-
-    # @return [EntityContext, nil] Entity for ContextProperty filters
-    attr_reader :entity
 
     def initialize(identity: nil, groups: [], traits: {}, entity: nil)
       @identity = identity&.to_s

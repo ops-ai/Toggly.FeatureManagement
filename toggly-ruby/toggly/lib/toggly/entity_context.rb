@@ -4,6 +4,7 @@ require "json"
 require "net/http"
 require "uri"
 
+# Entity context registry, mappers, and startup catalog PUT.
 module Toggly
   EntityContext = Struct.new(:kind, :key, :attributes, keyword_init: true) do
     def attribute(name)

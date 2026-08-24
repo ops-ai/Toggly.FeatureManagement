@@ -15,17 +15,21 @@ T = TypeVar("T")
 logger = logging.getLogger("toggly")
 
 _mappers: dict[str, Callable[[Any], TogglyEntityContext]] = {}
-_schemas: dict[str, "EntityContextSchemaRegistration"] = {}
+_schemas: dict[str, EntityContextSchemaRegistration] = {}
 
 
 @dataclass
 class EntityContextPropertySchema:
+    """Named property in an entity context schema catalog."""
+
     name: str
     type: str
 
 
 @dataclass
 class EntityContextSchemaRegistration:
+    """Schema posted to the dashboard entity-context catalog."""
+
     kind: str
     key_property: str
     display_name: str | None = None
@@ -47,15 +51,18 @@ def register_context(
 
 
 def get_entity_context_schema_registrations() -> list[EntityContextSchemaRegistration]:
+    """Return registered entity context schemas."""
     return list(_schemas.values())
 
 
 def clear_entity_context_schema_registrations() -> None:
+    """Clear mapper and schema registries (tests)."""
     _schemas.clear()
     _mappers.clear()
 
 
 def map_entity(kind: str, entity: Any) -> TogglyEntityContext | None:
+    """Map a domain object using the mapper registered for ``kind``."""
     mapper = _mappers.get(kind)
     if mapper is None:
         return None
@@ -70,6 +77,7 @@ def register_entity_contexts_at_startup(
     debug: bool = False,
     timeout: float = 10.0,
 ) -> None:
+    """Best-effort PUT of registered schemas at client startup."""
     if register_on_startup is False:
         return
     if not app_key:

@@ -30,10 +30,7 @@ module Toggly
     attr_reader :created_at
 
     # @return [Time, nil] When the feature was last updated
-    attr_reader :updated_at
-    attr_reader :requirement_type
-    attr_reader :context_kind
-    attr_reader :context_requirement_type
+    attr_reader :updated_at, :requirement_type, :context_kind, :context_requirement_type
 
     # @return [String, nil] Feature description
     attr_reader :description
@@ -41,6 +38,7 @@ module Toggly
     # Feature types
     TYPES = %w[Release Experiment Ops Permission].freeze
 
+    # rubocop:disable Metrics/ParameterLists
     def initialize(
       feature_key:,
       feature_type: "Release",
@@ -66,6 +64,7 @@ module Toggly
       @context_kind = context_kind
       @context_requirement_type = context_requirement_type
     end
+    # rubocop:enable Metrics/ParameterLists
 
     # Create from a hash (e.g., from JSON)
     #
