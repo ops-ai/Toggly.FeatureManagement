@@ -23,12 +23,14 @@ type FeatureFilter struct {
 //
 // It also matches the Defs payload inside the signed response (/definitions-signed/{appKey}/{env}).
 type FeatureDefinitionModel struct {
-	FeatureKey       string          `json:"featureKey"`
-	Filters          []FeatureFilter `json:"filters"`
-	Metrics          []string        `json:"metrics"`
-	SecuredFeature   bool            `json:"securedFeature"`
-	ClientSdkEnabled bool            `json:"clientSdkEnabled"`
-	RequirementType  RequirementType `json:"requirementType"`
+	FeatureKey             string          `json:"featureKey"`
+	Filters                []FeatureFilter `json:"filters"`
+	Metrics                []string        `json:"metrics"`
+	SecuredFeature         bool            `json:"securedFeature"`
+	ClientSdkEnabled       bool            `json:"clientSdkEnabled"`
+	RequirementType        RequirementType `json:"requirementType"`
+	ContextKind            string          `json:"contextKind,omitempty"`
+	ContextRequirementType RequirementType `json:"contextRequirementType,omitempty"`
 }
 
 // SignedDefinitionsResponse is the envelope returned by /definitions-signed/{appKey}/{env}.

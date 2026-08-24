@@ -88,7 +88,7 @@ def get_evaluation_context(request: Request) -> EvaluationContext:
 ContextDep = Annotated[EvaluationContext, Depends(get_evaluation_context)]
 
 
-def get_client() -> Optional[TogglyClient]:
+def get_client() -> TogglyClient | None:
     """FastAPI dependency that provides the Toggly client.
 
     Returns:
@@ -116,7 +116,7 @@ def require_feature(
     feature_key: str,
     *,
     status_code: int = HTTP_403_FORBIDDEN,
-    detail: Optional[str] = None,
+    detail: str | None = None,
 ) -> Callable[[TogglyRequestHelper], bool]:
     """Create a dependency that requires a feature to be enabled.
 
@@ -172,7 +172,7 @@ def require_features(
     requirement: FeatureRequirement = FeatureRequirement.ALL,
     negate: bool = False,
     status_code: int = HTTP_403_FORBIDDEN,
-    detail: Optional[str] = None,
+    detail: str | None = None,
 ) -> Callable[[TogglyRequestHelper], bool]:
     """Create a dependency that requires multiple features.
 
@@ -283,12 +283,12 @@ class FeatureGateDependency:
 
     def __init__(
         self,
-        required: Optional[list[str]] = None,
-        optional: Optional[list[str]] = None,
+        required: list[str] | None = None,
+        optional: list[str] | None = None,
         *,
         requirement: FeatureRequirement = FeatureRequirement.ALL,
         status_code: int = HTTP_403_FORBIDDEN,
-        detail: Optional[str] = None,
+        detail: str | None = None,
     ) -> None:
         """Initialize the dependency.
 
@@ -305,9 +305,7 @@ class FeatureGateDependency:
         self.status_code = status_code
         self.detail = detail
 
-    def __call__(
-        self, toggly: TogglyRequestHelper = Depends(get_toggly)
-    ) -> dict[str, bool]:
+    def __call__(self, toggly: TogglyRequestHelper = Depends(get_toggly)) -> dict[str, bool]:  # noqa: B008
         """Evaluate the feature gate.
 
         Args:
@@ -340,9 +338,9 @@ class FeatureGateDependency:
 
 
 def with_feature_context(
-    identity: Optional[str] = None,
-    groups: Optional[list[str]] = None,
-    traits: Optional[dict[str, Any]] = None,
+    identity: str | None = None,
+    groups: list[str] | None = None,
+    traits: dict[str, Any] | None = None,
 ) -> Callable[[Request], EvaluationContext]:
     """Create a custom evaluation context dependency.
 

@@ -51,6 +51,7 @@ impl Registry {
             "ContextualTargeting",
             Arc::new(ContextualTargetingEvaluator),
         );
+        self.register("ContextProperty", Arc::new(ContextPropertyEvaluator));
     }
 
     /// Register a filter evaluator.

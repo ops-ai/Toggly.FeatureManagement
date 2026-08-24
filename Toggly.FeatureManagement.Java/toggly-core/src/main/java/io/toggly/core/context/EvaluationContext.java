@@ -27,16 +27,22 @@ import java.util.Set;
  */
 public final class EvaluationContext {
 
-    private static final EvaluationContext EMPTY = new EvaluationContext(null, Collections.emptySet(), Collections.emptyMap());
+    private static final EvaluationContext EMPTY = new EvaluationContext(null, Collections.emptySet(), Collections.emptyMap(), null);
 
     private final String identity;
     private final Set<String> groups;
     private final Map<String, Object> traits;
+    private final TogglyEntityContext entity;
 
     private EvaluationContext(String identity, Set<String> groups, Map<String, Object> traits) {
+        this(identity, groups, traits, null);
+    }
+
+    private EvaluationContext(String identity, Set<String> groups, Map<String, Object> traits, TogglyEntityContext entity) {
         this.identity = identity;
         this.groups = Collections.unmodifiableSet(new HashSet<>(groups));
         this.traits = Collections.unmodifiableMap(new HashMap<>(traits));
+        this.entity = entity;
     }
 
     /**
@@ -55,7 +61,7 @@ public final class EvaluationContext {
      * @return a new context
      */
     public static EvaluationContext forIdentity(String identity) {
-        return new EvaluationContext(identity, Collections.emptySet(), Collections.emptyMap());
+        return new EvaluationContext(identity, Collections.emptySet(), Collections.emptyMap(), null);
     }
 
     /**
@@ -92,6 +98,15 @@ public final class EvaluationContext {
      */
     public Map<String, Object> getTraits() {
         return traits;
+    }
+
+    /**
+     * Returns the entity context used by ContextProperty filters.
+     *
+     * @return the entity or null
+     */
+    public TogglyEntityContext getEntity() {
+        return entity;
     }
 
     /**
@@ -147,7 +162,7 @@ public final class EvaluationContext {
      * @return a new context with the identity
      */
     public EvaluationContext withIdentity(String identity) {
-        return new EvaluationContext(identity, this.groups, this.traits);
+        return new EvaluationContext(identity, this.groups, this.traits, this.entity);
     }
 
     /**
@@ -159,7 +174,7 @@ public final class EvaluationContext {
     public EvaluationContext withGroup(String group) {
         Set<String> newGroups = new HashSet<>(this.groups);
         newGroups.add(group);
-        return new EvaluationContext(this.identity, newGroups, this.traits);
+        return new EvaluationContext(this.identity, newGroups, this.traits, this.entity);
     }
 
     /**
@@ -172,7 +187,17 @@ public final class EvaluationContext {
     public EvaluationContext withTrait(String key, Object value) {
         Map<String, Object> newTraits = new HashMap<>(this.traits);
         newTraits.put(key, value);
-        return new EvaluationContext(this.identity, this.groups, newTraits);
+        return new EvaluationContext(this.identity, this.groups, newTraits, this.entity);
+    }
+
+    /**
+     * Creates a new context with the specified entity.
+     *
+     * @param entity the entity context
+     * @return a new context
+     */
+    public EvaluationContext withEntity(TogglyEntityContext entity) {
+        return new EvaluationContext(this.identity, this.groups, this.traits, entity);
     }
 
     /**
@@ -182,6 +207,7 @@ public final class EvaluationContext {
         private String identity;
         private final Set<String> groups = new HashSet<>();
         private final Map<String, Object> traits = new HashMap<>();
+        private TogglyEntityContext entity;
 
         private Builder() {}
 
@@ -254,8 +280,19 @@ public final class EvaluationContext {
          *
          * @return a new EvaluationContext
          */
+        /**
+         * Sets the entity context for ContextProperty filters.
+         *
+         * @param entity the entity
+         * @return this builder
+         */
+        public Builder entity(TogglyEntityContext entity) {
+            this.entity = entity;
+            return this;
+        }
+
         public EvaluationContext build() {
-            return new EvaluationContext(identity, groups, traits);
+            return new EvaluationContext(identity, groups, traits, entity);
         }
     }
 
@@ -266,12 +303,13 @@ public final class EvaluationContext {
         EvaluationContext that = (EvaluationContext) o;
         return Objects.equals(identity, that.identity) &&
                 Objects.equals(groups, that.groups) &&
-                Objects.equals(traits, that.traits);
+                Objects.equals(traits, that.traits) &&
+                Objects.equals(entity, that.entity);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(identity, groups, traits);
+        return Objects.hash(identity, groups, traits, entity);
     }
 
     @Override

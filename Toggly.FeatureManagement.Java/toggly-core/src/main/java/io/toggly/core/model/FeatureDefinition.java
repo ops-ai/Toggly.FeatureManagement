@@ -13,6 +13,8 @@ public final class FeatureDefinition {
     private final String featureKey;
     private final List<FeatureFilter> filters;
     private final FeatureRequirement requirementType;
+    private final String contextKind;
+    private final FeatureRequirement contextRequirementType;
     private final boolean securedFeature;
     private final List<MetricDefinition> metrics;
 
@@ -20,6 +22,8 @@ public final class FeatureDefinition {
         this.featureKey = builder.featureKey;
         this.filters = Collections.unmodifiableList(new ArrayList<>(builder.filters));
         this.requirementType = builder.requirementType;
+        this.contextKind = builder.contextKind;
+        this.contextRequirementType = builder.contextRequirementType;
         this.securedFeature = builder.securedFeature;
         this.metrics = builder.metrics != null
                 ? Collections.unmodifiableList(new ArrayList<>(builder.metrics))
@@ -42,6 +46,14 @@ public final class FeatureDefinition {
         return requirementType;
     }
 
+    public String getContextKind() {
+        return contextKind;
+    }
+
+    public FeatureRequirement getContextRequirementType() {
+        return contextRequirementType;
+    }
+
     public boolean isSecuredFeature() {
         return securedFeature;
     }
@@ -54,6 +66,8 @@ public final class FeatureDefinition {
         private String featureKey;
         private List<FeatureFilter> filters = new ArrayList<>();
         private FeatureRequirement requirementType = FeatureRequirement.ANY;
+        private String contextKind;
+        private FeatureRequirement contextRequirementType;
         private boolean securedFeature = false;
         private List<MetricDefinition> metrics;
 
@@ -76,6 +90,16 @@ public final class FeatureDefinition {
 
         public Builder requirementType(FeatureRequirement requirementType) {
             this.requirementType = requirementType != null ? requirementType : FeatureRequirement.ANY;
+            return this;
+        }
+
+        public Builder contextKind(String contextKind) {
+            this.contextKind = contextKind;
+            return this;
+        }
+
+        public Builder contextRequirementType(FeatureRequirement contextRequirementType) {
+            this.contextRequirementType = contextRequirementType;
             return this;
         }
 

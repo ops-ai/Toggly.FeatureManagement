@@ -7,6 +7,32 @@ from typing import Any
 
 
 @dataclass
+class TogglyEntityContext:
+    """Canonical entity instance for ContextProperty evaluation."""
+
+    kind: str
+    key: str
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+    def get_attribute(self, name: str) -> Any:
+        """Return an attribute by name, matching case-insensitively."""
+        if name in self.attributes:
+            return self.attributes[name]
+        lower = name.lower()
+        for key, value in self.attributes.items():
+            if key.lower() == lower:
+                return value
+        return None
+
+    def contains_attribute(self, name: str) -> bool:
+        """Return whether an attribute exists, matching case-insensitively."""
+        if name in self.attributes:
+            return True
+        lower = name.lower()
+        return any(key.lower() == lower for key in self.attributes)
+
+
+@dataclass
 class EvaluationContext:
     """Context for evaluating feature flags.
 
@@ -32,6 +58,9 @@ class EvaluationContext:
     traits: dict[str, Any] = field(default_factory=dict)
     """Additional attributes for targeting (e.g., country, plan, version)."""
 
+    entity: TogglyEntityContext | None = None
+    """Optional entity for ContextProperty filters."""
+
     def with_identity(self, identity: str) -> EvaluationContext:
         """Create a new context with the specified identity.
 
@@ -46,6 +75,7 @@ class EvaluationContext:
             identity=identity,
             groups=self.groups.copy(),
             traits=self.traits.copy(),
+            entity=self.entity,
         )
 
     def with_groups(self, *groups: str) -> EvaluationContext:
@@ -62,6 +92,7 @@ class EvaluationContext:
             identity=self.identity,
             groups=list(set(self.groups + list(groups))),
             traits=self.traits.copy(),
+            entity=self.entity,
         )
 
     def with_traits(self, **traits: Any) -> EvaluationContext:
@@ -79,6 +110,7 @@ class EvaluationContext:
             identity=self.identity,
             groups=self.groups.copy(),
             traits=merged_traits,
+            entity=self.entity,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -92,6 +124,13 @@ class EvaluationContext:
             "identity": self.identity,
             "groups": self.groups,
             "traits": self.traits,
+            "entity": None
+            if self.entity is None
+            else {
+                "kind": self.entity.kind,
+                "key": self.entity.key,
+                "attributes": self.entity.attributes,
+            },
         }
 
     @classmethod
@@ -105,10 +144,19 @@ class EvaluationContext:
             An EvaluationContext instance.
 
         """
+        entity_data = data.get("entity")
+        entity = None
+        if isinstance(entity_data, dict):
+            entity = TogglyEntityContext(
+                kind=str(entity_data.get("kind", "")),
+                key=str(entity_data.get("key", "")),
+                attributes=entity_data.get("attributes") or {},
+            )
         return cls(
             identity=data.get("identity"),
             groups=data.get("groups", []),
             traits=data.get("traits", {}),
+            entity=entity,
         )
 
     @classmethod
@@ -128,4 +176,4 @@ class EvaluationContext:
             True if context has identity, groups, or traits.
 
         """
-        return bool(self.identity or self.groups or self.traits)
+        return bool(self.identity or self.groups or self.traits or self.entity)

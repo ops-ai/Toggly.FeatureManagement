@@ -411,10 +411,11 @@ class TestTogglyRequestHelper:
 
         # Create a proper mock for EvaluationContext
         class MockEvaluationContext:
-            def __init__(self, identity=None, groups=None, traits=None):
+            def __init__(self, identity=None, groups=None, traits=None, entity=None, **kwargs):
                 self.identity = identity
                 self.groups = groups or []
                 self.traits = traits or {}
+                self.entity = entity
 
         with patch.dict(
             "sys.modules",
@@ -458,10 +459,11 @@ class TestGetContextFromRequest:
         _reload_modules()
 
         class MockEvaluationContext:
-            def __init__(self, identity=None, groups=None, traits=None):
+            def __init__(self, identity=None, groups=None, traits=None, entity=None, **kwargs):
                 self.identity = identity
                 self.groups = groups or []
                 self.traits = traits or {}
+                self.entity = entity
 
         with patch.dict(
             "sys.modules",
@@ -500,10 +502,11 @@ class TestGetContextFromRequest:
         _reload_modules()
 
         class MockEvaluationContext:
-            def __init__(self, identity=None, groups=None, traits=None):
+            def __init__(self, identity=None, groups=None, traits=None, entity=None, **kwargs):
                 self.identity = identity
                 self.groups = groups or []
                 self.traits = traits or {}
+                self.entity = entity
 
         with patch.dict(
             "sys.modules",

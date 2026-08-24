@@ -583,10 +583,11 @@ class TestGetEvaluationContext:
 
         # Create a proper EvaluationContext mock
         class MockEvaluationContext:
-            def __init__(self, identity=None, groups=None, traits=None):
+            def __init__(self, identity=None, groups=None, traits=None, entity=None, **kwargs):
                 self.identity = identity
                 self.groups = groups or []
                 self.traits = traits or {}
+                self.entity = entity
 
         with patch.dict(
             "sys.modules",

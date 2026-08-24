@@ -12,6 +12,8 @@ require_relative "toggly/evaluators/percentage"
 require_relative "toggly/evaluators/targeting"
 require_relative "toggly/evaluators/time_window"
 require_relative "toggly/evaluators/contextual_targeting"
+require_relative "toggly/evaluators/context_property"
+require_relative "toggly/entity_context"
 require_relative "toggly/registry"
 require_relative "toggly/evaluation_engine"
 require_relative "toggly/snapshot_providers/base"
@@ -89,6 +91,7 @@ module Toggly
     def reset!
       @client&.close
       @client = nil
+      clear_entity_context_registrations if respond_to?(:clear_entity_context_registrations)
     end
   end
 end

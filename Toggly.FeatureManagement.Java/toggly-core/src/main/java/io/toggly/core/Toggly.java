@@ -2,7 +2,9 @@ package io.toggly.core;
 
 import io.toggly.core.config.TogglyConfig;
 import io.toggly.core.context.ContextHolder;
+import io.toggly.core.context.EntityContextRegistry;
 import io.toggly.core.context.EvaluationContext;
+import io.toggly.core.context.TogglyEntityContext;
 import io.toggly.core.exception.TogglyException;
 
 import java.util.concurrent.atomic.AtomicReference;
@@ -102,6 +104,20 @@ public final class Toggly {
      */
     public static boolean isEnabled(String featureKey, EvaluationContext context) {
         return client().isEnabled(featureKey, context);
+    }
+
+    /**
+     * Registers a mapper from a domain object to {@link TogglyEntityContext}.
+     */
+    public static void registerContext(String kind, java.util.function.Function<Object, TogglyEntityContext> mapper) {
+        EntityContextRegistry.registerContext(kind, mapper);
+    }
+
+    public static void registerContext(
+            String kind,
+            java.util.function.Function<Object, TogglyEntityContext> mapper,
+            EntityContextRegistry.EntityContextSchemaRegistration schema) {
+        EntityContextRegistry.registerContext(kind, mapper, schema);
     }
 
     /**

@@ -55,7 +55,7 @@ class MemcachedSnapshotProvider:
 
     def __init__(
         self,
-        client: "Client | None" = None,
+        client: Client | None = None,
         servers: Sequence[tuple[str, int]] | None = None,
         prefix: str = "toggly:",
         ttl: int = 0,
@@ -107,7 +107,7 @@ class MemcachedSnapshotProvider:
         self._ttl = ttl
 
     @property
-    def client(self) -> "Client":
+    def client(self) -> Client:
         """Get the Memcached client instance."""
         return self._client
 
@@ -201,7 +201,7 @@ class MemcachedSnapshotProvider:
         except json.JSONDecodeError as e:
             logger.error("Failed to parse snapshot from Memcached: %s", e)
             return None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Failed to load snapshot from Memcached: %s", e)
             return None
 
@@ -223,7 +223,7 @@ class MemcachedSnapshotProvider:
             if result:
                 logger.debug("Deleted snapshot from Memcached key: %s", key)
             return bool(result)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Failed to delete snapshot from Memcached: %s", e)
             return False
 
@@ -242,7 +242,7 @@ class MemcachedSnapshotProvider:
         try:
             # Memcached doesn't have an EXISTS command, so we need to get
             return self._client.get(key) is not None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(
                 "Failed to check snapshot existence in Memcached: %s", e
             )
@@ -257,5 +257,5 @@ class MemcachedSnapshotProvider:
         """
         try:
             self._client.close()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Error closing Memcached connection: %s", e)

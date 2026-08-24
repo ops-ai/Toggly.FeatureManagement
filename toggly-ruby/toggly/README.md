@@ -4,6 +4,8 @@ Core Ruby SDK for [Toggly](https://toggly.io) feature flag management.
 
 **Zero dependencies** - pure Ruby implementation.
 
+Entity `ContextProperty` filters evaluate `Toggly::EntityContext` (`kind`, `key`, `attributes`) and are ANDed with user filters. `Toggly.register_context` optionally PUTs schemas to `sdk/{appKey}/contexts`.
+
 ## Installation
 
 ```ruby

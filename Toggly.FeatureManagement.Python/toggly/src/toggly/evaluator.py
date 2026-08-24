@@ -292,6 +292,173 @@ class TargetingEvaluator(FilterEvaluator):
         return groups
 
 
+FILTER_CONTEXT_PROPERTY = "ContextProperty"
+
+
+def _param(params: dict[str, Any], key: str) -> Any:
+    if key in params:
+        return params[key]
+    lower = key.lower()
+    for name, value in params.items():
+        if name.lower() == lower:
+            return value
+    return None
+
+
+class ContextPropertyEvaluator(FilterEvaluator):
+    """Evaluator for ContextProperty entity filters. Fail closed."""
+
+    def evaluate(
+        self,
+        filter_: FeatureFilter,
+        feature_key: str,
+        context: EvaluationContext,
+    ) -> bool:
+        """Evaluate a ContextProperty filter against the current entity."""
+        if context.entity is None:
+            return False
+        return self.evaluate_single(filter_, context.entity)
+
+    @staticmethod
+    def is_context_property_filter(filter_: FeatureFilter) -> bool:
+        """Return whether the filter is a ContextProperty filter."""
+        return filter_.name.lower() == FILTER_CONTEXT_PROPERTY.lower()
+
+    @classmethod
+    def entity_filters(cls, definition: FeatureDefinition) -> list[FeatureFilter]:
+        """Return ContextProperty filters from a definition."""
+        return [f for f in definition.filters if cls.is_context_property_filter(f)]
+
+    @classmethod
+    def user_filters(cls, definition: FeatureDefinition) -> list[FeatureFilter]:
+        """Return non-ContextProperty filters from a definition."""
+        return [f for f in definition.filters if not cls.is_context_property_filter(f)]
+
+    @classmethod
+    def evaluate_entity_filters(
+        cls, definition: FeatureDefinition, entity: Any
+    ) -> bool:
+        """Evaluate entity filters against an entity, failing closed."""
+        filters = cls.entity_filters(definition)
+        if not filters or entity is None:
+            return False
+        req = (definition.context_requirement_type or definition.requirement_type or "Any").lower()
+        results = [cls.evaluate_single(f, entity) for f in filters]
+        if req == "all":
+            return all(results)
+        return any(results)
+
+    @classmethod
+    def evaluate_single(cls, filter_: FeatureFilter, entity: Any) -> bool:
+        """Evaluate one ContextProperty filter against an entity."""
+        params = filter_.parameters
+        property_name = _param(params, "Property")
+        op = _param(params, "Operator")
+        expected = _param(params, "Value")
+        value_type = _param(params, "ValueType") or "string"
+        if not property_name or not op or expected is None:
+            return False
+        op = str(op).lower()
+        value_type = str(value_type).lower()
+        expected_s = str(expected)
+        contains = getattr(entity, "contains_attribute", None)
+        get_attr = getattr(entity, "get_attribute", None)
+        attrs = getattr(entity, "attributes", None)
+        if callable(contains):
+            if not contains(str(property_name)):
+                return False
+            actual = get_attr(str(property_name)) if callable(get_attr) else None
+        elif isinstance(attrs, dict):
+            actual = None
+            found = False
+            if str(property_name) in attrs:
+                actual = attrs[str(property_name)]
+                found = True
+            else:
+                lower = str(property_name).lower()
+                for k, v in attrs.items():
+                    if str(k).lower() == lower:
+                        actual = v
+                        found = True
+                        break
+            if not found:
+                return False
+        else:
+            return False
+        return cls._compare(actual, op, expected_s, value_type)
+
+    @staticmethod
+    def _compare(actual: Any, op: str, expected: str, value_type: str) -> bool:
+        if op in ("eq", "neq"):
+            actual_s = "" if actual is None else str(actual)
+            equal = actual_s.lower() == expected.lower()
+            return equal if op == "eq" else not equal
+        if op in ("gt", "gte", "lt", "lte"):
+            return ContextPropertyEvaluator._compare_ordered(actual, expected, value_type, op)
+        if op == "in":
+            actual_s = "" if actual is None else str(actual)
+            return any(
+                c.strip().lower() == actual_s.lower()
+                for c in expected.split(",")
+                if c.strip()
+            )
+        if op == "contains":
+            if value_type == "string[]":
+                values = actual if isinstance(actual, (list, tuple, set)) else []
+                return any(str(v).lower() == expected.lower() for v in values)
+            actual_s = "" if actual is None else str(actual)
+            return expected.lower() in actual_s.lower()
+        return False
+
+    @staticmethod
+    def _compare_ordered(actual: Any, expected: str, value_type: str, op: str) -> bool:
+        if value_type == "datetime":
+            actual_dt = ContextPropertyEvaluator._parse_dt(actual)
+            expected_dt = ContextPropertyEvaluator._parse_dt(expected)
+            if actual_dt is None or expected_dt is None:
+                return False
+            if op == "gt":
+                return actual_dt > expected_dt
+            if op == "gte":
+                return actual_dt >= expected_dt
+            if op == "lt":
+                return actual_dt < expected_dt
+            if op == "lte":
+                return actual_dt <= expected_dt
+            return False
+        if value_type == "number":
+            try:
+                actual_n = float(actual)
+                expected_n = float(expected)
+            except (TypeError, ValueError):
+                return False
+            if op == "gt":
+                return actual_n > expected_n
+            if op == "gte":
+                return actual_n >= expected_n
+            if op == "lt":
+                return actual_n < expected_n
+            if op == "lte":
+                return actual_n <= expected_n
+            return False
+        return False
+
+    @staticmethod
+    def _parse_dt(value: Any) -> datetime | None:
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value
+        text = str(value)
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed
+        except (ValueError, TypeError):
+            return None
+
+
 class EvaluatorRegistry:
     """Registry of filter evaluators."""
 
@@ -302,6 +469,7 @@ class EvaluatorRegistry:
             "Percentage": PercentageEvaluator(),
             "TimeWindow": TimeWindowEvaluator(),
             "Targeting": TargetingEvaluator(),
+            "ContextProperty": ContextPropertyEvaluator(),
         }
 
     def register(self, name: str, evaluator: FilterEvaluator) -> None:
@@ -386,20 +554,45 @@ class EvaluationEngine:
             # No filters means feature is disabled
             return False
 
-        requirement = definition.requirement_type.lower()
+        entity_filters = ContextPropertyEvaluator.entity_filters(definition)
+        user_filters = ContextPropertyEvaluator.user_filters(definition)
 
+        if entity_filters:
+            if context is None or context.entity is None:
+                return False
+            if not ContextPropertyEvaluator.evaluate_entity_filters(definition, context.entity):
+                return False
+            if not user_filters:
+                return True
+            return self._evaluate_group(
+                user_filters,
+                definition.requirement_type,
+                definition.feature_key,
+                context,
+            )
+
+        return self._evaluate_group(
+            user_filters,
+            definition.requirement_type,
+            definition.feature_key,
+            context,
+        )
+
+    def _evaluate_group(
+        self,
+        filters: list[FeatureFilter],
+        requirement_type: str,
+        feature_key: str,
+        context: EvaluationContext,
+    ) -> bool:
+        if not filters:
+            return False
+        requirement = (requirement_type or "any").lower()
         if requirement == "all":
-            # All filters must pass
             return all(
-                self._registry.evaluate_filter(f, definition.feature_key, context)
-                for f in definition.filters
+                self._registry.evaluate_filter(f, feature_key, context) for f in filters
             )
-        else:
-            # Any filter must pass (default)
-            return any(
-                self._registry.evaluate_filter(f, definition.feature_key, context)
-                for f in definition.filters
-            )
+        return any(self._registry.evaluate_filter(f, feature_key, context) for f in filters)
 
     def evaluate_gate(
         self,

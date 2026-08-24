@@ -30,7 +30,7 @@ module Toggly
     attr_reader :created_at
 
     # @return [Time, nil] When the feature was last updated
-    attr_reader :updated_at
+    attr_reader :updated_at, :requirement_type, :context_kind, :context_requirement_type
 
     # @return [String, nil] Feature description
     attr_reader :description
@@ -38,6 +38,7 @@ module Toggly
     # Feature types
     TYPES = %w[Release Experiment Ops Permission].freeze
 
+    # rubocop:disable Metrics/ParameterLists
     def initialize(
       feature_key:,
       feature_type: "Release",
@@ -46,7 +47,10 @@ module Toggly
       metadata: {},
       description: nil,
       created_at: nil,
-      updated_at: nil
+      updated_at: nil,
+      requirement_type: "Any",
+      context_kind: nil,
+      context_requirement_type: nil
     )
       @feature_key = feature_key.to_s
       @feature_type = validate_type(feature_type)
@@ -56,7 +60,11 @@ module Toggly
       @description = description
       @created_at = parse_time(created_at)
       @updated_at = parse_time(updated_at)
+      @requirement_type = requirement_type || "Any"
+      @context_kind = context_kind
+      @context_requirement_type = context_requirement_type
     end
+    # rubocop:enable Metrics/ParameterLists
 
     # Create from a hash (e.g., from JSON)
     #
@@ -84,7 +92,10 @@ module Toggly
         metadata: hash[:metadata] || {},
         description: hash[:description],
         created_at: hash[:createdAt] || hash[:created_at],
-        updated_at: hash[:updatedAt] || hash[:updated_at]
+        updated_at: hash[:updatedAt] || hash[:updated_at],
+        requirement_type: hash[:requirementType] || hash[:requirement_type] || "Any",
+        context_kind: hash[:contextKind] || hash[:context_kind],
+        context_requirement_type: hash[:contextRequirementType] || hash[:context_requirement_type]
       )
     end
 

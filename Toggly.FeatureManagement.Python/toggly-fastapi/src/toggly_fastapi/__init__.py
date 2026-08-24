@@ -36,30 +36,30 @@ from toggly_fastapi.middleware import (
 
 __version__ = "0.1.0"
 __all__ = [
-    # Middleware
-    "TogglyMiddleware",
-    "TogglyASGIMiddleware",
-    "TogglyRequestHelper",
-    "configure_toggly",
-    "get_toggly_client",
-    "get_current_toggly",
-    "get_context_from_request",
-    # Dependencies
-    "get_toggly",
-    "get_evaluation_context",
-    "get_client",
-    "require_feature",
-    "require_features",
-    "feature_enabled",
+    "ClientDep",
+    "ContextDep",
+    "FeatureFlagRouter",
     "FeatureGateDependency",
-    "with_feature_context",
+    "TogglyASGIMiddleware",
     # Type aliases
     "TogglyDep",
-    "ContextDep",
-    "ClientDep",
+    # Middleware
+    "TogglyMiddleware",
+    "TogglyRequestHelper",
+    "configure_toggly",
+    "feature_enabled",
     # Decorators
     "feature_flag_required",
     "feature_gate_required",
     "feature_switch",
-    "FeatureFlagRouter",
+    "get_client",
+    "get_context_from_request",
+    "get_current_toggly",
+    "get_evaluation_context",
+    # Dependencies
+    "get_toggly",
+    "get_toggly_client",
+    "require_feature",
+    "require_features",
+    "with_feature_context",
 ]

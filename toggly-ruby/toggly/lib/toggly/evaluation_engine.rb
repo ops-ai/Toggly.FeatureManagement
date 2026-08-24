@@ -69,8 +69,53 @@ module Toggly
     private
 
     def evaluate_rules(definition, context, result = nil)
-      definition.rules.each_with_index do |rule, index|
-        rule_type = rule["type"] || rule[:type] || "always_on"
+      entity_rules, user_rules = definition.rules.partition { |rule| Evaluators::ContextProperty.context_property?(rule) }
+
+      if entity_rules.any?
+        entity_ok = evaluate_entity_group(definition, entity_rules, context)
+        unless entity_ok
+          result&.reason = "entity_filters_failed"
+          return false
+        end
+        return true if user_rules.empty?
+
+        return evaluate_filter_group(user_rules, definition.requirement_type, context, definition.feature_key, result)
+      end
+
+      sequential_rules(user_rules.empty? ? definition.rules : user_rules, definition, context, result)
+    end
+
+    def evaluate_entity_group(definition, rules, context)
+      entity = context&.entity
+      return false unless entity
+
+      results = rules.map { |rule| Evaluators::ContextProperty.evaluate_single(rule, entity) }
+      req = (definition.context_requirement_type || definition.requirement_type || "Any").to_s
+      req.casecmp?("All") ? results.all? : results.any?
+    end
+
+    def evaluate_filter_group(rules, requirement_type, context, feature_key, result)
+      req = (requirement_type || "Any").to_s
+      evaluations = rules.map do |rule|
+        rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "always_on"
+        evaluator = @registry.get(rule_type)
+        next false unless evaluator
+
+        begin
+          value = evaluator.evaluate(rule, context, feature_key: feature_key)
+          value == true
+        rescue StandardError
+          false
+        end
+      end
+      passed = req.casecmp?("All") ? evaluations.all? : evaluations.any?
+      result&.reason = passed ? "rule_matched" : "no_match" if result
+      passed
+    end
+
+    def sequential_rules(rules, definition, context, result)
+      rules.each_with_index do |rule, index|
+        rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "always_on"
         evaluator = @registry.get(rule_type)
 
         unless evaluator
@@ -81,7 +126,6 @@ module Toggly
         begin
           evaluation = evaluator.evaluate(rule, context, feature_key: definition.feature_key)
 
-          # nil means continue to next rule
           next if evaluation.nil?
 
           if result
@@ -97,7 +141,6 @@ module Toggly
         end
       end
 
-      # No rules matched, default to enabled (since the feature itself is enabled)
       result&.reason = "default_enabled"
       true
     end

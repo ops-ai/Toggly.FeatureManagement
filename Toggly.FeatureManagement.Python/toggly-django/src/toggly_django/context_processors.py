@@ -70,7 +70,7 @@ class TemplateToggly:
         return self._context
 
     @property
-    def is_enabled(self) -> "FeatureFlagChecker":
+    def is_enabled(self) -> FeatureFlagChecker:
         """Get a feature flag checker for template attribute access.
 
         Usage in templates:
@@ -79,7 +79,7 @@ class TemplateToggly:
         return FeatureFlagChecker(self)
 
     @property
-    def is_disabled(self) -> "FeatureFlagChecker":
+    def is_disabled(self) -> FeatureFlagChecker:
         """Get a feature flag checker for disabled features.
 
         Usage in templates:

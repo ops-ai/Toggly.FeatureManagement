@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings as django_settings
 from django.http import HttpRequest
@@ -18,10 +18,10 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractUser
 
 # Module-level client storage
-_client: Optional[TogglyClient] = None
+_client: TogglyClient | None = None
 
 
-def get_client() -> Optional[TogglyClient]:
+def get_client() -> TogglyClient | None:
     """Get the Toggly client instance.
 
     Returns:
@@ -88,6 +88,7 @@ def get_context_from_request(
         identity=identity,
         groups=groups,
         traits=traits,
+        entity=getattr(request, "toggly_entity", None),
     )
 
 
@@ -141,8 +142,8 @@ def is_feature_disabled(
 
 
 def configure_toggly(
-    client: Optional[TogglyClient] = None,
-    app_key: Optional[str] = None,
+    client: TogglyClient | None = None,
+    app_key: str | None = None,
     environment: str = "Production",
     **kwargs: Any,
 ) -> TogglyClient:

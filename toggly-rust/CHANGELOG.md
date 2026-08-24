@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+2026-08-21
+
+### Added
+- ContextProperty entity filters (`context_kind` / `context_requirement_type`) with operators eq, neq, gt, gte, lt, lte, in, contains. Fail closed. User filters AND entity filters; percentage stays user-only.
+- `TogglyEntityContext`, schema registration, and optional startup PUT `sdk/{appKey}/contexts` (`disable_entity_context_registration` to opt out).
+
 ## 0.2.0
 
 2026-07-11

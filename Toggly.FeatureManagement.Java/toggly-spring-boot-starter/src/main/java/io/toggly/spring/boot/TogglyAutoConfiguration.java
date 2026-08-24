@@ -33,7 +33,8 @@ public class TogglyAutoConfiguration {
                 .environment(properties.getEnvironment())
                 .baseUrl(properties.getBaseUrl())
                 .refreshIntervalSeconds(properties.getRefreshIntervalSeconds())
-                .defaultFeatureState(properties.isDefaultFeatureState());
+                .defaultFeatureState(properties.isDefaultFeatureState())
+                .registerContextsOnStartup(properties.isRegisterContextsOnStartup());
 
         if (properties.getDefaultIdentity() != null) {
             builder.defaultIdentity(properties.getDefaultIdentity());

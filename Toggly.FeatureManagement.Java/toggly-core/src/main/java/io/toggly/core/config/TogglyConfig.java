@@ -38,6 +38,7 @@ public final class TogglyConfig {
     private final boolean defaultFeatureState;
     private final Set<String> allowedKeyIds;
     private final BiConsumer<String, Throwable> onError;
+    private final boolean registerContextsOnStartup;
 
     private TogglyConfig(Builder builder) {
         this.appKey = builder.appKey;
@@ -58,6 +59,7 @@ public final class TogglyConfig {
                 ? Collections.emptySet()
                 : Collections.unmodifiableSet(new HashSet<>(builder.allowedKeyIds));
         this.onError = builder.onError;
+        this.registerContextsOnStartup = builder.registerContextsOnStartup;
     }
 
     /**
@@ -183,6 +185,13 @@ public final class TogglyConfig {
     }
 
     /**
+     * Whether entity context schemas are PUT to the catalog on client start (default true).
+     */
+    public boolean isRegisterContextsOnStartup() {
+        return registerContextsOnStartup;
+    }
+
+    /**
      * Returns the refresh interval in seconds.
      *
      * @return refresh interval in seconds
@@ -213,7 +222,8 @@ public final class TogglyConfig {
                 .identity(identity)
                 .defaultFeatureState(defaultFeatureState)
                 .allowedKeyIds(allowedKeyIds)
-                .onError(onError);
+                .onError(onError)
+                .registerContextsOnStartup(registerContextsOnStartup);
     }
 
     /**
@@ -236,6 +246,7 @@ public final class TogglyConfig {
         private boolean defaultFeatureState = false;
         private Set<String> allowedKeyIds = new HashSet<>();
         private BiConsumer<String, Throwable> onError;
+        private boolean registerContextsOnStartup = true;
 
         private Builder() {}
 
@@ -449,6 +460,14 @@ public final class TogglyConfig {
          */
         public Builder onError(BiConsumer<String, Throwable> onError) {
             this.onError = onError;
+            return this;
+        }
+
+        /**
+         * Opt out of startup PUT {@code sdk/{appKey}/contexts}. Default is true.
+         */
+        public Builder registerContextsOnStartup(boolean registerContextsOnStartup) {
+            this.registerContextsOnStartup = registerContextsOnStartup;
             return this;
         }
 

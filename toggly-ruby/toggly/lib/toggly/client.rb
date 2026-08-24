@@ -52,6 +52,7 @@ module Toggly
       @refresh_thread = nil
 
       initialize_definitions
+      Toggly.register_entity_contexts_at_startup(@config) unless @config.disable_entity_context_registration
       start_background_refresh unless @config.disable_background_refresh
     end
 

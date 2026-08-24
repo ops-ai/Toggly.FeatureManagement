@@ -44,7 +44,13 @@ class FeatureDefinition:
     """List of filters to evaluate for this feature."""
 
     requirement_type: str = "Any"
-    """How to combine filter results: 'Any' (OR) or 'All' (AND)."""
+    """How to combine user filter results: 'Any' (OR) or 'All' (AND)."""
+
+    context_kind: str | None = None
+    """Optional entity context kind bound to this feature."""
+
+    context_requirement_type: str | None = None
+    """Any/All requirement for ContextProperty filters. Falls back to requirement_type."""
 
     secured_feature: bool = False
     """Whether this feature requires additional authorization."""
@@ -58,6 +64,11 @@ class FeatureDefinition:
             raise ValueError("Feature key cannot be empty")
         if self.requirement_type not in ("Any", "All"):
             raise ValueError("Requirement type must be 'Any' or 'All'")
+        if self.context_requirement_type is not None and self.context_requirement_type not in (
+            "Any",
+            "All",
+        ):
+            raise ValueError("Context requirement type must be 'Any' or 'All'")
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to a dictionary for serialization."""
@@ -67,6 +78,8 @@ class FeatureDefinition:
                 {"name": f.name, "parameters": f.parameters} for f in self.filters
             ],
             "requirement_type": self.requirement_type,
+            "context_kind": self.context_kind,
+            "context_requirement_type": self.context_requirement_type,
             "secured_feature": self.secured_feature,
             "metrics": self.metrics,
         }
@@ -81,8 +94,11 @@ class FeatureDefinition:
         return cls(
             feature_key=data["feature_key"],
             filters=filters,
-            requirement_type=data.get("requirement_type", "Any"),
-            secured_feature=data.get("secured_feature", False),
+            requirement_type=data.get("requirement_type") or data.get("requirementType") or "Any",
+            context_kind=data.get("context_kind") or data.get("contextKind"),
+            context_requirement_type=data.get("context_requirement_type")
+            or data.get("contextRequirementType"),
+            secured_feature=data.get("secured_feature", data.get("securedFeature", False)),
             metrics=data.get("metrics"),
         )
 

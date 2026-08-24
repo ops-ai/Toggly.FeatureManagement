@@ -26,6 +26,8 @@ A feature flag (or feature toggle) is a software development technique that allo
 pip install toggly
 ```
 
+Entity `ContextProperty` filters evaluate `{kind, key, attributes}` and are ANDed with user filters. Register kinds with `register_context` (startup PUT to `sdk/{appKey}/contexts`, opt out via `register_contexts_on_startup=False`).
+
 ## Quick Start
 
 ### Basic Usage with Toggly.io

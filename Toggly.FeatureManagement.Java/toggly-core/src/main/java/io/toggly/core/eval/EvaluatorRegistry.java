@@ -24,6 +24,7 @@ public final class EvaluatorRegistry {
         register("Percentage", PercentageEvaluator.INSTANCE);
         register("TimeWindow", TimeWindowEvaluator.INSTANCE);
         register("Targeting", TargetingEvaluator.INSTANCE);
+        register("ContextProperty", ContextPropertyEvaluator.INSTANCE);
     }
 
     /**

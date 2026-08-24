@@ -247,6 +247,12 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         StringBuilder sb = new StringBuilder();
         sb.append("{\"featureKey\":\"").append(escapeJson(feature.getFeatureKey())).append("\"");
         sb.append(",\"requirementType\":\"").append(feature.getRequirementType()).append("\"");
+        if (feature.getContextKind() != null) {
+            sb.append(",\"contextKind\":\"").append(escapeJson(feature.getContextKind())).append("\"");
+        }
+        if (feature.getContextRequirementType() != null) {
+            sb.append(",\"contextRequirementType\":\"").append(feature.getContextRequirementType()).append("\"");
+        }
 
         if (feature.getFilters() != null && !feature.getFilters().isEmpty()) {
             sb.append(",\"filters\":[");
@@ -425,9 +431,17 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
         List<FeatureFilter> filters = parseFilters(json);
 
+        String contextKind = extractStringValue(json, "contextKind");
+        String contextReqStr = extractStringValue(json, "contextRequirementType");
+        FeatureRequirement contextRequirement = contextReqStr == null || contextReqStr.isBlank()
+                ? null
+                : FeatureRequirement.fromString(contextReqStr);
+
         return FeatureDefinition.builder()
                 .featureKey(featureKey)
                 .requirementType(requirement)
+                .contextKind(contextKind)
+                .contextRequirementType(contextRequirement)
                 .filters(filters)
                 .build();
     }
