@@ -184,4 +184,58 @@ class EntityGateTest {
         assertEquals("1", mapped?.key)
         assertNull(resolveEntityContext("Kitten", mapOf("id" to "1")))
     }
+
+    @Test
+    fun `covers remaining parse mapper and operator branches`() {
+        assertFalse(isEntityGate(EntityGate("neither", emptyList())))
+
+        registerContext(
+            "Order",
+            EntityContextMapper { entity ->
+                val map = entity as Map<*, *>
+                TogglyEntityContext(
+                    "Order",
+                    map["id"].toString(),
+                    mapOf("Color" to map["color"])
+                )
+            }
+        )
+        val inline = EntityContextMapper {
+            TogglyEntityContext("Order", "inline", emptyMap())
+        }
+        assertEquals("inline", mapEntityContext("Order", mapOf("id" to "1"), inline)?.key)
+        assertNull(normalizeEntityContext(null))
+        assertEquals("k", normalizeEntityContext(TogglyEntityContext("Order", "k", emptyMap()))?.key)
+        assertEquals("1", normalizeEntityContext(mapOf("id" to "1", "color" to "red"), "Order")?.key)
+        assertNull(normalizeEntityContext(mapOf("id" to "1"), null))
+
+        val parsed = parseEvaluatedDefinitions(
+            """{"S":"yes","Arr":[],"Bad":{"requirement":"neither","rules":[]}}"""
+        )
+        assertTrue(parsed["S"] is EvaluatedDefinition.BooleanValue)
+        assertTrue(parsed["Arr"] is EvaluatedDefinition.BooleanValue)
+        assertTrue(parsed["Bad"] is EvaluatedDefinition.BooleanValue)
+
+        assertTrue(
+            applyEntityGate(
+                EntityGate("all", listOf(EntityGateRule("N", "eq", "2"))),
+                mapOf("N" to 2.0)
+            )
+        )
+        assertTrue(
+            applyEntityGate(
+                EntityGate("all", listOf(EntityGateRule("Born", "gt", "100", "datetime"))),
+                mapOf("Born" to 200L)
+            )
+        )
+        assertFalse(
+            applyEntityGate(
+                EntityGate("all", listOf(EntityGateRule("Age", "gt", "", "number"))),
+                mapOf("Age" to "")
+            )
+        )
+
+        assertTrue(evaluateEvaluatedGate(emptyMap(), listOf("Missing"), requirementAll = true, negate = true))
+        assertFalse(evaluateEvaluatedGate(emptyMap(), listOf("Missing"), requirementAll = true, negate = false))
+    }
 }

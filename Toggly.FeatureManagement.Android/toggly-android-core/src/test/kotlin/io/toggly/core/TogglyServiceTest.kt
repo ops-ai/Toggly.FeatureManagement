@@ -195,6 +195,19 @@ class TogglyServiceTest {
     }
 
     @Test
+    fun `registerContext and entity-aware isFeatureEnabled`() = runTest {
+        service = createService(featureDefaults = mapOf("feature1" to true))
+        service.registerContext("Order") { order: Map<String, String> ->
+            TogglyEntityContext("Order", order.getValue("id"), emptyMap())
+        }
+        service.registerContext(
+            "Product",
+            EntityContextMapper { TogglyEntityContext("Product", "p", emptyMap()) }
+        )
+        assertTrue(service.isFeatureEnabled("feature1", mapOf("id" to "1"), "Order"))
+    }
+
+    @Test
     fun `featureFlagFlow emits current value`() = runTest {
         val defaults = mapOf("feature1" to true)
         service = createService(featureDefaults = defaults)

@@ -1,5 +1,6 @@
 package io.toggly.core
 
+import io.toggly.core.models.FeatureRequirement
 import io.toggly.core.models.TogglyConfig
 import io.toggly.core.storage.MemoryStorage
 import kotlinx.coroutines.Dispatchers
@@ -151,5 +152,32 @@ class TogglyTest {
         Toggly.configure(config)
 
         assertNotNull(Toggly.featureFlags)
+    }
+
+    @Test
+    fun `registerContext and entity-aware reads go through the facade`() = runTest {
+        val config = TogglyConfig(
+            appKey = "test-key",
+            featureDefaults = mapOf("feature1" to true),
+            storage = MemoryStorage()
+        )
+        Toggly.configure(config)
+        Toggly.registerContext("Order") { order: Map<String, String> ->
+            TogglyEntityContext("Order", order.getValue("id"), emptyMap())
+        }
+        Toggly.registerContext(
+            "Product",
+            EntityContextMapper { TogglyEntityContext("Product", "p", emptyMap()) }
+        )
+        assertTrue(Toggly.isFeatureEnabled("feature1", mapOf("id" to "1"), "Order"))
+        assertTrue(
+            Toggly.evaluateFeatureGate(
+                listOf("feature1"),
+                FeatureRequirement.ALL,
+                false,
+                mapOf("id" to "1"),
+                "Order"
+            )
+        )
     }
 }
