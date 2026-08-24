@@ -1,4 +1,20 @@
-## 1.10.0
+## 1.11.0
+
+2026-08-21
+
+### Added
+- Client-side entity-gate evaluation (eq, neq, gt, gte, lt, lte, in, contains)
+  with fail-closed missing attributes, unknown operators, and empty rules.
+- `Toggly.registerContext` (local mapper only; no schema PUT),
+  `Toggly.isFeatureOn(key, context:)` and `Feature(..., context: entity)`.
+- Mixed boolean + entity-gate definitions are stored internally; the public
+  `Map<String, bool>` snapshot still flattens gates to `false` without context.
+
+### Fixed
+- Definitions parsing no longer uses `Map<String, bool>.from` on `defs`, which
+  threw when the payload contained entity-gate objects.
+
+
 
 2026-07-13
 

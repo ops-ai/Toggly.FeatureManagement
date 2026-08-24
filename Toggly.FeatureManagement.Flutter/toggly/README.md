@@ -106,6 +106,35 @@ await Toggly.evaluateFeatureGate(
 );
 ```
 
+### Entity context (per evaluation)
+
+Entity-gated flags fail closed without a context. Identity (`Toggly.init` user id)
+is separate; pass an entity on each read. `registerContext` is local only (no schema PUT).
+
+```dart
+Toggly.registerContext('Order', (entity) {
+  final order = entity as Order;
+  return TogglyEntityContext(
+    kind: 'Order',
+    key: order.id,
+    attributes: {'Color': order.status},
+  );
+});
+
+if (await Toggly.isFeatureOn('PresalePhotos', context: order, kind: 'Order')) {
+  // ...
+}
+
+Feature(
+  featureKeys: const ['PresalePhotos'],
+  context: order,
+  kind: 'Order',
+  child: const PresalePhotosView(),
+);
+```
+
+The public `Map<String, bool>` snapshot still flattens gated flags to `false` without context.
+
 ### Feature vs FeatureGateBuilder
 
 Use **Feature** when you want simple show/hide: the child is rendered when the gate is on, otherwise an empty placeholder is returned.

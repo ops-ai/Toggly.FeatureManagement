@@ -3,6 +3,7 @@ package io.toggly.core
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.math.BigInteger
 import java.security.KeyPair
@@ -27,6 +28,15 @@ class SignedDefsVerifyTest {
 
         assertEquals(defs, envelope.defsRaw)
         assertEquals(mapOf("PresalePhotos" to true, "OrderSales" to false), SignedDefsVerify.parseDefinitions(defs))
+    }
+
+    @Test
+    fun `parses mixed boolean and entity-gate definitions`() {
+        val defs = """{"On":true,"Gated":{"requirement":"all","rules":[{"property":"Color","op":"eq","value":"red"}]}}"""
+        val snapshot = SignedDefsVerify.parseDefinitions(defs)
+        assertEquals(mapOf("On" to true, "Gated" to false), snapshot)
+        val mixed = SignedDefsVerify.parseEvaluatedDefinitions(defs)
+        assertTrue(mixed["Gated"] is EvaluatedDefinition.Gate)
     }
 
     @Test

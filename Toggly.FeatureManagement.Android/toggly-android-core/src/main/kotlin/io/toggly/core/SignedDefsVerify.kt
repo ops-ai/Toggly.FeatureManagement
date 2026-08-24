@@ -110,8 +110,12 @@ internal object SignedDefsVerify {
         )
     }
 
+    internal fun parseEvaluatedDefinitions(defsRaw: String): EvaluatedDefinitions {
+        return parseEvaluatedDefinitions(json.parseToJsonElement(defsRaw))
+    }
+
     internal fun parseDefinitions(defsRaw: String): FeatureFlags {
-        return json.decodeFromString(defsRaw)
+        return toBooleanDefinitions(parseEvaluatedDefinitions(defsRaw))
     }
 
     internal fun doubleSha256(payload: String): ByteArray {

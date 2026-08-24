@@ -125,6 +125,25 @@ struct ContentView: View {
 }
 ```
 
+### Entity context (per evaluation)
+
+Entity-gated flags fail closed without a context. `setIdentity` remains user targeting;
+pass an entity on each read. `registerContext` is local only (no schema PUT).
+
+```swift
+Toggly.shared.registerContext("Order") { entity in
+    let order = entity as! Order
+    return TogglyEntityContext(kind: "Order", key: order.id, attributes: ["Color": order.status])
+}
+
+if await Toggly.shared.isEnabled("PresalePhotos", context: order, kind: "Order") {
+    showPresalePhotos()
+}
+```
+
+The `FeatureFlags` snapshot still maps every key to a `Bool`: gated flags are `false`
+until you evaluate with context.
+
 #### UIKit
 
 ```swift

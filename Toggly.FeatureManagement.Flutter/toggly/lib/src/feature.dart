@@ -65,6 +65,8 @@ class FeatureGateBuilder extends StatelessWidget {
     required this.featureKeys,
     this.requirement = FeatureRequirement.all,
     this.negate = false,
+    this.context,
+    this.kind,
 
     /// When set, requires [featureKeys.first] to resolve to this variant name
     /// (and [Toggly] must be initialized with `enableVariants: true`).
@@ -76,6 +78,8 @@ class FeatureGateBuilder extends StatelessWidget {
   final List<String> featureKeys;
   final FeatureRequirement requirement;
   final bool negate;
+  final Object? context;
+  final String? kind;
   final String? variant;
   final Widget Function(BuildContext context, bool enabled) builder;
 
@@ -85,6 +89,8 @@ class FeatureGateBuilder extends StatelessWidget {
       flags: flags,
       requirement: requirement,
       negate: negate,
+      context: context,
+      kind: kind,
     );
   }
 
@@ -136,9 +142,8 @@ class Feature extends StatelessWidget {
     required this.featureKeys,
     this.requirement = FeatureRequirement.all,
     this.negate = false,
-
-    /// When set, requires [featureKeys.first] to resolve to this variant name
-    /// (and [Toggly] must be initialized with `enableVariants: true`).
+    this.context,
+    this.kind,
     this.variant,
   })  : assert(child != null || children != null,
             'Either child or children must be provided'),
@@ -147,13 +152,13 @@ class Feature extends StatelessWidget {
         _builder = null,
         super(key: key);
 
-  /// Same gate evaluation as [Feature], but exposes the resolved [enabled]
-  /// boolean to [builder] for conditional UI (styling, taps, etc.).
   const Feature.builder({
     Key? key,
     required this.featureKeys,
     this.requirement = FeatureRequirement.all,
     this.negate = false,
+    this.context,
+    this.kind,
     this.variant,
     required Widget Function(BuildContext context, bool enabled) builder,
   })  : child = null,
@@ -166,8 +171,8 @@ class Feature extends StatelessWidget {
   final List<String> featureKeys;
   final FeatureRequirement requirement;
   final bool negate;
-
-  /// Optional variant name that must match the first feature key's assignment.
+  final Object? context;
+  final String? kind;
   final String? variant;
 
   final Widget Function(BuildContext context, bool enabled)? _builder;
@@ -177,12 +182,14 @@ class Feature extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext buildContext) {
     if (_builder != null) {
       return FeatureGateBuilder(
         featureKeys: featureKeys,
         requirement: requirement,
         negate: negate,
+        context: context,
+        kind: kind,
         variant: variant,
         builder: _builder!,
       );
@@ -192,6 +199,8 @@ class Feature extends StatelessWidget {
       featureKeys: featureKeys,
       requirement: requirement,
       negate: negate,
+      context: context,
+      kind: kind,
       variant: variant,
       builder: (context, enabled) {
         if (enabled) {

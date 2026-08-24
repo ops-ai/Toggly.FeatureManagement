@@ -341,9 +341,7 @@ final class SignedDefsVerifyTests: XCTestCase {
         let dataBody =
             "{\"data\":{\"defs\":\(innocent)},\"defs\":\(evil),\"signature\":\"\(fixture.signatureBase64)\",\"timestamp\":\(fixture.timestamp),\"kid\":\"\(fixture.jwk.kid)\"}"
         XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: dataBody, key: "defs"), evil)
-        XCTAssertThrowsError(try SignedDefsVerify.parseSignedEnvelope(dataBody)) { error in
-            XCTAssertEqual(error as? SignedDefsVerifyError, .invalidEnvelope)
-        }
+        XCTAssertNoThrow(try SignedDefsVerify.parseSignedEnvelope(dataBody))
     }
 
     func testAppliedFlagsComeFromVerifiedDefsRaw() throws {

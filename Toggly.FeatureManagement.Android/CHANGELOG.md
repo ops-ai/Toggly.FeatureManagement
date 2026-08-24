@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.2.0
+
+2026-08-21
+
+### Added
+- Client-side entity-gate evaluation (eq, neq, gt, gte, lt, lte, in, contains)
+  with fail-closed missing attributes, unknown operators, and empty rules.
+- `registerContext` (local mapper only; no schema PUT) and
+  `isFeatureEnabled(key, context)` / `evaluateFeatureGate(..., context)`.
+- Mixed boolean + entity-gate definitions are stored internally; the public
+  `FeatureFlags` map remains a derived snapshot (gates flatten to `false`
+  without context).
+
+### Fixed
+- Signed and unsigned defs parsing no longer requires `Map<String, Boolean>`
+  for every value, so entity-gate objects in `defs` do not fail kotlinx
+  deserialization.
+
 ## 1.1.0
 
 2026-07-14
