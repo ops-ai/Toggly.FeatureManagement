@@ -105,47 +105,60 @@ jobs:
         if: steps.release.outputs.action == 'publish'
         run: pnpm install --frozen-lockfile
 
-      - name: Type check
-        if: steps.release.outputs.action == 'publish'
-        run: pnpm typecheck
-
-      - name: Build
-        if: steps.release.outputs.action == 'publish'
-        run: pnpm build
-
-      - name: Run tests
-        if: steps.release.outputs.action == 'publish'
-        run: pnpm test
-
-      - name: Determine packages to publish
+      - name: Determine unpublished packages
         if: steps.release.outputs.action == 'publish'
         id: packages
         run: |
           INPUT="${{ github.event.inputs.packages || 'all' }}"
           if [ "$INPUT" == "all" ]; then
-            echo "list=${{ env.ALL_PACKAGES }}" >> $GITHUB_OUTPUT
+            CANDIDATES="${{ env.ALL_PACKAGES }}"
           else
-            echo "list=$(echo "$INPUT" | tr ',' ' ')" >> $GITHUB_OUTPUT
+            CANDIDATES=$(echo "$INPUT" | tr ',' ' ')
           fi
+          LIST=""
+          for pkg in $CANDIDATES; do
+            NAME=$(node -p "require('./$pkg/package.json').name")
+            VER=$(node -p "require('./$pkg/package.json').version")
+            if npm view "${NAME}@${VER}" version >/dev/null 2>&1; then
+              echo "Already published: ${NAME}@${VER}"
+            else
+              LIST="$LIST $pkg"
+            fi
+          done
+          LIST=$(echo "$LIST" | xargs)
+          echo "list=$LIST" >> $GITHUB_OUTPUT
+          echo "Unpublished: ${LIST:-none}"
 
-      - name: Publish packages to npm
-        if: steps.release.outputs.action == 'publish'
+      - name: Type check unpublished packages
+        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
         run: |
           for pkg in ${{ steps.packages.outputs.list }}; do
+            pnpm --filter "./$pkg" typecheck
+          done
+
+      - name: Build unpublished packages
+        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        run: |
+          for pkg in ${{ steps.packages.outputs.list }}; do
+            pnpm --filter "./$pkg" build
+          done
+
+      - name: Test unpublished packages
+        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        run: |
+          for pkg in ${{ steps.packages.outputs.list }}; do
+            pnpm --filter "./$pkg" test
+          done
+
+      - name: Publish packages to npm
+        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        run: |
+          ROOT="${GITHUB_WORKSPACE}/${{ env.SDK_ROOT }}"
+          for pkg in ${{ steps.packages.outputs.list }}; do
             echo "Publishing $pkg..."
-            cd "$pkg"
-
-            PACKAGE_NAME=$(node -p "require('./package.json').name")
-            PACKAGE_VERSION=$(node -p "require('./package.json').version")
-
-            if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
-              echo "Skipping ${PACKAGE_NAME}@${PACKAGE_VERSION} (already published)"
-              cd ..
-              continue
-            fi
+            cd "$ROOT/$pkg"
 
             if [ "$pkg" = "nuxt-toggly" ]; then
-              ROOT="${GITHUB_WORKSPACE}/${{ env.SDK_ROOT }}"
               for dep_dir in nuxt-toggly-core nuxt-toggly-server nuxt-toggly-client; do
                 DEP=$(node -p "require('${ROOT}/$dep_dir/package.json').name")
                 DEP_VER=$(node -p "require('${ROOT}/$dep_dir/package.json').version")
@@ -162,7 +175,6 @@ jobs:
             fi
 
             pnpm publish --access public --no-git-checks --provenance || pnpm publish --access public --no-git-checks
-            cd ..
             sleep 3
           done
         env:

@@ -343,11 +343,18 @@ jobs:
 
       - name: Dry run publish
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
-        run: flutter pub publish --dry-run
+        run: |
+          # pub publish --dry-run runs pub get again and may rewrite
+          # analysis_options.yaml; restore immediately before validation.
+          git checkout -- analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
+          flutter pub publish --dry-run
 
       - name: Publish to pub.dev
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
-        run: flutter pub publish --force
+        run: |
+          git checkout -- analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
+          flutter pub publish --force
+
 
       - name: Create GitHub Release (core)
         if: needs.validate.outputs.is_provider != 'true'
