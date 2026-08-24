@@ -91,16 +91,14 @@ jobs:
             cd ..
           done
 
-      - name: Validate monorepo versions
+      - name: Note independent package versions
         if: steps.release.outputs.action == 'publish'
         run: |
           TARGET="${{ steps.release.outputs.version }}"
+          echo "Core resolved version: $TARGET"
           for pkg in ${{ env.ALL_PACKAGES }}; do
             VER=$(node -p "require('./$pkg/package.json').version")
-            if [ "$VER" != "$TARGET" ]; then
-              echo "Version mismatch in $pkg: manifest $VER != resolved $TARGET"
-              exit 1
-            fi
+            echo "$pkg@$VER"
           done
 
       - name: Install dependencies
@@ -147,12 +145,15 @@ jobs:
             fi
 
             if [ "$pkg" = "nuxt-toggly" ]; then
-              for dep in @ops-ai/nuxt-toggly-core @ops-ai/nuxt-toggly-server @ops-ai/nuxt-toggly-client; do
+              ROOT="${GITHUB_WORKSPACE}/${{ env.SDK_ROOT }}"
+              for dep_dir in nuxt-toggly-core nuxt-toggly-server nuxt-toggly-client; do
+                DEP=$(node -p "require('${ROOT}/$dep_dir/package.json').name")
+                DEP_VER=$(node -p "require('${ROOT}/$dep_dir/package.json').version")
                 DEP_RETRY=0
-                until npm view "${dep}@${PACKAGE_VERSION}" version >/dev/null 2>&1; do
+                until npm view "${DEP}@${DEP_VER}" version >/dev/null 2>&1; do
                   DEP_RETRY=$((DEP_RETRY + 1))
                   if [ $DEP_RETRY -ge 10 ]; then
-                    echo "Timed out waiting for ${dep}@${PACKAGE_VERSION}"
+                    echo "Timed out waiting for ${DEP}@${DEP_VER}"
                     exit 1
                   fi
                   sleep 6

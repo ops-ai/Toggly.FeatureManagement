@@ -119,8 +119,7 @@ jobs:
 
             VER=$(node -p "require('./package.json').version")
             if [ "$VER" != "$TARGET" ]; then
-              echo "Version mismatch in $dir: expected $TARGET, got $VER"
-              exit 1
+              echo "Note: $dir is at $VER (core resolved $TARGET); publishing this package's own version"
             fi
 
             if [ "$needs_core" = "true" ]; then

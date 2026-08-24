@@ -324,7 +324,11 @@ jobs:
       # Provider packages resolve feature_flags_toggly from pub.dev when publishing.
       - name: Install dependencies
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
-        run: flutter pub get
+        run: |
+          flutter pub get
+          # pub get may rewrite checked-in analysis_options.yaml; pub.dev
+          # rejects a dirty git tree on dry-run.
+          git checkout -- analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
 
       # Generate Isar (or other) codegen so *.g.dart files are present in the published archive.
       - name: Run code generation (if needed)

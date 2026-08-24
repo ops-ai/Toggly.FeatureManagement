@@ -114,7 +114,13 @@ jobs:
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
-          echo "$GPG_PRIVATE_KEY" | base64 --decode > $HOME/secring.gpg
+          # Same secret is ASCII-armored for crazy-max/ghaction-import-gpg.
+          # Older Android steps assumed base64; accept both.
+          if printf '%s' "$GPG_PRIVATE_KEY" | grep -q "BEGIN PGP"; then
+            printf '%s\n' "$GPG_PRIVATE_KEY" > "$HOME/secring.gpg"
+          else
+            printf '%s' "$GPG_PRIVATE_KEY" | base64 --decode > "$HOME/secring.gpg"
+          fi
 
       - name: Publish to Maven Central
         working-directory: ${{ env.SDK_ROOT }}

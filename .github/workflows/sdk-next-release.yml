@@ -89,16 +89,14 @@ jobs:
             cd ..
           done
 
-      - name: Validate monorepo versions
+      - name: Note independent package versions
         if: steps.release.outputs.action == 'publish'
         run: |
           TARGET="${{ steps.release.outputs.version }}"
+          echo "Core resolved version: $TARGET"
           for pkg in ${{ env.ALL_PACKAGES }}; do
             VER=$(node -p "require('./$pkg/package.json').version")
-            if [ "$VER" != "$TARGET" ]; then
-              echo "Version mismatch in $pkg: manifest $VER != resolved $TARGET"
-              exit 1
-            fi
+            echo "$pkg@$VER"
           done
 
       - name: Install dependencies

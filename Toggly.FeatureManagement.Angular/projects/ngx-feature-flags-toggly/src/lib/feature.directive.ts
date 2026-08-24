@@ -66,24 +66,28 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
   private requirement: 'all' | 'any' = 'all'
   private negate = false
 
+  // eslint-disable-next-line @angular-eslint/no-input-rename -- structural directive alias
   @Input('featureFlagRequirement')
   set featureFlagRequirement(value: 'all' | 'any') {
     this.requirement = value ?? 'all'
     this.updateView()
   }
 
+  // eslint-disable-next-line @angular-eslint/no-input-rename -- structural directive alias
   @Input('featureFlagNegate')
   set featureFlagNegate(value: boolean) {
     this.negate = value ?? false
     this.updateView()
   }
 
+  // eslint-disable-next-line @angular-eslint/no-input-rename -- structural directive alias
   @Input('featureFlagContext')
   set featureFlagContext(value: TogglyEntityContext | Record<string, unknown> | null) {
     this.entityContext = value
     this.updateView()
   }
 
+  // eslint-disable-next-line @angular-eslint/no-input-rename -- structural directive alias
   @Input('featureFlagKind')
   set featureFlagKind(value: string | undefined) {
     this.kind = value

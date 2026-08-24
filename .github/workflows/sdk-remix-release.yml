@@ -80,16 +80,14 @@ jobs:
             npm version "$TARGET" --no-git-tag-version --allow-same-version
           done
 
-      - name: Validate monorepo versions
+      - name: Note independent package versions
         if: steps.release.outputs.action == 'publish'
         run: |
           TARGET="${{ steps.release.outputs.version }}"
+          echo "Core resolved version: $TARGET"
           for pkg in ${{ env.ALL_PACKAGES }}; do
             VER=$(node -p "require('./${{ env.SDK_ROOT }}/$pkg/package.json').version")
-            if [ "$VER" != "$TARGET" ]; then
-              echo "Version mismatch in $pkg: manifest $VER != resolved $TARGET"
-              exit 1
-            fi
+            echo "$pkg@$VER"
           done
 
       - name: Install and build core
