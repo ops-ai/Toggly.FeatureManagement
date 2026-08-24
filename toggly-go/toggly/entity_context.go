@@ -54,6 +54,18 @@ func RegisterContext(kind string, mapper func(any) EntityContext, schema *Entity
 	}
 }
 
+// MapEntity maps a domain object through the mapper registered for kind.
+func MapEntity(kind string, entity any) *EntityContext {
+	entityMu.RLock()
+	mapper, ok := entityMappers[kind]
+	entityMu.RUnlock()
+	if !ok {
+		return nil
+	}
+	ctx := mapper(entity)
+	return &ctx
+}
+
 func getEntitySchemas() []EntityContextSchemaRegistration {
 	entityMu.RLock()
 	defer entityMu.RUnlock()

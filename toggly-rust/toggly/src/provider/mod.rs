@@ -256,6 +256,7 @@ impl DefinitionsProvider {
     }
 
     /// Handle an incoming WebSocket text message.
+    #[allow(clippy::too_many_arguments)]
     async fn handle_ws_message(
         text: &str,
         http_client: &reqwest::Client,
@@ -408,6 +409,7 @@ impl DefinitionsProvider {
     }
 
     /// Internal implementation of fetch_definitions.
+    #[allow(clippy::too_many_arguments)]
     async fn fetch_definitions_impl(
         http_client: &reqwest::Client,
         config: &TogglyConfig,
@@ -758,7 +760,7 @@ mod tests {
         let url = DefinitionsProvider::build_ws_url(&config, None);
         assert_eq!(
             url,
-            "wss://definitions.toggly.io/my-app/ws?sdk=rust&sdkVersion=0.2.0"
+            "wss://definitions.toggly.io/my-app/ws?sdk=rust&sdkVersion=0.3.0"
         );
     }
 
@@ -773,7 +775,7 @@ mod tests {
         let url = DefinitionsProvider::build_ws_url(&config, Some("rev123"));
         assert_eq!(
             url,
-            "wss://custom.example.com/my-app/ws?rev=rev123&sdk=rust&sdkVersion=0.2.0"
+            "wss://custom.example.com/my-app/ws?rev=rev123&sdk=rust&sdkVersion=0.3.0"
         );
     }
 
@@ -788,7 +790,7 @@ mod tests {
         let url = DefinitionsProvider::build_ws_url(&config, None);
         assert_eq!(
             url,
-            "ws://localhost:8080/my-app/ws?sdk=rust&sdkVersion=0.2.0"
+            "ws://localhost:8080/my-app/ws?sdk=rust&sdkVersion=0.3.0"
         );
     }
 }
