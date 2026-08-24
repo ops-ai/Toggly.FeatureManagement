@@ -53,10 +53,20 @@ impl Engine {
             if user_filters.is_empty() {
                 return Ok(true);
             }
-            return self.evaluate_group(&definition.feature_key, &user_filters, definition.requirement_type, context);
+            return self.evaluate_group(
+                &definition.feature_key,
+                &user_filters,
+                definition.requirement_type,
+                context,
+            );
         }
 
-        self.evaluate_group(&definition.feature_key, &user_filters, definition.requirement_type, context)
+        self.evaluate_group(
+            &definition.feature_key,
+            &user_filters,
+            definition.requirement_type,
+            context,
+        )
     }
 
     fn evaluate_group(
@@ -141,8 +151,13 @@ fn value_as_string(v: &serde_json::Value) -> String {
     }
 }
 
-pub(crate) fn evaluate_context_property(filter: &FeatureFilter, entity: &TogglyEntityContext) -> bool {
-    let property = param(filter, "Property").map(value_as_string).unwrap_or_default();
+pub(crate) fn evaluate_context_property(
+    filter: &FeatureFilter,
+    entity: &TogglyEntityContext,
+) -> bool {
+    let property = param(filter, "Property")
+        .map(value_as_string)
+        .unwrap_or_default();
     let op = param(filter, "Operator")
         .map(value_as_string)
         .unwrap_or_default()
@@ -189,11 +204,15 @@ fn compare_context(
         "contains" => {
             if value_type == "string[]" {
                 if let Some(serde_json::Value::Array(arr)) = actual {
-                    return arr.iter().any(|v| value_as_string(v).eq_ignore_ascii_case(expected));
+                    return arr
+                        .iter()
+                        .any(|v| value_as_string(v).eq_ignore_ascii_case(expected));
                 }
                 return false;
             }
-            actual_s.to_ascii_lowercase().contains(&expected.to_ascii_lowercase())
+            actual_s
+                .to_ascii_lowercase()
+                .contains(&expected.to_ascii_lowercase())
         }
         _ => false,
     }
@@ -206,9 +225,9 @@ fn compare_ordered(
     op: &str,
 ) -> bool {
     if value_type == "number" {
-        let a = actual.and_then(|v| v.as_f64()).or_else(|| {
-            actual.map(value_as_string).and_then(|s| s.parse().ok())
-        });
+        let a = actual
+            .and_then(|v| v.as_f64())
+            .or_else(|| actual.map(value_as_string).and_then(|s| s.parse().ok()));
         let e: Option<f64> = expected.parse().ok();
         let (Some(a), Some(e)) = (a, e) else {
             return false;

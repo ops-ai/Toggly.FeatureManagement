@@ -29,10 +29,7 @@ impl TogglyEntityContext {
     /// Whether the attribute exists (case-insensitive).
     pub fn contains_attr(&self, name: &str) -> bool {
         self.attributes.contains_key(name)
-            || self
-                .attributes
-                .keys()
-                .any(|k| k.eq_ignore_ascii_case(name))
+            || self.attributes.keys().any(|k| k.eq_ignore_ascii_case(name))
     }
 }
 

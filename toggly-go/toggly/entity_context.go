@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
@@ -14,21 +13,6 @@ type EntityContext struct {
 	Kind       string
 	Key        string
 	Attributes map[string]any
-}
-
-func (e EntityContext) attr(name string) (any, bool) {
-	if e.Attributes == nil {
-		return nil, false
-	}
-	if v, ok := e.Attributes[name]; ok {
-		return v, true
-	}
-	for k, v := range e.Attributes {
-		if strings.EqualFold(k, name) {
-			return v, true
-		}
-	}
-	return nil, false
 }
 
 // EntityContextPropertySchema describes a dashboard catalog property.

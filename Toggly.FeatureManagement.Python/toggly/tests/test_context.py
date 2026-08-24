@@ -1,6 +1,5 @@
 """Tests for EvaluationContext."""
 
-import pytest
 
 from toggly import EvaluationContext
 
@@ -101,7 +100,8 @@ class TestEvaluationContext:
         assert result == {
             "identity": "user-123",
             "groups": ["beta"],
-            "traits": {"country": "US"}
+            "traits": {"country": "US"},
+            "entity": None,
         }
 
     def test_from_dict(self) -> None:

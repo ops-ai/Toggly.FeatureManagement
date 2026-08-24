@@ -33,12 +33,8 @@ module Toggly
       private
 
       def extract_entity(request, user)
-        if request.respond_to?(:env) && request.env["toggly.entity"]
-          return request.env["toggly.entity"]
-        end
-        if user.respond_to?(:toggly_entity)
-          return user.toggly_entity
-        end
+        return request.env["toggly.entity"] if request.respond_to?(:env) && request.env["toggly.entity"]
+        return user.toggly_entity if user.respond_to?(:toggly_entity)
 
         nil
       end
