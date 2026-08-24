@@ -102,7 +102,12 @@ jobs:
 
       - name: Publish to npm
         if: steps.release.outputs.action == 'publish'
-        run: npm publish --provenance --access public || npm publish --access public
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::NPM_TOKEN is empty; cannot publish a new scoped package"
+            exit 1
+          fi
+          npm publish --provenance --access public || npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

@@ -167,7 +167,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
   constructor(
     private readonly _config: TogglyOptions,
     private readonly _ngZone: NgZone,
-    @Inject(PLATFORM_ID) platformId: Object,
+    @Inject(PLATFORM_ID) platformId: object,
   ) {
     this._isBrowser = isPlatformBrowser(platformId)
 

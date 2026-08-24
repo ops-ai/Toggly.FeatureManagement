@@ -50,24 +50,29 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
   private requirement: 'all' | 'any' = 'all'
   private negate = false
 
+  // Microsyntax: *featureGateBuilder="'x'; requirement: 'all'"
+  // eslint-disable-next-line @angular-eslint/no-input-rename -- structural directive alias
   @Input('featureGateBuilderRequirement')
   set featureGateBuilderRequirement(value: 'all' | 'any') {
     this.requirement = value ?? 'all'
     this.updateView()
   }
 
+  // eslint-disable-next-line @angular-eslint/no-input-rename -- structural directive alias
   @Input('featureGateBuilderNegate')
   set featureGateBuilderNegate(value: boolean) {
     this.negate = value ?? false
     this.updateView()
   }
 
+  // eslint-disable-next-line @angular-eslint/no-input-rename -- structural directive alias
   @Input('featureGateBuilderContext')
   set featureGateBuilderContext(value: TogglyEntityContext | Record<string, unknown> | null) {
     this.entityContext = value
     this.updateView()
   }
 
+  // eslint-disable-next-line @angular-eslint/no-input-rename -- structural directive alias
   @Input('featureGateBuilderKind')
   set featureGateBuilderKind(value: string | undefined) {
     this.kind = value

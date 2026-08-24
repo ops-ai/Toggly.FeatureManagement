@@ -95,7 +95,9 @@ If `develop` has moved past that version, bump the manifest and push a new tag i
 
 ### Monorepo packages (Nuxt, Next, Remix, React Native, Node server)
 
-All sibling packages must share the same version. The workflow validates this before publishing.
+Each sibling package is published at **its own** manifest version. Core
+being ahead of a sibling is not a failure: already-published versions are
+skipped. Do not bump unrelated siblings just to satisfy a lockstep check.
 
 ## Workflows
 

@@ -45,6 +45,7 @@ export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
 
   @Input() featureVariant = ''
   /** Bound via microsyntax: `*featureVariant="'key'; variant: 'name'"` → `featureVariantVariant` */
+  // eslint-disable-next-line @angular-eslint/no-input-rename -- structural directive alias
   @Input('featureVariantVariant') variant = ''
 
   constructor(

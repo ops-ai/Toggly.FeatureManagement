@@ -155,11 +155,24 @@ jobs:
 
       - name: Build and publish gems
         run: |
+          set -euo pipefail
           for gem_name in ${{ needs.validate.outputs.gems }}; do
             echo "Building and publishing $gem_name..."
             cd ${{ env.SDK_ROOT }}/$gem_name
             gem build *.gemspec
-            gem push *.gem
+            GEM_FILE=$(ls *.gem)
+            set +e
+            PUSH_OUT=$(gem push "$GEM_FILE" 2>&1)
+            PUSH_STATUS=$?
+            set -e
+            echo "$PUSH_OUT"
+            if [ "$PUSH_STATUS" -eq 0 ]; then
+              echo "Published $GEM_FILE"
+            elif echo "$PUSH_OUT" | grep -qi "Repushing of gem versions is not allowed"; then
+              echo "Skipping $GEM_FILE (already published)"
+            else
+              exit "$PUSH_STATUS"
+            fi
             cd $GITHUB_WORKSPACE
           done
 
