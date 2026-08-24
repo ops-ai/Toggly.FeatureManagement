@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from django.apps import AppConfig
 from django.conf import settings
-
 from toggly import TogglyClient, set_default_client
 from toggly import TogglyConfig as BaseTogglyConfig
 
