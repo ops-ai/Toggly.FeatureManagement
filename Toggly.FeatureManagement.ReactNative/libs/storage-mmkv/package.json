@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/react-native-toggly-storage-mmkv",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "MMKV storage adapter for React Native Toggly SDK. High-performance persistent storage using react-native-mmkv.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -51,7 +51,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@ops-ai/react-native-toggly-core": "file:../core"
+    "@ops-ai/react-native-toggly-core": "^1.7.1"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

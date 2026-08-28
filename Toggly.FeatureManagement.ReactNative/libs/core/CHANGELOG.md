@@ -1,3 +1,12 @@
+## 1.7.1
+
+2026-08-28
+
+### Fixed
+
+- Publish shared packages as caret ranges instead of `file:` paths so the
+  package installs from npm.
+
 ## 1.7.0
 
 2026-08-21

@@ -8,6 +8,10 @@
 - Entity context evaluation on `getFlag` with `registerContext`. Entity gates
   fail closed without context.
 
+### Fixed
+- Publish shared packages as caret ranges instead of `file:` paths so the
+  package installs from npm.
+
 ## 0.1.6
 
 2026-07-14

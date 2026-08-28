@@ -1,3 +1,12 @@
+## 1.2.1
+
+2026-08-28
+
+### Fixed
+
+- Publish `@ops-ai/remix-toggly-core` and shared packages as caret ranges
+  instead of `file:` paths so the package installs from npm.
+
 ## 1.2.0
 
 2026-08-21

@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/react-native-toggly-storage-async",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "AsyncStorage adapter for React Native Toggly SDK. Provides persistent feature flag storage using @react-native-async-storage/async-storage.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -50,7 +50,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@ops-ai/react-native-toggly-core": "file:../core"
+    "@ops-ai/react-native-toggly-core": "^1.7.1"
   },
   "devDependencies": {
     "@react-native-async-storage/async-storage": "^1.23.0",

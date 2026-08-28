@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1
+
+2026-08-28
+
+### Fixed
+
+- Publish `@ops-ai/react-native-toggly-core` as `^1.7.1` instead of a `file:`
+  path so the package installs from npm.
+
 ## 1.1.0
 
 2026-07-03
