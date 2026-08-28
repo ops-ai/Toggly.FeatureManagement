@@ -1,3 +1,11 @@
+## 1.5.2
+
+2026-08-28
+
+### Fixed
+- Widen `react` / `react-dom` peerDependencies to `^18 || ^19` so installs
+  succeed under npm with React 19 without `--legacy-peer-deps`.
+
 ## 1.5.1
 
 2026-08-28

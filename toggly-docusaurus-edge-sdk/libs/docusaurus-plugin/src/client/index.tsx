@@ -13,7 +13,7 @@ import React, {
   useRef,
   ReactNode,
 } from 'react';
-import { createTogglyClient, type TogglyClient, type TogglyConfig, type Flags } from '../lib/toggly-client';
+import { createTogglyClient, type TogglyClient, type TogglyConfig, type Flags } from '../lib/toggly-client.js';
 
 export interface TogglyProviderProps {
   config: TogglyConfig;

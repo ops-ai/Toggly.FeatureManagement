@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.2
+
+2026-08-28
+
+### Fixed
+
+- Add `.js` extensions on relative ESM imports so Node resolves the published
+  `dist` graph without `ERR_MODULE_NOT_FOUND`.
+
 ## 0.7.1
 
 2026-08-28

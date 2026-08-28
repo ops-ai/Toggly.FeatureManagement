@@ -1,3 +1,12 @@
+## 1.7.2
+
+2026-08-28
+
+### Fixed
+- Point `main` / `module` / `exports` at `dist/feature-flags-toggly.bundle.js`
+  so published packages resolve after install (previous `index.js` was not in
+  the tarball).
+
 ## 1.7.1
 
 2026-08-28

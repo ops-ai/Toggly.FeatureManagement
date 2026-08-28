@@ -1,8 +1,18 @@
 {
   "name": "@ops-ai/feature-flags-toggly",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Provides feature flags support for Javascript applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
-  "main": "index.js",
+  "main": "./dist/feature-flags-toggly.bundle.js",
+  "module": "./dist/feature-flags-toggly.bundle.js",
+  "types": "./dist/feature-flags-toggly.bundle.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/feature-flags-toggly.bundle.d.ts",
+      "import": "./dist/feature-flags-toggly.bundle.js",
+      "require": "./dist/feature-flags-toggly.bundle.js",
+      "default": "./dist/feature-flags-toggly.bundle.js"
+    }
+  },
   "scripts": {
     "build": "webpack",
     "dev": "npx webpack -w",

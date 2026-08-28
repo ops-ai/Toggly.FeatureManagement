@@ -10,9 +10,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { glob } from 'glob';
 import webpack from 'webpack';
-import { fetchBuildTimeFlags } from './lib/fetch-build-flags';
-import { routeToHtmlPath } from './lib/route-to-html-path';
-import type { Flags } from './lib/toggly-client';
+import { fetchBuildTimeFlags } from './lib/fetch-build-flags.js';
+import { routeToHtmlPath } from './lib/route-to-html-path.js';
+import type { Flags } from './lib/toggly-client.js';
 import { serializeJsonForInlineScript } from '@ops-ai/toggly-hooks-types';
 
 /**
@@ -569,9 +569,9 @@ async function extractFromRoot(
 }
 
 // Export React components and hooks
-export { TogglyProvider, useToggly, useFlag, Feature, isStaticGatingMode, readBuildFlagsSnapshot } from './client';
+export { TogglyProvider, useToggly, useFlag, Feature, isStaticGatingMode, readBuildFlagsSnapshot } from './client/index.js';
 export type {
   TogglyProviderProps,
   TogglyContextValue,
   FeatureProps,
-} from './client';
+} from './client/index.js';
