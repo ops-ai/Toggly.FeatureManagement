@@ -51,9 +51,9 @@
   },
   "homepage": "https://toggly.io",
   "dependencies": {
-    "@ops-ai/toggly-hooks-types": "file:../../toggly-hooks-types",
-    "@ops-ai/toggly-local-gates": "file:../../toggly-local-gates",
-    "@ops-ai/toggly-signed-defs": "file:../../toggly-signed-defs"
+    "@ops-ai/toggly-hooks-types": "^1.4.3",
+    "@ops-ai/toggly-local-gates": "^1.0.1",
+    "@ops-ai/toggly-signed-defs": "^1.2.3"
   },
   "devDependencies": {
     "@types/node": "^22.13.1",

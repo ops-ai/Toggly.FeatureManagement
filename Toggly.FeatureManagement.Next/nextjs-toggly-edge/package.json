@@ -55,7 +55,7 @@
   "homepage": "https://toggly.io",
   "dependencies": {
     "@ops-ai/nextjs-toggly-core": "workspace:*",
-    "@ops-ai/toggly-signed-defs": "file:../../toggly-signed-defs"
+    "@ops-ai/toggly-signed-defs": "^1.2.3"
   },
   "peerDependencies": {
     "next": ">=14.0.0"

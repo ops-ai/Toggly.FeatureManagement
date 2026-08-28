@@ -142,6 +142,9 @@ jobs:
         if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
         run: pnpm test
 
+      # pnpm publish rewrites workspace:* to concrete versions. npm publish does not,
+      # and would ship uninstallable packages (see OPS-777). Wait for core on the
+      # registry before publishing dependents that resolve to an exact core version.
       - name: Publish packages to npm
         if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
         working-directory: ${{ env.SDK_ROOT }}
@@ -150,7 +153,38 @@ jobs:
           for pkg in ${{ steps.packages.outputs.list }}; do
             echo "Publishing $pkg..."
             cd "$ROOT/$pkg"
-            npm publish --provenance --access public || npm publish --access public
+
+            if [ "$pkg" != "nextjs-toggly-core" ]; then
+              CORE_NAME=$(node -p "require('${ROOT}/nextjs-toggly-core/package.json').name")
+              CORE_VER=$(node -p "require('${ROOT}/nextjs-toggly-core/package.json').version")
+              DEP_RETRY=0
+              until npm view "${CORE_NAME}@${CORE_VER}" version >/dev/null 2>&1; do
+                DEP_RETRY=$((DEP_RETRY + 1))
+                if [ $DEP_RETRY -ge 10 ]; then
+                  echo "Timed out waiting for ${CORE_NAME}@${CORE_VER}"
+                  exit 1
+                fi
+                sleep 6
+              done
+            fi
+
+            # Reject unpublishable protocol specs before they hit the registry.
+            BAD=$(node -e "
+              const m = require('./package.json');
+              const deps = { ...m.dependencies, ...m.peerDependencies, ...m.optionalDependencies };
+              const bad = Object.entries(deps).filter(([, v]) => /^(workspace|file|link):/.test(String(v)));
+              // workspace:* is OK in the working tree — pnpm publish rewrites it.
+              // file:/link: must never ship.
+              const fatal = bad.filter(([, v]) => /^(file|link):/.test(String(v)));
+              console.log(fatal.map(([k, v]) => k + '@' + v).join(', '));
+            ")
+            if [ -n "$BAD" ]; then
+              echo "::error::Refusing to publish $pkg with local-path dependencies: $BAD"
+              exit 1
+            fi
+
+            pnpm publish --access public --no-git-checks --provenance || pnpm publish --access public --no-git-checks
+            sleep 3
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
