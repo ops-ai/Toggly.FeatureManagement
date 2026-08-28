@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1
+
+2026-08-28
+
+### Changed
+- Public crates.io metadata: author `Toggly <support@toggly.io>`, repository URL to `ops-ai/Toggly.FeatureManagement`.
+- Release workflow uses crates.io Trusted Publishing (OIDC) via `rust-lang/crates-io-auth-action`, with `CARGO_REGISTRY_TOKEN` fallback until Trusted Publishers are configured on each crate.
+
 ## 0.3.0
 
 2026-08-21
