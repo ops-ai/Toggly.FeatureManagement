@@ -30,3 +30,10 @@ Recorded: 2026-08-28
 - Auth for CI is intended to be OIDC + `--provenance`; many workflows still pass `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` as fallback until Task 4 completes per group.
 - Interactive Trusted Publisher setup (requires OTP): `.github/package-registry/configure-npm-trusted-publishers.sh`
 - Do **not** revoke GitHub `NPM_TOKEN` / granular npm tokens until every inventoried package has a verified OIDC publish and an explicit OPS-727 approval comment.
+
+## 2026-08-28 publish discovery
+
+- Repository secrets do **not** include `NPM_TOKEN` (confirmed via `gh secret list`).
+- Successful releases (Angular, JS, React, Vue, Svelte, Astro, Gatsby, Remix, RN, Next, Node, hooks, hooks-types, docusaurus) used **OIDC Trusted Publisher** with empty `NODE_AUTH_TOKEN` from `${{ secrets.NPM_TOKEN }}`.
+- Failures with `ENEEDAUTH`: packages missing Trusted Publisher config (`toggly-client-core` after workflow change, `toggly-local-gates`, `toggly-signed-defs`, and any others not yet trusted).
+- **Human:** run `.github/package-registry/configure-npm-trusted-publishers.sh` (OTP required), then strip `|| npm publish` fallbacks and set `oidcReady: true` per package.

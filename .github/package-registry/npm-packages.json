@@ -229,7 +229,7 @@
       "changelog": "toggly-docusaurus-edge-sdk/libs/core/CHANGELOG.md",
       "workflow": ".github/workflows/sdk-client-core-release.yml",
       "docsUrl": "https://docs.toggly.io/sdks/docusaurus",
-      "oidcReady": true
+      "oidcReady": false
     },
     {
       "name": "@ops-ai/toggly-docusaurus-plugin",
