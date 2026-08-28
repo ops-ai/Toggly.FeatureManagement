@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly-server",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Server-side feature flag utilities for Nuxt with Nitro support",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -32,9 +32,10 @@
     "nuxt",
     "nitro",
     "server",
-    "typescript"
+    "typescript",
+    "feature-management"
   ],
-  "author": "OpsAI <support@ops.ai>",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -44,7 +45,7 @@
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://toggly.io",
+  "homepage": "https://docs.toggly.io/sdks/nuxt/server",
   "dependencies": {
     "@ops-ai/nuxt-toggly-core": "workspace:*"
   },
@@ -67,5 +68,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

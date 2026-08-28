@@ -1,0 +1,334 @@
+{
+  "schemaVersion": 1,
+  "repositoryUrl": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+  "bugsUrl": "https://github.com/ops-ai/Toggly.FeatureManagement/issues",
+  "author": "Toggly <support@toggly.io>",
+  "license": "MIT",
+  "requiredKeywords": [
+    "toggly",
+    "feature-flags",
+    "feature-management"
+  ],
+  "excludeFromInventory": [
+    "@ops-ai/nextjs-toggly-monorepo",
+    "@ops-ai/toggly-cloudflare-pages-function",
+    "@ops-ai/toggly-cloudflare-worker"
+  ],
+  "packages": [
+    {
+      "name": "@ops-ai/astro-feature-flags-toggly",
+      "group": "astro",
+      "manifest": "Toggly.FeatureManagement.Astro/package.json",
+      "changelog": "Toggly.FeatureManagement.Astro/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-astro-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/astro",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/feature-flags-toggly",
+      "group": "javascript",
+      "manifest": "Toggly.FeatureManagement.Javascript/feature_flags_toggly/package.json",
+      "changelog": "Toggly.FeatureManagement.Javascript/feature_flags_toggly/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-javascript-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/javascript/vanilla",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/gatsby-feature-flags-toggly",
+      "group": "gatsby",
+      "manifest": "Toggly.FeatureManagement.Gatsby/package.json",
+      "changelog": "Toggly.FeatureManagement.Gatsby/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-gatsby-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/gatsby",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/nextjs-toggly-client",
+      "group": "next",
+      "manifest": "Toggly.FeatureManagement.Next/nextjs-toggly-client/package.json",
+      "changelog": "Toggly.FeatureManagement.Next/nextjs-toggly-client/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-next-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nextjs/client",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/nextjs-toggly-core",
+      "group": "next",
+      "manifest": "Toggly.FeatureManagement.Next/nextjs-toggly-core/package.json",
+      "changelog": "Toggly.FeatureManagement.Next/nextjs-toggly-core/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-next-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nextjs",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/nextjs-toggly-edge",
+      "group": "next",
+      "manifest": "Toggly.FeatureManagement.Next/nextjs-toggly-edge/package.json",
+      "changelog": "Toggly.FeatureManagement.Next/nextjs-toggly-edge/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-next-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nextjs/edge",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/nextjs-toggly-server",
+      "group": "next",
+      "manifest": "Toggly.FeatureManagement.Next/nextjs-toggly-server/package.json",
+      "changelog": "Toggly.FeatureManagement.Next/nextjs-toggly-server/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-next-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nextjs/server",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/ngx-feature-flags-toggly",
+      "group": "angular",
+      "manifest": "Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly/package.json",
+      "changelog": "Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-angular-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/javascript/angular",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/nuxt-toggly",
+      "group": "nuxt",
+      "manifest": "Toggly.FeatureManagement.Nuxt/nuxt-toggly/package.json",
+      "changelog": "Toggly.FeatureManagement.Nuxt/nuxt-toggly/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-nuxt-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nuxt",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/nuxt-toggly-client",
+      "group": "nuxt",
+      "manifest": "Toggly.FeatureManagement.Nuxt/nuxt-toggly-client/package.json",
+      "changelog": "Toggly.FeatureManagement.Nuxt/nuxt-toggly-client/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-nuxt-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nuxt/client",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/nuxt-toggly-core",
+      "group": "nuxt",
+      "manifest": "Toggly.FeatureManagement.Nuxt/nuxt-toggly-core/package.json",
+      "changelog": "Toggly.FeatureManagement.Nuxt/nuxt-toggly-core/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-nuxt-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nuxt",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/nuxt-toggly-server",
+      "group": "nuxt",
+      "manifest": "Toggly.FeatureManagement.Nuxt/nuxt-toggly-server/package.json",
+      "changelog": "Toggly.FeatureManagement.Nuxt/nuxt-toggly-server/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-nuxt-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nuxt/server",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/react-feature-flags-toggly",
+      "group": "react",
+      "manifest": "Toggly.FeatureManagement.React/package.json",
+      "changelog": "Toggly.FeatureManagement.React/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-react-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/javascript/react",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/react-native-toggly",
+      "group": "react-native",
+      "manifest": "Toggly.FeatureManagement.ReactNative/libs/react-native/package.json",
+      "changelog": "Toggly.FeatureManagement.ReactNative/libs/react-native/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-react-native-all-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/react-native",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/react-native-toggly-core",
+      "group": "react-native",
+      "manifest": "Toggly.FeatureManagement.ReactNative/libs/core/package.json",
+      "changelog": "Toggly.FeatureManagement.ReactNative/libs/core/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-react-native-all-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/react-native",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/react-native-toggly-storage-async",
+      "group": "react-native",
+      "manifest": "Toggly.FeatureManagement.ReactNative/libs/storage-async/package.json",
+      "changelog": "Toggly.FeatureManagement.ReactNative/libs/storage-async/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-react-native-all-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/react-native/storage",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/react-native-toggly-storage-mmkv",
+      "group": "react-native",
+      "manifest": "Toggly.FeatureManagement.ReactNative/libs/storage-mmkv/package.json",
+      "changelog": "Toggly.FeatureManagement.ReactNative/libs/storage-mmkv/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-react-native-all-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/react-native/storage",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/remix-toggly-client",
+      "group": "remix",
+      "manifest": "Toggly.FeatureManagement.Remix/remix-toggly-client/package.json",
+      "changelog": "Toggly.FeatureManagement.Remix/remix-toggly-client/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-remix-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/remix/client",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/remix-toggly-core",
+      "group": "remix",
+      "manifest": "Toggly.FeatureManagement.Remix/remix-toggly-core/package.json",
+      "changelog": "Toggly.FeatureManagement.Remix/remix-toggly-core/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-remix-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/remix",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/remix-toggly-server",
+      "group": "remix",
+      "manifest": "Toggly.FeatureManagement.Remix/remix-toggly-server/package.json",
+      "changelog": "Toggly.FeatureManagement.Remix/remix-toggly-server/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-remix-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/remix/server",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/svelte-feature-flags-toggly",
+      "group": "svelte",
+      "manifest": "Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/package.json",
+      "changelog": "Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-svelte-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/javascript/svelte",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-appinsights-hook",
+      "group": "hooks",
+      "manifest": "toggly-appinsights-hook/package.json",
+      "changelog": "toggly-appinsights-hook/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-appinsights-hook-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/hooks",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-clarity-hook",
+      "group": "hooks",
+      "manifest": "toggly-clarity-hook/package.json",
+      "changelog": "toggly-clarity-hook/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-clarity-hook-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/hooks/clarity",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-client-core",
+      "group": "docusaurus",
+      "manifest": "toggly-docusaurus-edge-sdk/libs/core/package.json",
+      "changelog": "toggly-docusaurus-edge-sdk/libs/core/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-client-core-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/docusaurus",
+      "oidcReady": true
+    },
+    {
+      "name": "@ops-ai/toggly-docusaurus-plugin",
+      "group": "docusaurus",
+      "manifest": "toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/package.json",
+      "changelog": "toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-docusaurus-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/docusaurus",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-express",
+      "group": "node",
+      "manifest": "Toggly.FeatureManagement.Node/toggly-express/package.json",
+      "changelog": "Toggly.FeatureManagement.Node/toggly-express/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-node-server-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nodejs",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-fastify",
+      "group": "node",
+      "manifest": "Toggly.FeatureManagement.Node/toggly-fastify/package.json",
+      "changelog": "Toggly.FeatureManagement.Node/toggly-fastify/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-node-server-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nodejs",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-ga4-hook",
+      "group": "hooks",
+      "manifest": "toggly-ga4-hook/package.json",
+      "changelog": "toggly-ga4-hook/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-ga4-hook-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/hooks",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-hono",
+      "group": "node",
+      "manifest": "Toggly.FeatureManagement.Node/toggly-hono/package.json",
+      "changelog": "Toggly.FeatureManagement.Node/toggly-hono/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-node-server-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nodejs",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-hooks-types",
+      "group": "shared",
+      "manifest": "toggly-hooks-types/package.json",
+      "changelog": "toggly-hooks-types/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-hooks-types-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/hooks",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-koa",
+      "group": "node",
+      "manifest": "Toggly.FeatureManagement.Node/toggly-koa/package.json",
+      "changelog": "Toggly.FeatureManagement.Node/toggly-koa/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-node-server-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nodejs",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-local-gates",
+      "group": "shared",
+      "manifest": "toggly-local-gates/package.json",
+      "changelog": "toggly-local-gates/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-local-gates-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks",
+      "oidcReady": true
+    },
+    {
+      "name": "@ops-ai/toggly-node-core",
+      "group": "node",
+      "manifest": "Toggly.FeatureManagement.Node/toggly-node-core/package.json",
+      "changelog": "Toggly.FeatureManagement.Node/toggly-node-core/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-node-server-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nodejs",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-signed-defs",
+      "group": "shared",
+      "manifest": "toggly-signed-defs/package.json",
+      "changelog": "toggly-signed-defs/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-signed-defs-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks",
+      "oidcReady": true
+    },
+    {
+      "name": "@ops-ai/vue-feature-flags-toggly",
+      "group": "vue",
+      "manifest": "Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/package.json",
+      "changelog": "Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-vue-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/javascript/vue",
+      "oidcReady": false
+    }
+  ]
+}

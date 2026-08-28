@@ -9,6 +9,18 @@ Manifest-first release policy for all Toggly SDK packages in this repository.
 3. **Run the release workflow** with defaults (`release_mode: publish`).
 4. The workflow **publishes the manifest version** — it does not bump by default.
 
+## npm public packages (`@ops-ai/*`)
+
+Before shipping a **new** public npm package:
+
+1. Add a row to [`.github/package-registry/npm-packages.json`](package-registry/npm-packages.json) (`name`, `manifest`, `changelog`, `workflow`, `docsUrl`).
+2. Satisfy the metadata contract enforced by `verify-npm-metadata.mjs` (`author` `Toggly <support@toggly.io>`, `MIT`, exact docs `homepage`, `repository.url` + `repository.directory`, GitHub `bugs`, `publishConfig.access: public`, required keywords). Never publish `#develop` or `/tree/develop/` links.
+3. Point `workflow` at an existing `sdk-*-release.yml` (or add one) that publishes with `--provenance`.
+4. Configure npm **Trusted Publisher** for that package → repository `ops-ai/Toggly.FeatureManagement`, exact workflow filename, environment `npm-publish`. Set `oidcReady: true` in the inventory only after a successful OIDC publish, then remove `NODE_AUTH_TOKEN` / `secrets.NPM_TOKEN` fallback from that workflow.
+5. Run locally: `node --test .github/package-registry/verify-npm-metadata.test.mjs` and `node --test .github/package-registry/verify-npm-trusted-publishing.test.mjs`.
+
+Governance notes: [`.github/package-registry/npm-governance-status.md`](package-registry/npm-governance-status.md).
+
 ## Workflow inputs
 
 | Input | Default | Description |

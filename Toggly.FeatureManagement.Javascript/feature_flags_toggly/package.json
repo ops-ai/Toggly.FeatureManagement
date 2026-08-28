@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/feature-flags-toggly",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "Provides feature flags support for Javascript applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "main": "./dist/feature-flags-toggly.bundle.js",
   "module": "./dist/feature-flags-toggly.bundle.js",
@@ -20,17 +20,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git#develop"
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.Javascript/feature_flags_toggly"
   },
-  "author": {
-    "name": "Cosmin Atomei",
-    "email": "cosmin.atomei@gmail.com"
-  },
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop#readme",
+  "homepage": "https://docs.toggly.io/sdks/javascript/vanilla",
   "files": [
     "dist"
   ],
@@ -54,5 +52,13 @@
     "webpack": "^5.75.0",
     "webpack-cli": "^5.0.0",
     "ws": "^8.0.0"
+  },
+  "keywords": [
+    "toggly",
+    "feature-flags",
+    "feature-management"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

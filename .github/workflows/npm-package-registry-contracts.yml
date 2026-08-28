@@ -1,0 +1,44 @@
+name: npm Package Registry Contracts
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/package-registry/**'
+      - '.github/workflows/sdk-*-release.yml'
+      - '.github/workflows/npm-package-registry-contracts.yml'
+      - '**/package.json'
+      - '**/CHANGELOG.md'
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - '.github/package-registry/**'
+      - '.github/workflows/sdk-*-release.yml'
+      - '.github/workflows/npm-package-registry-contracts.yml'
+      - '**/package.json'
+      - '**/CHANGELOG.md'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-npm-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.14.0'
+
+      - name: Verify npm metadata inventory and contract
+        run: node --test .github/package-registry/verify-npm-metadata.test.mjs
+
+      - name: Verify npm trusted publishing contract
+        run: node --test .github/package-registry/verify-npm-trusted-publishing.test.mjs

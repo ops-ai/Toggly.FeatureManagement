@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/remix-toggly-server",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Server-side utilities for Toggly Remix SDK - loaders, actions, and server utilities",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -32,18 +32,20 @@
     "toggly",
     "server",
     "loader",
-    "action"
+    "action",
+    "feature-management"
   ],
-  "author": "OpsAI <support@ops.ai>",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.Remix/remix-toggly-server"
   },
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement#readme",
+  "homepage": "https://docs.toggly.io/sdks/remix/server",
   "dependencies": {
     "@ops-ai/remix-toggly-core": "^1.4.1",
     "@ops-ai/toggly-local-gates": "^1.0.1",
@@ -81,5 +83,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

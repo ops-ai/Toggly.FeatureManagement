@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/gatsby-feature-flags-toggly",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Toggly feature flags SDK for Gatsby with SSR, SSG, and build-time page gating",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -55,13 +55,15 @@
     "feature-toggle",
     "ssr",
     "ssg",
-    "react"
+    "react",
+    "feature-management"
   ],
-  "author": "Ops.AI <hello@ops.ai>",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.Gatsby"
   },
   "dependencies": {
     "@nanostores/react": "^0.8.0",
@@ -88,5 +90,12 @@
     "gatsby": "^5.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "homepage": "https://docs.toggly.io/sdks/gatsby",
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-appinsights-hook",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Azure Application Insights hook for Toggly Feature Flags SDK. Automatically tracks feature flag data in Application Insights for monitoring and analytics.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,12 +30,10 @@
     "hooks",
     "tracking",
     "apm",
-    "observability"
+    "observability",
+    "feature-management"
   ],
-  "author": {
-    "name": "Toggly",
-    "email": "hello@toggly.io"
-  },
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -45,7 +43,7 @@
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/toggly-appinsights-hook#readme",
+  "homepage": "https://docs.toggly.io/sdks/hooks",
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.1.0"
   },

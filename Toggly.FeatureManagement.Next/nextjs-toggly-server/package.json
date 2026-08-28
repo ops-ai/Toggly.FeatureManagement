@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nextjs-toggly-server",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Server-side feature flags for Next.js - Server Components, Server Actions, and Route Handlers",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -39,9 +39,10 @@
     "typescript",
     "server-components",
     "server-actions",
-    "rsc"
+    "rsc",
+    "feature-management"
   ],
-  "author": "OpsAI <support@ops.ai>",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -51,7 +52,7 @@
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://toggly.io",
+  "homepage": "https://docs.toggly.io/sdks/nextjs/server",
   "dependencies": {
     "@ops-ai/nextjs-toggly-core": "workspace:*"
   },
@@ -71,5 +72,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+
+## 1.2.1
+
+- Normalize public npm metadata for provenance and docs links (no API change).
+
 ## 1.2.0
 
 2026-08-21

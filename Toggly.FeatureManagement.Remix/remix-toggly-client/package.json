@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/remix-toggly-client",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Client-side React components and hooks for Toggly feature flags in Remix",
   "keywords": [
     "toggly",
@@ -11,19 +11,20 @@
     "hooks",
     "client",
     "ssr",
-    "hydration"
+    "hydration",
+    "feature-management"
   ],
-  "homepage": "https://toggly.io",
+  "homepage": "https://docs.toggly.io/sdks/remix/client",
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
     "directory": "Toggly.FeatureManagement.Remix/remix-toggly-client"
   },
   "license": "MIT",
-  "author": "Ops.ai <contact@ops.ai>",
+  "author": "Toggly <support@toggly.io>",
   "type": "module",
   "exports": {
     ".": {

@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-hono",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Toggly feature flags Hono middleware",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -42,16 +42,17 @@
     "edge",
     "cloudflare-workers",
     "ab-testing",
-    "experimentation"
+    "experimentation",
+    "feature-management"
   ],
-  "author": "ops.ai",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
     "directory": "Toggly.FeatureManagement.Node/toggly-hono"
   },
-  "homepage": "https://toggly.io",
+  "homepage": "https://docs.toggly.io/sdks/nodejs",
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
@@ -72,5 +73,8 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

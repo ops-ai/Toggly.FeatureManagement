@@ -1,22 +1,23 @@
 {
   "name": "@ops-ai/react-feature-flags-toggly",
-  "version": "1.10.3",
+  "version": "1.10.4",
   "description": "Provides feature flags support for React applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "scripts": {
     "build": "rollup -c",
     "test": "jest --coverage",
     "test:watch": "jest --watch"
   },
-  "author": "Cosmin Atomei <cosmin.atomei@gmail.com>",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.React"
   },
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement#readme",
+  "homepage": "https://docs.toggly.io/sdks/javascript/react",
   "devDependencies": {
     "@rollup/plugin-commonjs": "^24.0.1",
     "@rollup/plugin-node-resolve": "^15.0.1",
@@ -47,5 +48,13 @@
     "dist"
   ],
   "types": "dist/index.d.ts",
-  "type": "module"
+  "type": "module",
+  "keywords": [
+    "toggly",
+    "feature-flags",
+    "feature-management"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

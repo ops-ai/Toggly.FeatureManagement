@@ -1,5 +1,10 @@
 # Changelog
 
+
+## 1.1.1
+
+- Normalize public npm metadata for provenance and docs links (no API change).
+
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]

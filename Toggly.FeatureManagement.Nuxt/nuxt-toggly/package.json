@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Feature flags for Nuxt 3 - composables, components, directives, and server utilities",
   "type": "module",
   "main": "./dist/module.cjs",
@@ -33,9 +33,10 @@
     "feature-toggles",
     "toggly",
     "vue3",
-    "typescript"
+    "typescript",
+    "feature-management"
   ],
-  "author": "OpsAI <support@ops.ai>",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -45,7 +46,7 @@
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://toggly.io",
+  "homepage": "https://docs.toggly.io/sdks/nuxt",
   "dependencies": {
     "@nuxt/kit": "^3.16.0",
     "@ops-ai/nuxt-toggly-core": "workspace:*",
@@ -68,5 +69,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

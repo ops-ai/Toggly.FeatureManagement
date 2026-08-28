@@ -13,16 +13,14 @@
   "types": "./dist/types/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.Vue/vue-feature-flags-toggly"
   },
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop#readme",
-  "author": {
-    "name": "Cosmin Atomei",
-    "email": "cosmin.atomei@gmail.com"
-  },
+  "homepage": "https://docs.toggly.io/sdks/javascript/vue",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
@@ -36,7 +34,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "name": "@ops-ai/vue-feature-flags-toggly",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "description": "Provides feature flags support for Vue.js applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "type": "module",
   "dependencies": {
@@ -57,5 +55,13 @@
     "vitest": "^1.0.0",
     "vue-tsc": "^1.0.24",
     "ws": "^8.0.0"
+  },
+  "keywords": [
+    "toggly",
+    "feature-flags",
+    "feature-management"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

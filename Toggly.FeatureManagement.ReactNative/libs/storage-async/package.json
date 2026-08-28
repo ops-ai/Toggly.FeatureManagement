@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/react-native-toggly-storage-async",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "AsyncStorage adapter for React Native Toggly SDK. Provides persistent feature flag storage using @react-native-async-storage/async-storage.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -27,12 +27,10 @@
     "feature-flags",
     "async-storage",
     "storage",
-    "persistence"
+    "persistence",
+    "feature-management"
   ],
-  "author": {
-    "name": "Toggly",
-    "email": "hello@toggly.io"
-  },
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -42,7 +40,7 @@
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.FeatureManagement.ReactNative#readme",
+  "homepage": "https://docs.toggly.io/sdks/react-native/storage",
   "engines": {
     "node": ">=18.0.0"
   },

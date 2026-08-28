@@ -55,7 +55,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: '22.14.0'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Resolve release version
@@ -91,11 +91,10 @@ jobs:
           package_dir: ${{ env.SDK_DIR }}
           skip_import: 'true'
 
+      # Auth: npm Trusted Publisher (OIDC + provenance). No NPM_TOKEN fallback.
       - name: Publish to npm
         if: steps.release.outputs.action == 'publish'
-        run: npm publish --provenance --access public || npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
 
       - name: Commit version bump
         if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'

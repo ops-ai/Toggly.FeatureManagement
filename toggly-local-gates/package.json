@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-local-gates",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Pure helpers for device-local post-filter gates on Toggly client SDK feature flags",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -34,12 +34,10 @@
     "feature-flags",
     "local-gates",
     "post-filter",
-    "typescript"
+    "typescript",
+    "feature-management"
   ],
-  "author": {
-    "name": "Toggly",
-    "email": "hello@toggly.io"
-  },
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -49,7 +47,7 @@
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/toggly-local-gates#readme",
+  "homepage": "https://docs.toggly.io/sdks",
   "engines": {
     "node": ">=18.0.0"
   },
