@@ -125,13 +125,13 @@ jobs:
           node --input-type=module -e "const m = await import('${{ env.NPM_PACKAGE }}'); if (!Object.keys(m).length) { throw new Error('ESM entry point exported nothing') }"
           echo "Packed tarball verified"
 
-      # Auth: npm Trusted Publisher (OIDC + provenance). No NPM_TOKEN fallback.
-      # Force empty token so environment secrets cannot override OIDC.
+      # Trusted Publisher not yet configured for this package; keep token +
+      # provenance with non-provenance fallback until OIDC is verified.
       - name: Publish to npm
         if: steps.release.outputs.action == 'publish'
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public || npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ''
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
         if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'

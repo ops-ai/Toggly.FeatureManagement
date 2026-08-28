@@ -74,7 +74,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
   const client = createTogglyClient(mergedConfig)
   globalClient = client
   client.subscribeFeaturesRefresh?.(() => {
-    features.value = client.state.features
+    features.value = client.state.features as Record<string, boolean>
     error.value = client.state.error
   })
 
@@ -92,7 +92,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
 
       try {
         const defs = await client.init(newConfig)
-        features.value = defs
+        features.value = defs as Record<string, boolean>
         isReady.value = true
 
         // Check if client encountered an error (it catches internally)
@@ -129,7 +129,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
 
       try {
         const defs = await client.refresh()
-        features.value = defs
+        features.value = defs as Record<string, boolean>
         error.value = client.state.error
 
         // Persist features if enabled

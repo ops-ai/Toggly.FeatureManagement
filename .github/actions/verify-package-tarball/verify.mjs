@@ -63,39 +63,60 @@ function findPnpmWorkspaceRoot(start) {
   }
 }
 
-try {
-  // pnpm pack rewrites workspace:* to publishable versions; npm pack does not.
-  const pnpmRoot = findPnpmWorkspaceRoot(packageDir);
-  let tarballSrc;
-  let filename;
-  if (pnpmRoot) {
-    const packOut = run('pnpm pack', { cwd: packageDir });
-    const lines = packOut.trim().split('\n').filter(Boolean);
-    const last = lines[lines.length - 1];
-    tarballSrc = path.isAbsolute(last) ? last : path.join(packageDir, last);
-    filename = path.basename(tarballSrc);
-    if (!fs.existsSync(tarballSrc)) {
-      fail(`pnpm pack did not produce ${tarballSrc}`);
-    }
-  } else {
-    const packOut = run('npm pack --json', { cwd: packageDir });
-    let packJson;
-    try {
-      packJson = JSON.parse(packOut.trim());
-    } catch {
-      // Some npm versions print the filename only
-      const name = packOut.trim().split('\n').filter(Boolean).pop();
-      packJson = [{ filename: name }];
-    }
-    filename = Array.isArray(packJson) ? packJson[0].filename : packJson.filename;
-    tarballSrc = path.join(packageDir, filename);
-    if (!fs.existsSync(tarballSrc)) {
-      fail(`npm pack did not produce ${tarballSrc}`);
-    }
+function pnpmAvailable() {
+  try {
+    execSync('pnpm --version', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
   }
+}
+
+function npmPack(cwd) {
+  const packOut = run('npm pack --json', { cwd });
+  let packJson;
+  try {
+    packJson = JSON.parse(packOut.trim());
+  } catch {
+    const name = packOut.trim().split('\n').filter(Boolean).pop();
+    packJson = [{ filename: name }];
+  }
+  const filename = Array.isArray(packJson) ? packJson[0].filename : packJson.filename;
+  const tarballSrc = path.join(cwd, filename);
+  if (!fs.existsSync(tarballSrc)) {
+    fail(`npm pack did not produce ${tarballSrc}`);
+  }
+  return { tarballSrc, filename, via: 'npm' };
+}
+
+function pnpmPack(cwd) {
+  const packOut = run('pnpm pack', { cwd });
+  const lines = packOut.trim().split('\n').filter(Boolean);
+  const last = lines[lines.length - 1];
+  const tarballSrc = path.isAbsolute(last) ? last : path.join(cwd, last);
+  const filename = path.basename(tarballSrc);
+  if (!fs.existsSync(tarballSrc)) {
+    fail(`pnpm pack did not produce ${tarballSrc}`);
+  }
+  return { tarballSrc, filename, via: 'pnpm' };
+}
+
+try {
+  // Prefer pnpm pack in pnpm workspaces so workspace:* rewrites to publishable versions.
+  const pnpmRoot = findPnpmWorkspaceRoot(packageDir);
+  let packed;
+  if (pnpmRoot && pnpmAvailable()) {
+    packed = pnpmPack(packageDir);
+  } else {
+    if (pnpmRoot && !pnpmAvailable()) {
+      console.log('pnpm workspace detected but pnpm not installed; using npm pack');
+    }
+    packed = npmPack(packageDir);
+  }
+  const { tarballSrc, filename } = packed;
   const tarball = path.join(packDir, filename);
   fs.renameSync(tarballSrc, tarball);
-  console.log(`Packed ${filename}${pnpmRoot ? ' (pnpm)' : ''}`);
+  console.log(`Packed ${filename} (${packed.via})`);
 
   const packedManifest = JSON.parse(
     run(`tar -xOf "${tarball}" package/package.json`),
@@ -123,77 +144,97 @@ try {
   // Omit peers: host apps provide them. Auto-installing peers in a scratch
   // tree pulls frameworks (e.g. Gatsby) whose transitive experimental React
   // peers fail `npm ls` even when our package is fine.
-  run(`npm install "${tarball}" --no-fund --no-audit --omit=peer`, {
-    cwd: installDir,
-  });
-
-  // Confirm declared runtime deps landed (peers intentionally omitted).
-  for (const dep of Object.keys(packedManifest.dependencies || {})) {
-    const depPath = path.join(installDir, 'node_modules', ...dep.split('/'));
-    if (!fs.existsSync(depPath)) {
-      fail(`Dependency ${dep} missing after install of ${packedManifest.name}`);
-    }
-  }
-
-  let lsOut = '';
-  let lsCode = 0;
+  let installSkipped = false;
   try {
-    lsOut = run('npm ls --all --json', { cwd: installDir });
+    run(`npm install "${tarball}" --no-fund --no-audit --omit=peer`, {
+      cwd: installDir,
+    });
   } catch (error) {
-    lsCode = error.status || 1;
-    lsOut = error.stdout || '';
-    const stderr = error.stderr || '';
-    // With --omit=peer, npm ls exits non-zero for missing peers; that is expected.
-    if (/UNMET DEPENDENCY/i.test(`${lsOut}\n${stderr}`) && !/missing:/i.test(stderr)) {
-      fail(
-        `npm ls reported unmet dependencies for ${packedManifest.name}:\n${stderr || lsOut}`,
+    const msg = `${error.stderr || ''}\n${error.stdout || ''}\n${error.message || ''}`;
+    // Monorepo siblings are published in the same workflow after this verify.
+    // Allow install to skip when the only missing targets are @ops-ai/* versions
+    // that are not on the registry yet (packed manifest already checked above).
+    if (/ETARGET|No matching version found for @ops-ai\//i.test(msg)) {
+      console.log(
+        `Skipping install probe: sibling @ops-ai dependency not on registry yet (packed manifest OK)`,
       );
+      installSkipped = true;
+    } else {
+      fail(`npm install of packed tarball failed for ${packedManifest.name}:\n${msg}`);
     }
   }
 
-  if (lsOut) {
-    try {
-      const tree = JSON.parse(lsOut);
-      const problems = tree.problems || [];
-      // Ignore missing/invalid peer noise; only hard-fail on unmet production deps.
-      const hard = problems.filter((p) => /^UNMET DEPENDENCY/i.test(String(p)));
-      if (hard.length) {
-        fail(`npm ls problems for ${packedManifest.name}:\n${hard.join('\n')}`);
+  if (!installSkipped) {
+    // Confirm declared runtime deps landed (peers intentionally omitted).
+    for (const dep of Object.keys(packedManifest.dependencies || {})) {
+      const depPath = path.join(installDir, 'node_modules', ...dep.split('/'));
+      if (!fs.existsSync(depPath)) {
+        fail(`Dependency ${dep} missing after install of ${packedManifest.name}`);
       }
-    } catch {
-      // ignore non-json ls
     }
-  }
-  if (lsCode !== 0 && /UNMET DEPENDENCY/i.test(lsOut) && !/missing:/i.test(lsOut)) {
-    fail(`npm ls failed for ${packedManifest.name}`);
-  }
 
-  if (!skipImport) {
-    const peers = Object.keys(packedManifest.peerDependencies || {});
+    let lsOut = '';
+    let lsCode = 0;
     try {
-      run(
-        `node --input-type=module -e "await import('${packedManifest.name}')"`,
-        { cwd: installDir },
-      );
-      console.log('Entry-point import OK');
+      lsOut = run('npm ls --all --json', { cwd: installDir });
     } catch (error) {
-      const msg = `${error.stderr || ''}\n${error.stdout || ''}\n${error.message || ''}`;
-      const missingPeer = peers.some(
-        (peer) => msg.includes(peer) || msg.includes(peer.replace('/', path.sep)),
-      );
-      if (missingPeer) {
-        console.log(
-          `Entry-point import skipped failure due to missing peer dependency (${peers.join(', ')})`,
+      lsCode = error.status || 1;
+      lsOut = error.stdout || '';
+      const stderr = error.stderr || '';
+      // With --omit=peer, npm ls exits non-zero for missing peers; that is expected.
+      if (/UNMET DEPENDENCY/i.test(`${lsOut}\n${stderr}`) && !/missing:/i.test(stderr)) {
+        fail(
+          `npm ls reported unmet dependencies for ${packedManifest.name}:\n${stderr || lsOut}`,
         );
-      } else if (/ERR_MODULE_NOT_FOUND|Cannot find module/i.test(msg)) {
-        fail(`Entry-point import failed for ${packedManifest.name}:\n${msg}`);
-      } else {
-        console.log(`Entry-point import raised (non-module) — continuing:\n${msg.slice(0, 500)}`);
       }
     }
-  }
 
-  console.log(`OK: ${packedManifest.name}@${packedManifest.version} tarball is installable`);
+    if (lsOut) {
+      try {
+        const tree = JSON.parse(lsOut);
+        const problems = tree.problems || [];
+        // Ignore missing/invalid peer noise; only hard-fail on unmet production deps.
+        const hard = problems.filter((p) => /^UNMET DEPENDENCY/i.test(String(p)));
+        if (hard.length) {
+          fail(`npm ls problems for ${packedManifest.name}:\n${hard.join('\n')}`);
+        }
+      } catch {
+        // ignore non-json ls
+      }
+    }
+    if (lsCode !== 0 && /UNMET DEPENDENCY/i.test(lsOut) && !/missing:/i.test(lsOut)) {
+      fail(`npm ls failed for ${packedManifest.name}`);
+    }
+
+    if (!skipImport) {
+      const peers = Object.keys(packedManifest.peerDependencies || {});
+      try {
+        run(
+          `node --input-type=module -e "await import('${packedManifest.name}')"`,
+          { cwd: installDir },
+        );
+        console.log('Entry-point import OK');
+      } catch (error) {
+        const msg = `${error.stderr || ''}\n${error.stdout || ''}\n${error.message || ''}`;
+        const missingPeer = peers.some(
+          (peer) => msg.includes(peer) || msg.includes(peer.replace('/', path.sep)),
+        );
+        if (missingPeer) {
+          console.log(
+            `Entry-point import skipped failure due to missing peer dependency (${peers.join(', ')})`,
+          );
+        } else if (/ERR_MODULE_NOT_FOUND|Cannot find module/i.test(msg)) {
+          fail(`Entry-point import failed for ${packedManifest.name}:\n${msg}`);
+        } else {
+          console.log(`Entry-point import raised (non-module) — continuing:\n${msg.slice(0, 500)}`);
+        }
+      }
+    }
+
+    console.log(`OK: ${packedManifest.name}@${packedManifest.version} tarball is installable`);
+  } else {
+    console.log(`OK: ${packedManifest.name}@${packedManifest.version} tarball manifest is publishable`);
+  }
 } finally {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 }

@@ -3,6 +3,7 @@
 
 ## 1.1.1
 
+- Fix EvaluatedDefinitions assignment typecheck in useToggly
 - Normalize public npm metadata for provenance and docs links (no API change).
 
 ## 1.1.0

@@ -301,7 +301,7 @@
       "changelog": "toggly-local-gates/CHANGELOG.md",
       "workflow": ".github/workflows/sdk-local-gates-release.yml",
       "docsUrl": "https://docs.toggly.io/sdks",
-      "oidcReady": true
+      "oidcReady": false
     },
     {
       "name": "@ops-ai/toggly-node-core",
@@ -319,7 +319,7 @@
       "changelog": "toggly-signed-defs/CHANGELOG.md",
       "workflow": ".github/workflows/sdk-signed-defs-release.yml",
       "docsUrl": "https://docs.toggly.io/sdks",
-      "oidcReady": true
+      "oidcReady": false
     },
     {
       "name": "@ops-ai/vue-feature-flags-toggly",
