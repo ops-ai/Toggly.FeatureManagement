@@ -152,6 +152,16 @@ jobs:
             pnpm --filter "./$pkg" test
           done
 
+
+      - name: Verify packed tarballs
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
+        working-directory: ${{ github.workspace }}
+        run: |
+          for pkg in ${{ steps.packages.outputs.list }}; do
+            echo "Verifying $pkg..."
+            PACKAGE_DIR="${{ env.SDK_ROOT }}/$pkg" SKIP_IMPORT=true \
+              node .github/actions/verify-package-tarball/verify.mjs
+          done
       - name: Publish packages to npm
         if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: |

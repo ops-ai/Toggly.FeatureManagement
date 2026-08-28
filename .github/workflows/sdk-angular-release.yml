@@ -89,6 +89,14 @@ jobs:
         if: steps.release.outputs.action == 'publish'
         run: npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless
 
+
+      - name: Verify packed tarball
+        if: steps.release.outputs.action == 'publish'
+        uses: ./.github/actions/verify-package-tarball
+        with:
+          package_dir: ${{ env.SDK_ROOT }}/dist/ngx-feature-flags-toggly
+          skip_import: 'true'
+
       - name: Publish to npm
         if: steps.release.outputs.action == 'publish'
         working-directory: ${{ env.SDK_ROOT }}/dist/ngx-feature-flags-toggly

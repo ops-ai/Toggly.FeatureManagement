@@ -147,6 +147,16 @@ jobs:
       # pnpm publish rewrites workspace:* to concrete versions. npm publish does not,
       # and would ship uninstallable packages (see OPS-777). Wait for core on the
       # registry before publishing dependents that resolve to an exact core version.
+
+      - name: Verify packed tarballs
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
+        working-directory: ${{ github.workspace }}
+        run: |
+          for pkg in ${{ steps.packages.outputs.list }}; do
+            echo "Verifying $pkg..."
+            PACKAGE_DIR="${{ env.SDK_ROOT }}/$pkg" SKIP_IMPORT=true \
+              node .github/actions/verify-package-tarball/verify.mjs
+          done
       - name: Publish packages to npm
         if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         working-directory: ${{ env.SDK_ROOT }}

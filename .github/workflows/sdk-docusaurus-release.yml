@@ -88,6 +88,13 @@ jobs:
         if: steps.release.outputs.action == 'publish'
         run: npm test
 
+
+      - name: Verify packed tarball
+        if: steps.release.outputs.action == 'publish'
+        uses: ./.github/actions/verify-package-tarball
+        with:
+          package_dir: ${{ env.SDK_DIR }}
+          skip_import: 'true'
       - name: Publish to npm
         if: steps.release.outputs.action == 'publish'
         run: npm publish --provenance --access public || npm publish --access public
