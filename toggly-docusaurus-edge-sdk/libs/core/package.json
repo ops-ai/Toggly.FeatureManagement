@@ -32,6 +32,14 @@
   ],
   "author": "Toggly",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement#readme",
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
