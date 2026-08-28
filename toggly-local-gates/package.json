@@ -4,12 +4,17 @@
   "description": "Pure helpers for device-local post-filter gates on Toggly client SDK feature flags",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
-  "types": "dist/esm/index.d.ts",
+  "types": "dist/cjs/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/esm/index.d.ts",
-      "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.js"
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
     }
   },
   "files": [
@@ -21,7 +26,7 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
-    "test": "jest",
+    "test": "jest && node scripts/verify-consumer-types.mjs",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
@@ -39,12 +44,12 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
-    "directory": "Toggly.FeatureManagement/toggly-local-gates"
+    "directory": "toggly-local-gates"
   },
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.FeatureManagement/toggly-local-gates#readme",
+  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/toggly-local-gates#readme",
   "engines": {
     "node": ">=18.0.0"
   },

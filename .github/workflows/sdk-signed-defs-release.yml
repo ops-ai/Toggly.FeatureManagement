@@ -105,7 +105,7 @@ jobs:
           BAD=$(tar -xzOf "$PACKED" package/package.json \
             | node -e "
               const m = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-              const deps = { ...m.dependencies, ...m.peerDependencies };
+              const deps = { ...m.dependencies, ...m.peerDependencies, ...m.optionalDependencies };
               const bad = Object.entries(deps).filter(([, v]) => /^(workspace|file|link):/.test(v));
               console.log(bad.map(([k, v]) => k + '@' + v).join(', '));
             ")
