@@ -28,3 +28,5 @@ Recorded: 2026-08-28
 ## Notes
 
 - Auth for CI is intended to be OIDC + `--provenance`; many workflows still pass `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` as fallback until Task 4 completes per group.
+- Interactive Trusted Publisher setup (requires OTP): `.github/package-registry/configure-npm-trusted-publishers.sh`
+- Do **not** revoke GitHub `NPM_TOKEN` / granular npm tokens until every inventoried package has a verified OIDC publish and an explicit OPS-727 approval comment.
