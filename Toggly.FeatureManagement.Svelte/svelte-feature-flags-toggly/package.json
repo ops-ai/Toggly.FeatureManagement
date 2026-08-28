@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/svelte-feature-flags-toggly",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Provides feature flags support for Svelte applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "type": "module",
   "main": "./dist/svelte-feature-flags-toggly.cjs",
@@ -67,8 +67,8 @@
     "ws": "^8.0.0"
   },
   "dependencies": {
-    "@ops-ai/toggly-hooks-types": "file:../../toggly-hooks-types",
-    "@ops-ai/toggly-local-gates": "file:../../toggly-local-gates",
-    "@ops-ai/toggly-signed-defs": "file:../../toggly-signed-defs"
+    "@ops-ai/toggly-hooks-types": "^1.4.3",
+    "@ops-ai/toggly-local-gates": "^1.0.1",
+    "@ops-ai/toggly-signed-defs": "^1.2.3"
   }
 }

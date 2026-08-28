@@ -1,3 +1,12 @@
+## 1.7.1
+
+2026-08-28
+
+### Fixed
+- Publish installable semver ranges for `@ops-ai/toggly-hooks-types`,
+  `@ops-ai/toggly-local-gates`, and `@ops-ai/toggly-signed-defs` instead of
+  `file:` paths that leave unmet dependencies after `npm install`.
+
 ## 1.7.0
 
 2026-08-19

@@ -1,7 +1,7 @@
 {
   "name": "@ops-ai/ngx-feature-flags-toggly",
   "description": "Provides feature flags support for Angular applications allowing you to check feature status and enable/disable them easily.",
-  "version": "2.7.1",
+  "version": "2.7.2",
   "license": "MIT",
   "author": {
     "name": "Ops.AI",
@@ -27,10 +27,10 @@
     "@angular/common": ">=15.0.0",
     "@angular/core": ">=15.0.0",
     "@angular/router": ">=15.0.0",
-    "@ops-ai/toggly-hooks-types": "file:../../../toggly-hooks-types"
+    "@ops-ai/toggly-hooks-types": "^1.4.3"
   },
   "dependencies": {
-    "@ops-ai/toggly-local-gates": "file:../../../toggly-local-gates",
+    "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.0",
     "tslib": "^2.3.0"
   },
