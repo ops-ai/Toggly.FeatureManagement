@@ -9,12 +9,12 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.0"
-authors = ["Ops.ai <contact@ops.ai>"]
+version = "0.3.1"
+authors = ["Toggly <support@toggly.io>"]
 edition = "2021"
 rust-version = "1.88"
 license = "MIT"
-repository = "https://github.com/ops-ai/toggly-feature-flags"
+repository = "https://github.com/ops-ai/Toggly.FeatureManagement"
 homepage = "https://toggly.io"
 documentation = "https://docs.toggly.io/sdks/rust"
 keywords = ["toggly", "feature-flags", "feature-toggles", "ab-testing", "experiments"]

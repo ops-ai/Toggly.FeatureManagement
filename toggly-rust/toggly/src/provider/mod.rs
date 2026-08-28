@@ -760,7 +760,10 @@ mod tests {
         let url = DefinitionsProvider::build_ws_url(&config, None);
         assert_eq!(
             url,
-            "wss://definitions.toggly.io/my-app/ws?sdk=rust&sdkVersion=0.3.0"
+            format!(
+                "wss://definitions.toggly.io/my-app/ws?sdk=rust&sdkVersion={}",
+                env!("CARGO_PKG_VERSION")
+            )
         );
     }
 
@@ -775,7 +778,10 @@ mod tests {
         let url = DefinitionsProvider::build_ws_url(&config, Some("rev123"));
         assert_eq!(
             url,
-            "wss://custom.example.com/my-app/ws?rev=rev123&sdk=rust&sdkVersion=0.3.0"
+            format!(
+                "wss://custom.example.com/my-app/ws?rev=rev123&sdk=rust&sdkVersion={}",
+                env!("CARGO_PKG_VERSION")
+            )
         );
     }
 
@@ -790,7 +796,10 @@ mod tests {
         let url = DefinitionsProvider::build_ws_url(&config, None);
         assert_eq!(
             url,
-            "ws://localhost:8080/my-app/ws?sdk=rust&sdkVersion=0.3.0"
+            format!(
+                "ws://localhost:8080/my-app/ws?sdk=rust&sdkVersion={}",
+                env!("CARGO_PKG_VERSION")
+            )
         );
     }
 }
