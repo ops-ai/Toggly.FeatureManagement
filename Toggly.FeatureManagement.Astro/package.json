@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/astro-feature-flags-toggly",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Toggly feature flags SDK for Astro with SSR, SSG, and framework support",
   "type": "module",
   "main": "./dist/index.js",
@@ -70,9 +70,9 @@
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
   },
   "dependencies": {
-    "@ops-ai/toggly-hooks-types": "file:../toggly-hooks-types",
-    "@ops-ai/toggly-local-gates": "file:../toggly-local-gates",
-    "@ops-ai/toggly-signed-defs": "file:../toggly-signed-defs",
+    "@ops-ai/toggly-hooks-types": "^1.4.3",
+    "@ops-ai/toggly-local-gates": "^1.0.1",
+    "@ops-ai/toggly-signed-defs": "^1.2.3",
     "glob": "^10.3.10"
   },
   "devDependencies": {
