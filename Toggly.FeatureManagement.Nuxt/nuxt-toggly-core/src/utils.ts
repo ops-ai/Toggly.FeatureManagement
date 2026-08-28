@@ -88,7 +88,13 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
  * Check if we're running in a browser environment
  */
 export function isBrowser(): boolean {
-  return typeof window !== 'undefined' && typeof document !== 'undefined'
+  // Avoid direct window/document identifiers so Node-only dependents can
+  // typecheck without DOM libs (OPS-727 Nuxt release gate).
+  return (
+    typeof globalThis !== 'undefined' &&
+    'window' in globalThis &&
+    'document' in globalThis
+  )
 }
 
 /**

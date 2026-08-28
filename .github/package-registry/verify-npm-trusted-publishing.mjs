@@ -29,8 +29,16 @@ function analyzeWorkflow(content) {
   if (/secrets\.NPM_TOKEN/.test(content)) {
     issues.push('still references secrets.NPM_TOKEN');
   }
-  if (/NODE_AUTH_TOKEN/.test(content)) {
-    issues.push('still sets NODE_AUTH_TOKEN');
+  // Empty NODE_AUTH_TOKEN clears environment-injected tokens so OIDC wins.
+  const forbiddenToken = content.split('\n').some((line) => {
+    const trimmed = line.trim();
+    if (!/NODE_AUTH_TOKEN\s*:/.test(trimmed) || trimmed.startsWith('#')) {
+      return false;
+    }
+    return !/NODE_AUTH_TOKEN\s*:\s*(?:''|"")\s*$/.test(trimmed);
+  });
+  if (forbiddenToken) {
+    issues.push('still sets a non-empty NODE_AUTH_TOKEN');
   }
   if (/\|\|\s*(npm|pnpm)\s+publish/.test(content)) {
     issues.push('has non-provenance || publish fallback');

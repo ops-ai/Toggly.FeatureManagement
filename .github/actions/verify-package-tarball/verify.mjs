@@ -49,24 +49,53 @@ const installDir = path.join(tmpRoot, 'install');
 fs.mkdirSync(packDir);
 fs.mkdirSync(installDir);
 
-try {
-  const packOut = run('npm pack --json', { cwd: packageDir });
-  let packJson;
-  try {
-    packJson = JSON.parse(packOut.trim());
-  } catch {
-    // Some npm versions print the filename only
-    const name = packOut.trim().split('\n').filter(Boolean).pop();
-    packJson = [{ filename: name }];
+function findPnpmWorkspaceRoot(start) {
+  let dir = start;
+  while (true) {
+    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      return null;
+    }
+    dir = parent;
   }
-  const filename = Array.isArray(packJson) ? packJson[0].filename : packJson.filename;
-  const tarballSrc = path.join(packageDir, filename);
-  if (!fs.existsSync(tarballSrc)) {
-    fail(`npm pack did not produce ${tarballSrc}`);
+}
+
+try {
+  // pnpm pack rewrites workspace:* to publishable versions; npm pack does not.
+  const pnpmRoot = findPnpmWorkspaceRoot(packageDir);
+  let tarballSrc;
+  let filename;
+  if (pnpmRoot) {
+    const packOut = run('pnpm pack', { cwd: packageDir });
+    const lines = packOut.trim().split('\n').filter(Boolean);
+    const last = lines[lines.length - 1];
+    tarballSrc = path.isAbsolute(last) ? last : path.join(packageDir, last);
+    filename = path.basename(tarballSrc);
+    if (!fs.existsSync(tarballSrc)) {
+      fail(`pnpm pack did not produce ${tarballSrc}`);
+    }
+  } else {
+    const packOut = run('npm pack --json', { cwd: packageDir });
+    let packJson;
+    try {
+      packJson = JSON.parse(packOut.trim());
+    } catch {
+      // Some npm versions print the filename only
+      const name = packOut.trim().split('\n').filter(Boolean).pop();
+      packJson = [{ filename: name }];
+    }
+    filename = Array.isArray(packJson) ? packJson[0].filename : packJson.filename;
+    tarballSrc = path.join(packageDir, filename);
+    if (!fs.existsSync(tarballSrc)) {
+      fail(`npm pack did not produce ${tarballSrc}`);
+    }
   }
   const tarball = path.join(packDir, filename);
   fs.renameSync(tarballSrc, tarball);
-  console.log(`Packed ${filename}`);
+  console.log(`Packed ${filename}${pnpmRoot ? ' (pnpm)' : ''}`);
 
   const packedManifest = JSON.parse(
     run(`tar -xOf "${tarball}" package/package.json`),

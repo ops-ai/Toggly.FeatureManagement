@@ -133,9 +133,12 @@ jobs:
           echo "Packed tarball verified"
 
       # Auth: npm Trusted Publisher (OIDC + provenance). No NPM_TOKEN fallback.
+      # Force empty token so environment secrets cannot override OIDC.
       - name: Publish to npm
         if: steps.release.outputs.action == 'publish'
         run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ''
 
       - name: Commit version bump
         if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
