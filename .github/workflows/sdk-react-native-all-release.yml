@@ -73,7 +73,8 @@ jobs:
 
   publish:
     needs: validate
-    if: needs.validate.outputs.action == 'publish'
+    # Core may already be on npm (action=skip) while siblings still need publish.
+    if: needs.validate.outputs.action != 'fail'
     runs-on: ubuntu-latest
     environment: npm-publish
 
