@@ -3,6 +3,7 @@
 
 ## 1.5.2
 
+- Avoid DOM globals in isBrowser so Node-only dependents typecheck
 - Normalize public npm metadata for provenance and docs links (no API change).
 
 2026-08-28
