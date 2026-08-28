@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nextjs-toggly-edge",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Edge Runtime feature flags for Next.js - Middleware and Edge Functions",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -40,9 +40,10 @@
     "edge",
     "middleware",
     "cloudflare",
-    "vercel"
+    "vercel",
+    "feature-management"
   ],
-  "author": "OpsAI <support@ops.ai>",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -52,7 +53,7 @@
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://toggly.io",
+  "homepage": "https://docs.toggly.io/sdks/nextjs/edge",
   "dependencies": {
     "@ops-ai/nextjs-toggly-core": "workspace:*",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
@@ -71,5 +72,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

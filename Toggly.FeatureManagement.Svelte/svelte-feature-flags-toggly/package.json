@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/svelte-feature-flags-toggly",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "description": "Provides feature flags support for Svelte applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "type": "module",
   "main": "./dist/svelte-feature-flags-toggly.cjs",
@@ -34,21 +34,20 @@
     "feature-flags",
     "feature-toggles",
     "toggly",
-    "ab-testing"
+    "ab-testing",
+    "feature-management"
   ],
-  "author": {
-    "name": "Cosmin Atomei",
-    "email": "cosmin.atomei@gmail.com"
-  },
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly"
   },
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.FeatureManagement/Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly#readme",
+  "homepage": "https://docs.toggly.io/sdks/javascript/svelte",
   "peerDependencies": {
     "svelte": "^4.0.0 || ^5.0.0"
   },
@@ -70,5 +69,8 @@
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

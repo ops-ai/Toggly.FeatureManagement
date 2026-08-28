@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/remix-toggly-core",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Core types and utilities for Toggly Remix SDK - shared between server and client packages",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -30,18 +30,20 @@
     "feature-flags",
     "feature-toggles",
     "toggly",
-    "types"
+    "types",
+    "feature-management"
   ],
-  "author": "OpsAI <support@ops.ai>",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.Remix/remix-toggly-core"
   },
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement#readme",
+  "homepage": "https://docs.toggly.io/sdks/remix",
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1"
@@ -60,5 +62,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

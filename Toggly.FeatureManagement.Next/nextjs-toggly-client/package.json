@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nextjs-toggly-client",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Client-side feature flags for Next.js - React hooks and Client Components",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -39,9 +39,10 @@
     "typescript",
     "react",
     "hooks",
-    "client-components"
+    "client-components",
+    "feature-management"
   ],
-  "author": "OpsAI <support@ops.ai>",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -51,7 +52,7 @@
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://toggly.io",
+  "homepage": "https://docs.toggly.io/sdks/nextjs/client",
   "dependencies": {
     "@ops-ai/nextjs-toggly-core": "workspace:*"
   },
@@ -73,5 +74,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

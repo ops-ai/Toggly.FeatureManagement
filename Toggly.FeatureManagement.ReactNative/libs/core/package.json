@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/react-native-toggly-core",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Core feature flag logic for React Native applications. Framework-agnostic, minimal dependencies. Can be used with or without Toggly.io.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -31,12 +31,10 @@
     "mobile",
     "ios",
     "android",
-    "core"
+    "core",
+    "feature-management"
   ],
-  "author": {
-    "name": "Toggly",
-    "email": "hello@toggly.io"
-  },
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -46,7 +44,7 @@
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.FeatureManagement.ReactNative#readme",
+  "homepage": "https://docs.toggly.io/sdks/react-native",
   "engines": {
     "node": ">=18.0.0"
   },

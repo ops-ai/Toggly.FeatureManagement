@@ -1,5 +1,10 @@
 ## 1.7.1
 
+
+## 1.7.2
+
+- Normalize public npm metadata for provenance and docs links (no API change).
+
 2026-08-28
 
 ### Fixed

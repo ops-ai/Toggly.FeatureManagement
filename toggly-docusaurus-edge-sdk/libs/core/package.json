@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-client-core",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Framework-agnostic Toggly client for feature flag evaluation",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -30,16 +30,17 @@
     "feature-toggles",
     "feature-management"
   ],
-  "author": "Toggly",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "toggly-docusaurus-edge-sdk/libs/core"
   },
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement#readme",
+  "homepage": "https://docs.toggly.io/sdks/docusaurus",
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
@@ -48,5 +49,8 @@
     "@vitest/coverage-v8": "^1.6.0",
     "typescript": "^5.3.3",
     "vitest": "^1.6.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

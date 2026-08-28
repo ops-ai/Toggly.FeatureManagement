@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/astro-feature-flags-toggly",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "description": "Toggly feature flags SDK for Astro with SSR, SSG, and framework support",
   "type": "module",
   "main": "./dist/index.js",
@@ -61,13 +61,15 @@
     "toggly",
     "feature-toggle",
     "ssr",
-    "ssg"
+    "ssg",
+    "feature-management"
   ],
-  "author": "Ops.AI <hello@ops.ai>",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.Astro"
   },
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.4.3",
@@ -122,5 +124,12 @@
     "vue": {
       "optional": true
     }
+  },
+  "homepage": "https://docs.toggly.io/sdks/astro",
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

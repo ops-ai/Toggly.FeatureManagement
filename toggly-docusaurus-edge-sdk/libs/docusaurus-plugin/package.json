@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-docusaurus-plugin",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "Docusaurus plugin and React bindings for Toggly feature flag gating",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -35,18 +35,20 @@
     "docusaurus",
     "feature-flags",
     "react",
-    "documentation"
+    "documentation",
+    "feature-management"
   ],
-  "author": "Toggly",
+  "author": "Toggly <support@toggly.io>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ops-ai/Toggly.FeatureManagement"
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "toggly-docusaurus-edge-sdk/libs/docusaurus-plugin"
   },
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://github.com/ops-ai/Toggly.FeatureManagement#readme",
+  "homepage": "https://docs.toggly.io/sdks/docusaurus",
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "glob": "^10.3.10",
@@ -79,5 +81,8 @@
     "@vitest/coverage-v8": "^1.6.0",
     "webpack": "^5.104.1",
     "ws": "^8.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
