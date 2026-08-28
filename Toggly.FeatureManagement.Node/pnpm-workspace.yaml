@@ -4,3 +4,5 @@ packages:
   - 'toggly-fastify'
   - 'toggly-hono'
   - 'toggly-koa'
+allowBuilds:
+  esbuild: set this to true or false

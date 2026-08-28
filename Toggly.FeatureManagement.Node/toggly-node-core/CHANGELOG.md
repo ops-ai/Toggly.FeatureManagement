@@ -1,3 +1,12 @@
+## 0.4.1
+
+2026-08-28
+
+### Fixed
+
+- Publish `@ops-ai/toggly-hooks-types` as `^1.4.3` instead of a `file:` path so
+  the package installs from npm.
+
 ## 0.4.0
 
 2026-08-21
