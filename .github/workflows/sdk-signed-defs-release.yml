@@ -125,14 +125,12 @@ jobs:
           node --input-type=module -e "const m = await import('${{ env.NPM_PACKAGE }}'); if (!Object.keys(m).length) { throw new Error('ESM entry point exported nothing') }"
           echo "Packed tarball verified"
 
+      # Auth is npm trusted publishing (OIDC + --provenance), not NPM_TOKEN.
+      # NODE_AUTH_TOKEN is intentionally empty; the empty-token guard added in
+      # #274 blocked first-time publishes that OIDC would have completed.
       - name: Publish to npm
         if: steps.release.outputs.action == 'publish'
-        run: |
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "::error::NPM_TOKEN is empty; cannot publish a new scoped package"
-            exit 1
-          fi
-          npm publish --provenance --access public || npm publish --access public
+        run: npm publish --provenance --access public || npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
