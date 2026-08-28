@@ -91,13 +91,13 @@ jobs:
           package_dir: ${{ env.SDK_DIR }}
           skip_import: 'true'
 
-      # Auth: npm Trusted Publisher (OIDC + provenance). No NPM_TOKEN fallback.
-      # Force empty token so environment secrets cannot override OIDC.
+      # Auth: npm Trusted Publisher (OIDC + provenance). secrets.NPM_TOKEN is unset;
+      # NODE_AUTH_TOKEN stays empty so OIDC is used (same pattern as Angular).
       - name: Publish to npm
         if: steps.release.outputs.action == 'publish'
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public || npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ''
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
         if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'

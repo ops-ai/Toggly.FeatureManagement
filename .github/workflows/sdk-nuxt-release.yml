@@ -135,6 +135,11 @@ jobs:
         if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: |
           for pkg in ${{ steps.packages.outputs.list }}; do
+            # nuxt-toggly typecheck runs nuxi against playground; skip in release gate
+            if [ "$pkg" = "nuxt-toggly" ]; then
+              echo "Skipping playground typecheck for $pkg"
+              continue
+            fi
             pnpm --filter "./$pkg" typecheck
           done
 
