@@ -127,26 +127,20 @@ jobs:
           echo "list=$LIST" >> $GITHUB_OUTPUT
           echo "Unpublished: ${LIST:-none}"
 
-      - name: Type check unpublished packages
+      # Build the whole workspace before type checking: dependent packages resolve
+      # @ops-ai/nextjs-toggly-core through its dist declarations, and a filtered
+      # build would skip a dependency that is already published.
+      - name: Build all packages
         if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
-        run: |
-          for pkg in ${{ steps.packages.outputs.list }}; do
-            pnpm --filter "./$pkg" typecheck
-          done
+        run: pnpm build
 
-      - name: Build unpublished packages
+      - name: Type check
         if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
-        run: |
-          for pkg in ${{ steps.packages.outputs.list }}; do
-            pnpm --filter "./$pkg" build
-          done
+        run: pnpm typecheck
 
-      - name: Test unpublished packages
+      - name: Run tests
         if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
-        run: |
-          for pkg in ${{ steps.packages.outputs.list }}; do
-            pnpm --filter "./$pkg" test
-          done
+        run: pnpm test
 
       - name: Publish packages to npm
         if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
