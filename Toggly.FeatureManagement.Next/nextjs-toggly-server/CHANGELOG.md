@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0
+
+2026-08-28
+
+### Added
+- WebSocket live updates enabled by default for long-lived Node servers via the
+  `ws` package (`enableLiveUpdates: true`, `webSocketImpl` injected).
+- Avoids per-request HTTP polling of definitions while keeping reconnect +
+  debounced refresh on push.
+
+### Changed
+- Depends on `ws` for Node WebSocket when `globalThis.WebSocket` is absent.
 
 ## 1.0.2
 

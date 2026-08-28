@@ -43,7 +43,10 @@ describe('Server Client', () => {
         })
       )
 
-      const client = await initServerToggly({ appKey: 'test-key' })
+      const client = await initServerToggly({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+      })
 
       expect(client).toBeDefined()
       expect(client.state.initialized).toBe(true)
@@ -60,6 +63,7 @@ describe('Server Client', () => {
         appKey: 'test-key',
         cache: true,
         cacheTtl: 60000,
+        enableLiveUpdates: false,
       })
 
       const features = getServerFeatures()
@@ -72,6 +76,7 @@ describe('Server Client', () => {
       await initServerToggly({
         appKey: 'test-key',
         featureDefaults: { 'default-feature': true },
+        enableLiveUpdates: false,
       })
 
       const features = getServerFeatures()
@@ -88,7 +93,7 @@ describe('Server Client', () => {
     it('should return client after initialization', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const client = getServerToggly()
       expect(client).not.toBeNull()
@@ -105,7 +110,7 @@ describe('Server Client', () => {
     it('should return client after initialization', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const client = useServerToggly()
       expect(client).toBeDefined()
@@ -120,7 +125,7 @@ describe('Server Client', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const result = await isServerFeatureOn('feature-a')
       expect(result).toBe(true)
@@ -133,7 +138,7 @@ describe('Server Client', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const result = await isServerFeatureOn('feature-a', 'user-123')
       expect(result).toBe(true)
@@ -148,7 +153,7 @@ describe('Server Client', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const result = await isServerFeatureOff('feature-a')
       expect(result).toBe(false)
@@ -171,7 +176,7 @@ describe('Server Client', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const features = getServerFeatures()
       expect(features).toEqual({
@@ -185,7 +190,7 @@ describe('Server Client', () => {
     it('should reset the server client', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
       expect(getServerToggly()).not.toBeNull()
 
       resetServerToggly()
