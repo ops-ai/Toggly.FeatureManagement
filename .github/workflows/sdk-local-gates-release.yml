@@ -1,4 +1,4 @@
-name: Signed Defs Package - Build & Publish
+name: Local Gates Package - Build & Publish
 
 on:
   workflow_dispatch:
@@ -26,8 +26,8 @@ permissions:
   id-token: write
 
 env:
-  SDK_DIR: toggly-signed-defs
-  NPM_PACKAGE: '@ops-ai/toggly-signed-defs'
+  SDK_DIR: toggly-local-gates
+  NPM_PACKAGE: '@ops-ai/toggly-local-gates'
 
 jobs:
   build-and-publish:
@@ -70,28 +70,35 @@ jobs:
 
       - name: Install dependencies
         if: steps.release.outputs.action == 'publish'
-        run: npm install
+        run: npm ci
 
       - name: Run type check
         if: steps.release.outputs.action == 'publish'
         run: npm run typecheck
 
-      - name: Build package
-        if: steps.release.outputs.action == 'publish'
-        run: npm run build
-
       - name: Run tests
         if: steps.release.outputs.action == 'publish'
         run: npm test
 
+      - name: Build package
+        if: steps.release.outputs.action == 'publish'
+        run: npm run build
+
       - name: Verify build outputs
         if: steps.release.outputs.action == 'publish'
         run: |
-          if [ ! -f "dist/index.js" ] || [ ! -f "dist/index.d.ts" ] || [ ! -f "dist/esm/index.js" ] || [ ! -f "dist/esm/package.json" ]; then
-            echo "Build verification failed - missing CJS or ESM output files"
+          for file in dist/cjs/index.js dist/cjs/index.d.ts dist/esm/index.js dist/esm/index.d.ts; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Build verification failed - missing $file"
+              exit 1
+            fi
+          done
+          # Node resolves module type from the nearest package.json, so the ESM
+          # output is parsed as CommonJS without this marker.
+          if [ "$(node -p "require('./dist/esm/package.json').type")" != "module" ]; then
+            echo "::error::dist/esm/package.json must declare \"type\": \"module\""
             exit 1
           fi
-          node --input-type=module -e "import { parseSignedEnvelope } from './dist/esm/index.js'; if (typeof parseSignedEnvelope !== 'function') process.exit(1)"
           echo "Build outputs verified"
 
       # A dry-run publish accepts unusable specifiers, so install the real tarball
@@ -146,7 +153,7 @@ jobs:
           git add ${{ env.SDK_DIR }}/package.json
           git add ${{ env.SDK_DIR }}/package-lock.json 2>/dev/null || true
 
-          git commit -S -m "Bumped signed-defs package to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
+          git commit -S -m "Bumped local gates package to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
 
           MAX_RETRIES=3
           RETRY_COUNT=0
@@ -169,36 +176,10 @@ jobs:
           echo "Failed to push after $MAX_RETRIES attempts"
           exit 1
 
-      - name: Create GitHub Release
-        if: steps.release.outputs.action == 'publish'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: toggly-signed-defs-v${{ steps.release.outputs.version }}
-          name: Signed Defs v${{ steps.release.outputs.version }}
-          body: |
-            ## @ops-ai/toggly-signed-defs ${{ steps.release.outputs.version }}
-
-            Shared ES256 signed-definitions verification for Toggly SDKs
-
-            ### Installation
-            ```bash
-            npm install @ops-ai/toggly-signed-defs
-            ```
-
-            ### What's Changed
-            See [CHANGELOG.md](https://github.com/ops-ai/Toggly.FeatureManagement/blob/develop/toggly-signed-defs/CHANGELOG.md) for details.
-
-            ### NPM Package
-            https://www.npmjs.com/package/@ops-ai/toggly-signed-defs
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Publish summary
         if: always()
         run: |
-          echo "## Signed Defs Package Release" >> $GITHUB_STEP_SUMMARY
+          echo "## Local Gates Package Release" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
