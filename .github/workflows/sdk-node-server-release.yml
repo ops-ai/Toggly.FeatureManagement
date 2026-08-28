@@ -177,7 +177,36 @@ jobs:
       - name: Publish to npm
         if: steps.release.outputs.action == 'publish'
         working-directory: ${{ env.SDK_ROOT }}/${{ matrix.package }}
-        run: npm publish --provenance --access public || npm publish --access public
+        run: |
+          # pnpm publish rewrites workspace:*; npm publish does not (OPS-777).
+          if [ "${{ matrix.package }}" != "toggly-node-core" ]; then
+            CORE_NAME=$(node -p "require('../toggly-node-core/package.json').name")
+            CORE_VER=$(node -p "require('../toggly-node-core/package.json').version")
+            DEP_RETRY=0
+            until npm view "${CORE_NAME}@${CORE_VER}" version >/dev/null 2>&1; do
+              DEP_RETRY=$((DEP_RETRY + 1))
+              if [ $DEP_RETRY -ge 10 ]; then
+                echo "Timed out waiting for ${CORE_NAME}@${CORE_VER}"
+                exit 1
+              fi
+              sleep 6
+            done
+          fi
+
+          BAD=$(node -e "
+            const m = require('./package.json');
+            const deps = { ...m.dependencies, ...m.peerDependencies, ...m.optionalDependencies };
+            const fatal = Object.entries(deps)
+              .filter(([, v]) => /^(file|link):/.test(String(v)))
+              .map(([k, v]) => k + '@' + v);
+            console.log(fatal.join(', '));
+          ")
+          if [ -n "$BAD" ]; then
+            echo "::error::Refusing to publish ${{ matrix.package }} with local-path dependencies: $BAD"
+            exit 1
+          fi
+
+          pnpm publish --access public --no-git-checks --provenance || pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
