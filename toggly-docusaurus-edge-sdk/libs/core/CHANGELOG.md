@@ -7,6 +7,7 @@
 ### Changed
 - Confirm CI release via npm trusted publishing for
   `sdk-client-core-release.yml` (no functional API change).
+- Set `repository.url` so provenance publish matches the GitHub source.
 
 ## 0.2.0
 
