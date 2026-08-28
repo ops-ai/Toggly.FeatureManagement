@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+2026-08-28
+
+### Changed
+- Confirm CI release via npm trusted publishing for
+  `sdk-client-core-release.yml` (no functional API change).
+
 ## 0.2.0
 
 2026-08-21
