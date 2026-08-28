@@ -89,22 +89,24 @@ jobs:
             cd ..
           done
 
+      # Core may already be on npm (action=skip) while sibling packages still need
+      # a version bump publish. Gate only on fail; package-level checks decide work.
       - name: Note independent package versions
-        if: steps.release.outputs.action == 'publish'
+        if: steps.release.outputs.action != 'fail'
         run: |
           TARGET="${{ steps.release.outputs.version }}"
-          echo "Core resolved version: $TARGET"
+          echo "Core resolved version: $TARGET (action=${{ steps.release.outputs.action }})"
           for pkg in ${{ env.ALL_PACKAGES }}; do
             VER=$(node -p "require('./$pkg/package.json').version")
             echo "$pkg@$VER"
           done
 
       - name: Install dependencies
-        if: steps.release.outputs.action == 'publish'
+        if: steps.release.outputs.action != 'fail'
         run: pnpm install --frozen-lockfile
 
       - name: Determine unpublished packages
-        if: steps.release.outputs.action == 'publish'
+        if: steps.release.outputs.action != 'fail'
         id: packages
         run: |
           INPUT="${{ github.event.inputs.packages || 'all' }}"
@@ -131,22 +133,22 @@ jobs:
       # @ops-ai/nextjs-toggly-core through its dist declarations, and a filtered
       # build would skip a dependency that is already published.
       - name: Build all packages
-        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: pnpm build
 
       - name: Type check
-        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: pnpm typecheck
 
       - name: Run tests
-        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: pnpm test
 
       # pnpm publish rewrites workspace:* to concrete versions. npm publish does not,
       # and would ship uninstallable packages (see OPS-777). Wait for core on the
       # registry before publishing dependents that resolve to an exact core version.
       - name: Publish packages to npm
-        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           ROOT="${GITHUB_WORKSPACE}/${{ env.SDK_ROOT }}"
@@ -218,6 +220,7 @@ jobs:
         if: always()
         run: |
           echo "## Next.js SDK Release" >> $GITHUB_STEP_SUMMARY
-          echo "| Action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Reason | ${{ steps.release.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Packages published | ${{ steps.packages.outputs.list || 'none' }} |" >> $GITHUB_STEP_SUMMARY

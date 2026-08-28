@@ -91,22 +91,24 @@ jobs:
             cd ..
           done
 
+      # Core may already be on npm (action=skip) while sibling packages still need
+      # a version bump publish. Gate only on fail; package-level checks decide work.
       - name: Note independent package versions
-        if: steps.release.outputs.action == 'publish'
+        if: steps.release.outputs.action != 'fail'
         run: |
           TARGET="${{ steps.release.outputs.version }}"
-          echo "Core resolved version: $TARGET"
+          echo "Core resolved version: $TARGET (action=${{ steps.release.outputs.action }})"
           for pkg in ${{ env.ALL_PACKAGES }}; do
             VER=$(node -p "require('./$pkg/package.json').version")
             echo "$pkg@$VER"
           done
 
       - name: Install dependencies
-        if: steps.release.outputs.action == 'publish'
+        if: steps.release.outputs.action != 'fail'
         run: pnpm install --frozen-lockfile
 
       - name: Determine unpublished packages
-        if: steps.release.outputs.action == 'publish'
+        if: steps.release.outputs.action != 'fail'
         id: packages
         run: |
           INPUT="${{ github.event.inputs.packages || 'all' }}"
@@ -130,28 +132,28 @@ jobs:
           echo "Unpublished: ${LIST:-none}"
 
       - name: Type check unpublished packages
-        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: |
           for pkg in ${{ steps.packages.outputs.list }}; do
             pnpm --filter "./$pkg" typecheck
           done
 
       - name: Build unpublished packages
-        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: |
           for pkg in ${{ steps.packages.outputs.list }}; do
             pnpm --filter "./$pkg" build
           done
 
       - name: Test unpublished packages
-        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: |
           for pkg in ${{ steps.packages.outputs.list }}; do
             pnpm --filter "./$pkg" test
           done
 
       - name: Publish packages to npm
-        if: steps.release.outputs.action == 'publish' && steps.packages.outputs.list != ''
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: |
           ROOT="${GITHUB_WORKSPACE}/${{ env.SDK_ROOT }}"
           for pkg in ${{ steps.packages.outputs.list }}; do
@@ -210,8 +212,9 @@ jobs:
         run: |
           echo "## Nuxt SDK Release" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "| Action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Manifest | ${{ steps.release.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Registry latest | ${{ steps.release.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Reason | ${{ steps.release.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Packages published | ${{ steps.packages.outputs.list || 'none' }} |" >> $GITHUB_STEP_SUMMARY
