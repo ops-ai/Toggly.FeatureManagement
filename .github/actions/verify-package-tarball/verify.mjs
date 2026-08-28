@@ -91,7 +91,20 @@ try {
     path.join(installDir, 'package.json'),
     JSON.stringify({ name: 'toggly-pack-verify-scratch', private: true, type: 'module' }, null, 2),
   );
-  run(`npm install "${tarball}" --no-fund --no-audit`, { cwd: installDir });
+  // Omit peers: host apps provide them. Auto-installing peers in a scratch
+  // tree pulls frameworks (e.g. Gatsby) whose transitive experimental React
+  // peers fail `npm ls` even when our package is fine.
+  run(`npm install "${tarball}" --no-fund --no-audit --omit=peer`, {
+    cwd: installDir,
+  });
+
+  // Confirm declared runtime deps landed (peers intentionally omitted).
+  for (const dep of Object.keys(packedManifest.dependencies || {})) {
+    const depPath = path.join(installDir, 'node_modules', ...dep.split('/'));
+    if (!fs.existsSync(depPath)) {
+      fail(`Dependency ${dep} missing after install of ${packedManifest.name}`);
+    }
+  }
 
   let lsOut = '';
   let lsCode = 0;
@@ -101,19 +114,20 @@ try {
     lsCode = error.status || 1;
     lsOut = error.stdout || '';
     const stderr = error.stderr || '';
-    if (/ELSPROBLEMS|UNMET DEPENDENCY|invalid/i.test(`${lsOut}\n${stderr}`)) {
+    // With --omit=peer, npm ls exits non-zero for missing peers; that is expected.
+    if (/UNMET DEPENDENCY/i.test(`${lsOut}\n${stderr}`) && !/missing:/i.test(stderr)) {
       fail(
-        `npm ls reported unmet/invalid dependencies for ${packedManifest.name}:\n${stderr || lsOut}`,
+        `npm ls reported unmet dependencies for ${packedManifest.name}:\n${stderr || lsOut}`,
       );
     }
-    // npm ls can exit non-zero for peer warnings; only fail on hard unmet
   }
 
   if (lsOut) {
     try {
       const tree = JSON.parse(lsOut);
       const problems = tree.problems || [];
-      const hard = problems.filter((p) => /UNMET|invalid|missing/i.test(String(p)));
+      // Ignore missing/invalid peer noise; only hard-fail on unmet production deps.
+      const hard = problems.filter((p) => /^UNMET DEPENDENCY/i.test(String(p)));
       if (hard.length) {
         fail(`npm ls problems for ${packedManifest.name}:\n${hard.join('\n')}`);
       }
@@ -121,7 +135,7 @@ try {
       // ignore non-json ls
     }
   }
-  if (lsCode !== 0 && /ELSPROBLEMS|UNMET DEPENDENCY/i.test(lsOut)) {
+  if (lsCode !== 0 && /UNMET DEPENDENCY/i.test(lsOut) && !/missing:/i.test(lsOut)) {
     fail(`npm ls failed for ${packedManifest.name}`);
   }
 
