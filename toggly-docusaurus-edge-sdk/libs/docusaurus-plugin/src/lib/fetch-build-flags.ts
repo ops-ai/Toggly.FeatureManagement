@@ -2,7 +2,7 @@
  * Server-side flag fetch for static (build-time) gating.
  * Used only from the Docusaurus plugin during `contentLoaded` / `postBuild`.
  */
-import type { Flags } from './toggly-client';
+import type { Flags } from './toggly-client.js';
 import {
   parseEvaluatedResponseBody,
   readResponseBody,

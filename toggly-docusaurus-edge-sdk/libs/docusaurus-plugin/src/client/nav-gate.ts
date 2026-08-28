@@ -15,7 +15,7 @@
  *   reading the same mapping and using data-feature markers if desired.
  */
 
-import { createTogglyClient, type Flags } from '../lib/toggly-client';
+import { createTogglyClient, type Flags } from '../lib/toggly-client.js';
 
 declare const __TOGGLY_CONFIG__: any;
 declare const __TOGGLY_PAGE_FEATURES__: Record<string, string>;

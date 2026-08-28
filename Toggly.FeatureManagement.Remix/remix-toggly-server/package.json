@@ -1,16 +1,16 @@
 {
   "name": "@ops-ai/remix-toggly-server",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Server-side utilities for Toggly Remix SDK - loaders, actions, and server utilities",
-  "main": "dist/cjs/index.js",
-  "module": "dist/esm/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
   "files": [

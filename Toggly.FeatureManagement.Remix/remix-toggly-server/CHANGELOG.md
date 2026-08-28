@@ -1,3 +1,12 @@
+## 1.4.2
+
+2026-08-28
+
+### Fixed
+
+- Align `main` / `module` / `exports` with tsup output (`dist/index.js` and
+  `dist/index.cjs`) so import and require resolve after install.
+
 ## 1.4.1
 
 2026-08-28
