@@ -33,8 +33,8 @@
   "author": "Toggly",
   "license": "MIT",
   "dependencies": {
-    "@ops-ai/toggly-hooks-types": "file:../../../toggly-hooks-types",
-    "@ops-ai/toggly-signed-defs": "file:../../../toggly-signed-defs"
+    "@ops-ai/toggly-hooks-types": "^1.4.3",
+    "@ops-ai/toggly-signed-defs": "^1.2.3"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^1.6.0",
