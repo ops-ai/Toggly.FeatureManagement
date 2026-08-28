@@ -344,16 +344,20 @@ jobs:
       - name: Dry run publish
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
         run: |
-          # pub publish --dry-run runs pub get again and may rewrite
-          # analysis_options.yaml; restore immediately before validation.
-          git checkout -- analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
+          # pub publish runs pub get and rewrites analysis_options.yaml mid-flight.
+          # Hide those paths from git so dry-run does not fail on a dirty tree.
+          git update-index --skip-worktree analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
           flutter pub publish --dry-run
+          git update-index --no-skip-worktree analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
+          git checkout -- analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
 
       - name: Publish to pub.dev
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
         run: |
-          git checkout -- analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
+          git update-index --skip-worktree analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
           flutter pub publish --force
+          git update-index --no-skip-worktree analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
+          git checkout -- analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
 
 
       - name: Create GitHub Release (core)
