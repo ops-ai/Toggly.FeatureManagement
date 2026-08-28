@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -48,7 +48,7 @@ jobs:
 
       - name: Upload coverage (Ruby 3.3 only)
         if: matrix.ruby == '3.3'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ruby-coverage-core
           path: ${{ env.SDK_ROOT }}/toggly/coverage/
@@ -63,7 +63,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Ruby 3.3
         uses: ruby/setup-ruby@v1
@@ -93,7 +93,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload coverage (Ruby 3.3, Rails 8.0 only)
         if: matrix.ruby == '3.3' && matrix.rails == '8.0'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ruby-coverage-rails
           path: ${{ env.SDK_ROOT }}/toggly-rails/coverage/
@@ -144,7 +144,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -163,7 +163,7 @@ jobs:
 
       - name: Upload coverage (Ruby 3.3 only)
         if: matrix.ruby == '3.3'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ruby-coverage-cache
           path: ${{ env.SDK_ROOT }}/toggly-cache/coverage/
@@ -176,7 +176,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -213,26 +213,26 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download core coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ruby-coverage-core
           path: coverage-artifacts/core/
         continue-on-error: true
 
       - name: Download rails coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ruby-coverage-rails
           path: coverage-artifacts/rails/
         continue-on-error: true
 
       - name: Download cache coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ruby-coverage-cache
           path: coverage-artifacts/cache/
@@ -255,7 +255,7 @@ jobs:
         continue-on-error: true
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v6.0.0
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -273,14 +273,14 @@ jobs:
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dependency-check-report-ruby
           path: dependency-check-reports/
         continue-on-error: true
 
       - name: SonarQube Server Scan
-        uses: SonarSource/sonarqube-scan-action@v6.0.0
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -302,10 +302,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Cache OWASP Dependency Check database
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /home/runner/OWASP-Dependency-Check/data/
           key: dependency-check-db-${{ runner.os }}-v6
@@ -329,7 +329,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Dependency Check report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dependency-check-report-ruby
@@ -352,7 +352,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Verify required jobs passed
         uses: ./.github/actions/verify-required-jobs

@@ -47,7 +47,7 @@ jobs:
       CI_HEALER_DRY_RUN: ${{ vars.CI_HEALER_DRY_RUN || 'false' }}
     steps:
       - name: Checkout failing branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
