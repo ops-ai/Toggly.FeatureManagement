@@ -142,6 +142,8 @@ jobs:
             if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
               echo "Skipping ${PACKAGE_NAME}@${PACKAGE_VERSION} (already published)"
             else
+              PACKAGE_DIR="$ROOT/$pkg" SKIP_IMPORT=true \
+                node "${GITHUB_WORKSPACE}/.github/actions/verify-package-tarball/verify.mjs"
               npm publish --provenance --access public || npm publish --access public
             fi
           done

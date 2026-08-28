@@ -1,0 +1,24 @@
+name: Verify package tarball
+description: >-
+  Pack a package, reject unpublishable dependency protocols, install the
+  tarball outside the workspace, and fail on unmet dependencies.
+
+inputs:
+  package_dir:
+    description: Path to the package directory (relative to repo root or absolute)
+    required: true
+  skip_import:
+    description: Skip entry-point import (use when peers are required at runtime)
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Verify packed tarball is installable
+      shell: bash
+      run: node "${{ github.action_path }}/verify.mjs"
+      env:
+        PACKAGE_DIR: ${{ inputs.package_dir }}
+        SKIP_IMPORT: ${{ inputs.skip_import }}
+        GITHUB_WORKSPACE: ${{ github.workspace }}
