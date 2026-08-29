@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nextjs-toggly-server",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Server-side feature flags for Next.js - Server Components, Server Actions, and Route Handlers",
   "type": "module",
   "main": "./dist/index.cjs",

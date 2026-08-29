@@ -125,6 +125,45 @@ export function createTogglyClient(
     }, REFRESH_DEBOUNCE_MS)
   }
 
+  /**
+   * definitions.toggly.io can lag the WS `flags-updated` notify. Refresh
+   * immediately, then retry until the HTTP revision matches the WS etag (or
+   * retries are exhausted).
+   */
+  const flagsUpdatedRetryTimers = new Set<ReturnType<typeof setTimeout>>()
+
+  function clearFlagsUpdatedRetries(): void {
+    for (const timer of flagsUpdatedRetryTimers) {
+      clearTimeout(timer)
+    }
+    flagsUpdatedRetryTimers.clear()
+  }
+
+  function scheduleFlagsUpdatedRefresh(expectedEtag?: string): void {
+    scheduleDebouncedRefresh(true)
+    clearFlagsUpdatedRetries()
+    if (!expectedEtag) {
+      return
+    }
+
+    for (const delayMs of [800, 2000, 4000]) {
+      const timer = setTimeout(() => {
+        flagsUpdatedRetryTimers.delete(timer)
+        if (destroyed) {
+          return
+        }
+        if (getDefinitionsRevision() === expectedEtag) {
+          return
+        }
+        cachedDefinitionsRevision = null
+        client.refresh().catch(() => {
+          // Error already logged in refresh()
+        })
+      }, delayMs)
+      flagsUpdatedRetryTimers.add(timer)
+    }
+  }
+
   function handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = getDefinitionsRevision()
     if (shouldFetchOnSync(message, previousRevision)) {
@@ -146,9 +185,9 @@ export function createTogglyClient(
     }
     const previousRevision = getDefinitionsRevision()
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      // Clear revision so the GET is unconditional. Caching the WS etag
-      // before fetch caused 304 responses and left flags stale.
-      scheduleDebouncedRefresh(true)
+      // Clear revision so the GET is unconditional. Retry if CDN lags the
+      // WS notify (HTTP still serves the previous revision).
+      scheduleFlagsUpdatedRefresh(message.etag)
       return
     }
     if (message.etag) {
@@ -427,6 +466,8 @@ export function createTogglyClient(
       clearTimeout(refreshDebounceTimer)
       refreshDebounceTimer = null
     }
+
+    clearFlagsUpdatedRetries()
 
     if (liveSocket) {
       try {
