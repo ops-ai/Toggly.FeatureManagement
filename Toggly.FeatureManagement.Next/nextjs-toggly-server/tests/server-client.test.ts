@@ -7,6 +7,10 @@ import {
   isServerFeatureOff,
   getServerFeatures,
   resetServerToggly,
+  refreshServerToggly,
+  createMemoryStorage,
+  setServerStorage,
+  getServerStorage,
 } from '../src/server-client'
 
 // Mock fetch globally
@@ -70,6 +74,24 @@ describe('Server Client', () => {
       expect(features['feature-a']).toBe(true)
     })
 
+    it('loads cached definitions into feature defaults before fetch', async () => {
+      const storage = createMemoryStorage()
+      await storage.setItem('toggly:definitions', { 'cached-flag': true })
+      setServerStorage(storage)
+
+      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        cache: true,
+        cacheKeyPrefix: 'toggly:',
+        enableLiveUpdates: false,
+      })
+
+      // Empty API payload keeps defaults seeded from cache.
+      expect(getServerFeatures()['cached-flag']).toBe(true)
+    })
+
     it('should use feature defaults', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
 
@@ -81,6 +103,39 @@ describe('Server Client', () => {
 
       const features = getServerFeatures()
       expect(features['default-feature']).toBe(true)
+    })
+
+    it('pins the client on globalThis across re-reads', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      const first = getServerToggly()
+      const fromGlobal = (
+        globalThis as typeof globalThis & {
+          __togglyServerClient?: ReturnType<typeof getServerToggly>
+        }
+      ).__togglyServerClient
+
+      expect(first).not.toBeNull()
+      expect(fromGlobal).toBe(first)
+    })
+
+    it('destroys the previous client when re-initialized', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ features: [] }))
+        .mockResolvedValueOnce(createMockResponse({ features: [] }))
+
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      const first = getServerToggly()
+      expect(first).not.toBeNull()
+      const destroySpy = vi.spyOn(first!, 'destroy')
+
+      await initServerToggly({ appKey: 'test-key-2', enableLiveUpdates: false })
+      const second = getServerToggly()
+
+      expect(destroySpy).toHaveBeenCalledTimes(1)
+      expect(second).not.toBeNull()
+      expect(second).not.toBe(first)
     })
   })
 
@@ -195,6 +250,50 @@ describe('Server Client', () => {
 
       resetServerToggly()
       expect(getServerToggly()).toBeNull()
+    })
+  })
+
+  describe('refreshServerToggly', () => {
+    it('returns null when not initialized', async () => {
+      expect(await refreshServerToggly()).toBeNull()
+    })
+
+    it('refreshes and updates cache', async () => {
+      mockFetch
+        .mockResolvedValueOnce(
+          createMockResponse({
+            features: [{ featureKey: 'feature-a', enabled: false }],
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            features: [{ featureKey: 'feature-a', enabled: true }],
+          }),
+        )
+
+      await initServerToggly({
+        appKey: 'test-key',
+        cache: true,
+        enableLiveUpdates: false,
+      })
+
+      const definitions = await refreshServerToggly()
+      expect(definitions?.['feature-a']).toBe(true)
+      expect(getServerFeatures()['feature-a']).toBe(true)
+    })
+  })
+
+  describe('server storage helpers', () => {
+    it('createMemoryStorage returns a working store', async () => {
+      const storage = createMemoryStorage()
+      await storage.setItem('k', { ok: true })
+      expect(await storage.getItem('k')).toEqual({ ok: true })
+    })
+
+    it('setServerStorage replaces the process storage', async () => {
+      const custom = createMemoryStorage()
+      setServerStorage(custom)
+      expect(getServerStorage()).toBe(custom)
     })
   })
 })

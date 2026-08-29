@@ -151,6 +151,14 @@ export async function initServerToggly(
     }
   }
 
+  // Replace any prior process-wide client (e.g. accidental double-init)
+  // so WebSockets/timers from the old instance do not leak.
+  const previousClient = getServerClientRef()
+  if (previousClient) {
+    previousClient.destroy()
+    setServerClientRef(null)
+  }
+
   // Create and initialize client
   const serverClient = createTogglyClient(mergedConfig as TogglyConfig)
   setServerClientRef(serverClient)
