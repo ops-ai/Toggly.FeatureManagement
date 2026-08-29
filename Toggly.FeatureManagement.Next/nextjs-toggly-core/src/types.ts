@@ -29,8 +29,15 @@ export interface TogglyConfig {
   refreshInterval?: number
   /** Initial hooks to register */
   hooks?: Hook[]
-  /** Enable WebSocket live updates for real-time feature flag changes (browser only, default: true) */
+  /** Enable WebSocket live updates for real-time feature flag changes (default: true) */
   enableLiveUpdates?: boolean
+  /**
+   * WebSocket constructor for live updates.
+   * Browser and modern Node provide `globalThis.WebSocket`.
+   * Node 18 / environments without a global should pass the `ws` package default
+   * (injected automatically by `@ops-ai/nextjs-toggly-server`).
+   */
+  webSocketImpl?: new (url: string) => unknown
   /**
    * When true, verify ES256 signed definition envelopes via JWKS before applying flags.
    */

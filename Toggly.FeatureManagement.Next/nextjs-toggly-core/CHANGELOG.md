@@ -1,5 +1,29 @@
-## 1.4.3
+## 1.5.1
 
+2026-08-28
+
+### Fixed
+- After a `flags-updated` / sync push, do not cache the WebSocket etag before
+  the debounced HTTP refresh. Caching first caused `If-None-Match` to match the
+  new revision, return 304, and leave in-memory flags stale.
+- Prefer the EventEmitter path when a socket exposes both `on()` and
+  `onmessage` (as the `ws` package does).
+- Closing a still-connecting `ws` socket keeps an error sink so destroy does
+  not surface uncaught "closed before the connection was established" errors.
+- Detach socket listeners on intentional `close()` and ignore stale handler
+  callbacks after reconnect so an old `onClose` cannot orphan the new socket.
+
+## 1.5.0
+
+2026-08-28
+
+### Added
+- Node/server WebSocket live updates via `webSocketImpl` or `globalThis.WebSocket`
+  (no longer browser-only). Edge runtimes still skip long-lived sockets.
+- `live-socket` helpers shared by browser WHATWG and `ws` EventEmitter APIs.
+
+### Changed
+- `enableLiveUpdates` docs: applies to browser and Node server clients.
 
 ## 1.4.4
 

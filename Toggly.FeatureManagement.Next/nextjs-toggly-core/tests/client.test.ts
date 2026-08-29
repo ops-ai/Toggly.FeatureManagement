@@ -433,4 +433,77 @@ describe('createTogglyClient', () => {
       )
     })
   })
+
+  describe('WebSocket live updates', () => {
+    it('refetches without If-None-Match after flags-updated (avoids stale 304)', async () => {
+      vi.useFakeTimers()
+
+      class FakeWs {
+        static instances: FakeWs[] = []
+        onopen: ((ev: Event) => void) | null = null
+        onmessage: ((ev: MessageEvent) => void) | null = null
+        onclose: ((ev: CloseEvent) => void) | null = null
+        onerror: ((ev: Event) => void) | null = null
+        close = vi.fn()
+        constructor(_url: string) {
+          FakeWs.instances.push(this)
+        }
+      }
+      FakeWs.instances = []
+
+      const initHeaders = {
+        get: (name: string) =>
+          name === 'X-Definitions-Revision' || name === 'ETag'
+            ? 'rev-old'
+            : null,
+      }
+      mockFetch.mockResolvedValueOnce({
+        ...createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: false }],
+        }),
+        headers: initHeaders,
+      })
+
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+        webSocketImpl: FakeWs as unknown as new (url: string) => unknown,
+      })
+
+      await client.init()
+      expect(await client.isFeatureOn('feature-a')).toBe(false)
+
+      const socket = FakeWs.instances[0]
+      expect(socket).toBeDefined()
+      socket.onopen?.(new Event('open'))
+      expect(client.state.wsConnected).toBe(true)
+
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: true }],
+        }),
+      )
+
+      socket.onmessage?.({
+        data: JSON.stringify({
+          type: 'flags-updated',
+          etag: 'rev-new',
+        }),
+      } as MessageEvent)
+
+      await vi.advanceTimersByTimeAsync(400)
+
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+      const refreshCall = mockFetch.mock.calls[1]
+      const refreshHeaders = refreshCall?.[1]?.headers as
+        | Record<string, string>
+        | undefined
+      expect(refreshHeaders?.['If-None-Match']).toBeUndefined()
+      expect(await client.isFeatureOn('feature-a')).toBe(true)
+
+      client.destroy()
+      vi.useRealTimers()
+    })
+  })
 })
