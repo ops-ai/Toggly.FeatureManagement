@@ -405,7 +405,9 @@ class TogglyClientInstance {
 
       if (typeof data === 'string') {
         if (data === 'update' || data === 'flags-updated') {
-          this.scheduleDebouncedRefresh();
+          // Clear revision so the follow-up GET is unconditional (same as JSON
+          // flags-updated path — avoids conditional 304 with stale in-memory flags).
+          this.scheduleDebouncedRefresh(true);
           return;
         }
 

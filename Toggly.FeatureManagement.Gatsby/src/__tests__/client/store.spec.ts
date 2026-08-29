@@ -649,9 +649,10 @@ describe('Client Store', () => {
 
     it('triggers refresh on plain text update after debounce', async () => {
       vi.useFakeTimers();
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        mockOkResponse({ F1: true }),
-      );
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(mockOkResponse({ F1: true }, 'old-rev'))
+        .mockResolvedValue(mockOkResponse({ F1: true }, 'new-rev'));
 
       await store.initTogglyClient({
         appKey: 'test-key',
@@ -664,6 +665,32 @@ describe('Client Store', () => {
       await Promise.resolve();
 
       expect(fetchSpy.mock.calls.length).toBeGreaterThan(before);
+      const refreshCall = fetchSpy.mock.calls[1];
+      const headers = refreshCall[1]?.headers as Record<string, string>;
+      expect(headers['If-None-Match']).toBeUndefined();
+      vi.useRealTimers();
+    });
+
+    it('triggers refresh on plain text flags-updated and clears revision', async () => {
+      vi.useFakeTimers();
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(mockOkResponse({ F1: true }, 'old-rev'))
+        .mockResolvedValue(mockOkResponse({ F1: false }, 'new-rev'));
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      latestWs().triggerMessage('flags-updated');
+      await vi.advanceTimersByTimeAsync(300);
+      await Promise.resolve();
+
+      const refreshCall = fetchSpy.mock.calls[1];
+      const headers = refreshCall[1]?.headers as Record<string, string>;
+      expect(headers['If-None-Match']).toBeUndefined();
+      expect(store.$flags.get()).toEqual({ F1: false });
       vi.useRealTimers();
     });
 
