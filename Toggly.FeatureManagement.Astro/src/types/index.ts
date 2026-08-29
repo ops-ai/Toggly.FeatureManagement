@@ -31,6 +31,11 @@ export interface TogglyConfig {
   flagDefaults?: Record<string, boolean>;
   /** Feature flags refresh interval in milliseconds (default: 180000 = 3 minutes) */
   featureFlagsRefreshInterval?: number;
+  /**
+   * When true (default), the browser client connects to the definitions WebSocket
+   * for live flag updates. Set false to rely on polling only.
+   */
+  enableLiveUpdates?: boolean;
   /** Enable debug logging (default: false) */
   isDebug?: boolean;
   /** Connection timeout in milliseconds (default: 5000) */

@@ -1,13 +1,18 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import WebSocket from 'ws';
+import { SDK_ID, SDK_VERSION } from '../sdk-identity.js';
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
 describe('WebSocket smoke test', () => {
   it('connects and receives sync message', async () => {
     if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_FRONTEND is not configured — set this env var to run smoke tests');
-    const ws = new WebSocket(`wss://definitions.toggly.io/${appKey!}/ws`);
+    const params = new URLSearchParams({
+      sdk: SDK_ID,
+      sdkVersion: SDK_VERSION,
+    });
+    const ws = new WebSocket(`wss://definitions.toggly.io/${appKey!}/ws?${params.toString()}`);
 
     const message = await new Promise<string>((resolve, reject) => {
       const timeout = setTimeout(() => {

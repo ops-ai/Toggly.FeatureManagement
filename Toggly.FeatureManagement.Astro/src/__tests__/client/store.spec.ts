@@ -5,6 +5,7 @@ import {
   setIdentity,
   clearIdentity,
   stopRefreshInterval,
+  stopWebSocket,
   getVariant,
   getVariantValue,
   $flags,
@@ -15,16 +16,54 @@ import {
   $variant,
   __resetClient,
 } from '../../client/store.js';
+import { SDK_ID, SDK_VERSION } from '../../sdk-identity.js';
+import { REFRESH_DEBOUNCE_MS } from '../../client/ws-sync.js';
 
 // Mock global fetch
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-function createMockResponse(body: unknown) {
+class MockWebSocket {
+  static instances: MockWebSocket[] = [];
+  url: string;
+  onopen: ((ev?: Event) => void) | null = null;
+  onmessage: ((ev: { data: string }) => void) | null = null;
+  onclose: ((ev?: CloseEvent) => void) | null = null;
+  onerror: ((ev?: Event) => void) | null = null;
+  readyState = 0;
+
+  constructor(url: string) {
+    this.url = url;
+    MockWebSocket.instances.push(this);
+  }
+
+  close(): void {
+    this.readyState = 3;
+  }
+}
+
+function createMockResponse(
+  body: unknown,
+  options?: { status?: number; revision?: string }
+) {
+  const status = options?.status ?? 200;
+  const revision = options?.revision;
   const bodyText = typeof body === 'string' ? body : JSON.stringify(body);
   return {
-    ok: true,
-    status: 200,
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 304 ? 'Not Modified' : 'OK',
+    headers: {
+      get: (key: string) => {
+        if (!revision) {
+          return null;
+        }
+        if (key === 'X-Definitions-Revision' || key === 'ETag') {
+          return revision;
+        }
+        return null;
+      },
+    },
     text: () => Promise.resolve(bodyText),
     json: () => Promise.resolve(typeof body === 'string' ? JSON.parse(body) : body),
   };
@@ -41,10 +80,18 @@ describe('Client Store', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
     __resetClient();
+    try {
+      localStorage.clear();
+    } catch {
+      // ignore
+    }
   });
 
   afterEach(() => {
+    __resetClient();
     vi.useRealTimers();
   });
 
@@ -395,6 +442,409 @@ describe('Client Store', () => {
 
       $flags.set({ F1: true, F2: false, F3: false });
       expect(gate.get()).toBe(false);
+    });
+  });
+
+  describe('WebSocket live updates', () => {
+    it('should not start WebSocket when enableLiveUpdates is false', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(MockWebSocket.instances).toHaveLength(0);
+    });
+
+    it('should not start WebSocket when appKey is missing', async () => {
+      await initTogglyClient({
+        environment: 'test',
+        flagDefaults: { F1: true },
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(MockWebSocket.instances).toHaveLength(0);
+    });
+
+    it('should connect with sdk identity query params after init', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+
+      await initTogglyClient({
+        appKey: 'my-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(MockWebSocket.instances).toHaveLength(1);
+      expect(MockWebSocket.instances[0].url).toBe(
+        `wss://definitions.toggly.io/my-key/ws?sdk=${SDK_ID}&sdkVersion=${SDK_VERSION}`
+      );
+    });
+
+    it('should include rev when a definitions revision is cached', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({ F1: true }, { revision: 'rev123' })
+      );
+
+      await initTogglyClient({
+        appKey: 'k',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(MockWebSocket.instances[0].url).toBe(
+        `wss://definitions.toggly.io/k/ws?rev=rev123&sdk=${SDK_ID}&sdkVersion=${SDK_VERSION}`
+      );
+    });
+
+    it('should send If-None-Match on subsequent fetches when revision is known', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'rev-a' }))
+        .mockResolvedValueOnce(
+          createMockResponse({ F1: false }, { revision: 'rev-b' })
+        );
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      await refreshFlags();
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'If-None-Match': 'rev-a',
+          }),
+        })
+      );
+    });
+
+    it('should keep cached flags on 304', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'rev-a' }))
+        .mockResolvedValueOnce(createMockResponse('', { status: 304, revision: 'rev-a' }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      await refreshFlags();
+
+      expect($flags.get()).toEqual({ F1: true });
+    });
+
+    it('should debounced-refresh on flags-updated without caching WS etag first', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'old' }))
+        .mockResolvedValueOnce(createMockResponse({ F1: false }, { revision: 'new' }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'flags-updated', etag: 'new' }),
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // Revision cleared before refresh → no If-None-Match on the forced fetch
+      expect(mockFetch.mock.calls[1][1].headers['If-None-Match']).toBeUndefined();
+      expect($flags.get()).toEqual({ F1: false });
+    });
+
+    it('should refresh on sync when etag differs', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'old' }))
+        .mockResolvedValueOnce(createMockResponse({ F1: false }, { revision: 'new' }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'sync', etag: 'new' }),
+      });
+
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not refresh on sync when unchanged is true', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'abc' }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'sync', etag: 'abc', unchanged: true }),
+      });
+
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should refresh on signing-key-updated', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'old' }))
+        .mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'new' }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'signing-key-updated', kid: 'k2' }),
+      });
+
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should ignore ping messages', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'ping' }),
+      });
+
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reconnect with exponential backoff on close', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ F1: true }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(MockWebSocket.instances).toHaveLength(1);
+      MockWebSocket.instances[0].onclose?.();
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(MockWebSocket.instances).toHaveLength(2);
+
+      stopWebSocket();
+    });
+
+    it('preserves pending debounced refresh across reconnect', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ F1: true }))
+        .mockResolvedValueOnce(createMockResponse({ F1: false }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({ data: 'update' });
+      // Reconnect before debounce fires — must not cancel the pending refresh
+      MockWebSocket.instances[0].onclose?.();
+      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect($flags.get()).toEqual({ F1: false });
+      stopWebSocket();
+    });
+
+    it('should connect over ws for http baseURI', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+
+      await initTogglyClient({
+        appKey: 'k',
+        baseURI: 'http://localhost:8787',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(MockWebSocket.instances[0].url).toBe(
+        `ws://localhost:8787/k/ws?sdk=${SDK_ID}&sdkVersion=${SDK_VERSION}`
+      );
+    });
+
+    it('should refresh on plain text update messages', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ F1: true }))
+        .mockResolvedValueOnce(createMockResponse({ F1: false }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({ data: 'update' });
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should cache sync etag without refresh when unchanged path caches matching rev', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'abc' }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'sync', etag: 'abc', unchanged: true }),
+      });
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip interval refresh while WebSocket is connected within fallback window', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ F1: true }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 5000,
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      MockWebSocket.instances[0].onopen?.();
+
+      await vi.advanceTimersByTimeAsync(5001);
+      await flushPromises();
+
+      // Skipped because WS is connected and fallback window not elapsed
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      stopRefreshInterval();
+    });
+
+    it('stopWebSocket is safe when client is not initialized', () => {
+      __resetClient();
+      expect(() => stopWebSocket()).not.toThrow();
+    });
+  });
+
+  describe('local gates helpers', () => {
+    it('setLocalGates and notifyLocalGatesChanged error without client', async () => {
+      const { setLocalGates, notifyLocalGatesChanged } = await import('../../client/store.js');
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      __resetClient();
+      setLocalGates([]);
+      notifyLocalGatesChanged();
+
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('not initialized'));
+      errorSpy.mockRestore();
+    });
+
+    it('setLocalGates and notifyLocalGatesChanged work when initialized', async () => {
+      const { setLocalGates, notifyLocalGatesChanged, $localGatesRevision } = await import(
+        '../../client/store.js'
+      );
+
+      await initTogglyClient({
+        environment: 'test',
+        flagDefaults: { F1: true },
+        featureFlagsRefreshInterval: 0,
+      });
+
+      const before = $localGatesRevision.get();
+      setLocalGates([
+        {
+          id: 'gate1',
+          flagKeys: ['F1'],
+          isEnabled: () => true,
+        },
+      ]);
+      notifyLocalGatesChanged();
+      expect($localGatesRevision.get()).toBe(before + 1);
+    });
+  });
+
+  describe('resolveVariant edge cases', () => {
+    it('returns null when variant name is missing', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          defs: {
+            V: { enabled: true },
+          },
+        })
+      );
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(getVariant('V')).toBeNull();
+      expect(getVariant('Missing')).toBeNull();
+    });
+
+    it('returns null when feature is disabled', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          defs: {
+            V: { enabled: false, variant: 'A', configurationValue: { x: 1 } },
+          },
+        })
+      );
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(getVariant('V')).toBeNull();
     });
   });
 });
