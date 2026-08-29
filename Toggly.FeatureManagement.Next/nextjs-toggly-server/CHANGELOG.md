@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1
+
+2026-08-28
+
+### Fixed
+- Pin the server client, config, and storage on `globalThis` so Next.js /
+  Turbopack RSC and Route Handler bundles share one live client instead of
+  separate module-level singletons.
+
 ## 1.1.0
 
 2026-08-28

@@ -505,5 +505,136 @@ describe('createTogglyClient', () => {
       client.destroy()
       vi.useRealTimers()
     })
+
+    it('retries definitions fetch when CDN still serves the previous revision', async () => {
+      vi.useFakeTimers()
+
+      class FakeWs {
+        static instances: FakeWs[] = []
+        onopen: ((ev: Event) => void) | null = null
+        onmessage: ((ev: MessageEvent) => void) | null = null
+        onclose: ((ev: CloseEvent) => void) | null = null
+        onerror: ((ev: Event) => void) | null = null
+        close = vi.fn()
+        constructor(_url: string) {
+          FakeWs.instances.push(this)
+        }
+      }
+      FakeWs.instances = []
+
+      const headersFor = (revision: string) => ({
+        get: (name: string) =>
+          name === 'X-Definitions-Revision' || name === 'ETag'
+            ? revision
+            : null,
+      })
+
+      mockFetch.mockResolvedValueOnce({
+        ...createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: false }],
+        }),
+        headers: headersFor('rev-old'),
+      })
+
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+        webSocketImpl: FakeWs as unknown as new (url: string) => unknown,
+      })
+
+      await client.init()
+      FakeWs.instances[0]?.onopen?.(new Event('open'))
+
+      // Debounced refresh still sees CDN lag (old revision header).
+      mockFetch.mockResolvedValueOnce({
+        ...createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: false }],
+        }),
+        headers: headersFor('rev-old'),
+      })
+
+      FakeWs.instances[0]?.onmessage?.({
+        data: JSON.stringify({
+          type: 'flags-updated',
+          etag: 'rev-new',
+        }),
+      } as MessageEvent)
+
+      await vi.advanceTimersByTimeAsync(400)
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(await client.isFeatureOn('feature-a')).toBe(false)
+
+      // Retry at 800ms gets the new revision.
+      mockFetch.mockResolvedValueOnce({
+        ...createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: true }],
+        }),
+        headers: headersFor('rev-new'),
+      })
+
+      await vi.advanceTimersByTimeAsync(500)
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+      expect(await client.isFeatureOn('feature-a')).toBe(true)
+
+      // Later retry timers no-op once revision matches.
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+
+      client.destroy()
+      vi.useRealTimers()
+    })
+
+    it('skips CDN revision retries when flags-updated has no etag', async () => {
+      vi.useFakeTimers()
+
+      class FakeWs {
+        static instances: FakeWs[] = []
+        onopen: ((ev: Event) => void) | null = null
+        onmessage: ((ev: MessageEvent) => void) | null = null
+        onclose: ((ev: CloseEvent) => void) | null = null
+        onerror: ((ev: Event) => void) | null = null
+        close = vi.fn()
+        constructor(_url: string) {
+          FakeWs.instances.push(this)
+        }
+      }
+      FakeWs.instances = []
+
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: false }],
+        }),
+      )
+
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+        webSocketImpl: FakeWs as unknown as new (url: string) => unknown,
+      })
+
+      await client.init()
+      FakeWs.instances[0]?.onopen?.(new Event('open'))
+
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: true }],
+        }),
+      )
+
+      FakeWs.instances[0]?.onmessage?.({
+        data: JSON.stringify({ type: 'flags-updated' }),
+      } as MessageEvent)
+
+      await vi.advanceTimersByTimeAsync(400)
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      client.destroy()
+      vi.useRealTimers()
+    })
   })
 })

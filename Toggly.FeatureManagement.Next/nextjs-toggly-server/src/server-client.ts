@@ -65,25 +65,51 @@ class MemoryStorage implements TogglyStorage {
   }
 }
 
-// Global server storage instance
-let serverStorage: TogglyStorage = new MemoryStorage()
+// Process-wide singleton. Next/Turbopack can evaluate this module in multiple
+// bundles; pin on globalThis so RSC + Route Handlers share one live client.
+type TogglyServerGlobals = {
+  __togglyServerStorage?: TogglyStorage
+  __togglyServerClient?: TogglyClient | null
+  __togglyServerConfig?: TogglyServerConfig | null
+}
 
-// Global server client instance
-let serverClient: TogglyClient | null = null
-let serverConfig: TogglyServerConfig | null = null
+const togglyGlobal = globalThis as typeof globalThis & TogglyServerGlobals
+
+function getServerStorageRef(): TogglyStorage {
+  if (!togglyGlobal.__togglyServerStorage) {
+    togglyGlobal.__togglyServerStorage = new MemoryStorage()
+  }
+  return togglyGlobal.__togglyServerStorage
+}
+
+function getServerClientRef(): TogglyClient | null {
+  return togglyGlobal.__togglyServerClient ?? null
+}
+
+function setServerClientRef(client: TogglyClient | null): void {
+  togglyGlobal.__togglyServerClient = client
+}
+
+function getServerConfigRef(): TogglyServerConfig | null {
+  return togglyGlobal.__togglyServerConfig ?? null
+}
+
+function setServerConfigRef(config: TogglyServerConfig | null): void {
+  togglyGlobal.__togglyServerConfig = config
+}
 
 /**
  * Set custom storage implementation
  */
 export function setServerStorage(storage: TogglyStorage): void {
-  serverStorage = storage
+  togglyGlobal.__togglyServerStorage = storage
 }
 
 /**
  * Get current server storage
  */
 export function getServerStorage(): TogglyStorage {
-  return serverStorage
+  return getServerStorageRef()
 }
 
 /**
@@ -108,7 +134,8 @@ export async function initServerToggly(
     webSocketImpl: config.webSocketImpl ?? DEFAULT_SERVER_CONFIG.webSocketImpl,
   }
 
-  serverConfig = mergedConfig
+  setServerConfigRef(mergedConfig)
+  const serverStorage = getServerStorageRef()
 
   // Check for cached definitions
   if (mergedConfig.cache) {
@@ -124,8 +151,17 @@ export async function initServerToggly(
     }
   }
 
+  // Replace any prior process-wide client (e.g. accidental double-init)
+  // so WebSockets/timers from the old instance do not leak.
+  const previousClient = getServerClientRef()
+  if (previousClient) {
+    previousClient.destroy()
+    setServerClientRef(null)
+  }
+
   // Create and initialize client
-  serverClient = createTogglyClient(mergedConfig as TogglyConfig)
+  const serverClient = createTogglyClient(mergedConfig as TogglyConfig)
+  setServerClientRef(serverClient)
   const definitions = await serverClient.init()
 
   // Cache the definitions
@@ -144,13 +180,14 @@ export async function initServerToggly(
  * Returns null if not initialized
  */
 export function getServerToggly(): TogglyClient | null {
-  return serverClient
+  return getServerClientRef()
 }
 
 /**
  * Get the server-side Toggly client, throwing if not initialized
  */
 export function useServerToggly(): TogglyClient {
+  const serverClient = getServerClientRef()
   if (!serverClient) {
     throw new Error(
       '[Toggly] Server client not initialized. Call initServerToggly() first.'
@@ -163,6 +200,8 @@ export function useServerToggly(): TogglyClient {
  * Refresh server-side definitions
  */
 export async function refreshServerToggly(): Promise<FeatureDefinitions | null> {
+  const serverClient = getServerClientRef()
+  const serverConfig = getServerConfigRef()
   if (!serverClient || !serverConfig) {
     return null
   }
@@ -172,7 +211,7 @@ export async function refreshServerToggly(): Promise<FeatureDefinitions | null> 
   // Update cache
   if (serverConfig.cache) {
     const cacheKey = `${serverConfig.cacheKeyPrefix}definitions`
-    await serverStorage.setItem(cacheKey, definitions, {
+    await getServerStorageRef().setItem(cacheKey, definitions, {
       ttl: serverConfig.cacheTtl,
     })
   }
@@ -220,6 +259,7 @@ export async function isServerFeatureOff(
  * Get all feature definitions (for SSR/SSG)
  */
 export function getServerFeatures(): FeatureDefinitions {
+  const serverClient = getServerClientRef()
   if (!serverClient) {
     return {}
   }
@@ -230,11 +270,13 @@ export function getServerFeatures(): FeatureDefinitions {
  * Reset server client (useful for testing)
  */
 export function resetServerToggly(): void {
+  const serverClient = getServerClientRef()
   if (serverClient) {
     serverClient.destroy()
-    serverClient = null
+    setServerClientRef(null)
   }
-  serverConfig = null
+  setServerConfigRef(null)
+  const serverStorage = getServerStorageRef()
   if (serverStorage instanceof MemoryStorage) {
     serverStorage.clear()
   }
