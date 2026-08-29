@@ -31,6 +31,22 @@ import {
   readResponseBody,
   unwrapDefsPayload,
 } from '../signed-response.js';
+import {
+  buildWebSocketUrl,
+  extractDefinitionsRevision,
+  getNextReconnectDelayMs,
+  shouldFetchOnFlagsUpdated,
+  shouldFetchOnSigningKeyUpdated,
+  shouldFetchOnSync,
+  REFRESH_DEBOUNCE_MS,
+  type WsSyncMessage,
+} from './ws-sync.js';
+
+const FALLBACK_REFRESH_INTERVAL_MS = 20 * 60 * 1000;
+
+function revisionCacheKey(appKey: string, environment: string): string {
+  return `toggly:revision:${appKey}:${environment}`;
+}
 
 /**
  * Atom containing all feature flags
@@ -74,6 +90,13 @@ class TogglyClientInstance {
   private localGates: LocalGate[] = [];
   private localGateIndex: FlagGateIndex = new Map();
   private lastError: Error | null = null;
+  private definitionsRevision: string | null = null;
+  private ws: WebSocket | null = null;
+  private wsConnected = false;
+  private wsReconnectAttempt = 0;
+  private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastFallbackRefresh = 0;
 
   constructor(config: TogglyConfig) {
     this.config = {
@@ -82,12 +105,15 @@ class TogglyClientInstance {
       environment: 'Production',
       flagDefaults: {},
       featureFlagsRefreshInterval: 3 * 60 * 1000,
+      enableLiveUpdates: true,
       isDebug: false,
       connectTimeout: 5 * 1000,
       enableVariants: false,
       hooks: [],
       ...config,
     };
+
+    this.definitionsRevision = this.readCachedRevision();
     
     // Register initial hooks
     if (this.config.hooks) {
@@ -123,6 +149,64 @@ class TogglyClientInstance {
 
   notifyLocalGatesChanged(): void {
     $localGatesRevision.set($localGatesRevision.get() + 1);
+  }
+
+  private readCachedRevision(): string | null {
+    const appKey = this.config.appKey;
+    if (!appKey) {
+      return null;
+    }
+    try {
+      if (typeof localStorage === 'undefined') {
+        return null;
+      }
+      return localStorage.getItem(
+        revisionCacheKey(appKey, this.config.environment ?? 'Production')
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  private cacheDefinitionsRevision(revision: string | null | undefined): void {
+    if (!revision) {
+      return;
+    }
+    const cleaned = revision.replace(/^"+|"+$/g, '');
+    this.definitionsRevision = cleaned;
+    const appKey = this.config.appKey;
+    if (!appKey) {
+      return;
+    }
+    try {
+      if (typeof localStorage === 'undefined') {
+        return;
+      }
+      localStorage.setItem(
+        revisionCacheKey(appKey, this.config.environment ?? 'Production'),
+        cleaned
+      );
+    } catch {
+      // Ignore storage failures (private mode, SSR, etc.)
+    }
+  }
+
+  private clearDefinitionsRevision(): void {
+    this.definitionsRevision = null;
+    const appKey = this.config.appKey;
+    if (!appKey) {
+      return;
+    }
+    try {
+      if (typeof localStorage === 'undefined') {
+        return;
+      }
+      localStorage.removeItem(
+        revisionCacheKey(appKey, this.config.environment ?? 'Production')
+      );
+    } catch {
+      // Ignore storage failures
+    }
   }
 
   private getApiUrl(): string {
@@ -165,16 +249,38 @@ class TogglyClientInstance {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
 
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+      };
+      if (this.definitionsRevision) {
+        headers['If-None-Match'] = this.definitionsRevision;
+      }
+
       const response = await fetch(url, {
         method: 'GET',
-        headers: buildDefinitionFetchHeaders({
-          Accept: 'application/json',
-        }),
+        headers: buildDefinitionFetchHeaders(headers),
         cache: 'no-store',
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
+
+      const responseRevision = extractDefinitionsRevision(response);
+      if (responseRevision) {
+        this.cacheDefinitionsRevision(responseRevision);
+      }
+
+      if (response.status === 304) {
+        if (this.cache) {
+          this.lastError = null;
+          return {
+            flags: { ...this.cache },
+            variantDefs: this.variantCache,
+          };
+        }
+        // No in-memory cache — fall through as error-like and use defaults below
+        throw new Error('304 Not Modified but no cached flags');
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to fetch flags: ${response.status} ${response.statusText}`);
@@ -255,6 +361,8 @@ class TogglyClientInstance {
       // Trigger afterRefresh hooks
       await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
 
+      this.startWebSocket();
+
       // Start refresh interval if configured
       if (
         this.config.featureFlagsRefreshInterval &&
@@ -289,12 +397,191 @@ class TogglyClientInstance {
     }
   }
 
+  private scheduleDebouncedRefresh(forceRevisionReset = false): void {
+    if (this.refreshDebounceTimer) {
+      clearTimeout(this.refreshDebounceTimer);
+    }
+    this.refreshDebounceTimer = setTimeout(() => {
+      this.refreshDebounceTimer = null;
+      if (forceRevisionReset) {
+        this.clearDefinitionsRevision();
+      }
+      this.refresh().catch(() => {
+        // Error already logged in refresh()
+      });
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  private handleWsSyncMessage(message: WsSyncMessage): void {
+    const previousRevision = this.definitionsRevision;
+    if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache message.etag before refresh — that would make the
+      // follow-up GET send If-None-Match for the new revision and 304 with
+      // stale in-memory defs.
+      this.scheduleDebouncedRefresh();
+      return;
+    }
+    if (message.etag) {
+      this.cacheDefinitionsRevision(message.etag);
+    }
+  }
+
+  private handleWsUpdateMessage(message: WsSyncMessage): void {
+    if (shouldFetchOnSigningKeyUpdated(message)) {
+      this.scheduleDebouncedRefresh(true);
+      return;
+    }
+    const previousRevision = this.definitionsRevision;
+    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      // Clear revision so the GET is unconditional. Caching the WS etag
+      // before fetch caused 304 responses and left flags stale.
+      this.scheduleDebouncedRefresh(true);
+      return;
+    }
+    if (message.etag) {
+      this.cacheDefinitionsRevision(message.etag);
+    }
+  }
+
+  startWebSocket(): void {
+    if (!this.config.appKey) {
+      return;
+    }
+
+    if (this.config.enableLiveUpdates === false) {
+      return;
+    }
+
+    if (typeof WebSocket === 'undefined') {
+      return;
+    }
+
+    this.stopWebSocket();
+
+    const wsUrl = buildWebSocketUrl(
+      this.config.baseURI!,
+      this.config.appKey,
+      this.definitionsRevision
+    );
+
+    if (this.config.isDebug) {
+      console.log(`[Toggly Client] WebSocket connecting to ${wsUrl}`);
+    }
+
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      this.wsConnected = true;
+      this.wsReconnectAttempt = 0;
+      this.lastFallbackRefresh = Date.now();
+      if (this.config.isDebug) {
+        console.log('[Toggly Client] WebSocket connected');
+      }
+    };
+
+    ws.onmessage = (event) => {
+      const data = event.data;
+
+      if (typeof data === 'string') {
+        if (data === 'update' || data === 'flags-updated') {
+          if (this.config.isDebug) {
+            console.log(`[Toggly Client] WebSocket received text: ${data}`);
+          }
+          this.scheduleDebouncedRefresh();
+          return;
+        }
+
+        try {
+          const message = JSON.parse(data) as WsSyncMessage;
+          if (message.type === 'ping') {
+            return;
+          }
+          if (message.type === 'sync') {
+            if (this.config.isDebug) {
+              console.log('[Toggly Client] WebSocket received sync');
+            }
+            this.handleWsSyncMessage(message);
+            return;
+          }
+          if (
+            message.type === 'flags-updated' ||
+            message.type === 'update' ||
+            message.type === 'signing-key-updated'
+          ) {
+            if (this.config.isDebug) {
+              console.log(`[Toggly Client] WebSocket received: ${message.type}`);
+            }
+            this.handleWsUpdateMessage(message);
+          }
+        } catch {
+          if (this.config.isDebug) {
+            console.log(`[Toggly Client] WebSocket received unrecognized message: ${data}`);
+          }
+        }
+      }
+    };
+
+    ws.onclose = () => {
+      this.wsConnected = false;
+      this.ws = null;
+      const delay = getNextReconnectDelayMs(this.wsReconnectAttempt);
+      this.wsReconnectAttempt += 1;
+      if (this.config.isDebug) {
+        console.log(`[Toggly Client] WebSocket closed, reconnecting in ${delay}ms`);
+      }
+
+      this.wsReconnectTimer = setTimeout(() => {
+        this.startWebSocket();
+      }, delay);
+    };
+
+    ws.onerror = (error) => {
+      console.error('[Toggly Client] WebSocket error:', error);
+    };
+
+    this.ws = ws;
+  }
+
+  stopWebSocket(): void {
+    if (this.wsReconnectTimer) {
+      clearTimeout(this.wsReconnectTimer);
+      this.wsReconnectTimer = null;
+    }
+
+    if (this.refreshDebounceTimer) {
+      clearTimeout(this.refreshDebounceTimer);
+      this.refreshDebounceTimer = null;
+    }
+
+    if (this.ws) {
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      this.ws.close();
+      this.ws = null;
+    }
+
+    this.wsConnected = false;
+  }
+
   private startRefreshInterval(): void {
     if (this.refreshInterval) {
       return;
     }
 
     this.refreshInterval = setInterval(() => {
+      if (
+        this.wsConnected &&
+        Date.now() - this.lastFallbackRefresh < FALLBACK_REFRESH_INTERVAL_MS
+      ) {
+        if (this.config.isDebug) {
+          console.log('[Toggly Client] Skipping interval refresh, WebSocket is connected');
+        }
+        return;
+      }
+
+      this.lastFallbackRefresh = Date.now();
       this.refresh();
     }, this.config.featureFlagsRefreshInterval!);
 
@@ -314,6 +601,7 @@ class TogglyClientInstance {
         console.log('[Toggly Client] Stopped refresh interval');
       }
     }
+    this.stopWebSocket();
   }
 
   setIdentity(identity: string): void {
@@ -402,11 +690,20 @@ export function clearIdentity(): void {
 }
 
 /**
- * Stop automatic refresh interval
+ * Stop automatic refresh interval and WebSocket live updates
  */
 export function stopRefreshInterval(): void {
   if (clientInstance) {
     clientInstance.stopRefreshInterval();
+  }
+}
+
+/**
+ * Stop WebSocket live updates (keeps poll interval if running)
+ */
+export function stopWebSocket(): void {
+  if (clientInstance) {
+    clientInstance.stopWebSocket();
   }
 }
 
@@ -445,6 +742,7 @@ export function __resetClient(): void {
   $variants.set({});
   $isReady.set(false);
   $error.set(null);
+  $localGatesRevision.set(0);
 }
 
 /**

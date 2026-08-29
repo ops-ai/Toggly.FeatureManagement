@@ -1,5 +1,5 @@
 export const SDK_ID = 'astro';
-export const SDK_VERSION = '1.6.1';
+export const SDK_VERSION = '1.10.0';
 
 export const SDK_HEADER_ID = 'X-Toggly-Sdk';
 export const SDK_HEADER_VERSION = 'X-Toggly-Sdk-Version';

@@ -273,6 +273,12 @@ interface TogglyConfig {
   
   /** Feature flags refresh interval in milliseconds (default: 180000 = 3 minutes) */
   featureFlagsRefreshInterval?: number;
+
+  /**
+   * When true (default), the browser client connects to the definitions WebSocket
+   * for live flag updates. Set false to rely on polling only.
+   */
+  enableLiveUpdates?: boolean;
   
   /** Enable debug logging (default: false) */
   isDebug?: boolean;
@@ -406,6 +412,17 @@ import { refreshFlags } from '@ops-ai/astro-feature-flags-toggly';
 // Manually refresh flags
 await refreshFlags();
 ```
+
+### Live updates (browser client)
+
+Hydrated islands use the definitions WebSocket by default (`enableLiveUpdates: true`).
+When connected, HTTP polling becomes a rare 20-minute fallback. Set
+`enableLiveUpdates: false` to poll only.
+
+**Server helpers (`TogglyServer` / middleware)** remain request-scoped with a TTL
+cache — they do not hold a long-lived WebSocket. For long-lived Node processes
+that need live sync, use `@ops-ai/toggly-node-core` (or another Node SDK) instead
+of relying on Astro SSR helpers.
 
 ### Programmatic Flag Evaluation
 

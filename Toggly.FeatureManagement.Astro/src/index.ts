@@ -33,6 +33,7 @@ export {
   setIdentity,
   clearIdentity,
   stopRefreshInterval,
+  stopWebSocket,
   getVariant,
   getVariantValue,
   $flags,

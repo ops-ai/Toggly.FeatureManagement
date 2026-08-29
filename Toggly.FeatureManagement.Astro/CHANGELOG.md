@@ -1,3 +1,17 @@
+## 1.10.0
+
+2026-08-28
+
+### Added
+- ETag-aware definitions WebSocket live updates on the browser client store
+  (`sync` / `flags-updated` / `signing-key-updated`), 300ms debounced refresh,
+  exponential reconnect (5s–60s), and `enableLiveUpdates` (default true).
+- Definitions revision cache with `If-None-Match` conditional HTTP fetches;
+  when WebSocket is connected, the poll interval acts as a 20-minute fallback.
+
+### Changed
+- Align `SDK_VERSION` with the package version for WebSocket and HTTP identity.
+
 ## 1.9.1
 
 
