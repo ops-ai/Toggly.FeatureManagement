@@ -1,3 +1,16 @@
+## 1.6.0
+
+2026-08-28
+
+### Added
+- ETag-aware WebSocket live updates for the browser client (`sync` /
+  `flags-updated` / `signing-key-updated`), with debounced refresh and
+  exponential reconnect.
+- `enableLiveUpdates` plugin option (default `true`). While the socket is
+  connected, HTTP polling becomes a rare fallback (~20 minutes).
+- Conditional GET via `If-None-Match` / `304 Not Modified` using the
+  definitions revision cache.
+
 ## 1.5.2
 
 
