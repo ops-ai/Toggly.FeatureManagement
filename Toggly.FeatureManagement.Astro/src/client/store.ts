@@ -456,7 +456,9 @@ class TogglyClientInstance {
       return;
     }
 
-    this.stopWebSocket();
+    // Preserve a pending debounced refresh across reconnect so updates
+    // received just before disconnect are not dropped.
+    this.stopWebSocket({ preserveDebounce: true });
 
     const wsUrl = buildWebSocketUrl(
       this.config.baseURI!,
@@ -542,13 +544,13 @@ class TogglyClientInstance {
     this.ws = ws;
   }
 
-  stopWebSocket(): void {
+  stopWebSocket(options?: { preserveDebounce?: boolean }): void {
     if (this.wsReconnectTimer) {
       clearTimeout(this.wsReconnectTimer);
       this.wsReconnectTimer = null;
     }
 
-    if (this.refreshDebounceTimer) {
+    if (!options?.preserveDebounce && this.refreshDebounceTimer) {
       clearTimeout(this.refreshDebounceTimer);
       this.refreshDebounceTimer = null;
     }

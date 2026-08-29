@@ -668,6 +668,29 @@ describe('Client Store', () => {
       stopWebSocket();
     });
 
+    it('preserves pending debounced refresh across reconnect', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ F1: true }))
+        .mockResolvedValueOnce(createMockResponse({ F1: false }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({ data: 'update' });
+      // Reconnect before debounce fires — must not cancel the pending refresh
+      MockWebSocket.instances[0].onclose?.();
+      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect($flags.get()).toEqual({ F1: false });
+      stopWebSocket();
+    });
+
     it('should connect over ws for http baseURI', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
 
