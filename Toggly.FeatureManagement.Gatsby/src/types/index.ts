@@ -36,6 +36,12 @@ export interface TogglyPluginOptions {
   
   /** Feature flags refresh interval in milliseconds (default: 180000 = 3 minutes) */
   featureFlagsRefreshInterval?: number;
+
+  /**
+   * Enable definitions WebSocket live updates in the browser (default: true).
+   * When connected, HTTP polling becomes a rare fallback (~20 minutes).
+   */
+  enableLiveUpdates?: boolean;
   
   /** Enable all features during build (for hybrid approach with edge filtering) */
   allFeaturesEnabledDuringBuild?: boolean;

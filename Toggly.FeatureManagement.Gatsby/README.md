@@ -114,7 +114,8 @@ During build, the plugin generates a `toggly-page-features.json` manifest that m
 | `environment` | `string` | `'Production'` | Environment name (e.g., 'Staging', 'Dev') |
 | `baseURI` | `string` | `'https://client.toggly.io'` | Toggly API base URL |
 | `flagDefaults` | `object` | `{}` | Default flag values when API unavailable |
-| `featureFlagsRefreshInterval` | `number` | `180000` | Client refresh interval (ms) |
+| `featureFlagsRefreshInterval` | `number` | `180000` | Client refresh interval (ms); rare fallback while WebSocket is connected |
+| `enableLiveUpdates` | `boolean` | `true` | Browser WebSocket live updates for definitions |
 | `allFeaturesEnabledDuringBuild` | `boolean` | `false` | Enable all features during build |
 | `identity` | `string` | `undefined` | User identity for targeting |
 | `isDebug` | `boolean` | `false` | Enable debug logging |

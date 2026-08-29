@@ -24,7 +24,7 @@ import {
 /**
  * Server config type with required properties except identity and hooks
  */
-type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | 'claims' | 'hooks' | 'localGates' | 'onError' | 'allowedKeyIds' | 'maxSignatureAgeSeconds'>> & {
+type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | 'claims' | 'hooks' | 'localGates' | 'onError' | 'allowedKeyIds' | 'maxSignatureAgeSeconds' | 'enableLiveUpdates'>> & {
   identity?: string;
   groups?: string[];
   claims?: Record<string, string>;
@@ -33,6 +33,7 @@ type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | '
   onError?: TogglyPluginOptions['onError'];
   allowedKeyIds?: string[];
   maxSignatureAgeSeconds?: number;
+  enableLiveUpdates?: boolean;
 };
 
 /**

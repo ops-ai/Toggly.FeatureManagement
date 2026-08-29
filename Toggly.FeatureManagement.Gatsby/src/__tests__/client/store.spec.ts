@@ -1,7 +1,70 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { SDK_VERSION } from '../../sdk-identity.js';
 
 // We use dynamic imports via vi.resetModules() to get a fresh clientInstance for each test
 type StoreModule = typeof import('../../client/store.js');
+
+class MockWebSocket {
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: ((error: unknown) => void) | null = null;
+  readyState = MockWebSocket.CONNECTING;
+  url: string;
+
+  constructor(url: string) {
+    this.url = url;
+    wsInstances.push(this);
+  }
+
+  close() {
+    this.readyState = MockWebSocket.CLOSED;
+  }
+
+  triggerOpen() {
+    this.readyState = MockWebSocket.OPEN;
+    this.onopen?.();
+  }
+
+  triggerMessage(data: unknown) {
+    this.onmessage?.({ data });
+  }
+
+  triggerClose() {
+    this.readyState = MockWebSocket.CLOSED;
+    this.onclose?.();
+  }
+}
+
+let wsInstances: MockWebSocket[] = [];
+
+function latestWs(): MockWebSocket {
+  return wsInstances[wsInstances.length - 1];
+}
+
+function mockOkResponse(flags: Record<string, boolean>, revision?: string): Response {
+  const body = JSON.stringify(flags);
+  return {
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: {
+      get: (key: string) => {
+        if (revision && (key === 'ETag' || key === 'X-Definitions-Revision')) {
+          return revision;
+        }
+        return null;
+      },
+    },
+    text: async () => body,
+    json: async () => flags,
+  } as Response;
+}
 
 describe('Client Store', () => {
   let store: StoreModule;
@@ -9,6 +72,11 @@ describe('Client Store', () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.restoreAllMocks();
+    wsInstances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.clear();
+    }
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -17,6 +85,8 @@ describe('Client Store', () => {
 
   afterEach(() => {
     store.stopRefreshInterval();
+    store.stopWebSocket();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -350,14 +420,14 @@ describe('Client Store', () => {
 
     it('should stop interval after initialization', async () => {
       vi.useFakeTimers();
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({ F1: true }),
+      );
 
       await store.initTogglyClient({
         appKey: 'test-key',
         featureFlagsRefreshInterval: 5000,
+        enableLiveUpdates: false,
       });
 
       const callsAfterInit = fetchSpy.mock.calls.length;
@@ -425,14 +495,14 @@ describe('Client Store', () => {
   describe('refresh interval', () => {
     it('should start refresh interval when configured', async () => {
       vi.useFakeTimers();
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({ F1: true }),
+      );
 
       await store.initTogglyClient({
         appKey: 'test-key',
         featureFlagsRefreshInterval: 5000,
+        enableLiveUpdates: false,
       });
 
       const callsAfterInit = fetchSpy.mock.calls.length;
@@ -445,20 +515,238 @@ describe('Client Store', () => {
 
     it('should not start refresh when interval is 0', async () => {
       vi.useFakeTimers();
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({ F1: true }),
+      );
 
       await store.initTogglyClient({
         appKey: 'test-key',
         featureFlagsRefreshInterval: 0,
+        enableLiveUpdates: false,
       });
 
       const callsAfterInit = fetchSpy.mock.calls.length;
       await vi.advanceTimersByTimeAsync(200000);
 
       expect(fetchSpy.mock.calls.length).toBe(callsAfterInit);
+      vi.useRealTimers();
+    });
+
+    it('skips poll ticks while WebSocket is connected within fallback window', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({ F1: true }),
+      );
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        featureFlagsRefreshInterval: 5000,
+      });
+
+      latestWs().triggerOpen();
+      const callsAfterOpen = fetchSpy.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(fetchSpy.mock.calls.length).toBe(callsAfterOpen);
+
+      store.stopRefreshInterval();
+      vi.useRealTimers();
+    });
+  });
+
+  // ─── HTTP 304 and revision caching ──────────────────────
+  describe('HTTP 304 and revision caching', () => {
+    it('sends If-None-Match after caching revision from ETag', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({ F1: true }, 'rev-123'),
+      );
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        featureFlagsRefreshInterval: 0,
+        enableLiveUpdates: false,
+      });
+
+      await store.refreshFlags();
+
+      const secondCall = fetchSpy.mock.calls[1];
+      const headers = secondCall[1]?.headers as Record<string, string>;
+      expect(headers['If-None-Match']).toBe('rev-123');
+    });
+
+    it('uses cached flags on 304 Not Modified', async () => {
+      let callCount = 0;
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return mockOkResponse({ F1: true }, 'rev-abc');
+        }
+        return {
+          ok: false,
+          status: 304,
+          statusText: 'Not Modified',
+          headers: { get: () => null },
+          text: async () => '',
+          json: async () => ({}),
+        } as Response;
+      });
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        featureFlagsRefreshInterval: 0,
+        enableLiveUpdates: false,
+      });
+      expect(store.$flags.get()).toEqual({ F1: true });
+
+      await store.refreshFlags();
+      expect(store.$flags.get()).toEqual({ F1: true });
+    });
+  });
+
+  // ─── WebSocket live updates ──────────────────────
+  describe('WebSocket live updates', () => {
+    it('does not create WebSocket when enableLiveUpdates is false', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOkResponse({ F1: true }));
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        featureFlagsRefreshInterval: 0,
+        enableLiveUpdates: false,
+      });
+
+      expect(wsInstances).toHaveLength(0);
+    });
+
+    it('creates WebSocket with sdk query params', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOkResponse({ F1: true }));
+
+      await store.initTogglyClient({
+        appKey: 'my-app-key',
+        featureFlagsRefreshInterval: 0,
+        baseURI: 'https://definitions.toggly.io',
+      });
+
+      expect(latestWs()).toBeDefined();
+      expect(latestWs().url).toBe(
+        `wss://definitions.toggly.io/my-app-key/ws?sdk=gatsby&sdkVersion=${SDK_VERSION}`,
+      );
+    });
+
+    it('includes rev when a revision was cached from HTTP', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({ F1: true }, 'etag-1'),
+      );
+
+      await store.initTogglyClient({
+        appKey: 'my-app-key',
+        featureFlagsRefreshInterval: 0,
+        baseURI: 'https://definitions.toggly.io',
+      });
+
+      expect(latestWs().url).toContain('rev=etag-1');
+      expect(latestWs().url).toContain('sdk=gatsby');
+    });
+
+    it('triggers refresh on plain text update after debounce', async () => {
+      vi.useFakeTimers();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({ F1: true }),
+      );
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      const before = fetchSpy.mock.calls.length;
+      latestWs().triggerMessage('update');
+      await vi.advanceTimersByTimeAsync(300);
+      await Promise.resolve();
+
+      expect(fetchSpy.mock.calls.length).toBeGreaterThan(before);
+      vi.useRealTimers();
+    });
+
+    it('triggers refresh on JSON flags-updated and clears revision', async () => {
+      vi.useFakeTimers();
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(mockOkResponse({ F1: true }, 'old-rev'))
+        .mockResolvedValue(mockOkResponse({ F1: false }, 'new-rev'));
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      latestWs().triggerMessage(JSON.stringify({ type: 'flags-updated', etag: 'new-rev' }));
+      await vi.advanceTimersByTimeAsync(300);
+      await Promise.resolve();
+
+      const refreshCall = fetchSpy.mock.calls[1];
+      const headers = refreshCall[1]?.headers as Record<string, string>;
+      expect(headers['If-None-Match']).toBeUndefined();
+      expect(store.$flags.get()).toEqual({ F1: false });
+      vi.useRealTimers();
+    });
+
+    it('does not refresh on sync unchanged', async () => {
+      vi.useFakeTimers();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({ F1: true }, 'abc'),
+      );
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      const before = fetchSpy.mock.calls.length;
+      latestWs().triggerMessage(
+        JSON.stringify({ type: 'sync', etag: 'abc', unchanged: true }),
+      );
+      await vi.advanceTimersByTimeAsync(300);
+      await Promise.resolve();
+
+      expect(fetchSpy.mock.calls.length).toBe(before);
+      vi.useRealTimers();
+    });
+
+    it('schedules reconnect with backoff on close', async () => {
+      vi.useFakeTimers();
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOkResponse({ F1: true }));
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(wsInstances).toHaveLength(1);
+      latestWs().triggerClose();
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(wsInstances.length).toBeGreaterThanOrEqual(2);
+      vi.useRealTimers();
+    });
+
+    it('stopWebSocket cancels pending debounced refresh', async () => {
+      vi.useFakeTimers();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({ F1: true }),
+      );
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      const before = fetchSpy.mock.calls.length;
+      latestWs().triggerMessage('update');
+      store.stopWebSocket();
+      await vi.advanceTimersByTimeAsync(300);
+      await Promise.resolve();
+
+      expect(fetchSpy.mock.calls.length).toBe(before);
       vi.useRealTimers();
     });
   });
@@ -470,10 +758,7 @@ describe('Client Store', () => {
       vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
         callCount++;
         if (callCount === 1) {
-          return {
-            ok: true,
-            json: () => Promise.resolve({ F1: true }),
-          } as Response;
+          return mockOkResponse({ F1: true });
         }
         throw new Error('Network fail');
       });
@@ -481,6 +766,8 @@ describe('Client Store', () => {
       await store.initTogglyClient({
         appKey: 'test-key',
         isDebug: true,
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
       });
       expect(store.$flags.get()).toEqual({ F1: true });
 
@@ -494,16 +781,17 @@ describe('Client Store', () => {
       vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
         callCount++;
         if (callCount === 1) {
-          return {
-            ok: true,
-            json: () => Promise.resolve({ F1: true }),
-          } as Response;
+          return mockOkResponse({ F1: true });
         }
         throw new Error('Refresh failed');
       });
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      await store.initTogglyClient({ appKey: 'test-key' });
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
+      });
       await store.refreshFlags();
 
       // Should not crash
