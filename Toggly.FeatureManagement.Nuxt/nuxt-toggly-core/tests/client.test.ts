@@ -48,6 +48,16 @@ describe('createTogglyClient', () => {
       client.destroy()
     })
 
+    it('should keep enableLiveUpdates true when plugins pass explicit undefined', () => {
+      const client = createTogglyClient({
+        enableLiveUpdates: undefined as unknown as boolean,
+      })
+
+      expect(client.config.enableLiveUpdates).toBe(true)
+
+      client.destroy()
+    })
+
     it('should merge custom config with defaults', () => {
       const client = createTogglyClient({
         appKey: 'test-key',

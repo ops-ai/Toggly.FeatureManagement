@@ -12,6 +12,9 @@
   and Node server clients. Callers can still pass `enableLiveUpdates: false`.
 
 ### Fixed
+- Apply config defaults after spreading caller options so explicit `undefined`
+  (e.g. from module plugins forwarding unset `enableLiveUpdates`) cannot wipe
+  `DEFAULT_CONFIG` values.
 - After a `flags-updated` / sync push, do not cache the WebSocket etag before
   the debounced HTTP refresh. Caching first caused `If-None-Match` to match the
   new revision, return 304, and leave in-memory flags stale.

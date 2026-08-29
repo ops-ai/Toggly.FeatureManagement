@@ -57,7 +57,7 @@ export function createTogglyClient(
   let lastFallbackRefresh = 0
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
 
-  // Merge with defaults
+  // Merge with defaults (normalize after spread so explicit undefined cannot wipe defaults)
   const config: Required<
     Pick<
       TogglyConfig,
@@ -69,13 +69,14 @@ export function createTogglyClient(
     >
   > &
     TogglyConfig = {
+      ...initialConfig,
       baseUri: initialConfig.baseUri ?? DEFAULT_CONFIG.baseUri,
       environment: initialConfig.environment ?? DEFAULT_CONFIG.environment,
       refreshInterval: initialConfig.refreshInterval ?? DEFAULT_CONFIG.refreshInterval,
-      showFeatureDuringEvaluation: initialConfig.showFeatureDuringEvaluation ?? DEFAULT_CONFIG.showFeatureDuringEvaluation,
+      showFeatureDuringEvaluation:
+        initialConfig.showFeatureDuringEvaluation ?? DEFAULT_CONFIG.showFeatureDuringEvaluation,
       enableLiveUpdates: initialConfig.enableLiveUpdates ?? DEFAULT_CONFIG.enableLiveUpdates,
       featureDefaults: initialConfig.featureDefaults ?? {},
-      ...initialConfig,
     }
 
   // Initialize state
