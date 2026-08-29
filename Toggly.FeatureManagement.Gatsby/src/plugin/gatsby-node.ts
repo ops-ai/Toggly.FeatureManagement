@@ -121,6 +121,9 @@ export const pluginOptionsSchema: GatsbyNode['pluginOptionsSchema'] = ({ Joi }) 
       .min(0)
       .default(180000)
       .description('Refresh interval in milliseconds'),
+    enableLiveUpdates: Joi.boolean()
+      .default(true)
+      .description('Enable WebSocket live updates in the browser client'),
     allFeaturesEnabledDuringBuild: Joi.boolean()
       .default(false)
       .description('Enable all features during build'),
