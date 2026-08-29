@@ -668,6 +668,57 @@ describe('Client Store', () => {
       stopWebSocket();
     });
 
+    it('should connect over ws for http baseURI', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+
+      await initTogglyClient({
+        appKey: 'k',
+        baseURI: 'http://localhost:8787',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(MockWebSocket.instances[0].url).toBe(
+        `ws://localhost:8787/k/ws?sdk=${SDK_ID}&sdkVersion=${SDK_VERSION}`
+      );
+    });
+
+    it('should refresh on plain text update messages', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ F1: true }))
+        .mockResolvedValueOnce(createMockResponse({ F1: false }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({ data: 'update' });
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should cache sync etag without refresh when unchanged path caches matching rev', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'abc' }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'sync', etag: 'abc', unchanged: true }),
+      });
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it('should skip interval refresh while WebSocket is connected within fallback window', async () => {
       mockFetch.mockResolvedValue(createMockResponse({ F1: true }));
 
@@ -688,6 +739,89 @@ describe('Client Store', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
       stopRefreshInterval();
+    });
+
+    it('stopWebSocket is safe when client is not initialized', () => {
+      __resetClient();
+      expect(() => stopWebSocket()).not.toThrow();
+    });
+  });
+
+  describe('local gates helpers', () => {
+    it('setLocalGates and notifyLocalGatesChanged error without client', async () => {
+      const { setLocalGates, notifyLocalGatesChanged } = await import('../../client/store.js');
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      __resetClient();
+      setLocalGates([]);
+      notifyLocalGatesChanged();
+
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('not initialized'));
+      errorSpy.mockRestore();
+    });
+
+    it('setLocalGates and notifyLocalGatesChanged work when initialized', async () => {
+      const { setLocalGates, notifyLocalGatesChanged, $localGatesRevision } = await import(
+        '../../client/store.js'
+      );
+
+      await initTogglyClient({
+        environment: 'test',
+        flagDefaults: { F1: true },
+        featureFlagsRefreshInterval: 0,
+      });
+
+      const before = $localGatesRevision.get();
+      setLocalGates([
+        {
+          id: 'gate1',
+          flagKeys: ['F1'],
+          isEnabled: () => true,
+        },
+      ]);
+      notifyLocalGatesChanged();
+      expect($localGatesRevision.get()).toBe(before + 1);
+    });
+  });
+
+  describe('resolveVariant edge cases', () => {
+    it('returns null when variant name is missing', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          defs: {
+            V: { enabled: true },
+          },
+        })
+      );
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(getVariant('V')).toBeNull();
+      expect(getVariant('Missing')).toBeNull();
+    });
+
+    it('returns null when feature is disabled', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          defs: {
+            V: { enabled: false, variant: 'A', configurationValue: { x: 1 } },
+          },
+        })
+      );
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      expect(getVariant('V')).toBeNull();
     });
   });
 });
