@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly-server",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Server-side feature flag utilities for Nuxt with Nitro support",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -47,9 +47,11 @@
   },
   "homepage": "https://docs.toggly.io/sdks/nuxt/server",
   "dependencies": {
-    "@ops-ai/nuxt-toggly-core": "workspace:*"
+    "@ops-ai/nuxt-toggly-core": "workspace:*",
+    "ws": "^8.18.0"
   },
   "peerDependencies": {
+    "@ops-ai/nuxt-toggly-core": "^1.6.0",
     "h3": "^1.0.0"
   },
   "peerDependenciesMeta": {
@@ -59,6 +61,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.1",
+    "@types/ws": "^8.5.14",
     "@vitest/coverage-v8": "^3.0.4",
     "eslint": "^9.19.0",
     "h3": "^1.14.0",

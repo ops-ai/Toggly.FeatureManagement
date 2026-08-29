@@ -8,6 +8,14 @@ Core feature flag utilities for Nuxt
 npm install @ops-ai/nuxt-toggly-core
 ```
 
+## Live updates
+
+WebSocket live updates are enabled when `enableLiveUpdates` is unset or true
+(browser, Node with `globalThis.WebSocket`, or an injected `webSocketImpl`).
+Edge runtimes skip long-lived sockets. Pass `webSocketImpl` from the `ws`
+package on Node 18 when no global WebSocket exists (done automatically by
+`@ops-ai/nuxt-toggly-server`).
+
 ## Documentation
 
 - [docs.toggly.io](https://docs.toggly.io)

@@ -3,16 +3,23 @@ import {
   type TogglyClient,
   type TogglyConfig,
 } from '@ops-ai/nuxt-toggly-core'
+import WebSocket from 'ws'
 import type { TogglyServerConfig, TogglyStorage } from './types'
 
 /**
  * Default server configuration
+ *
+ * Live updates use WebSocket (via `ws`) so long-lived Node processes do not
+ * poll definitions.toggly.io on every request. refreshInterval stays 0;
+ * reconnect + WS push keep flags fresh. Edge runtimes skip WS in core.
  */
 const DEFAULT_SERVER_CONFIG = {
   cache: true,
-  cacheTtl: 60000, // 1 minute
+  cacheTtl: 60000, // 1 minute (HTTP response cache helper only)
   cacheKeyPrefix: 'toggly:server:',
-  refreshInterval: 0, // Disable auto-refresh on server by default
+  refreshInterval: 0,
+  enableLiveUpdates: true,
+  webSocketImpl: WebSocket as unknown as TogglyConfig['webSocketImpl'],
 }
 
 /**
@@ -93,8 +100,10 @@ export async function initServerToggly(
   const mergedConfig: TogglyServerConfig = {
     ...DEFAULT_SERVER_CONFIG,
     ...config,
-    // Server should not auto-refresh by default
-    refreshInterval: config.refreshInterval ?? 0,
+    // Prefer caller overrides; otherwise keep server live-update defaults
+    refreshInterval: config.refreshInterval ?? DEFAULT_SERVER_CONFIG.refreshInterval,
+    enableLiveUpdates: config.enableLiveUpdates ?? DEFAULT_SERVER_CONFIG.enableLiveUpdates,
+    webSocketImpl: config.webSocketImpl ?? DEFAULT_SERVER_CONFIG.webSocketImpl,
   }
 
   serverConfig = mergedConfig

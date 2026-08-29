@@ -73,7 +73,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const middleware = defineFeatureMiddleware({
         featureKey: 'feature-a',
@@ -92,7 +92,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const middleware = defineFeatureMiddleware({
         featureKey: 'feature-a',
@@ -115,7 +115,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const onDisabled = vi.fn()
 
@@ -145,7 +145,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const middleware = defineFeatureMiddleware({
         featureKey: ['feature-a', 'feature-b'],
@@ -167,7 +167,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const middleware = defineFeatureMiddleware({
         featureKey: ['feature-a', 'feature-b'],
@@ -186,7 +186,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const middleware = defineFeatureMiddleware({
         featureKey: 'feature-a',
@@ -225,7 +225,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const handler = vi.fn().mockResolvedValue({ success: true })
 
@@ -245,7 +245,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const handler = vi.fn()
 
@@ -281,7 +281,7 @@ describe('Middleware', () => {
     it('should return client with identity from header', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const event = createMockEvent({
         'x-toggly-identity': 'user-123',
@@ -309,7 +309,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const event = createMockEvent()
 
@@ -323,7 +323,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const event = createMockEvent({
         'x-toggly-identity': 'user-123',
@@ -350,7 +350,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const event = createMockEvent()
 
@@ -369,7 +369,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const event = createMockEvent()
 
@@ -385,7 +385,7 @@ describe('Middleware', () => {
         })
       )
 
-      await initServerToggly({ appKey: 'test-key' })
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
       const event = createMockEvent()
 

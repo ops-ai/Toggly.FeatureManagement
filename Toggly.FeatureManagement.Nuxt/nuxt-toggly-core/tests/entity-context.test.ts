@@ -27,7 +27,7 @@ function createClient() {
     headers: { get: () => null },
   })
 
-  return createTogglyClient({ appKey: 'test-key', refreshInterval: 0 })
+  return createTogglyClient({ appKey: 'test-key', refreshInterval: 0, enableLiveUpdates: false })
 }
 
 describe('entity context evaluation', () => {

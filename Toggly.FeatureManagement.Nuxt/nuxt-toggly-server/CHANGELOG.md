@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0
+
+2026-08-28
+
+### Added
+- WebSocket live updates enabled by default for long-lived Node servers via the
+  `ws` package (`enableLiveUpdates: true`, `webSocketImpl` injected).
+- Avoids per-request HTTP polling of definitions while keeping reconnect +
+  debounced refresh on push.
+
+### Changed
+- Depends on `ws` for Node WebSocket when `globalThis.WebSocket` is absent.
+- Peer/dependency on `@ops-ai/nuxt-toggly-core` allows `^1.6.0`.
 
 ## 1.0.3
 
