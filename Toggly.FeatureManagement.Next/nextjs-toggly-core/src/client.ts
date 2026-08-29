@@ -359,14 +359,20 @@ export function createTogglyClient(
         getDefinitionsRevision(),
       )
 
-      liveSocket = openLiveSocket(url, WebSocketImpl, {
+      const opened = openLiveSocket(url, WebSocketImpl, {
         onOpen: () => {
+          if (liveSocket !== opened) {
+            return
+          }
           wsConnected = true
           state.wsConnected = true
           wsReconnectAttempt = 0
           lastFallbackRefresh = Date.now()
         },
         onMessage: (data) => {
+          if (liveSocket !== opened) {
+            return
+          }
           dispatchLiveMessage(data, {
             onPlainUpdate: () => scheduleDebouncedRefresh(),
             onSync: (message) => handleWsSyncMessage(message),
@@ -374,6 +380,9 @@ export function createTogglyClient(
           })
         },
         onClose: () => {
+          if (liveSocket !== opened) {
+            return
+          }
           wsConnected = false
           state.wsConnected = false
           liveSocket = null
@@ -388,10 +397,14 @@ export function createTogglyClient(
           }
         },
         onError: () => {
+          if (liveSocket !== opened) {
+            return
+          }
           wsConnected = false
           state.wsConnected = false
         },
       })
+      liveSocket = opened
     } catch (error) {
       console.error('[Toggly] Failed to create WebSocket connection:', error)
       reportError('Failed to create WebSocket connection', error)

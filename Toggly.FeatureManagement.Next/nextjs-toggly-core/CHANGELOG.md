@@ -10,6 +10,8 @@
   `onmessage` (as the `ws` package does).
 - Closing a still-connecting `ws` socket keeps an error sink so destroy does
   not surface uncaught "closed before the connection was established" errors.
+- Detach socket listeners on intentional `close()` and ignore stale handler
+  callbacks after reconnect so an old `onClose` cannot orphan the new socket.
 
 ## 1.5.0
 

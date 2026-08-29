@@ -48,12 +48,51 @@ describe('openLiveSocket', () => {
     const live = openLiveSocket('wss://example.test', Capturing as never, handlers)
     Capturing.instance.onopen?.(new Event('open'))
     Capturing.instance.onmessage?.({ data: 'flags-updated' } as MessageEvent)
-    Capturing.instance.onclose?.(new CloseEvent('close'))
+    Capturing.instance.onclose?.(new Event('close') as unknown as CloseEvent)
     expect(handlers.onOpen).toHaveBeenCalled()
     expect(handlers.onMessage).toHaveBeenCalledWith('flags-updated')
     expect(handlers.onClose).toHaveBeenCalled()
     live.close()
     expect(Capturing.instance.close).toHaveBeenCalled()
+    expect(Capturing.instance.onclose).toBeNull()
+  })
+
+  it('detaches EventEmitter listeners on close so late close events are ignored', () => {
+    const handlers = {
+      onOpen: vi.fn(),
+      onMessage: vi.fn(),
+      onClose: vi.fn(),
+      onError: vi.fn(),
+    }
+
+    class EmitterWs {
+      static instance: EmitterWs
+      listeners = new Map<string, Array<(...args: unknown[]) => void>>()
+      on(event: string, listener: (...args: unknown[]) => void) {
+        const list = this.listeners.get(event) ?? []
+        list.push(listener)
+        this.listeners.set(event, list)
+      }
+      emit(event: string, ...args: unknown[]) {
+        for (const listener of this.listeners.get(event) ?? []) {
+          listener(...args)
+        }
+      }
+      removeAllListeners = vi.fn(() => {
+        this.listeners.clear()
+      })
+      close = vi.fn()
+      constructor(url: string) {
+        EmitterWs.instance = this
+        void url
+      }
+    }
+
+    const live = openLiveSocket('wss://example.test', EmitterWs as never, handlers)
+    live.close()
+    expect(EmitterWs.instance.removeAllListeners).toHaveBeenCalled()
+    EmitterWs.instance.emit('close')
+    expect(handlers.onClose).not.toHaveBeenCalled()
   })
 
   it('wires EventEmitter-style ws package sockets', () => {

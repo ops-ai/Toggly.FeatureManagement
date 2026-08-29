@@ -104,6 +104,8 @@ export function openLiveSocket(
     return {
       close: () => {
         try {
+          // Detach first so intentional stop does not fire onClose/reconnect.
+          socket.removeAllListeners?.()
           // Keep a sink so premature-close errors from `ws` are not uncaught.
           socket.on('error', () => {})
           socket.close()
@@ -133,6 +135,10 @@ export function openLiveSocket(
     return {
       close: () => {
         try {
+          socket.onopen = null
+          socket.onmessage = null
+          socket.onclose = null
+          socket.onerror = null
           socket.close()
         } catch {
           // ignore
