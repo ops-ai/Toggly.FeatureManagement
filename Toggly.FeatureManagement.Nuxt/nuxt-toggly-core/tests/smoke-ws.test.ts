@@ -1,8 +1,8 @@
 /**
  * @vitest-environment node
  *
- * Nuxt core uses browser-native WebSocket (guarded by typeof window),
- * so in Node we verify the WS endpoint directly using the `ws` package.
+ * Verifies the definitions live WebSocket endpoint with the `ws` package
+ * (same transport `@ops-ai/nuxt-toggly-server` injects via webSocketImpl).
  */
 import { describe, it, expect } from 'vitest';
 import WebSocket from 'ws';

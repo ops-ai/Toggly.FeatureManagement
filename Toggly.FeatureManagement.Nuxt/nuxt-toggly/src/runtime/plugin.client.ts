@@ -21,6 +21,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     featureDefaults: config.featureDefaults,
     showFeatureDuringEvaluation: config.showFeatureDuringEvaluation,
     refreshInterval: config.refreshInterval,
+    enableLiveUpdates: config.enableLiveUpdates,
     persistIdentity: config.persistIdentity,
     persistFeatures: config.persistFeatures,
     hooks: config.hooks,

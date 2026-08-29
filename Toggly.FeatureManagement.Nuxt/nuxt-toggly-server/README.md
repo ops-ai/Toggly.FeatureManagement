@@ -8,6 +8,13 @@ Server-side feature flag utilities for Nuxt with Nitro support
 npm install @ops-ai/nuxt-toggly-server
 ```
 
+## Live updates
+
+By default, `initServerToggly` enables WebSocket live updates (`enableLiveUpdates:
+true`) and injects the `ws` package as `webSocketImpl`, while keeping
+`refreshInterval: 0` (no HTTP polling). Pass `enableLiveUpdates: false` to
+disable. Edge/short-lived runtimes skip sockets in core.
+
 ## Documentation
 
 - [docs.toggly.io](https://docs.toggly.io)

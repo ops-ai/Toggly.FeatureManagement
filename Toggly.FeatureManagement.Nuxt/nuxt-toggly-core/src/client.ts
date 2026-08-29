@@ -10,7 +10,7 @@ import type {
 } from './types'
 import { HookExecutor } from './hooks'
 import { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
-import { generateUUID, evaluateGate, isBrowser } from './utils'
+import { generateUUID, evaluateGate, isEdgeRuntime } from './utils'
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -27,6 +27,12 @@ import {
   shouldFetchOnSync,
   type WsSyncMessage,
 } from './ws-sync'
+import {
+  dispatchLiveMessage,
+  openLiveSocket,
+  resolveWebSocketConstructor,
+  type LiveSocket,
+} from './live-socket'
 import { appendEvaluationContext, normalizeEntityContext, registerContext as registerEntityContext, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
 import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
@@ -42,7 +48,7 @@ export function createTogglyClient(
   let destroyed = false
 
   // WebSocket live updates
-  let ws: WebSocket | null = null
+  let liveSocket: LiveSocket | null = null
   let wsConnected = false
   let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
   let wsReconnectAttempt = 0
@@ -51,7 +57,7 @@ export function createTogglyClient(
   let lastFallbackRefresh = 0
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
 
-  // Merge with defaults
+  // Merge with defaults (normalize after spread so explicit undefined cannot wipe defaults)
   const config: Required<
     Pick<
       TogglyConfig,
@@ -63,13 +69,14 @@ export function createTogglyClient(
     >
   > &
     TogglyConfig = {
+      ...initialConfig,
       baseUri: initialConfig.baseUri ?? DEFAULT_CONFIG.baseUri,
       environment: initialConfig.environment ?? DEFAULT_CONFIG.environment,
       refreshInterval: initialConfig.refreshInterval ?? DEFAULT_CONFIG.refreshInterval,
-      showFeatureDuringEvaluation: initialConfig.showFeatureDuringEvaluation ?? DEFAULT_CONFIG.showFeatureDuringEvaluation,
+      showFeatureDuringEvaluation:
+        initialConfig.showFeatureDuringEvaluation ?? DEFAULT_CONFIG.showFeatureDuringEvaluation,
       enableLiveUpdates: initialConfig.enableLiveUpdates ?? DEFAULT_CONFIG.enableLiveUpdates,
       featureDefaults: initialConfig.featureDefaults ?? {},
-      ...initialConfig,
     }
 
   // Initialize state
@@ -127,7 +134,11 @@ export function createTogglyClient(
   function handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = getDefinitionsRevision()
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache message.etag before refresh — that would make the
+      // follow-up GET send If-None-Match for the new revision and 304 with
+      // stale in-memory defs.
       scheduleDebouncedRefresh()
+      return
     }
     if (message.etag) {
       cacheDefinitionsRevision(message.etag)
@@ -141,7 +152,10 @@ export function createTogglyClient(
     }
     const previousRevision = getDefinitionsRevision()
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      scheduleDebouncedRefresh()
+      // Clear revision so the GET is unconditional. Caching the WS etag
+      // before fetch caused 304 responses and left flags stale.
+      scheduleDebouncedRefresh(true)
+      return
     }
     if (message.etag) {
       cacheDefinitionsRevision(message.etag)
@@ -320,84 +334,88 @@ export function createTogglyClient(
   }
 
   /**
-   * Start a WebSocket connection for live feature flag updates (browser only)
+   * Start a WebSocket connection for live feature flag updates
+   * (browser, Node with global WebSocket, or config.webSocketImpl / `ws`).
+   * Skipped on Edge runtimes (no long-lived process).
    */
   function startWebSocket(): void {
-    if (!isBrowser() || !config.appKey || config.enableLiveUpdates === false) {
+    if (
+      isEdgeRuntime() ||
+      !config.appKey ||
+      config.enableLiveUpdates === false
+    ) {
       return
     }
 
-    // Clean up any existing connection
+    const WebSocketImpl = resolveWebSocketConstructor(config.webSocketImpl)
+    if (!WebSocketImpl) {
+      reportError(
+        'WebSocket implementation not available; live updates disabled. Pass webSocketImpl (e.g. from the ws package) on Node 18.',
+      )
+      return
+    }
+
     stopWebSocket()
 
     try {
-      const url = buildWebSocketUrl(config.baseUri, config.appKey, getDefinitionsRevision())
-      ws = new WebSocket(url)
+      const url = buildWebSocketUrl(
+        config.baseUri,
+        config.appKey,
+        getDefinitionsRevision(),
+      )
 
-      ws.onopen = () => {
-        wsConnected = true
-        state.wsConnected = true
-        wsReconnectAttempt = 0
-        lastFallbackRefresh = Date.now()
-      }
-
-      ws.onmessage = (event: MessageEvent) => {
-        const data = event.data
-
-        if (typeof data === 'string') {
-          if (data === 'update' || data === 'flags-updated') {
-            scheduleDebouncedRefresh()
+      const opened = openLiveSocket(url, WebSocketImpl, {
+        onOpen: () => {
+          if (liveSocket !== opened) {
             return
           }
-
-          try {
-            const message = JSON.parse(data) as WsSyncMessage
-            if (message.type === 'ping') {
-              return
-            }
-            if (message.type === 'sync') {
-              handleWsSyncMessage(message)
-              return
-            }
-            if (
-              message.type === 'flags-updated' ||
-              message.type === 'update' ||
-              message.type === 'signing-key-updated'
-            ) {
-              handleWsUpdateMessage(message)
-            }
-          } catch {
-            // Unrecognized message, ignore
+          wsConnected = true
+          state.wsConnected = true
+          wsReconnectAttempt = 0
+          lastFallbackRefresh = Date.now()
+        },
+        onMessage: (data) => {
+          if (liveSocket !== opened) {
+            return
           }
-        }
-      }
+          dispatchLiveMessage(data, {
+            onPlainUpdate: () => scheduleDebouncedRefresh(),
+            onSync: (message) => handleWsSyncMessage(message),
+            onUpdate: (message) => handleWsUpdateMessage(message),
+          })
+        },
+        onClose: () => {
+          if (liveSocket !== opened) {
+            return
+          }
+          wsConnected = false
+          state.wsConnected = false
+          liveSocket = null
 
-      ws.onclose = () => {
-        wsConnected = false
-        state.wsConnected = false
-        ws = null
-
-        // Schedule reconnect if not destroyed
-        if (!destroyed && config.enableLiveUpdates !== false) {
-          const delay = getNextReconnectDelayMs(wsReconnectAttempt)
-          wsReconnectAttempt += 1
-          wsReconnectTimer = setTimeout(() => {
-            wsReconnectTimer = null
-            startWebSocket()
-          }, delay)
-        }
-      }
-
-      ws.onerror = (error) => {
-        console.error('[Toggly] WebSocket error:', error)
-        // onclose will fire after onerror, which handles reconnect
-        wsConnected = false
-        state.wsConnected = false
-      }
+          if (!destroyed && config.enableLiveUpdates !== false) {
+            const delay = getNextReconnectDelayMs(wsReconnectAttempt)
+            wsReconnectAttempt += 1
+            wsReconnectTimer = setTimeout(() => {
+              wsReconnectTimer = null
+              startWebSocket()
+            }, delay)
+          }
+        },
+        onError: () => {
+          if (liveSocket !== opened) {
+            return
+          }
+          wsConnected = false
+          state.wsConnected = false
+        },
+      })
+      liveSocket = opened
     } catch (error) {
       console.error('[Toggly] Failed to create WebSocket connection:', error)
+      reportError('Failed to create WebSocket connection', error)
       wsConnected = false
       state.wsConnected = false
+      liveSocket = null
     }
   }
 
@@ -415,13 +433,13 @@ export function createTogglyClient(
       refreshDebounceTimer = null
     }
 
-    if (ws) {
-      ws.onopen = null
-      ws.onmessage = null
-      ws.onclose = null
-      ws.onerror = null
-      ws.close()
-      ws = null
+    if (liveSocket) {
+      try {
+        liveSocket.close()
+      } catch {
+        // ignore
+      }
+      liveSocket = null
     }
 
     wsConnected = false
@@ -491,7 +509,7 @@ export function createTogglyClient(
         // Start auto-refresh
         startRefreshInterval()
 
-        // Start WebSocket for live updates (browser only)
+        // Start WebSocket for live updates (browser + Node server)
         startWebSocket()
 
         return state.features

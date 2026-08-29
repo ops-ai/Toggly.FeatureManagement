@@ -18,7 +18,8 @@ export default defineNitroPlugin(async () => {
       baseUri: config.baseUri,
       identity: config.identity,
       featureDefaults: config.featureDefaults,
-      refreshInterval: 0, // Disable auto-refresh on server
+      refreshInterval: 0, // Disable HTTP polling; live updates use WebSocket
+      enableLiveUpdates: config.enableLiveUpdates,
       cache: config.serverCache,
       cacheTtl: config.serverCacheTtl,
       hooks: config.hooks,

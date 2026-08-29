@@ -26,6 +26,8 @@ describe('createTogglyClient', () => {
     vi.useFakeTimers()
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
+    // Avoid accidental live sockets from Node's global WebSocket during unit tests
+    delete (globalThis as { WebSocket?: unknown }).WebSocket
   })
 
   afterEach(() => {
@@ -40,7 +42,18 @@ describe('createTogglyClient', () => {
       expect(client.config.environment).toBe('Production')
       expect(client.config.refreshInterval).toBe(180000)
       expect(client.config.showFeatureDuringEvaluation).toBe(false)
+      expect(client.config.enableLiveUpdates).toBe(true)
       expect(client.state.initialized).toBe(false)
+
+      client.destroy()
+    })
+
+    it('should keep enableLiveUpdates true when plugins pass explicit undefined', () => {
+      const client = createTogglyClient({
+        enableLiveUpdates: undefined as unknown as boolean,
+      })
+
+      expect(client.config.enableLiveUpdates).toBe(true)
 
       client.destroy()
     })
@@ -762,14 +775,15 @@ describe('createTogglyClient', () => {
     let mockWsInstances: any[]
     const savedWindow = (globalThis as any).window
     const savedDocument = (globalThis as any).document
+    const savedWebSocket = (globalThis as any).WebSocket
 
     beforeEach(() => {
       mockWsInstances = []
       const MockWs = class {
         url: string
-        onopen: (() => void) | null = null
+        onopen: ((ev?: Event) => void) | null = null
         onmessage: ((e: { data: string }) => void) | null = null
-        onclose: (() => void) | null = null
+        onclose: ((ev?: Event) => void) | null = null
         onerror: ((e: any) => void) | null = null
         closeCalled = false
         constructor(url: string) {
@@ -785,8 +799,16 @@ describe('createTogglyClient', () => {
 
     afterEach(() => {
       ;(globalThis as any).window = savedWindow
-      delete (globalThis as any).document
-      delete (globalThis as any).WebSocket
+      if (savedDocument === undefined) {
+        delete (globalThis as any).document
+      } else {
+        ;(globalThis as any).document = savedDocument
+      }
+      if (savedWebSocket === undefined) {
+        delete (globalThis as any).WebSocket
+      } else {
+        ;(globalThis as any).WebSocket = savedWebSocket
+      }
     })
 
     it('should not start WebSocket when enableLiveUpdates is false', async () => {
@@ -798,6 +820,17 @@ describe('createTogglyClient', () => {
       })
       await client.init()
       expect(mockWsInstances).toHaveLength(0)
+      client.destroy()
+    })
+
+    it('should start WebSocket when enableLiveUpdates is unset (default on)', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+      })
+      await client.init()
+      expect(mockWsInstances).toHaveLength(1)
       client.destroy()
     })
 
@@ -818,7 +851,31 @@ describe('createTogglyClient', () => {
       })
       await client.init()
       expect(mockWsInstances).toHaveLength(1)
-      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/test-key/ws?sdk=nuxt&sdkVersion=1.3.1')
+      expect(mockWsInstances[0].url).toMatch(/^wss:\/\/definitions\.toggly\.io\/test-key\/ws\?sdk=nuxt&sdkVersion=/)
+      client.destroy()
+    })
+
+    it('should use webSocketImpl when provided (Node/server path)', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
+      const instances: any[] = []
+      class FakeWs {
+        onopen: ((ev: Event) => void) | null = null
+        onmessage: ((ev: MessageEvent) => void) | null = null
+        onclose: ((ev: CloseEvent) => void) | null = null
+        onerror: ((ev: Event) => void) | null = null
+        close = vi.fn()
+        constructor(url: string) {
+          instances.push({ url, close: this.close })
+          void url
+        }
+      }
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        webSocketImpl: FakeWs as unknown as new (url: string) => unknown,
+      })
+      await client.init()
+      expect(instances).toHaveLength(1)
       client.destroy()
     })
 
@@ -831,7 +888,7 @@ describe('createTogglyClient', () => {
         enableLiveUpdates: true,
       })
       await client.init()
-      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=nuxt&sdkVersion=1.3.1')
+      expect(mockWsInstances[0].url).toMatch(/^ws:\/\/local\.test\/mykey\/ws\?sdk=nuxt&sdkVersion=/)
       client.destroy()
     })
 
@@ -844,7 +901,75 @@ describe('createTogglyClient', () => {
       })
       await client.init()
       mockWsInstances[0].onopen!()
-      // no assertion on internal state — just verify it doesn't throw
+      expect(client.state.wsConnected).toBe(true)
+      client.destroy()
+    })
+
+    it('refetches without If-None-Match after flags-updated (avoids stale 304)', async () => {
+      class FakeWs {
+        static instances: FakeWs[] = []
+        onopen: ((ev: Event) => void) | null = null
+        onmessage: ((ev: MessageEvent) => void) | null = null
+        onclose: ((ev: CloseEvent) => void) | null = null
+        onerror: ((ev: Event) => void) | null = null
+        close = vi.fn()
+        constructor(_url: string) {
+          FakeWs.instances.push(this)
+        }
+      }
+      FakeWs.instances = []
+
+      const initHeaders = {
+        get: (name: string) =>
+          name === 'X-Definitions-Revision' || name === 'ETag'
+            ? 'rev-old'
+            : null,
+      }
+      mockFetch.mockResolvedValueOnce({
+        ...createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: false }],
+        }),
+        headers: initHeaders,
+      })
+
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        refreshInterval: 0,
+        enableLiveUpdates: true,
+        webSocketImpl: FakeWs as unknown as new (url: string) => unknown,
+      })
+
+      await client.init()
+      expect(await client.isFeatureOn('feature-a')).toBe(false)
+
+      const socket = FakeWs.instances[0]
+      expect(socket).toBeDefined()
+      socket.onopen?.(new Event('open'))
+      expect(client.state.wsConnected).toBe(true)
+
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: true }],
+        }),
+      )
+
+      socket.onmessage?.({
+        data: JSON.stringify({
+          type: 'flags-updated',
+          etag: 'rev-new',
+        }),
+      } as MessageEvent)
+
+      await vi.advanceTimersByTimeAsync(400)
+
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+      const refreshCall = mockFetch.mock.calls[1]
+      const refreshHeaders = refreshCall?.[1]?.headers as
+        | Record<string, string>
+        | undefined
+      expect(refreshHeaders?.['If-None-Match']).toBeUndefined()
+      expect(await client.isFeatureOn('feature-a')).toBe(true)
+
       client.destroy()
     })
 
@@ -907,18 +1032,18 @@ describe('createTogglyClient', () => {
       client.destroy()
     })
 
-    it('should log error on onerror', async () => {
+    it('should clear wsConnected on onerror', async () => {
       mockFetch.mockResolvedValue(createMockResponse({ features: [] }))
-      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const client = createTogglyClient({
         appKey: 'test-key',
         refreshInterval: 0,
         enableLiveUpdates: true,
       })
       await client.init()
-      const err = new Event('error')
-      mockWsInstances[0].onerror!(err)
-      expect(errSpy).toHaveBeenCalledWith('[Toggly] WebSocket error:', err)
+      mockWsInstances[0].onopen!()
+      expect(client.state.wsConnected).toBe(true)
+      mockWsInstances[0].onerror!(new Event('error'))
+      expect(client.state.wsConnected).toBe(false)
       client.destroy()
     })
 

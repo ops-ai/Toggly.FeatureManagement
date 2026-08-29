@@ -1,7 +1,28 @@
-## 1.5.1
+## 1.6.0
 
+2026-08-28
+
+### Added
+- Node/server WebSocket live updates via `webSocketImpl` or `globalThis.WebSocket`
+  (no longer browser-only). Edge runtimes still skip long-lived sockets.
+- `live-socket` helpers shared by browser WHATWG and `ws` EventEmitter APIs.
+
+### Changed
+- `DEFAULT_CONFIG.enableLiveUpdates` is `true` (was `false`); applies to browser
+  and Node server clients. Callers can still pass `enableLiveUpdates: false`.
+
+### Fixed
+- Apply config defaults after spreading caller options so explicit `undefined`
+  (e.g. from module plugins forwarding unset `enableLiveUpdates`) cannot wipe
+  `DEFAULT_CONFIG` values.
+- After a `flags-updated` / sync push, do not cache the WebSocket etag before
+  the debounced HTTP refresh. Caching first caused `If-None-Match` to match the
+  new revision, return 304, and leave in-memory flags stale.
 
 ## 1.5.2
+
+
+## 1.5.1
 
 - Avoid DOM globals in isBrowser so Node-only dependents typecheck
 - Normalize public npm metadata for provenance and docs links (no API change).

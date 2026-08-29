@@ -105,6 +105,17 @@ export function isServer(): boolean {
 }
 
 /**
+ * Check if we're running in an edge runtime
+ */
+export function isEdgeRuntime(): boolean {
+  return (
+    typeof globalThis !== 'undefined' &&
+    // @ts-expect-error - EdgeRuntime global
+    typeof globalThis.EdgeRuntime !== 'undefined'
+  )
+}
+
+/**
  * Debounce a function
  */
 export function debounce<T extends (...args: unknown[]) => unknown>(
