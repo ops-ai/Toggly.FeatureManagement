@@ -173,6 +173,89 @@ describe('openLiveSocket', () => {
     expect(handlers.onMessage).toHaveBeenCalledWith('flags-updated')
     expect(handlers.onMessage).not.toHaveBeenCalledWith('ignored')
   })
+
+  it('decodes ArrayBuffer, TypedArray, and fallback message payloads', () => {
+    const handlers = {
+      onOpen: vi.fn(),
+      onMessage: vi.fn(),
+      onClose: vi.fn(),
+      onError: vi.fn(),
+    }
+
+    class EmitterWs {
+      static instance: EmitterWs
+      listeners = new Map<string, Array<(...args: unknown[]) => void>>()
+      on(event: string, listener: (...args: unknown[]) => void) {
+        const list = this.listeners.get(event) ?? []
+        list.push(listener)
+        this.listeners.set(event, list)
+      }
+      emit(event: string, ...args: unknown[]) {
+        for (const listener of this.listeners.get(event) ?? []) {
+          listener(...args)
+        }
+      }
+      close = vi.fn()
+      constructor(url: string) {
+        EmitterWs.instance = this
+        void url
+      }
+    }
+
+    openLiveSocket('wss://example.test', EmitterWs as never, handlers)
+    const text = 'hello'
+    const bytes = new TextEncoder().encode(text)
+    EmitterWs.instance.emit('message', bytes.buffer)
+    EmitterWs.instance.emit('message', bytes)
+    EmitterWs.instance.emit('message', 42)
+    expect(handlers.onMessage).toHaveBeenCalledWith(text)
+    expect(handlers.onMessage).toHaveBeenCalledWith('42')
+  })
+
+  it('forwards browser-style non-string message data via String()', () => {
+    const handlers = {
+      onOpen: vi.fn(),
+      onMessage: vi.fn(),
+      onClose: vi.fn(),
+      onError: vi.fn(),
+    }
+
+    class Capturing {
+      static instance: Capturing
+      onopen: ((ev: Event) => void) | null = null
+      onmessage: ((ev: MessageEvent) => void) | null = null
+      onclose: ((ev: Event) => void) | null = null
+      onerror: ((ev: Event) => void) | null = null
+      close = vi.fn()
+      constructor(url: string) {
+        Capturing.instance = this
+        void url
+      }
+    }
+
+    openLiveSocket('wss://example.test', Capturing as never, handlers)
+    Capturing.instance.onmessage?.({ data: 7 } as unknown as MessageEvent)
+    Capturing.instance.onerror?.(new Event('error'))
+    expect(handlers.onMessage).toHaveBeenCalledWith('7')
+    expect(handlers.onError).toHaveBeenCalled()
+  })
+
+  it('throws for unsupported socket implementations', () => {
+    class Broken {
+      // no on(), no onmessage, no close as EventEmitter/browser
+      constructor(url: string) {
+        void url
+      }
+    }
+    expect(() =>
+      openLiveSocket('wss://example.test', Broken as never, {
+        onOpen: vi.fn(),
+        onMessage: vi.fn(),
+        onClose: vi.fn(),
+        onError: vi.fn(),
+      }),
+    ).toThrow(/Unsupported WebSocket/)
+  })
 })
 
 describe('dispatchLiveMessage', () => {
@@ -201,5 +284,29 @@ describe('dispatchLiveMessage', () => {
     })
     expect(onSync).toHaveBeenCalled()
     expect(onUpdate).toHaveBeenCalled()
+  })
+
+  it('routes signing-key-updated and ignores ping / invalid JSON', () => {
+    const onUpdate = vi.fn()
+    const onSync = vi.fn()
+    const onPlainUpdate = vi.fn()
+    dispatchLiveMessage(JSON.stringify({ type: 'ping' }), {
+      onPlainUpdate,
+      onSync,
+      onUpdate,
+    })
+    dispatchLiveMessage(JSON.stringify({ type: 'signing-key-updated' }), {
+      onPlainUpdate,
+      onSync,
+      onUpdate,
+    })
+    dispatchLiveMessage('{not-json', {
+      onPlainUpdate,
+      onSync,
+      onUpdate,
+    })
+    expect(onUpdate).toHaveBeenCalledTimes(1)
+    expect(onSync).not.toHaveBeenCalled()
+    expect(onPlainUpdate).not.toHaveBeenCalled()
   })
 })
