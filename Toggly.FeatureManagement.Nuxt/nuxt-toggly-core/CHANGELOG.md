@@ -8,8 +8,8 @@
 - `live-socket` helpers shared by browser WHATWG and `ws` EventEmitter APIs.
 
 ### Changed
-- `enableLiveUpdates` defaults on when unset (`!== false`); applies to browser
-  and Node server clients.
+- `DEFAULT_CONFIG.enableLiveUpdates` is `true` (was `false`); applies to browser
+  and Node server clients. Callers can still pass `enableLiveUpdates: false`.
 
 ### Fixed
 - After a `flags-updated` / sync push, do not cache the WebSocket etag before

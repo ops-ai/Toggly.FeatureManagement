@@ -42,6 +42,7 @@ describe('createTogglyClient', () => {
       expect(client.config.environment).toBe('Production')
       expect(client.config.refreshInterval).toBe(180000)
       expect(client.config.showFeatureDuringEvaluation).toBe(false)
+      expect(client.config.enableLiveUpdates).toBe(true)
       expect(client.state.initialized).toBe(false)
 
       client.destroy()

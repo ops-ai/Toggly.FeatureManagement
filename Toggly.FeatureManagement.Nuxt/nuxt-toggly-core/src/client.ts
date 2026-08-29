@@ -65,6 +65,7 @@ export function createTogglyClient(
       | 'environment'
       | 'refreshInterval'
       | 'showFeatureDuringEvaluation'
+      | 'enableLiveUpdates'
     >
   > &
     TogglyConfig = {
@@ -72,6 +73,7 @@ export function createTogglyClient(
       environment: initialConfig.environment ?? DEFAULT_CONFIG.environment,
       refreshInterval: initialConfig.refreshInterval ?? DEFAULT_CONFIG.refreshInterval,
       showFeatureDuringEvaluation: initialConfig.showFeatureDuringEvaluation ?? DEFAULT_CONFIG.showFeatureDuringEvaluation,
+      enableLiveUpdates: initialConfig.enableLiveUpdates ?? DEFAULT_CONFIG.enableLiveUpdates,
       featureDefaults: initialConfig.featureDefaults ?? {},
       ...initialConfig,
     }
