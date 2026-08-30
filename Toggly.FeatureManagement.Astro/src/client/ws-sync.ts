@@ -62,6 +62,25 @@ export function shouldFetchOnSigningKeyUpdated(message: WsSyncMessage): boolean 
   return message.type === 'signing-key-updated';
 }
 
+export type FlagsUpdatedRefreshPlan =
+  | { action: 'none' }
+  | { action: 'refresh-jwks' }
+  | { action: 'refresh-pinned'; pin: string | null };
+
+export function planFlagsUpdatedRefresh(
+  message: WsSyncMessage,
+  previousRevision: string | null,
+): FlagsUpdatedRefreshPlan {
+  if (shouldFetchOnSigningKeyUpdated(message)) {
+    return { action: 'refresh-jwks' };
+  }
+  if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+    return { action: 'refresh-pinned', pin: message.etag ?? null };
+  }
+  return { action: 'none' };
+}
+
+
 export function extractDefinitionsRevision(response: Response): string | null {
   if (!response.headers?.get) {
     return null;

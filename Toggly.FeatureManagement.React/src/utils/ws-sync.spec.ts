@@ -3,6 +3,7 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   appendDefinitionsRevisionParam,
+  planFlagsUpdatedRefresh,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -82,6 +83,27 @@ describe('ws-sync', () => {
 
     it('returns false for other message types', () => {
       expect(shouldFetchOnSigningKeyUpdated({ type: 'sync' })).toBe(false);
+    });
+  });
+
+  describe('planFlagsUpdatedRefresh', () => {
+    it('plans JWKS refresh for signing-key-updated', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'signing-key-updated' }, 'old')).toEqual({
+        action: 'refresh-jwks',
+      });
+    });
+
+    it('plans pinned refresh when flags-updated etag differs', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'flags-updated', etag: 'new' }, 'old')).toEqual({
+        action: 'refresh-pinned',
+        pin: 'new',
+      });
+    });
+
+    it('plans none when etag matches cached revision', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'flags-updated', etag: 'same' }, 'same')).toEqual({
+        action: 'none',
+      });
     });
   });
 

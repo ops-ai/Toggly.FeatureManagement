@@ -29,8 +29,7 @@ import {
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
   appendDefinitionsRevisionParam,
-  shouldFetchOnFlagsUpdated,
-  shouldFetchOnSigningKeyUpdated,
+  planFlagsUpdatedRefresh,
   shouldFetchOnSync,
   type WsSyncMessage,
 } from './ws-sync';
@@ -130,20 +129,21 @@ export class Toggly {
   }
 
   private static handleWsUpdateMessage(message: WsSyncMessage): void {
-    if (shouldFetchOnSigningKeyUpdated(message)) {
-      Toggly.scheduleDebouncedRefresh(true);
-      return;
-    }
-    const previousRevision = Toggly.definitionsRevision;
-    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP confirms.
-      Toggly._pendingDefinitionsPin = message.etag ?? null;
-      Toggly._cachedDefinitionsRevision = null;
-      Toggly.scheduleDebouncedRefresh();
-      return;
-    }
-    if (message.etag) {
-      Toggly.cacheDefinitionsRevision(message.etag);
+    const plan = planFlagsUpdatedRefresh(message, Toggly.definitionsRevision);
+    switch (plan.action) {
+      case 'refresh-jwks':
+        Toggly.scheduleDebouncedRefresh(true);
+        return;
+      case 'refresh-pinned':
+        // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP confirms.
+        Toggly._pendingDefinitionsPin = plan.pin;
+        Toggly._cachedDefinitionsRevision = null;
+        Toggly.scheduleDebouncedRefresh();
+        return;
+      case 'none':
+        if (message.etag) {
+          Toggly.cacheDefinitionsRevision(message.etag);
+        }
     }
   }
 

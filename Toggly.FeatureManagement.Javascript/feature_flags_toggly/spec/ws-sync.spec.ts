@@ -3,6 +3,7 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   appendDefinitionsRevisionParam,
+  planFlagsUpdatedRefresh,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -51,6 +52,34 @@ describe('ws-sync', () => {
     });
   });
 
+  describe('planFlagsUpdatedRefresh', () => {
+    it('plans JWKS refresh for signing-key-updated', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'signing-key-updated' }, 'old')).toEqual({
+        action: 'refresh-jwks',
+      });
+    });
+
+    it('plans pinned refresh when flags-updated etag differs', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'flags-updated', etag: 'new' }, 'old')).toEqual({
+        action: 'refresh-pinned',
+        pin: 'new',
+      });
+    });
+
+    it('plans none when etag matches cached revision', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'flags-updated', etag: 'same' }, 'same')).toEqual({
+        action: 'none',
+      });
+    });
+
+    it('plans pinned refresh with null pin when etag is missing', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'update' }, 'cached')).toEqual({
+        action: 'refresh-pinned',
+        pin: null,
+      });
+    });
+  });
+
   describe('extractDefinitionsRevision', () => {
     it('reads X-Definitions-Revision header', () => {
       const response = {
@@ -61,7 +90,6 @@ describe('ws-sync', () => {
       expect(extractDefinitionsRevision(response)).toBe('rev-abc');
     });
   });
-});
 
   describe('appendDefinitionsRevisionParam', () => {
     it('appends rev query param to absolute URLs', () => {
@@ -84,4 +112,10 @@ describe('ws-sync', () => {
         'https://example.com/x',
       );
     });
+
+    it('appends rev to relative URLs via the catch path', () => {
+      expect(appendDefinitionsRevisionParam('/relative/path', 'etag-1')).toContain('rev=etag-1');
+      expect(appendDefinitionsRevisionParam('/relative?x=1', 'etag-1')).toContain('&rev=');
+    });
   });
+});

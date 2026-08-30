@@ -28,8 +28,7 @@ import {
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
   appendDefinitionsRevisionParam,
-  shouldFetchOnFlagsUpdated,
-  shouldFetchOnSigningKeyUpdated,
+  planFlagsUpdatedRefresh,
   shouldFetchOnSync,
   type WsSyncMessage,
 } from './ws-sync.js'
@@ -221,20 +220,21 @@ export function createTogglyClient(
   }
 
   function handleWsUpdateMessage(message: WsSyncMessage): void {
-    if (shouldFetchOnSigningKeyUpdated(message)) {
-      scheduleDebouncedRefresh(true)
-      return
-    }
-    const previousRevision = getDefinitionsRevision()
-    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP confirms.
-      pendingDefinitionsPin = message.etag ?? null
-      cachedDefinitionsRevision = null
-      scheduleDebouncedRefresh()
-      return
-    }
-    if (message.etag) {
-      cacheDefinitionsRevision(message.etag)
+    const plan = planFlagsUpdatedRefresh(message, getDefinitionsRevision())
+    switch (plan.action) {
+      case 'refresh-jwks':
+        scheduleDebouncedRefresh(true)
+        return
+      case 'refresh-pinned':
+        // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP confirms.
+        pendingDefinitionsPin = plan.pin
+        cachedDefinitionsRevision = null
+        scheduleDebouncedRefresh()
+        return
+      case 'none':
+        if (message.etag) {
+          cacheDefinitionsRevision(message.etag)
+        }
     }
   }
 
