@@ -8,8 +8,6 @@
 - Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
   the HTTP response updates the cached revision.
 
-## 0.4.1
-
 ## 0.4.2
 
 - Normalize public npm metadata for provenance and docs links (no API change).
@@ -20,6 +18,8 @@
 
 - Publish `@ops-ai/toggly-hooks-types` as `^1.4.3` instead of a `file:` path so
   the package installs from npm.
+
+## 0.4.1
 
 ## 0.4.0
 
@@ -92,3 +92,4 @@
 ## 0.1.1
 
 Initial published release.
+

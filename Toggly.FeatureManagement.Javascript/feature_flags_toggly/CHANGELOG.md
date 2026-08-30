@@ -8,8 +8,6 @@
 - Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
   the HTTP response updates the cached revision.
 
-## 1.7.2
-
 ## 1.7.3
 
 - Normalize public npm metadata for provenance and docs links (no API change).
@@ -20,6 +18,8 @@
 - Point `main` / `module` / `exports` at `dist/feature-flags-toggly.bundle.js`
   so published packages resolve after install (previous `index.js` was not in
   the tarball).
+
+## 1.7.2
 
 ## 1.7.1
 

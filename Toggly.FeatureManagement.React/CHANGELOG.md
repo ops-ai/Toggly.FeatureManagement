@@ -8,8 +8,6 @@
 - Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
   the HTTP response updates the cached revision.
 
-## 1.10.3
-
 ## 1.10.4
 
 - Normalize public npm metadata for provenance and docs links (no API change).
@@ -20,6 +18,8 @@
 - Publish installable semver ranges for `@ops-ai/toggly-hooks-types`,
   `@ops-ai/toggly-local-gates`, and `@ops-ai/toggly-signed-defs` instead of
   `file:` paths that leave unmet dependencies after `npm install`.
+
+## 1.10.3
 
 ## 1.10.2
 
@@ -133,3 +133,4 @@
 
 - Device-local post-filter gates: `setLocalGates`, `notifyLocalGatesChanged`, and `subscribeLocalGatesChanged` apply a read-time AND on worker-evaluated booleans via `@ops-ai/toggly-local-gates`.
 - `Feature` and `useVariant` subscribe to local gate changes for instant UI updates.
+

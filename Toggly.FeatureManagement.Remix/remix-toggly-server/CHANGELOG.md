@@ -8,8 +8,6 @@
 - Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
   the HTTP response updates the cached revision.
 
-## 1.4.2
-
 ## 1.4.3
 
 - Normalize public npm metadata for provenance and docs links (no API change).
@@ -20,6 +18,8 @@
 
 - Align `main` / `module` / `exports` with tsup output (`dist/index.js` and
   `dist/index.cjs`) so import and require resolve after install.
+
+## 1.4.2
 
 ## 1.4.1
 
@@ -82,3 +82,4 @@
 ### Added
 
 - `setLocalGates`, `notifyLocalGatesChanged`, and `subscribeLocalGatesChanged` on `TogglyServerClient` apply a read-time AND via `@ops-ai/toggly-local-gates`.
+

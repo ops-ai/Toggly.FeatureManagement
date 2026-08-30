@@ -8,8 +8,6 @@
 - Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
   the HTTP response updates the cached revision.
 
-## 1.9.1
-
 ## 1.9.2
 
 - Normalize public npm metadata for provenance and docs links (no API change).
@@ -20,6 +18,8 @@
 - Publish installable semver ranges for `@ops-ai/toggly-hooks-types`,
   `@ops-ai/toggly-local-gates`, and `@ops-ai/toggly-signed-defs` instead of
   `file:` paths that leave unmet dependencies after `npm install`.
+
+## 1.9.1
 
 ## 1.9.0
 
@@ -152,3 +152,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript support with full type definitions
 - Works with or without Toggly.io (using feature defaults)
 - Example application demonstrating all features
+

@@ -21,8 +21,6 @@
 
 ## 1.6.0
 
-## 1.5.2
-
 ## 1.5.3
 
 - Normalize public npm metadata for provenance and docs links (no API change).
@@ -32,6 +30,8 @@
 ### Fixed
 - Widen `react` / `react-dom` peerDependencies to `^18 || ^19` so installs
   succeed under npm with React 19 without `--legacy-peer-deps`.
+
+## 1.5.2
 
 ## 1.5.1
 
@@ -156,3 +156,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fallback values for offline/error scenarios
 
 [1.0.0]: https://github.com/ops-ai/Toggly.FeatureManagement/releases/tag/gatsby-v1.0.0
+

@@ -8,8 +8,6 @@
 - Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
   the HTTP response updates the cached revision.
 
-## 1.7.1
-
 ## 1.7.2
 
 - Normalize public npm metadata for provenance and docs links (no API change).
@@ -20,6 +18,8 @@
 
 - Publish shared packages as caret ranges instead of `file:` paths so the
   package installs from npm.
+
+## 1.7.1
 
 ## 1.7.0
 
@@ -124,3 +124,4 @@
 ### Added
 
 - Device-local post-filter gates: `setLocalGates`, `notifyLocalGatesChanged`, and `localGatesChanged` event apply a read-time AND via `@ops-ai/toggly-local-gates`.
+
