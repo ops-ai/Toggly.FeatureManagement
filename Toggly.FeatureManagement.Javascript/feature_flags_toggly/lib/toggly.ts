@@ -154,6 +154,21 @@ export class Toggly {
     );
   }
 
+  /**
+   * Consume a one-shot WS pin: append ?rev= and omit If-None-Match so the
+   * post-notify GET cannot 304 against a revision that HTTP has not confirmed.
+   */
+  private static consumePendingDefinitionsRequest(
+    mode: 'evaluated' | 'variants',
+  ): { url: string; headers: HeadersInit } {
+    const pin = Toggly._pendingDefinitionsPin;
+    Toggly._pendingDefinitionsPin = null;
+    return {
+      url: appendDefinitionsRevisionParam(Toggly.buildEvaluatedUrl(mode), pin),
+      headers: Toggly.buildFetchHeaders(!!pin),
+    };
+  }
+
   private static applyFetchRevision(response: Response): void {
     const revision = extractDefinitionsRevision(response);
     if (revision) {
@@ -593,15 +608,13 @@ export class Toggly {
     }
 
     return new Promise((resolve) => {
-      const pin = Toggly._pendingDefinitionsPin;
-      Toggly._pendingDefinitionsPin = null;
-      const url = appendDefinitionsRevisionParam(Toggly.buildEvaluatedUrl('evaluated'), pin);
+      const { url, headers } = Toggly.consumePendingDefinitionsRequest('evaluated');
 
       // Wrap the fetch invocation in a resolved Promise so that any synchronous
       // failure (e.g. a non-conforming fetch implementation returning undefined)
       // is funneled through the same .catch handler as a real network error.
       Promise.resolve()
-        .then(() => fetch(url, { headers: Toggly.buildFetchHeaders(!!pin) }))
+        .then(() => fetch(url, { headers }))
         .then((response) => {
           Toggly.applyFetchRevision(response);
           if (response.status === 304) {
@@ -639,12 +652,10 @@ export class Toggly {
 
   private static fetchFeatureFlagsWithVariants(): Promise<{ [key: string]: boolean }> {
     return new Promise((resolve) => {
-      const pin = Toggly._pendingDefinitionsPin;
-      Toggly._pendingDefinitionsPin = null;
-      const url = appendDefinitionsRevisionParam(Toggly.buildEvaluatedUrl('variants'), pin);
+      const { url, headers } = Toggly.consumePendingDefinitionsRequest('variants');
 
       Promise.resolve()
-        .then(() => fetch(url, { headers: Toggly.buildFetchHeaders(!!pin) }))
+        .then(() => fetch(url, { headers }))
         .then((response) => {
           Toggly.applyFetchRevision(response);
           if (response.status === 304) {
