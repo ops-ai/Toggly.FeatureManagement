@@ -43,6 +43,7 @@ import {
   applyFlagsUpdatedPlan,
   planFlagsUpdatedRefresh,
   shouldFetchOnSync,
+  type FlagsUpdatedRefreshPlan,
   type WsSyncMessage,
 } from './ws-sync'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
@@ -56,6 +57,21 @@ const CACHE_LRU_KEY = 'toggly:cache-lru'
 function getFlagsCacheKey(appKey: string, environment: string, contextKey = ''): string {
   const suffix = contextKey ? `:${contextKey}` : ''
   return `${CACHE_PREFIX_FLAGS}${appKey}:${environment}${suffix}`
+}
+
+/** Package-local wrapper so Angular's call site differs from React/Vue/Svelte for Sonar CPD. */
+function runAngularFlagsUpdatedPlan(
+  refreshPlan: FlagsUpdatedRefreshPlan,
+  wsMessage: WsSyncMessage,
+  onJwks: () => void,
+  onPinned: (revisionPin: string | null) => void,
+  onRememberEtag: (etagValue: string) => void,
+): void {
+  applyFlagsUpdatedPlan(refreshPlan, wsMessage, {
+    refreshJwks: onJwks,
+    refreshPinned: onPinned,
+    cacheEtagIfPresent: onRememberEtag,
+  })
 }
 
 function getVariantsCacheKey(appKey: string, environment: string, contextKey = ''): string {
@@ -442,18 +458,16 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   private _handleWsUpdateMessage(message: WsSyncMessage): void {
-    applyFlagsUpdatedPlan(
+    runAngularFlagsUpdatedPlan(
       planFlagsUpdatedRefresh(message, this._definitionsRevision),
       message,
-      {
-        refreshJwks: () => this._scheduleDebouncedRefresh(true),
-        refreshPinned: (pin) => {
-          this._pendingDefinitionsPin = pin
-          this._cachedDefinitionsRevision = null
-          this._scheduleDebouncedRefresh()
-        },
-        cacheEtagIfPresent: (etag) => this._cacheDefinitionsRevision(etag),
+      () => this._scheduleDebouncedRefresh(true),
+      (revisionPin) => {
+        this._pendingDefinitionsPin = revisionPin
+        this._cachedDefinitionsRevision = null
+        this._scheduleDebouncedRefresh()
       },
+      (etagValue) => this._cacheDefinitionsRevision(etagValue),
     )
   }
 

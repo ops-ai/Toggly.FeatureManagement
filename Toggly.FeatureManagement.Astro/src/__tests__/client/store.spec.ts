@@ -570,6 +570,47 @@ describe('Client Store', () => {
       expect($flags.get()).toEqual({ F1: false });
     });
 
+    it('should force-refresh on signing-key-updated', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'old' }))
+        .mockResolvedValueOnce(createMockResponse({ F1: false }, { revision: 'rotated' }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'signing-key-updated' }),
+      });
+
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[1][1].headers['If-None-Match']).toBeUndefined();
+    });
+
+    it('should not refresh when flags-updated etag matches cache', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'same' }));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        featureFlagsRefreshInterval: 0,
+      });
+
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'flags-updated', etag: 'same' }),
+      });
+
+      await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it('should refresh on sync when etag differs', async () => {
       mockFetch
         .mockResolvedValueOnce(createMockResponse({ F1: true }, { revision: 'old' }))

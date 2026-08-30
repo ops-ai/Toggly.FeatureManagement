@@ -130,19 +130,21 @@ export class Toggly {
   }
 
   private static handleWsUpdateMessage(message: WsSyncMessage): void {
-    applyFlagsUpdatedPlan(
-      planFlagsUpdatedRefresh(message, Toggly.definitionsRevision),
-      message,
-      {
-        refreshJwks: () => Toggly.scheduleDebouncedRefresh(true),
-        refreshPinned: (pin) => {
-          Toggly._pendingDefinitionsPin = pin;
-          Toggly._cachedDefinitionsRevision = null;
-          Toggly.scheduleDebouncedRefresh();
-        },
-        cacheEtagIfPresent: (etag) => Toggly.cacheDefinitionsRevision(etag),
+    const refreshPlan = planFlagsUpdatedRefresh(message, Toggly.definitionsRevision);
+    const hooks = {
+      refreshJwks(): void {
+        Toggly.scheduleDebouncedRefresh(true);
       },
-    );
+      refreshPinned(revisionPin: string | null): void {
+        Toggly._pendingDefinitionsPin = revisionPin;
+        Toggly._cachedDefinitionsRevision = null;
+        Toggly.scheduleDebouncedRefresh();
+      },
+      cacheEtagIfPresent(etagValue: string): void {
+        Toggly.cacheDefinitionsRevision(etagValue);
+      },
+    };
+    applyFlagsUpdatedPlan(refreshPlan, message, hooks);
   }
 
   private static buildFetchHeaders(skipIfNoneMatch = false): HeadersInit {

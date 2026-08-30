@@ -469,17 +469,19 @@ export class Toggly implements TogglyService {
     }
   }
 
+  private _beginPinnedDefinitionsRefresh(pin: string | null): void {
+    this._pendingDefinitionsPin = pin
+    this._cachedDefinitionsRevision = null
+    this._scheduleDebouncedRefresh()
+  }
+
   private _handleWsUpdateMessage(message: WsSyncMessage): void {
     applyFlagsUpdatedPlan(
       planFlagsUpdatedRefresh(message, this._definitionsRevision),
       message,
       {
         refreshJwks: () => this._scheduleDebouncedRefresh(true),
-        refreshPinned: (pin) => {
-          this._pendingDefinitionsPin = pin
-          this._cachedDefinitionsRevision = null
-          this._scheduleDebouncedRefresh()
-        },
+        refreshPinned: (pin) => this._beginPinnedDefinitionsRefresh(pin),
         cacheEtagIfPresent: (etag) => this._cacheDefinitionsRevision(etag),
       },
     )
