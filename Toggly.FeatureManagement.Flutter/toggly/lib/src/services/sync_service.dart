@@ -72,7 +72,9 @@ class SyncService {
   void Function({required bool unchanged, String? etag})? onSyncMessage;
 
   /// Debounced callback when definitions should be refreshed from the API.
-  Future<void> Function({required bool forceJwksRefresh, String? pinnedRevision})? onRefreshRequested;
+  Future<void> Function(
+      {required bool forceJwksRefresh,
+      String? pinnedRevision})? onRefreshRequested;
 
   /// Called when a WebSocket message carries a new definitions revision.
   void Function(String etag)? onDefinitionsRevisionUpdated;

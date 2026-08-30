@@ -40,6 +40,7 @@ class Toggly with WidgetsBindingObserver {
   static DateTime? _lastChecked;
   static DateTime? _lastSynced;
   static String? _definitionsRevision;
+
   /// WS etag to pin via ?rev= on the next definitions/variants HTTP GETs.
   static String? _pendingHttpRevisionPin;
   static String? _lastError;

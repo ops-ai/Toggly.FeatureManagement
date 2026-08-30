@@ -62,6 +62,7 @@ export class Toggly {
   static _wsReconnectAttempt: number = 0;
   static _refreshDebounceTimer: any = null;
   static _cachedDefinitionsRevision: string | null = null;
+  static _pendingDefinitionsPin: string | null = null;
   static _lastFallbackRefresh: number = 0;
   static _fallbackRefreshInterval: number = 20 * 60 * 1000;
 
@@ -136,7 +137,7 @@ export class Toggly {
     const previousRevision = Toggly.definitionsRevision;
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
       // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP confirms.
-      Toggly.pendingDefinitionsPin = message.etag ?? null;
+      Toggly._pendingDefinitionsPin = message.etag ?? null;
       Toggly._cachedDefinitionsRevision = null;
       Toggly.scheduleDebouncedRefresh();
       return;
@@ -592,8 +593,8 @@ export class Toggly {
     }
 
     return new Promise((resolve) => {
-      const pin = Toggly.pendingDefinitionsPin;
-      Toggly.pendingDefinitionsPin = null;
+      const pin = Toggly._pendingDefinitionsPin;
+      Toggly._pendingDefinitionsPin = null;
       const url = appendDefinitionsRevisionParam(Toggly.buildEvaluatedUrl('evaluated'), pin);
 
       // Wrap the fetch invocation in a resolved Promise so that any synchronous
@@ -638,8 +639,8 @@ export class Toggly {
 
   private static fetchFeatureFlagsWithVariants(): Promise<{ [key: string]: boolean }> {
     return new Promise((resolve) => {
-      const pin = Toggly.pendingDefinitionsPin;
-      Toggly.pendingDefinitionsPin = null;
+      const pin = Toggly._pendingDefinitionsPin;
+      Toggly._pendingDefinitionsPin = null;
       const url = appendDefinitionsRevisionParam(Toggly.buildEvaluatedUrl('variants'), pin);
 
       Promise.resolve()
