@@ -1,5 +1,15 @@
 ## 1.11.0
 
+## 1.11.1
+
+2026-08-30
+
+### Fixed
+- After WebSocket `flags-updated`, do not set the definitions revision from the
+  WS etag before HTTP refresh (avoids If-None-Match matching and a stale 304).
+- Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
+  the HTTP response updates the cached revision.
+
 2026-08-21
 
 ### Added

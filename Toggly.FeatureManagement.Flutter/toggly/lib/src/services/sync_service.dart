@@ -72,7 +72,7 @@ class SyncService {
   void Function({required bool unchanged, String? etag})? onSyncMessage;
 
   /// Debounced callback when definitions should be refreshed from the API.
-  Future<void> Function({required bool forceJwksRefresh})? onRefreshRequested;
+  Future<void> Function({required bool forceJwksRefresh, String? pinnedRevision})? onRefreshRequested;
 
   /// Called when a WebSocket message carries a new definitions revision.
   void Function(String etag)? onDefinitionsRevisionUpdated;
@@ -161,11 +161,21 @@ class SyncService {
   }
 
   /// Schedules a debounced definitions refresh.
-  void requestRefresh({bool forceJwksRefresh = false}) {
+  String? _pendingPinnedRevision;
+
+  void requestRefresh({bool forceJwksRefresh = false, String? pinnedRevision}) {
+    if (pinnedRevision != null) {
+      _pendingPinnedRevision = pinnedRevision;
+    }
     _refreshDebounceTimer?.cancel();
     _refreshDebounceTimer = Timer(refreshDebounceDelay, () {
       _refreshDebounceTimer = null;
-      onRefreshRequested?.call(forceJwksRefresh: forceJwksRefresh);
+      final pin = _pendingPinnedRevision;
+      _pendingPinnedRevision = null;
+      onRefreshRequested?.call(
+        forceJwksRefresh: forceJwksRefresh,
+        pinnedRevision: pin,
+      );
     });
   }
 
@@ -219,7 +229,10 @@ class SyncService {
               'Toggly: Received WebSocket flags update (type: ${message.type})');
         }
         if (_shouldFetchOnFlagsUpdated(message)) {
-          requestRefresh();
+          // Never set revision from WS before HTTP confirms — that poisons
+          // If-None-Match and yields a stale 304. Pass etag via refresh pin.
+          requestRefresh(pinnedRevision: message.etag);
+          return;
         }
         if (message.etag != null && message.etag!.isNotEmpty) {
           onDefinitionsRevisionUpdated?.call(message.etag!);

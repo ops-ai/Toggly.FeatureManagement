@@ -713,6 +713,7 @@ describe('Client Store', () => {
       const refreshCall = fetchSpy.mock.calls[1];
       const headers = refreshCall[1]?.headers as Record<string, string>;
       expect(headers['If-None-Match']).toBeUndefined();
+      expect(String(refreshCall[0])).toContain('rev=new-rev');
       expect(store.$flags.get()).toEqual({ F1: false });
       vi.useRealTimers();
     });

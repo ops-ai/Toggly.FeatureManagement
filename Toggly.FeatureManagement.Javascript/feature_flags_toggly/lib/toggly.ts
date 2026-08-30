@@ -28,6 +28,7 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
+  appendDefinitionsRevisionParam,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -118,7 +119,9 @@ export class Toggly {
   private static handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = Toggly.definitionsRevision;
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache WS etag before HTTP confirms — avoids conditional 304 with stale defs.
       Toggly.scheduleDebouncedRefresh();
+      return;
     }
     if (message.etag) {
       Toggly.cacheDefinitionsRevision(message.etag);
@@ -132,16 +135,21 @@ export class Toggly {
     }
     const previousRevision = Toggly.definitionsRevision;
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP confirms.
+      Toggly.pendingDefinitionsPin = message.etag ?? null;
+      Toggly._cachedDefinitionsRevision = null;
       Toggly.scheduleDebouncedRefresh();
+      return;
     }
     if (message.etag) {
       Toggly.cacheDefinitionsRevision(message.etag);
     }
   }
 
-  private static buildFetchHeaders(): HeadersInit {
+  private static buildFetchHeaders(skipIfNoneMatch = false): HeadersInit {
+    const revision = skipIfNoneMatch ? null : Toggly.definitionsRevision;
     return buildDefinitionFetchHeaders(
-      Toggly.definitionsRevision ? { 'If-None-Match': Toggly.definitionsRevision } : {},
+      revision ? { 'If-None-Match': revision } : {},
     );
   }
 
@@ -584,13 +592,15 @@ export class Toggly {
     }
 
     return new Promise((resolve) => {
-      const url = Toggly.buildEvaluatedUrl('evaluated');
+      const pin = Toggly.pendingDefinitionsPin;
+      Toggly.pendingDefinitionsPin = null;
+      const url = appendDefinitionsRevisionParam(Toggly.buildEvaluatedUrl('evaluated'), pin);
 
       // Wrap the fetch invocation in a resolved Promise so that any synchronous
       // failure (e.g. a non-conforming fetch implementation returning undefined)
       // is funneled through the same .catch handler as a real network error.
       Promise.resolve()
-        .then(() => fetch(url, { headers: Toggly.buildFetchHeaders() }))
+        .then(() => fetch(url, { headers: Toggly.buildFetchHeaders(!!pin) }))
         .then((response) => {
           Toggly.applyFetchRevision(response);
           if (response.status === 304) {
@@ -628,10 +638,12 @@ export class Toggly {
 
   private static fetchFeatureFlagsWithVariants(): Promise<{ [key: string]: boolean }> {
     return new Promise((resolve) => {
-      const url = Toggly.buildEvaluatedUrl('variants');
+      const pin = Toggly.pendingDefinitionsPin;
+      Toggly.pendingDefinitionsPin = null;
+      const url = appendDefinitionsRevisionParam(Toggly.buildEvaluatedUrl('variants'), pin);
 
       Promise.resolve()
-        .then(() => fetch(url, { headers: Toggly.buildFetchHeaders() }))
+        .then(() => fetch(url, { headers: Toggly.buildFetchHeaders(!!pin) }))
         .then((response) => {
           Toggly.applyFetchRevision(response);
           if (response.status === 304) {

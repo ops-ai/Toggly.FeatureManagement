@@ -572,13 +572,18 @@ class Toggly with WidgetsBindingObserver {
     try {
       // Prepare headers
       final headers = <String, dynamic>{};
-      final revision = _definitionsRevision;
+      final pin = _pendingHttpRevisionPin;
+      _pendingHttpRevisionPin = null;
+      final revision = pin != null ? null : _definitionsRevision;
       if (revision != null) {
         headers['If-None-Match'] = revision;
       }
 
       final queryParameters =
           Toggly._buildEvaluationQueryParameters(variants: false);
+      if (pin != null && pin.isNotEmpty) {
+        queryParameters['rev'] = pin;
+      }
 
       final response = await _http.get(
         '${Toggly._config.baseURI}/evaluated-signed/${Toggly._appKey}/${Toggly._environment}',
@@ -728,13 +733,23 @@ class Toggly with WidgetsBindingObserver {
     }
     try {
       final headers = <String, dynamic>{};
-      if (_definitionsRevision != null) {
-        headers['If-None-Match'] = _definitionsRevision!;
+      final pin = _pendingHttpRevisionPin;
+      // Do not clear pin here if flags fetch should consume it first; variants
+      // runs after flags in refresh and may share the same pin intent.
+      final revision = pin != null ? null : _definitionsRevision;
+      if (revision != null) {
+        headers['If-None-Match'] = revision;
+      }
+
+      final queryParameters =
+          Toggly._buildEvaluationQueryParameters(variants: true);
+      if (pin != null && pin.isNotEmpty) {
+        queryParameters['rev'] = pin;
       }
 
       final response = await _http.get(
         '${Toggly._config.baseURI}/evaluated-variants-signed/${Toggly._appKey}/${Toggly._environment}',
-        queryParameters: Toggly._buildEvaluationQueryParameters(variants: true),
+        queryParameters: queryParameters,
         options: Options(
           headers: headers,
           responseType: ResponseType.plain,
@@ -1621,7 +1636,9 @@ class Toggly with WidgetsBindingObserver {
         cachedRevision: previousRevision,
         hasSuccessfulSync: !Toggly._needsInitialHttpSync,
       )) {
-        Toggly._sync.requestRefresh();
+        // Do not cache WS etag before HTTP confirms — avoids If-None-Match 304.
+        Toggly._sync.requestRefresh(pinnedRevision: etag);
+        return;
       } else if (kDebugMode) {
         print('Toggly: WebSocket sync unchanged — skipping fetch');
       }
@@ -1631,13 +1648,21 @@ class Toggly with WidgetsBindingObserver {
       }
     };
 
-    Toggly._sync.onRefreshRequested = ({required bool forceJwksRefresh}) async {
+    Toggly._sync.onRefreshRequested =
+        ({required bool forceJwksRefresh, String? pinnedRevision}) async {
       if (forceJwksRefresh) {
         _definitionsRevision = null;
         Toggly._sync.updateCachedRevision(null);
         await _deleteCachedDefinitionsRevision();
         _inMemoryJwks = null;
         await Toggly._cache?.deleteJwks();
+      }
+
+      // Clear cached revision so If-None-Match is not sent; pin via ?rev=.
+      if (pinnedRevision != null) {
+        _definitionsRevision = null;
+        Toggly._sync.updateCachedRevision(null);
+        Toggly._pendingHttpRevisionPin = pinnedRevision;
       }
 
       if (kDebugMode) {

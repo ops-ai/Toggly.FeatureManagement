@@ -500,6 +500,7 @@ describe('createTogglyClient', () => {
         | Record<string, string>
         | undefined
       expect(refreshHeaders?.['If-None-Match']).toBeUndefined()
+      expect(String(refreshCall?.[0])).toContain('rev=rev-new')
       expect(await client.isFeatureOn('feature-a')).toBe(true)
 
       client.destroy()

@@ -31,6 +31,7 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
+  appendDefinitionsRevisionParam,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -60,6 +61,7 @@ export class TogglyServerClient {
   private wsReconnectAttempt = 0;
   private refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private cachedDefinitionsRevision: string | null = null;
+  private pendingDefinitionsPin: string | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private identity?: string;
 
@@ -180,7 +182,9 @@ export class TogglyServerClient {
   private handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = this.getDefinitionsRevision();
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache WS etag before HTTP confirms — avoids conditional 304 with stale defs.
       this.scheduleDebouncedRefresh();
+      return;
     }
     this.cacheDefinitionsRevision(message.etag);
   }
@@ -192,7 +196,11 @@ export class TogglyServerClient {
     }
     const previousRevision = this.getDefinitionsRevision();
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP confirms.
+      this.pendingDefinitionsPin = message.etag ?? null;
+      this.cachedDefinitionsRevision = null;
       this.scheduleDebouncedRefresh();
+      return;
     }
     this.cacheDefinitionsRevision(message.etag);
   }
@@ -266,10 +274,15 @@ export class TogglyServerClient {
     }
 
     try {
-      const url = buildDefinitionsUrl(this.config, identity);
+      const pin = this.pendingDefinitionsPin;
+      this.pendingDefinitionsPin = null;
+      const url = appendDefinitionsRevisionParam(
+        buildDefinitionsUrl(this.config, identity),
+        pin,
+      );
       this.logger.debug(`Fetching flags from: ${url}`);
 
-      const revision = this.getDefinitionsRevision();
+      const revision = pin ? null : this.getDefinitionsRevision();
       const headers = buildDefinitionFetchHeaders(
         revision ? { 'If-None-Match': revision } : {},
       );

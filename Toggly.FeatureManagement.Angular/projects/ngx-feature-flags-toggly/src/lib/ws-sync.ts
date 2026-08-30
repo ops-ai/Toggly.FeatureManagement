@@ -68,3 +68,26 @@ export function extractDefinitionsRevision(response: Response): string | null {
   }
   return response.headers.get(DEFINITIONS_REVISION_HEADER) ?? response.headers.get('ETag');
 }
+
+
+/**
+ * Append `?rev=` for a cache-proof definitions GET after `flags-updated`.
+ * Invariant: never cache a WebSocket etag before HTTP confirms the revision;
+ * post-notify GETs should use `?rev=` and must not send If-None-Match.
+ */
+export function appendDefinitionsRevisionParam(
+  url: string,
+  rev: string | null | undefined,
+): string {
+  if (!rev) {
+    return url;
+  }
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set('rev', rev);
+    return parsed.toString();
+  } catch {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}rev=${encodeURIComponent(rev)}`;
+  }
+}

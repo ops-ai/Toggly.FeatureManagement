@@ -43,6 +43,7 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
+  appendDefinitionsRevisionParam,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -176,6 +177,7 @@ export class TogglyService {
   private lastSynced: Date | null = null;
   private lastError: string | null = null;
   private cachedDefinitionsRevision: string | null = null;
+  private pendingDefinitionsPin: string | null = null;
   private isInitialized = false;
   private networkState: NetworkState | null = null;
   private appState: AppStateType = 'active';
@@ -290,7 +292,9 @@ export class TogglyService {
   private handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = this.getDefinitionsRevision();
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache WS etag before HTTP confirms — avoids conditional 304 with stale defs.
       this.scheduleDebouncedRefresh();
+      return;
     }
     if (message.etag) {
       void this.cacheDefinitionsRevision(message.etag);
@@ -304,7 +308,11 @@ export class TogglyService {
     }
     const previousRevision = this.getDefinitionsRevision();
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP confirms.
+      this.pendingDefinitionsPin = message.etag ?? null;
+      this.cachedDefinitionsRevision = null;
       this.scheduleDebouncedRefresh();
+      return;
     }
     if (message.etag) {
       void this.cacheDefinitionsRevision(message.etag);
@@ -454,8 +462,10 @@ export class TogglyService {
     this.featuresLoading = true;
 
     try {
-      const url = this.buildApiUrl();
-      const revision = this.getDefinitionsRevision();
+      const pin = this.pendingDefinitionsPin;
+      this.pendingDefinitionsPin = null;
+      const url = appendDefinitionsRevisionParam(this.buildApiUrl(), pin);
+      const revision = pin ? null : this.getDefinitionsRevision();
       const headers = buildDefinitionFetchHeaders(
         revision ? { 'If-None-Match': revision } : {},
       );

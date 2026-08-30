@@ -35,6 +35,7 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
+  appendDefinitionsRevisionParam,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -124,6 +125,7 @@ class TogglyClientInstance {
   private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private cachedDefinitionsRevision: string | null = null;
+  private pendingDefinitionsPin: string | null = null;
   private lastFallbackRefresh = 0;
 
   constructor(config: TogglyPluginOptions) {
@@ -249,9 +251,12 @@ class TogglyClientInstance {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
-      const revision = this.definitionsRevision;
+      const pin = this.pendingDefinitionsPin;
+      this.pendingDefinitionsPin = null;
+      const fetchUrl = appendDefinitionsRevisionParam(url, pin);
+      const revision = pin ? null : this.definitionsRevision;
 
-      const response = await fetch(url, {
+      const response = await fetch(fetchUrl, {
         method: 'GET',
         headers: buildDefinitionFetchHeaders({
           Accept: 'application/json',
@@ -358,8 +363,8 @@ class TogglyClientInstance {
     }
     const previousRevision = this.definitionsRevision;
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      // Clear revision so the GET is unconditional. Caching the WS etag
-      // before fetch caused 304 responses and left flags stale.
+      // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP.
+      this.pendingDefinitionsPin = message.etag ?? null;
       this.scheduleDebouncedRefresh(true);
       return;
     }

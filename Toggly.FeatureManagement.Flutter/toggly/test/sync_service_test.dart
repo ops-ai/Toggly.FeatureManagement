@@ -84,4 +84,19 @@ void main() {
       expect(message.unchanged, isTrue);
     });
   });
+
+  group('requestRefresh pin', () {
+    test('forwards pinnedRevision to onRefreshRequested', () async {
+      final sync = SyncService.getInstance;
+      String? seenPin;
+      sync.onRefreshRequested =
+          ({required bool forceJwksRefresh, String? pinnedRevision}) async {
+        seenPin = pinnedRevision;
+      };
+
+      sync.requestRefresh(pinnedRevision: 'ws-etag');
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      expect(seenPin, 'ws-etag');
+    });
+  });
 }

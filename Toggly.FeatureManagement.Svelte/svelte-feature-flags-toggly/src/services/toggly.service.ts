@@ -26,6 +26,7 @@ import {
   buildWebSocketUrl,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
+  appendDefinitionsRevisionParam,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -322,6 +323,7 @@ export class Toggly implements TogglyService {
   _wsReconnectAttempt = 0
   _refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null
   _cachedDefinitionsRevision: string | null = null
+  _pendingDefinitionsPin: string | null = null
   _lastFallbackRefresh: number = 0
   private _fallbackRefreshInterval: number = 20 * 60 * 1000
   private _jwks = new InMemoryJwksCache()
@@ -385,7 +387,9 @@ export class Toggly implements TogglyService {
   private _handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = this._definitionsRevision
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache WS etag before HTTP confirms — avoids conditional 304 with stale defs.
       this._scheduleDebouncedRefresh()
+      return
     }
     if (message.etag) {
       this._cacheDefinitionsRevision(message.etag)
@@ -399,7 +403,11 @@ export class Toggly implements TogglyService {
     }
     const previousRevision = this._definitionsRevision
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP confirms.
+      this._pendingDefinitionsPin = message.etag ?? null
+      this._cachedDefinitionsRevision = null
       this._scheduleDebouncedRefresh()
+      return
     }
     if (message.etag) {
       this._cacheDefinitionsRevision(message.etag)
@@ -546,15 +554,19 @@ export class Toggly implements TogglyService {
         this._config.enableVariants ?? false,
       )
 
+      const pin = this._pendingDefinitionsPin
+      this._pendingDefinitionsPin = null
+      const fetchUrl = appendDefinitionsRevisionParam(url, pin)
+
       const loaded = await fetchEvaluatedSignedDefinitions(
-        url,
+        fetchUrl,
         this._jwks,
         {
           ...this._config,
           baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
         },
         {
-          revision: this._definitionsRevision,
+          revision: pin ? null : this._definitionsRevision,
           headers: buildDefinitionFetchHeaders(),
         },
       )

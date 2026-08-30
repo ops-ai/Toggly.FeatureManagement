@@ -1197,6 +1197,34 @@ describe('Toggly Service', () => {
       expect(mockFetch).toHaveBeenCalled();
     });
 
+    
+    it('after flags-updated with etag, next GET must not send If-None-Match for the WS etag', async () => {
+      localStorage.setItem('toggly:revision:k:Production', 'old-rev');
+      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: { F1: true } });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: (n: string) => (n === 'ETag' || n === 'X-Definitions-Revision' ? 'ws-etag' : null) },
+        json: () => Promise.resolve({ defs: { F1: false } }),
+        text: () => Promise.resolve(JSON.stringify({ defs: { F1: false } })),
+      });
+      service.startWebSocket();
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: 'flags-updated', etag: 'ws-etag' }),
+      });
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockFetch).toHaveBeenCalled();
+      const [, init] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      const ifNone = headers['If-None-Match'] ?? headers['if-none-match'];
+      expect(ifNone).not.toBe('ws-etag');
+      const url = String(mockFetch.mock.calls[mockFetch.mock.calls.length - 1][0]);
+      expect(url).toContain('rev=ws-etag');
+    });
+
     it('should skip refresh when flags-updated etag matches cache', () => {
       localStorage.setItem('toggly:revision:k:Production', 'same-rev');
       const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });

@@ -27,6 +27,7 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
+  appendDefinitionsRevisionParam,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -101,6 +102,7 @@ export function createTogglyClient(
   let wsReconnectAttempt = 0
   let refreshDebounceTimer: NodeJS.Timeout | null = null
   let cachedDefinitionsRevision: string | null = null
+  let pendingDefinitionsPin: string | null = null
   let lastFallbackRefresh = 0
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000 // 20 minutes
   let cachedJwks: JwkSet | null = null
@@ -209,7 +211,9 @@ export function createTogglyClient(
   function handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = getDefinitionsRevision()
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache WS etag before HTTP confirms — avoids conditional 304 with stale defs.
       scheduleDebouncedRefresh()
+      return
     }
     if (message.etag) {
       cacheDefinitionsRevision(message.etag)
@@ -223,7 +227,11 @@ export function createTogglyClient(
     }
     const previousRevision = getDefinitionsRevision()
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+      // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP confirms.
+      pendingDefinitionsPin = message.etag ?? null
+      cachedDefinitionsRevision = null
       scheduleDebouncedRefresh()
+      return
     }
     if (message.etag) {
       cacheDefinitionsRevision(message.etag)
@@ -260,8 +268,10 @@ export function createTogglyClient(
       return config.featureDefaults ?? {}
     }
 
-    const url = buildApiUrl()
-    const revision = getDefinitionsRevision()
+    const pin = pendingDefinitionsPin
+    pendingDefinitionsPin = null
+    const url = appendDefinitionsRevisionParam(buildApiUrl(), pin)
+    const revision = pin ? null : getDefinitionsRevision()
     const headers = buildDefinitionFetchHeaders({
       'Content-Type': 'application/json',
       ...(config.identity ? { 'x-toggly-identity': config.identity } : {}),

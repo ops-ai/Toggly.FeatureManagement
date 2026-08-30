@@ -22,6 +22,7 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
+  appendDefinitionsRevisionParam,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -54,6 +55,7 @@ export function createTogglyClient(
   let wsReconnectAttempt = 0
   let refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let cachedDefinitionsRevision: string | null = null
+  let pendingDefinitionsPin: string | null = null
   let lastFallbackRefresh = 0
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
 
@@ -155,6 +157,7 @@ export function createTogglyClient(
         if (getDefinitionsRevision() === expectedEtag) {
           return
         }
+        pendingDefinitionsPin = expectedEtag
         cachedDefinitionsRevision = null
         client.refresh().catch(() => {
           // Error already logged in refresh()
@@ -185,8 +188,9 @@ export function createTogglyClient(
     }
     const previousRevision = getDefinitionsRevision()
     if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      // Clear revision so the GET is unconditional. Retry if CDN lags the
-      // WS notify (HTTP still serves the previous revision).
+      // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP.
+      // Keep CDN-lag retries as a safety net until worker always-revalidate + ?rev= are live.
+      pendingDefinitionsPin = message.etag ?? null
       scheduleFlagsUpdatedRefresh(message.etag)
       return
     }
@@ -258,9 +262,11 @@ export function createTogglyClient(
       },
       'evaluated',
     )
-    const url = fetchUrl.toString()
+    const pin = pendingDefinitionsPin
+    pendingDefinitionsPin = null
+    const url = appendDefinitionsRevisionParam(fetchUrl.toString(), pin)
 
-    const revision = getDefinitionsRevision()
+    const revision = pin ? null : getDefinitionsRevision()
     const headers = buildDefinitionFetchHeaders({
       'Content-Type': 'application/json',
       ...(config.identity ? { 'x-toggly-identity': config.identity } : {}),
