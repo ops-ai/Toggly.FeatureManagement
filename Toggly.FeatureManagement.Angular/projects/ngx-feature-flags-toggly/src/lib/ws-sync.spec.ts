@@ -2,6 +2,9 @@ import {
   buildWebSocketUrl,
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
+  appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -51,6 +54,82 @@ describe('ws-sync', () => {
     expect(shouldFetchOnSigningKeyUpdated({ type: 'signing-key-updated' })).toBeTrue();
   });
 
+  it('planFlagsUpdatedRefresh plans JWKS refresh for signing-key-updated', () => {
+    expect(planFlagsUpdatedRefresh({ type: 'signing-key-updated' }, 'old')).toEqual({
+      action: 'refresh-jwks',
+    });
+  });
+
+  it('planFlagsUpdatedRefresh plans pinned refresh when etag differs', () => {
+    expect(planFlagsUpdatedRefresh({ type: 'flags-updated', etag: 'new' }, 'old')).toEqual({
+      action: 'refresh-pinned',
+      pin: 'new',
+    });
+  });
+
+  it('planFlagsUpdatedRefresh plans none when etag matches', () => {
+    expect(planFlagsUpdatedRefresh({ type: 'flags-updated', etag: 'same' }, 'same')).toEqual({
+      action: 'none',
+    });
+  });
+
+  it('applyFlagsUpdatedPlan invokes refreshJwks for refresh-jwks', () => {
+    const hooks = {
+      refreshJwks: jasmine.createSpy('refreshJwks'),
+      refreshPinned: jasmine.createSpy('refreshPinned'),
+      cacheEtagIfPresent: jasmine.createSpy('cacheEtagIfPresent'),
+    };
+    applyFlagsUpdatedPlan(
+      { action: 'refresh-jwks' },
+      { type: 'signing-key-updated' },
+      hooks,
+    );
+    expect(hooks.refreshJwks).toHaveBeenCalled();
+    expect(hooks.refreshPinned).not.toHaveBeenCalled();
+    expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled();
+  });
+
+  it('applyFlagsUpdatedPlan invokes refreshPinned with pin', () => {
+    const hooks = {
+      refreshJwks: jasmine.createSpy('refreshJwks'),
+      refreshPinned: jasmine.createSpy('refreshPinned'),
+      cacheEtagIfPresent: jasmine.createSpy('cacheEtagIfPresent'),
+    };
+    applyFlagsUpdatedPlan(
+      { action: 'refresh-pinned', pin: 'new-rev' },
+      { type: 'flags-updated', etag: 'new-rev' },
+      hooks,
+    );
+    expect(hooks.refreshPinned).toHaveBeenCalledWith('new-rev');
+    expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled();
+  });
+
+  it('applyFlagsUpdatedPlan caches etag on none when present', () => {
+    const hooks = {
+      refreshJwks: jasmine.createSpy('refreshJwks'),
+      refreshPinned: jasmine.createSpy('refreshPinned'),
+      cacheEtagIfPresent: jasmine.createSpy('cacheEtagIfPresent'),
+    };
+    applyFlagsUpdatedPlan(
+      { action: 'none' },
+      { type: 'flags-updated', etag: 'same' },
+      hooks,
+    );
+    expect(hooks.cacheEtagIfPresent).toHaveBeenCalledWith('same');
+    expect(hooks.refreshJwks).not.toHaveBeenCalled();
+    expect(hooks.refreshPinned).not.toHaveBeenCalled();
+  });
+
+  it('applyFlagsUpdatedPlan skips cache when none has no etag', () => {
+    const hooks = {
+      refreshJwks: jasmine.createSpy('refreshJwks'),
+      refreshPinned: jasmine.createSpy('refreshPinned'),
+      cacheEtagIfPresent: jasmine.createSpy('cacheEtagIfPresent'),
+    };
+    applyFlagsUpdatedPlan({ action: 'none' }, { type: 'flags-updated' }, hooks);
+    expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled();
+  });
+
   it('extractDefinitionsRevision reads revision header', () => {
     const response = {
       headers: {
@@ -58,5 +137,28 @@ describe('ws-sync', () => {
       },
     } as Response;
     expect(extractDefinitionsRevision(response)).toBe('rev-abc');
+  });
+
+  describe('appendDefinitionsRevisionParam', () => {
+    it('appends rev query param to absolute URLs', () => {
+      expect(
+        appendDefinitionsRevisionParam('https://definitions.toggly.io/a/b', 'etag-1'),
+      ).toBe('https://definitions.toggly.io/a/b?rev=etag-1');
+    });
+
+    it('replaces an existing rev param', () => {
+      expect(
+        appendDefinitionsRevisionParam('https://definitions.toggly.io/a/b?rev=old', 'new'),
+      ).toBe('https://definitions.toggly.io/a/b?rev=new');
+    });
+
+    it('returns the original URL when rev is empty', () => {
+      expect(appendDefinitionsRevisionParam('https://example.com/x', null)).toBe(
+        'https://example.com/x',
+      );
+      expect(appendDefinitionsRevisionParam('https://example.com/x', undefined)).toBe(
+        'https://example.com/x',
+      );
+    });
   });
 });

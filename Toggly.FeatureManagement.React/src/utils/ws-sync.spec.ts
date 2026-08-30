@@ -2,6 +2,9 @@ import {
   buildWebSocketUrl,
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
+  appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -84,6 +87,74 @@ describe('ws-sync', () => {
     });
   });
 
+  describe('planFlagsUpdatedRefresh', () => {
+    it('plans JWKS refresh for signing-key-updated', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'signing-key-updated' }, 'old')).toEqual({
+        action: 'refresh-jwks',
+      });
+    });
+
+    it('plans pinned refresh when flags-updated etag differs', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'flags-updated', etag: 'new' }, 'old')).toEqual({
+        action: 'refresh-pinned',
+        pin: 'new',
+      });
+    });
+
+    it('plans none when etag matches cached revision', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'flags-updated', etag: 'same' }, 'same')).toEqual({
+        action: 'none',
+      });
+    });
+  });
+
+  describe('applyFlagsUpdatedPlan', () => {
+    it('routes refresh-jwks to refreshJwks hook', () => {
+      const hooks = {
+        refreshJwks: jest.fn(),
+        refreshPinned: jest.fn(),
+        cacheEtagIfPresent: jest.fn(),
+      };
+      applyFlagsUpdatedPlan(
+        { action: 'refresh-jwks' },
+        { type: 'signing-key-updated' },
+        hooks,
+      );
+      expect(hooks.refreshJwks).toHaveBeenCalledTimes(1);
+      expect(hooks.refreshPinned).not.toHaveBeenCalled();
+      expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled();
+    });
+
+    it('routes refresh-pinned to refreshPinned with pin', () => {
+      const hooks = {
+        refreshJwks: jest.fn(),
+        refreshPinned: jest.fn(),
+        cacheEtagIfPresent: jest.fn(),
+      };
+      applyFlagsUpdatedPlan(
+        { action: 'refresh-pinned', pin: 'rev-2' },
+        { type: 'flags-updated', etag: 'rev-2' },
+        hooks,
+      );
+      expect(hooks.refreshPinned).toHaveBeenCalledWith('rev-2');
+      expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled();
+    });
+
+    it('caches etag on none when present', () => {
+      const hooks = {
+        refreshJwks: jest.fn(),
+        refreshPinned: jest.fn(),
+        cacheEtagIfPresent: jest.fn(),
+      };
+      applyFlagsUpdatedPlan(
+        { action: 'none' },
+        { type: 'flags-updated', etag: 'same' },
+        hooks,
+      );
+      expect(hooks.cacheEtagIfPresent).toHaveBeenCalledWith('same');
+    });
+  });
+
   describe('extractDefinitionsRevision', () => {
     function mockResponse(headers: Record<string, string>): Response {
       return {
@@ -108,3 +179,26 @@ describe('ws-sync', () => {
     });
   });
 });
+
+  describe('appendDefinitionsRevisionParam', () => {
+    it('appends rev query param to absolute URLs', () => {
+      expect(
+        appendDefinitionsRevisionParam('https://definitions.toggly.io/a/b', 'etag-1'),
+      ).toBe('https://definitions.toggly.io/a/b?rev=etag-1');
+    });
+
+    it('replaces an existing rev param', () => {
+      expect(
+        appendDefinitionsRevisionParam('https://definitions.toggly.io/a/b?rev=old', 'new'),
+      ).toBe('https://definitions.toggly.io/a/b?rev=new');
+    });
+
+    it('returns the original URL when rev is empty', () => {
+      expect(appendDefinitionsRevisionParam('https://example.com/x', null)).toBe(
+        'https://example.com/x',
+      );
+      expect(appendDefinitionsRevisionParam('https://example.com/x', undefined)).toBe(
+        'https://example.com/x',
+      );
+    });
+  });

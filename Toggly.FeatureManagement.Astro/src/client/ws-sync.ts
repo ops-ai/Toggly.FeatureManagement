@@ -62,9 +62,73 @@ export function shouldFetchOnSigningKeyUpdated(message: WsSyncMessage): boolean 
   return message.type === 'signing-key-updated';
 }
 
+export type FlagsUpdatedRefreshPlan =
+  | { action: 'none' }
+  | { action: 'refresh-jwks' }
+  | { action: 'refresh-pinned'; pin: string | null };
+
+export function planFlagsUpdatedRefresh(
+  message: WsSyncMessage,
+  previousRevision: string | null,
+): FlagsUpdatedRefreshPlan {
+  if (shouldFetchOnSigningKeyUpdated(message)) {
+    return { action: 'refresh-jwks' };
+  }
+  if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
+    return { action: 'refresh-pinned', pin: message.etag ?? null };
+  }
+  return { action: 'none' };
+}
+
+export function applyFlagsUpdatedPlan(
+  plan: FlagsUpdatedRefreshPlan,
+  message: WsSyncMessage,
+  hooks: {
+    refreshJwks: () => void;
+    refreshPinned: (pin: string | null) => void;
+    cacheEtagIfPresent: (etag: string) => void;
+  },
+): void {
+  if (plan.action === 'refresh-jwks') {
+    hooks.refreshJwks();
+    return;
+  }
+  if (plan.action === 'refresh-pinned') {
+    hooks.refreshPinned(plan.pin);
+    return;
+  }
+  if (message.etag) {
+    hooks.cacheEtagIfPresent(message.etag);
+  }
+}
+
+
 export function extractDefinitionsRevision(response: Response): string | null {
   if (!response.headers?.get) {
     return null;
   }
   return response.headers.get(DEFINITIONS_REVISION_HEADER) ?? response.headers.get('ETag');
 }
+
+/**
+ * Append `?rev=` for a cache-proof definitions GET after `flags-updated`.
+ * Invariant: never cache a WebSocket etag before HTTP confirms the revision;
+ * post-notify GETs should use `?rev=` and must not send If-None-Match.
+ */
+export function appendDefinitionsRevisionParam(
+  url: string,
+  rev: string | null | undefined,
+): string {
+  if (!rev) {
+    return url;
+  }
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set('rev', rev);
+    return parsed.toString();
+  } catch {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}rev=${encodeURIComponent(rev)}`;
+  }
+}
+

@@ -32,8 +32,9 @@ import {
   buildWebSocketUrl,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
-  shouldFetchOnFlagsUpdated,
-  shouldFetchOnSigningKeyUpdated,
+  appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnSync,
   type WsSyncMessage,
 } from '../utils/ws-sync';
@@ -339,6 +340,7 @@ export class Toggly implements TogglyService {
   _wsReconnectAttempt = 0
   _refreshDebounceTimer: any = null
   _cachedDefinitionsRevision: string | null = null
+  _pendingDefinitionsPin: string | null = null
   _lastFallbackRefresh: number = 0
   private _jwks = new InMemoryJwksCache()
 
@@ -458,25 +460,31 @@ export class Toggly implements TogglyService {
   private _handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = this._definitionsRevision
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache WS etag before HTTP confirms — avoids conditional 304 with stale defs.
       this._scheduleDebouncedRefresh()
+      return
     }
     if (message.etag) {
       this._cacheDefinitionsRevision(message.etag)
     }
   }
 
+  private _beginPinnedDefinitionsRefresh(pin: string | null): void {
+    this._pendingDefinitionsPin = pin
+    this._cachedDefinitionsRevision = null
+    this._scheduleDebouncedRefresh()
+  }
+
   private _handleWsUpdateMessage(message: WsSyncMessage): void {
-    if (shouldFetchOnSigningKeyUpdated(message)) {
-      this._scheduleDebouncedRefresh(true)
-      return
-    }
-    const previousRevision = this._definitionsRevision
-    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      this._scheduleDebouncedRefresh()
-    }
-    if (message.etag) {
-      this._cacheDefinitionsRevision(message.etag)
-    }
+    applyFlagsUpdatedPlan(
+      planFlagsUpdatedRefresh(message, this._definitionsRevision),
+      message,
+      {
+        refreshJwks: () => this._scheduleDebouncedRefresh(true),
+        refreshPinned: (pin) => this._beginPinnedDefinitionsRefresh(pin),
+        cacheEtagIfPresent: (etag) => this._cacheDefinitionsRevision(etag),
+      },
+    )
   }
 
   private get _canPersist(): boolean {
@@ -556,15 +564,19 @@ export class Toggly implements TogglyService {
         !!this._config.enableVariants,
       )
 
+      const pin = this._pendingDefinitionsPin
+      this._pendingDefinitionsPin = null
+      const fetchUrl = appendDefinitionsRevisionParam(url, pin)
+
       const loaded = await fetchEvaluatedSignedDefinitions(
-        url,
+        fetchUrl,
         this._jwks,
         {
           ...this._config,
           baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
         },
         {
-          revision: this._definitionsRevision,
+          revision: pin ? null : this._definitionsRevision,
           headers: buildDefinitionFetchHeaders(),
         },
       )

@@ -301,20 +301,45 @@ describe('Toggly WebSocket', () => {
       expect(mockFetch.mock.calls.length).toBe(before);
     });
 
-    it('caches etag from flags-updated message', async () => {
+    it('does not cache WS etag before HTTP confirms', async () => {
       const { StorageKeys } = require('../lib/models');
+      const revisionKey = StorageKeys.definitionsRevisionCacheKey('test-key', 'Test');
+      localStorage.setItem(revisionKey, 'old-rev');
+
       await initWithWs();
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ FlagOn: true }),
+        text: async () => JSON.stringify({ FlagOn: true }),
+        headers: {
+          get: (name: string) =>
+            name === 'X-Definitions-Revision' || name === 'ETag' ? 'rev-from-http' : null,
+        },
+      });
 
       latestWs().triggerMessage(JSON.stringify({
         type: 'flags-updated',
         etag: 'rev-from-ws',
       }));
-      jest.advanceTimersByTime(300);
-      await Promise.resolve();
 
-      expect(
-        localStorage.getItem(StorageKeys.definitionsRevisionCacheKey('test-key', 'Test')),
-      ).toBe('rev-from-ws');
+      expect(Toggly._pendingDefinitionsPin).toBe('rev-from-ws');
+      expect(localStorage.getItem(revisionKey)).not.toBe('rev-from-ws');
+
+      jest.advanceTimersByTime(300);
+      // Flush fetch → applyFetchRevision → body parse chain
+      for (let i = 0; i < 20; i++) {
+        await Promise.resolve();
+      }
+
+      const lastCall = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
+      expect(String(lastCall[0])).toContain('rev=rev-from-ws');
+      const headers = (lastCall[1]?.headers ?? {}) as Record<string, string>;
+      expect(headers['If-None-Match'] ?? headers['if-none-match']).toBeUndefined();
+
+      expect(localStorage.getItem(revisionKey)).toBe('rev-from-http');
+      expect(Toggly._pendingDefinitionsPin).toBeNull();
     });
 
     it('resets debounce timer when multiple updates arrive quickly', async () => {

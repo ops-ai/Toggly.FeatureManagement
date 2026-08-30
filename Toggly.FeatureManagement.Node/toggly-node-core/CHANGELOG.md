@@ -1,5 +1,12 @@
-## 0.4.1
+## 0.5.0
 
+2026-08-30
+
+### Fixed
+- After WebSocket `flags-updated`, do not cache the message etag before HTTP
+  confirms the revision (avoids If-None-Match matching and a stale 304).
+- Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
+  the HTTP response updates the cached revision.
 
 ## 0.4.2
 
@@ -11,6 +18,8 @@
 
 - Publish `@ops-ai/toggly-hooks-types` as `^1.4.3` instead of a `file:` path so
   the package installs from npm.
+
+## 0.4.1
 
 ## 0.4.0
 

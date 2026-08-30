@@ -3,6 +3,7 @@ import {
   buildWebSocketUrl,
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
+  appendDefinitionsRevisionParam,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -59,3 +60,26 @@ describe('ws-sync', () => {
     expect(extractDefinitionsRevision({} as Response)).toBeNull();
   });
 });
+
+  describe('appendDefinitionsRevisionParam', () => {
+    it('appends rev query param to absolute URLs', () => {
+      expect(
+        appendDefinitionsRevisionParam('https://definitions.toggly.io/a/b', 'etag-1'),
+      ).toBe('https://definitions.toggly.io/a/b?rev=etag-1');
+    });
+
+    it('replaces an existing rev param', () => {
+      expect(
+        appendDefinitionsRevisionParam('https://definitions.toggly.io/a/b?rev=old', 'new'),
+      ).toBe('https://definitions.toggly.io/a/b?rev=new');
+    });
+
+    it('returns the original URL when rev is empty', () => {
+      expect(appendDefinitionsRevisionParam('https://example.com/x', null)).toBe(
+        'https://example.com/x',
+      );
+      expect(appendDefinitionsRevisionParam('https://example.com/x', undefined)).toBe(
+        'https://example.com/x',
+      );
+    });
+  });

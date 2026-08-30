@@ -1,10 +1,20 @@
-## 1.5.2
+## 1.5.3
+
+2026-08-30
+
+### Fixed
+- After WebSocket `flags-updated`, do not cache the message etag before HTTP
+  confirms the revision (avoids If-None-Match matching and a stale 304).
+- Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
+  the HTTP response updates the cached revision.
 
 2026-08-28
 
 ### Fixed
 - After `flags-updated`, retry definitions HTTP fetch when the CDN still
   serves the previous revision (WS notify can race ahead of the edge cache).
+
+## 1.5.2
 
 ## 1.5.1
 

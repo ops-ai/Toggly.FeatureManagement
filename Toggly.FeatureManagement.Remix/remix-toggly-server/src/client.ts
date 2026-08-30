@@ -31,8 +31,9 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
-  shouldFetchOnFlagsUpdated,
-  shouldFetchOnSigningKeyUpdated,
+  appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnSync,
   type WsSyncMessage,
 } from './ws-sync';
@@ -60,6 +61,7 @@ export class TogglyServerClient {
   private wsReconnectAttempt = 0;
   private refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private cachedDefinitionsRevision: string | null = null;
+  private pendingDefinitionsPin: string | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private identity?: string;
 
@@ -180,21 +182,27 @@ export class TogglyServerClient {
   private handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = this.getDefinitionsRevision();
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache WS etag before HTTP confirms — avoids conditional 304 with stale defs.
       this.scheduleDebouncedRefresh();
+      return;
     }
     this.cacheDefinitionsRevision(message.etag);
   }
 
   private handleWsUpdateMessage(message: WsSyncMessage): void {
-    if (shouldFetchOnSigningKeyUpdated(message)) {
-      this.scheduleDebouncedRefresh(true);
-      return;
-    }
-    const previousRevision = this.getDefinitionsRevision();
-    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      this.scheduleDebouncedRefresh();
-    }
-    this.cacheDefinitionsRevision(message.etag);
+    applyFlagsUpdatedPlan(
+      planFlagsUpdatedRefresh(message, this.getDefinitionsRevision()),
+      message,
+      {
+        refreshJwks: () => this.scheduleDebouncedRefresh(true),
+        refreshPinned: (pin) => {
+          this.pendingDefinitionsPin = pin;
+          this.cachedDefinitionsRevision = null;
+          this.scheduleDebouncedRefresh();
+        },
+        cacheEtagIfPresent: (etag) => this.cacheDefinitionsRevision(etag),
+      },
+    );
   }
 
   private evaluateGateEffective(
@@ -266,10 +274,15 @@ export class TogglyServerClient {
     }
 
     try {
-      const url = buildDefinitionsUrl(this.config, identity);
+      const pin = this.pendingDefinitionsPin;
+      this.pendingDefinitionsPin = null;
+      const url = appendDefinitionsRevisionParam(
+        buildDefinitionsUrl(this.config, identity),
+        pin,
+      );
       this.logger.debug(`Fetching flags from: ${url}`);
 
-      const revision = this.getDefinitionsRevision();
+      const revision = pin ? null : this.getDefinitionsRevision();
       const headers = buildDefinitionFetchHeaders(
         revision ? { 'If-None-Match': revision } : {},
       );

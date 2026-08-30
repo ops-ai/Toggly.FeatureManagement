@@ -35,8 +35,9 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
-  shouldFetchOnFlagsUpdated,
-  shouldFetchOnSigningKeyUpdated,
+  appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnSync,
   type WsSyncMessage,
 } from '../utils/ws-sync.js';
@@ -124,6 +125,7 @@ class TogglyClientInstance {
   private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private cachedDefinitionsRevision: string | null = null;
+  private pendingDefinitionsPin: string | null = null;
   private lastFallbackRefresh = 0;
 
   constructor(config: TogglyPluginOptions) {
@@ -249,9 +251,12 @@ class TogglyClientInstance {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
-      const revision = this.definitionsRevision;
+      const pin = this.pendingDefinitionsPin;
+      this.pendingDefinitionsPin = null;
+      const fetchUrl = appendDefinitionsRevisionParam(url, pin);
+      const revision = pin ? null : this.definitionsRevision;
 
-      const response = await fetch(url, {
+      const response = await fetch(fetchUrl, {
         method: 'GET',
         headers: buildDefinitionFetchHeaders({
           Accept: 'application/json',
@@ -352,20 +357,18 @@ class TogglyClientInstance {
   }
 
   private handleWsUpdateMessage(message: WsSyncMessage): void {
-    if (shouldFetchOnSigningKeyUpdated(message)) {
-      this.scheduleDebouncedRefresh(true);
-      return;
-    }
-    const previousRevision = this.definitionsRevision;
-    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      // Clear revision so the GET is unconditional. Caching the WS etag
-      // before fetch caused 304 responses and left flags stale.
-      this.scheduleDebouncedRefresh(true);
-      return;
-    }
-    if (message.etag) {
-      this.cacheDefinitionsRevision(message.etag);
-    }
+    applyFlagsUpdatedPlan(
+      planFlagsUpdatedRefresh(message, this.definitionsRevision),
+      message,
+      {
+        refreshJwks: () => this.scheduleDebouncedRefresh(true),
+        refreshPinned: (pin) => {
+          this.pendingDefinitionsPin = pin;
+          this.scheduleDebouncedRefresh(true);
+        },
+        cacheEtagIfPresent: (etag) => this.cacheDefinitionsRevision(etag),
+      },
+    );
   }
 
   startWebSocket(): void {

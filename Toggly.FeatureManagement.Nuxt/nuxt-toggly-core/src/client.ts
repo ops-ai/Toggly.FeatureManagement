@@ -22,8 +22,9 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
-  shouldFetchOnFlagsUpdated,
-  shouldFetchOnSigningKeyUpdated,
+  appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnSync,
   type WsSyncMessage,
 } from './ws-sync'
@@ -54,6 +55,7 @@ export function createTogglyClient(
   let wsReconnectAttempt = 0
   let refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let cachedDefinitionsRevision: string | null = null
+  let pendingDefinitionsPin: string | null = null
   let lastFallbackRefresh = 0
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
 
@@ -146,20 +148,18 @@ export function createTogglyClient(
   }
 
   function handleWsUpdateMessage(message: WsSyncMessage): void {
-    if (shouldFetchOnSigningKeyUpdated(message)) {
-      scheduleDebouncedRefresh(true)
-      return
-    }
-    const previousRevision = getDefinitionsRevision()
-    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      // Clear revision so the GET is unconditional. Caching the WS etag
-      // before fetch caused 304 responses and left flags stale.
-      scheduleDebouncedRefresh(true)
-      return
-    }
-    if (message.etag) {
-      cacheDefinitionsRevision(message.etag)
-    }
+    applyFlagsUpdatedPlan(
+      planFlagsUpdatedRefresh(message, getDefinitionsRevision()),
+      message,
+      {
+        refreshJwks: () => scheduleDebouncedRefresh(true),
+        refreshPinned: (pin) => {
+          pendingDefinitionsPin = pin
+          scheduleDebouncedRefresh(true)
+        },
+        cacheEtagIfPresent: (etag) => cacheDefinitionsRevision(etag),
+      },
+    )
   }
 
   function notifyFeaturesRefresh(): void {
@@ -225,9 +225,11 @@ export function createTogglyClient(
       },
       'evaluated',
     )
-    const url = fetchUrl.toString()
+    const pin = pendingDefinitionsPin
+    pendingDefinitionsPin = null
+    const url = appendDefinitionsRevisionParam(fetchUrl.toString(), pin)
 
-    const revision = getDefinitionsRevision()
+    const revision = pin ? null : getDefinitionsRevision()
     const headers = buildDefinitionFetchHeaders({
       'Content-Type': 'application/json',
       ...(config.identity ? { 'x-toggly-identity': config.identity } : {}),

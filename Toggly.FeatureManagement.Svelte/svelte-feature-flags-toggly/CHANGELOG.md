@@ -1,5 +1,12 @@
-## 1.9.1
+## 1.9.3
 
+2026-08-30
+
+### Fixed
+- After WebSocket `flags-updated`, do not cache the message etag before HTTP
+  confirms the revision (avoids If-None-Match matching and a stale 304).
+- Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
+  the HTTP response updates the cached revision.
 
 ## 1.9.2
 
@@ -11,6 +18,8 @@
 - Publish installable semver ranges for `@ops-ai/toggly-hooks-types`,
   `@ops-ai/toggly-local-gates`, and `@ops-ai/toggly-signed-defs` instead of
   `file:` paths that leave unmet dependencies after `npm install`.
+
+## 1.9.1
 
 ## 1.9.0
 

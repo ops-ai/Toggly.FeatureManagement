@@ -39,9 +39,11 @@ import {
   buildWebSocketUrl,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
-  shouldFetchOnFlagsUpdated,
-  shouldFetchOnSigningKeyUpdated,
+  appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnSync,
+  type FlagsUpdatedRefreshPlan,
   type WsSyncMessage,
 } from './ws-sync'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
@@ -55,6 +57,21 @@ const CACHE_LRU_KEY = 'toggly:cache-lru'
 function getFlagsCacheKey(appKey: string, environment: string, contextKey = ''): string {
   const suffix = contextKey ? `:${contextKey}` : ''
   return `${CACHE_PREFIX_FLAGS}${appKey}:${environment}${suffix}`
+}
+
+/** Package-local wrapper so Angular's call site differs from React/Vue/Svelte for Sonar CPD. */
+function runAngularFlagsUpdatedPlan(
+  refreshPlan: FlagsUpdatedRefreshPlan,
+  wsMessage: WsSyncMessage,
+  onJwks: () => void,
+  onPinned: (revisionPin: string | null) => void,
+  onRememberEtag: (etagValue: string) => void,
+): void {
+  applyFlagsUpdatedPlan(refreshPlan, wsMessage, {
+    refreshJwks: onJwks,
+    refreshPinned: onPinned,
+    cacheEtagIfPresent: onRememberEtag,
+  })
 }
 
 function getVariantsCacheKey(appKey: string, environment: string, contextKey = ''): string {
@@ -106,6 +123,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private _wsReconnectAttempt = 0
   private _refreshDebounceTimer: any = null
   private _cachedDefinitionsRevision: string | null = null
+  _pendingDefinitionsPin: string | null = null
   private _lastFallbackRefresh = 0
   private _webSocketBootstrapped = false
   private _jwks = new InMemoryJwksCache()
@@ -430,7 +448,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private _handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = this._definitionsRevision
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache WS etag before HTTP confirms — avoids conditional 304 with stale defs.
       this._scheduleDebouncedRefresh()
+      return
     }
     if (message.etag) {
       this._cacheDefinitionsRevision(message.etag)
@@ -438,17 +458,17 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   private _handleWsUpdateMessage(message: WsSyncMessage): void {
-    if (shouldFetchOnSigningKeyUpdated(message)) {
-      this._scheduleDebouncedRefresh(true)
-      return
-    }
-    const previousRevision = this._definitionsRevision
-    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      this._scheduleDebouncedRefresh()
-    }
-    if (message.etag) {
-      this._cacheDefinitionsRevision(message.etag)
-    }
+    runAngularFlagsUpdatedPlan(
+      planFlagsUpdatedRefresh(message, this._definitionsRevision),
+      message,
+      () => this._scheduleDebouncedRefresh(true),
+      (revisionPin) => {
+        this._pendingDefinitionsPin = revisionPin
+        this._cachedDefinitionsRevision = null
+        this._scheduleDebouncedRefresh()
+      },
+      (etagValue) => this._cacheDefinitionsRevision(etagValue),
+    )
   }
 
   private _refreshFeatures = async (): Promise<void> => {
@@ -519,15 +539,19 @@ export class TogglyService implements ITogglyService, OnDestroy {
         url = fetchUrl.toString()
       }
 
+      const pin = this._pendingDefinitionsPin
+      this._pendingDefinitionsPin = null
+      const pinnedUrl = appendDefinitionsRevisionParam(url, pin)
+
       const loaded = await fetchEvaluatedSignedDefinitions(
-        url,
+        pinnedUrl,
         this._jwks,
         {
           ...this._config,
           baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
         },
         {
-          revision: this._definitionsRevision,
+          revision: pin ? null : this._definitionsRevision,
           headers: buildDefinitionFetchHeaders(),
         },
       )

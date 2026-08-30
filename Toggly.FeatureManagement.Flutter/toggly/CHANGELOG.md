@@ -1,4 +1,12 @@
-## 1.11.0
+## 1.11.1
+
+2026-08-30
+
+### Fixed
+- After WebSocket `flags-updated`, do not set the definitions revision from the
+  WS etag before HTTP refresh (avoids If-None-Match matching and a stale 304).
+- Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
+  the HTTP response updates the cached revision.
 
 2026-08-21
 
@@ -13,8 +21,6 @@
 ### Fixed
 - Definitions parsing no longer uses `Map<String, bool>.from` on `defs`, which
   threw when the payload contained entity-gate objects.
-
-
 
 2026-07-13
 
@@ -41,6 +47,8 @@
   only**, matching the JS SDKs — nested keys cannot be used to swap verified
   bytes for unsigned outer fields.
 - Empty `signature` or `kid` values are rejected during verification.
+
+## 1.11.0
 
 ## 1.9.2
 
@@ -145,7 +153,6 @@
 ### Added
 - SDK identity on definitions traffic: User-Agent on server HTTP, custom headers on browser/web HTTP, sdk + sdkVersion query params on WebSocket.
 
-
 ## 1.5.0
 
 2026-07-05
@@ -223,7 +230,6 @@
 ### Migration
 - Apps needing offline support across restarts should add one of the `feature_flags_toggly_*` companion packages (or implement `TogglyCacheProvider`) and pass it via `TogglyConfig(cacheProvider: ...)`, along with a stable `identity`.
 
-
 ## 1.1.16
 
 2026-04-08
@@ -231,14 +237,12 @@
 ### Maintenance
 - Satisfied pub.dev publish checks: bounded runtime dependency versions, `.pubignore` for the local benchmark app (not shipped on pub.dev), top-level `benchmarks/` renamed to `benchmark/` for layout consistency, and minor analyzer cleanups in `toggly.dart`.
 
-
 ## 1.1.15
 
 2025-05-15
 
 ### Reliability
 - Fixed features being cached in some cases when switching identities
-
 
 ## 1.1.14
 
@@ -260,7 +264,6 @@
 
 ### Reliability
 - Added debug method for visibility into current state
-
 
 ## 1.1.11
 
@@ -291,7 +294,6 @@
 
 ### Breaking Changes
 - None
-
 
 ## 1.1.8
 
@@ -411,6 +413,4 @@
 * Feature Gate unit tests
 * Documentation
 * License
-
-
 

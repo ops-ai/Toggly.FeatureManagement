@@ -27,8 +27,9 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
-  shouldFetchOnFlagsUpdated,
-  shouldFetchOnSigningKeyUpdated,
+  appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnSync,
   type WsSyncMessage,
 } from './ws-sync.js'
@@ -101,6 +102,7 @@ export function createTogglyClient(
   let wsReconnectAttempt = 0
   let refreshDebounceTimer: NodeJS.Timeout | null = null
   let cachedDefinitionsRevision: string | null = null
+  let pendingDefinitionsPin: string | null = null
   let lastFallbackRefresh = 0
   const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000 // 20 minutes
   let cachedJwks: JwkSet | null = null
@@ -209,7 +211,9 @@ export function createTogglyClient(
   function handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = getDefinitionsRevision()
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache WS etag before HTTP confirms — avoids conditional 304 with stale defs.
       scheduleDebouncedRefresh()
+      return
     }
     if (message.etag) {
       cacheDefinitionsRevision(message.etag)
@@ -217,17 +221,19 @@ export function createTogglyClient(
   }
 
   function handleWsUpdateMessage(message: WsSyncMessage): void {
-    if (shouldFetchOnSigningKeyUpdated(message)) {
-      scheduleDebouncedRefresh(true)
-      return
-    }
-    const previousRevision = getDefinitionsRevision()
-    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      scheduleDebouncedRefresh()
-    }
-    if (message.etag) {
-      cacheDefinitionsRevision(message.etag)
-    }
+    applyFlagsUpdatedPlan(
+      planFlagsUpdatedRefresh(message, getDefinitionsRevision()),
+      message,
+      {
+        refreshJwks: () => scheduleDebouncedRefresh(true),
+        refreshPinned: (pin) => {
+          pendingDefinitionsPin = pin
+          cachedDefinitionsRevision = null
+          scheduleDebouncedRefresh()
+        },
+        cacheEtagIfPresent: (etag) => cacheDefinitionsRevision(etag),
+      },
+    )
   }
 
   /**
@@ -260,8 +266,10 @@ export function createTogglyClient(
       return config.featureDefaults ?? {}
     }
 
-    const url = buildApiUrl()
-    const revision = getDefinitionsRevision()
+    const pin = pendingDefinitionsPin
+    pendingDefinitionsPin = null
+    const url = appendDefinitionsRevisionParam(buildApiUrl(), pin)
+    const revision = pin ? null : getDefinitionsRevision()
     const headers = buildDefinitionFetchHeaders({
       'Content-Type': 'application/json',
       ...(config.identity ? { 'x-toggly-identity': config.identity } : {}),

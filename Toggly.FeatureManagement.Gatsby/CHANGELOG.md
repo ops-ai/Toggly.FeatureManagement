@@ -1,4 +1,12 @@
-## 1.6.0
+## 1.6.1
+
+2026-08-30
+
+### Fixed
+- After WebSocket `flags-updated`, do not cache the message etag before HTTP
+  confirms the revision (avoids If-None-Match matching and a stale 304).
+- Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
+  the HTTP response updates the cached revision.
 
 2026-08-28
 
@@ -11,8 +19,7 @@
 - Conditional GET via `If-None-Match` / `304 Not Modified` using the
   definitions revision cache.
 
-## 1.5.2
-
+## 1.6.0
 
 ## 1.5.3
 
@@ -23,6 +30,8 @@
 ### Fixed
 - Widen `react` / `react-dom` peerDependencies to `^18 || ^19` so installs
   succeed under npm with React 19 without `--legacy-peer-deps`.
+
+## 1.5.2
 
 ## 1.5.1
 

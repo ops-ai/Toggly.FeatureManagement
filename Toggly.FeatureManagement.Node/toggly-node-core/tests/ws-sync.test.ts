@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   DEFINITIONS_REVISION_HEADER,
   WS_RECONNECT_BASE_MS,
@@ -6,6 +6,9 @@ import {
   buildWebSocketUrl,
   getNextReconnectDelayMs,
   shouldFetchOnSync,
+  appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   extractDefinitionsRevision,
@@ -82,6 +85,94 @@ describe('ws-sync', () => {
     })
   })
 
+  describe('planFlagsUpdatedRefresh', () => {
+    it('plans JWKS refresh for signing-key-updated', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'signing-key-updated' }, 'old')).toEqual({
+        action: 'refresh-jwks',
+      })
+    })
+
+    it('plans pinned refresh when flags-updated etag differs', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'flags-updated', etag: 'new' }, 'old')).toEqual({
+        action: 'refresh-pinned',
+        pin: 'new',
+      })
+    })
+
+    it('plans none when etag matches cached revision', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'flags-updated', etag: 'same' }, 'same')).toEqual({
+        action: 'none',
+      })
+    })
+
+    it('plans pinned refresh with null pin when etag is missing', () => {
+      expect(planFlagsUpdatedRefresh({ type: 'update' }, 'cached')).toEqual({
+        action: 'refresh-pinned',
+        pin: null,
+      })
+    })
+  })
+
+  describe('applyFlagsUpdatedPlan', () => {
+    it('invokes refreshJwks for refresh-jwks plans', () => {
+      const hooks = {
+        refreshJwks: vi.fn(),
+        refreshPinned: vi.fn(),
+        cacheEtagIfPresent: vi.fn(),
+      }
+      applyFlagsUpdatedPlan(
+        { action: 'refresh-jwks' },
+        { type: 'signing-key-updated' },
+        hooks,
+      )
+      expect(hooks.refreshJwks).toHaveBeenCalled()
+      expect(hooks.refreshPinned).not.toHaveBeenCalled()
+      expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled()
+    })
+
+    it('invokes refreshPinned with pin for refresh-pinned plans', () => {
+      const hooks = {
+        refreshJwks: vi.fn(),
+        refreshPinned: vi.fn(),
+        cacheEtagIfPresent: vi.fn(),
+      }
+      applyFlagsUpdatedPlan(
+        { action: 'refresh-pinned', pin: 'new-rev' },
+        { type: 'flags-updated', etag: 'new-rev' },
+        hooks,
+      )
+      expect(hooks.refreshPinned).toHaveBeenCalledWith('new-rev')
+      expect(hooks.refreshJwks).not.toHaveBeenCalled()
+      expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled()
+    })
+
+    it('caches etag only for none plans when etag is present', () => {
+      const hooks = {
+        refreshJwks: vi.fn(),
+        refreshPinned: vi.fn(),
+        cacheEtagIfPresent: vi.fn(),
+      }
+      applyFlagsUpdatedPlan(
+        { action: 'none' },
+        { type: 'flags-updated', etag: 'same' },
+        hooks,
+      )
+      expect(hooks.cacheEtagIfPresent).toHaveBeenCalledWith('same')
+      expect(hooks.refreshJwks).not.toHaveBeenCalled()
+      expect(hooks.refreshPinned).not.toHaveBeenCalled()
+    })
+
+    it('skips cache when none plan has no etag', () => {
+      const hooks = {
+        refreshJwks: vi.fn(),
+        refreshPinned: vi.fn(),
+        cacheEtagIfPresent: vi.fn(),
+      }
+      applyFlagsUpdatedPlan({ action: 'none' }, { type: 'flags-updated' }, hooks)
+      expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled()
+    })
+  })
+
   describe('extractDefinitionsRevision', () => {
     it('prefers X-Definitions-Revision over ETag', () => {
       const response = {
@@ -107,6 +198,34 @@ describe('ws-sync', () => {
 
     it('returns null when headers are missing', () => {
       expect(extractDefinitionsRevision({} as Response)).toBeNull()
+    })
+  })
+
+  describe('appendDefinitionsRevisionParam', () => {
+    it('appends rev query param to absolute URLs', () => {
+      expect(
+        appendDefinitionsRevisionParam('https://definitions.toggly.io/a/b', 'etag-1'),
+      ).toBe('https://definitions.toggly.io/a/b?rev=etag-1')
+    })
+
+    it('replaces an existing rev param', () => {
+      expect(
+        appendDefinitionsRevisionParam('https://definitions.toggly.io/a/b?rev=old', 'new'),
+      ).toBe('https://definitions.toggly.io/a/b?rev=new')
+    })
+
+    it('returns the original URL when rev is empty', () => {
+      expect(appendDefinitionsRevisionParam('https://example.com/x', null)).toBe(
+        'https://example.com/x',
+      )
+      expect(appendDefinitionsRevisionParam('https://example.com/x', undefined)).toBe(
+        'https://example.com/x',
+      )
+    })
+
+    it('appends rev to relative URLs via the catch path', () => {
+      expect(appendDefinitionsRevisionParam('/relative/path', 'etag-1')).toContain('rev=etag-1')
+      expect(appendDefinitionsRevisionParam('/relative?x=1', 'etag-1')).toContain('&rev=')
     })
   })
 })

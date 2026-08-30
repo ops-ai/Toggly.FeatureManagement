@@ -28,8 +28,9 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
-  shouldFetchOnFlagsUpdated,
-  shouldFetchOnSigningKeyUpdated,
+  appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnSync,
   type WsSyncMessage,
 } from './ws-sync';
@@ -61,6 +62,7 @@ export class Toggly {
   static _wsReconnectAttempt: number = 0;
   static _refreshDebounceTimer: any = null;
   static _cachedDefinitionsRevision: string | null = null;
+  static _pendingDefinitionsPin: string | null = null;
   static _lastFallbackRefresh: number = 0;
   static _fallbackRefreshInterval: number = 20 * 60 * 1000;
 
@@ -118,7 +120,9 @@ export class Toggly {
   private static handleWsSyncMessage(message: WsSyncMessage): void {
     const previousRevision = Toggly.definitionsRevision;
     if (shouldFetchOnSync(message, previousRevision)) {
+      // Do not cache WS etag before HTTP confirms — avoids conditional 304 with stale defs.
       Toggly.scheduleDebouncedRefresh();
+      return;
     }
     if (message.etag) {
       Toggly.cacheDefinitionsRevision(message.etag);
@@ -126,23 +130,43 @@ export class Toggly {
   }
 
   private static handleWsUpdateMessage(message: WsSyncMessage): void {
-    if (shouldFetchOnSigningKeyUpdated(message)) {
-      Toggly.scheduleDebouncedRefresh(true);
-      return;
-    }
-    const previousRevision = Toggly.definitionsRevision;
-    if (shouldFetchOnFlagsUpdated(message, previousRevision)) {
-      Toggly.scheduleDebouncedRefresh();
-    }
-    if (message.etag) {
-      Toggly.cacheDefinitionsRevision(message.etag);
-    }
+    const refreshPlan = planFlagsUpdatedRefresh(message, Toggly.definitionsRevision);
+    const hooks = {
+      refreshJwks(): void {
+        Toggly.scheduleDebouncedRefresh(true);
+      },
+      refreshPinned(revisionPin: string | null): void {
+        Toggly._pendingDefinitionsPin = revisionPin;
+        Toggly._cachedDefinitionsRevision = null;
+        Toggly.scheduleDebouncedRefresh();
+      },
+      cacheEtagIfPresent(etagValue: string): void {
+        Toggly.cacheDefinitionsRevision(etagValue);
+      },
+    };
+    applyFlagsUpdatedPlan(refreshPlan, message, hooks);
   }
 
-  private static buildFetchHeaders(): HeadersInit {
+  private static buildFetchHeaders(skipIfNoneMatch = false): HeadersInit {
+    const revision = skipIfNoneMatch ? null : Toggly.definitionsRevision;
     return buildDefinitionFetchHeaders(
-      Toggly.definitionsRevision ? { 'If-None-Match': Toggly.definitionsRevision } : {},
+      revision ? { 'If-None-Match': revision } : {},
     );
+  }
+
+  /**
+   * Consume a one-shot WS pin: append ?rev= and omit If-None-Match so the
+   * post-notify GET cannot 304 against a revision that HTTP has not confirmed.
+   */
+  private static consumePendingDefinitionsRequest(
+    mode: 'evaluated' | 'variants',
+  ): { url: string; headers: HeadersInit } {
+    const pin = Toggly._pendingDefinitionsPin;
+    Toggly._pendingDefinitionsPin = null;
+    return {
+      url: appendDefinitionsRevisionParam(Toggly.buildEvaluatedUrl(mode), pin),
+      headers: Toggly.buildFetchHeaders(!!pin),
+    };
   }
 
   private static applyFetchRevision(response: Response): void {
@@ -584,13 +608,13 @@ export class Toggly {
     }
 
     return new Promise((resolve) => {
-      const url = Toggly.buildEvaluatedUrl('evaluated');
+      const { url, headers } = Toggly.consumePendingDefinitionsRequest('evaluated');
 
       // Wrap the fetch invocation in a resolved Promise so that any synchronous
       // failure (e.g. a non-conforming fetch implementation returning undefined)
       // is funneled through the same .catch handler as a real network error.
       Promise.resolve()
-        .then(() => fetch(url, { headers: Toggly.buildFetchHeaders() }))
+        .then(() => fetch(url, { headers }))
         .then((response) => {
           Toggly.applyFetchRevision(response);
           if (response.status === 304) {
@@ -628,10 +652,10 @@ export class Toggly {
 
   private static fetchFeatureFlagsWithVariants(): Promise<{ [key: string]: boolean }> {
     return new Promise((resolve) => {
-      const url = Toggly.buildEvaluatedUrl('variants');
+      const { url, headers } = Toggly.consumePendingDefinitionsRequest('variants');
 
       Promise.resolve()
-        .then(() => fetch(url, { headers: Toggly.buildFetchHeaders() }))
+        .then(() => fetch(url, { headers }))
         .then((response) => {
           Toggly.applyFetchRevision(response);
           if (response.status === 304) {

@@ -1,5 +1,12 @@
-## 1.4.2
+## 1.4.4
 
+2026-08-30
+
+### Fixed
+- After WebSocket `flags-updated`, do not cache the message etag before HTTP
+  confirms the revision (avoids If-None-Match matching and a stale 304).
+- Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
+  the HTTP response updates the cached revision.
 
 ## 1.4.3
 
@@ -11,6 +18,8 @@
 
 - Align `main` / `module` / `exports` with tsup output (`dist/index.js` and
   `dist/index.cjs`) so import and require resolve after install.
+
+## 1.4.2
 
 ## 1.4.1
 

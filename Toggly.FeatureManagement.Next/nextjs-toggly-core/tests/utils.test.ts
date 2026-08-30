@@ -5,6 +5,7 @@ import {
   deepMerge,
   normalizeFeatureKeys,
 } from '../src/utils'
+import { appendDefinitionsRevisionParam } from '../src/ws-sync'
 
 describe('generateUUID', () => {
   it('should generate a valid UUID v4', () => {
@@ -116,5 +117,14 @@ describe('normalizeFeatureKeys', () => {
       'feature-a',
       'feature-b',
     ])
+  })
+})
+
+
+describe('appendDefinitionsRevisionParam', () => {
+  it('sets rev on absolute URLs', () => {
+    expect(appendDefinitionsRevisionParam('https://definitions.toggly.io/a/b', 'e1')).toBe(
+      'https://definitions.toggly.io/a/b?rev=e1',
+    )
   })
 })
