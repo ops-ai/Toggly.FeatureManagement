@@ -1,5 +1,3 @@
-## 1.6.0
-
 ## 1.6.1
 
 2026-08-30
@@ -21,8 +19,9 @@
 - Conditional GET via `If-None-Match` / `304 Not Modified` using the
   definitions revision cache.
 
-## 1.5.2
+## 1.6.0
 
+## 1.5.2
 
 ## 1.5.3
 

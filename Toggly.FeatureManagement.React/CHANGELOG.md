@@ -1,5 +1,3 @@
-## 1.10.3
-
 ## 1.10.5
 
 2026-08-30
@@ -10,6 +8,7 @@
 - Pin post-notify definitions GETs with `?rev=` and omit If-None-Match until
   the HTTP response updates the cached revision.
 
+## 1.10.3
 
 ## 1.10.4
 

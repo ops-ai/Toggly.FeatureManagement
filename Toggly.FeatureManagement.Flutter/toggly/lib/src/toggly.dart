@@ -40,6 +40,8 @@ class Toggly with WidgetsBindingObserver {
   static DateTime? _lastChecked;
   static DateTime? _lastSynced;
   static String? _definitionsRevision;
+  /// WS etag to pin via ?rev= on the next definitions/variants HTTP GETs.
+  static String? _pendingHttpRevisionPin;
   static String? _lastError;
   // Add new static field for in-memory cache
   static Map<String, bool>? _inMemoryFlags;
@@ -294,6 +296,9 @@ class Toggly with WidgetsBindingObserver {
     if (Toggly._config.enableVariants && Toggly._appKey != null) {
       await Toggly.fetchEvaluatedVariants();
     }
+
+    // Consume pin only after both definitions and variants GETs have run.
+    _pendingHttpRevisionPin = null;
 
     return TogglyInitResponse(
       status: status,
@@ -572,8 +577,8 @@ class Toggly with WidgetsBindingObserver {
     try {
       // Prepare headers
       final headers = <String, dynamic>{};
+      // Keep pin until refresh() finishes both flags + variants fetches.
       final pin = _pendingHttpRevisionPin;
-      _pendingHttpRevisionPin = null;
       final revision = pin != null ? null : _definitionsRevision;
       if (revision != null) {
         headers['If-None-Match'] = revision;
@@ -733,9 +738,8 @@ class Toggly with WidgetsBindingObserver {
     }
     try {
       final headers = <String, dynamic>{};
+      // Share the same ?rev= pin as fetchFeatureFlags; refresh() clears it after.
       final pin = _pendingHttpRevisionPin;
-      // Do not clear pin here if flags fetch should consume it first; variants
-      // runs after flags in refresh and may share the same pin intent.
       final revision = pin != null ? null : _definitionsRevision;
       if (revision != null) {
         headers['If-None-Match'] = revision;

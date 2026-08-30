@@ -1,5 +1,3 @@
-## 1.5.2
-
 ## 1.5.3
 
 2026-08-30
@@ -15,6 +13,8 @@
 ### Fixed
 - After `flags-updated`, retry definitions HTTP fetch when the CDN still
   serves the previous revision (WS notify can race ahead of the edge cache).
+
+## 1.5.2
 
 ## 1.5.1
 

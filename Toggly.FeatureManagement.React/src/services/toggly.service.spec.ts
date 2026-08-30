@@ -1197,7 +1197,7 @@ describe('Toggly Service', () => {
       expect(mockFetch).toHaveBeenCalled();
     });
 
-    
+
     it('after flags-updated with etag, next GET must not send If-None-Match for the WS etag', async () => {
       localStorage.setItem('toggly:revision:k:Production', 'old-rev');
       const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: { F1: true } });

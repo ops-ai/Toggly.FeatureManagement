@@ -103,7 +103,7 @@ void main() {
 
       var refreshCalls = 0;
       SyncService.getInstance.onRefreshRequested =
-          ({required bool forceJwksRefresh}) async {
+          ({required bool forceJwksRefresh, String? pinnedRevision}) async {
         refreshCalls++;
         await Toggly.refresh();
       };

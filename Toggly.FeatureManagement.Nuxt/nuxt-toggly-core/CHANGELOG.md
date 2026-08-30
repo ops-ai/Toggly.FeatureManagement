@@ -1,5 +1,3 @@
-## 1.6.0
-
 ## 1.6.1
 
 2026-08-30
@@ -29,8 +27,9 @@
   the debounced HTTP refresh. Caching first caused `If-None-Match` to match the
   new revision, return 304, and leave in-memory flags stale.
 
-## 1.5.2
+## 1.6.0
 
+## 1.5.2
 
 ## 1.5.1
 
