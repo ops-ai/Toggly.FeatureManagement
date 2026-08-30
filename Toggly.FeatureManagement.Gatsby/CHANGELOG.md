@@ -156,4 +156,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fallback values for offline/error scenarios
 
 [1.0.0]: https://github.com/ops-ai/Toggly.FeatureManagement/releases/tag/gatsby-v1.0.0
-

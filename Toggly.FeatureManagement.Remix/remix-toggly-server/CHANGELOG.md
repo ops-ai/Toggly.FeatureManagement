@@ -82,4 +82,3 @@
 ### Added
 
 - `setLocalGates`, `notifyLocalGatesChanged`, and `subscribeLocalGatesChanged` on `TogglyServerClient` apply a read-time AND via `@ops-ai/toggly-local-gates`.
-

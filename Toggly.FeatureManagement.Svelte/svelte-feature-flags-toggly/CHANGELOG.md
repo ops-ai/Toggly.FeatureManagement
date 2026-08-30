@@ -152,4 +152,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript support with full type definitions
 - Works with or without Toggly.io (using feature defaults)
 - Example application demonstrating all features
-
