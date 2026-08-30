@@ -36,6 +36,7 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   planFlagsUpdatedRefresh,
+  applyFlagsUpdatedPlan,
   shouldFetchOnSync,
   REFRESH_DEBOUNCE_MS,
   type WsSyncMessage,
@@ -426,21 +427,15 @@ class TogglyClientInstance {
   }
 
   private handleWsUpdateMessage(message: WsSyncMessage): void {
-    const plan = planFlagsUpdatedRefresh(message, this.definitionsRevision);
-    switch (plan.action) {
-      case 'refresh-jwks':
-        this.scheduleDebouncedRefresh(true);
-        return;
-      case 'refresh-pinned':
-        // Clear revision so the GET is unconditional. Caching the WS etag
-        // before fetch caused 304 responses and left flags stale.
-        this.scheduleDebouncedRefresh(true);
-        return;
-      case 'none':
-        if (message.etag) {
-          this.cacheDefinitionsRevision(message.etag);
-        }
-    }
+    applyFlagsUpdatedPlan(
+      planFlagsUpdatedRefresh(message, this.definitionsRevision),
+      message,
+      {
+        refreshJwks: () => this.scheduleDebouncedRefresh(true),
+        refreshPinned: () => this.scheduleDebouncedRefresh(true),
+        cacheEtagIfPresent: (etag) => this.cacheDefinitionsRevision(etag),
+      },
+    );
   }
 
   startWebSocket(): void {

@@ -80,6 +80,28 @@ export function planFlagsUpdatedRefresh(
   return { action: 'none' };
 }
 
+export function applyFlagsUpdatedPlan(
+  plan: FlagsUpdatedRefreshPlan,
+  message: WsSyncMessage,
+  hooks: {
+    refreshJwks: () => void;
+    refreshPinned: (pin: string | null) => void;
+    cacheEtagIfPresent: (etag: string) => void;
+  },
+): void {
+  if (plan.action === 'refresh-jwks') {
+    hooks.refreshJwks();
+    return;
+  }
+  if (plan.action === 'refresh-pinned') {
+    hooks.refreshPinned(plan.pin);
+    return;
+  }
+  if (message.etag) {
+    hooks.cacheEtagIfPresent(message.etag);
+  }
+}
+
 
 export function extractDefinitionsRevision(response: Response): string | null {
   if (!response.headers?.get) {

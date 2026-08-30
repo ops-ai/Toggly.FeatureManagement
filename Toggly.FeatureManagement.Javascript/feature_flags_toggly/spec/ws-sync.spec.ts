@@ -3,6 +3,7 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
   planFlagsUpdatedRefresh,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
@@ -77,6 +78,66 @@ describe('ws-sync', () => {
         action: 'refresh-pinned',
         pin: null,
       });
+    });
+  });
+
+  describe('applyFlagsUpdatedPlan', () => {
+    it('invokes refreshJwks for refresh-jwks plans', () => {
+      const hooks = {
+        refreshJwks: jest.fn(),
+        refreshPinned: jest.fn(),
+        cacheEtagIfPresent: jest.fn(),
+      };
+      applyFlagsUpdatedPlan(
+        { action: 'refresh-jwks' },
+        { type: 'signing-key-updated' },
+        hooks,
+      );
+      expect(hooks.refreshJwks).toHaveBeenCalled();
+      expect(hooks.refreshPinned).not.toHaveBeenCalled();
+      expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled();
+    });
+
+    it('invokes refreshPinned with pin for refresh-pinned plans', () => {
+      const hooks = {
+        refreshJwks: jest.fn(),
+        refreshPinned: jest.fn(),
+        cacheEtagIfPresent: jest.fn(),
+      };
+      applyFlagsUpdatedPlan(
+        { action: 'refresh-pinned', pin: 'new-rev' },
+        { type: 'flags-updated', etag: 'new-rev' },
+        hooks,
+      );
+      expect(hooks.refreshPinned).toHaveBeenCalledWith('new-rev');
+      expect(hooks.refreshJwks).not.toHaveBeenCalled();
+      expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled();
+    });
+
+    it('caches etag only for none plans when etag is present', () => {
+      const hooks = {
+        refreshJwks: jest.fn(),
+        refreshPinned: jest.fn(),
+        cacheEtagIfPresent: jest.fn(),
+      };
+      applyFlagsUpdatedPlan(
+        { action: 'none' },
+        { type: 'flags-updated', etag: 'same' },
+        hooks,
+      );
+      expect(hooks.cacheEtagIfPresent).toHaveBeenCalledWith('same');
+      expect(hooks.refreshJwks).not.toHaveBeenCalled();
+      expect(hooks.refreshPinned).not.toHaveBeenCalled();
+    });
+
+    it('skips cache when none plan has no etag', () => {
+      const hooks = {
+        refreshJwks: jest.fn(),
+        refreshPinned: jest.fn(),
+        cacheEtagIfPresent: jest.fn(),
+      };
+      applyFlagsUpdatedPlan({ action: 'none' }, { type: 'flags-updated' }, hooks);
+      expect(hooks.cacheEtagIfPresent).not.toHaveBeenCalled();
     });
   });
 

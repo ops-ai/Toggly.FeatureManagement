@@ -23,6 +23,7 @@ import {
   getNextReconnectDelayMs,
   REFRESH_DEBOUNCE_MS,
   appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
   planFlagsUpdatedRefresh,
   shouldFetchOnSync,
   type WsSyncMessage,
@@ -147,21 +148,18 @@ export function createTogglyClient(
   }
 
   function handleWsUpdateMessage(message: WsSyncMessage): void {
-    const plan = planFlagsUpdatedRefresh(message, getDefinitionsRevision())
-    switch (plan.action) {
-      case 'refresh-jwks':
-        scheduleDebouncedRefresh(true)
-        return
-      case 'refresh-pinned':
-        // Pin with ?rev= and skip If-None-Match; never cache WS etag before HTTP.
-        pendingDefinitionsPin = plan.pin
-        scheduleDebouncedRefresh(true)
-        return
-      case 'none':
-        if (message.etag) {
-          cacheDefinitionsRevision(message.etag)
-        }
-    }
+    applyFlagsUpdatedPlan(
+      planFlagsUpdatedRefresh(message, getDefinitionsRevision()),
+      message,
+      {
+        refreshJwks: () => scheduleDebouncedRefresh(true),
+        refreshPinned: (pin) => {
+          pendingDefinitionsPin = pin
+          scheduleDebouncedRefresh(true)
+        },
+        cacheEtagIfPresent: (etag) => cacheDefinitionsRevision(etag),
+      },
+    )
   }
 
   function notifyFeaturesRefresh(): void {
