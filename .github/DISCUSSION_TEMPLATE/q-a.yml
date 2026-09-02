@@ -1,0 +1,25 @@
+title: "[Q&A] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask a question about Toggly SDKs or FeatureManagement packages. Search existing discussions first.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do, and where are you stuck?
+      placeholder: I'm integrating the .NET SDK and...
+    validations:
+      required: true
+  - type: input
+    id: packages
+    attributes:
+      label: Package versions
+      placeholder: e.g. Toggly.FeatureManagement 2.x, Node SDK 1.x
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Runtime, framework, OS — anything that helps reproduce.
