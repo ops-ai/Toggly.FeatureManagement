@@ -18,18 +18,6 @@ importers:
         specifier: ^8.0.0
         version: 8.19.0
 
-  ../toggly-eval:
-    devDependencies:
-      '@vitest/coverage-v8':
-        specifier: ^3.0.4
-        version: 3.2.4(supports-color@7.2.0)(vitest@3.2.4(@types/node@22.19.11)(supports-color@7.2.0))
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.4
-        version: 3.2.4(@types/node@22.19.11)(supports-color@7.2.0)
-
   toggly-express:
     dependencies:
       '@ops-ai/toggly-node-core':
@@ -154,8 +142,8 @@ importers:
   toggly-node-core:
     dependencies:
       '@ops-ai/toggly-eval':
-        specifier: workspace:^
-        version: link:../../toggly-eval
+        specifier: ^1.0.0
+        version: 1.0.0
       '@ops-ai/toggly-hooks-types':
         specifier: ^1.4.3
         version: 1.4.3
@@ -460,6 +448,10 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@ops-ai/toggly-eval@1.0.0':
+    resolution: {integrity: sha512-J/57ive/3QRV28SlLDpgNBnkGvF6Sq2JwYI2qX40RSp9uOv8fEMaZUxfczHO4E7rqUMBwtVdKcuWtzRjkCzHUA==}
+    engines: {node: '>=18.0.0'}
 
   '@ops-ai/toggly-hooks-types@1.4.3':
     resolution: {integrity: sha512-raN6g9hSJ61/SkiIFcHaoWQHAq/6utcn5D+HUAxx2/1f9unurZqQKpAQC0uxaJ1D7Ir4+3Y0VyjZ4NsKXO10AA==}
@@ -2180,6 +2172,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@ops-ai/toggly-eval@1.0.0': {}
 
   '@ops-ai/toggly-hooks-types@1.4.3': {}
 
