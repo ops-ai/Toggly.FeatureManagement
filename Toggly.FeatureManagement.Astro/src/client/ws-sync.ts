@@ -131,4 +131,3 @@ export function appendDefinitionsRevisionParam(
     return `${url}${separator}rev=${encodeURIComponent(rev)}`;
   }
 }
-

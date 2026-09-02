@@ -142,7 +142,7 @@ namespace Toggly.FeatureManagement.Configuration
             services.AddOptions<EntityContextRegistryOptions>();
             services.TryAddSingleton<EntityContextRegistry>(EntityContextServiceCollectionExtensions.CreateRegistry);
             services.TryAddSingleton<ITogglyEntityContextResolver, TogglyEntityContextResolver>();
-            
+
             var defaultMethodConfig = new MethodConfig
             {
                 Names = { MethodName.Default },

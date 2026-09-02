@@ -1,8 +1,8 @@
 # Eval hash and segment filter parity design [OPS-832]
 
-**Status:** Approved  
-**Date:** 2026-09-02  
-**Linear:** [OPS-832](https://linear.app/opsai/issue/OPS-832/align-eval-hash-and-segment-filters-across-definitions-go-js-and-net)  
+**Status:** Approved
+**Date:** 2026-09-02
+**Linear:** [OPS-832](https://linear.app/opsai/issue/OPS-832/align-eval-hash-and-segment-filters-across-definitions-go-js-and-net)
 **Related:** [OPS-825](https://linear.app/opsai/issue/OPS-825) (definitions-signed local rail for Node/Next server SDKs)
 
 ## Problem

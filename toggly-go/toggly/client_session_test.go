@@ -7,7 +7,7 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
-func TestClient_PercentageDeterministicByIdentityOnly(t *testing.T) {
+func TestClient_PercentageStickyByFeatureKeyAndIdentity(t *testing.T) {
 	c, err := NewClient(Config{
 		AppKey:                   "app",
 		Environment:              "env",
@@ -48,15 +48,15 @@ func TestClient_PercentageDeterministicByIdentityOnly(t *testing.T) {
 	}
 
 	if a1 != a2 {
-		t.Fatalf("expected deterministic result for same identity, got %v then %v", a1, a2)
+		t.Fatalf("expected sticky result for same featureKey+identity, got %v then %v", a1, a2)
 	}
 
-	// Identity-only: Percentage should be consistent across feature keys for the same identity.
+	// Feature key seeds the hash: buckets differ across features for the same identity.
 	b, err := c.IsEnabled(context.Background(), "flagB", ctx)
 	if err != nil {
 		t.Fatalf("IsEnabled flagB: %v", err)
 	}
-	if a1 != b {
-		t.Fatalf("expected identity-only consistency across feature keys, got flagA=%v flagB=%v", a1, b)
+	if a1 == b {
+		t.Fatalf("expected different Percentage outcomes across feature keys, got flagA=%v flagB=%v", a1, b)
 	}
 }
