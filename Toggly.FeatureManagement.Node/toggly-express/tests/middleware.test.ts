@@ -64,12 +64,18 @@ describe('togglyMiddleware', () => {
       ok: true,
       status: 200,
       headers: new Map(),
-      json: async () => ({
-        features: [
-          { featureKey: 'feature-a', enabled: true },
-          { featureKey: 'feature-b', enabled: false },
-        ],
-      }),
+      json: async () => ([
+
+          { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+          { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+        
+        ]),
+      text: async () => JSON.stringify([
+
+          { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+          { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+        
+        ]),
     })
   })
 
@@ -245,12 +251,18 @@ describe('featureGate', () => {
       ok: true,
       status: 200,
       headers: new Map(),
-      json: async () => ({
-        features: [
-          { featureKey: 'enabled-feature', enabled: true },
-          { featureKey: 'disabled-feature', enabled: false },
-        ],
-      }),
+      json: async () => ([
+
+          { featureKey: 'enabled-feature', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+          { featureKey: 'disabled-feature', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+        
+        ]),
+      text: async () => JSON.stringify([
+
+          { featureKey: 'enabled-feature', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+          { featureKey: 'disabled-feature', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+        
+        ]),
     })
   })
 
@@ -398,12 +410,18 @@ describe('featureRoutes', () => {
       ok: true,
       status: 200,
       headers: new Map(),
-      json: async () => ({
-        features: [
-          { featureKey: 'beta-feature', enabled: false },
-          { featureKey: 'admin-feature', enabled: true },
-        ],
-      }),
+      json: async () => ([
+
+          { featureKey: 'beta-feature', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+          { featureKey: 'admin-feature', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+        
+        ]),
+      text: async () => JSON.stringify([
+
+          { featureKey: 'beta-feature', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+          { featureKey: 'admin-feature', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+        
+        ]),
     })
   })
 
@@ -485,9 +503,12 @@ describe('withFeature', () => {
       ok: true,
       status: 200,
       headers: new Map(),
-      json: async () => ({
-        features: [{ featureKey: 'my-feature', enabled: true }],
-      }),
+      json: async () => ([
+{ featureKey: 'my-feature', filters: [{ name: 'AlwaysOn', parameters: {} }] }
+        ]),
+      text: async () => JSON.stringify([
+{ featureKey: 'my-feature', filters: [{ name: 'AlwaysOn', parameters: {} }] }
+        ]),
     })
   })
 
@@ -520,12 +541,18 @@ describe('featuresHandler', () => {
       ok: true,
       status: 200,
       headers: new Map(),
-      json: async () => ({
-        features: [
-          { featureKey: 'feature-a', enabled: true },
-          { featureKey: 'feature-b', enabled: false },
-        ],
-      }),
+      json: async () => ([
+
+          { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+          { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+        
+        ]),
+      text: async () => JSON.stringify([
+
+          { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+          { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+        
+        ]),
     })
   })
 
@@ -572,7 +599,12 @@ describe('getExpressToggly', () => {
       ok: true,
       status: 200,
       headers: new Map(),
-      json: async () => ({ features: [] }),
+      json: async () => ([
+
+        ]),
+      text: async () => JSON.stringify([
+
+        ]),
     })
   })
 
@@ -602,7 +634,12 @@ describe('closeExpressToggly', () => {
       ok: true,
       status: 200,
       headers: new Map(),
-      json: async () => ({ features: [] }),
+      json: async () => ([
+
+        ]),
+      text: async () => JSON.stringify([
+
+        ]),
     })
   })
 

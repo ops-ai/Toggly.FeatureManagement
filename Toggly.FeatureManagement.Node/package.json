@@ -9,11 +9,11 @@
     "directory": "Toggly.FeatureManagement.Node"
   },
   "scripts": {
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "lint": "pnpm -r lint",
-    "clean": "pnpm -r clean",
-    "typecheck": "pnpm -r typecheck"
+    "build": "pnpm -r --filter \"./toggly-*\" build",
+    "test": "pnpm -r --filter \"./toggly-*\" test",
+    "lint": "pnpm -r --filter \"./toggly-*\" lint",
+    "clean": "pnpm -r --filter \"./toggly-*\" clean",
+    "typecheck": "pnpm -r --filter \"./toggly-*\" typecheck"
   },
   "devDependencies": {
     "@types/ws": "^8.0.0",
