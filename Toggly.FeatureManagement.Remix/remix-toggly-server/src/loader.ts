@@ -54,11 +54,12 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
         identity = getIdentityFromRequest(request, options.getIdentityFromCookies);
       }
 
-      // Initialize client and fetch flags (re-snapshots when already warm)
+      // Ensure definitions are loaded; request-local snapshot avoids shared flags race
       await client.init(identity);
+      const identityCtx = { identity };
 
       return {
-        flags: client.getFlags(),
+        flags: client.snapshotFlags(identityCtx),
         identity,
         appKey: options.appKey,
         environment: options.environment,
@@ -91,11 +92,7 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
       defaultValue = false,
       identity?: string
     ): Promise<boolean> {
-      return client.isEnabled(
-        featureKey,
-        identity !== undefined ? { identity } : undefined,
-        defaultValue,
-      );
+      return client.isEnabled(featureKey, { identity }, defaultValue);
     },
 
     /**
@@ -106,11 +103,7 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
       defaultValue = true,
       identity?: string
     ): Promise<boolean> {
-      return client.isDisabled(
-        featureKey,
-        identity !== undefined ? { identity } : undefined,
-        defaultValue,
-      );
+      return client.isDisabled(featureKey, { identity }, defaultValue);
     },
 
     /**
@@ -129,7 +122,7 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
         false,
         undefined,
         undefined,
-        identity !== undefined ? { identity } : undefined,
+        { identity },
       );
     },
 

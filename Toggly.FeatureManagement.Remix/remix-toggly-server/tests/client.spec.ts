@@ -243,6 +243,40 @@ describe('TogglyServerClient', () => {
       expect(await client.isEnabled('targeted-flag')).toBe(true);
     });
 
+    it('should clear identity on warm re-init with undefined', async () => {
+      const targetingAlice = {
+        featureKey: 'targeted-flag',
+        filters: [
+          {
+            name: 'Targeting',
+            parameters: {
+              'Audience.Users:0': 'alice',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([targetingAlice]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([targetingAlice]),
+        headers: { get: () => null },
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      expect((await client.init('alice'))['targeted-flag']).toBe(true);
+      expect((await client.init(undefined))['targeted-flag']).toBe(false);
+      expect(await client.isEnabled('targeted-flag', { identity: undefined })).toBe(
+        false,
+      );
+      expect(await client.isEnabled('targeted-flag', { identity: 'alice' })).toBe(
+        true,
+      );
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it('should evaluate concurrent identity overrides independently', async () => {
       const targetingAlice = {
         featureKey: 'targeted-flag',

@@ -62,6 +62,8 @@ export class TogglyServerClient {
   private definitions: Map<string, FeatureDefinitionModel> = new Map();
   private hooks: TogglyHook[] = [];
   private initialized = false;
+  /** Dedupes concurrent cold-start definition fetches. */
+  private definitionsLoadPromise: Promise<void> | null = null;
 
   // WebSocket live updates
   private ws: WebSocket | null = null;
@@ -160,11 +162,40 @@ export class TogglyServerClient {
     identityOverride?: IdentityContext,
     entityContext?: TogglyEntityContext | null,
   ): EvalContext {
+    // When an override object is provided, use its fields (including
+    // `identity: undefined` for anonymous). Only fall back to process
+    // defaults when no override object is passed.
+    if (identityOverride) {
+      return {
+        identity: identityOverride.identity,
+        groups: identityOverride.groups ?? this.config.groups,
+        traits:
+          identityOverride.traits ??
+          identityOverride.claims ??
+          this.config.claims,
+        entity: entityContext ?? null,
+      };
+    }
+
     return {
-      identity: identityOverride?.identity ?? this.identity,
-      groups: identityOverride?.groups ?? this.config.groups,
-      traits: identityOverride?.traits ?? identityOverride?.claims ?? this.config.claims,
+      identity: this.identity,
+      groups: this.config.groups,
+      traits: this.config.claims,
       entity: entityContext ?? null,
+    };
+  }
+
+  /**
+   * Evaluate a boolean snapshot for a specific identity without relying on
+   * shared mutable `this.flags` / `this.identity` (safe under concurrency).
+   */
+  snapshotFlags(identityOverride?: IdentityContext): FeatureFlags {
+    return {
+      ...(this.config.featureDefaults ?? {}),
+      ...snapshotEvaluatedBooleans(
+        this.definitions as DefinitionsByKey,
+        this.buildEvalContext(identityOverride),
+      ),
     };
   }
 
@@ -268,43 +299,38 @@ export class TogglyServerClient {
 
   /**
    * Initialize the client by fetching feature definitions.
-   * When already initialized, rebinds identity and re-snapshots flags without
-   * re-fetching (definitions are identity-agnostic).
+   * When already initialized, rebinds identity (including clearing it) and
+   * re-snapshots flags without re-fetching (definitions are identity-agnostic).
+   * Concurrent cold starts share one fetch; each caller still receives a
+   * request-local snapshot for its identity.
    */
   async init(identity?: string): Promise<FeatureFlags> {
-    if (this.initialized && this.definitions.size > 0) {
-      if (identity !== undefined) {
-        this.identity = identity;
+    const wasWarm = this.initialized && this.definitions.size > 0;
+
+    if (!wasWarm) {
+      if (!this.definitionsLoadPromise) {
+        this.definitionsLoadPromise = (async () => {
+          await this.fetchFlags();
+          this.initialized = true;
+          this.startWebSocket();
+        })().finally(() => {
+          this.definitionsLoadPromise = null;
+        });
       }
-      this.flags = {
-        ...this.config.featureDefaults,
-        ...snapshotEvaluatedBooleans(
-          this.definitions as DefinitionsByKey,
-          this.buildEvalContext(),
-        ),
-      };
-      this.logger.debug('Client already initialized; re-snapshotted for identity.');
-      return this.flags;
+      await this.definitionsLoadPromise;
+
+      if (identity) {
+        await this.executeBeforeIdentify(identity);
+        await this.executeAfterIdentify(identity);
+      }
     }
 
+    // Always rebind — including `undefined` so identified→anonymous is correct.
     this.identity = identity;
-
-    // Execute beforeIdentify hooks if identity provided
-    if (identity) {
-      await this.executeBeforeIdentify(identity);
+    this.flags = this.snapshotFlags({ identity });
+    if (wasWarm) {
+      this.logger.debug('Client already initialized; re-snapshotted for identity.');
     }
-
-    await this.fetchFlags(identity);
-    this.initialized = true;
-
-    // Execute afterIdentify hooks if identity provided
-    if (identity) {
-      await this.executeAfterIdentify(identity);
-    }
-
-    // Start WebSocket live updates
-    this.startWebSocket();
-
     return this.flags;
   }
 

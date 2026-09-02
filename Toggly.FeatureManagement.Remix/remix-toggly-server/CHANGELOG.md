@@ -1,3 +1,15 @@
+## 1.5.2
+
+2026-09-02
+
+### Fixed
+- Warm `init(undefined)` clears prior identity (identified→anonymous).
+- `snapshotFlags({ identity })` returns a request-local evaluation; loaders
+  and actions use it so concurrent requests do not share mutable flag state.
+- Identity override objects treat `identity: undefined` as anonymous instead
+  of falling back to the shared client identity.
+- Concurrent cold-start `init` calls share one definitions fetch.
+
 ## 1.5.1
 
 2026-09-02

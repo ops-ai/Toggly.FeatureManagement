@@ -305,6 +305,55 @@ describe('createTogglyLoader', () => {
       ).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
+
+    it('should keep request-local snapshots under concurrent loads', async () => {
+      const targetingAlice = {
+        featureKey: 'targeted-flag',
+        filters: [
+          {
+            name: 'Targeting',
+            parameters: {
+              'Audience.Users:0': 'alice',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([targetingAlice]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([targetingAlice]),
+        headers: { get: () => null },
+      });
+
+      const loader = createTogglyLoader({
+        ...defaultOptions,
+        getIdentity: async (request) =>
+          request.headers.get('x-user-id') ?? undefined,
+      });
+
+      const [bobCtx, aliceCtx, anonCtx] = await Promise.all([
+        loader.load(
+          createMockLoaderArgs(
+            createMockRequest({ headers: { 'x-user-id': 'bob' } }),
+          ),
+        ),
+        loader.load(
+          createMockLoaderArgs(
+            createMockRequest({ headers: { 'x-user-id': 'alice' } }),
+          ),
+        ),
+        loader.load(createMockLoaderArgs(createMockRequest())),
+      ]);
+
+      expect(bobCtx.flags['targeted-flag']).toBe(false);
+      expect(aliceCtx.flags['targeted-flag']).toBe(true);
+      expect(anonCtx.flags['targeted-flag']).toBe(false);
+      expect(anonCtx.identity).toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('isDisabled', () => {

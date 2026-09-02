@@ -69,12 +69,12 @@ export function createFeatureGatedAction<T>(
       identity = await options.getIdentity(request);
     }
     await client.init(identity);
-    const identityCtx = identity !== undefined ? { identity } : undefined;
+    const identityCtx = { identity };
 
     // Create context
     const togglyContext: TogglyActionContext = {
       client,
-      flags: client.getFlags(),
+      flags: client.snapshotFlags(identityCtx),
       isEnabled: (key, def) => client.isEnabled(key, identityCtx, def),
       isDisabled: (key, def) => client.isDisabled(key, identityCtx, def),
       evaluateGate: (keys, req, neg) =>
@@ -140,11 +140,11 @@ export function createTogglyAction(options: TogglyLoaderOptions) {
       }
 
       await client.init(identity);
-      const identityCtx = identity !== undefined ? { identity } : undefined;
+      const identityCtx = { identity };
 
       return {
         client,
-        flags: client.getFlags(),
+        flags: client.snapshotFlags(identityCtx),
         isEnabled: (key, def) => client.isEnabled(key, identityCtx, def),
         isDisabled: (key, def) => client.isDisabled(key, identityCtx, def),
         evaluateGate: (keys, req, neg) =>
