@@ -1,8 +1,8 @@
 # Eval hash and segment filter parity design [OPS-832]
 
-**Status:** Approved
-**Date:** 2026-09-02
-**Linear:** [OPS-832](https://linear.app/opsai/issue/OPS-832/align-eval-hash-and-segment-filters-across-definitions-go-js-and-net)
+**Status:** Approved  
+**Date:** 2026-09-02  
+**Linear:** [OPS-832](https://linear.app/opsai/issue/OPS-832/align-eval-hash-and-segment-filters-across-definitions-go-js-and-net)  
 **Related:** [OPS-825](https://linear.app/opsai/issue/OPS-825) (definitions-signed local rail for Node/Next server SDKs)
 
 ## Problem
@@ -29,7 +29,7 @@ Local evaluation after OPS-825 (Go FNV / `@ops-ai/toggly-eval` FNV) does not mat
 | Hash contract | Definitions SHA-256 of `` `${featureKey}\n${userId}` `` |
 | Segment sticky seed | Same string as Percentage (correlated by design) |
 | No identity (segment `%`) | Fall back to non-sticky random |
-| No identity (Percentage / Targeting) | Fail closed |
+| No identity (Percentage / Targeting) | `<=0` → off; `>=100` → on (always); fail closed only for `(0, 100)` without identity |
 | Approach | Spec + golden vectors, cascade Definitions → toggly-eval → Go → Node → .NET |
 | MF string order | Do **not** adopt; .NET uses Definitions-aligned helpers |
 
@@ -40,6 +40,8 @@ Local evaluation after OPS-825 (Go FNV / `@ops-ai/toggly-eval` FNV) does not mat
 3. Interpret the first 4 bytes as little-endian `uint32`.
 4. `bucket = (value / 0xFFFFFFFF) * 100` → `[0, 100)`.
 5. In rollout iff `bucket < percentage` (`percentage <= 0` → off; `>= 100` → on).
+
+**Identity short-circuit (amended OPS-832):** `<=0` and `>=100` apply **before** the identity check (match Definitions). Fail closed without identity only when percentage is in `(0, 100)` and a sticky bucket would otherwise be required.
 
 Reference implementation today: `Toggly/src/Toggly.Definitions/src/filter-evaluator.ts` → `computePercentile`.
 
