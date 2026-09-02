@@ -21,7 +21,7 @@ importers:
   toggly-express:
     dependencies:
       '@ops-ai/toggly-node-core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../toggly-node-core
     devDependencies:
       '@types/express':
@@ -52,7 +52,7 @@ importers:
   toggly-fastify:
     dependencies:
       '@ops-ai/toggly-node-core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../toggly-node-core
       fastify-plugin:
         specifier: ^5.0.1
@@ -83,7 +83,7 @@ importers:
   toggly-hono:
     dependencies:
       '@ops-ai/toggly-node-core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../toggly-node-core
     devDependencies:
       '@types/node':
@@ -111,7 +111,7 @@ importers:
   toggly-koa:
     dependencies:
       '@ops-ai/toggly-node-core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../toggly-node-core
     devDependencies:
       '@types/koa':

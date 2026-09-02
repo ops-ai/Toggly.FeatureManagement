@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-fastify",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Toggly feature flags Fastify plugin",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -61,7 +61,7 @@
     "fastify": "^4.0.0 || ^5.0.0"
   },
   "dependencies": {
-    "@ops-ai/toggly-node-core": "workspace:*",
+    "@ops-ai/toggly-node-core": "workspace:^",
     "fastify-plugin": "^5.0.1"
   },
   "devDependencies": {

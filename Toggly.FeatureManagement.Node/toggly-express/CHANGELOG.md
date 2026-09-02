@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 0.1.5
+
+2026-09-02
+
+### Changed
+
+- Pin `@ops-ai/toggly-node-core` with `workspace:^` so publish resolves a compatible semver range instead of an exact snapshot that can strand sibling packages on two core copies.
+
 ## 0.1.4
 
 - Normalize public npm metadata for provenance and docs links (no API change).

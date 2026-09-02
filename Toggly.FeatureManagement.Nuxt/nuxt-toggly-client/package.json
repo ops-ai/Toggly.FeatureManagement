@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly-client",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Client-side feature flag composables and components for Nuxt/Vue 3",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -48,7 +48,7 @@
   },
   "homepage": "https://docs.toggly.io/sdks/nuxt/client",
   "dependencies": {
-    "@ops-ai/nuxt-toggly-core": "workspace:*"
+    "@ops-ai/nuxt-toggly-core": "workspace:^"
   },
   "peerDependencies": {
     "vue": "^3.3.0"
