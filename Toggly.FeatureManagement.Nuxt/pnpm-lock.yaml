@@ -15,6 +15,18 @@ importers:
         specifier: ^8.0.0
         version: 8.19.0
 
+  ../toggly-eval:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^3.0.4
+        version: 3.2.4(vitest@3.2.4(@types/node@22.19.11)(happy-dom@20.0.2)(jiti@2.6.1)(terser@5.46.0)(yaml@2.8.2))
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.4
+        version: 3.2.4(@types/node@22.19.11)(happy-dom@20.0.2)(jiti@2.6.1)(terser@5.46.0)(yaml@2.8.2)
+
   nuxt-toggly:
     dependencies:
       '@nuxt/kit':
@@ -94,6 +106,9 @@ importers:
 
   nuxt-toggly-core:
     dependencies:
+      '@ops-ai/toggly-eval':
+        specifier: workspace:^
+        version: link:../../toggly-eval
       '@ops-ai/toggly-hooks-types':
         specifier: ^1.4.3
         version: 1.4.3

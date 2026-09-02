@@ -45,7 +45,7 @@
   },
   "homepage": "https://docs.toggly.io/sdks/remix",
   "dependencies": {
-    "@ops-ai/toggly-eval": "file:../../toggly-eval",
+    "@ops-ai/toggly-eval": "^1.0.0",
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1"
   },

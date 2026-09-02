@@ -18,6 +18,18 @@ importers:
         specifier: ^8.0.0
         version: 8.19.0
 
+  ../toggly-eval:
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^3.0.4
+        version: 3.2.4(supports-color@7.2.0)(vitest@3.2.4(@types/node@22.19.11)(supports-color@7.2.0))
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.4
+        version: 3.2.4(@types/node@22.19.11)(supports-color@7.2.0)
+
   toggly-express:
     dependencies:
       '@ops-ai/toggly-node-core':
@@ -141,6 +153,9 @@ importers:
 
   toggly-node-core:
     dependencies:
+      '@ops-ai/toggly-eval':
+        specifier: workspace:^
+        version: link:../../toggly-eval
       '@ops-ai/toggly-hooks-types':
         specifier: ^1.4.3
         version: 1.4.3

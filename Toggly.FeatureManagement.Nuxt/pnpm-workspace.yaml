@@ -3,3 +3,4 @@ packages:
   - 'nuxt-toggly-server'
   - 'nuxt-toggly-client'
   - 'nuxt-toggly'
+  - '../toggly-eval'

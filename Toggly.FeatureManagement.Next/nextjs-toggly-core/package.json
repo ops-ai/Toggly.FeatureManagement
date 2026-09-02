@@ -52,7 +52,7 @@
   },
   "homepage": "https://docs.toggly.io/sdks/nextjs",
   "dependencies": {
-    "@ops-ai/toggly-eval": "file:../../toggly-eval",
+    "@ops-ai/toggly-eval": "workspace:^",
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
