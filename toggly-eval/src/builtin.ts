@@ -141,8 +141,31 @@ export const timeWindow: FilterEvaluator = (_featureKey, params, _ctx) => {
 }
 
 export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
-  const ignoreCase = asBool(params, 'IgnoreCase') ?? false
+  // Match Definitions default: IgnoreCase defaults to true when unset.
+  const ignoreCase = asBool(params, 'IgnoreCase') ?? true
   const identity = ctx.identity ?? ''
+
+  if (identity) {
+    const exclusionUsers = collectPrefixedStrings(
+      params,
+      'Audience.Exclusion.Users',
+    )
+    if (contains(exclusionUsers, identity, ignoreCase)) {
+      return false
+    }
+  }
+
+  if (ctx.groups && ctx.groups.length > 0) {
+    const exclusionGroups = collectPrefixedStrings(
+      params,
+      'Audience.Exclusion.Groups',
+    )
+    for (const g of ctx.groups) {
+      if (contains(exclusionGroups, g, ignoreCase)) {
+        return false
+      }
+    }
+  }
 
   if (identity) {
     const users = collectPrefixedStrings(params, 'Audience.Users')

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1
+
+2026-09-02
+
+### Fixed
+- Targeting honors `Audience.Exclusion.Users` / `Audience.Exclusion.Groups`
+  before inclusions and default rollout (Definitions parity).
+- `IgnoreCase` defaults to `true` when unset (Definitions parity).
+
 ## 1.0.0
 
 2026-09-02

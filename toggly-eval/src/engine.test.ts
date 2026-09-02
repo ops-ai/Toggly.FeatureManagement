@@ -65,6 +65,45 @@ describe('builtin filters', () => {
     expect(evaluateDefinition(def, { identity: 'bob' })).toBe(false)
   })
 
+  it('Targeting exclusion user wins over inclusion and rollout', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'f',
+      filters: [
+        {
+          name: 'Targeting',
+          parameters: {
+            'Audience.Users:0': 'alice',
+            'Audience.Exclusion.Users:0': 'alice',
+            'Audience.DefaultRolloutPercentage': 100,
+          },
+        },
+      ],
+    }
+    expect(evaluateDefinition(def, { identity: 'alice' })).toBe(false)
+    expect(evaluateDefinition(def, { identity: 'bob' })).toBe(true)
+  })
+
+  it('Targeting exclusion group wins over default rollout', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'f',
+      filters: [
+        {
+          name: 'Targeting',
+          parameters: {
+            'Audience.Exclusion.Groups:0': 'banned',
+            'Audience.DefaultRolloutPercentage': 100,
+          },
+        },
+      ],
+    }
+    expect(
+      evaluateDefinition(def, { identity: 'u', groups: ['banned'] }),
+    ).toBe(false)
+    expect(evaluateDefinition(def, { identity: 'u', groups: ['ok'] })).toBe(
+      true,
+    )
+  })
+
   it('Targeting default rollout is deterministic', () => {
     const featureKey = 'f'
     const identity = 'user'

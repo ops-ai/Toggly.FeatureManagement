@@ -77,9 +77,29 @@ func (t TimeWindowEvaluator) Evaluate(featureKey string, params map[string]any, 
 type TargetingEvaluator struct{}
 
 func (TargetingEvaluator) Evaluate(featureKey string, params map[string]any, ctx Context) (bool, error) {
-	ignoreCase, _ := asBool(params, "IgnoreCase")
+	// Match Definitions default: IgnoreCase defaults to true when unset.
+	ignoreCase, ok := asBool(params, "IgnoreCase")
+	if !ok {
+		ignoreCase = true
+	}
 
 	identity := ctx.Identity
+	if identity != "" {
+		exclusionUsers := collectPrefixedStrings(params, "Audience.Exclusion.Users")
+		if contains(exclusionUsers, identity, ignoreCase) {
+			return false, nil
+		}
+	}
+
+	if len(ctx.Groups) > 0 {
+		exclusionGroups := collectPrefixedStrings(params, "Audience.Exclusion.Groups")
+		for _, g := range ctx.Groups {
+			if contains(exclusionGroups, g, ignoreCase) {
+				return false, nil
+			}
+		}
+	}
+
 	if identity != "" {
 		users := collectPrefixedStrings(params, "Audience.Users")
 		if contains(users, identity, ignoreCase) {
