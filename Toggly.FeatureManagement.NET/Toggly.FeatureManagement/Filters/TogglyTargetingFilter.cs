@@ -37,7 +37,8 @@ namespace Toggly.FeatureManagement.Filters
         /// <inheritdoc />
         public async Task<bool> EvaluateAsync(FeatureFilterEvaluationContext context)
         {
-            ArgumentNullException.ThrowIfNull(context);
+            if (context == null)
+                throw new ArgumentNullException(nameof(context));
 
             var parameters = context.Parameters;
             var ignoreCase = parameters.GetValue("IgnoreCase", true);

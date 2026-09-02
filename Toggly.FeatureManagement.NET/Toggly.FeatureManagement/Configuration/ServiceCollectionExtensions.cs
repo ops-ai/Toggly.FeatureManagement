@@ -238,7 +238,8 @@ namespace Toggly.FeatureManagement.Configuration
         public static IFeatureManagementBuilder WithTogglyTargeting<T>(this IFeatureManagementBuilder builder)
             where T : class, ITargetingContextAccessor
         {
-            ArgumentNullException.ThrowIfNull(builder);
+            if (builder == null)
+                throw new ArgumentNullException(nameof(builder));
 
             builder.Services.AddSingleton<ITargetingContextAccessor, T>();
             RemoveFeatureFilter(builder.Services, typeof(TargetingFilter));

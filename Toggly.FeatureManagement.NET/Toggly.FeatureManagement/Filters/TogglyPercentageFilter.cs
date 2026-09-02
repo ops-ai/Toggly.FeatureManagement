@@ -30,7 +30,8 @@ namespace Toggly.FeatureManagement.Filters
         /// <inheritdoc />
         public async Task<bool> EvaluateAsync(FeatureFilterEvaluationContext context)
         {
-            ArgumentNullException.ThrowIfNull(context);
+            if (context == null)
+                throw new ArgumentNullException(nameof(context));
 
             var settings = context.Parameters.Get<PercentageFilterSettings>() ?? new PercentageFilterSettings();
             if (settings.Value <= 0)
