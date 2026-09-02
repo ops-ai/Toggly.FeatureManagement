@@ -104,17 +104,28 @@ test('cross-workspace and peer deps accept caret ranges but reject exact pins', 
 test('the caret range must match end to end', () => {
   // An unanchored pattern would accept trailing junk, or a second comparator
   // that pins the dependency right back down.
-  for (const specifier of ['^1.4.3 garbage', '^1.4.3 || 1.0.0', '^1.4.3.4', '^1.4.3-']) {
+  for (const specifier of [
+    '^1.4.3 garbage',
+    '^1.4.3 || 1.0.0',
+    '^1.4.3.4',
+    '^1.4.3-',
+    '^1.4.3-..', // Empty prerelease identifier.
+    '^01.4.3', // Leading zero.
+    '^1.4.3+', // Empty build metadata.
+  ]) {
     const errors = check({ dependencies: { '@ops-ai/toggly-hooks-types': specifier } });
 
     assert.equal(errors.length, 1, `expected ${specifier} to be rejected`);
   }
 
   // Prerelease and build metadata are still legitimate caret ranges.
-  assert.deepEqual(
-    check({ dependencies: { '@ops-ai/toggly-hooks-types': '^1.4.3-beta.1' } }),
-    [],
-  );
+  for (const specifier of ['^1.4.3-beta.1', '^1.4.3+build.5', '^0.0.1', '^1.4.3-rc.0+a']) {
+    assert.deepEqual(
+      check({ dependencies: { '@ops-ai/toggly-hooks-types': specifier } }),
+      [],
+      `expected ${specifier} to be accepted`,
+    );
+  }
 });
 
 test('third-party dependencies are ignored by the intra-repo guard', () => {
