@@ -145,6 +145,14 @@ func (c *Client) IsEnabled(ctx context.Context, featureKey string, evalCtx Conte
 		Identity: evalCtx.Identity,
 		Groups:   evalCtx.Groups,
 		Traits:   evalCtx.Traits,
+		Claims:   evalCtx.Claims,
+	}
+	if evalCtx.Request != nil {
+		inner.Request = &eval.RequestContext{
+			UserAgent:      evalCtx.Request.UserAgent,
+			AcceptLanguage: evalCtx.Request.AcceptLanguage,
+			Country:        evalCtx.Request.Country,
+		}
 	}
 	if evalCtx.Entity != nil {
 		inner.Entity = &eval.EntityContext{
