@@ -30,13 +30,13 @@ describe('togglyMiddleware', () => {
 
           { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
       text: async () => JSON.stringify([
 
           { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
     })
 
@@ -194,13 +194,13 @@ describe('featureGate', () => {
 
           { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
       text: async () => JSON.stringify([
 
           { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
     })
 
@@ -327,13 +327,13 @@ describe('featureRoutes', () => {
 
           { featureKey: 'beta', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'admin', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
       text: async () => JSON.stringify([
 
           { featureKey: 'beta', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'admin', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
     })
 
@@ -446,13 +446,13 @@ describe('featuresHandler', () => {
 
           { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
       text: async () => JSON.stringify([
 
           { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
     })
 

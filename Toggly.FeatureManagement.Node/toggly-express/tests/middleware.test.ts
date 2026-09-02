@@ -68,13 +68,13 @@ describe('togglyMiddleware', () => {
 
           { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
       text: async () => JSON.stringify([
 
           { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
     })
   })
@@ -255,13 +255,13 @@ describe('featureGate', () => {
 
           { featureKey: 'enabled-feature', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'disabled-feature', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
       text: async () => JSON.stringify([
 
           { featureKey: 'enabled-feature', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'disabled-feature', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
     })
   })
@@ -414,13 +414,13 @@ describe('featureRoutes', () => {
 
           { featureKey: 'beta-feature', filters: [{ name: 'AlwaysOff', parameters: {} }] },
           { featureKey: 'admin-feature', filters: [{ name: 'AlwaysOn', parameters: {} }] },
-        
+
         ]),
       text: async () => JSON.stringify([
 
           { featureKey: 'beta-feature', filters: [{ name: 'AlwaysOff', parameters: {} }] },
           { featureKey: 'admin-feature', filters: [{ name: 'AlwaysOn', parameters: {} }] },
-        
+
         ]),
     })
   })
@@ -545,13 +545,13 @@ describe('featuresHandler', () => {
 
           { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
       text: async () => JSON.stringify([
 
           { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
           { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
-        
+
         ]),
     })
   })
