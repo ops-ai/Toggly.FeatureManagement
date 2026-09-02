@@ -197,15 +197,28 @@ namespace Toggly.FeatureManagement.Configuration
         /// </summary>
         /// <param name="services">The application service collection.</param>
         /// <returns>The feature management builder for further configuration.</returns>
+        /// <remarks>
+        /// Registers Definitions-aligned <see cref="Filters.TogglyPercentageFilter"/> and
+        /// <see cref="Filters.TogglyTargetingFilter"/> and removes stock
+        /// <see cref="PercentageFilter"/> / <see cref="TargetingFilter"/> so their
+        /// reversed <c>userId\nhint</c> hash cannot win for default rollout.
+        /// Prefer <see cref="WithTogglyTargeting{T}"/> over Microsoft's
+        /// <c>WithTargeting</c> (which re-registers the stock targeting filter).
+        /// </remarks>
         public static IFeatureManagementBuilder AddTogglyFeatureManagement(this IServiceCollection services)
         {
             var featureManagement = services.AddFeatureManagement()
-                .AddFeatureFilter<PercentageFilter>()
                 .AddFeatureFilter<TimeWindowFilter>()
                 .AddFeatureFilter<ContextPropertyFilter>();
 
-            if (services.Any(t => t.ImplementationType?.IsAssignableFrom(typeof(ITargetingContextAccessor)) ?? false))
-                featureManagement.AddFeatureFilter<TargetingFilter>();
+            // AddFeatureManagement auto-registers stock PercentageFilter; remove it so
+            // Definitions-aligned sticky Percentage is the only Microsoft.Percentage match.
+            RemoveFeatureFilter(services, typeof(PercentageFilter));
+            RemoveFeatureFilter(services, typeof(TargetingFilter));
+
+            featureManagement
+                .AddFeatureFilter<Filters.TogglyPercentageFilter>()
+                .AddFeatureFilter<Filters.TogglyTargetingFilter>();
 
             services.Decorate<IFeatureManager, TogglyFeatureManager>();
             // Fail closed: unknown filters throw instead of being ignored (which can enable flags).
@@ -216,6 +229,32 @@ namespace Toggly.FeatureManagement.Configuration
             });
 
             return featureManagement;
+        }
+
+        /// <summary>
+        /// Registers a targeting context accessor for sticky Percentage / Targeting /
+        /// segment evaluation without re-adding stock <see cref="TargetingFilter"/>.
+        /// </summary>
+        public static IFeatureManagementBuilder WithTogglyTargeting<T>(this IFeatureManagementBuilder builder)
+            where T : class, ITargetingContextAccessor
+        {
+            if (builder == null)
+                throw new ArgumentNullException(nameof(builder));
+
+            builder.Services.AddSingleton<ITargetingContextAccessor, T>();
+            RemoveFeatureFilter(builder.Services, typeof(TargetingFilter));
+            builder.AddFeatureFilter<Filters.TogglyTargetingFilter>();
+            return builder;
+        }
+
+        private static void RemoveFeatureFilter(IServiceCollection services, Type implementationType)
+        {
+            var descriptors = services
+                .Where(d => d.ServiceType == typeof(IFeatureFilterMetadata) && d.ImplementationType == implementationType)
+                .ToList();
+
+            foreach (var descriptor in descriptors)
+                services.Remove(descriptor);
         }
     }
 }

@@ -1,10 +1,11 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.FeatureManagement;
+using Microsoft.FeatureManagement.FeatureFilters;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using UAParser;
 
 namespace Toggly.FeatureManagement.Web.Filters
 {
@@ -12,20 +13,27 @@ namespace Toggly.FeatureManagement.Web.Filters
     public class BrowserLanguageFilter : IFeatureFilter
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly ITargetingContextAccessor _targetingContextAccessor;
 
-        public BrowserLanguageFilter(IHttpContextAccessor httpContextAccessor)
+        public BrowserLanguageFilter(
+            IHttpContextAccessor httpContextAccessor,
+            IEnumerable<ITargetingContextAccessor> targetingContextAccessors)
         {
             _httpContextAccessor = httpContextAccessor;
+            _targetingContextAccessor = SegmentPercentageGate.ResolveAccessor(targetingContextAccessors);
         }
 
-        public Task<bool> EvaluateAsync(FeatureFilterEvaluationContext context)
+        public async Task<bool> EvaluateAsync(FeatureFilterEvaluationContext context)
         {
             var settings = context.Parameters.Get<BrowserLanguageFilterSettings>() ?? new BrowserLanguageFilterSettings();
 
+            if (!await SegmentPercentageGate.PassesAsync(settings.Percentage, context.FeatureName, _targetingContextAccessor).ConfigureAwait(false))
+                return false;
+
             var acceptLanguage = _httpContextAccessor.HttpContext.Request.Headers["Accept-Language"].FirstOrDefault();
 
-            var result = (RandomGenerator.NextDouble() * 100) < settings.Percentage;
-            return Task.FromResult(result && settings.BrowserLanguage.Any(t => acceptLanguage?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
+            return settings.BrowserLanguage != null &&
+                   settings.BrowserLanguage.Any(t => acceptLanguage?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false);
         }
 
         public class BrowserLanguageFilterSettings

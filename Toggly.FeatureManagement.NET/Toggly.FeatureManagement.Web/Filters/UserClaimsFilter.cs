@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.FeatureManagement;
+using Microsoft.FeatureManagement.FeatureFilters;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Toggly.FeatureManagement.Web.Filters
@@ -9,18 +11,24 @@ namespace Toggly.FeatureManagement.Web.Filters
     public class UserClaimsFilter : IFeatureFilter
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
-        
-        public UserClaimsFilter(IHttpContextAccessor httpContextAccessor)
+        private readonly ITargetingContextAccessor _targetingContextAccessor;
+
+        public UserClaimsFilter(
+            IHttpContextAccessor httpContextAccessor,
+            IEnumerable<ITargetingContextAccessor> targetingContextAccessors)
         {
             _httpContextAccessor = httpContextAccessor;
+            _targetingContextAccessor = SegmentPercentageGate.ResolveAccessor(targetingContextAccessors);
         }
 
         public async Task<bool> EvaluateAsync(FeatureFilterEvaluationContext context)
         {
             UserClaimsFilterSettings settings = context.Parameters.Get<UserClaimsFilterSettings>() ?? new UserClaimsFilterSettings();
 
-            var result = (RandomGenerator.NextDouble() * 100) < settings.Percentage;
-            return result && (_httpContextAccessor.HttpContext?.User?.HasClaim(settings.Claim, settings.Value) ?? false);
+            if (!await SegmentPercentageGate.PassesAsync(settings.Percentage, context.FeatureName, _targetingContextAccessor).ConfigureAwait(false))
+                return false;
+
+            return _httpContextAccessor.HttpContext?.User?.HasClaim(settings.Claim, settings.Value) ?? false;
         }
     }
 

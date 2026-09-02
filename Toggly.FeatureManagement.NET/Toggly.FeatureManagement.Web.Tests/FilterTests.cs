@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.FeatureManagement;
+using Microsoft.FeatureManagement.FeatureFilters;
 using Moq;
 using System.Security.Claims;
 using Toggly.FeatureManagement.Web.Filters;
@@ -17,7 +18,9 @@ public class BrowserFamilyFilterTests
     public BrowserFamilyFilterTests()
     {
         _httpContextAccessorMock = new Mock<IHttpContextAccessor>();
-        _filter = new BrowserFamilyFilter(_httpContextAccessorMock.Object);
+        _filter = new BrowserFamilyFilter(
+            _httpContextAccessorMock.Object,
+            Enumerable.Empty<ITargetingContextAccessor>());
     }
 
     private void SetupUserAgent(string userAgent)
@@ -96,7 +99,9 @@ public class BrowserLanguageFilterTests
     public BrowserLanguageFilterTests()
     {
         _httpContextAccessorMock = new Mock<IHttpContextAccessor>();
-        _filter = new BrowserLanguageFilter(_httpContextAccessorMock.Object);
+        _filter = new BrowserLanguageFilter(
+            _httpContextAccessorMock.Object,
+            Enumerable.Empty<ITargetingContextAccessor>());
     }
 
     private void SetupAcceptLanguage(string acceptLanguage)
@@ -177,7 +182,9 @@ public class CountryFilterTests
     public CountryFilterTests()
     {
         _httpContextAccessorMock = new Mock<IHttpContextAccessor>();
-        _filter = new CountryFilter(_httpContextAccessorMock.Object);
+        _filter = new CountryFilter(
+            _httpContextAccessorMock.Object,
+            Enumerable.Empty<ITargetingContextAccessor>());
     }
 
     private void SetupCountryHeader(string country)
@@ -256,7 +263,9 @@ public class DeviceTypeFilterTests
     public DeviceTypeFilterTests()
     {
         _httpContextAccessorMock = new Mock<IHttpContextAccessor>();
-        _filter = new DeviceTypeFilter(_httpContextAccessorMock.Object);
+        _filter = new DeviceTypeFilter(
+            _httpContextAccessorMock.Object,
+            Enumerable.Empty<ITargetingContextAccessor>());
     }
 
     private void SetupUserAgent(string userAgent)
@@ -321,7 +330,9 @@ public class OSFilterTests
     public OSFilterTests()
     {
         _httpContextAccessorMock = new Mock<IHttpContextAccessor>();
-        _filter = new OSFilter(_httpContextAccessorMock.Object);
+        _filter = new OSFilter(
+            _httpContextAccessorMock.Object,
+            Enumerable.Empty<ITargetingContextAccessor>());
     }
 
     private void SetupUserAgent(string userAgent)
@@ -400,7 +411,9 @@ public class UserClaimsFilterTests
     public UserClaimsFilterTests()
     {
         _httpContextAccessorMock = new Mock<IHttpContextAccessor>();
-        _filter = new UserClaimsFilter(_httpContextAccessorMock.Object);
+        _filter = new UserClaimsFilter(
+            _httpContextAccessorMock.Object,
+            Enumerable.Empty<ITargetingContextAccessor>());
     }
 
     private void SetupUserWithClaims(params Claim[] claims)
@@ -497,5 +510,117 @@ public class UserClaimsFilterTests
 
         // Assert
         result.Should().BeFalse();
+    }
+}
+
+public class SegmentStickyPercentageFilterTests
+{
+    private const string ChromeUa =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
+
+    [Theory]
+    [InlineData(61, true)]
+    [InlineData(60, false)]
+    public async Task BrowserFamily_WithUserId_UsesStickyPercentile(short percentage, bool expected)
+    {
+        var filter = CreateBrowserFamilyFilter("user-123");
+        var result = await filter.EvaluateAsync(CreateBrowserFamilyContext("demo-feature", percentage));
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(61, true)]
+    [InlineData(60, false)]
+    public async Task Country_WithUserId_UsesStickyPercentile(short percentage, bool expected)
+    {
+        var http = new Mock<IHttpContextAccessor>();
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers["CF-IPCountry"] = "US";
+        http.Setup(x => x.HttpContext).Returns(ctx);
+
+        var targeting = new Mock<ITargetingContextAccessor>();
+        targeting.Setup(a => a.GetContextAsync())
+            .ReturnsAsync(new TargetingContext { UserId = "user-123" });
+
+        var filter = new CountryFilter(http.Object, new[] { targeting.Object });
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Percentage"] = percentage.ToString(),
+                ["Country:0"] = "US"
+            })
+            .Build();
+
+        var result = await filter.EvaluateAsync(new FeatureFilterEvaluationContext
+        {
+            FeatureName = "demo-feature",
+            Parameters = config
+        });
+
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(61, true)]
+    [InlineData(60, false)]
+    public async Task UserClaims_WithUserId_UsesStickyPercentile(short percentage, bool expected)
+    {
+        var http = new Mock<IHttpContextAccessor>();
+        var ctx = new DefaultHttpContext();
+        ctx.User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim("role", "admin") }, "TestAuth"));
+        http.Setup(x => x.HttpContext).Returns(ctx);
+
+        var targeting = new Mock<ITargetingContextAccessor>();
+        targeting.Setup(a => a.GetContextAsync())
+            .ReturnsAsync(new TargetingContext { UserId = "user-123" });
+
+        var filter = new UserClaimsFilter(http.Object, new[] { targeting.Object });
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Percentage"] = percentage.ToString(),
+                ["Claim"] = "role",
+                ["Value"] = "admin"
+            })
+            .Build();
+
+        var result = await filter.EvaluateAsync(new FeatureFilterEvaluationContext
+        {
+            FeatureName = "demo-feature",
+            Parameters = config
+        });
+
+        result.Should().Be(expected);
+    }
+
+    private static BrowserFamilyFilter CreateBrowserFamilyFilter(string userId)
+    {
+        var http = new Mock<IHttpContextAccessor>();
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers["User-Agent"] = ChromeUa;
+        http.Setup(x => x.HttpContext).Returns(ctx);
+
+        var targeting = new Mock<ITargetingContextAccessor>();
+        targeting.Setup(a => a.GetContextAsync())
+            .ReturnsAsync(new TargetingContext { UserId = userId });
+
+        return new BrowserFamilyFilter(http.Object, new[] { targeting.Object });
+    }
+
+    private static FeatureFilterEvaluationContext CreateBrowserFamilyContext(string featureName, short percentage)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Percentage"] = percentage.ToString(),
+                ["BrowserFamily:0"] = "Chrome"
+            })
+            .Build();
+
+        return new FeatureFilterEvaluationContext
+        {
+            FeatureName = featureName,
+            Parameters = config
+        };
     }
 }
