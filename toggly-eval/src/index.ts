@@ -18,6 +18,16 @@ export {
 } from './builtin'
 
 export {
+  passesSegmentPercentageGate,
+  browserFamily,
+  browserLanguage,
+  country,
+  deviceType,
+  operatingSystem,
+  userClaims,
+} from './segment'
+
+export {
   evaluateContextProperty,
   evaluateEntityFilters,
   isContextPropertyFilter,

@@ -17,6 +17,11 @@
 
 - Golden vector tests (`testdata/eval-percentile-golden.json`) shared with
   Definitions [OPS-832].
+- Segment filters: BrowserFamily, BrowserLanguage, Country / CountryFamily,
+  DeviceType, OS / OperatingSystem, UserClaims — sticky `%` when identity is
+  present, random otherwise. EvalContext gains `claims` and `request`
+  (`userAgent`, `acceptLanguage`, `country`). Uses `ua-parser-js` (same as
+  Definitions; UA family strings may still drift vs .NET/Go parsers).
 
 ## 1.0.2
 
