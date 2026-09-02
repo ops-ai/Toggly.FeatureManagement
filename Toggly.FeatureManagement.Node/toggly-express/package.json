@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-express",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Toggly feature flags middleware for Express.js applications",
   "keywords": [
     "feature-flags",
@@ -55,7 +55,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@ops-ai/toggly-node-core": "workspace:*"
+    "@ops-ai/toggly-node-core": "workspace:^"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

@@ -21,13 +21,13 @@ importers:
         specifier: ^3.16.0
         version: 3.21.1(magicast@0.5.2)
       '@ops-ai/nuxt-toggly-client':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../nuxt-toggly-client
       '@ops-ai/nuxt-toggly-core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../nuxt-toggly-core
       '@ops-ai/nuxt-toggly-server':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../nuxt-toggly-server
     devDependencies:
       '@nuxt/module-builder':
@@ -61,7 +61,7 @@ importers:
   nuxt-toggly-client:
     dependencies:
       '@ops-ai/nuxt-toggly-core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../nuxt-toggly-core
     devDependencies:
       '@types/node':
@@ -132,7 +132,7 @@ importers:
   nuxt-toggly-server:
     dependencies:
       '@ops-ai/nuxt-toggly-core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../nuxt-toggly-core
       ws:
         specifier: ^8.18.0

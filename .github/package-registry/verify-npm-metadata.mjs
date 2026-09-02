@@ -91,6 +91,34 @@ function forbiddenUrl(value) {
   );
 }
 
+const FORBIDDEN_INTRA_REPO_SPECIFIERS = /^(workspace:\*|workspace:~|file:|link:)/;
+
+export function validateIntraRepoDependencies(name, data) {
+  const errors = [];
+  const depSections = ['dependencies', 'peerDependencies', 'optionalDependencies'];
+
+  for (const section of depSections) {
+    const deps = data[section];
+    if (!deps || typeof deps !== 'object') continue;
+
+    for (const [depName, specifier] of Object.entries(deps)) {
+      if (!depName.startsWith('@ops-ai/')) continue;
+      const value = String(specifier);
+      if (FORBIDDEN_INTRA_REPO_SPECIFIERS.test(value)) {
+        errors.push(
+          `${section}.${depName}: intra-repo @ops-ai deps must use workspace:^, got ${value}`,
+        );
+      } else if (value.startsWith('workspace:') && value !== 'workspace:^') {
+        errors.push(
+          `${section}.${depName}: intra-repo @ops-ai deps must use workspace:^, got ${value}`,
+        );
+      }
+    }
+  }
+
+  return errors;
+}
+
 export function validatePackageMetadata(pkg, inventory, data) {
   const errors = [];
   const { repositoryUrl, bugsUrl, author, license, requiredKeywords } = inventory;
@@ -137,6 +165,7 @@ export function validatePackageMetadata(pkg, inventory, data) {
       errors.push(`forbidden develop/duplicated URL segment in metadata: ${field}`);
     }
   }
+  errors.push(...validateIntraRepoDependencies(pkg.name, data));
   return errors;
 }
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1
+
+2026-09-02
+
+### Changed
+
+- Pin `@ops-ai/nuxt-toggly-core` with `workspace:^` so publish resolves a compatible semver range instead of an exact snapshot that can strand sibling packages on two core copies.
+
 ## 1.1.0
 
 2026-08-28
