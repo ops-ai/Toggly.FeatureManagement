@@ -8,6 +8,8 @@
   (OPS-825). Browser client remains on `evaluated-signed`.
 - `enableVariants` still uses `evaluated-variants-signed` for remote
   variant assignment.
+- Local evaluation depends on `@ops-ai/toggly-eval@^2.0.0` SHA-256
+  sticky buckets (cohort shift vs FNV / eval 1.x) [OPS-832].
 
 ### Added
 - Dependency on `@ops-ai/toggly-eval` for local definition evaluation.

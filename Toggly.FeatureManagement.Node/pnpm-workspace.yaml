@@ -4,4 +4,3 @@ packages:
   - 'toggly-fastify'
   - 'toggly-hono'
   - 'toggly-koa'
-  - '../toggly-eval'

@@ -55,7 +55,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@ops-ai/toggly-eval": "workspace:^",
+    "@ops-ai/toggly-eval": "^2.0.0",
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "ws": "^8.0.0"
   },
