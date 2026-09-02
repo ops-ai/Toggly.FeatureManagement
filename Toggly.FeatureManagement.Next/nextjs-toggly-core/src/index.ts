@@ -31,6 +31,19 @@ export type {
   TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types'
 
+// Local evaluation helpers
+export {
+  evaluateDefinitions,
+  evaluateFeatureGate as evaluateLocalFeatureGate,
+  indexDefinitions,
+  parseDefinitionsPayload,
+  snapshotEvaluatedBooleans,
+} from '@ops-ai/toggly-eval'
+export type {
+  EvalContext,
+  FeatureDefinitionModel,
+} from '@ops-ai/toggly-eval'
+
 // Types
 export type {
   TogglyConfig,
@@ -45,4 +58,5 @@ export type {
   IdentitySeriesData,
   Hook,
   HookMetadata,
+  EvaluationMode,
 } from './types'

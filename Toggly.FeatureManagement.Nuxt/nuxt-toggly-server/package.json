@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly-server",
-  "version": "1.1.1",
+  "version": "1.3.0",
   "description": "Server-side feature flag utilities for Nuxt with Nitro support",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -51,7 +51,7 @@
     "ws": "^8.18.0"
   },
   "peerDependencies": {
-    "@ops-ai/nuxt-toggly-core": "^1.6.0",
+    "@ops-ai/nuxt-toggly-core": "^1.8.0",
     "h3": "^1.0.0"
   },
   "peerDependenciesMeta": {

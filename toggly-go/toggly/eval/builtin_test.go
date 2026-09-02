@@ -31,6 +31,88 @@ func TestTargetingEvaluator_UserAndGroup(t *testing.T) {
 	}
 }
 
+func TestTargetingEvaluator_ExclusionUserWins(t *testing.T) {
+	e := TargetingEvaluator{}
+	params := map[string]any{
+		"Audience.Users:0":                  "alice",
+		"Audience.Exclusion.Users:0":        "alice",
+		"Audience.DefaultRolloutPercentage": float64(100),
+	}
+
+	on, err := e.Evaluate("f", params, Context{Identity: "alice"})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if on {
+		t.Fatalf("expected excluded alice to be off")
+	}
+
+	on, err = e.Evaluate("f", params, Context{Identity: "bob"})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if !on {
+		t.Fatalf("expected bob to pass default rollout")
+	}
+}
+
+func TestTargetingEvaluator_ExclusionGroupWins(t *testing.T) {
+	e := TargetingEvaluator{}
+	params := map[string]any{
+		"Audience.Exclusion.Groups:0":       "banned",
+		"Audience.DefaultRolloutPercentage": float64(100),
+	}
+
+	on, err := e.Evaluate("f", params, Context{Identity: "u", Groups: []string{"banned"}})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if on {
+		t.Fatalf("expected banned group to be excluded")
+	}
+}
+
+func TestTargetingEvaluator_MicrosoftAliasAndColonKeys(t *testing.T) {
+	e := TargetingEvaluator{}
+	params := map[string]any{
+		"Audience:Users:0":                  "alice",
+		"Audience.DefaultRolloutPercentage": float64(0),
+	}
+
+	on, err := e.Evaluate("f", params, Context{Identity: "alice"})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if !on {
+		t.Fatalf("expected colon-form inclusion for alice")
+	}
+
+	reg := DefaultRegistry()
+	ev, ok := reg.get("Microsoft.Targeting")
+	if !ok {
+		t.Fatalf("expected Microsoft.Targeting registration")
+	}
+	on, err = ev.Evaluate("f", params, Context{Identity: "alice"})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if !on {
+		t.Fatalf("expected Microsoft.Targeting alias to evaluate")
+	}
+
+	excl := map[string]any{
+		"Audience:Exclusion:Users:0":        "alice",
+		"Audience.DefaultRolloutPercentage": float64(100),
+	}
+	on, err = e.Evaluate("f", excl, Context{Identity: "alice"})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if on {
+		t.Fatalf("expected colon-form exclusion for alice")
+	}
+}
+
 func TestTargetingEvaluator_DefaultRolloutDeterministic(t *testing.T) {
 	e := TargetingEvaluator{}
 	featureKey := "f"

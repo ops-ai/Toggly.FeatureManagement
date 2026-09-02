@@ -18,17 +18,24 @@ import {
   type TogglyEvaluationContext,
   type TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types';
+import {
+  evaluateDefinitions,
+  evaluateFeatureGate as evaluateLocalFeatureGate,
+  type DefinitionsByKey,
+  type EvalContext,
+} from '@ops-ai/toggly-eval';
 
 /**
  * Default Toggly configuration
  */
 export const DEFAULT_CONFIG: Required<
-  Pick<TogglyConfig, 'baseUrl' | 'environment' | 'timeout' | 'debug'>
+  Pick<TogglyConfig, 'baseUrl' | 'environment' | 'timeout' | 'debug' | 'evaluationMode'>
 > = {
   baseUrl: 'https://definitions.toggly.io',
   environment: 'Production',
   timeout: 10000,
   debug: false,
+  evaluationMode: 'remote',
 };
 
 /**
@@ -42,19 +49,31 @@ export function mergeConfig(config: TogglyConfig): TogglyConfig {
 }
 
 /**
- * Build the feature definitions URL
+ * Build the feature definitions URL.
+ *
+ * - `evaluationMode: 'remote'` (default): `/evaluated-signed/...` + context query params
+ * - `evaluationMode: 'local'`: `/definitions-signed/...` with no evaluation context params
  */
 export function buildDefinitionsUrl(
   config: TogglyConfig,
   context?: string | TogglyEvaluationContext
 ): string {
-  const { baseUrl, appKey, environment, groups, claims } = mergeConfig(config);
+  const { baseUrl, appKey, environment, groups, claims, evaluationMode } =
+    mergeConfig(config);
 
   if (!appKey) {
     throw new Error('appKey is required');
   }
 
-  const url = new URL(`${baseUrl}/evaluated-signed/${appKey}/${environment}`);
+  const mode = evaluationMode ?? 'remote';
+  const pathSegment =
+    mode === 'local' ? 'definitions-signed' : 'evaluated-signed';
+  const url = new URL(`${baseUrl}/${pathSegment}/${appKey}/${environment}`);
+
+  if (mode === 'local') {
+    return url.toString();
+  }
+
   const fromParam =
     typeof context === 'string' ? { identity: context } : context;
 
@@ -93,6 +112,71 @@ export function isFeatureEnabled(
 }
 
 export { registerContext, clearRegisteredContexts, normalizeEntityContext };
+
+/**
+ * Locally evaluate a single feature against definitions-signed rules.
+ */
+export function isFeatureEnabledLocal(
+  defsByKey: DefinitionsByKey | null | undefined,
+  featureKey: string,
+  evalCtx: EvalContext = {},
+  defaultValue = false,
+): boolean {
+  if (!defsByKey || defsByKey.size === 0) {
+    return defaultValue;
+  }
+
+  if (!defsByKey.has(featureKey)) {
+    return defaultValue;
+  }
+
+  return evaluateDefinitions(defsByKey, featureKey, evalCtx);
+}
+
+/**
+ * Locally evaluate multiple features with requirement against definitions-signed rules.
+ */
+export function evaluateFeatureGateLocal(
+  defsByKey: DefinitionsByKey | null | undefined,
+  featureKeys: string[],
+  requirement: FeatureRequirement = 'all',
+  negate = false,
+  defaultValue = false,
+  evalCtx: EvalContext = {},
+): EvaluationResult {
+  if (!defsByKey || defsByKey.size === 0) {
+    return {
+      enabled: negate ? !defaultValue : defaultValue,
+      featureKeys,
+      requirement,
+      negated: negate,
+    };
+  }
+
+  if (featureKeys.length === 0) {
+    return {
+      enabled: negate ? false : true,
+      featureKeys,
+      requirement,
+      negated: negate,
+    };
+  }
+
+  const enabled = evaluateLocalFeatureGate(
+    defsByKey,
+    featureKeys,
+    requirement,
+    negate,
+    evalCtx,
+  );
+
+  return {
+    enabled,
+    featureKeys,
+    requirement,
+    negated: negate,
+  };
+}
 
 /**
  * Evaluate multiple features with requirement

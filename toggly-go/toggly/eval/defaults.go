@@ -12,12 +12,15 @@ func DefaultRegistry() *Registry {
 
 	// Percentage rollout.
 	r.Register("Percentage", PercentageEvaluator{})
+	r.Register("Microsoft.Percentage", PercentageEvaluator{})
 
 	// Time window.
 	r.Register("TimeWindow", TimeWindowEvaluator{})
+	r.Register("Microsoft.TimeWindow", TimeWindowEvaluator{})
 
 	// Targeting.
 	r.Register("Targeting", TargetingEvaluator{})
+	r.Register("Microsoft.Targeting", TargetingEvaluator{})
 
 	return r
 }

@@ -1,5 +1,8 @@
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
-import { toBooleanDefinitions } from '@ops-ai/nextjs-toggly-core'
+import {
+  snapshotEvaluatedBooleans,
+  toBooleanDefinitions,
+} from '@ops-ai/nextjs-toggly-core'
 import { getServerToggly } from './server-client'
 import type { FeatureGateResult } from './types'
 
@@ -31,11 +34,7 @@ export async function checkFeature(
     return false
   }
 
-  if (identity) {
-    client.identity = identity
-  }
-
-  return client.isFeatureOn(featureKey)
+  return client.isFeatureOn(featureKey, undefined, undefined, identity)
 }
 
 /**
@@ -93,15 +92,14 @@ export async function checkFeatureGate(options: {
     }
   }
 
-  if (identity) {
-    client.identity = identity
-  }
-
   try {
     const allowed = await client.evaluateFeatureGate(
       featureKeys,
       requirement,
-      negate
+      negate,
+      undefined,
+      undefined,
+      identity
     )
 
     return {
@@ -172,7 +170,19 @@ export async function getFeatures(): Promise<Record<string, boolean>> {
     return {}
   }
 
-  return toBooleanDefinitions({ ...client.state.features })
+  const defs = client.getDefinitions()
+  if (defs.size === 0) {
+    return toBooleanDefinitions({ ...client.state.features })
+  }
+
+  return toBooleanDefinitions({
+    ...client.config.featureDefaults,
+    ...snapshotEvaluatedBooleans(defs, {
+      identity: client.config.identity,
+      groups: client.config.groups,
+      traits: client.config.claims,
+    }),
+  })
 }
 
 /**

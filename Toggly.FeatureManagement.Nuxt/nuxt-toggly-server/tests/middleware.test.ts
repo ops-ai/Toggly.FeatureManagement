@@ -13,17 +13,29 @@ import {
   getServerToggly,
 } from '../src/server-client'
 import type { H3Event } from 'h3'
+import type { TogglyClient } from '@ops-ai/nuxt-toggly-core'
 
 // Mock fetch globally
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
+
+function featureDefs(flags: Record<string, boolean>) {
+  return Object.entries(flags).map(([featureKey, enabled]) => ({
+    featureKey,
+    filters: [{ name: enabled ? 'AlwaysOn' : 'AlwaysOff', parameters: {} }],
+  }))
+}
+
 function createMockResponse(data: unknown, status = 200) {
+  const bodyText = typeof data === 'string' ? data : JSON.stringify(data)
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? 'OK' : 'Error',
+    text: async () => bodyText,
     json: async () => data,
+    headers: { get: () => null },
   }
 }
 
@@ -68,9 +80,7 @@ describe('Middleware', () => {
   describe('defineFeatureMiddleware', () => {
     it('should allow access when feature is enabled', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -87,9 +97,7 @@ describe('Middleware', () => {
 
     it('should throw error when feature is disabled', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: false }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': false }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -110,9 +118,7 @@ describe('Middleware', () => {
 
     it('should use custom onDisabled handler', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: false }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': false }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -137,12 +143,7 @@ describe('Middleware', () => {
 
     it('should support multiple feature keys', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: true },
-          ],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true, 'feature-b': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -159,12 +160,7 @@ describe('Middleware', () => {
 
     it('should support "any" requirement', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: false },
-          ],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true, 'feature-b': false }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -179,14 +175,16 @@ describe('Middleware', () => {
       await expect(middleware(event)).resolves.not.toThrow()
     })
 
-    it('should use identity from header', async () => {
+    it('should use identity from header without mutating shared client', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'default-user',
+        enableLiveUpdates: false,
+      })
 
       const middleware = defineFeatureMiddleware({
         featureKey: 'feature-a',
@@ -198,7 +196,7 @@ describe('Middleware', () => {
 
       await middleware(event)
 
-      expect(getServerToggly()?.identity).toBe('user-123')
+      expect(getServerToggly()?.identity).toBe('default-user')
     })
 
     it('should warn and reject if client not initialized', async () => {
@@ -220,9 +218,7 @@ describe('Middleware', () => {
   describe('defineFeatureHandler', () => {
     it('should call handler when feature is enabled', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -240,9 +236,7 @@ describe('Middleware', () => {
 
     it('should throw error when feature is disabled', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: false }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': false }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -257,6 +251,26 @@ describe('Middleware', () => {
         statusCode: 404,
       })
 
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it('should call onDisabled when feature is disabled', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(featureDefs({ 'feature-a': false }))
+      )
+
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+
+      const onDisabled = vi.fn()
+      const handler = vi.fn()
+      const wrappedHandler = defineFeatureHandler('feature-a', handler, {
+        onDisabled,
+      })
+
+      await expect(wrappedHandler(createMockEvent())).rejects.toMatchObject({
+        statusCode: 404,
+      })
+      expect(onDisabled).toHaveBeenCalled()
       expect(handler).not.toHaveBeenCalled()
     })
 
@@ -278,10 +292,14 @@ describe('Middleware', () => {
   })
 
   describe('useEventToggly', () => {
-    it('should return client with identity from header', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+    it('should return client with identity from header without mutating shared', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse(featureDefs({})))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'default-user',
+        enableLiveUpdates: false,
+      })
 
       const event = createMockEvent({
         'x-toggly-identity': 'user-123',
@@ -290,6 +308,71 @@ describe('Middleware', () => {
       const client = useEventToggly(event)
 
       expect(client.identity).toBe('user-123')
+      expect(getServerToggly()?.identity).toBe('default-user')
+    })
+
+    it('should proxy eval helpers and ignore identity writes', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse([
+          {
+            featureKey: 'targeted-flag',
+            filters: [
+              {
+                name: 'Targeting',
+                parameters: {
+                  'Audience.Users:0': 'alice',
+                  'Audience.DefaultRolloutPercentage': 0,
+                },
+              },
+            ],
+          },
+          {
+            featureKey: 'plain-on',
+            filters: [{ name: 'AlwaysOn', parameters: {} }],
+          },
+        ])
+      )
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'bob',
+        enableLiveUpdates: false,
+      })
+
+      const event = createMockEvent({
+        'x-toggly-identity': 'alice',
+      })
+      const client = useEventToggly(event)
+
+      expect(await client.isFeatureOn('targeted-flag')).toBe(true)
+      expect(await client.isFeatureOff('targeted-flag')).toBe(false)
+      expect(await client.evaluateFeatureGate(['targeted-flag', 'plain-on'], 'all')).toBe(
+        true,
+      )
+
+      client.identity = 'evil'
+      expect(getServerToggly()?.identity).toBe('bob')
+      expect(client.identity).toBe('alice')
+
+      // Non-identity writes still forward to the shared client
+      ;(client as TogglyClient & { __probe?: number }).__probe = 42
+      expect((getServerToggly() as TogglyClient & { __probe?: number })?.__probe).toBe(
+        42,
+      )
+    })
+
+    it('should return the shared client when no identity header is present', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse(featureDefs({})))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'default-user',
+        enableLiveUpdates: false,
+      })
+
+      const client = useEventToggly(createMockEvent())
+      expect(client).toBe(getServerToggly())
+      expect(client.identity).toBe('default-user')
     })
 
     it('should throw if client not initialized', () => {
@@ -304,9 +387,7 @@ describe('Middleware', () => {
   describe('isEventFeatureOn', () => {
     it('should check feature for event', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -316,14 +397,16 @@ describe('Middleware', () => {
       expect(await isEventFeatureOn(event, 'feature-a')).toBe(true)
     })
 
-    it('should use identity from header', async () => {
+    it('should use identity from header without mutating shared client', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'default-user',
+        enableLiveUpdates: false,
+      })
 
       const event = createMockEvent({
         'x-toggly-identity': 'user-123',
@@ -331,7 +414,7 @@ describe('Middleware', () => {
 
       await isEventFeatureOn(event, 'feature-a')
 
-      expect(getServerToggly()?.identity).toBe('user-123')
+      expect(getServerToggly()?.identity).toBe('default-user')
     })
 
     it('should return false if client not initialized', async () => {
@@ -345,9 +428,7 @@ describe('Middleware', () => {
   describe('isEventFeatureOff', () => {
     it('should return inverse of isEventFeatureOn', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -361,12 +442,7 @@ describe('Middleware', () => {
   describe('evaluateEventFeatureGate', () => {
     it('should evaluate multiple features', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: true },
-          ],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true, 'feature-b': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -380,9 +456,7 @@ describe('Middleware', () => {
 
     it('should support negate option', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })

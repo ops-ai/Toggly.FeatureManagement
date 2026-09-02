@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.Next/**'
+      - 'toggly-eval/**'
       - '.github/workflows/analysis-next.yml'
   pull_request:
     branches:
@@ -14,6 +15,7 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.Next/**'
+      - 'toggly-eval/**'
       - '.github/workflows/analysis-next.yml'
   workflow_dispatch:
 
@@ -55,6 +57,8 @@ jobs:
         working-directory: toggly-signed-defs
         run: (npm ci || npm install) && npm run build
 
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
         run: pnpm install
@@ -94,6 +98,8 @@ jobs:
         working-directory: toggly-signed-defs
         run: (npm ci || npm install) && npm run build
 
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
         run: pnpm install
@@ -133,6 +139,8 @@ jobs:
         working-directory: toggly-signed-defs
         run: (npm ci || npm install) && npm run build
 
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
         run: pnpm install
@@ -183,6 +191,8 @@ jobs:
         working-directory: toggly-signed-defs
         run: (npm ci || npm install) && npm run build
 
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
         run: pnpm install
@@ -219,6 +229,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
+
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
 
       - name: Install dependencies for TypeScript analysis
         working-directory: ${{ env.SDK_ROOT }}

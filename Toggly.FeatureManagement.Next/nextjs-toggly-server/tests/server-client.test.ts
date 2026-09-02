@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { FeatureDefinitionModel } from '@ops-ai/nextjs-toggly-core'
 import {
   initServerToggly,
   getServerToggly,
@@ -17,12 +18,38 @@ import {
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
-function createMockResponse(data: unknown, status = 200) {
+const alwaysOn: FeatureDefinitionModel = {
+  featureKey: 'feature-a',
+  filters: [{ name: 'AlwaysOn', parameters: {} }],
+}
+
+const alwaysOff: FeatureDefinitionModel = {
+  featureKey: 'feature-b',
+  filters: [{ name: 'AlwaysOff', parameters: {} }],
+}
+
+const targetingAlice: FeatureDefinitionModel = {
+  featureKey: 'targeted-flag',
+  filters: [
+    {
+      name: 'Targeting',
+      parameters: {
+        'Audience.Users:0': 'alice',
+        'Audience.DefaultRolloutPercentage': 0,
+      },
+    },
+  ],
+}
+
+function defsResponse(definitions: FeatureDefinitionModel[], status = 200) {
+  const body = JSON.stringify(definitions)
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? 'OK' : 'Error',
-    json: async () => data,
+    text: async () => body,
+    json: async () => definitions,
+    headers: { get: () => null },
   }
 }
 
@@ -40,12 +67,8 @@ describe('Server Client', () => {
   })
 
   describe('initServerToggly', () => {
-    it('should initialize the server client', async () => {
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
-      )
+    it('should initialize the server client on the local rail', async () => {
+      mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
       const client = await initServerToggly({
         appKey: 'test-key',
@@ -54,14 +77,29 @@ describe('Server Client', () => {
 
       expect(client).toBeDefined()
       expect(client.state.initialized).toBe(true)
+      expect(client.config.evaluationMode).toBe('local')
+
+      const url = String(mockFetch.mock.calls[0]?.[0])
+      expect(url).toContain('/definitions-signed/')
+      expect(url).not.toContain('/evaluated-signed/')
     })
 
-    it('should cache feature definitions', async () => {
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
-      )
+    it('forces evaluationMode local even when caller requests remote', async () => {
+      mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
+
+      const client = await initServerToggly({
+        appKey: 'test-key',
+        evaluationMode: 'remote',
+        enableLiveUpdates: false,
+      })
+
+      expect(client.config.evaluationMode).toBe('local')
+      const url = String(mockFetch.mock.calls[0]?.[0])
+      expect(url).toContain('/definitions-signed/')
+    })
+
+    it('should cache raw definition models', async () => {
+      mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
       await initServerToggly({
         appKey: 'test-key',
@@ -72,14 +110,20 @@ describe('Server Client', () => {
 
       const features = getServerFeatures()
       expect(features['feature-a']).toBe(true)
+
+      const cached = await getServerStorage().getItem<FeatureDefinitionModel[]>(
+        'toggly:server:definitions'
+      )
+      expect(cached?.[0]?.featureKey).toBe('feature-a')
+      expect(cached?.[0]?.filters?.[0]?.name).toBe('AlwaysOn')
     })
 
-    it('loads cached definitions into feature defaults before fetch', async () => {
+    it('hydrates cached definition models when fetch fails', async () => {
       const storage = createMemoryStorage()
-      await storage.setItem('toggly:definitions', { 'cached-flag': true })
+      await storage.setItem('toggly:definitions', [alwaysOn])
       setServerStorage(storage)
 
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+      mockFetch.mockRejectedValueOnce(new Error('network down'))
 
       await initServerToggly({
         appKey: 'test-key',
@@ -88,12 +132,29 @@ describe('Server Client', () => {
         enableLiveUpdates: false,
       })
 
-      // Empty API payload keeps defaults seeded from cache.
-      expect(getServerFeatures()['cached-flag']).toBe(true)
+      expect(getServerFeatures()['feature-a']).toBe(true)
+      expect(useServerToggly().getDefinitions().has('feature-a')).toBe(true)
+    })
+
+    it('ignores legacy boolean cache entries', async () => {
+      const storage = createMemoryStorage()
+      await storage.setItem('toggly:definitions', { 'cached-flag': true })
+      setServerStorage(storage)
+
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        cache: true,
+        cacheKeyPrefix: 'toggly:',
+        enableLiveUpdates: false,
+      })
+
+      expect(getServerFeatures()['cached-flag']).toBeUndefined()
     })
 
     it('should use feature defaults', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await initServerToggly({
         appKey: 'test-key',
@@ -106,7 +167,7 @@ describe('Server Client', () => {
     })
 
     it('pins the client on globalThis across re-reads', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
       const first = getServerToggly()
@@ -122,8 +183,8 @@ describe('Server Client', () => {
 
     it('destroys the previous client when re-initialized', async () => {
       mockFetch
-        .mockResolvedValueOnce(createMockResponse({ features: [] }))
-        .mockResolvedValueOnce(createMockResponse({ features: [] }))
+        .mockResolvedValueOnce(defsResponse([]))
+        .mockResolvedValueOnce(defsResponse([]))
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
       const first = getServerToggly()
@@ -146,7 +207,7 @@ describe('Server Client', () => {
     })
 
     it('should return client after initialization', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
@@ -163,7 +224,7 @@ describe('Server Client', () => {
     })
 
     it('should return client after initialization', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
@@ -174,11 +235,7 @@ describe('Server Client', () => {
 
   describe('isServerFeatureOn', () => {
     it('should return feature state', async () => {
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
-      )
+      mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
@@ -186,27 +243,28 @@ describe('Server Client', () => {
       expect(result).toBe(true)
     })
 
-    it('should use provided identity', async () => {
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
-      )
+    it('evaluates identity overrides on the shared client', async () => {
+      mockFetch.mockResolvedValueOnce(defsResponse([targetingAlice]))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'bob',
+        enableLiveUpdates: false,
+      })
 
-      const result = await isServerFeatureOn('feature-a', 'user-123')
-      expect(result).toBe(true)
+      const shared = useServerToggly()
+      expect(await isServerFeatureOn('targeted-flag')).toBe(false)
+      expect(await isServerFeatureOn('targeted-flag', 'alice')).toBe(true)
+      expect(await isServerFeatureOn('targeted-flag', 'bob')).toBe(false)
+      // Shared client identity must not be mutated by overrides
+      expect(shared.identity).toBe('bob')
+      expect(getServerToggly()).toBe(shared)
     })
   })
 
   describe('isServerFeatureOff', () => {
     it('should return inverted feature state', async () => {
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
-      )
+      mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
@@ -221,15 +279,8 @@ describe('Server Client', () => {
       expect(features).toEqual({})
     })
 
-    it('should return all features', async () => {
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: false },
-          ],
-        })
-      )
+    it('should return evaluated boolean snapshot', async () => {
+      mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn, alwaysOff]))
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
@@ -243,7 +294,7 @@ describe('Server Client', () => {
 
   describe('resetServerToggly', () => {
     it('should reset the server client', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
       expect(getServerToggly()).not.toBeNull()
@@ -258,24 +309,19 @@ describe('Server Client', () => {
       expect(await refreshServerToggly()).toBeNull()
     })
 
-    it('refreshes and updates cache', async () => {
+    it('refreshes and updates definition cache', async () => {
       mockFetch
-        .mockResolvedValueOnce(
-          createMockResponse({
-            features: [{ featureKey: 'feature-a', enabled: false }],
-          }),
-        )
-        .mockResolvedValueOnce(
-          createMockResponse({
-            features: [{ featureKey: 'feature-a', enabled: true }],
-          }),
-        )
+        .mockResolvedValueOnce(defsResponse([alwaysOff]))
+        .mockResolvedValueOnce(defsResponse([alwaysOn]))
 
       await initServerToggly({
         appKey: 'test-key',
         cache: true,
         enableLiveUpdates: false,
       })
+
+      expect(getServerFeatures()['feature-a']).toBeUndefined()
+      expect(getServerFeatures()['feature-b']).toBe(false)
 
       const definitions = await refreshServerToggly()
       expect(definitions?.['feature-a']).toBe(true)

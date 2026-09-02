@@ -77,18 +77,38 @@ func (t TimeWindowEvaluator) Evaluate(featureKey string, params map[string]any, 
 type TargetingEvaluator struct{}
 
 func (TargetingEvaluator) Evaluate(featureKey string, params map[string]any, ctx Context) (bool, error) {
-	ignoreCase, _ := asBool(params, "IgnoreCase")
+	// Match Definitions default: IgnoreCase defaults to true when unset.
+	ignoreCase, ok := asBool(params, "IgnoreCase")
+	if !ok {
+		ignoreCase = true
+	}
 
 	identity := ctx.Identity
 	if identity != "" {
-		users := collectPrefixedStrings(params, "Audience.Users")
+		exclusionUsers := collectPrefixedStrings(params, "Audience.Exclusion.Users", "Audience:Exclusion:Users")
+		if contains(exclusionUsers, identity, ignoreCase) {
+			return false, nil
+		}
+	}
+
+	if len(ctx.Groups) > 0 {
+		exclusionGroups := collectPrefixedStrings(params, "Audience.Exclusion.Groups", "Audience:Exclusion:Groups")
+		for _, g := range ctx.Groups {
+			if contains(exclusionGroups, g, ignoreCase) {
+				return false, nil
+			}
+		}
+	}
+
+	if identity != "" {
+		users := collectPrefixedStrings(params, "Audience.Users", "Audience:Users")
 		if contains(users, identity, ignoreCase) {
 			return true, nil
 		}
 	}
 
 	if len(ctx.Groups) > 0 {
-		groups := collectPrefixedStrings(params, "Audience.Groups")
+		groups := collectPrefixedStrings(params, "Audience.Groups", "Audience:Groups")
 		for _, g := range ctx.Groups {
 			if contains(groups, g, ignoreCase) {
 				return true, nil
@@ -124,10 +144,17 @@ func parseTime(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func collectPrefixedStrings(params map[string]any, prefix string) []string {
+func collectPrefixedStrings(params map[string]any, prefixes ...string) []string {
 	var out []string
 	for k, v := range params {
-		if !strings.HasPrefix(k, prefix+":") {
+		matched := false
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(k, prefix+":") {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			continue
 		}
 		s, _ := asStringValue(v)

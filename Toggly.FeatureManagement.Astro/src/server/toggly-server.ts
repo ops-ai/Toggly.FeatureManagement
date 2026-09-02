@@ -1,9 +1,8 @@
 /**
  * Toggly Server-Side Client for Astro SSR/SSG
- * 
- * This module provides server-side feature flag evaluation for Astro applications.
- * It caches flags for SSG builds and fetches fresh flags for SSR requests.
- * This is a complete, embedded Toggly client implementation.
+ *
+ * Fetches definitions-signed rules and evaluates locally with @ops-ai/toggly-eval.
+ * Variant mode still uses evaluated-variants-signed (variant assignment is remote).
  */
 
 import type {
@@ -14,16 +13,28 @@ import type {
   EvaluatedVariantDef,
 } from '../types/index.js';
 import { parseVariantDefsPayload, variantDefsToFlags } from '../variant-helpers.js';
-import { appendEvaluationContext, evaluateEvaluatedGate, normalizeEntityContext, registerContext as registerEntityContext, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types';
+import {
+  appendEvaluationContext,
+  normalizeEntityContext,
+  registerContext as registerEntityContext,
+} from '@ops-ai/toggly-hooks-types';
+import {
+  evaluateDefinition,
+  evaluateFeatureGate,
+  parseDefinitionsPayload,
+  snapshotEvaluatedBooleans,
+  type FeatureDefinitionModel,
+  type EvalContext,
+} from '@ops-ai/toggly-eval';
 import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
 import {
   parseEvaluatedResponseBody,
   readResponseBody,
-  unwrapDefsPayload,
 } from '../signed-response.js';
 
 interface CachedFlags {
   flags: Flags;
+  definitions: Map<string, FeatureDefinitionModel>;
   variantDefs: Record<string, EvaluatedVariantDef> | null;
   timestamp: number;
 }
@@ -34,8 +45,7 @@ interface CachedFlags {
 export class TogglyServer implements TogglyClient {
   private config: TogglyConfig;
   private cache: CachedFlags | null = null;
-  private fetchPromise: Promise<{ flags: Flags; variantDefs: Record<string, EvaluatedVariantDef> | null }> | null =
-    null;
+  private fetchPromise: Promise<CachedFlags> | null = null;
   private isBuildTime: boolean = false;
 
   constructor(config: TogglyConfig, isBuildTime: boolean = false) {
@@ -55,7 +65,7 @@ export class TogglyServer implements TogglyClient {
   }
 
   /**
-   * Get API URL for fetching flags (or variants when enableVariants is true)
+   * Get API URL for fetching definitions (or evaluated variants when enableVariants).
    */
   private getApiUrl(): string {
     const { baseURI, appKey, environment, identity, groups, claims, enableVariants } = this.config;
@@ -65,18 +75,27 @@ export class TogglyServer implements TogglyClient {
     }
 
     const baseUrl = baseURI!.replace(/\/$/, '');
-    const path = enableVariants
-      ? `/evaluated-variants-signed/${appKey}/${environment}`
-      : `/evaluated-signed/${appKey}/${environment}`;
-    const url = new URL(`${baseUrl}${path}`);
 
-    appendEvaluationContext(
-      url,
-      { identity, groups, claims },
-      enableVariants ? 'variants' : 'evaluated',
-    );
+    // Variants still need remote assignment; keep evaluated-variants-signed.
+    if (enableVariants) {
+      const url = new URL(`${baseUrl}/evaluated-variants-signed/${appKey}/${environment}`);
+      appendEvaluationContext(url, { identity, groups, claims }, 'variants');
+      return url.toString();
+    }
 
-    return url.toString();
+    // Default server rail: definitions-signed, no identity query (OPS-825).
+    return `${baseUrl}/definitions-signed/${appKey}/${environment}`;
+  }
+
+  private buildEvalContext(
+    entity?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
+  ): EvalContext {
+    return {
+      identity: this.config.identity,
+      groups: this.config.groups,
+      traits: this.config.claims,
+      entity: entity ?? null,
+    };
   }
 
   /**
@@ -91,7 +110,7 @@ export class TogglyServer implements TogglyClient {
   /**
    * Fetch flags (and optional variant defs) from Toggly API
    */
-  private async fetchFlags(): Promise<{ flags: Flags; variantDefs: Record<string, EvaluatedVariantDef> | null }> {
+  private async fetchFlags(): Promise<CachedFlags> {
     const url = this.getApiUrl();
     const enableVariants = this.config.enableVariants === true;
 
@@ -102,7 +121,9 @@ export class TogglyServer implements TogglyClient {
       }
       return {
         flags: { ...this.config.flagDefaults! },
+        definitions: new Map(),
         variantDefs: enableVariants ? {} : null,
+        timestamp: Date.now(),
       };
     }
 
@@ -135,7 +156,9 @@ export class TogglyServer implements TogglyClient {
         maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
         headers: buildDefinitionFetchHeaders({ Accept: 'application/json' }),
       });
+
       let flags: Flags;
+      let definitions: Map<string, FeatureDefinitionModel> = new Map();
       let variantDefs: Record<string, EvaluatedVariantDef> | null;
 
       if (enableVariants) {
@@ -145,7 +168,11 @@ export class TogglyServer implements TogglyClient {
         );
         flags = variantDefsToFlags(variantDefs);
       } else {
-        flags = unwrapDefsPayload(payload) as Flags;
+        definitions = parseDefinitionsPayload(payload);
+        flags = {
+          ...this.config.flagDefaults!,
+          ...snapshotEvaluatedBooleans(definitions, this.buildEvalContext()),
+        };
         variantDefs = null;
       }
 
@@ -168,7 +195,12 @@ export class TogglyServer implements TogglyClient {
         }
       }
 
-      return { flags, variantDefs };
+      return {
+        flags,
+        definitions,
+        variantDefs,
+        timestamp: Date.now(),
+      };
     } catch (error) {
       if (this.config.isDebug) {
         console.error('[Toggly Server] Error fetching flags:', error);
@@ -181,7 +213,9 @@ export class TogglyServer implements TogglyClient {
         }
         return {
           flags: { ...this.cache.flags },
+          definitions: this.cache.definitions,
           variantDefs: this.cache.variantDefs,
+          timestamp: this.cache.timestamp,
         };
       }
 
@@ -191,7 +225,9 @@ export class TogglyServer implements TogglyClient {
 
       return {
         flags: { ...this.config.flagDefaults! },
+        definitions: new Map(),
         variantDefs: enableVariants ? {} : null,
+        timestamp: Date.now(),
       };
     }
   }
@@ -213,34 +249,43 @@ export class TogglyServer implements TogglyClient {
     this.fetchPromise = this.fetchFlags();
 
     try {
-      const { flags, variantDefs } = await this.fetchPromise;
-      this.cache = {
-        flags,
-        variantDefs,
-        timestamp: Date.now(),
-      };
+      this.cache = await this.fetchPromise;
     } finally {
       this.fetchPromise = null;
     }
+  }
+
+  private async ensureCache(): Promise<CachedFlags> {
+    if (!this.config.appKey) {
+      return {
+        flags: { ...this.config.flagDefaults! },
+        definitions: new Map(),
+        variantDefs: this.config.enableVariants ? {} : null,
+        timestamp: Date.now(),
+      };
+    }
+
+    if (this.isCacheValid() && this.cache) {
+      return this.cache;
+    }
+
+    await this.refreshFlags();
+    return (
+      this.cache ?? {
+        flags: { ...this.config.flagDefaults! },
+        definitions: new Map(),
+        variantDefs: this.config.enableVariants ? {} : null,
+        timestamp: Date.now(),
+      }
+    );
   }
 
   /**
    * Get all feature flags
    */
   async getFlags(): Promise<Flags> {
-    // If no appKey, return flagDefaults immediately
-    if (!this.config.appKey) {
-      return { ...this.config.flagDefaults! };
-    }
-
-    // If cache is valid, return it
-    if (this.isCacheValid() && this.cache) {
-      return { ...this.cache.flags };
-    }
-
-    // Otherwise, refresh and return
-    await this.refreshFlags();
-    return this.cache ? { ...this.cache.flags } : { ...this.config.flagDefaults! };
+    const cache = await this.ensureCache();
+    return { ...cache.flags };
   }
 
   /**
@@ -252,14 +297,22 @@ export class TogglyServer implements TogglyClient {
     entity?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ): Promise<boolean> {
-    const flags = await this.getFlags();
-    const value = flags[key];
+    const cache = await this.ensureCache();
+    const entityContext = normalizeEntityContext(entity, kind);
 
-    if (value !== undefined) {
-      return resolveEvaluatedDefinition(value, normalizeEntityContext(entity, kind));
+    if (this.config.enableVariants) {
+      const value = cache.flags[key];
+      if (value !== undefined) {
+        return typeof value === 'boolean' ? value : defaultValue;
+      }
+      return this.config.flagDefaults?.[key] ?? defaultValue;
     }
 
-    // Check flagDefaults first, then use provided defaultValue
+    const def = cache.definitions.get(key);
+    if (def) {
+      return evaluateDefinition(def, this.buildEvalContext(entityContext));
+    }
+
     return this.config.flagDefaults?.[key] ?? defaultValue;
   }
 
@@ -277,10 +330,26 @@ export class TogglyServer implements TogglyClient {
       return !negate;
     }
 
-    const flags = await this.getFlags();
+    const cache = await this.ensureCache();
     const entityContext = normalizeEntityContext(entity, kind);
 
-    return evaluateEvaluatedGate(flags, keys, requirement, negate, entityContext);
+    if (this.config.enableVariants) {
+      const results = keys.map((key) => {
+        const value = cache.flags[key];
+        return typeof value === 'boolean' ? value : false;
+      });
+      const result =
+        requirement === 'any' ? results.some(Boolean) : results.every(Boolean);
+      return negate ? !result : result;
+    }
+
+    return evaluateFeatureGate(
+      cache.definitions,
+      keys,
+      requirement,
+      negate,
+      this.buildEvalContext(entityContext),
+    );
   }
 
   registerContext<T>(
@@ -331,5 +400,3 @@ export class TogglyServer implements TogglyClient {
 export function createTogglyServerClient(config: TogglyConfig, isBuildTime: boolean = false): TogglyServer {
   return new TogglyServer(config, isBuildTime);
 }
-
-

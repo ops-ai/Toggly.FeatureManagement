@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.Nuxt/**'
+      - 'toggly-eval/**'
       - '.github/workflows/analysis-nuxt.yml'
   pull_request:
     branches:
@@ -14,6 +15,7 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.Nuxt/**'
+      - 'toggly-eval/**'
       - '.github/workflows/analysis-nuxt.yml'
   workflow_dispatch:
 
@@ -61,6 +63,8 @@ jobs:
         working-directory: toggly-signed-defs
         run: (npm ci || npm install) && npm run build
 
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -104,6 +108,8 @@ jobs:
         working-directory: toggly-signed-defs
         run: (npm ci || npm install) && npm run build
 
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -138,6 +144,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
 
       - name: Install dependencies for TypeScript analysis
         working-directory: ${{ env.SDK_ROOT }}

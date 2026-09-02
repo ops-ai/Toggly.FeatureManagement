@@ -199,17 +199,26 @@ describe('DefinitionsCache', () => {
     cache = new DefinitionsCache(provider, false)
   })
 
-  describe('getDefinitions/setDefinitions', () => {
-    it('should store and retrieve definitions', async () => {
-      const definitions = { 'feature-a': true, 'feature-b': false }
-      await cache.setDefinitions('defs', definitions)
+  describe('getDefinitionModels/setDefinitionModels', () => {
+    it('should store and retrieve definition models', async () => {
+      const definitions = [
+        { featureKey: 'feature-a', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+        { featureKey: 'feature-b', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+      ]
+      await cache.setDefinitionModels('defs', definitions)
 
-      const result = await cache.getDefinitions('defs')
+      const result = await cache.getDefinitionModels('defs')
       expect(result).toEqual(definitions)
     })
 
     it('should return null for non-existent definitions', async () => {
-      const result = await cache.getDefinitions('non-existent')
+      const result = await cache.getDefinitionModels('non-existent')
+      expect(result).toBeNull()
+    })
+
+    it('should ignore legacy boolean snapshots', async () => {
+      await cache.setDefinitions('legacy', { 'feature-a': true })
+      const result = await cache.getDefinitionModels('legacy')
       expect(result).toBeNull()
     })
 
@@ -218,7 +227,7 @@ describe('DefinitionsCache', () => {
       await provider.set('invalid', 'not-json')
 
       const providerCache = new DefinitionsCache(provider, false)
-      const result = await providerCache.getDefinitions('invalid')
+      const result = await providerCache.getDefinitionModels('invalid')
       expect(result).toBeNull()
     })
   })
@@ -239,10 +248,12 @@ describe('DefinitionsCache', () => {
 
   describe('clear', () => {
     it('should clear cached data', async () => {
-      await cache.setDefinitions('defs', { feature: true })
+      await cache.setDefinitionModels('defs', [
+        { featureKey: 'feature', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+      ])
       await cache.clear('defs')
 
-      const result = await cache.getDefinitions('defs')
+      const result = await cache.getDefinitionModels('defs')
       expect(result).toBeNull()
     })
 

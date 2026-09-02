@@ -4,13 +4,13 @@
   "private": true,
   "description": "Feature flags for Next.js - monorepo",
   "scripts": {
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "test:coverage": "pnpm -r test:coverage",
-    "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck",
-    "clean": "pnpm -r clean",
-    "dev:prepare": "pnpm -r dev:prepare"
+    "build": "pnpm -r --filter \"./nextjs-*\" build",
+    "test": "pnpm -r --filter \"./nextjs-*\" test",
+    "test:coverage": "pnpm -r --filter \"./nextjs-*\" test:coverage",
+    "lint": "pnpm -r --filter \"./nextjs-*\" lint",
+    "typecheck": "pnpm -r --filter \"./nextjs-*\" typecheck",
+    "clean": "pnpm -r --filter \"./nextjs-*\" clean",
+    "dev:prepare": "pnpm -r --filter \"./nextjs-*\" dev:prepare"
   },
   "engines": {
     "node": ">=18.0.0",

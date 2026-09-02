@@ -12,6 +12,7 @@ export type {
   IdentitySeriesData,
   Hook,
   HookMetadata,
+  EvaluationMode,
 } from './types'
 
 // Constants
@@ -36,6 +37,19 @@ export {
 
 // Client
 export { createTogglyClient } from './client'
+
+// Local evaluation helpers (server packages hydrate / snapshot via these)
+export {
+  evaluateDefinitions,
+  evaluateFeatureGate as evaluateLocalFeatureGate,
+  indexDefinitions,
+  parseDefinitionsPayload,
+  snapshotEvaluatedBooleans,
+} from '@ops-ai/toggly-eval'
+export type {
+  EvalContext,
+  FeatureDefinitionModel,
+} from '@ops-ai/toggly-eval'
 
 // Live socket helpers
 export {

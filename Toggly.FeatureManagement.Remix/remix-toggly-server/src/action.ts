@@ -69,14 +69,16 @@ export function createFeatureGatedAction<T>(
       identity = await options.getIdentity(request);
     }
     await client.init(identity);
+    const identityCtx = { identity };
 
     // Create context
     const togglyContext: TogglyActionContext = {
       client,
-      flags: client.getFlags(),
-      isEnabled: (key, def) => client.isEnabled(key, undefined, def),
-      isDisabled: (key, def) => client.isDisabled(key, undefined, def),
-      evaluateGate: (keys, req, neg) => client.evaluateGate(keys, req, neg),
+      flags: client.snapshotFlags(identityCtx),
+      isEnabled: (key, def) => client.isEnabled(key, identityCtx, def),
+      isDisabled: (key, def) => client.isDisabled(key, identityCtx, def),
+      evaluateGate: (keys, req, neg) =>
+        client.evaluateGate(keys, req, neg, false, undefined, undefined, identityCtx),
     };
 
     // Check required features
@@ -138,13 +140,15 @@ export function createTogglyAction(options: TogglyLoaderOptions) {
       }
 
       await client.init(identity);
+      const identityCtx = { identity };
 
       return {
         client,
-        flags: client.getFlags(),
-        isEnabled: (key, def) => client.isEnabled(key, undefined, def),
-        isDisabled: (key, def) => client.isDisabled(key, undefined, def),
-        evaluateGate: (keys, req, neg) => client.evaluateGate(keys, req, neg),
+        flags: client.snapshotFlags(identityCtx),
+        isEnabled: (key, def) => client.isEnabled(key, identityCtx, def),
+        isDisabled: (key, def) => client.isDisabled(key, identityCtx, def),
+        evaluateGate: (keys, req, neg) =>
+          client.evaluateGate(keys, req, neg, false, undefined, undefined, identityCtx),
       };
     },
 

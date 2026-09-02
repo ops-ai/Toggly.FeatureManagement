@@ -1,3 +1,22 @@
+## 1.6.0
+
+2026-09-02
+
+### Added
+- `evaluationMode: 'local' | 'remote'` dual-rail (OPS-825). Default remains
+  `'remote'` (evaluated-signed) for browser clients; `'local'` fetches
+  definitions-signed and evaluates with `@ops-ai/toggly-eval`.
+- `API_ENDPOINTS.evaluatedSigned` / `definitionsSigned`; `definitions` kept as
+  a deprecated alias of `evaluatedSigned`.
+- `state.definitions` Map and `getDefinitions()` for the local rail.
+- `hydrateDefinitions(defs)` to apply a cached definitions-signed model array
+  without a network fetch (server last-known-good hydration).
+- `setIdentity` no longer refreshes when `evaluationMode` is `'local'`
+  (identity is eval-time only).
+
+### Changed
+- Depend on `@ops-ai/toggly-eval@1.0.0` for local definition evaluation.
+
 ## 1.5.3
 
 2026-08-30

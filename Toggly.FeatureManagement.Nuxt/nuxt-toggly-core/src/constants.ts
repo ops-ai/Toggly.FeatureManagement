@@ -7,6 +7,7 @@ export const DEFAULT_CONFIG = {
   refreshInterval: 180000, // 3 minutes
   showFeatureDuringEvaluation: false,
   enableLiveUpdates: true,
+  evaluationMode: 'remote' as const,
 } as const
 
 /**
@@ -22,6 +23,11 @@ export const STORAGE_KEYS = {
  * API endpoints
  */
 export const API_ENDPOINTS = {
+  evaluatedSigned: (baseUri: string, appKey: string, environment: string) =>
+    `${baseUri}/evaluated-signed/${appKey}/${environment}`,
+  definitionsSigned: (baseUri: string, appKey: string, environment: string) =>
+    `${baseUri}/definitions-signed/${appKey}/${environment}`,
+  /** @deprecated use evaluatedSigned — kept for back-compat */
   definitions: (baseUri: string, appKey: string, environment: string) =>
     `${baseUri}/evaluated-signed/${appKey}/${environment}`,
 } as const

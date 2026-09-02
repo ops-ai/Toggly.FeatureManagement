@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.2
+
+2026-09-02
+
+### Fixed
+- Register `Microsoft.Targeting` / `Microsoft.Percentage` /
+  `Microsoft.TimeWindow` aliases.
+- Accept colon-form audience keys alongside dotted form.
+
+## 0.3.1
+
+2026-09-02
+
+### Fixed
+- Targeting honors `Audience.Exclusion.Users` / `Audience.Exclusion.Groups`
+  before inclusions and default rollout (Definitions parity).
+- `IgnoreCase` defaults to `true` when unset (Definitions parity).
+
 ## 0.3.0
 
 2026-08-21

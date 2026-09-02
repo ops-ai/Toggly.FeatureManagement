@@ -10,6 +10,7 @@ import {
   FeatureFlags,
 } from '@ops-ai/remix-toggly-core';
 import * as signedResponse from '../src/signed-response';
+import { featureDefs, mockDefsFetchResponse } from './defs-helpers';
 
 jest.mock('../src/signed-response', () => {
   const actual = jest.requireActual('../src/signed-response');
@@ -89,10 +90,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should apply local gates from config', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient({
         ...defaultConfig,
@@ -129,9 +127,9 @@ describe('TogglyServerClient', () => {
     });
 
     it('unwraps a verified defs envelope when signatures are enabled', async () => {
-      (signedResponse.parseEvaluatedResponseBody as jest.Mock).mockResolvedValueOnce({
-        defs: { feature1: true },
-      });
+      (signedResponse.parseEvaluatedResponseBody as jest.Mock).mockResolvedValueOnce(
+        featureDefs({ feature1: true }),
+      );
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -153,10 +151,7 @@ describe('TogglyServerClient', () => {
 
   describe('local gate subscriptions', () => {
     it('should notify subscribers when local gates change', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
@@ -178,10 +173,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should swallow listener errors during notifyLocalGatesChanged', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
@@ -198,10 +190,7 @@ describe('TogglyServerClient', () => {
   describe('init', () => {
     it('should fetch flags on init', async () => {
       const flags: FeatureFlags = { feature1: true, feature2: false };
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(flags),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
 
       const client = new TogglyServerClient(defaultConfig);
       const result = await client.init();
@@ -212,10 +201,7 @@ describe('TogglyServerClient', () => {
 
     it('should return cached flags on subsequent calls', async () => {
       const flags: FeatureFlags = { feature1: true };
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(flags),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
@@ -225,18 +211,119 @@ describe('TogglyServerClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('should include identity in request', async () => {
-      const flags: FeatureFlags = { feature1: true };
+    it('should rebind identity and re-snapshot flags on warm re-init', async () => {
+      const targetingAlice = {
+        featureKey: 'targeted-flag',
+        filters: [
+          {
+            name: 'Targeting',
+            parameters: {
+              'Audience.Users:0': 'alice',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([targetingAlice]);
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(flags),
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([targetingAlice]),
+        headers: { get: () => null },
       });
+
+      const client = new TogglyServerClient(defaultConfig);
+      const first = await client.init('bob');
+      expect(first['targeted-flag']).toBe(false);
+
+      const second = await client.init('alice');
+      expect(second['targeted-flag']).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(await client.isEnabled('targeted-flag')).toBe(true);
+    });
+
+    it('should clear identity on warm re-init with undefined', async () => {
+      const targetingAlice = {
+        featureKey: 'targeted-flag',
+        filters: [
+          {
+            name: 'Targeting',
+            parameters: {
+              'Audience.Users:0': 'alice',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([targetingAlice]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([targetingAlice]),
+        headers: { get: () => null },
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      expect((await client.init('alice'))['targeted-flag']).toBe(true);
+      expect((await client.init(undefined))['targeted-flag']).toBe(false);
+      expect(await client.isEnabled('targeted-flag', { identity: undefined })).toBe(
+        false,
+      );
+      expect(await client.isEnabled('targeted-flag', { identity: 'alice' })).toBe(
+        true,
+      );
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should evaluate concurrent identity overrides independently', async () => {
+      const targetingAlice = {
+        featureKey: 'targeted-flag',
+        filters: [
+          {
+            name: 'Targeting',
+            parameters: {
+              'Audience.Users:0': 'alice',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([targetingAlice]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([targetingAlice]),
+        headers: { get: () => null },
+      });
+
+      const client = new TogglyServerClient({
+        ...defaultConfig,
+      });
+      await client.init('bob');
+
+      const results = await Promise.all([
+        client.isEnabled('targeted-flag', { identity: 'alice' }),
+        client.isEnabled('targeted-flag', { identity: 'bob' }),
+        client.isEnabled('targeted-flag', { identity: 'alice' }),
+      ]);
+
+      expect(results).toEqual([true, false, true]);
+    });
+
+    it('should fetch definitions-signed without identity query params', async () => {
+      const flags: FeatureFlags = { feature1: true };
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init('user-123');
 
       const calledUrl = mockFetch.mock.calls[0][0] as string;
-      expect(calledUrl).toContain('u=user-123');
+      expect(calledUrl).toContain('/definitions-signed/');
+      expect(calledUrl).not.toContain('/evaluated-signed/');
+      expect(new URL(calledUrl).searchParams.get('u')).toBeNull();
     });
   });
 
@@ -310,11 +397,16 @@ describe('TogglyServerClient', () => {
       );
     });
 
-    it('should extract flags from defs property in response', async () => {
+    it('should extract flags from defs array envelope in response', async () => {
       const flags: FeatureFlags = { feature1: true, feature2: false };
+      const defs = featureDefs(flags);
+      const body = JSON.stringify({ defs });
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ defs: flags }),
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve({ defs }),
+        headers: { get: () => null },
       });
 
       const client = new TogglyServerClient(defaultConfig);
@@ -326,9 +418,7 @@ describe('TogglyServerClient', () => {
     it('should return existing flags on 304 Not Modified', async () => {
       const flags: FeatureFlags = { feature1: true };
       mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(flags),
+        ...mockDefsFetchResponse(flags),
         headers: { get: () => '"rev-quoted"' },
       });
 
@@ -351,10 +441,7 @@ describe('TogglyServerClient', () => {
   describe('getFlags', () => {
     it('should return a copy of flags', async () => {
       const flags: FeatureFlags = { feature1: true };
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(flags),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
@@ -368,10 +455,7 @@ describe('TogglyServerClient', () => {
 
   describe('isEnabled', () => {
     it('should return true for enabled feature', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
@@ -382,10 +466,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should return false for disabled feature', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: false }));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
@@ -396,10 +477,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should return default value for missing feature', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
@@ -412,10 +490,7 @@ describe('TogglyServerClient', () => {
 
   describe('isDisabled', () => {
     it('should return true for disabled feature', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: false }));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
@@ -426,10 +501,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should return false for enabled feature', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
@@ -442,15 +514,11 @@ describe('TogglyServerClient', () => {
 
   describe('evaluateGate', () => {
     beforeEach(() => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({
             feature1: true,
             feature2: true,
             feature3: false,
-          }),
-      });
+          }));
     });
 
     it('should return true when all features are enabled (requirement: all)', async () => {
@@ -520,10 +588,7 @@ describe('TogglyServerClient', () => {
   describe('getServerContext', () => {
     it('should return server context for hydration', async () => {
       const flags: FeatureFlags = { feature1: true };
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(flags),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
 
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
@@ -590,10 +655,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should execute beforeEvaluation hooks', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient(defaultConfig);
       const hook = createMockHook('test-hook');
@@ -606,10 +668,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should execute afterEvaluation hooks', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient(defaultConfig);
       const hook = createMockHook('test-hook');
@@ -626,10 +685,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should execute beforeIdentify hooks', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const client = new TogglyServerClient(defaultConfig);
       const hook = createMockHook('test-hook');
@@ -641,10 +697,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should execute afterIdentify hooks', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const client = new TogglyServerClient(defaultConfig);
       const hook = createMockHook('test-hook');
@@ -657,10 +710,7 @@ describe('TogglyServerClient', () => {
 
     it('should execute afterRefresh hooks', async () => {
       const flags = { feature1: true };
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(flags),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
 
       const client = new TogglyServerClient(defaultConfig);
       const hook = createMockHook('test-hook');
@@ -672,10 +722,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should handle hook errors gracefully', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient(defaultConfig);
       const hook: TogglyHook = {
@@ -697,10 +744,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should handle afterEvaluation hook errors gracefully', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient(defaultConfig);
       const hook: TogglyHook = {
@@ -721,10 +765,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should handle beforeIdentify hook errors gracefully', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const client = new TogglyServerClient(defaultConfig);
       const hook: TogglyHook = {
@@ -743,10 +784,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should handle afterIdentify hook errors gracefully', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const client = new TogglyServerClient(defaultConfig);
       const hook: TogglyHook = {
@@ -765,10 +803,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should handle afterRefresh hook errors gracefully', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient(defaultConfig);
       const hook: TogglyHook = {
@@ -787,10 +822,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should skip hook methods that are not defined', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const client = new TogglyServerClient(defaultConfig);
       const minimalHook: TogglyHook = {
@@ -815,10 +847,7 @@ describe('TogglyServerClient', () => {
 
   describe('WebSocket behavior', () => {
     const initClient = async (flags: FeatureFlags = { feature1: true }) => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(flags),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
       return client;
@@ -837,10 +866,7 @@ describe('TogglyServerClient', () => {
     it('should refresh flags when flags-updated JSON message is received', async () => {
       jest.useFakeTimers();
       const client = await initClient();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: false }));
 
       wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'flags-updated' })));
       jest.advanceTimersByTime(350);
@@ -854,10 +880,7 @@ describe('TogglyServerClient', () => {
     it('should refresh flags when update JSON message is received', async () => {
       jest.useFakeTimers();
       const client = await initClient();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: false }));
 
       wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'update' })));
       jest.advanceTimersByTime(350);
@@ -882,10 +905,7 @@ describe('TogglyServerClient', () => {
     it('should refresh flags when sync JSON message is received', async () => {
       jest.useFakeTimers();
       const client = await initClient();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: false }));
 
       wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'sync', etag: 'new-rev' })));
       jest.advanceTimersByTime(350);
@@ -899,10 +919,7 @@ describe('TogglyServerClient', () => {
     it('should refresh flags when signing-key-updated JSON message is received', async () => {
       jest.useFakeTimers();
       const client = await initClient();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: false }));
 
       wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'signing-key-updated' })));
       jest.advanceTimersByTime(350);
@@ -916,10 +933,7 @@ describe('TogglyServerClient', () => {
     it('caches etag from flags-updated without treating an empty revision as a change', async () => {
       jest.useFakeTimers();
       const client = await initClient();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: false }));
 
       wsHandlers['message']?.(
         Buffer.from(JSON.stringify({ type: 'update', etag: 'rev-2' })),
@@ -935,10 +949,7 @@ describe('TogglyServerClient', () => {
     it('clears a pending refresh debounce when closed', async () => {
       jest.useFakeTimers();
       const client = await initClient();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: false }));
 
       wsHandlers['message']?.(Buffer.from(JSON.stringify({ type: 'update' })));
       client.close();
@@ -952,10 +963,7 @@ describe('TogglyServerClient', () => {
     it('should refresh flags on plain text "update" message', async () => {
       jest.useFakeTimers();
       const client = await initClient();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       wsHandlers['message']?.(Buffer.from('update'));
       jest.advanceTimersByTime(350);
@@ -969,10 +977,7 @@ describe('TogglyServerClient', () => {
     it('should refresh flags on plain text "flags-updated" message', async () => {
       jest.useFakeTimers();
       const client = await initClient();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       wsHandlers['message']?.(Buffer.from('flags-updated'));
       jest.advanceTimersByTime(350);
@@ -1017,10 +1022,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should not start WebSocket when no appKey is provided', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
       const client = new TogglyServerClient({
         featureDefaults: { feature1: true },
       });
@@ -1031,10 +1033,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should not create a second WebSocket if one already exists', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
 
@@ -1048,10 +1047,7 @@ describe('TogglyServerClient', () => {
     });
 
     it('should log error and schedule reconnect when WebSocket constructor throws', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
       const client = new TogglyServerClient(defaultConfig);
 
       // Make the WS constructor throw on the NEXT call (after init's first WS creation)
@@ -1080,10 +1076,7 @@ describe('TogglyServerClient', () => {
 
     it('should fire reconnect timer callback and restart WebSocket', async () => {
       jest.useFakeTimers();
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValue(mockDefsFetchResponse({}));
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
 
@@ -1101,10 +1094,7 @@ describe('TogglyServerClient', () => {
 
     it('should not schedule a second reconnect timer if one is already pending', async () => {
       jest.useFakeTimers();
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValue(mockDefsFetchResponse({}));
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
 
@@ -1124,10 +1114,7 @@ describe('TogglyServerClient', () => {
 
   describe('close', () => {
     it('should close WebSocket and cleanup on close()', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
 
@@ -1149,10 +1136,7 @@ describe('TogglyServerClient', () => {
 
     it('should cancel pending reconnect timer on close()', async () => {
       jest.useFakeTimers();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
       const client = new TogglyServerClient(defaultConfig);
       await client.init();
 

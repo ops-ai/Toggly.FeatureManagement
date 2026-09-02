@@ -6,7 +6,9 @@ import {
   mergeConfig,
   buildDefinitionsUrl,
   isFeatureEnabled,
+  isFeatureEnabledLocal,
   evaluateFeatureGate,
+  evaluateFeatureGateLocal,
   normalizeFeatureKeys,
   createLogger,
   parseIdentity,
@@ -22,6 +24,8 @@ import {
   normalizeEntityContext,
 } from '../src/utils';
 import type { FeatureFlags, TogglyConfig } from '../src/types';
+import type { DefinitionsByKey, FeatureDefinitionModel } from '@ops-ai/toggly-eval';
+import { indexDefinitions } from '@ops-ai/toggly-eval';
 
 describe('utils', () => {
   describe('mergeConfig', () => {
@@ -57,6 +61,17 @@ describe('utils', () => {
 
       expect(result.baseUrl).toBe(DEFAULT_CONFIG.baseUrl);
       expect(result.environment).toBe(DEFAULT_CONFIG.environment);
+      expect(result.evaluationMode).toBe('remote');
+    });
+
+    it('should default evaluationMode to remote', () => {
+      expect(DEFAULT_CONFIG.evaluationMode).toBe('remote');
+      expect(mergeConfig({ appKey: 'x' }).evaluationMode).toBe('remote');
+    });
+
+    it('should preserve evaluationMode local', () => {
+      const result = mergeConfig({ appKey: 'x', evaluationMode: 'local' });
+      expect(result.evaluationMode).toBe('local');
     });
   });
 
@@ -123,7 +138,125 @@ describe('utils', () => {
 
       expect(url).toContain('Production');
     });
+
+    it('should use definitions-signed for local evaluationMode', () => {
+      const config: TogglyConfig = {
+        appKey: 'my-app',
+        environment: 'Production',
+        evaluationMode: 'local',
+      };
+
+      const url = buildDefinitionsUrl(config, 'user-123');
+
+      expect(url).toBe(
+        'https://definitions.toggly.io/definitions-signed/my-app/Production',
+      );
+      expect(url).not.toContain('u=');
+      expect(url).not.toContain('evaluated-signed');
+    });
+
+    it('should ignore groups and claims query params in local mode', () => {
+      const config: TogglyConfig = {
+        appKey: 'my-app',
+        environment: 'Staging',
+        evaluationMode: 'local',
+        groups: ['beta'],
+        claims: { plan: 'pro' },
+      };
+
+      const url = buildDefinitionsUrl(config, {
+        identity: 'user-1',
+        groups: ['alpha'],
+        claims: { plan: 'free' },
+      });
+
+      expect(url).toBe(
+        'https://definitions.toggly.io/definitions-signed/my-app/Staging',
+      );
+    });
+
+    it('should keep evaluated-signed when evaluationMode is remote', () => {
+      const config: TogglyConfig = {
+        appKey: 'my-app',
+        evaluationMode: 'remote',
+      };
+
+      const url = buildDefinitionsUrl(config, 'user-123');
+
+      expect(url).toBe(
+        'https://definitions.toggly.io/evaluated-signed/my-app/Production?u=user-123',
+      );
+    });
   });
+
+  describe('isFeatureEnabledLocal / evaluateFeatureGateLocal', () => {
+    const defs: DefinitionsByKey = indexDefinitions([
+      {
+        featureKey: 'feature-a',
+        filters: [{ name: 'AlwaysOn' }],
+      },
+      {
+        featureKey: 'feature-b',
+        filters: [{ name: 'AlwaysOff' }],
+      },
+      {
+        featureKey: 'targeting',
+        filters: [
+          {
+            name: 'Targeting',
+            parameters: {
+              'Audience.Users:0': 'alice',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          },
+        ],
+      },
+    ] as FeatureDefinitionModel[]);
+
+    it('should evaluate AlwaysOn / AlwaysOff locally', () => {
+      expect(isFeatureEnabledLocal(defs, 'feature-a')).toBe(true);
+      expect(isFeatureEnabledLocal(defs, 'feature-b')).toBe(false);
+    });
+
+    it('should use default for missing keys and empty maps', () => {
+      expect(isFeatureEnabledLocal(defs, 'unknown')).toBe(false);
+      expect(isFeatureEnabledLocal(defs, 'unknown', {}, true)).toBe(true);
+      expect(isFeatureEnabledLocal(new Map(), 'feature-a', {}, true)).toBe(true);
+      expect(isFeatureEnabledLocal(null, 'feature-a', {}, true)).toBe(true);
+    });
+
+    it('should evaluate with identity context', () => {
+      expect(isFeatureEnabledLocal(defs, 'targeting', { identity: 'alice' })).toBe(true);
+      expect(isFeatureEnabledLocal(defs, 'targeting', { identity: 'bob' })).toBe(false);
+    });
+
+    it('should evaluate gates with all / any / negate', () => {
+      expect(
+        evaluateFeatureGateLocal(defs, ['feature-a', 'feature-b'], 'all').enabled,
+      ).toBe(false);
+      expect(
+        evaluateFeatureGateLocal(defs, ['feature-a', 'feature-b'], 'any').enabled,
+      ).toBe(true);
+      expect(
+        evaluateFeatureGateLocal(defs, ['feature-a'], 'all', true).enabled,
+      ).toBe(false);
+      expect(
+        evaluateFeatureGateLocal(defs, ['feature-b'], 'all', true).enabled,
+      ).toBe(true);
+    });
+
+    it('should handle empty keys and empty defs for local gates', () => {
+      expect(evaluateFeatureGateLocal(defs, [], 'all').enabled).toBe(true);
+      expect(evaluateFeatureGateLocal(defs, [], 'all', true).enabled).toBe(false);
+      expect(
+        evaluateFeatureGateLocal(new Map(), ['feature-a'], 'all', false, true).enabled,
+      ).toBe(true);
+      expect(
+        evaluateFeatureGateLocal(null, ['feature-a'], 'all', true, true).enabled,
+      ).toBe(false);
+    });
+  });
+
 
   describe('isFeatureEnabled', () => {
     const flags: FeatureFlags = {

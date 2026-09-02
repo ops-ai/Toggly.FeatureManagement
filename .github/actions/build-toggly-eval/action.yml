@@ -1,0 +1,10 @@
+name: Build toggly-eval
+description: Install and build the in-repo @ops-ai/toggly-eval package for CI consumers
+
+runs:
+  using: composite
+  steps:
+    - name: Install and build @ops-ai/toggly-eval
+      shell: bash
+      working-directory: toggly-eval
+      run: (npm ci || npm install) && npm run build

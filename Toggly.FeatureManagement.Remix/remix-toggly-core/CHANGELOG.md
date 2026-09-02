@@ -1,6 +1,25 @@
 # Changelog
 
 
+## 1.5.0
+
+2026-09-02
+
+### Added
+
+- `evaluationMode?: 'local' | 'remote'` on `TogglyConfig` (default `remote`) for
+  dual-rail definitions fetches.
+- Local evaluation helpers `isFeatureEnabledLocal` and
+  `evaluateFeatureGateLocal` backed by `@ops-ai/toggly-eval`.
+- Re-exports of `evaluateDefinitions`, `indexDefinitions`,
+  `parseDefinitionsPayload`, `snapshotEvaluatedBooleans`, and related types for
+  remix-toggly-server wiring.
+
+### Changed
+
+- `buildDefinitionsUrl` uses `definitions-signed` (no context query params)
+  when `evaluationMode` is `local`; remote mode keeps `evaluated-signed`.
+
 ## 1.4.2
 
 - Normalize public npm metadata for provenance and docs links (no API change).

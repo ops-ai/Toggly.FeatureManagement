@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.3.0
+
+2026-09-02
+
+### Changed
+- Durable cache stores raw `FeatureDefinitionModel[]`; failed fetches hydrate
+  via `hydrateDefinitions` (aligned with nextjs-toggly-server).
+- Per-call `identity` on `isServerFeatureOn` / event helpers uses core
+  `identityOverride` instead of mutating shared `client.identity`.
+- `useEventToggly` binds request identity through a Proxy that forwards
+  overrides without writing process-wide identity.
+- Peer on `@ops-ai/nuxt-toggly-core` allows `^1.8.0`.
+
+## 1.2.0
+
+2026-09-02
+
+### Changed
+- `initServerToggly` forces `evaluationMode: 'local'` so the server fetches
+  `definitions-signed` and evaluates with `@ops-ai/toggly-eval` (OPS-825).
+
 ## 1.1.1
 
 2026-09-02

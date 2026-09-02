@@ -1,6 +1,8 @@
 import {
   createTogglyClient,
+  snapshotEvaluatedBooleans,
   toBooleanDefinitions,
+  type FeatureDefinitionModel,
   type TogglyClient,
   type TogglyConfig,
   type FeatureDefinitions,
@@ -14,6 +16,8 @@ import type { TogglyServerConfig, TogglyStorage } from './types'
  * Live updates use WebSocket (via `ws`) so long-lived Node processes do not
  * poll definitions.toggly.io on every request. refreshInterval stays 0;
  * reconnect + WS push keep flags fresh. Edge runtimes skip WS in core.
+ *
+ * Server packages always evaluate locally (definitions-signed + toggly-eval).
  */
 const DEFAULT_SERVER_CONFIG = {
   cache: true,
@@ -21,6 +25,7 @@ const DEFAULT_SERVER_CONFIG = {
   cacheKeyPrefix: 'toggly:server:',
   refreshInterval: 0,
   enableLiveUpdates: true,
+  evaluationMode: 'local' as const,
   webSocketImpl: WebSocket as unknown as TogglyConfig['webSocketImpl'],
 }
 
@@ -98,6 +103,61 @@ function setServerConfigRef(config: TogglyServerConfig | null): void {
   togglyGlobal.__togglyServerConfig = config
 }
 
+function definitionsCacheKey(config: TogglyServerConfig): string {
+  return `${config.cacheKeyPrefix}definitions`
+}
+
+function isDefinitionModelArray(
+  value: unknown
+): value is FeatureDefinitionModel[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        item !== null &&
+        typeof item === 'object' &&
+        typeof (item as FeatureDefinitionModel).featureKey === 'string'
+    )
+  )
+}
+
+async function readCachedDefinitions(
+  storage: TogglyStorage,
+  config: TogglyServerConfig
+): Promise<FeatureDefinitionModel[] | null> {
+  const cached = await storage.getItem<unknown>(definitionsCacheKey(config))
+  return isDefinitionModelArray(cached) ? cached : null
+}
+
+async function writeCachedDefinitions(
+  storage: TogglyStorage,
+  config: TogglyServerConfig,
+  client: TogglyClient
+): Promise<void> {
+  const defs = Array.from(client.getDefinitions().values())
+  if (defs.length === 0) {
+    return
+  }
+  await storage.setItem(definitionsCacheKey(config), defs, {
+    ttl: config.cacheTtl,
+  })
+}
+
+function evaluatedSnapshot(client: TogglyClient): FeatureDefinitions {
+  const defs = client.getDefinitions()
+  if (defs.size === 0) {
+    return toBooleanDefinitions({ ...client.state.features })
+  }
+  return toBooleanDefinitions({
+    ...client.config.featureDefaults,
+    ...snapshotEvaluatedBooleans(defs, {
+      identity: client.config.identity,
+      groups: client.config.groups,
+      traits: client.config.claims,
+    }),
+  })
+}
+
 /**
  * Set custom storage implementation
  */
@@ -121,6 +181,9 @@ export function createMemoryStorage(): TogglyStorage {
 
 /**
  * Initialize the server-side Toggly client
+ *
+ * Always uses local evaluation (`definitions-signed` + `@ops-ai/toggly-eval`).
+ * Durable cache stores raw definition models (not evaluated booleans).
  */
 export async function initServerToggly(
   config: TogglyServerConfig
@@ -132,24 +195,16 @@ export async function initServerToggly(
     refreshInterval: config.refreshInterval ?? DEFAULT_SERVER_CONFIG.refreshInterval,
     enableLiveUpdates: config.enableLiveUpdates ?? DEFAULT_SERVER_CONFIG.enableLiveUpdates,
     webSocketImpl: config.webSocketImpl ?? DEFAULT_SERVER_CONFIG.webSocketImpl,
+    // Server package is always on the local evaluation rail
+    evaluationMode: 'local',
   }
 
   setServerConfigRef(mergedConfig)
   const serverStorage = getServerStorageRef()
 
-  // Check for cached definitions
-  if (mergedConfig.cache) {
-    const cacheKey = `${mergedConfig.cacheKeyPrefix}definitions`
-    const cached = await serverStorage.getItem<FeatureDefinitions>(cacheKey)
-
-    if (cached) {
-      // Use cached definitions as defaults
-      mergedConfig.featureDefaults = {
-        ...toBooleanDefinitions(cached),
-        ...mergedConfig.featureDefaults,
-      }
-    }
-  }
+  const cachedDefs = mergedConfig.cache
+    ? await readCachedDefinitions(serverStorage, mergedConfig)
+    : null
 
   // Replace any prior process-wide client (e.g. accidental double-init)
   // so WebSockets/timers from the old instance do not leak.
@@ -159,17 +214,18 @@ export async function initServerToggly(
     setServerClientRef(null)
   }
 
-  // Create and initialize client
   const serverClient = createTogglyClient(mergedConfig as TogglyConfig)
   setServerClientRef(serverClient)
-  const definitions = await serverClient.init()
+  await serverClient.init()
 
-  // Cache the definitions
-  if (mergedConfig.cache) {
-    const cacheKey = `${mergedConfig.cacheKeyPrefix}definitions`
-    await serverStorage.setItem(cacheKey, definitions, {
-      ttl: mergedConfig.cacheTtl,
-    })
+  // Last-known-good: if fetch failed, hydrate from durable definition cache
+  if (serverClient.state.error && cachedDefs && cachedDefs.length > 0) {
+    serverClient.hydrateDefinitions(cachedDefs)
+  }
+
+  // Persist definition models after a successful fetch (or hydrate)
+  if (mergedConfig.cache && serverClient.getDefinitions().size > 0) {
+    await writeCachedDefinitions(serverStorage, mergedConfig, serverClient)
   }
 
   return serverClient
@@ -206,42 +262,29 @@ export async function refreshServerToggly(): Promise<FeatureDefinitions | null> 
     return null
   }
 
-  const definitions = await serverClient.refresh()
+  await serverClient.refresh()
 
-  // Update cache
-  if (serverConfig.cache) {
-    const cacheKey = `${serverConfig.cacheKeyPrefix}definitions`
-    await getServerStorageRef().setItem(cacheKey, definitions, {
-      ttl: serverConfig.cacheTtl,
-    })
+  if (serverConfig.cache && serverClient.getDefinitions().size > 0) {
+    await writeCachedDefinitions(
+      getServerStorageRef(),
+      serverConfig,
+      serverClient
+    )
   }
 
-  return definitions
+  return evaluatedSnapshot(serverClient)
 }
 
 /**
- * Check if a feature is enabled on the server
+ * Check if a feature is enabled on the server.
+ * Pass `identity` as a per-call override (local eval); shared client is reused.
  */
 export async function isServerFeatureOn(
   featureKey: string,
   identity?: string
 ): Promise<boolean> {
   const client = useServerToggly()
-
-  if (identity) {
-    // Create a temporary context with the identity
-    const originalIdentity = client.identity
-    client.identity = identity
-
-    const result = await client.isFeatureOn(featureKey)
-
-    // Restore original identity
-    client.identity = originalIdentity
-
-    return result
-  }
-
-  return client.isFeatureOn(featureKey)
+  return client.isFeatureOn(featureKey, undefined, undefined, identity)
 }
 
 /**
@@ -256,14 +299,15 @@ export async function isServerFeatureOff(
 }
 
 /**
- * Get all feature definitions (for SSR/SSG)
+ * Get all feature definitions as an evaluated boolean snapshot (for SSR/SSG).
+ * Uses the shared client's config identity / groups / claims.
  */
 export function getServerFeatures(): FeatureDefinitions {
   const serverClient = getServerClientRef()
   if (!serverClient) {
     return {}
   }
-  return { ...serverClient.state.features }
+  return evaluatedSnapshot(serverClient)
 }
 
 /**

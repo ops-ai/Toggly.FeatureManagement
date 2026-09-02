@@ -52,16 +52,15 @@ export async function Feature({
     return negate ? children : fallback
   }
 
-  // Set identity if provided
-  if (identity) {
-    client.identity = identity
-  }
-
+  // Per-call identity override (local eval); do not mutate shared client identity
   const featureKeys = Array.isArray(featureKey) ? featureKey : [featureKey]
   const isEnabled = await client.evaluateFeatureGate(
     featureKeys,
     requirement,
-    negate
+    negate,
+    undefined,
+    undefined,
+    identity
   )
 
   return isEnabled ? children : fallback

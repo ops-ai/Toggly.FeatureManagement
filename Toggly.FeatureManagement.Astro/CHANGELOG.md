@@ -1,3 +1,17 @@
+## 1.11.0
+
+2026-09-02
+
+### Changed
+- Server client fetches `definitions-signed` (no identity query) and
+  evaluates with `@ops-ai/toggly-eval` at `getFlag` / `evaluateGate`
+  (OPS-825). Browser client remains on `evaluated-signed`.
+- `enableVariants` still uses `evaluated-variants-signed` for remote
+  variant assignment.
+
+### Added
+- Dependency on `@ops-ai/toggly-eval` for local definition evaluation.
+
 ## 1.10.0
 
 2026-08-28

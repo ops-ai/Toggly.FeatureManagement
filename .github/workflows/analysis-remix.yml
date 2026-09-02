@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.Remix/**'
+      - 'toggly-eval/**'
       - '.github/workflows/analysis-remix.yml'
   pull_request:
     branches:
@@ -14,6 +15,7 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.Remix/**'
+      - 'toggly-eval/**'
       - '.github/workflows/analysis-remix.yml'
   workflow_dispatch:
 
@@ -50,6 +52,8 @@ jobs:
         working-directory: toggly-signed-defs
         run: (npm ci || npm install) && npm run build
 
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
       - name: Install and build core package
         if: matrix.package != 'remix-toggly-core'
         working-directory: ${{ env.SDK_ROOT }}/remix-toggly-core
@@ -92,6 +96,9 @@ jobs:
         with:
           node-version: '20.x'
 
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
+
       - name: Lint core
         working-directory: ${{ env.SDK_ROOT }}/remix-toggly-core
         run: npm ci && npm run lint --if-present
@@ -120,6 +127,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
+
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
 
       - name: Build core package
         working-directory: ${{ env.SDK_ROOT }}/remix-toggly-core
@@ -155,6 +165,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
+
+      - name: Build shared toggly-eval package
+        uses: ./.github/actions/build-toggly-eval
 
       - name: Install dependencies for TypeScript analysis
         run: |
