@@ -1,3 +1,17 @@
+# Changelog
+
+## 0.7.0
+
+2026-09-02
+
+### Changed
+- Depends on `@ops-ai/toggly-eval@2` SHA-256 sticky buckets (breaking cohort
+  shift vs FNV from 0.6 / eval 1.x) [OPS-832].
+
+### Added
+- `EvaluationContext.claims` and `request` forwarded into local eval.
+- Re-export `fromHttpRequest` for mapping HTTP headers → eval request fields.
+
 ## 0.6.0
 
 2026-09-02

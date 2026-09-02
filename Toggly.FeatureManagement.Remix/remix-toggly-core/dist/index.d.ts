@@ -2,6 +2,8 @@ import { LocalGate } from '@ops-ai/toggly-local-gates';
 export { LocalGate } from '@ops-ai/toggly-local-gates';
 import { EvaluatedDefinitions, TogglyEvaluationContext, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 export { EntityGate, EntityGateRule, EvaluatedDefinitions, TogglyEntityContext, clearRegisteredContexts, normalizeEntityContext, registerContext, resolveEvaluatedDefinition, toBooleanDefinitions } from '@ops-ai/toggly-hooks-types';
+import { DefinitionsByKey, EvalContext } from '@ops-ai/toggly-eval';
+export { DefinitionsByKey, EntityEvalContext, EvalContext, FeatureDefinitionModel, evaluateDefinitions, indexDefinitions, parseDefinitionsPayload, snapshotEvaluatedBooleans } from '@ops-ai/toggly-eval';
 
 /**
  * Core types for Toggly Remix SDK
@@ -12,6 +14,12 @@ export { EntityGate, EntityGateRule, EvaluatedDefinitions, TogglyEntityContext, 
  */
 type FeatureRequirement = 'all' | 'any';
 /**
+ * Where feature evaluation happens for definitions fetches.
+ * - `remote` (default): fetch `evaluated-signed` with context query params
+ * - `local`: fetch `definitions-signed` (rules only) and evaluate with `@ops-ai/toggly-eval`
+ */
+type EvaluationMode = 'local' | 'remote';
+/**
  * Configuration options for Toggly
  */
 interface TogglyConfig {
@@ -21,6 +29,11 @@ interface TogglyConfig {
     environment?: string;
     /** Base URL for Toggly API */
     baseUrl?: string;
+    /**
+     * Evaluation rail. Defaults to `remote` for backward compatibility.
+     * Use `local` for definitions-signed + call-site evaluation (server multi-tenant).
+     */
+    evaluationMode?: EvaluationMode;
     /** Default feature values for offline/fallback mode */
     featureDefaults?: Record<string, boolean>;
     /** Request timeout in milliseconds */
@@ -196,13 +209,16 @@ declare class TogglyTimeoutError extends TogglyError {
 /**
  * Default Toggly configuration
  */
-declare const DEFAULT_CONFIG: Required<Pick<TogglyConfig, 'baseUrl' | 'environment' | 'timeout' | 'debug'>>;
+declare const DEFAULT_CONFIG: Required<Pick<TogglyConfig, 'baseUrl' | 'environment' | 'timeout' | 'debug' | 'evaluationMode'>>;
 /**
  * Merge user config with defaults
  */
 declare function mergeConfig(config: TogglyConfig): TogglyConfig;
 /**
- * Build the feature definitions URL
+ * Build the feature definitions URL.
+ *
+ * - `evaluationMode: 'remote'` (default): `/evaluated-signed/...` + context query params
+ * - `evaluationMode: 'local'`: `/definitions-signed/...` with no evaluation context params
  */
 declare function buildDefinitionsUrl(config: TogglyConfig, context?: string | TogglyEvaluationContext): string;
 /**
@@ -210,6 +226,14 @@ declare function buildDefinitionsUrl(config: TogglyConfig, context?: string | To
  */
 declare function isFeatureEnabled(flags: FeatureFlags, featureKey: string, defaultValue?: boolean, entityContext?: TogglyEntityContext | null): boolean;
 
+/**
+ * Locally evaluate a single feature against definitions-signed rules.
+ */
+declare function isFeatureEnabledLocal(defsByKey: DefinitionsByKey | null | undefined, featureKey: string, evalCtx?: EvalContext, defaultValue?: boolean): boolean;
+/**
+ * Locally evaluate multiple features with requirement against definitions-signed rules.
+ */
+declare function evaluateFeatureGateLocal(defsByKey: DefinitionsByKey | null | undefined, featureKeys: string[], requirement?: FeatureRequirement, negate?: boolean, defaultValue?: boolean, evalCtx?: EvalContext): EvaluationResult;
 /**
  * Evaluate multiple features with requirement
  */
@@ -301,5 +325,5 @@ declare const ERROR_CODES: {
 /** Meta key for loader data */
 declare const TOGGLY_LOADER_KEY: "__toggly";
 
-export { DEFAULT_BASE_URL, DEFAULT_CONFIG, DEFAULT_ENVIRONMENT, DEFAULT_TIMEOUT, ERROR_CODES, HEADERS, REQUIREMENT, STORAGE_KEYS, TOGGLY_LOADER_KEY, TogglyConfigError, TogglyError, TogglyNetworkError, TogglyTimeoutError, buildDefinitionsUrl, createLogger, createTimeout, deserializeFlags, evaluateFeatureGate, fetchWithTimeout, isClient, isFeatureEnabled, isServer, mergeConfig, normalizeFeatureKeys, parseIdentity, serializeFlags };
-export type { EvaluationOptions, EvaluationResult, EvaluationSeriesData, FeatureFlags, FeatureRequirement, HookMetadata, IdentityContext, IdentitySeriesData, ServerFeatureContext, StorageOptions, TogglyConfig, TogglyHook, TogglyLoaderData };
+export { DEFAULT_BASE_URL, DEFAULT_CONFIG, DEFAULT_ENVIRONMENT, DEFAULT_TIMEOUT, ERROR_CODES, HEADERS, REQUIREMENT, STORAGE_KEYS, TOGGLY_LOADER_KEY, TogglyConfigError, TogglyError, TogglyNetworkError, TogglyTimeoutError, buildDefinitionsUrl, createLogger, createTimeout, deserializeFlags, evaluateFeatureGate, evaluateFeatureGateLocal, fetchWithTimeout, isClient, isFeatureEnabled, isFeatureEnabledLocal, isServer, mergeConfig, normalizeFeatureKeys, parseIdentity, serializeFlags };
+export type { EvaluationMode, EvaluationOptions, EvaluationResult, EvaluationSeriesData, FeatureFlags, FeatureRequirement, HookMetadata, IdentityContext, IdentitySeriesData, ServerFeatureContext, StorageOptions, TogglyConfig, TogglyHook, TogglyLoaderData };

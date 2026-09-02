@@ -166,6 +166,8 @@ export function createTogglyClient(
       identity: context?.identity ?? config.identity,
       groups: context?.groups,
       traits: context?.traits,
+      claims: context?.claims,
+      request: context?.request,
       entity: normalizeEntityContext(entity, kind),
     }
   }

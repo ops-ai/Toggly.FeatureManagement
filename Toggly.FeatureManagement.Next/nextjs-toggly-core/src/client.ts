@@ -232,6 +232,7 @@ export function createTogglyClient(
       identity: identityOverride ?? config.identity,
       groups: config.groups,
       traits: config.claims,
+      claims: config.claims,
       entity: entityContext ?? undefined,
     }
   }
@@ -244,6 +245,7 @@ export function createTogglyClient(
       identity: config.identity,
       groups: config.groups,
       traits: config.claims,
+      claims: config.claims,
     })
     state.features = {
       ...config.featureDefaults,

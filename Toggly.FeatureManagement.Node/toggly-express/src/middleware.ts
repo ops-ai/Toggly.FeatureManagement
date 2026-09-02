@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import {
   createTogglyClient,
   normalizeFeatureKeys,
+  fromHttpRequest,
   type TogglyClient,
   type EvaluationContext,
 } from '@ops-ai/toggly-node-core'
@@ -61,13 +62,18 @@ async function extractContext(
     return config.getContext(req)
   }
 
-  // Default: extract basic context
+  // Default: extract basic context + segment request headers
   const identity = await extractIdentity(req, config)
   const session = (req as Request & { session?: { groups?: string[] } }).session
-
-  return {
+  const fromReq = fromHttpRequest(req.headers as Record<string, string | string[] | undefined>, {
     identity,
     groups: session?.groups,
+  })
+
+  return {
+    identity: fromReq.identity,
+    groups: fromReq.groups,
+    request: fromReq.request,
     traits: {
       ip: req.ip,
       userAgent: req.headers['user-agent'],

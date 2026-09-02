@@ -19,6 +19,14 @@ export interface EvaluationContext {
   groups?: string[]
   /** Custom attributes for advanced targeting rules */
   traits?: Record<string, unknown>
+  /** Principal / JWT-style claims for UserClaims filters */
+  claims?: Record<string, string>
+  /** HTTP request fields for segment identity filters */
+  request?: {
+    userAgent?: string
+    acceptLanguage?: string
+    country?: string
+  }
 }
 
 /**

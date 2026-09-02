@@ -38,4 +38,8 @@
     <ProjectReference Include="..\Toggly.FeatureManagement.Hangfire\Toggly.FeatureManagement.Hangfire.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="testdata\eval-percentile-golden.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

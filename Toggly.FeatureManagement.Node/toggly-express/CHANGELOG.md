@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 0.1.6
+
+2026-09-02
+
+### Added
+- Default request context maps User-Agent / Accept-Language / CF-IPCountry
+  via `fromHttpRequest` for segment filters [OPS-832].
+
 ## 0.1.5
 
 2026-09-02

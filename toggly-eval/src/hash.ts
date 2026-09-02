@@ -1,40 +1,32 @@
-/** FNV-1a 32-bit helpers matching Go `hash/fnv` New32a. */
-
-const FNV_OFFSET = 2166136261
-const FNV_PRIME = 16777619
-
-export function fnv1a32(bytes: Uint8Array): number {
-  let hash = FNV_OFFSET >>> 0
-  for (let i = 0; i < bytes.length; i++) {
-    hash ^= bytes[i]!
-    hash = Math.imul(hash, FNV_PRIME) >>> 0
-  }
-  return hash >>> 0
-}
-
-function utf8Bytes(s: string): Uint8Array {
-  return new TextEncoder().encode(s)
-}
+import { createHash } from 'node:crypto'
 
 /**
- * Deterministic bucket in [0.00, 99.99] from identity only (Percentage filter).
+ * Sticky percentile bucket in [0, 100) matching Definitions
+ * (`computePercentile`): SHA-256 of `${featureKey}\n${userId}`,
+ * little-endian first 4 bytes as uint32, then `(value / 0xFFFFFFFF) * 100`.
+ *
+ * Arg order matches Definitions: `computePercentile(userId, featureKey)`
+ * while the hashed string is featureKey-first.
  */
-export function identityBucket(identity: string): number {
-  const v = fnv1a32(utf8Bytes(identity)) % 10000
-  return v / 100.0
+export function computePercentile(userId: string, featureKey: string): number {
+  const input = `${featureKey}\n${userId}`
+  const buf = createHash('sha256').update(input, 'utf8').digest()
+  const value = buf.readUInt32LE(0)
+  return (value / 0xffffffff) * 100
 }
 
 /**
- * Deterministic bucket in [0.00, 99.99] from featureKey:identity (Targeting rollout).
+ * @deprecated Use {@link computePercentile} with both identity and featureKey.
+ * Kept as an alias that still requires a feature seed — prefer
+ * `computePercentile(identity, featureKey)`.
+ */
+export function identityBucket(identity: string, featureKey = ''): number {
+  return computePercentile(identity, featureKey)
+}
+
+/**
+ * @deprecated Use {@link computePercentile}(identity, featureKey).
  */
 export function rolloutBucket(featureKey: string, identity: string): number {
-  const enc = new TextEncoder()
-  const keyBytes = enc.encode(featureKey)
-  const idBytes = enc.encode(identity)
-  const combined = new Uint8Array(keyBytes.length + 1 + idBytes.length)
-  combined.set(keyBytes, 0)
-  combined[keyBytes.length] = 58 // ':'
-  combined.set(idBytes, keyBytes.length + 1)
-  const v = fnv1a32(combined) % 10000
-  return v / 100.0
+  return computePercentile(identity, featureKey)
 }

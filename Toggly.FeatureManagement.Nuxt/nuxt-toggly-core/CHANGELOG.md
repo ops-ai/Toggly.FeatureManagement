@@ -11,6 +11,11 @@
 - Re-export local-eval helpers (`snapshotEvaluatedBooleans`,
   `indexDefinitions`, `FeatureDefinitionModel`, …) for server wrappers.
 
+### Changed
+- Local evaluation uses `@ops-ai/toggly-eval@2` SHA-256 sticky buckets
+  (cohort shift vs FNV). Config claims forwarded as EvalContext.claims
+  [OPS-832].
+
 ## 1.7.0
 
 2026-09-02

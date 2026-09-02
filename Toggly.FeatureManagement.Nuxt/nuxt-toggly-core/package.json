@@ -45,7 +45,7 @@
   },
   "homepage": "https://docs.toggly.io/sdks/nuxt",
   "dependencies": {
-    "@ops-ai/toggly-eval": "^1.0.0",
+    "@ops-ai/toggly-eval": "^2.0.0",
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.3"

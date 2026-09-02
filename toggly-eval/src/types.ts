@@ -33,6 +33,14 @@ export interface EvalContext {
   groups?: string[]
   /** Custom attributes / claims used by Targeting and similar filters. */
   traits?: Record<string, unknown>
+  /** Principal / JWT-style claims for UserClaims filters. */
+  claims?: Record<string, string>
+  /** HTTP request fields for segment identity filters. */
+  request?: {
+    userAgent?: string
+    acceptLanguage?: string
+    country?: string
+  }
   entity?: EntityEvalContext | null
 }
 

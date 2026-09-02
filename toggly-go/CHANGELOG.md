@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0
+
+2026-09-02
+
+### Breaking
+
+- Percentage / Targeting default rollout now use Definitions-aligned SHA-256
+  sticky buckets (`featureKey + "\n" + userId`) instead of FNV-1a. Cohorts
+  shift for any consumer of the 0.3.x FNV behavior [OPS-832].
+
+### Added
+
+- Segment filters: BrowserFamily, BrowserLanguage, Country / CountryFamily,
+  DeviceType, OS / OperatingSystem, UserClaims (sticky `%` with identity,
+  random without). Context gains `Claims` and `Request`.
+- Golden vector tests under `toggly/eval/testdata/`.
+- Dependency on `github.com/mileusna/useragent` (best-effort UA families; may
+  differ from `ua-parser-js` / UAParser.NET).
+
 ## 0.3.2
 
 2026-09-02

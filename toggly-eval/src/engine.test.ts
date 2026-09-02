@@ -4,8 +4,7 @@ import {
   evaluateDefinitions,
   evaluateFeatureGate,
   indexDefinitions,
-  identityBucket,
-  rolloutBucket,
+  computePercentile,
   setTimeWindowNow,
   type FeatureDefinitionModel,
   type EvalContext,
@@ -139,7 +138,7 @@ describe('builtin filters', () => {
   it('Targeting default rollout is deterministic', () => {
     const featureKey = 'f'
     const identity = 'user'
-    const bucket = rolloutBucket(featureKey, identity)
+    const bucket = computePercentile(identity, featureKey)
     const defAbove: FeatureDefinitionModel = {
       featureKey,
       filters: [
@@ -160,6 +159,23 @@ describe('builtin filters', () => {
     }
     expect(evaluateDefinition(defAbove, { identity })).toBe(true)
     expect(evaluateDefinition(defBelow, { identity })).toBe(false)
+  })
+
+  it('Targeting exclusions fail closed', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'f',
+      filters: [
+        {
+          name: 'Targeting',
+          parameters: {
+            'Audience.Users:0': 'alice',
+            'Audience.Exclusion.Users:0': 'alice',
+            'Audience.DefaultRolloutPercentage': 100,
+          },
+        },
+      ],
+    }
+    expect(evaluateDefinition(def, { identity: 'alice' })).toBe(false)
   })
 
   it('TimeWindow respects now', () => {
@@ -184,22 +200,38 @@ describe('builtin filters', () => {
     }
   })
 
-  it('Percentage is deterministic and identity-only', () => {
+  it('Percentage is sticky on featureKey+identity (SHA-256)', () => {
     const ctx: EvalContext = { identity: 'user-123' }
-    const def: FeatureDefinitionModel = {
-      featureKey: 'featureA',
+    const defA: FeatureDefinitionModel = {
+      featureKey: 'demo-feature',
       filters: [{ name: 'Percentage', parameters: { Value: 50 } }],
     }
-    const a = evaluateDefinition(def, ctx)
-    const b = evaluateDefinition(def, ctx)
-    expect(a).toBe(b)
-    const other: FeatureDefinitionModel = {
-      featureKey: 'featureB',
+    const defB: FeatureDefinitionModel = {
+      featureKey: 'other-flag',
       filters: [{ name: 'Percentage', parameters: { Value: 50 } }],
     }
-    // Same identity → same bucket regardless of feature key
-    expect(evaluateDefinition(other, ctx)).toBe(a)
-    expect(identityBucket('user-123')).toBeTypeOf('number')
+    // demo-feature / user-123 → ~60.1 → false at 50
+    expect(evaluateDefinition(defA, ctx)).toBe(false)
+    // other-flag / user-123 → ~59.5 → false at 50
+    expect(evaluateDefinition(defB, ctx)).toBe(false)
+    // Same pair sticky
+    expect(evaluateDefinition(defA, ctx)).toBe(
+      evaluateDefinition(defA, ctx),
+    )
+    // Feature key matters: bucket for demo-feature is above 60, so 61% passes
+    expect(
+      evaluateDefinition(
+        {
+          featureKey: 'demo-feature',
+          filters: [{ name: 'Percentage', parameters: { Value: 61 } }],
+        },
+        ctx,
+      ),
+    ).toBe(true)
+    expect(computePercentile('user-123', 'demo-feature')).toBeCloseTo(
+      60.099955033534194,
+      12,
+    )
   })
 })
 

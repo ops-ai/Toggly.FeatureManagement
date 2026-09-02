@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
+using Toggly.FeatureManagement.Configuration;
 using Toggly.FeatureManagement.Web.Configuration;
 using Xunit;
 
@@ -197,7 +198,7 @@ public class ServiceCollectionExtensionsTests
             {
                 options.AppKey = "test-key";
             })
-            .WithTargeting<TestTargetingContextAccessor>();
+            .WithTogglyTargeting<TestTargetingContextAccessor>();
 
         // Assert - verify registrations exist
         var featureManagerRegistration = services.FirstOrDefault(s => s.ServiceType == typeof(IFeatureManager));
@@ -364,7 +365,7 @@ public class ServiceCollectionExtensionsTests
         services
             .AddLogging()
             .AddTogglyWeb(settings)
-            .WithTargeting<TestTargetingContextAccessor>();
+            .WithTogglyTargeting<TestTargetingContextAccessor>();
 
         // Assert - verify registrations exist
         var featureManagerRegistration = services.FirstOrDefault(s => s.ServiceType == typeof(IFeatureManager));

@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.0.0
+
+2026-09-02
+
+### Breaking
+
+- Replace FNV-1a `identityBucket` / `rolloutBucket` with Definitions-aligned
+  SHA-256 sticky buckets: hash UTF-8 `${featureKey}\n${userId}`, take the
+  first 4 bytes as little-endian uint32, then `(value / 0xFFFFFFFF) * 100`.
+  Percentage and Targeting default rollout now seed on **featureKey +
+  identity** (cohorts shift vs 1.x FNV). Prefer `computePercentile(userId,
+  featureKey)`; deprecated aliases remain for transitional imports.
+
+### Added
+
+- Golden vector tests (`testdata/eval-percentile-golden.json`) shared with
+  Definitions [OPS-832].
+- Segment filters: BrowserFamily, BrowserLanguage, Country / CountryFamily,
+  DeviceType, OS / OperatingSystem, UserClaims — sticky `%` when identity is
+  present, random otherwise. EvalContext gains `claims` and `request`
+  (`userAgent`, `acceptLanguage`, `country`). Uses `ua-parser-js` (same as
+  Definitions; UA family strings may still drift vs .NET/Go parsers).
+- `fromHttpRequest(headers, extras?)` helper to map User-Agent /
+  Accept-Language / CF-IPCountry (and common CDN country headers) into
+  `EvalContext.request`.
+
 ## 1.0.2
 
 2026-09-02

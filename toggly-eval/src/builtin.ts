@@ -1,60 +1,9 @@
-import type { EvalContext, FilterEvaluator } from './types'
-import { identityBucket, rolloutBucket } from './hash'
+import type { FilterEvaluator } from './types'
+import { computePercentile } from './hash'
+import { registerSegmentFilters } from './segment'
+import { asBool, asFloat, asString, collectIndexedValues } from './params'
 
-export function asFloat(
-  params: Record<string, unknown> | undefined,
-  key: string,
-): number | undefined {
-  if (!params) {
-    return undefined
-  }
-  const v = params[key]
-  if (typeof v === 'number' && Number.isFinite(v)) {
-    return v
-  }
-  if (typeof v === 'string') {
-    const f = Number.parseFloat(v)
-    return Number.isFinite(f) ? f : undefined
-  }
-  return undefined
-}
-
-export function asBool(
-  params: Record<string, unknown> | undefined,
-  key: string,
-): boolean | undefined {
-  if (!params) {
-    return undefined
-  }
-  const v = params[key]
-  if (typeof v === 'boolean') {
-    return v
-  }
-  if (typeof v === 'string') {
-    if (v === 'true' || v === 'True' || v === '1') {
-      return true
-    }
-    if (v === 'false' || v === 'False' || v === '0') {
-      return false
-    }
-  }
-  return undefined
-}
-
-export function asString(
-  params: Record<string, unknown> | undefined,
-  key: string,
-): string | undefined {
-  if (!params) {
-    return undefined
-  }
-  const v = params[key]
-  return typeof v === 'string' ? v : undefined
-}
-
-function asStringValue(v: unknown): string | undefined {
-  return typeof v === 'string' ? v : undefined
-}
+export { asBool, asFloat, asString, collectIndexedValues } from './params'
 
 function parseTime(s: string): Date | undefined {
   const t = Date.parse(s)
@@ -62,34 +11,6 @@ function parseTime(s: string): Date | undefined {
     return undefined
   }
   return new Date(t)
-}
-
-function collectPrefixedStrings(
-  params: Record<string, unknown> | undefined,
-  ...prefixes: string[]
-): string[] {
-  if (!params || prefixes.length === 0) {
-    return []
-  }
-  const out: string[] = []
-  for (const [k, v] of Object.entries(params)) {
-    let matched = false
-    for (const prefix of prefixes) {
-      if (!k.startsWith(`${prefix}:`)) {
-        continue
-      }
-      matched = true
-      break
-    }
-    if (!matched) {
-      continue
-    }
-    const s = asStringValue(v)
-    if (s) {
-      out.push(s)
-    }
-  }
-  return out
 }
 
 function contains(list: string[], val: string, ignoreCase: boolean): boolean {
@@ -108,7 +29,7 @@ function contains(list: string[], val: string, ignoreCase: boolean): boolean {
 export const alwaysOn: FilterEvaluator = () => true
 export const alwaysOff: FilterEvaluator = () => false
 
-export const percentage: FilterEvaluator = (_featureKey, params, ctx) => {
+export const percentage: FilterEvaluator = (featureKey, params, ctx) => {
   let pct = asFloat(params, 'Value')
   if (pct === undefined) {
     pct = asFloat(params, 'Percentage')
@@ -122,7 +43,7 @@ export const percentage: FilterEvaluator = (_featureKey, params, ctx) => {
   if (!ctx.identity) {
     return false
   }
-  return identityBucket(ctx.identity) < pct
+  return computePercentile(ctx.identity, featureKey) < pct
 }
 
 let timeWindowNow: (() => Date) | undefined
@@ -151,50 +72,44 @@ export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
   // Match Definitions default: IgnoreCase defaults to true when unset.
   const ignoreCase = asBool(params, 'IgnoreCase') ?? true
   const identity = ctx.identity ?? ''
+  const groups = ctx.groups ?? []
 
-  if (identity) {
-    const exclusionUsers = collectPrefixedStrings(
-      params,
-      'Audience.Exclusion.Users',
-      'Audience:Exclusion:Users',
-    )
-    if (contains(exclusionUsers, identity, ignoreCase)) {
-      return false
-    }
+  const exclusionUsers = collectIndexedValues(params, [
+    'Audience.Exclusion.Users',
+    'Audience:Exclusion:Users',
+  ])
+  if (identity && contains(exclusionUsers, identity, ignoreCase)) {
+    return false
   }
 
-  if (ctx.groups && ctx.groups.length > 0) {
-    const exclusionGroups = collectPrefixedStrings(
-      params,
-      'Audience.Exclusion.Groups',
-      'Audience:Exclusion:Groups',
-    )
-    for (const g of ctx.groups) {
-      if (contains(exclusionGroups, g, ignoreCase)) {
-        return false
-      }
-    }
+  const exclusionGroups = collectIndexedValues(params, [
+    'Audience.Exclusion.Groups',
+    'Audience:Exclusion:Groups',
+  ])
+  if (
+    groups.length > 0 &&
+    exclusionGroups.some((g) => contains(groups, g, ignoreCase))
+  ) {
+    return false
   }
 
   if (identity) {
-    const users = collectPrefixedStrings(
-      params,
+    const users = collectIndexedValues(params, [
       'Audience.Users',
       'Audience:Users',
-    )
+    ])
     if (contains(users, identity, ignoreCase)) {
       return true
     }
   }
 
-  if (ctx.groups && ctx.groups.length > 0) {
-    const groups = collectPrefixedStrings(
-      params,
+  if (groups.length > 0) {
+    const audienceGroups = collectIndexedValues(params, [
       'Audience.Groups',
       'Audience:Groups',
-    )
-    for (const g of ctx.groups) {
-      if (contains(groups, g, ignoreCase)) {
+    ])
+    for (const g of groups) {
+      if (contains(audienceGroups, g, ignoreCase)) {
         return true
       }
     }
@@ -213,21 +128,24 @@ export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
   if (!identity) {
     return false
   }
-  return rolloutBucket(featureKey, identity) < pct
+  return computePercentile(identity, featureKey) < pct
 }
 
 export function createDefaultRegistry(): Map<string, FilterEvaluator> {
   const reg = new Map<string, FilterEvaluator>()
-  reg.set('AlwaysOn', alwaysOn)
-  reg.set('AlwaysOff', alwaysOff)
-  reg.set('Percentage', percentage)
-  reg.set('Microsoft.Percentage', percentage)
-  reg.set('TimeWindow', timeWindow)
-  reg.set('Microsoft.TimeWindow', timeWindow)
-  reg.set('Targeting', targeting)
-  reg.set('Microsoft.Targeting', targeting)
+  const register = (names: string[], ev: FilterEvaluator) => {
+    for (const name of names) {
+      reg.set(name, ev)
+    }
+  }
+  register(['AlwaysOn'], alwaysOn)
+  register(['AlwaysOff'], alwaysOff)
+  register(['Percentage', 'Microsoft.Percentage'], percentage)
+  register(['TimeWindow', 'Microsoft.TimeWindow'], timeWindow)
+  register(['Targeting', 'Microsoft.Targeting'], targeting)
+  registerSegmentFilters(reg)
   return reg
 }
 
 /** Exported for tests that need bucket values. */
-export { identityBucket, rolloutBucket }
+export { computePercentile, identityBucket, rolloutBucket } from './hash'

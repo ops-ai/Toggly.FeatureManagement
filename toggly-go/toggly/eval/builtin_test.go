@@ -118,7 +118,7 @@ func TestTargetingEvaluator_DefaultRolloutDeterministic(t *testing.T) {
 	featureKey := "f"
 	identity := "user"
 
-	bucket := rolloutBucket(featureKey, identity)
+	bucket := ComputePercentile(identity, featureKey)
 	params := map[string]any{
 		"Audience.DefaultRolloutPercentage": bucket + 0.01,
 	}
@@ -159,30 +159,36 @@ func TestTimeWindowEvaluator(t *testing.T) {
 	}
 }
 
-func TestPercentageEvaluator_DeterministicIdentityOnly(t *testing.T) {
+func TestPercentageEvaluator_StickyFeatureKey(t *testing.T) {
 	e := PercentageEvaluator{}
-
 	params := map[string]any{"Value": float64(50)}
 	ctx := Context{Identity: "user-123"}
 
-	a, err := e.Evaluate("featureA", params, ctx)
+	// demo-feature bucket ~60.1 → false at 50
+	a, err := e.Evaluate("demo-feature", params, ctx)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	b, err := e.Evaluate("featureA", params, ctx)
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if a != b {
-		t.Fatalf("expected deterministic result for same identity, got %v then %v", a, b)
+	if a {
+		t.Fatalf("expected demo-feature disabled at 50%%")
 	}
 
-	c, err := e.Evaluate("featureB", params, ctx)
+	b, err := e.Evaluate("demo-feature", map[string]any{"Value": float64(61)}, ctx)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	if a != c {
-		t.Fatalf("expected identity-only consistency across feature keys, got %v vs %v", a, c)
+	if !b {
+		t.Fatalf("expected demo-feature enabled at 61%%")
+	}
+
+	// Feature key changes the bucket
+	c, err := e.Evaluate("other-flag", params, ctx)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	_ = c
+	if ComputePercentile("user-123", "demo-feature") == ComputePercentile("user-123", "other-flag") {
+		t.Fatalf("expected different buckets across features")
 	}
 }
 
