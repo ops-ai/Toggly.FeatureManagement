@@ -34,6 +34,9 @@ export {
   splitFilters,
 } from './context-property'
 
+export { fromHttpRequest } from './http'
+export type { HttpHeaderBag } from './http'
+
 export {
   evaluateDefinition,
   evaluateDefinitions,

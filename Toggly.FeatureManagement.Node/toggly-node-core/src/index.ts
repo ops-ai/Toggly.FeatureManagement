@@ -76,6 +76,7 @@ export {
   indexDefinitions,
   parseDefinitionsPayload,
   snapshotEvaluatedBooleans,
+  fromHttpRequest,
 } from '@ops-ai/toggly-eval'
 export type {
   DefinitionsByKey,
@@ -83,6 +84,7 @@ export type {
   EntityEvalContext,
   FeatureFilter,
   GateRequirement,
+  HttpHeaderBag,
 } from '@ops-ai/toggly-eval'
 
 export {

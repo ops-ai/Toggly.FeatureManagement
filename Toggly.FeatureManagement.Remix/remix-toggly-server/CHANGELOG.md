@@ -1,3 +1,11 @@
+## 1.6.0
+
+2026-09-02
+
+### Changed
+- Local evaluation uses `@ops-ai/toggly-eval@2` SHA-256 sticky buckets
+  (cohort shift vs FNV). Claims forwarded as EvalContext.claims [OPS-832].
+
 ## 1.5.2
 
 2026-09-02

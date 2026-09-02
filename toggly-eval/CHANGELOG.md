@@ -22,6 +22,9 @@
   present, random otherwise. EvalContext gains `claims` and `request`
   (`userAgent`, `acceptLanguage`, `country`). Uses `ua-parser-js` (same as
   Definitions; UA family strings may still drift vs .NET/Go parsers).
+- `fromHttpRequest(headers, extras?)` helper to map User-Agent /
+  Accept-Language / CF-IPCountry (and common CDN country headers) into
+  `EvalContext.request`.
 
 ## 1.0.2
 

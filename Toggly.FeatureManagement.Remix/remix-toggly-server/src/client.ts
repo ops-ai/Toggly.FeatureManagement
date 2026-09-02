@@ -166,6 +166,9 @@ export class TogglyServerClient {
     // `identity: undefined` for anonymous). Only fall back to process
     // defaults when no override object is passed.
     if (identityOverride) {
+      const claims =
+        (identityOverride.claims as Record<string, string> | undefined) ??
+        (this.config.claims as Record<string, string> | undefined);
       return {
         identity: identityOverride.identity,
         groups: identityOverride.groups ?? this.config.groups,
@@ -173,14 +176,17 @@ export class TogglyServerClient {
           identityOverride.traits ??
           identityOverride.claims ??
           this.config.claims,
+        claims,
         entity: entityContext ?? null,
       };
     }
 
+    const claims = this.config.claims as Record<string, string> | undefined;
     return {
       identity: this.identity,
       groups: this.config.groups,
       traits: this.config.claims,
+      claims,
       entity: entityContext ?? null,
     };
   }
