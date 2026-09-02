@@ -8,6 +8,10 @@ import {
   type FeatureDefinitions,
 } from '@ops-ai/nextjs-toggly-core'
 import WebSocket from 'ws'
+import {
+  resolveFeatureCheckArgs,
+  type FeatureCheckOptions,
+} from './feature-check'
 import type { TogglyServerConfig, TogglyStorage } from './types'
 
 /**
@@ -277,14 +281,17 @@ export async function refreshServerToggly(): Promise<FeatureDefinitions | null> 
 
 /**
  * Check if a feature is enabled on the server.
- * Pass `identity` as a per-call override (local eval); shared client is reused.
+ * Pass a user `identity` string or `{ identity, context, contextKind }` for
+ * per-call local eval. The shared client is reused; identity is not mutated.
  */
 export async function isServerFeatureOn(
   featureKey: string,
-  identity?: string
+  identityOrOptions?: string | FeatureCheckOptions
 ): Promise<boolean> {
   const client = useServerToggly()
-  return client.isFeatureOn(featureKey, undefined, undefined, identity)
+  const { identity, context, contextKind } =
+    resolveFeatureCheckArgs(identityOrOptions)
+  return client.isFeatureOn(featureKey, context, contextKind, identity)
 }
 
 /**
@@ -292,9 +299,9 @@ export async function isServerFeatureOn(
  */
 export async function isServerFeatureOff(
   featureKey: string,
-  identity?: string
+  identityOrOptions?: string | FeatureCheckOptions
 ): Promise<boolean> {
-  const isOn = await isServerFeatureOn(featureKey, identity)
+  const isOn = await isServerFeatureOn(featureKey, identityOrOptions)
   return !isOn
 }
 

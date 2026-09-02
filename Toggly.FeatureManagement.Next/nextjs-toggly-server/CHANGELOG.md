@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0
+
+2026-09-02
+
+### Added
+- `isServerFeatureOn`, `checkFeature`, `<Feature>`, cached helpers, and
+  related APIs accept `{ context, contextKind }` for entity gates on the local
+  evaluation rail. A string second argument remains user identity.
+- Cache keys hash full entity attributes so two contexts that share kind/key
+  cannot collide.
+
+### Changed
+- `ServerFeatureOptions.context` is entity context (not an unused HTTP bag).
+  `RequestContext` remains exported.
+
 ## 1.2.0
 
 2026-09-02

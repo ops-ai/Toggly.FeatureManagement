@@ -43,7 +43,11 @@ export type {
   RequestContext,
   ServerFeatureOptions,
   FeatureGateResult,
+  FeatureCheckOptions,
+  EntityContextInput,
 } from './types'
+
+export type { TogglyEntityContext } from '@ops-ai/nextjs-toggly-core'
 
 // Re-export core types
 export type {
