@@ -13,6 +13,7 @@ import {
   getServerToggly,
 } from '../src/server-client'
 import type { H3Event } from 'h3'
+import type { TogglyClient } from '@ops-ai/nuxt-toggly-core'
 
 // Mock fetch globally
 const mockFetch = vi.fn()
@@ -253,6 +254,26 @@ describe('Middleware', () => {
       expect(handler).not.toHaveBeenCalled()
     })
 
+    it('should call onDisabled when feature is disabled', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(featureDefs({ 'feature-a': false }))
+      )
+
+      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+
+      const onDisabled = vi.fn()
+      const handler = vi.fn()
+      const wrappedHandler = defineFeatureHandler('feature-a', handler, {
+        onDisabled,
+      })
+
+      await expect(wrappedHandler(createMockEvent())).rejects.toMatchObject({
+        statusCode: 404,
+      })
+      expect(onDisabled).toHaveBeenCalled()
+      expect(handler).not.toHaveBeenCalled()
+    })
+
     it('should reject and not call handler if client not initialized', async () => {
       const handler = vi.fn().mockResolvedValue({ success: true })
 
@@ -288,6 +309,70 @@ describe('Middleware', () => {
 
       expect(client.identity).toBe('user-123')
       expect(getServerToggly()?.identity).toBe('default-user')
+    })
+
+    it('should proxy eval helpers and ignore identity writes', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse([
+          {
+            featureKey: 'targeted-flag',
+            filters: [
+              {
+                name: 'Targeting',
+                parameters: {
+                  'Audience.Users:0': 'alice',
+                  'Audience.DefaultRolloutPercentage': 0,
+                },
+              },
+            ],
+          },
+          {
+            featureKey: 'plain-on',
+            filters: [{ name: 'AlwaysOn', parameters: {} }],
+          },
+        ])
+      )
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'bob',
+        enableLiveUpdates: false,
+      })
+
+      const event = createMockEvent({
+        'x-toggly-identity': 'alice',
+      })
+      const client = useEventToggly(event)
+
+      expect(await client.isFeatureOn('targeted-flag')).toBe(true)
+      expect(await client.isFeatureOff('targeted-flag')).toBe(false)
+      expect(await client.evaluateFeatureGate(['targeted-flag', 'plain-on'], 'all')).toBe(
+        true,
+      )
+
+      client.identity = 'evil'
+      expect(getServerToggly()?.identity).toBe('bob')
+      expect(client.identity).toBe('alice')
+
+      // Non-identity writes still forward to the shared client
+      ;(client as TogglyClient & { __probe?: number }).__probe = 42
+      expect((getServerToggly() as TogglyClient & { __probe?: number })?.__probe).toBe(
+        42,
+      )
+    })
+
+    it('should return the shared client when no identity header is present', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse(featureDefs({})))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'default-user',
+        enableLiveUpdates: false,
+      })
+
+      const client = useEventToggly(createMockEvent())
+      expect(client).toBe(getServerToggly())
+      expect(client.identity).toBe('default-user')
     })
 
     it('should throw if client not initialized', () => {
