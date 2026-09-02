@@ -26,14 +26,23 @@ namespace Toggly.FeatureManagement
         /// <returns>Bucket in <c>[0, 100)</c>.</returns>
         public static double Compute(string featureKey, string userId)
         {
+#if NET6_0_OR_GREATER
+            ArgumentNullException.ThrowIfNull(featureKey);
+            ArgumentNullException.ThrowIfNull(userId);
+#else
             if (featureKey == null)
                 throw new ArgumentNullException(nameof(featureKey));
             if (userId == null)
                 throw new ArgumentNullException(nameof(userId));
+#endif
 
             var input = Encoding.UTF8.GetBytes(featureKey + "\n" + userId);
+#if NET6_0_OR_GREATER
+            var hash = SHA256.HashData(input);
+#else
             using var sha = SHA256.Create();
             var hash = sha.ComputeHash(input);
+#endif
 
             // Little-endian uint32 of the first 4 digest bytes (architecture-independent).
             uint value = (uint)(hash[0] | (hash[1] << 8) | (hash[2] << 16) | (hash[3] << 24));

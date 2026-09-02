@@ -547,6 +547,8 @@ public class UserClaimsFilterTests
 
 public class SegmentStickyPercentageFilterTests
 {
+    private static readonly bool[] BooleanOutcomes = { true, false };
+
     private const string ChromeUa =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
 
@@ -668,7 +670,7 @@ public class SegmentStickyPercentageFilterTests
         var filter = new BrowserFamilyFilter(http.Object, Enumerable.Empty<ITargetingContextAccessor>());
         var result = await filter.EvaluateAsync(CreateBrowserFamilyContext("demo-feature", 50));
         // Non-deterministic; assert a boolean outcome so the random gate path is covered.
-        new[] { true, false }.Should().Contain(result);
+        BooleanOutcomes.Should().Contain(result);
     }
 
     [Theory]
