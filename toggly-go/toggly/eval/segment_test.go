@@ -14,8 +14,8 @@ func TestBrowserFamily_StickyPercentage(t *testing.T) {
 	bucket := ComputePercentile(identity, featureKey)
 
 	params := map[string]any{
-		"Percentage":       bucket + 1,
-		"BrowserFamily:0":  "Chrome",
+		"Percentage":      bucket + 1,
+		"BrowserFamily:0": "Chrome",
 	}
 	ctx := Context{
 		Identity: identity,
@@ -51,8 +51,8 @@ func TestSegmentFilters_Basic(t *testing.T) {
 			name: "language",
 			ev:   BrowserLanguageEvaluator{},
 			params: map[string]any{
-				"Percentage":         float64(100),
-				"BrowserLanguage:0":  "en-US",
+				"Percentage":        float64(100),
+				"BrowserLanguage:0": "en-US",
 			},
 			ctx:  Context{Identity: "u", Request: &RequestContext{AcceptLanguage: "en-US,en;q=0.9"}},
 			want: true,
@@ -71,8 +71,8 @@ func TestSegmentFilters_Basic(t *testing.T) {
 			name: "os",
 			ev:   OperatingSystemEvaluator{},
 			params: map[string]any{
-				"Percentage":          float64(100),
-				"OperatingSystem:0":   "macOS",
+				"Percentage":        float64(100),
+				"OperatingSystem:0": "macOS",
 			},
 			ctx:  Context{Identity: "u", Request: &RequestContext{UserAgent: chromeUA}},
 			want: true,
@@ -81,8 +81,8 @@ func TestSegmentFilters_Basic(t *testing.T) {
 			name: "device",
 			ev:   DeviceTypeEvaluator{},
 			params: map[string]any{
-				"Percentage":    float64(100),
-				"DeviceType:0":  "iPhone",
+				"Percentage":   float64(100),
+				"DeviceType:0": "iPhone",
 			},
 			ctx:  Context{Identity: "u", Request: &RequestContext{UserAgent: iphoneUA}},
 			want: true,

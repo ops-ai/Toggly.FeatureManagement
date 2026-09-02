@@ -172,6 +172,14 @@ public class BrowserLanguageFilterTests
         // Assert
         result.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task EvaluateAsync_With0Percent_ReturnsFalse()
+    {
+        SetupAcceptLanguage("en-US,en;q=0.9");
+        var result = await _filter.EvaluateAsync(CreateContext(new[] { "en" }, 0));
+        result.Should().BeFalse();
+    }
 }
 
 public class CountryFilterTests
@@ -320,6 +328,14 @@ public class DeviceTypeFilterTests
         // Assert
         result.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task EvaluateAsync_With0Percent_ReturnsFalse()
+    {
+        SetupUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1");
+        var result = await _filter.EvaluateAsync(CreateContext(new[] { "iPhone" }, 0));
+        result.Should().BeFalse();
+    }
 }
 
 public class OSFilterTests
@@ -400,6 +416,14 @@ public class OSFilterTests
 
         // Assert
         result.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_With0Percent_ReturnsFalse()
+    {
+        SetupUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        var result = await _filter.EvaluateAsync(CreateContext(new[] { "Windows" }, 0));
+        result.Should().BeFalse();
     }
 }
 
@@ -622,5 +646,117 @@ public class SegmentStickyPercentageFilterTests
             FeatureName = featureName,
             Parameters = config
         };
+    }
+
+    [Fact]
+    public async Task BrowserFamily_WithoutUserId_UsesRandomPercentageGate()
+    {
+        var http = new Mock<IHttpContextAccessor>();
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers["User-Agent"] = ChromeUa;
+        http.Setup(x => x.HttpContext).Returns(ctx);
+
+        // Empty targeting accessors → SegmentPercentageGate random path for partial %.
+        var filter = new BrowserFamilyFilter(http.Object, Enumerable.Empty<ITargetingContextAccessor>());
+        var result = await filter.EvaluateAsync(CreateBrowserFamilyContext("demo-feature", 50));
+        // Non-deterministic; just ensure the random gate path executes without throwing.
+        _ = result;
+    }
+
+    [Theory]
+    [InlineData(61, true)]
+    [InlineData(60, false)]
+    public async Task DeviceType_WithUserId_UsesStickyPercentile(short percentage, bool expected)
+    {
+        var http = new Mock<IHttpContextAccessor>();
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers["User-Agent"] =
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1";
+        http.Setup(x => x.HttpContext).Returns(ctx);
+
+        var targeting = new Mock<ITargetingContextAccessor>();
+        targeting.Setup(a => a.GetContextAsync())
+            .ReturnsAsync(new TargetingContext { UserId = "user-123" });
+
+        var filter = new DeviceTypeFilter(http.Object, new[] { targeting.Object });
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Percentage"] = percentage.ToString(),
+                ["DeviceType:0"] = "iPhone"
+            })
+            .Build();
+
+        var result = await filter.EvaluateAsync(new FeatureFilterEvaluationContext
+        {
+            FeatureName = "demo-feature",
+            Parameters = config
+        });
+
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(61, true)]
+    [InlineData(60, false)]
+    public async Task OS_WithUserId_UsesStickyPercentile(short percentage, bool expected)
+    {
+        var http = new Mock<IHttpContextAccessor>();
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers["User-Agent"] = ChromeUa;
+        http.Setup(x => x.HttpContext).Returns(ctx);
+
+        var targeting = new Mock<ITargetingContextAccessor>();
+        targeting.Setup(a => a.GetContextAsync())
+            .ReturnsAsync(new TargetingContext { UserId = "user-123" });
+
+        var filter = new OSFilter(http.Object, new[] { targeting.Object });
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Percentage"] = percentage.ToString(),
+                ["OperatingSystem:0"] = "Windows"
+            })
+            .Build();
+
+        var result = await filter.EvaluateAsync(new FeatureFilterEvaluationContext
+        {
+            FeatureName = "demo-feature",
+            Parameters = config
+        });
+
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(61, true)]
+    [InlineData(60, false)]
+    public async Task BrowserLanguage_WithUserId_UsesStickyPercentile(short percentage, bool expected)
+    {
+        var http = new Mock<IHttpContextAccessor>();
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers["Accept-Language"] = "en-US,en;q=0.9";
+        http.Setup(x => x.HttpContext).Returns(ctx);
+
+        var targeting = new Mock<ITargetingContextAccessor>();
+        targeting.Setup(a => a.GetContextAsync())
+            .ReturnsAsync(new TargetingContext { UserId = "user-123" });
+
+        var filter = new BrowserLanguageFilter(http.Object, new[] { targeting.Object });
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Percentage"] = percentage.ToString(),
+                ["BrowserLanguage:0"] = "en"
+            })
+            .Build();
+
+        var result = await filter.EvaluateAsync(new FeatureFilterEvaluationContext
+        {
+            FeatureName = "demo-feature",
+            Parameters = config
+        });
+
+        result.Should().Be(expected);
     }
 }

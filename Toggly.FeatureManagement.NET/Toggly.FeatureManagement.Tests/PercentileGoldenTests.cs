@@ -54,6 +54,20 @@ public class PercentileGoldenTests
         Percentile.IsInRollout(featureKey, userId, percentage).Should().Be(expected);
     }
 
+    [Fact]
+    public void Compute_NullFeatureKey_Throws()
+    {
+        Action act = () => Percentile.Compute(null!, "user-123");
+        act.Should().Throw<ArgumentNullException>().And.ParamName.Should().Be("featureKey");
+    }
+
+    [Fact]
+    public void Compute_NullUserId_Throws()
+    {
+        Action act = () => Percentile.Compute("demo-feature", null!);
+        act.Should().Throw<ArgumentNullException>().And.ParamName.Should().Be("userId");
+    }
+
     private sealed class GoldenRow
     {
         public string FeatureKey { get; set; } = "";
