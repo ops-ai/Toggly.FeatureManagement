@@ -3,10 +3,15 @@
  */
 import type { LocalGate } from '@ops-ai/toggly-local-gates'
 import type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 
 export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+export type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 
 export type { LocalGate }
+
+/** 'remote' (default): evaluated-signed client rail. 'local': definitions-signed + toggly-eval. */
+export type EvaluationMode = 'local' | 'remote'
 
 export interface TogglyConfig {
   /** Your Toggly application key */
@@ -21,6 +26,11 @@ export interface TogglyConfig {
   groups?: string[]
   /** Custom claims for targeting */
   claims?: Record<string, string>
+  /**
+   * 'remote' (default): evaluated-signed client rail.
+   * 'local': definitions-signed + `@ops-ai/toggly-eval` at read time.
+   */
+  evaluationMode?: EvaluationMode
   /** Default feature flag values when API is unavailable */
   featureDefaults?: Record<string, boolean>
   /** Show content while evaluating features (default: false) */
@@ -167,8 +177,13 @@ export interface TogglyState {
   initialized: boolean
   /** Whether features are currently loading */
   loading: boolean
-  /** Current feature definitions */
+  /** Current feature definitions (evaluated snapshot / remote map) */
   features: FeatureDefinitions
+  /**
+   * Raw definitions-signed models used for local evaluation.
+   * Empty when `evaluationMode` is `'remote'`.
+   */
+  definitions: Map<string, FeatureDefinitionModel>
   /** Last error (if any) */
   error: Error | null
   /** Last refresh timestamp */
@@ -194,11 +209,15 @@ export interface TogglyClient {
   /** Refresh feature definitions from API */
   refresh(): Promise<FeatureDefinitions>
 
-  /** Check if a single feature is enabled */
+  /**
+   * Check if a single feature is enabled.
+   * In local mode, `identityOverride` replaces config.identity for this evaluation only.
+   */
   isFeatureOn(
     featureKey: string,
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
+    identityOverride?: string,
   ): Promise<boolean>
 
   /** Check if a single feature is disabled */
@@ -206,6 +225,7 @@ export interface TogglyClient {
     featureKey: string,
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
+    identityOverride?: string,
   ): Promise<boolean>
 
   /** Evaluate a feature gate with multiple features */
@@ -215,6 +235,7 @@ export interface TogglyClient {
     negate?: boolean,
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
+    identityOverride?: string,
   ): Promise<boolean>
 
   /** Register an entity context mapper for a catalog kind */
@@ -225,6 +246,17 @@ export interface TogglyClient {
 
   /** Set user identity */
   setIdentity(identity: string): Promise<void>
+
+  /**
+   * Raw definition map used for local evaluation (empty in remote mode).
+   */
+  getDefinitions(): Map<string, FeatureDefinitionModel>
+
+  /**
+   * Hydrate the local definition map from a definitions-signed model array
+   * (e.g. durable cache) and refresh the evaluated boolean snapshot.
+   */
+  hydrateDefinitions(defs: FeatureDefinitionModel[]): FeatureDefinitions
 
   /** Add a hook */
   addHook(hook: Hook): void

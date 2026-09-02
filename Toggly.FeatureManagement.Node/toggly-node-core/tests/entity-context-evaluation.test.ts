@@ -1,10 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createTogglyClient, closeToggly } from '../src/client'
-import { clearRegisteredContexts, type EntityGate } from '@ops-ai/toggly-hooks-types'
+import { clearRegisteredContexts } from '@ops-ai/toggly-hooks-types'
+import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 
-const datetimeGate: EntityGate = {
-  requirement: 'all',
-  rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' }],
+const mockFetch = vi.fn()
+vi.stubGlobal('fetch', mockFetch)
+
+const entityGated: FeatureDefinitionModel = {
+  featureKey: 'EntityGated',
+  requirementType: 'Any',
+  contextRequirementType: 'All',
+  filters: [
+    {
+      name: 'ContextProperty',
+      parameters: {
+        Property: 'BirthDate',
+        Operator: 'gt',
+        Value: '2026-01-01',
+        ValueType: 'datetime',
+      },
+    },
+    { name: 'AlwaysOn', parameters: {} },
+  ],
 }
 
 const orderContext = {
@@ -14,13 +31,26 @@ const orderContext = {
 }
 
 async function createClient() {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    headers: new Map(),
+    text: async () =>
+      JSON.stringify([
+        { featureKey: 'PlainOn', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+        { featureKey: 'PlainOff', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+        entityGated,
+      ]),
+    json: async () => [
+      { featureKey: 'PlainOn', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+      { featureKey: 'PlainOff', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+      entityGated,
+    ],
+  })
+
   const client = createTogglyClient({
+    appKey: 'test-app',
     registerContextsOnStartup: false,
-    featureDefaults: {
-      PlainOn: true,
-      PlainOff: false,
-      EntityGated: datetimeGate,
-    } as Record<string, boolean>,
   })
   await client.init()
   return client
@@ -30,6 +60,7 @@ describe('entity context read-time evaluation', () => {
   beforeEach(() => {
     clearRegisteredContexts()
     closeToggly()
+    vi.clearAllMocks()
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 

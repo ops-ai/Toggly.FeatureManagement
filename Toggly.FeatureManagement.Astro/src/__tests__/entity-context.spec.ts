@@ -1,14 +1,34 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TogglyServer } from '../server/toggly-server.js';
-import { clearRegisteredContexts, type EntityGate } from '@ops-ai/toggly-hooks-types';
+import { clearRegisteredContexts } from '@ops-ai/toggly-hooks-types';
+import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-const datetimeGate: EntityGate = {
-  requirement: 'all',
-  rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' }],
+const entityGated: FeatureDefinitionModel = {
+  featureKey: 'EntityGated',
+  requirementType: 'Any',
+  contextRequirementType: 'All',
+  filters: [
+    {
+      name: 'ContextProperty',
+      parameters: {
+        Property: 'BirthDate',
+        Operator: 'gt',
+        Value: '2026-01-01',
+        ValueType: 'datetime',
+      },
+    },
+    { name: 'AlwaysOn', parameters: {} },
+  ],
 };
+
+const definitionsPayload: FeatureDefinitionModel[] = [
+  { featureKey: 'PlainOn', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+  { featureKey: 'PlainOff', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+  entityGated,
+];
 
 const orderContext = {
   kind: 'Order',
@@ -28,13 +48,7 @@ function createMockResponse(body: unknown) {
 }
 
 function createServer() {
-  mockFetch.mockResolvedValueOnce(
-    createMockResponse({
-      PlainOn: true,
-      PlainOff: false,
-      EntityGated: datetimeGate,
-    }),
-  );
+  mockFetch.mockResolvedValueOnce(createMockResponse(definitionsPayload));
   return new TogglyServer({ appKey: 'test-key', environment: 'Production' });
 }
 

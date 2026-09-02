@@ -9,6 +9,7 @@ import {
   FeatureGatedActionOptions,
 } from '../src/action';
 import type { ActionFunctionArgs } from '@remix-run/server-runtime';
+import { featureDefs, mockDefsFetchResponse } from './defs-helpers';
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -61,10 +62,7 @@ describe('createFeatureGatedAction', () => {
 
   describe('without required features', () => {
     it('should execute handler when no required features', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const handler = jest.fn().mockResolvedValue({ success: true });
       const action = createFeatureGatedAction(defaultOptions, handler);
@@ -76,10 +74,7 @@ describe('createFeatureGatedAction', () => {
     });
 
     it('should pass action args and toggly context to handler', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const handler = jest.fn().mockResolvedValue({ success: true });
       const action = createFeatureGatedAction(defaultOptions, handler);
@@ -99,10 +94,7 @@ describe('createFeatureGatedAction', () => {
     });
 
     it('should allow using context methods in handler', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true, feature2: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true, feature2: false }));
 
       const handler = jest.fn().mockImplementation(async (args, toggly) => {
         const enabled = await toggly.isEnabled('feature1');
@@ -120,10 +112,7 @@ describe('createFeatureGatedAction', () => {
 
   describe('with required features', () => {
     it('should execute handler when feature is enabled', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ premium: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ premium: true }));
 
       const handler = jest.fn().mockResolvedValue({ success: true });
       const action = createFeatureGatedAction(
@@ -141,10 +130,7 @@ describe('createFeatureGatedAction', () => {
     });
 
     it('should return 403 JSON response when feature is disabled', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ premium: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ premium: false }));
 
       const handler = jest.fn().mockResolvedValue({ success: true });
       const action = createFeatureGatedAction(
@@ -167,10 +153,7 @@ describe('createFeatureGatedAction', () => {
     });
 
     it('should use custom error status and message', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ premium: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ premium: false }));
 
       const action = createFeatureGatedAction(
         {
@@ -190,10 +173,7 @@ describe('createFeatureGatedAction', () => {
     });
 
     it('should redirect when redirectTo is specified', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ premium: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ premium: false }));
 
       const action = createFeatureGatedAction(
         {
@@ -211,10 +191,7 @@ describe('createFeatureGatedAction', () => {
     });
 
     it('should call custom onFeatureDisabled handler', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ premium: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ premium: false }));
 
       const customResponse = new Response('Custom response', { status: 451 });
       const onFeatureDisabled = jest.fn().mockReturnValue(customResponse);
@@ -240,10 +217,7 @@ describe('createFeatureGatedAction', () => {
 
   describe('with multiple required features', () => {
     it('should require all features by default', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true, feature2: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true, feature2: false }));
 
       const handler = jest.fn();
       const action = createFeatureGatedAction(
@@ -261,10 +235,7 @@ describe('createFeatureGatedAction', () => {
     });
 
     it('should pass when all features are enabled', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true, feature2: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true, feature2: true }));
 
       const handler = jest.fn().mockResolvedValue({ success: true });
       const action = createFeatureGatedAction(
@@ -283,10 +254,7 @@ describe('createFeatureGatedAction', () => {
     });
 
     it('should pass when any feature is enabled with requirement: any', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true, feature2: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true, feature2: false }));
 
       const handler = jest.fn().mockResolvedValue({ success: true });
       const action = createFeatureGatedAction(
@@ -307,10 +275,7 @@ describe('createFeatureGatedAction', () => {
 
   describe('with identity extraction', () => {
     it('should extract identity using getIdentity', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const getIdentity = jest.fn().mockResolvedValue('user-123');
       const action = createFeatureGatedAction(
@@ -325,7 +290,8 @@ describe('createFeatureGatedAction', () => {
 
       expect(getIdentity).toHaveBeenCalled();
       const calledUrl = mockFetch.mock.calls[0][0] as string;
-      expect(calledUrl).toContain('u=user-123');
+      expect(calledUrl).toContain('/definitions-signed/');
+      expect(new URL(calledUrl).searchParams.get('u')).toBeNull();
     });
   });
 });
@@ -359,10 +325,7 @@ describe('createTogglyAction', () => {
 
   describe('init', () => {
     it('should initialize with request', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const togglyAction = createTogglyAction(defaultOptions);
       const request = new Request('https://example.com');
@@ -376,10 +339,7 @@ describe('createTogglyAction', () => {
     });
 
     it('should allow using context methods', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true, feature2: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true, feature2: false }));
 
       const togglyAction = createTogglyAction(defaultOptions);
       const request = new Request('https://example.com');
@@ -395,10 +355,7 @@ describe('createTogglyAction', () => {
     });
 
     it('should extract identity using getIdentity', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const togglyAction = createTogglyAction({
         ...defaultOptions,
@@ -408,16 +365,14 @@ describe('createTogglyAction', () => {
       await togglyAction.init(request);
 
       const calledUrl = mockFetch.mock.calls[0][0] as string;
-      expect(calledUrl).toContain('u=user-123');
+      expect(calledUrl).toContain('/definitions-signed/');
+      expect(new URL(calledUrl).searchParams.get('u')).toBeNull();
     });
   });
 
   describe('requireFeature', () => {
     it('should create a feature-gated action', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ premium: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ premium: true }));
 
       const togglyAction = createTogglyAction(defaultOptions);
       const handler = jest.fn().mockResolvedValue({ success: true });
@@ -436,10 +391,7 @@ describe('createTogglyAction', () => {
     });
 
     it('should call onDisabled when feature is disabled', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ premium: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ premium: false }));
 
       const togglyAction = createTogglyAction(defaultOptions);
       const handler = jest.fn();
@@ -461,10 +413,7 @@ describe('createTogglyAction', () => {
 
   describe('requireFeatures', () => {
     it('should create a multi-feature gated action', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true, feature2: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true, feature2: true }));
 
       const togglyAction = createTogglyAction(defaultOptions);
       const handler = jest.fn().mockResolvedValue({ success: true });
@@ -487,10 +436,7 @@ describe('createTogglyAction', () => {
     });
 
     it('should support any requirement', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true, feature2: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true, feature2: false }));
 
       const togglyAction = createTogglyAction(defaultOptions);
       const handler = jest.fn().mockResolvedValue({ success: true });
@@ -532,10 +478,7 @@ describe('requireFeature', () => {
   });
 
   it('should create a higher-order function for feature-gated actions', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ premium: true }),
-    });
+    mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ premium: true }));
 
     const handler = jest.fn().mockResolvedValue({ success: true });
     const wrappedAction = requireFeature('premium', defaultOptions)(handler);
@@ -553,10 +496,7 @@ describe('requireFeature', () => {
   });
 
   it('should block action when feature is disabled', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ premium: false }),
-    });
+    mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ premium: false }));
 
     const handler = jest.fn();
     const wrappedAction = requireFeature('premium', defaultOptions)(handler);
@@ -574,10 +514,7 @@ describe('requireFeature', () => {
   });
 
   it('should call custom onDisabled handler', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ premium: false }),
-    });
+    mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ premium: false }));
 
     const customResponse = new Response('Upgrade required', { status: 402 });
     const onDisabled = jest.fn().mockReturnValue(customResponse);

@@ -104,6 +104,8 @@ export async function initServerToggly(
     refreshInterval: config.refreshInterval ?? DEFAULT_SERVER_CONFIG.refreshInterval,
     enableLiveUpdates: config.enableLiveUpdates ?? DEFAULT_SERVER_CONFIG.enableLiveUpdates,
     webSocketImpl: config.webSocketImpl ?? DEFAULT_SERVER_CONFIG.webSocketImpl,
+    // Server always uses definitions-signed + local evaluation (OPS-825).
+    evaluationMode: 'local',
   }
 
   serverConfig = mergedConfig

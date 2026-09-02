@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0
+
+2026-09-02
+
+### Changed
+- `initServerToggly` forces `evaluationMode: 'local'` so the server fetches
+  `definitions-signed` and evaluates with `@ops-ai/toggly-eval` (OPS-825).
+
 ## 1.1.1
 
 2026-09-02

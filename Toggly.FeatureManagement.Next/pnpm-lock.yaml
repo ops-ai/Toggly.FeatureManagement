@@ -60,6 +60,9 @@ importers:
 
   nextjs-toggly-core:
     dependencies:
+      '@ops-ai/toggly-eval':
+        specifier: file:../../toggly-eval
+        version: file:../toggly-eval
       '@ops-ai/toggly-hooks-types':
         specifier: ^1.4.3
         version: 1.4.3
@@ -653,6 +656,10 @@ packages:
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
+
+  '@ops-ai/toggly-eval@file:../toggly-eval':
+    resolution: {directory: ../toggly-eval, type: directory}
+    engines: {node: '>=18.0.0'}
 
   '@ops-ai/toggly-hooks-types@1.4.3':
     resolution: {integrity: sha512-raN6g9hSJ61/SkiIFcHaoWQHAq/6utcn5D+HUAxx2/1f9unurZqQKpAQC0uxaJ1D7Ir4+3Y0VyjZ4NsKXO10AA==}
@@ -2278,6 +2285,8 @@ snapshots:
 
   '@next/swc-win32-x64-msvc@15.5.12':
     optional: true
+
+  '@ops-ai/toggly-eval@file:../toggly-eval': {}
 
   '@ops-ai/toggly-hooks-types@1.4.3': {}
 

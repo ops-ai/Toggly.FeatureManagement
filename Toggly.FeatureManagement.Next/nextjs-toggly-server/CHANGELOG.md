@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.0
+
+2026-09-02
+
+### Changed
+- Always initialize on the local evaluation rail (`evaluationMode: 'local'`) so
+  the server package fetches `definitions-signed` and evaluates with
+  `@ops-ai/toggly-eval` (OPS-825).
+- Durable init cache stores raw `FeatureDefinitionModel[]` instead of evaluated
+  booleans; failed fetches hydrate last-known-good definitions via
+  `hydrateDefinitions`.
+- `getServerFeatures` / `getFeatures` / `cachedGetFeatures` return an evaluated
+  boolean snapshot from definitions (config identity / groups / claims).
+- Per-call `identity` uses `identityOverride` on the shared client instead of
+  mutating process-wide identity.
+
 ## 1.1.2
 
 2026-09-02

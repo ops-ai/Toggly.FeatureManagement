@@ -18,12 +18,23 @@ import type { H3Event } from 'h3'
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
+
+function featureDefs(flags: Record<string, boolean>) {
+  return Object.entries(flags).map(([featureKey, enabled]) => ({
+    featureKey,
+    filters: [{ name: enabled ? 'AlwaysOn' : 'AlwaysOff', parameters: {} }],
+  }))
+}
+
 function createMockResponse(data: unknown, status = 200) {
+  const bodyText = typeof data === 'string' ? data : JSON.stringify(data)
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? 'OK' : 'Error',
+    text: async () => bodyText,
     json: async () => data,
+    headers: { get: () => null },
   }
 }
 
@@ -68,9 +79,7 @@ describe('Middleware', () => {
   describe('defineFeatureMiddleware', () => {
     it('should allow access when feature is enabled', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -87,9 +96,7 @@ describe('Middleware', () => {
 
     it('should throw error when feature is disabled', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: false }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': false }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -110,9 +117,7 @@ describe('Middleware', () => {
 
     it('should use custom onDisabled handler', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: false }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': false }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -137,12 +142,7 @@ describe('Middleware', () => {
 
     it('should support multiple feature keys', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: true },
-          ],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true, 'feature-b': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -159,12 +159,7 @@ describe('Middleware', () => {
 
     it('should support "any" requirement', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: false },
-          ],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true, 'feature-b': false }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -181,9 +176,7 @@ describe('Middleware', () => {
 
     it('should use identity from header', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -220,9 +213,7 @@ describe('Middleware', () => {
   describe('defineFeatureHandler', () => {
     it('should call handler when feature is enabled', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -240,9 +231,7 @@ describe('Middleware', () => {
 
     it('should throw error when feature is disabled', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: false }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': false }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -279,7 +268,7 @@ describe('Middleware', () => {
 
   describe('useEventToggly', () => {
     it('should return client with identity from header', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+      mockFetch.mockResolvedValueOnce(createMockResponse(featureDefs({})))
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
 
@@ -304,9 +293,7 @@ describe('Middleware', () => {
   describe('isEventFeatureOn', () => {
     it('should check feature for event', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -318,9 +305,7 @@ describe('Middleware', () => {
 
     it('should use identity from header', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -345,9 +330,7 @@ describe('Middleware', () => {
   describe('isEventFeatureOff', () => {
     it('should return inverse of isEventFeatureOn', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -361,12 +344,7 @@ describe('Middleware', () => {
   describe('evaluateEventFeatureGate', () => {
     it('should evaluate multiple features', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: true },
-          ],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true, 'feature-b': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
@@ -380,9 +358,7 @@ describe('Middleware', () => {
 
     it('should support negate option', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
       await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })

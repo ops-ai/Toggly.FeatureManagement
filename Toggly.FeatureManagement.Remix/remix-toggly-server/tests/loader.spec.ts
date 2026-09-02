@@ -9,6 +9,7 @@ import {
   TogglyLoaderOptions,
 } from '../src/loader';
 import { HEADERS, STORAGE_KEYS, TOGGLY_LOADER_KEY } from '@ops-ai/remix-toggly-core';
+import { featureDefs, mockDefsFetchResponse } from './defs-helpers';
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -80,10 +81,7 @@ describe('createTogglyLoader', () => {
   describe('load', () => {
     it('should load feature flags', async () => {
       const flags = { feature1: true, feature2: false };
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(flags),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
 
       const loader = createTogglyLoader(defaultOptions);
       const request = createMockRequest();
@@ -99,10 +97,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should extract identity from custom getIdentity function', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const options: TogglyLoaderOptions = {
         ...defaultOptions,
@@ -117,10 +112,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should extract identity from async getIdentity function', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const options: TogglyLoaderOptions = {
         ...defaultOptions,
@@ -135,10 +127,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should extract identity from header', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const loader = createTogglyLoader(defaultOptions);
       const request = createMockRequest({
@@ -150,10 +139,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should extract identity from cookies', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const loader = createTogglyLoader(defaultOptions);
       const request = createMockRequest({
@@ -165,10 +151,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should use custom cookie parser', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const options: TogglyLoaderOptions = {
         ...defaultOptions,
@@ -183,10 +166,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should handle URL-encoded cookie values', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const loader = createTogglyLoader(defaultOptions);
       const request = createMockRequest({
@@ -198,10 +178,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should return raw cookie value when percent-decoding fails', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const loader = createTogglyLoader(defaultOptions);
       // %xx is invalid percent-encoding, causing decodeURIComponent to throw
@@ -214,10 +191,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should return undefined identity when cookie header has no identity key', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const loader = createTogglyLoader(defaultOptions);
       const request = createMockRequest({
@@ -232,10 +206,7 @@ describe('createTogglyLoader', () => {
   describe('getLoaderData', () => {
     it('should return loader data with feature context', async () => {
       const flags = { feature1: true };
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(flags),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
 
       const loader = createTogglyLoader(defaultOptions);
       const request = createMockRequest();
@@ -246,10 +217,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should merge with additional data', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const loader = createTogglyLoader(defaultOptions);
       const request = createMockRequest();
@@ -266,10 +234,7 @@ describe('createTogglyLoader', () => {
 
   describe('isEnabled', () => {
     it('should check if feature is enabled', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const loader = createTogglyLoader(defaultOptions);
       // Initialize first
@@ -281,10 +246,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should return default value for missing feature', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
       const loader = createTogglyLoader(defaultOptions);
       await loader.load(createMockLoaderArgs(createMockRequest()));
@@ -297,10 +259,7 @@ describe('createTogglyLoader', () => {
 
   describe('isDisabled', () => {
     it('should check if feature is disabled', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: false }));
 
       const loader = createTogglyLoader(defaultOptions);
       await loader.load(createMockLoaderArgs(createMockRequest()));
@@ -313,10 +272,7 @@ describe('createTogglyLoader', () => {
 
   describe('evaluateGate', () => {
     it('should evaluate feature gate', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true, feature2: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true, feature2: true }));
 
       const loader = createTogglyLoader(defaultOptions);
       await loader.load(createMockLoaderArgs(createMockRequest()));
@@ -327,10 +283,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should evaluate gate with any requirement', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true, feature2: false }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true, feature2: false }));
 
       const loader = createTogglyLoader(defaultOptions);
       await loader.load(createMockLoaderArgs(createMockRequest()));
@@ -341,10 +294,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should negate gate result', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
       const loader = createTogglyLoader(defaultOptions);
       await loader.load(createMockLoaderArgs(createMockRequest()));
@@ -355,10 +305,7 @@ describe('createTogglyLoader', () => {
     });
 
     it('should default to "all" requirement when not specified', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ feature1: true, feature2: true }),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true, feature2: true }));
 
       const loader = createTogglyLoader(defaultOptions);
       await loader.load(createMockLoaderArgs(createMockRequest()));
@@ -372,10 +319,7 @@ describe('createTogglyLoader', () => {
   describe('getFlags', () => {
     it('should return all flags', async () => {
       const flags = { feature1: true, feature2: false };
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(flags),
-      });
+      mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
 
       const loader = createTogglyLoader(defaultOptions);
       await loader.load(createMockLoaderArgs(createMockRequest()));
@@ -406,10 +350,7 @@ describe('getFeatureFlags', () => {
 
   it('should get feature flags for a request', async () => {
     const flags = { feature1: true };
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(flags),
-    });
+    mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));
 
     const request = new Request('https://example.com');
     const result = await getFeatureFlags(request, defaultOptions);
@@ -438,10 +379,7 @@ describe('isFeatureEnabled', () => {
   });
 
   it('should check if feature is enabled for a request', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ feature1: true }),
-    });
+    mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ feature1: true }));
 
     const request = new Request('https://example.com');
     const result = await isFeatureEnabled(request, 'feature1', defaultOptions);
@@ -450,10 +388,7 @@ describe('isFeatureEnabled', () => {
   });
 
   it('should return default value when feature not found', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({}),
-    });
+    mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({}));
 
     const request = new Request('https://example.com');
     const result = await isFeatureEnabled(

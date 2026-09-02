@@ -3,10 +3,15 @@
  */
 import type { LocalGate } from '@ops-ai/toggly-local-gates'
 import type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 
 export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+export type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 
 export type { LocalGate }
+
+/** 'remote' (default): evaluated-signed client rail. 'local': definitions-signed + toggly-eval. */
+export type EvaluationMode = 'local' | 'remote'
 
 export interface TogglyConfig {
   /** Your Toggly application key */
@@ -15,6 +20,11 @@ export interface TogglyConfig {
   environment?: string
   /** Base URI for the Toggly API (default: 'https://definitions.toggly.io') */
   baseUri?: string
+  /**
+   * Evaluation rail. `'remote'` (default) fetches evaluated-signed.
+   * `'local'` fetches definitions-signed and evaluates with `@ops-ai/toggly-eval`.
+   */
+  evaluationMode?: EvaluationMode
   /** User identity for targeting and rollouts */
   identity?: string
   /** User groups for targeting */
@@ -167,8 +177,13 @@ export interface TogglyState {
   initialized: boolean
   /** Whether features are currently loading */
   loading: boolean
-  /** Current feature definitions */
+  /** Current feature definitions (boolean snapshot; local mode evaluates from `definitions`) */
   features: FeatureDefinitions
+  /**
+   * Raw definitions-signed rules for local evaluation.
+   * Empty in remote mode.
+   */
+  definitions: Map<string, FeatureDefinitionModel>
   /** Last error (if any) */
   error: Error | null
   /** Last refresh timestamp */

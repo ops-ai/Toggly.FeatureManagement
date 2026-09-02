@@ -12,6 +12,11 @@ export const DEFAULT_CONFIG = {
  * API endpoints
  */
 export const API_ENDPOINTS = {
-  definitions: (baseUri: string, appKey: string, environment: string) =>
+  evaluatedSigned: (baseUri: string, appKey: string, environment: string) =>
     `${baseUri}/evaluated-signed/${appKey}/${environment}`,
+  definitionsSigned: (baseUri: string, appKey: string, environment: string) =>
+    `${baseUri}/definitions-signed/${appKey}/${environment}`,
+  /** @deprecated use evaluatedSigned — kept for back-compat */
+  definitions: (baseUri: string, appKey: string, environment: string) =>
+    API_ENDPOINTS.evaluatedSigned(baseUri, appKey, environment),
 } as const

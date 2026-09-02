@@ -241,6 +241,15 @@
       "oidcReady": false
     },
     {
+      "name": "@ops-ai/toggly-eval",
+      "group": "shared",
+      "manifest": "toggly-eval/package.json",
+      "changelog": "toggly-eval/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-eval-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks",
+      "oidcReady": false
+    },
+    {
       "name": "@ops-ai/toggly-express",
       "group": "node",
       "manifest": "Toggly.FeatureManagement.Node/toggly-express/package.json",

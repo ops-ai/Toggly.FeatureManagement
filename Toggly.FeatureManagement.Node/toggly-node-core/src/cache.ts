@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir, unlink, access } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 import type { CacheProvider, FeatureDefinitions } from './types.js'
 import { createLogger } from './utils.js'
 import { CACHE_KEYS } from './constants.js'
@@ -133,7 +134,47 @@ export class DefinitionsCache {
   }
 
   /**
-   * Get cached definitions
+   * Get cached feature-definition models (definitions-signed array).
+   * Legacy boolean snapshots are ignored.
+   */
+  async getDefinitionModels(
+    key: string
+  ): Promise<FeatureDefinitionModel[] | null> {
+    try {
+      const value = await this.provider.get(key)
+
+      if (!value) {
+        return null
+      }
+
+      const parsed: unknown = JSON.parse(value)
+      if (!Array.isArray(parsed)) {
+        return null
+      }
+      return parsed as FeatureDefinitionModel[]
+    } catch (error) {
+      this.logger.error('Failed to parse cached definitions:', error)
+      return null
+    }
+  }
+
+  /**
+   * Set cached feature-definition models
+   */
+  async setDefinitionModels(
+    key: string,
+    definitions: FeatureDefinitionModel[],
+    ttl?: number
+  ): Promise<void> {
+    try {
+      await this.provider.set(key, JSON.stringify(definitions), ttl)
+    } catch (error) {
+      this.logger.error('Failed to cache definitions:', error)
+    }
+  }
+
+  /**
+   * @deprecated Prefer getDefinitionModels — kept for boolean snapshot caches.
    */
   async getDefinitions(key: string): Promise<FeatureDefinitions | null> {
     try {
@@ -143,7 +184,11 @@ export class DefinitionsCache {
         return null
       }
 
-      return JSON.parse(value)
+      const parsed: unknown = JSON.parse(value)
+      if (Array.isArray(parsed) || parsed === null || typeof parsed !== 'object') {
+        return null
+      }
+      return parsed as FeatureDefinitions
     } catch (error) {
       this.logger.error('Failed to parse cached definitions:', error)
       return null
@@ -151,7 +196,7 @@ export class DefinitionsCache {
   }
 
   /**
-   * Set cached definitions
+   * @deprecated Prefer setDefinitionModels
    */
   async setDefinitions(
     key: string,

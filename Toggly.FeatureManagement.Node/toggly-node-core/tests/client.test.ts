@@ -7,10 +7,28 @@ import {
   closeToggly,
 } from '../src/client'
 import type { TogglyServerConfig, Hook } from '../src/types'
+import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 
 // Mock fetch globally
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
+
+function def(
+  featureKey: string,
+  filters: FeatureDefinitionModel['filters'] = [{ name: 'AlwaysOn', parameters: {} }],
+): FeatureDefinitionModel {
+  return { featureKey, filters }
+}
+
+function defsResponse(definitions: FeatureDefinitionModel[]) {
+  return {
+    ok: true,
+    status: 200,
+    headers: new Map(),
+    text: async () => JSON.stringify(definitions),
+    json: async () => definitions,
+  }
+}
 
 describe('createTogglyClient', () => {
   beforeEach(() => {
@@ -67,12 +85,15 @@ describe('createTogglyClient', () => {
         ok: true,
         status: 200,
         headers: new Headers({ ETag: '"abc123"' }),
-        json: async () => ({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: false },
-          ],
-        }),
+        text: async () =>
+          JSON.stringify([
+            def('feature-a'),
+            def('feature-b', [{ name: 'AlwaysOff', parameters: {} }]),
+          ]),
+        json: async () => [
+          def('feature-a'),
+          def('feature-b', [{ name: 'AlwaysOff', parameters: {} }]),
+        ],
       })
 
       const client = createTogglyClient({
@@ -87,16 +108,12 @@ describe('createTogglyClient', () => {
         'feature-b': false,
       })
       expect(client.state.initialized).toBe(true)
+      expect(client.state.definitions.size).toBe(2)
       expect(mockFetch).toHaveBeenCalledTimes(1)
     })
 
     it('should generate identity if not provided', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       const client = createTogglyClient({ appKey: 'test-app' })
       await client.init()
@@ -105,15 +122,13 @@ describe('createTogglyClient', () => {
       expect(client.identity).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
       )
+      const url = String(mockFetch.mock.calls[0][0])
+      expect(url).not.toContain('?u=')
+      expect(url).not.toContain(client.identity!)
     })
 
     it('should use provided identity', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       const client = createTogglyClient({
         appKey: 'test-app',
@@ -125,20 +140,13 @@ describe('createTogglyClient', () => {
     })
 
     it('should merge feature defaults with API response', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({
-          features: [{ featureKey: 'api-feature', enabled: true }],
-        }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([def('api-feature')]))
 
       const client = createTogglyClient({
         appKey: 'test-app',
         featureDefaults: {
           'default-feature': true,
-          'api-feature': false, // Will be overridden by API
+          'api-feature': false, // Will be overridden by snapshot from definitions
         },
       })
 
@@ -168,17 +176,12 @@ describe('createTogglyClient', () => {
     let client: ReturnType<typeof createTogglyClient>
 
     beforeEach(async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({
-          features: [
-            { featureKey: 'enabled-feature', enabled: true },
-            { featureKey: 'disabled-feature', enabled: false },
-          ],
-        }),
-      })
+      mockFetch.mockResolvedValueOnce(
+        defsResponse([
+          def('enabled-feature'),
+          def('disabled-feature', [{ name: 'AlwaysOff', parameters: {} }]),
+        ]),
+      )
 
       client = createTogglyClient({ appKey: 'test-app' })
       await client.init()
@@ -202,22 +205,93 @@ describe('createTogglyClient', () => {
     })
   })
 
+  describe('local targeting evaluation', () => {
+    it('evaluates Targeting with call-site identity without re-fetch', async () => {
+      mockFetch.mockResolvedValueOnce(
+        defsResponse([
+          {
+            featureKey: 'beta',
+            filters: [
+              {
+                name: 'Targeting',
+                parameters: {
+                  'Audience.Users:0': 'alice',
+                  'Audience.DefaultRolloutPercentage': 0,
+                },
+              },
+            ],
+          },
+        ]),
+      )
+
+      const client = createTogglyClient({
+        appKey: 'test-app',
+        identity: 'bob',
+      })
+      await client.init()
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+
+      expect(await client.isFeatureOn('beta')).toBe(false)
+      expect(await client.isFeatureOn('beta', { identity: 'alice' })).toBe(true)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('evaluates Percentage and ContextProperty filters locally', async () => {
+      mockFetch.mockResolvedValueOnce(
+        defsResponse([
+          {
+            featureKey: 'pct',
+            filters: [{ name: 'Percentage', parameters: { Value: 100 } }],
+          },
+          {
+            featureKey: 'orders',
+            requirementType: 'Any',
+            contextRequirementType: 'All',
+            filters: [
+              {
+                name: 'ContextProperty',
+                parameters: {
+                  Property: 'Color',
+                  Operator: 'eq',
+                  Value: 'red',
+                  ValueType: 'string',
+                },
+              },
+              { name: 'AlwaysOn', parameters: {} },
+            ],
+          },
+        ]),
+      )
+
+      const client = createTogglyClient({
+        appKey: 'test-app',
+        identity: 'user-1',
+      })
+      await client.init()
+
+      expect(await client.isFeatureOn('pct')).toBe(true)
+      expect(await client.isFeatureOn('orders')).toBe(false)
+      expect(
+        await client.isFeatureOn('orders', undefined, {
+          kind: 'Order',
+          key: '1',
+          attributes: { Color: 'red' },
+        }),
+      ).toBe(true)
+    })
+  })
+
   describe('evaluateFeatureGate', () => {
     let client: ReturnType<typeof createTogglyClient>
 
     beforeEach(async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: false },
-            { featureKey: 'feature-c', enabled: true },
-          ],
-        }),
-      })
+      mockFetch.mockResolvedValueOnce(
+        defsResponse([
+          def('feature-a'),
+          def('feature-b', [{ name: 'AlwaysOff', parameters: {} }]),
+          def('feature-c'),
+        ]),
+      )
 
       client = createTogglyClient({ appKey: 'test-app' })
       await client.init()
@@ -254,14 +328,9 @@ describe('createTogglyClient', () => {
   describe('refresh', () => {
     it('should fetch fresh definitions', async () => {
       // Initial fetch
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({
-          features: [{ featureKey: 'feature', enabled: false }],
-        }),
-      })
+      mockFetch.mockResolvedValueOnce(
+        defsResponse([def('feature', [{ name: 'AlwaysOff', parameters: {} }])]),
+      )
 
       const client = createTogglyClient({ appKey: 'test-app' })
       await client.init()
@@ -269,14 +338,7 @@ describe('createTogglyClient', () => {
       expect(await client.isFeatureOn('feature')).toBe(false)
 
       // Refresh with new data
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({
-          features: [{ featureKey: 'feature', enabled: true }],
-        }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([def('feature')]))
 
       await client.refresh()
 
@@ -288,9 +350,8 @@ describe('createTogglyClient', () => {
         ok: true,
         status: 200,
         headers: new Headers({ ETag: '"v1"' }),
-        json: async () => ({
-          features: [{ featureKey: 'feature', enabled: true }],
-        }),
+        text: async () => JSON.stringify([def('feature')]),
+        json: async () => [def('feature')],
       })
 
       const client = createTogglyClient({ appKey: 'test-app' })
@@ -310,13 +371,8 @@ describe('createTogglyClient', () => {
   })
 
   describe('setIdentity', () => {
-    it('should update identity and refresh', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+    it('should update identity without refreshing', async () => {
+      mockFetch.mockResolvedValue(defsResponse([]))
 
       const client = createTogglyClient({ appKey: 'test-app' })
       await client.init()
@@ -324,8 +380,8 @@ describe('createTogglyClient', () => {
       await client.setIdentity('new-identity')
 
       expect(client.identity).toBe('new-identity')
-      // Should have called fetch twice: init + refresh after setIdentity
-      expect(mockFetch).toHaveBeenCalledTimes(2)
+      // Identity is eval-time only — no refresh after setIdentity
+      expect(mockFetch).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -340,14 +396,7 @@ describe('createTogglyClient', () => {
         afterEvaluation: afterEval,
       }
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({
-          features: [{ featureKey: 'feature', enabled: true }],
-        }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([def('feature')]))
 
       const client = createTogglyClient({
         appKey: 'test-app',
@@ -371,12 +420,7 @@ describe('createTogglyClient', () => {
     })
 
     it('should add hooks dynamically', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       const client = createTogglyClient({ appKey: 'test-app' })
       await client.init()
@@ -387,12 +431,7 @@ describe('createTogglyClient', () => {
         afterRefresh,
       })
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await client.refresh()
 
@@ -402,12 +441,7 @@ describe('createTogglyClient', () => {
     it('should remove hooks', async () => {
       const afterRefresh = vi.fn()
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       const client = createTogglyClient({
         appKey: 'test-app',
@@ -421,12 +455,7 @@ describe('createTogglyClient', () => {
       const removed = client.removeHook('removable-hook')
       expect(removed).toBe(true)
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await client.refresh()
 
@@ -439,12 +468,7 @@ describe('createTogglyClient', () => {
     it('should cleanup resources', async () => {
       vi.useFakeTimers()
 
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValue(defsResponse([]))
 
       const client = createTogglyClient({
         appKey: 'test-app',
@@ -477,12 +501,7 @@ describe('singleton functions', () => {
 
   describe('initToggly', () => {
     it('should initialize and return the default client', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       const client = await initToggly({ appKey: 'test-app' })
 
@@ -491,12 +510,7 @@ describe('singleton functions', () => {
     })
 
     it('should replace existing client on re-initialization', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValue(defsResponse([]))
 
       const client1 = await initToggly({ appKey: 'app-1' })
       const client2 = await initToggly({ appKey: 'app-2' })
@@ -512,12 +526,7 @@ describe('singleton functions', () => {
     })
 
     it('should return client after initialization', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await initToggly({ appKey: 'test-app' })
 
@@ -531,12 +540,7 @@ describe('singleton functions', () => {
     })
 
     it('should return client after initialization', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await initToggly({ appKey: 'test-app' })
 
@@ -547,12 +551,7 @@ describe('singleton functions', () => {
 
   describe('closeToggly', () => {
     it('should close and clear the default client', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Map(),
-        json: async () => ({ features: [] }),
-      })
+      mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await initToggly({ appKey: 'test-app' })
       expect(getToggly()).not.toBeNull()
@@ -582,13 +581,8 @@ describe('API request', () => {
     closeToggly()
   })
 
-  it('should construct correct URL', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: new Map(),
-      json: async () => ({ features: [] }),
-    })
+  it('should construct definitions-signed URL without identity query', async () => {
+    mockFetch.mockResolvedValueOnce(defsResponse([]))
 
     const client = createTogglyClient({
       appKey: 'my-app',
@@ -598,7 +592,7 @@ describe('API request', () => {
     await client.init()
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://definitions.toggly.io/evaluated-signed/my-app/Staging?u=user-123',
+      'https://definitions.toggly.io/definitions-signed/my-app/Staging',
       expect.any(Object)
     )
   })
@@ -608,7 +602,8 @@ describe('API request', () => {
       ok: true,
       status: 200,
       headers: new Headers({ ETag: '"abc123"' }),
-      json: async () => ({ features: [] }),
+      text: async () => '[]',
+      json: async () => [],
     })
 
     const client = createTogglyClient({ appKey: 'test-app' })
@@ -671,7 +666,7 @@ describe('API request', () => {
   it('rejects empty signature when verifySignatures is enabled', async () => {
     // Empty signature must not bypass verification and apply unsigned defs.
     const body =
-      '{"defs":{"evil":true},"signature":"","timestamp":1,"kid":"some-kid"}'
+      '{"defs":[{"featureKey":"evil","filters":[{"name":"AlwaysOn","parameters":{}}]}],"signature":"","timestamp":1,"kid":"some-kid"}'
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -708,9 +703,8 @@ describe('clearCache and reliability', () => {
       ok: true,
       status: 200,
       headers: new Headers({ ETag: '"rev-1"' }),
-      json: async () => ({
-        features: [{ featureKey: 'feature-a', enabled: true }],
-      }),
+      text: async () => JSON.stringify([def('feature-a')]),
+      json: async () => [def('feature-a')],
     })
 
     const client = createTogglyClient({ appKey: 'test-app' })
@@ -722,17 +716,11 @@ describe('clearCache and reliability', () => {
 
     expect(await client.isFeatureOn('feature-a')).toBe(false)
     expect(client.state.etag).toBeNull()
+    expect(client.state.definitions.size).toBe(0)
   })
 
   it('should preserve last-known-good features and call onError on refresh failure', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: new Map(),
-      json: async () => ({
-        features: [{ featureKey: 'feature-a', enabled: true }],
-      }),
-    })
+    mockFetch.mockResolvedValueOnce(defsResponse([def('feature-a')]))
 
     const onError = vi.fn()
     const client = createTogglyClient({

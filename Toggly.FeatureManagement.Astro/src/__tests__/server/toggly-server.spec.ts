@@ -16,6 +16,17 @@ function createMockResponse(body: unknown, status = 200) {
   };
 }
 
+function featureDefs(flags: Record<string, boolean>) {
+  return Object.entries(flags).map(([featureKey, enabled]) => ({
+    featureKey,
+    filters: [{ name: enabled ? 'AlwaysOn' : 'AlwaysOff', parameters: {} }],
+  }));
+}
+
+function createDefsResponse(flags: Record<string, boolean>, status = 200) {
+  return createMockResponse(featureDefs(flags), status);
+}
+
 describe('TogglyServer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,7 +78,7 @@ describe('TogglyServer', () => {
 
     it('should fetch flags from API when appKey is set', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({ Feature1: true, Feature2: false })
+        createDefsResponse({ Feature1: true, Feature2: false })
       );
 
       const server = new TogglyServer({
@@ -104,7 +115,7 @@ describe('TogglyServer', () => {
     });
 
     it('should construct the correct API URL', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+      mockFetch.mockResolvedValueOnce(createDefsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'my-key',
@@ -114,60 +125,31 @@ describe('TogglyServer', () => {
 
       await server.getFlags();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://client.toggly.io/evaluated-signed/my-key/Staging',
+        'https://client.toggly.io/definitions-signed/my-key/Staging',
         expect.objectContaining({ method: 'GET' })
       );
     });
 
-    it('should include identity as query parameter', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+    it('should not include identity/groups/claims on definitions-signed URL', async () => {
+      mockFetch.mockResolvedValueOnce(createDefsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'my-key',
         environment: 'Production',
         identity: 'user-123',
-      });
-
-      await server.getFlags();
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://definitions.toggly.io/evaluated-signed/my-key/Production?u=user-123',
-        expect.anything()
-      );
-    });
-
-    it('should URL-encode identity', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
-
-      const server = new TogglyServer({
-        appKey: 'my-key',
-        environment: 'Production',
-        identity: 'user name@test.com',
-      });
-
-      await server.getFlags();
-      const calledUrl = mockFetch.mock.calls[0][0] as string;
-      expect(new URL(calledUrl).searchParams.get('u')).toBe('user name@test.com');
-    });
-
-    it('should include groups and claims in API URL', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
-
-      const server = new TogglyServer({
-        appKey: 'my-key',
-        environment: 'Production',
         groups: ['beta'],
         claims: { role: 'admin' },
       });
 
       await server.getFlags();
-      const calledUrl = mockFetch.mock.calls[0][0] as string;
-      const params = new URL(calledUrl).searchParams;
-      expect(params.getAll('g')).toEqual(['beta']);
-      expect(params.get('claim.role')).toBe('admin');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://definitions.toggly.io/definitions-signed/my-key/Production',
+        expect.anything()
+      );
     });
 
     it('should strip trailing slash from baseURI', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+      mockFetch.mockResolvedValueOnce(createDefsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'my-key',
@@ -177,13 +159,13 @@ describe('TogglyServer', () => {
 
       await server.getFlags();
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://client.toggly.io/evaluated-signed/my-key/Production',
+        'https://client.toggly.io/definitions-signed/my-key/Production',
         expect.anything()
       );
     });
 
     it('should use cache: no-store on fetch', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+      mockFetch.mockResolvedValueOnce(createDefsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'my-key',
@@ -198,7 +180,7 @@ describe('TogglyServer', () => {
     });
 
     it('should pass AbortController signal for timeout', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+      mockFetch.mockResolvedValueOnce(createDefsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'my-key',
@@ -219,7 +201,7 @@ describe('TogglyServer', () => {
   describe('caching', () => {
     it('should cache flags after first fetch', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({ Feature1: true })
+        createDefsResponse({ Feature1: true })
       );
 
       const server = new TogglyServer({
@@ -237,8 +219,8 @@ describe('TogglyServer', () => {
 
     it('should refetch when cache expires', async () => {
       mockFetch
-        .mockResolvedValueOnce(createMockResponse({ Feature1: true }))
-        .mockResolvedValueOnce(createMockResponse({ Feature1: false }));
+        .mockResolvedValueOnce(createDefsResponse({ Feature1: true }))
+        .mockResolvedValueOnce(createDefsResponse({ Feature1: false }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -259,7 +241,7 @@ describe('TogglyServer', () => {
 
     it('should return cached flags when within cache interval', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({ Feature1: true })
+        createDefsResponse({ Feature1: true })
       );
 
       const server = new TogglyServer({
@@ -294,7 +276,7 @@ describe('TogglyServer', () => {
 
     it('should return cached flags on fetch error when cache exists', async () => {
       mockFetch
-        .mockResolvedValueOnce(createMockResponse({ Feature1: true, Feature2: true }))
+        .mockResolvedValueOnce(createDefsResponse({ Feature1: true, Feature2: true }))
         .mockRejectedValueOnce(new Error('Network error'));
 
       const server = new TogglyServer({
@@ -344,8 +326,8 @@ describe('TogglyServer', () => {
   describe('refreshFlags', () => {
     it('should force refresh and update cache', async () => {
       mockFetch
-        .mockResolvedValueOnce(createMockResponse({ Feature1: true }))
-        .mockResolvedValueOnce(createMockResponse({ Feature1: false }));
+        .mockResolvedValueOnce(createDefsResponse({ Feature1: true }))
+        .mockResolvedValueOnce(createDefsResponse({ Feature1: false }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -370,7 +352,7 @@ describe('TogglyServer', () => {
       });
 
       mockFetch.mockReturnValueOnce(
-        delayedFetch.then(() => createMockResponse({ Feature1: true }))
+        delayedFetch.then(() => createDefsResponse({ Feature1: true }))
       );
 
       const server = new TogglyServer({
@@ -394,7 +376,7 @@ describe('TogglyServer', () => {
   describe('getFlag', () => {
     it('should return flag value when it exists', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({ Feature1: true, Feature2: false })
+        createDefsResponse({ Feature1: true, Feature2: false })
       );
 
       const server = new TogglyServer({
@@ -407,7 +389,7 @@ describe('TogglyServer', () => {
     });
 
     it('should return defaultValue when flag not found', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ Feature1: true }));
+      mockFetch.mockResolvedValueOnce(createDefsResponse({ Feature1: true }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -419,7 +401,7 @@ describe('TogglyServer', () => {
     });
 
     it('should return false as default when no defaultValue provided', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ Feature1: true }));
+      mockFetch.mockResolvedValueOnce(createDefsResponse({ Feature1: true }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -430,7 +412,7 @@ describe('TogglyServer', () => {
     });
 
     it('should check flagDefaults before using provided defaultValue', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({}));
+      mockFetch.mockResolvedValueOnce(createDefsResponse({}));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -446,7 +428,7 @@ describe('TogglyServer', () => {
   describe('evaluateGate', () => {
     beforeEach(() => {
       mockFetch.mockResolvedValue(
-        createMockResponse({ F1: true, F2: true, F3: false })
+        createDefsResponse({ F1: true, F2: true, F3: false })
       );
     });
 
@@ -511,7 +493,7 @@ describe('TogglyServer', () => {
   describe('allFeaturesEnabledDuringBuild', () => {
     it('should override all flags to true during build when enabled', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({ Feature1: true, Feature2: false, Feature3: false })
+        createDefsResponse({ Feature1: true, Feature2: false, Feature3: false })
       );
 
       const server = new TogglyServer(
@@ -531,7 +513,7 @@ describe('TogglyServer', () => {
 
     it('should NOT override flags when not in build time', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({ Feature1: true, Feature2: false })
+        createDefsResponse({ Feature1: true, Feature2: false })
       );
 
       const server = new TogglyServer(
@@ -550,7 +532,7 @@ describe('TogglyServer', () => {
 
     it('should NOT override flags when allFeaturesEnabledDuringBuild is false', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({ Feature1: true, Feature2: false })
+        createDefsResponse({ Feature1: true, Feature2: false })
       );
 
       const server = new TogglyServer(
@@ -570,7 +552,7 @@ describe('TogglyServer', () => {
   describe('debug logging', () => {
     it('should log when debug is enabled', async () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+      mockFetch.mockResolvedValueOnce(createDefsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -589,7 +571,7 @@ describe('TogglyServer', () => {
 
     it('should not log when debug is disabled', async () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      mockFetch.mockResolvedValueOnce(createMockResponse({ F1: true }));
+      mockFetch.mockResolvedValueOnce(createDefsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -659,7 +641,7 @@ describe('TogglyServer', () => {
     });
 
     it('getVariant returns null when enableVariants is false', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ F: true }));
+      mockFetch.mockResolvedValueOnce(createDefsResponse({ F: true }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -699,7 +681,7 @@ describe('TogglyServer', () => {
 
     it('should pass isBuildTime to the instance', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({ F1: false })
+        createDefsResponse({ F1: false })
       );
 
       const client = createTogglyServerClient(

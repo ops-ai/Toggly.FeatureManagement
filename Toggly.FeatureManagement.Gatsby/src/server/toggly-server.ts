@@ -1,24 +1,33 @@
 /**
  * Toggly Server-Side Client for Gatsby SSR/SSG
- * 
- * This module provides server-side feature flag evaluation for Gatsby applications.
- * It caches flags for SSG builds and fetches fresh flags for SSR requests.
- * This is a complete, embedded Toggly client implementation.
+ *
+ * Fetches definitions-signed rules and evaluates locally with @ops-ai/toggly-eval.
+ * Caches definitions for SSG builds and refreshes for SSR requests.
  */
 
 import type {
   TogglyPluginOptions,
   Flags,
   TogglyServerClient,
-  CachedFlags,
   GateRequirement,
 } from '../types/index.js';
-import { appendEvaluationContext, evaluateEvaluatedGate, normalizeEntityContext, registerContext as registerEntityContext, resolveEvaluatedDefinition, type Hook } from '@ops-ai/toggly-hooks-types';
+import {
+  normalizeEntityContext,
+  registerContext as registerEntityContext,
+  type Hook,
+} from '@ops-ai/toggly-hooks-types';
+import {
+  evaluateDefinition,
+  evaluateFeatureGate,
+  parseDefinitionsPayload,
+  snapshotEvaluatedBooleans,
+  type FeatureDefinitionModel,
+  type EvalContext,
+} from '@ops-ai/toggly-eval';
 import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
 import {
   parseEvaluatedResponseBody,
   readResponseBody,
-  unwrapDefsPayload,
 } from '../signed-response.js';
 
 /**
@@ -36,13 +45,19 @@ type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | '
   enableLiveUpdates?: boolean;
 };
 
+interface ServerCache {
+  definitions: Map<string, FeatureDefinitionModel>;
+  flags: Flags;
+  timestamp: number;
+}
+
 /**
  * Server-side Toggly client implementation
  */
 export class TogglyServer implements TogglyServerClient {
   private config: ServerConfig;
-  private cache: CachedFlags | null = null;
-  private fetchPromise: Promise<Flags> | null = null;
+  private cache: ServerCache | null = null;
+  private fetchPromise: Promise<ServerCache> | null = null;
   private isBuildTime: boolean = false;
 
   constructor(config: TogglyPluginOptions, isBuildTime: boolean = false) {
@@ -61,21 +76,28 @@ export class TogglyServer implements TogglyServerClient {
   }
 
   /**
-   * Get API URL for fetching flags
+   * Get API URL for fetching definitions-signed rules (no identity query).
    */
   private getApiUrl(): string {
-    const { baseURI, appKey, environment, identity, groups, claims } = this.config;
+    const { baseURI, appKey, environment } = this.config;
 
     if (!appKey) {
       return '';
     }
 
     const baseUrl = baseURI.replace(/\/$/, '');
-    const url = new URL(`${baseUrl}/evaluated-signed/${appKey}/${environment}`);
+    return `${baseUrl}/definitions-signed/${appKey}/${environment}`;
+  }
 
-    appendEvaluationContext(url, { identity, groups, claims }, 'evaluated');
-
-    return url.toString();
+  private buildEvalContext(
+    entity?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
+  ): EvalContext {
+    return {
+      identity: this.config.identity,
+      groups: this.config.groups,
+      traits: this.config.claims,
+      entity: entity ?? null,
+    };
   }
 
   /**
@@ -88,9 +110,9 @@ export class TogglyServer implements TogglyServerClient {
   }
 
   /**
-   * Fetch flags from Toggly API
+   * Fetch definitions from Toggly API and snapshot evaluated booleans.
    */
-  private async fetchFlags(): Promise<Flags> {
+  private async fetchFlags(): Promise<ServerCache> {
     const url = this.getApiUrl();
 
     // If no appKey, return flagDefaults
@@ -98,7 +120,11 @@ export class TogglyServer implements TogglyServerClient {
       if (this.config.isDebug) {
         console.log('[Toggly Server] Using flag defaults (no appKey):', this.config.flagDefaults);
       }
-      return { ...this.config.flagDefaults };
+      return {
+        definitions: new Map(),
+        flags: { ...this.config.flagDefaults },
+        timestamp: Date.now(),
+      };
     }
 
     try {
@@ -129,7 +155,12 @@ export class TogglyServer implements TogglyServerClient {
         maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
         headers: buildDefinitionFetchHeaders({ Accept: 'application/json' }),
       });
-      let flags = unwrapDefsPayload(payload) as Flags;
+
+      let definitions = parseDefinitionsPayload(payload);
+      let flags: Flags = {
+        ...this.config.flagDefaults,
+        ...snapshotEvaluatedBooleans(definitions, this.buildEvalContext()),
+      };
 
       // If allFeaturesEnabledDuringBuild is true and we're in build time,
       // override all flags to true
@@ -137,13 +168,12 @@ export class TogglyServer implements TogglyServerClient {
         if (this.config.isDebug) {
           console.log('[Toggly Server] Build mode: Enabling all features');
         }
-        
-        // Enable all flags AND all flagDefaults
+
         const allKeys = new Set([
-          ...Object.keys(flags),
+          ...definitions.keys(),
           ...Object.keys(this.config.flagDefaults),
         ]);
-        
+
         flags = Array.from(allKeys).reduce((acc, key) => {
           acc[key] = true;
           return acc;
@@ -151,10 +181,14 @@ export class TogglyServer implements TogglyServerClient {
       }
 
       if (this.config.isDebug) {
-        console.log('[Toggly Server] Fetched flags:', flags);
+        console.log('[Toggly Server] Fetched definitions:', definitions.size, 'flags:', flags);
       }
 
-      return flags;
+      return {
+        definitions,
+        flags,
+        timestamp: Date.now(),
+      };
     } catch (error) {
       if (this.config.isDebug) {
         console.error('[Toggly Server] Error fetching flags:', error);
@@ -165,14 +199,22 @@ export class TogglyServer implements TogglyServerClient {
         if (this.config.isDebug) {
           console.log('[Toggly Server] Using cached flags:', this.cache.flags);
         }
-        return { ...this.cache.flags };
+        return {
+          definitions: this.cache.definitions,
+          flags: { ...this.cache.flags },
+          timestamp: this.cache.timestamp,
+        };
       }
 
       if (this.config.isDebug) {
         console.log('[Toggly Server] Using flag defaults:', this.config.flagDefaults);
       }
 
-      return { ...this.config.flagDefaults };
+      return {
+        definitions: new Map(),
+        flags: { ...this.config.flagDefaults },
+        timestamp: Date.now(),
+      };
     }
   }
 
@@ -193,37 +235,45 @@ export class TogglyServer implements TogglyServerClient {
     this.fetchPromise = this.fetchFlags();
 
     try {
-      const flags = await this.fetchPromise;
-      this.cache = {
-        flags,
-        timestamp: Date.now(),
-      };
+      this.cache = await this.fetchPromise;
     } finally {
       this.fetchPromise = null;
     }
   }
 
-  /**
-   * Get all feature flags
-   */
-  async getFlags(): Promise<Flags> {
-    // If no appKey, return flagDefaults immediately
+  private async ensureCache(): Promise<ServerCache> {
     if (!this.config.appKey) {
-      return { ...this.config.flagDefaults };
+      return {
+        definitions: new Map(),
+        flags: { ...this.config.flagDefaults },
+        timestamp: Date.now(),
+      };
     }
 
-    // If cache is valid, return it
     if (this.isCacheValid() && this.cache) {
-      return { ...this.cache.flags };
+      return this.cache;
     }
 
-    // Otherwise, refresh and return
     await this.refreshFlags();
-    return this.cache ? { ...this.cache.flags } : { ...this.config.flagDefaults };
+    return (
+      this.cache ?? {
+        definitions: new Map(),
+        flags: { ...this.config.flagDefaults },
+        timestamp: Date.now(),
+      }
+    );
   }
 
   /**
-   * Get a single feature flag value
+   * Get all feature flags (boolean snapshot)
+   */
+  async getFlags(): Promise<Flags> {
+    const cache = await this.ensureCache();
+    return { ...cache.flags };
+  }
+
+  /**
+   * Get a single feature flag value (local evaluation)
    */
   async getFlag(
     key: string,
@@ -231,11 +281,12 @@ export class TogglyServer implements TogglyServerClient {
     entity?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ): Promise<boolean> {
-    const flags = await this.getFlags();
-    const value = flags[key];
+    const cache = await this.ensureCache();
+    const entityContext = normalizeEntityContext(entity, kind);
+    const def = cache.definitions.get(key);
 
-    if (value !== undefined) {
-      return resolveEvaluatedDefinition(value, normalizeEntityContext(entity, kind));
+    if (def) {
+      return evaluateDefinition(def, this.buildEvalContext(entityContext));
     }
 
     // Check flagDefaults first, then use provided defaultValue
@@ -243,7 +294,7 @@ export class TogglyServer implements TogglyServerClient {
   }
 
   /**
-   * Evaluate a feature gate with multiple flags
+   * Evaluate a feature gate with multiple flags (local evaluation)
    */
   async evaluateGate(
     keys: string[],
@@ -256,10 +307,16 @@ export class TogglyServer implements TogglyServerClient {
       return !negate;
     }
 
-    const flags = await this.getFlags();
+    const cache = await this.ensureCache();
     const entityContext = normalizeEntityContext(entity, kind);
 
-    return evaluateEvaluatedGate(flags, keys, requirement, negate, entityContext);
+    return evaluateFeatureGate(
+      cache.definitions,
+      keys,
+      requirement,
+      negate,
+      this.buildEvalContext(entityContext),
+    );
   }
 
   registerContext<T>(

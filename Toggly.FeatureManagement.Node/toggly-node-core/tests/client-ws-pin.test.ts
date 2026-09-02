@@ -47,6 +47,20 @@ function okResponse(body: unknown, revision?: string) {
   }
 }
 
+function alwaysOn(featureKey: string) {
+  return {
+    featureKey,
+    filters: [{ name: 'AlwaysOn', parameters: {} }],
+  }
+}
+
+function alwaysOff(featureKey: string) {
+  return {
+    featureKey,
+    filters: [{ name: 'AlwaysOff', parameters: {} }],
+  }
+}
+
 describe('client flags-updated pin path', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -63,20 +77,10 @@ describe('client flags-updated pin path', () => {
   it('sets pending pin and omits If-None-Match on flags-updated refresh', async () => {
     mockFetch
       .mockResolvedValueOnce(
-        okResponse(
-          {
-            features: [{ featureKey: 'feature-a', enabled: true }],
-          },
-          'old-rev',
-        ),
+        okResponse([alwaysOn('feature-a')], 'old-rev'),
       )
       .mockResolvedValueOnce(
-        okResponse(
-          {
-            features: [{ featureKey: 'feature-a', enabled: false }],
-          },
-          'new-rev',
-        ),
+        okResponse([alwaysOff('feature-a')], 'new-rev'),
       )
 
     const client = createTogglyClient({
@@ -116,12 +120,7 @@ describe('client flags-updated pin path', () => {
 
   it('does not pin-refresh when flags-updated etag matches cache', async () => {
     mockFetch.mockResolvedValueOnce(
-      okResponse(
-        {
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        },
-        'same-rev',
-      ),
+      okResponse([alwaysOn('feature-a')], 'same-rev'),
     )
 
     const client = createTogglyClient({

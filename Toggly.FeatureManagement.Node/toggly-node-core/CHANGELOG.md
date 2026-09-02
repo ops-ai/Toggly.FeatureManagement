@@ -1,3 +1,17 @@
+## 0.6.0
+
+2026-09-02
+
+### Changed
+- Fetch `definitions-signed` (rules payload) instead of `evaluated-signed` and
+  evaluate locally via `@ops-ai/toggly-eval` [OPS-825]. Identity is eval-time
+  only — it is no longer sent as `?u=` and `setIdentity` no longer forces a
+  refresh. `state.features` remains a snapshot for hooks; `isFeatureOn` /
+  gates always evaluate from stored definitions with call-site context.
+
+### Added
+- Dependency on `@ops-ai/toggly-eval` for local definition evaluation.
+
 ## 0.5.0
 
 2026-08-30

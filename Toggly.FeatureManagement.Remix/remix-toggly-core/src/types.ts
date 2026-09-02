@@ -20,6 +20,13 @@ export type { LocalGate }
 export type FeatureRequirement = 'all' | 'any';
 
 /**
+ * Where feature evaluation happens for definitions fetches.
+ * - `remote` (default): fetch `evaluated-signed` with context query params
+ * - `local`: fetch `definitions-signed` (rules only) and evaluate with `@ops-ai/toggly-eval`
+ */
+export type EvaluationMode = 'local' | 'remote';
+
+/**
  * Configuration options for Toggly
  */
 export interface TogglyConfig {
@@ -29,6 +36,11 @@ export interface TogglyConfig {
   environment?: string;
   /** Base URL for Toggly API */
   baseUrl?: string;
+  /**
+   * Evaluation rail. Defaults to `remote` for backward compatibility.
+   * Use `local` for definitions-signed + call-site evaluation (server multi-tenant).
+   */
+  evaluationMode?: EvaluationMode;
   /** Default feature values for offline/fallback mode */
   featureDefaults?: Record<string, boolean>;
   /** Request timeout in milliseconds */

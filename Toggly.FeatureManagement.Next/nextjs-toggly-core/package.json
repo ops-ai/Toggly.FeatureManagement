@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nextjs-toggly-core",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "description": "Core feature flag functionality for Next.js",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -52,6 +52,7 @@
   },
   "homepage": "https://docs.toggly.io/sdks/nextjs",
   "dependencies": {
+    "@ops-ai/toggly-eval": "file:../../toggly-eval",
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.3"

@@ -1,3 +1,14 @@
+## 1.5.0
+
+2026-09-02
+
+### Changed
+- Server client always uses `evaluationMode: 'local'`: fetch
+  `definitions-signed` (no identity query) and evaluate with
+  `@ops-ai/toggly-eval` at `isEnabled` / `evaluateGate` (OPS-825).
+- Keep a boolean snapshot of local evaluation for hydration /
+  `afterRefresh` compatibility.
+
 ## 1.4.4
 
 2026-08-30

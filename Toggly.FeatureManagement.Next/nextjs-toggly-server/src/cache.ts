@@ -1,7 +1,10 @@
 import { unstable_cache } from 'next/cache'
 import { getServerToggly } from './server-client'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
-import { toBooleanDefinitions } from '@ops-ai/nextjs-toggly-core'
+import {
+  snapshotEvaluatedBooleans,
+  toBooleanDefinitions,
+} from '@ops-ai/nextjs-toggly-core'
 
 /**
  * Cache tags for feature flags
@@ -54,11 +57,7 @@ export function cachedIsFeatureOn(
         return false
       }
 
-      if (identity) {
-        client.identity = identity
-      }
-
-      return client.isFeatureOn(featureKey)
+      return client.isFeatureOn(featureKey, undefined, undefined, identity)
     },
     [createFeatureCacheKey(featureKey, identity)],
     {
@@ -100,11 +99,14 @@ export function cachedEvaluateFeatureGate(
         return negate
       }
 
-      if (identity) {
-        client.identity = identity
-      }
-
-      return client.evaluateFeatureGate(featureKeys, requirement, negate)
+      return client.evaluateFeatureGate(
+        featureKeys,
+        requirement,
+        negate,
+        undefined,
+        undefined,
+        identity
+      )
     },
     [cacheKey],
     {
@@ -121,7 +123,7 @@ export function cachedEvaluateFeatureGate(
 }
 
 /**
- * Get all features with caching
+ * Get all features with caching (evaluated boolean snapshot)
  */
 export function cachedGetFeatures(options: {
   revalidate?: number | false
@@ -136,7 +138,19 @@ export function cachedGetFeatures(options: {
         return {}
       }
 
-      return toBooleanDefinitions({ ...client.state.features })
+      const defs = client.getDefinitions()
+      if (defs.size === 0) {
+        return toBooleanDefinitions({ ...client.state.features })
+      }
+
+      return toBooleanDefinitions({
+        ...client.config.featureDefaults,
+        ...snapshotEvaluatedBooleans(defs, {
+          identity: client.config.identity,
+          groups: client.config.groups,
+          traits: client.config.claims,
+        }),
+      })
     },
     ['toggly:all-features'],
     {

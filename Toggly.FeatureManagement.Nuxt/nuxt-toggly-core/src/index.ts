@@ -12,6 +12,8 @@ export type {
   IdentitySeriesData,
   Hook,
   HookMetadata,
+  EvaluationMode,
+  FeatureDefinitionModel,
 } from './types'
 
 // Constants
