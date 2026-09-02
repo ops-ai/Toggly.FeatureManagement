@@ -91,35 +91,82 @@ function forbiddenUrl(value) {
   );
 }
 
-const FORBIDDEN_INTRA_REPO_SPECIFIERS = /^(workspace:\*|workspace:~|file:|link:)/;
+const CARET_RANGE = /^\^\d+\.\d+\.\d+/;
 
-export function validateIntraRepoDependencies(name, data) {
+/**
+ * Nearest pnpm workspace root above a manifest, relative to the repo root.
+ * Returns null when the package is not inside any pnpm workspace.
+ */
+export function findWorkspaceRoot(manifestPath, repoRoot = REPO_ROOT) {
+  const root = path.resolve(repoRoot);
+  let dir = path.dirname(path.resolve(root, manifestPath));
+
+  while (dir.startsWith(root)) {
+    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) {
+      return path.relative(root, dir).split(path.sep).join('/') || '.';
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return null;
+}
+
+/** Maps every discovered repo package to its pnpm workspace root. */
+export function buildWorkspaceIndex(discovered, repoRoot = REPO_ROOT) {
+  return new Map(
+    discovered.map((pkg) => [pkg.name, findWorkspaceRoot(pkg.manifest, repoRoot)]),
+  );
+}
+
+/**
+ * Enforces how one repo package may depend on another.
+ *
+ * `workspace:*` publishes as an exact pin, which is what stranded consumers on
+ * two copies of a core package (OPS-820). A bare exact version does the same
+ * damage, so ranges — not just the workspace protocol — are what we check.
+ *
+ * - Same pnpm workspace, runtime deps: must be `workspace:^`.
+ * - Peer deps and cross-workspace deps: must be `workspace:^` or a caret range.
+ */
+export function validateIntraRepoDependencies(pkg, workspaceIndex) {
   const errors = [];
-  const depSections = ['dependencies', 'peerDependencies', 'optionalDependencies'];
+  const ownWorkspace = workspaceIndex.get(pkg.name) ?? null;
+  const data = pkg.data || {};
 
-  for (const section of depSections) {
+  for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
     const deps = data[section];
     if (!deps || typeof deps !== 'object') continue;
 
     for (const [depName, specifier] of Object.entries(deps)) {
-      if (!depName.startsWith('@ops-ai/')) continue;
+      if (!workspaceIndex.has(depName)) continue;
+
       const value = String(specifier);
-      if (FORBIDDEN_INTRA_REPO_SPECIFIERS.test(value)) {
-        errors.push(
-          `${section}.${depName}: intra-repo @ops-ai deps must use workspace:^, got ${value}`,
-        );
-      } else if (value.startsWith('workspace:') && value !== 'workspace:^') {
-        errors.push(
-          `${section}.${depName}: intra-repo @ops-ai deps must use workspace:^, got ${value}`,
-        );
+      const sameWorkspace =
+        ownWorkspace !== null && workspaceIndex.get(depName) === ownWorkspace;
+
+      if (sameWorkspace && section !== 'peerDependencies') {
+        if (value !== 'workspace:^') {
+          errors.push(
+            `${section}.${depName}: same-workspace repo deps must use workspace:^, got ${value}`,
+          );
+        }
+        continue;
       }
+
+      if (value === 'workspace:^' || CARET_RANGE.test(value)) continue;
+
+      errors.push(
+        `${section}.${depName}: repo deps must use workspace:^ or a caret range so installs dedupe, got ${value}`,
+      );
     }
   }
 
   return errors;
 }
 
-export function validatePackageMetadata(pkg, inventory, data) {
+export function validatePackageMetadata(pkg, inventory, data, workspaceIndex) {
   const errors = [];
   const { repositoryUrl, bugsUrl, author, license, requiredKeywords } = inventory;
 
@@ -165,7 +212,14 @@ export function validatePackageMetadata(pkg, inventory, data) {
       errors.push(`forbidden develop/duplicated URL segment in metadata: ${field}`);
     }
   }
-  errors.push(...validateIntraRepoDependencies(pkg.name, data));
+  if (workspaceIndex) {
+    errors.push(
+      ...validateIntraRepoDependencies(
+        { name: pkg.name, manifest: pkg.manifest, data },
+        workspaceIndex,
+      ),
+    );
+  }
   return errors;
 }
 
@@ -173,6 +227,7 @@ export function verifyNpmMetadata({ repoRoot = REPO_ROOT, inventoryPath = INVENT
   const inventory = loadInventory(inventoryPath);
   const errors = [];
   const discovered = discoverPublicOpsAiManifests(repoRoot, inventory);
+  const workspaceIndex = buildWorkspaceIndex(discovered, repoRoot);
   const byName = new Map(inventory.packages.map((p) => [p.name, p]));
 
   if (!Array.isArray(inventory.packages) || inventory.packages.length === 0) {
@@ -209,7 +264,11 @@ export function verifyNpmMetadata({ repoRoot = REPO_ROOT, inventoryPath = INVENT
       errors.push(`${pkg.name}: missing workflow ${pkg.workflow}`);
     }
     const data = JSON.parse(fs.readFileSync(manifestAbs, 'utf8'));
-    errors.push(...validatePackageMetadata(pkg, inventory, data).map((e) => `${pkg.name}: ${e}`));
+    errors.push(
+      ...validatePackageMetadata(pkg, inventory, data, workspaceIndex).map(
+        (e) => `${pkg.name}: ${e}`,
+      ),
+    );
   }
 
   return { ok: errors.length === 0, errors, discoveredCount: discovered.length, inventoryCount: inventory.packages.length };

@@ -1,11 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildWorkspaceIndex,
   discoverPublicOpsAiManifests,
   loadInventory,
   validateIntraRepoDependencies,
   verifyNpmMetadata,
 } from './verify-npm-metadata.mjs';
+
+// Two packages in one workspace, one in another, mirroring the Next/Nuxt split.
+const WORKSPACE_INDEX = new Map([
+  ['@ops-ai/nextjs-toggly-server', 'Toggly.FeatureManagement.Next'],
+  ['@ops-ai/nextjs-toggly-core', 'Toggly.FeatureManagement.Next'],
+  ['@ops-ai/toggly-hooks-types', 'Toggly.FeatureManagement.Shared'],
+]);
+
+function check(data) {
+  return validateIntraRepoDependencies(
+    { name: '@ops-ai/nextjs-toggly-server', data },
+    WORKSPACE_INDEX,
+  );
+}
 
 test('inventory lists every discovered public @ops-ai package exactly once', () => {
   const inventory = loadInventory();
@@ -27,9 +42,11 @@ test('every inventory workflow, changelog, and metadata contract passes', () => 
   );
 });
 
-test('every shipped @ops-ai manifest pins intra-repo deps with workspace:^', () => {
-  const bad = discoverPublicOpsAiManifests().flatMap((pkg) =>
-    validateIntraRepoDependencies(pkg.name, pkg.data).map(
+test('every shipped repo package depends on siblings with a dedupe-safe range', () => {
+  const discovered = discoverPublicOpsAiManifests();
+  const workspaceIndex = buildWorkspaceIndex(discovered);
+  const bad = discovered.flatMap((pkg) =>
+    validateIntraRepoDependencies(pkg, workspaceIndex).map(
       (error) => `${pkg.name} ${error}`,
     ),
   );
@@ -37,37 +54,53 @@ test('every shipped @ops-ai manifest pins intra-repo deps with workspace:^', () 
   assert.deepEqual(bad, [], bad.length ? bad.join('\n') : undefined);
 });
 
-test('workspace:^ and published semver ranges are accepted for intra-repo deps', () => {
-  const errors = validateIntraRepoDependencies('@ops-ai/example', {
-    dependencies: { '@ops-ai/nuxt-toggly-core': 'workspace:^' },
-    peerDependencies: { '@ops-ai/nuxt-toggly-core': '^1.6.0' },
-    optionalDependencies: { '@ops-ai/nextjs-toggly-core': 'workspace:^' },
-  });
-
-  assert.deepEqual(errors, []);
+test('same-workspace runtime deps must use workspace:^', () => {
+  assert.deepEqual(
+    check({
+      dependencies: { '@ops-ai/nextjs-toggly-core': 'workspace:^' },
+      optionalDependencies: { '@ops-ai/nextjs-toggly-core': 'workspace:^' },
+    }),
+    [],
+  );
 });
 
-test('exact-pinning specifiers are rejected for intra-repo deps', () => {
+test('same-workspace runtime deps reject every exact-pinning specifier', () => {
   for (const specifier of [
     'workspace:*',
     'workspace:~',
     'workspace:1.2.3',
-    'file:../nuxt-toggly-core',
-    'link:../nuxt-toggly-core',
+    'file:../nextjs-toggly-core',
+    'link:../nextjs-toggly-core',
+    // The published shape of workspace:* — the defect OPS-820 fixed.
+    '1.5.3',
+    '^1.5.3',
+    '*',
+    '>=1.0.0',
   ]) {
-    const errors = validateIntraRepoDependencies('@ops-ai/example', {
-      dependencies: { '@ops-ai/nuxt-toggly-core': specifier },
-    });
+    const errors = check({ dependencies: { '@ops-ai/nextjs-toggly-core': specifier } });
 
     assert.equal(errors.length, 1, `expected ${specifier} to be rejected`);
     assert.match(errors[0], /must use workspace:\^/);
   }
 });
 
-test('third-party dependencies are ignored by the intra-repo guard', () => {
-  const errors = validateIntraRepoDependencies('@ops-ai/example', {
-    dependencies: { ws: 'workspace:*', vue: '^3.0.0' },
-  });
+test('cross-workspace and peer deps accept caret ranges but reject exact pins', () => {
+  assert.deepEqual(
+    check({
+      dependencies: { '@ops-ai/toggly-hooks-types': '^1.4.3' },
+      peerDependencies: { '@ops-ai/nextjs-toggly-core': '^1.5.0' },
+    }),
+    [],
+  );
 
-  assert.deepEqual(errors, []);
+  for (const specifier of ['1.4.3', '*', '>=1.0.0', 'workspace:*']) {
+    const errors = check({ dependencies: { '@ops-ai/toggly-hooks-types': specifier } });
+
+    assert.equal(errors.length, 1, `expected ${specifier} to be rejected`);
+    assert.match(errors[0], /caret range/);
+  }
+});
+
+test('third-party dependencies are ignored by the intra-repo guard', () => {
+  assert.deepEqual(check({ dependencies: { ws: '8.18.0', react: '*' } }), []);
 });
