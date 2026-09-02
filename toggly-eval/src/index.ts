@@ -11,6 +11,7 @@ export type {
 
 export {
   createDefaultRegistry,
+  computePercentile,
   identityBucket,
   rolloutBucket,
   setTimeWindowNow,

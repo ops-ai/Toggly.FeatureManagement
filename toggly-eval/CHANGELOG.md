@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.0.0
+
+2026-09-02
+
+### Breaking
+
+- Replace FNV-1a `identityBucket` / `rolloutBucket` with Definitions-aligned
+  SHA-256 sticky buckets: hash UTF-8 `${featureKey}\n${userId}`, take the
+  first 4 bytes as little-endian uint32, then `(value / 0xFFFFFFFF) * 100`.
+  Percentage and Targeting default rollout now seed on **featureKey +
+  identity** (cohorts shift vs 1.x FNV). Prefer `computePercentile(userId,
+  featureKey)`; deprecated aliases remain for transitional imports.
+
+### Added
+
+- Golden vector tests (`testdata/eval-percentile-golden.json`) shared with
+  Definitions [OPS-832].
+
 ## 1.0.2
 
 2026-09-02
