@@ -1,3 +1,16 @@
+## 1.8.0
+
+2026-09-02
+
+### Added
+- Per-call `identityOverride` on `isFeatureOn` / `isFeatureOff` /
+  `evaluateFeatureGate` so server packages can evaluate without mutating
+  shared `client.identity` (OPS-825 Oracle).
+- `getDefinitions()` and `hydrateDefinitions()` for durable definition-cache
+  hydration on server packages.
+- Re-export local-eval helpers (`snapshotEvaluatedBooleans`,
+  `indexDefinitions`, `FeatureDefinitionModel`, …) for server wrappers.
+
 ## 1.7.0
 
 2026-09-02

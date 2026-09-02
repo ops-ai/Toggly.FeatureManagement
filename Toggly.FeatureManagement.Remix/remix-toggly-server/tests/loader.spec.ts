@@ -255,6 +255,56 @@ describe('createTogglyLoader', () => {
 
       expect(result).toBe(true);
     });
+
+    it('should evaluate with request identity without stale shared identity', async () => {
+      const targetingAlice = {
+        featureKey: 'targeted-flag',
+        filters: [
+          {
+            name: 'Targeting',
+            parameters: {
+              'Audience.Users:0': 'alice',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([targetingAlice]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([targetingAlice]),
+        headers: { get: () => null },
+      });
+
+      const loader = createTogglyLoader({
+        ...defaultOptions,
+        getIdentity: async (request) =>
+          request.headers.get('x-user-id') ?? undefined,
+      });
+
+      const bobCtx = await loader.load(
+        createMockLoaderArgs(
+          createMockRequest({ headers: { 'x-user-id': 'bob' } }),
+        ),
+      );
+      expect(bobCtx.flags['targeted-flag']).toBe(false);
+      expect(await loader.isEnabled('targeted-flag', false, bobCtx.identity)).toBe(
+        false,
+      );
+
+      const aliceCtx = await loader.load(
+        createMockLoaderArgs(
+          createMockRequest({ headers: { 'x-user-id': 'alice' } }),
+        ),
+      );
+      expect(aliceCtx.flags['targeted-flag']).toBe(true);
+      expect(
+        await loader.isEnabled('targeted-flag', false, aliceCtx.identity),
+      ).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('isDisabled', () => {

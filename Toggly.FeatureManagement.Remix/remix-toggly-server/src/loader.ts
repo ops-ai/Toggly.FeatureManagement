@@ -54,7 +54,7 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
         identity = getIdentityFromRequest(request, options.getIdentityFromCookies);
       }
 
-      // Initialize client and fetch flags
+      // Initialize client and fetch flags (re-snapshots when already warm)
       await client.init(identity);
 
       return {
@@ -82,17 +82,35 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
     },
 
     /**
-     * Check if a feature is enabled
+     * Check if a feature is enabled for a request identity.
+     * Prefer passing `identity` (from `load()` / headers) so concurrent
+     * requests do not share process-wide client.identity.
      */
-    async isEnabled(featureKey: string, defaultValue = false): Promise<boolean> {
-      return client.isEnabled(featureKey, undefined, defaultValue);
+    async isEnabled(
+      featureKey: string,
+      defaultValue = false,
+      identity?: string
+    ): Promise<boolean> {
+      return client.isEnabled(
+        featureKey,
+        identity !== undefined ? { identity } : undefined,
+        defaultValue,
+      );
     },
 
     /**
      * Check if a feature is disabled
      */
-    async isDisabled(featureKey: string, defaultValue = true): Promise<boolean> {
-      return client.isDisabled(featureKey, undefined, defaultValue);
+    async isDisabled(
+      featureKey: string,
+      defaultValue = true,
+      identity?: string
+    ): Promise<boolean> {
+      return client.isDisabled(
+        featureKey,
+        identity !== undefined ? { identity } : undefined,
+        defaultValue,
+      );
     },
 
     /**
@@ -101,9 +119,18 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
     async evaluateGate(
       featureKeys: string[],
       requirement: 'all' | 'any' = 'all',
-      negate = false
+      negate = false,
+      identity?: string
     ): Promise<boolean> {
-      return client.evaluateGate(featureKeys, requirement, negate);
+      return client.evaluateGate(
+        featureKeys,
+        requirement,
+        negate,
+        false,
+        undefined,
+        undefined,
+        identity !== undefined ? { identity } : undefined,
+      );
     },
 
     /**
@@ -187,8 +214,8 @@ export async function isFeatureEnabled(
   defaultValue = false
 ): Promise<boolean> {
   const loader = createTogglyLoader(options);
-  await loader.load({ request, params: {}, context: {} });
-  return loader.isEnabled(featureKey, defaultValue);
+  const ctx = await loader.load({ request, params: {}, context: {} });
+  return loader.isEnabled(featureKey, defaultValue, ctx.identity);
 }
 
 /**

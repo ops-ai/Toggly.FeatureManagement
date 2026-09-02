@@ -214,6 +214,7 @@ export interface TogglyClient {
     featureKey: string,
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
+    identityOverride?: string,
   ): Promise<boolean>
 
   /** Check if a single feature is disabled */
@@ -221,6 +222,7 @@ export interface TogglyClient {
     featureKey: string,
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
+    identityOverride?: string,
   ): Promise<boolean>
 
   /** Evaluate a feature gate with multiple features */
@@ -230,6 +232,7 @@ export interface TogglyClient {
     negate?: boolean,
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
+    identityOverride?: string,
   ): Promise<boolean>
 
   /** Register an entity context mapper for a catalog kind */
@@ -240,6 +243,12 @@ export interface TogglyClient {
 
   /** Set user identity */
   setIdentity(identity: string): Promise<void>
+
+  /** Raw definitions map (local mode) */
+  getDefinitions(): Map<string, FeatureDefinitionModel>
+
+  /** Hydrate cached definition models without fetching */
+  hydrateDefinitions(defs: FeatureDefinitionModel[]): FeatureDefinitions
 
   /** Add a hook */
   addHook(hook: Hook): void

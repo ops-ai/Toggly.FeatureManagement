@@ -211,6 +211,74 @@ describe('TogglyServerClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
+    it('should rebind identity and re-snapshot flags on warm re-init', async () => {
+      const targetingAlice = {
+        featureKey: 'targeted-flag',
+        filters: [
+          {
+            name: 'Targeting',
+            parameters: {
+              'Audience.Users:0': 'alice',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([targetingAlice]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([targetingAlice]),
+        headers: { get: () => null },
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      const first = await client.init('bob');
+      expect(first['targeted-flag']).toBe(false);
+
+      const second = await client.init('alice');
+      expect(second['targeted-flag']).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(await client.isEnabled('targeted-flag')).toBe(true);
+    });
+
+    it('should evaluate concurrent identity overrides independently', async () => {
+      const targetingAlice = {
+        featureKey: 'targeted-flag',
+        filters: [
+          {
+            name: 'Targeting',
+            parameters: {
+              'Audience.Users:0': 'alice',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([targetingAlice]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([targetingAlice]),
+        headers: { get: () => null },
+      });
+
+      const client = new TogglyServerClient({
+        ...defaultConfig,
+      });
+      await client.init('bob');
+
+      const results = await Promise.all([
+        client.isEnabled('targeted-flag', { identity: 'alice' }),
+        client.isEnabled('targeted-flag', { identity: 'bob' }),
+        client.isEnabled('targeted-flag', { identity: 'alice' }),
+      ]);
+
+      expect(results).toEqual([true, false, true]);
+    });
+
     it('should fetch definitions-signed without identity query params', async () => {
       const flags: FeatureFlags = { feature1: true };
       mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));

@@ -224,6 +224,58 @@ describe('local evaluation mode', () => {
     client.destroy()
   })
 
+  it('evaluates identityOverride without mutating client.identity', async () => {
+    const targetingAlice: FeatureDefinitionModel = {
+      featureKey: 'targeted-flag',
+      filters: [
+        {
+          name: 'Targeting',
+          parameters: {
+            'Audience.Users:0': 'alice',
+            'Audience.DefaultRolloutPercentage': 0,
+          },
+        },
+      ],
+    }
+    mockFetch.mockResolvedValueOnce(createMockResponse([targetingAlice]))
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      identity: 'bob',
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await client.init()
+
+    await expect(client.isFeatureOn('targeted-flag')).resolves.toBe(false)
+    await expect(
+      client.isFeatureOn('targeted-flag', undefined, undefined, 'alice'),
+    ).resolves.toBe(true)
+    expect(client.identity).toBe('bob')
+
+    client.destroy()
+  })
+
+  it('hydrateDefinitions applies cached models without a fetch', () => {
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+
+    const features = client.hydrateDefinitions([
+      { featureKey: 'PlainOn', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+    ])
+
+    expect(features.PlainOn).toBe(true)
+    expect(client.getDefinitions().has('PlainOn')).toBe(true)
+    expect(mockFetch).not.toHaveBeenCalled()
+
+    client.destroy()
+  })
+
   it('keeps remote evaluated-signed URL when evaluationMode is remote', async () => {
     mockFetch.mockResolvedValueOnce(
       createMockResponse({

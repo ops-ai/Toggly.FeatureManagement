@@ -267,11 +267,23 @@ export class TogglyServerClient {
   }
 
   /**
-   * Initialize the client by fetching feature flags
+   * Initialize the client by fetching feature definitions.
+   * When already initialized, rebinds identity and re-snapshots flags without
+   * re-fetching (definitions are identity-agnostic).
    */
   async init(identity?: string): Promise<FeatureFlags> {
-    if (this.initialized && Object.keys(this.flags).length > 0) {
-      this.logger.debug('Client already initialized, returning cached flags.');
+    if (this.initialized && this.definitions.size > 0) {
+      if (identity !== undefined) {
+        this.identity = identity;
+      }
+      this.flags = {
+        ...this.config.featureDefaults,
+        ...snapshotEvaluatedBooleans(
+          this.definitions as DefinitionsByKey,
+          this.buildEvalContext(),
+        ),
+      };
+      this.logger.debug('Client already initialized; re-snapshotted for identity.');
       return this.flags;
     }
 
@@ -431,6 +443,7 @@ export class TogglyServerClient {
     defaultValue = false,
     entity?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
+    identityOverride?: IdentityContext,
   ): Promise<boolean> {
     const entityContext = normalizeEntityContext(entity, kind);
 
@@ -444,6 +457,7 @@ export class TogglyServerClient {
       negate,
       defaultValue,
       entityContext,
+      identityOverride,
     );
 
     // Execute afterEvaluation

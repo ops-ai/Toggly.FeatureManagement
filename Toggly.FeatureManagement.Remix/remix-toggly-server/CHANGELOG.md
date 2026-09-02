@@ -1,3 +1,14 @@
+## 1.5.1
+
+2026-09-02
+
+### Fixed
+- Re-init after warm start rebinds identity and re-snapshots flags from
+  definitions (no stale first-user identity) [OPS-825 Oracle].
+- Loader / action helpers pass request `IdentityContext` into each eval so
+  concurrent requests do not share process-wide client identity.
+- `evaluateGate` accepts optional `identityOverride`.
+
 ## 1.5.0
 
 2026-09-02

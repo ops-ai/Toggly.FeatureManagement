@@ -174,12 +174,16 @@ describe('Middleware', () => {
       await expect(middleware(event)).resolves.not.toThrow()
     })
 
-    it('should use identity from header', async () => {
+    it('should use identity from header without mutating shared client', async () => {
       mockFetch.mockResolvedValueOnce(
         createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'default-user',
+        enableLiveUpdates: false,
+      })
 
       const middleware = defineFeatureMiddleware({
         featureKey: 'feature-a',
@@ -191,7 +195,7 @@ describe('Middleware', () => {
 
       await middleware(event)
 
-      expect(getServerToggly()?.identity).toBe('user-123')
+      expect(getServerToggly()?.identity).toBe('default-user')
     })
 
     it('should warn and reject if client not initialized', async () => {
@@ -267,10 +271,14 @@ describe('Middleware', () => {
   })
 
   describe('useEventToggly', () => {
-    it('should return client with identity from header', async () => {
+    it('should return client with identity from header without mutating shared', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(featureDefs({})))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'default-user',
+        enableLiveUpdates: false,
+      })
 
       const event = createMockEvent({
         'x-toggly-identity': 'user-123',
@@ -279,6 +287,7 @@ describe('Middleware', () => {
       const client = useEventToggly(event)
 
       expect(client.identity).toBe('user-123')
+      expect(getServerToggly()?.identity).toBe('default-user')
     })
 
     it('should throw if client not initialized', () => {
@@ -303,12 +312,16 @@ describe('Middleware', () => {
       expect(await isEventFeatureOn(event, 'feature-a')).toBe(true)
     })
 
-    it('should use identity from header', async () => {
+    it('should use identity from header without mutating shared client', async () => {
       mockFetch.mockResolvedValueOnce(
         createMockResponse(featureDefs({ 'feature-a': true }))
       )
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'default-user',
+        enableLiveUpdates: false,
+      })
 
       const event = createMockEvent({
         'x-toggly-identity': 'user-123',
@@ -316,7 +329,7 @@ describe('Middleware', () => {
 
       await isEventFeatureOn(event, 'feature-a')
 
-      expect(getServerToggly()?.identity).toBe('user-123')
+      expect(getServerToggly()?.identity).toBe('default-user')
     })
 
     it('should return false if client not initialized', async () => {
