@@ -91,7 +91,9 @@ function forbiddenUrl(value) {
   );
 }
 
-const CARET_RANGE = /^\^\d+\.\d+\.\d+/;
+// Anchored end-to-end: an unanchored range would also accept trailing junk
+// such as `^1.2.3 garbage`, or a second comparator that reintroduces a pin.
+const CARET_RANGE = /^\^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 /**
  * Nearest pnpm workspace root above a manifest, relative to the repo root.
