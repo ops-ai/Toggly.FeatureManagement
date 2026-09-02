@@ -10,12 +10,20 @@ using UAParser;
 
 namespace Toggly.FeatureManagement.Web.Filters
 {
+    /// <summary>
+    /// Feature filter that matches the request User-Agent operating system with an optional sticky percentage gate.
+    /// </summary>
     [FilterAlias("OS")]
     public class OSFilter : IFeatureFilter
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ITargetingContextAccessor _targetingContextAccessor;
 
+        /// <summary>
+        /// Creates an OS filter using the current HTTP context and optional targeting accessors.
+        /// </summary>
+        /// <param name="httpContextAccessor">Accessor for the current HTTP request.</param>
+        /// <param name="targetingContextAccessors">Targeting accessors used for sticky percentage evaluation.</param>
         public OSFilter(
             IHttpContextAccessor httpContextAccessor,
             IEnumerable<ITargetingContextAccessor> targetingContextAccessors)
@@ -24,6 +32,11 @@ namespace Toggly.FeatureManagement.Web.Filters
             _targetingContextAccessor = SegmentPercentageGate.ResolveAccessor(targetingContextAccessors);
         }
 
+        /// <summary>
+        /// Evaluates whether the current request's OS family matches the configured allow-list and percentage.
+        /// </summary>
+        /// <param name="context">Feature filter evaluation context.</param>
+        /// <returns><c>true</c> when the filter matches; otherwise <c>false</c>.</returns>
         public async Task<bool> EvaluateAsync(FeatureFilterEvaluationContext context)
         {
             var settings = context.Parameters.Get<OSFilterSettings>() ?? new OSFilterSettings();

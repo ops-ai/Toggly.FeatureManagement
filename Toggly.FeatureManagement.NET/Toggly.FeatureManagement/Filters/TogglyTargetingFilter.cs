@@ -37,37 +37,59 @@ namespace Toggly.FeatureManagement.Filters
         /// <inheritdoc />
         public async Task<bool> EvaluateAsync(FeatureFilterEvaluationContext context)
         {
-            if (context == null)
-                throw new ArgumentNullException(nameof(context));
+            ArgumentNullException.ThrowIfNull(context);
 
             var parameters = context.Parameters;
             var ignoreCase = parameters.GetValue("IgnoreCase", true);
-
-            string? userId = null;
-            IEnumerable<string>? groups = null;
-
-            if (_targetingContextAccessor != null)
-            {
-                var targetingContext = await _targetingContextAccessor.GetContextAsync().ConfigureAwait(false);
-                userId = targetingContext?.UserId;
-                groups = targetingContext?.Groups;
-            }
-
             var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            var comparer = ignoreCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
-            var exclusionUsers = CollectIndexedValues(parameters, ExclusionUserPrefixes);
-            if (!string.IsNullOrEmpty(userId) && exclusionUsers.Any(u => userId!.Equals(u, comparison)))
+            var (userId, groups) = await ResolveTargetingContextAsync().ConfigureAwait(false);
+
+            if (IsExcluded(parameters, userId, groups, comparison, comparer))
                 return false;
+
+            if (IsIncluded(parameters, userId, groups, comparison, comparer))
+                return true;
+
+            return ResolveRollout(parameters, context.FeatureName, userId);
+        }
+
+        private async Task<(string? UserId, IEnumerable<string>? Groups)> ResolveTargetingContextAsync()
+        {
+            if (_targetingContextAccessor == null)
+                return (null, null);
+
+            var targetingContext = await _targetingContextAccessor.GetContextAsync().ConfigureAwait(false);
+            return (targetingContext?.UserId, targetingContext?.Groups);
+        }
+
+        private static bool IsExcluded(
+            IConfiguration parameters,
+            string? userId,
+            IEnumerable<string>? groups,
+            StringComparison comparison,
+            StringComparer comparer)
+        {
+            var exclusionUsers = CollectIndexedValues(parameters, ExclusionUserPrefixes);
+            if (!string.IsNullOrEmpty(userId) && exclusionUsers.Contains(userId, comparer))
+                return true;
 
             var exclusionGroups = CollectIndexedValues(parameters, ExclusionGroupPrefixes);
-            if (groups != null && exclusionGroups.Count > 0 &&
-                exclusionGroups.Any(eg => groups.Any(g => g != null && g.Equals(eg, comparison))))
-            {
-                return false;
-            }
+            return groups != null &&
+                   exclusionGroups.Count > 0 &&
+                   exclusionGroups.Any(eg => groups.Any(g => g != null && g.Equals(eg, comparison)));
+        }
 
+        private static bool IsIncluded(
+            IConfiguration parameters,
+            string? userId,
+            IEnumerable<string>? groups,
+            StringComparison comparison,
+            StringComparer comparer)
+        {
             var inclusionUsers = CollectIndexedValues(parameters, UserPrefixes);
-            if (!string.IsNullOrEmpty(userId) && inclusionUsers.Any(u => userId!.Equals(u, comparison)))
+            if (!string.IsNullOrEmpty(userId) && inclusionUsers.Contains(userId, comparer))
                 return true;
 
             // Prefer Definitions-style indexed string groups; fall back to MF Audience.Groups names.
@@ -84,12 +106,13 @@ namespace Toggly.FeatureManagement.Filters
                 }
             }
 
-            if (groups != null && inclusionGroups.Count > 0 &&
-                inclusionGroups.Any(ig => groups.Any(g => g != null && g.Equals(ig, comparison))))
-            {
-                return true;
-            }
+            return groups != null &&
+                   inclusionGroups.Count > 0 &&
+                   inclusionGroups.Any(ig => groups.Any(g => g != null && g.Equals(ig, comparison)));
+        }
 
+        private static bool ResolveRollout(IConfiguration parameters, string featureName, string? userId)
+        {
             double? rollout = TryGetDouble(parameters, "Audience.DefaultRolloutPercentage");
             if (rollout == null)
                 rollout = TryGetDouble(parameters, "Percentage");
@@ -108,7 +131,7 @@ namespace Toggly.FeatureManagement.Filters
             if (string.IsNullOrEmpty(userId))
                 return false;
 
-            return Percentile.IsInRollout(context.FeatureName, userId!, rollout.Value);
+            return Percentile.IsInRollout(featureName, userId, rollout.Value);
         }
 
         private static List<string> CollectIndexedValues(IConfiguration parameters, IReadOnlyList<string> prefixes)

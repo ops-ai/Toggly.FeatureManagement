@@ -71,7 +71,7 @@ public class TogglyPercentageFilterTests
         return mock.Object;
     }
 
-    private static IServiceProvider BuildProvider(ITargetingContextAccessor? targetingAccessor)
+    private static ServiceProvider BuildProvider(ITargetingContextAccessor? targetingAccessor)
     {
         var services = new ServiceCollection();
         if (targetingAccessor != null)
@@ -82,6 +82,8 @@ public class TogglyPercentageFilterTests
 
 public class TogglyTargetingFilterTests
 {
+    private static readonly string[] BetaGroup = { "beta" };
+
     [Fact]
     public async Task EvaluateAsync_DefaultRollout_UsesDefinitionsHashOrder()
     {
@@ -153,7 +155,7 @@ public class TogglyTargetingFilterTests
     [Fact]
     public async Task EvaluateAsync_ExclusionGroup_ReturnsFalse()
     {
-        var filter = new TogglyTargetingFilter(BuildProvider(CreateAccessor("alice", new[] { "beta" })));
+        var filter = new TogglyTargetingFilter(BuildProvider(CreateAccessor("alice", BetaGroup)));
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -172,7 +174,7 @@ public class TogglyTargetingFilterTests
     [Fact]
     public async Task EvaluateAsync_InclusionGroup_ReturnsTrue()
     {
-        var filter = new TogglyTargetingFilter(BuildProvider(CreateAccessor("alice", new[] { "beta" })));
+        var filter = new TogglyTargetingFilter(BuildProvider(CreateAccessor("alice", BetaGroup)));
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -191,7 +193,7 @@ public class TogglyTargetingFilterTests
     [Fact]
     public async Task EvaluateAsync_MfNamedGroups_FallbackMatches()
     {
-        var filter = new TogglyTargetingFilter(BuildProvider(CreateAccessor("alice", new[] { "beta" })));
+        var filter = new TogglyTargetingFilter(BuildProvider(CreateAccessor("alice", BetaGroup)));
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -316,7 +318,7 @@ public class TogglyTargetingFilterTests
         return mock.Object;
     }
 
-    private static IServiceProvider BuildProvider(ITargetingContextAccessor? targetingAccessor)
+    private static ServiceProvider BuildProvider(ITargetingContextAccessor? targetingAccessor)
     {
         var services = new ServiceCollection();
         if (targetingAccessor != null)

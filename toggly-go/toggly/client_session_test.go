@@ -60,3 +60,96 @@ func TestClient_PercentageStickyByFeatureKeyAndIdentity(t *testing.T) {
 		t.Fatalf("expected different Percentage outcomes across feature keys, got flagA=%v flagB=%v", a1, b)
 	}
 }
+
+func TestClient_IsEnabled_ForwardsClaimsAndRequest(t *testing.T) {
+	c, err := NewClient(Config{
+		AppKey:                   "app",
+		Environment:              "env",
+		BaseURL:                  "https://example.invalid/",
+		DisableBackgroundRefresh: true,
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+
+	const chromeUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+	c.provider.applyDefinitions([]definitions.FeatureDefinitionModel{
+		{
+			FeatureKey: "claims-flag",
+			Filters: []definitions.FeatureFilter{
+				{
+					Name: "UserClaims",
+					Parameters: map[string]any{
+						"Percentage": float64(100),
+						"Claim":      "role",
+						"Value":      "admin",
+					},
+				},
+			},
+			RequirementType: definitions.RequirementAny,
+		},
+		{
+			FeatureKey: "browser-flag",
+			Filters: []definitions.FeatureFilter{
+				{
+					Name: "BrowserFamily",
+					Parameters: map[string]any{
+						"Percentage":      float64(100),
+						"BrowserFamily:0": "Chrome",
+					},
+				},
+			},
+			RequirementType: definitions.RequirementAny,
+		},
+	})
+
+	claimsOn, err := c.IsEnabled(context.Background(), "claims-flag", Context{
+		Identity: "user-1",
+		Claims:   map[string]string{"role": "admin"},
+	})
+	if err != nil {
+		t.Fatalf("claims IsEnabled: %v", err)
+	}
+	if !claimsOn {
+		t.Fatal("expected UserClaims match via forwarded Claims")
+	}
+
+	claimsOff, err := c.IsEnabled(context.Background(), "claims-flag", Context{
+		Identity: "user-1",
+		Claims:   map[string]string{"role": "user"},
+	})
+	if err != nil {
+		t.Fatalf("claims miss IsEnabled: %v", err)
+	}
+	if claimsOff {
+		t.Fatal("expected UserClaims mismatch to fail")
+	}
+
+	browserOn, err := c.IsEnabled(context.Background(), "browser-flag", Context{
+		Identity: "user-1",
+		Request: &RequestContext{
+			UserAgent:      chromeUA,
+			AcceptLanguage: "en-US",
+			Country:        "US",
+		},
+	})
+	if err != nil {
+		t.Fatalf("browser IsEnabled: %v", err)
+	}
+	if !browserOn {
+		t.Fatal("expected BrowserFamily match via forwarded Request")
+	}
+
+	browserOff, err := c.IsEnabled(context.Background(), "browser-flag", Context{
+		Identity: "user-1",
+		Request:  &RequestContext{UserAgent: "curl/8.0"},
+	})
+	if err != nil {
+		t.Fatalf("browser miss IsEnabled: %v", err)
+	}
+	if browserOff {
+		t.Fatal("expected BrowserFamily mismatch to fail")
+	}
+}

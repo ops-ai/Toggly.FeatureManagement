@@ -30,8 +30,7 @@ namespace Toggly.FeatureManagement.Filters
         /// <inheritdoc />
         public async Task<bool> EvaluateAsync(FeatureFilterEvaluationContext context)
         {
-            if (context == null)
-                throw new ArgumentNullException(nameof(context));
+            ArgumentNullException.ThrowIfNull(context);
 
             var settings = context.Parameters.Get<PercentageFilterSettings>() ?? new PercentageFilterSettings();
             if (settings.Value <= 0)
@@ -43,7 +42,7 @@ namespace Toggly.FeatureManagement.Filters
             if (string.IsNullOrEmpty(userId))
                 return false;
 
-            return Percentile.IsInRollout(context.FeatureName, userId!, settings.Value);
+            return Percentile.IsInRollout(context.FeatureName, userId, settings.Value);
         }
 
         private async Task<string?> ResolveUserIdAsync()

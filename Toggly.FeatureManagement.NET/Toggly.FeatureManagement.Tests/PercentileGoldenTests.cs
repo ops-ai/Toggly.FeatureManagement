@@ -11,17 +11,21 @@ public class PercentileGoldenTests
         "testdata",
         "eval-percentile-golden.json");
 
-    public static IEnumerable<object[]> GoldenRows()
+    private static readonly JsonSerializerOptions GoldenJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    public static TheoryData<string, string, double> GoldenRows()
     {
         var json = File.ReadAllText(GoldenPath);
-        var rows = JsonSerializer.Deserialize<List<GoldenRow>>(json, new JsonSerializerOptions
-                   {
-                       PropertyNameCaseInsensitive = true
-                   })
+        var rows = JsonSerializer.Deserialize<List<GoldenRow>>(json, GoldenJsonOptions)
                    ?? throw new InvalidOperationException("Failed to deserialize golden vectors");
 
+        var data = new TheoryData<string, string, double>();
         foreach (var row in rows)
-            yield return new object[] { row.FeatureKey, row.UserId, row.Bucket };
+            data.Add(row.FeatureKey, row.UserId, row.Bucket);
+        return data;
     }
 
     [Theory]

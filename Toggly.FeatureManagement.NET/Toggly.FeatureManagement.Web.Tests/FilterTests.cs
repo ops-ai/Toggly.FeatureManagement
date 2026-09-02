@@ -93,6 +93,9 @@ public class BrowserFamilyFilterTests
 
 public class BrowserLanguageFilterTests
 {
+    private static readonly string[] EnglishLanguage = { "en" };
+    private static readonly string[] FrenchLanguage = { "fr" };
+
     private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
     private readonly BrowserLanguageFilter _filter;
 
@@ -107,7 +110,7 @@ public class BrowserLanguageFilterTests
     private void SetupAcceptLanguage(string acceptLanguage)
     {
         var httpContext = new DefaultHttpContext();
-        httpContext.Request.Headers["Accept-Language"] = acceptLanguage;
+        httpContext.Request.Headers.AcceptLanguage = acceptLanguage;
         _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(httpContext);
     }
 
@@ -134,7 +137,7 @@ public class BrowserLanguageFilterTests
     {
         // Arrange
         SetupAcceptLanguage("en-US,en;q=0.9");
-        var context = CreateContext(new[] { "en" }, 100);
+        var context = CreateContext(EnglishLanguage, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -148,7 +151,7 @@ public class BrowserLanguageFilterTests
     {
         // Arrange
         SetupAcceptLanguage("en-US,en;q=0.9");
-        var context = CreateContext(new[] { "fr" }, 100);
+        var context = CreateContext(FrenchLanguage, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -164,7 +167,7 @@ public class BrowserLanguageFilterTests
         var httpContext = new DefaultHttpContext();
         // No Accept-Language header
         _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(httpContext);
-        var context = CreateContext(new[] { "en" }, 100);
+        var context = CreateContext(EnglishLanguage, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -177,7 +180,7 @@ public class BrowserLanguageFilterTests
     public async Task EvaluateAsync_With0Percent_ReturnsFalse()
     {
         SetupAcceptLanguage("en-US,en;q=0.9");
-        var result = await _filter.EvaluateAsync(CreateContext(new[] { "en" }, 0));
+        var result = await _filter.EvaluateAsync(CreateContext(EnglishLanguage, 0));
         result.Should().BeFalse();
     }
 }
@@ -265,6 +268,8 @@ public class CountryFilterTests
 
 public class DeviceTypeFilterTests
 {
+    private static readonly string[] IPhoneDevice = { "iPhone" };
+
     private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
     private readonly DeviceTypeFilter _filter;
 
@@ -306,7 +311,7 @@ public class DeviceTypeFilterTests
     {
         // Arrange - iPhone user agent
         SetupUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1");
-        var context = CreateContext(new[] { "iPhone" }, 100);
+        var context = CreateContext(IPhoneDevice, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -320,7 +325,7 @@ public class DeviceTypeFilterTests
     {
         // Arrange - Desktop user agent
         SetupUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-        var context = CreateContext(new[] { "iPhone" }, 100);
+        var context = CreateContext(IPhoneDevice, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -333,13 +338,16 @@ public class DeviceTypeFilterTests
     public async Task EvaluateAsync_With0Percent_ReturnsFalse()
     {
         SetupUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1");
-        var result = await _filter.EvaluateAsync(CreateContext(new[] { "iPhone" }, 0));
+        var result = await _filter.EvaluateAsync(CreateContext(IPhoneDevice, 0));
         result.Should().BeFalse();
     }
 }
 
 public class OSFilterTests
 {
+    private static readonly string[] WindowsOs = { "Windows" };
+    private static readonly string[] MacOs = { "Mac OS" };
+
     private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
     private readonly OSFilter _filter;
 
@@ -381,7 +389,7 @@ public class OSFilterTests
     {
         // Arrange - Windows user agent
         SetupUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-        var context = CreateContext(new[] { "Windows" }, 100);
+        var context = CreateContext(WindowsOs, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -395,7 +403,7 @@ public class OSFilterTests
     {
         // Arrange - Windows user agent
         SetupUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-        var context = CreateContext(new[] { "Mac OS" }, 100);
+        var context = CreateContext(MacOs, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -409,7 +417,7 @@ public class OSFilterTests
     {
         // Arrange - Mac user agent
         SetupUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-        var context = CreateContext(new[] { "Mac OS" }, 100);
+        var context = CreateContext(MacOs, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -422,7 +430,7 @@ public class OSFilterTests
     public async Task EvaluateAsync_With0Percent_ReturnsFalse()
     {
         SetupUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-        var result = await _filter.EvaluateAsync(CreateContext(new[] { "Windows" }, 0));
+        var result = await _filter.EvaluateAsync(CreateContext(WindowsOs, 0));
         result.Should().BeFalse();
     }
 }
@@ -621,7 +629,7 @@ public class SegmentStickyPercentageFilterTests
     {
         var http = new Mock<IHttpContextAccessor>();
         var ctx = new DefaultHttpContext();
-        ctx.Request.Headers["User-Agent"] = ChromeUa;
+        ctx.Request.Headers.UserAgent = ChromeUa;
         http.Setup(x => x.HttpContext).Returns(ctx);
 
         var targeting = new Mock<ITargetingContextAccessor>();
@@ -653,14 +661,14 @@ public class SegmentStickyPercentageFilterTests
     {
         var http = new Mock<IHttpContextAccessor>();
         var ctx = new DefaultHttpContext();
-        ctx.Request.Headers["User-Agent"] = ChromeUa;
+        ctx.Request.Headers.UserAgent = ChromeUa;
         http.Setup(x => x.HttpContext).Returns(ctx);
 
         // Empty targeting accessors → SegmentPercentageGate random path for partial %.
         var filter = new BrowserFamilyFilter(http.Object, Enumerable.Empty<ITargetingContextAccessor>());
         var result = await filter.EvaluateAsync(CreateBrowserFamilyContext("demo-feature", 50));
-        // Non-deterministic; just ensure the random gate path executes without throwing.
-        _ = result;
+        // Non-deterministic; assert a boolean outcome so the random gate path is covered.
+        new[] { true, false }.Should().Contain(result);
     }
 
     [Theory]
@@ -670,7 +678,7 @@ public class SegmentStickyPercentageFilterTests
     {
         var http = new Mock<IHttpContextAccessor>();
         var ctx = new DefaultHttpContext();
-        ctx.Request.Headers["User-Agent"] =
+        ctx.Request.Headers.UserAgent =
             "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1";
         http.Setup(x => x.HttpContext).Returns(ctx);
 
@@ -703,7 +711,7 @@ public class SegmentStickyPercentageFilterTests
     {
         var http = new Mock<IHttpContextAccessor>();
         var ctx = new DefaultHttpContext();
-        ctx.Request.Headers["User-Agent"] = ChromeUa;
+        ctx.Request.Headers.UserAgent = ChromeUa;
         http.Setup(x => x.HttpContext).Returns(ctx);
 
         var targeting = new Mock<ITargetingContextAccessor>();
@@ -735,7 +743,7 @@ public class SegmentStickyPercentageFilterTests
     {
         var http = new Mock<IHttpContextAccessor>();
         var ctx = new DefaultHttpContext();
-        ctx.Request.Headers["Accept-Language"] = "en-US,en;q=0.9";
+        ctx.Request.Headers.AcceptLanguage = "en-US,en;q=0.9";
         http.Setup(x => x.HttpContext).Returns(ctx);
 
         var targeting = new Mock<ITargetingContextAccessor>();
