@@ -66,15 +66,22 @@ function parseTime(s: string): Date | undefined {
 
 function collectPrefixedStrings(
   params: Record<string, unknown> | undefined,
-  prefix: string,
+  ...prefixes: string[]
 ): string[] {
-  if (!params) {
+  if (!params || prefixes.length === 0) {
     return []
   }
   const out: string[] = []
-  const needle = `${prefix}:`
   for (const [k, v] of Object.entries(params)) {
-    if (!k.startsWith(needle)) {
+    let matched = false
+    for (const prefix of prefixes) {
+      if (!k.startsWith(`${prefix}:`)) {
+        continue
+      }
+      matched = true
+      break
+    }
+    if (!matched) {
       continue
     }
     const s = asStringValue(v)
@@ -149,6 +156,7 @@ export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
     const exclusionUsers = collectPrefixedStrings(
       params,
       'Audience.Exclusion.Users',
+      'Audience:Exclusion:Users',
     )
     if (contains(exclusionUsers, identity, ignoreCase)) {
       return false
@@ -159,6 +167,7 @@ export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
     const exclusionGroups = collectPrefixedStrings(
       params,
       'Audience.Exclusion.Groups',
+      'Audience:Exclusion:Groups',
     )
     for (const g of ctx.groups) {
       if (contains(exclusionGroups, g, ignoreCase)) {
@@ -168,14 +177,22 @@ export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
   }
 
   if (identity) {
-    const users = collectPrefixedStrings(params, 'Audience.Users')
+    const users = collectPrefixedStrings(
+      params,
+      'Audience.Users',
+      'Audience:Users',
+    )
     if (contains(users, identity, ignoreCase)) {
       return true
     }
   }
 
   if (ctx.groups && ctx.groups.length > 0) {
-    const groups = collectPrefixedStrings(params, 'Audience.Groups')
+    const groups = collectPrefixedStrings(
+      params,
+      'Audience.Groups',
+      'Audience:Groups',
+    )
     for (const g of ctx.groups) {
       if (contains(groups, g, ignoreCase)) {
         return true
@@ -204,8 +221,11 @@ export function createDefaultRegistry(): Map<string, FilterEvaluator> {
   reg.set('AlwaysOn', alwaysOn)
   reg.set('AlwaysOff', alwaysOff)
   reg.set('Percentage', percentage)
+  reg.set('Microsoft.Percentage', percentage)
   reg.set('TimeWindow', timeWindow)
+  reg.set('Microsoft.TimeWindow', timeWindow)
   reg.set('Targeting', targeting)
+  reg.set('Microsoft.Targeting', targeting)
   return reg
 }
 

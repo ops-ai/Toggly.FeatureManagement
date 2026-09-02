@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2
+
+2026-09-02
+
+### Fixed
+- Register `Microsoft.Targeting` / `Microsoft.Percentage` /
+  `Microsoft.TimeWindow` aliases.
+- Accept colon-form audience keys alongside dotted form.
+
 ## 0.3.1
 
 2026-09-02

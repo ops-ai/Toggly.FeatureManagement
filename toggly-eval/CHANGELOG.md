@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2
+
+2026-09-02
+
+### Fixed
+- Register `Microsoft.Targeting` / `Microsoft.Percentage` /
+  `Microsoft.TimeWindow` aliases used by Definitions payloads.
+- Accept colon-form audience keys (`Audience:Users:N`,
+  `Audience:Exclusion:Users:N`, …) alongside dotted form.
+
 ## 1.0.1
 
 2026-09-02

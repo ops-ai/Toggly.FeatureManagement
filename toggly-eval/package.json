@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-eval",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Local feature-definition evaluation engine for Toggly server SDKs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

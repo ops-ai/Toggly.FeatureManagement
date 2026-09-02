@@ -104,6 +104,38 @@ describe('builtin filters', () => {
     )
   })
 
+  it('accepts Microsoft.Targeting and colon-form audience keys', () => {
+    const inclusion: FeatureDefinitionModel = {
+      featureKey: 'f',
+      filters: [
+        {
+          name: 'Microsoft.Targeting',
+          parameters: {
+            'Audience:Users:0': 'alice',
+            'Audience.DefaultRolloutPercentage': 0,
+          },
+        },
+      ],
+    }
+    expect(evaluateDefinition(inclusion, { identity: 'alice' })).toBe(true)
+    expect(evaluateDefinition(inclusion, { identity: 'bob' })).toBe(false)
+
+    const exclusion: FeatureDefinitionModel = {
+      featureKey: 'f',
+      filters: [
+        {
+          name: 'Microsoft.Targeting',
+          parameters: {
+            'Audience:Exclusion:Users:0': 'alice',
+            'Audience.DefaultRolloutPercentage': 100,
+          },
+        },
+      ],
+    }
+    expect(evaluateDefinition(exclusion, { identity: 'alice' })).toBe(false)
+    expect(evaluateDefinition(exclusion, { identity: 'bob' })).toBe(true)
+  })
+
   it('Targeting default rollout is deterministic', () => {
     const featureKey = 'f'
     const identity = 'user'
