@@ -25,6 +25,11 @@ Here are some of the benefits of using this library:
 
 **API Reference**: https://go.microsoft.com/fwlink/?linkid=2091700
 
+## Requirements
+
+- Core package targets: `netstandard2.1`, `netcoreapp3.1`, `net5.0`–`net9.0` (see individual `.csproj` files for storage packages).
+- Automated tests in this repository run on **.NET 9** (`net9.0`). Older TFMs are built for NuGet consumers; they are not each re-tested in CI.
+
 ### Feature Flags
 Feature flags are composed of two parts, a name and a list of feature-filters that are used to turn the feature on.
 

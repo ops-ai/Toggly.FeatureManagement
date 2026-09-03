@@ -26,7 +26,7 @@ Entity `ContextProperty` filters evaluate `EntityContext` (`kind`, `key`, `attri
 ## Get started
 
 1. Create a free app at [toggly.io](https://toggly.io).
-2. Install the module (Go 1.22+):
+2. Install the module (Go 1.24+):
 
 ```bash
 go get github.com/ops-ai/Toggly.FeatureManagement/toggly-go@latest
