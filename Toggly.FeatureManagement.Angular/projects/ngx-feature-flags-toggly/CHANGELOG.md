@@ -1,3 +1,11 @@
+## 2.8.0
+
+2026-09-03
+
+### Added
+- Optional `context` / `contextKind` (and `kind` alias) on `<feature>` for entity-gated flags,
+  matching `*featureFlag` directive parity.
+
 ## 2.7.4
 
 2026-08-30

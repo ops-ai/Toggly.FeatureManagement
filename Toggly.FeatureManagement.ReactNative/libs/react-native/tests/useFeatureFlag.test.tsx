@@ -83,7 +83,7 @@ describe('useFeatureFlag', () => {
       expect(result.isLoading).toBe(false);
     });
 
-    expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['testFeature'], 'all', false);
+    expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['testFeature'], 'all', false, undefined, undefined);
   });
 
   it('uses default value before evaluation completes', () => {
@@ -158,7 +158,7 @@ describe('useFeatureFlag', () => {
       expect(result.isLoading).toBe(false);
     });
 
-    expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['testFeature'], 'all', true);
+    expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['testFeature'], 'all', true, undefined, undefined);
   });
 
   it('subscribes to effective flags changed events', async () => {
@@ -292,11 +292,7 @@ describe('useFeatureGate', () => {
       expect(result.isEnabled).toBe(true);
     });
 
-    expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(
-      ['feature1', 'feature2'],
-      'all',
-      false
-    );
+    expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['feature1', 'feature2'], 'all', false, undefined, undefined);
   });
 
   it('evaluates multiple features with any requirement', async () => {
@@ -318,11 +314,7 @@ describe('useFeatureGate', () => {
       expect(result.isEnabled).toBe(true);
     });
 
-    expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(
-      ['feature1', 'feature2'],
-      'any',
-      false
-    );
+    expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['feature1', 'feature2'], 'any', false, undefined, undefined);
   });
 
   it('returns true for empty feature array', async () => {

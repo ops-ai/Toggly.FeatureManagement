@@ -163,20 +163,30 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
       }
     },
 
-    async isFeatureOn(featureKey: string) {
-      return client.isFeatureOn(featureKey)
+    async isFeatureOn(
+      featureKey: string,
+      context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ) {
+      return client.isFeatureOn(featureKey, context, kind)
     },
 
-    async isFeatureOff(featureKey: string) {
-      return client.isFeatureOff(featureKey)
+    async isFeatureOff(
+      featureKey: string,
+      context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ) {
+      return client.isFeatureOff(featureKey, context, kind)
     },
 
     async evaluateFeatureGate(
       featureKeys: string[],
       requirement: FeatureRequirement = 'all',
-      negate: boolean = false
+      negate: boolean = false,
+      context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
     ) {
-      return client.evaluateFeatureGate(featureKeys, requirement, negate)
+      return client.evaluateFeatureGate(featureKeys, requirement, negate, context, kind)
     },
   }
 

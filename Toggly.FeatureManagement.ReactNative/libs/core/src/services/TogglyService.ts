@@ -975,8 +975,12 @@ export class TogglyService {
   /**
    * Check if a feature is disabled.
    */
-  async isFeatureOff(featureKey: string): Promise<boolean> {
-    return this.evaluateFeatureGate([featureKey], 'all', true);
+  async isFeatureOff(
+    featureKey: string,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<boolean> {
+    return this.evaluateFeatureGate([featureKey], 'all', true, entity, kind);
   }
 
   /**

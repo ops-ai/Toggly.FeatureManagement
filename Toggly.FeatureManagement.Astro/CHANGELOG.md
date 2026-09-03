@@ -1,3 +1,14 @@
+## 1.12.0
+
+2026-09-03
+
+### Changed
+- Removed disabled-branch `fallback` slot/prop from Feature components (Astro, React, Vue, Svelte islands).
+  Use `negate` for the off path. Use `loading` on the React island for not-ready placeholders.
+
+### Added
+- Optional `context` / `contextKind` on Feature components and FeatureGateBuilders.
+
 ## 1.11.0
 
 2026-09-02

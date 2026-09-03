@@ -1,3 +1,10 @@
+## 1.10.0
+
+2026-09-03
+
+### Added
+- Optional `context` / `contextKind` on `<Feature>` and `<FeatureGateBuilder>` for entity-gated flags.
+
 ## 1.9.3
 
 2026-08-30

@@ -10,6 +10,7 @@ import {
 import { CommonModule } from '@angular/common'
 import { FeatureTemplateDirective } from './feature-template.directive'
 import { TogglyService } from './toggly.service'
+import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 
 /**
  * Feature component for conditionally rendering content based on feature flags
@@ -39,6 +40,15 @@ import { TogglyService } from './toggly.service'
  *   `
  * })
  * ```
+ *
+ * Entity context (parity with `*featureFlag`):
+ * ```html
+ * <feature featureKey="OrderBadge" [context]="order" contextKind="Order">
+ *   <ng-template featureTemplate>
+ *     <app-badge />
+ *   </ng-template>
+ * </feature>
+ * ```
  */
 @Component({
   selector: 'feature',
@@ -56,6 +66,12 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
   @Input() featureKeys: string[] | undefined
   @Input() requirement: 'all' | 'any' = 'all'
   @Input() negate: boolean = false
+  /** Entity instance or canonical entity context for entity-gated flags */
+  @Input() context: TogglyEntityContext | Record<string, unknown> | null = null
+  /** Context kind for registerContext mapper lookup when `context` is a domain object */
+  @Input() contextKind: string | undefined
+  /** Alias for {@link contextKind} to match `*featureFlag` microsyntax `kind` */
+  @Input() kind: string | undefined
 
   @ContentChild(FeatureTemplateDirective)
   content!: FeatureTemplateDirective
@@ -101,11 +117,12 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
     this.shouldShow = this.toggly.shouldShowFeatureDuringEvaluation
 
     if (gate.length <= 0) {
-      this.shouldShow = true
+      this.shouldShow = !this.negate
       this.isLoading = false
     } else {
+      const kind = this.contextKind ?? this.kind
       this.toggly
-        .evaluateFeatureGate(gate, this.requirement, this.negate)
+        .evaluateFeatureGate(gate, this.requirement, this.negate, this.context, kind)
         .then((isEnabled) => (this.shouldShow = isEnabled))
         .finally(() => (this.isLoading = false))
     }

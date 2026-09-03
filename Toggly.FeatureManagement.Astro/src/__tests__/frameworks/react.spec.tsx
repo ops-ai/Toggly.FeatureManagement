@@ -132,27 +132,26 @@ describe('React Framework Adapter', () => {
       expect(result).toBeTruthy();
     });
 
-    it('should render fallback when flag is disabled', () => {
+    it('should render null when flag is disabled', () => {
       $flags.set({ MyFeature: false });
       $isReady.set(true);
 
       const result = Feature({
         flag: 'MyFeature',
         children: React.createElement('div', null, 'hidden'),
-        fallback: React.createElement('div', null, 'fallback'),
       });
 
       expect(result).toBeTruthy();
     });
 
-    it('should render fallback when not ready', () => {
+    it('should render loading when not ready', () => {
       $flags.set({ MyFeature: true });
       $isReady.set(false);
 
       const result = Feature({
         flag: 'MyFeature',
         children: React.createElement('div', null, 'content'),
-        fallback: React.createElement('div', null, 'loading'),
+        loading: React.createElement('div', null, 'loading'),
       });
 
       expect(result).toBeTruthy();
@@ -177,7 +176,20 @@ describe('React Framework Adapter', () => {
         flag: 'MyFeature',
         negate: true,
         children: React.createElement('div', null, 'hidden'),
-        fallback: React.createElement('div', null, 'shown'),
+      });
+
+      expect(result).toBeTruthy();
+    });
+
+    it('should accept entity context props', () => {
+      $flags.set({ MyFeature: true });
+      $isReady.set(true);
+
+      const result = Feature({
+        flag: 'MyFeature',
+        context: { kind: 'Order', key: '1', attributes: {} },
+        contextKind: 'Order',
+        children: React.createElement('div', null, 'entity'),
       });
 
       expect(result).toBeTruthy();
@@ -254,13 +266,12 @@ describe('React Framework Adapter', () => {
       expect(result).toBeTruthy();
     });
 
-    it('should render fallback for empty gate when negated', () => {
+    it('should hide for empty gate when negated', () => {
       $isReady.set(true);
 
       const result = Feature({
         negate: true,
         children: React.createElement('div', null, 'content'),
-        fallback: React.createElement('div', null, 'fallback'),
       });
 
       expect(result).toBeTruthy();

@@ -104,18 +104,29 @@ describe('Feature with edge snapshot', () => {
     expect(container.querySelector('[data-feature="flagB"]')).toBeNull();
   });
 
-  it('renders the configured fallback for a disabled snapshot flag', async () => {
+  it('renders nothing for a disabled snapshot flag without fallback', async () => {
     setSnapshot({ flagB: false });
 
-    const { getByText, container } = await renderWithProvider(
-      <Feature flag="flagB" fallback={<span>fb</span>}>
-        B-content
+    const { container, queryByText } = await renderWithProvider(
+      <Feature flag="flagB">B-content</Feature>,
+      { flagB: false },
+    );
+
+    expect(queryByText('B-content')).toBeNull();
+    expect(container.querySelector('[data-feature="flagB"]')).toBeNull();
+  });
+
+  it('renders children when negate is set and the snapshot flag is off', async () => {
+    setSnapshot({ flagB: false });
+
+    const { getByText } = await renderWithProvider(
+      <Feature flag="flagB" negate>
+        Off-path
       </Feature>,
       { flagB: false },
     );
 
-    expect(getByText('fb')).toBeTruthy();
-    expect(container.querySelector('[data-feature="flagB"]')).toBeNull();
+    expect(getByText('Off-path')).toBeTruthy();
   });
 
   it('renders the wrapper on first render when no snapshot is present (legacy / no edge worker)', async () => {

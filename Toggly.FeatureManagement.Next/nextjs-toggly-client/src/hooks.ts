@@ -2,8 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
+import type { TogglyEntityContext } from '@ops-ai/nextjs-toggly-core'
 import { useToggly } from './context'
 import type { UseFeatureFlagReturn } from './types'
+
+export interface UseFeatureFlagOptions {
+  context?: TogglyEntityContext | Record<string, unknown> | null
+  contextKind?: string
+}
 
 /**
  * Hook to check if a feature is enabled
@@ -22,14 +28,18 @@ import type { UseFeatureFlagReturn } from './types'
  * }
  * ```
  */
-export function useFeatureFlag(featureKey: string): UseFeatureFlagReturn {
+export function useFeatureFlag(
+  featureKey: string,
+  options: UseFeatureFlagOptions = {},
+): UseFeatureFlagReturn {
+  const { context, contextKind } = options
   const { features, isReady, isLoading: contextLoading, isFeatureOn, refresh: contextRefresh } = useToggly()
   const [checked, setChecked] = useState(false)
   const [isEnabled, setIsEnabled] = useState(() => features[featureKey] === true)
 
   useEffect(() => {
     setChecked(false)
-  }, [featureKey])
+  }, [featureKey, context, contextKind])
 
   const checkFeature = useCallback(async () => {
     if (!isReady) {
@@ -38,14 +48,14 @@ export function useFeatureFlag(featureKey: string): UseFeatureFlagReturn {
     }
 
     try {
-      const result = await isFeatureOn(featureKey)
+      const result = await isFeatureOn(featureKey, context, contextKind)
       setIsEnabled(result)
       setChecked(true)
     } catch {
       setIsEnabled(false)
       setChecked(true)
     }
-  }, [featureKey, features, isReady, isFeatureOn])
+  }, [featureKey, features, isReady, isFeatureOn, context, contextKind])
 
   // Check feature when ready changes
   useEffect(() => {
@@ -82,8 +92,11 @@ export function useFeatureFlag(featureKey: string): UseFeatureFlagReturn {
  * Hook to check if a feature is disabled
  * Convenience wrapper with inverted logic
  */
-export function useFeatureOff(featureKey: string): UseFeatureFlagReturn {
-  const result = useFeatureFlag(featureKey)
+export function useFeatureOff(
+  featureKey: string,
+  options: UseFeatureFlagOptions = {},
+): UseFeatureFlagReturn {
+  const result = useFeatureFlag(featureKey, options)
 
   return useMemo(
     () => ({
@@ -120,7 +133,9 @@ export function useFeatureOff(featureKey: string): UseFeatureFlagReturn {
 export function useFeatureGate(
   featureKeys: string[],
   requirement: FeatureRequirement = 'all',
-  negate: boolean = false
+  negate: boolean = false,
+  context?: TogglyEntityContext | Record<string, unknown> | null,
+  contextKind?: string,
 ): {
   isAllowed: boolean
   isBlocked: boolean
@@ -152,14 +167,20 @@ export function useFeatureGate(
     }
 
     try {
-      const result = await evaluateFeatureGate(featureKeys, requirement, negate)
+      const result = await evaluateFeatureGate(
+        featureKeys,
+        requirement,
+        negate,
+        context,
+        contextKind,
+      )
       setIsAllowed(result)
       setChecked(true)
     } catch {
       setIsAllowed(negate)
       setChecked(true)
     }
-  }, [featureKeys, features, isReady, evaluateFeatureGate, requirement, negate])
+  }, [featureKeys, features, isReady, evaluateFeatureGate, requirement, negate, context, contextKind])
 
   useEffect(() => {
     checkGate()

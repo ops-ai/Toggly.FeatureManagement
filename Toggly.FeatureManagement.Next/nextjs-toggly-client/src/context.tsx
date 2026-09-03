@@ -199,15 +199,23 @@ export function TogglyProvider({
   )
 
   const isFeatureOn = useCallback(
-    async (featureKey: string) => {
-      return client.isFeatureOn(featureKey)
+    async (
+      featureKey: string,
+      context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ) => {
+      return client.isFeatureOn(featureKey, context, kind)
     },
     [client]
   )
 
   const isFeatureOff = useCallback(
-    async (featureKey: string) => {
-      return client.isFeatureOff(featureKey)
+    async (
+      featureKey: string,
+      context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ) => {
+      return client.isFeatureOff(featureKey, context, kind)
     },
     [client]
   )
@@ -216,9 +224,11 @@ export function TogglyProvider({
     async (
       featureKeys: string[],
       requirement: FeatureRequirement = 'all',
-      negate: boolean = false
+      negate: boolean = false,
+      context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
     ) => {
-      return client.evaluateFeatureGate(featureKeys, requirement, negate)
+      return client.evaluateFeatureGate(featureKeys, requirement, negate, context, kind)
     },
     [client]
   )

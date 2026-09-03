@@ -272,14 +272,25 @@ export interface TogglyService {
     gate: string[],
     requirement: string,
     negate: boolean,
+    entityContext?: TogglyEntityContext | null,
   ) => Promise<boolean>
   evaluateFeatureGate: (
     featureKeys: string[],
-    requirement: string,
-    negate: boolean,
+    requirement?: string,
+    negate?: boolean,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ) => Promise<boolean>
-  isFeatureOn: (featureKey: string) => Promise<boolean>
-  isFeatureOff: (featureKey: string) => Promise<boolean>
+  isFeatureOn: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<boolean>
+  isFeatureOff: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<boolean>
   refreshFlags: () => Promise<void>
   startWebSocket: () => void
   stopWebSocket: () => void
@@ -731,9 +742,14 @@ export class Toggly implements TogglyService {
     return result
   }
 
-  isFeatureOff = async (featureKey: string) => {
+  isFeatureOff = async (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => {
+    const entityContext = normalizeEntityContext(context, kind)
     const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKey)
-    const result = await this._evaluateFeatureGate([featureKey], 'all', true)
+    const result = await this._evaluateFeatureGate([featureKey], 'all', true, entityContext)
     await this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
     return result
   }

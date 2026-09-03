@@ -2,11 +2,16 @@
   import { onDestroy, onMount } from 'svelte'
   import { getTogglyService, togglyFlagsStore, togglyLocalGatesRevision } from '../stores/toggly.store'
   import type { TogglyService } from '../services/toggly.service'
+  import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 
   export let featureKey: string | undefined = undefined
   export let featureKeys: string[] | undefined = undefined
   export let requirement: 'all' | 'any' = 'all'
   export let negate: boolean = false
+  /** Entity instance or canonical entity context for entity-gated flags */
+  export let context: TogglyEntityContext | Record<string, unknown> | null = null
+  /** Context kind for registerContext mapper lookup when `context` is a domain object */
+  export let contextKind: string | undefined = undefined
 
   let enabled: boolean = false
   let toggly: TogglyService | null = null
@@ -40,14 +45,20 @@
     }
 
     try {
-      enabled = await toggly.evaluateFeatureGate(gate, requirement, negate)
+      enabled = await toggly.evaluateFeatureGate(
+        gate,
+        requirement,
+        negate,
+        context,
+        contextKind,
+      )
     } catch (error) {
       console.error('Toggly FeatureGateBuilder evaluation error:', error)
       enabled = false
     }
   }
 
-  $: if (toggly || featureKey || featureKeys || requirement || negate) {
+  $: if (toggly || featureKey || featureKeys || requirement || negate || context || contextKind) {
     evaluateFeature()
   }
 

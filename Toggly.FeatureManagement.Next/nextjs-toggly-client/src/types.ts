@@ -38,14 +38,24 @@ export interface TogglyContextValue {
   /** Set user identity */
   setIdentity: (identity: string) => Promise<void>
   /** Check if a feature is enabled */
-  isFeatureOn: (featureKey: string) => Promise<boolean>
+  isFeatureOn: (
+    featureKey: string,
+    context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<boolean>
   /** Check if a feature is disabled */
-  isFeatureOff: (featureKey: string) => Promise<boolean>
+  isFeatureOff: (
+    featureKey: string,
+    context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<boolean>
   /** Evaluate a feature gate */
   evaluateFeatureGate: (
     featureKeys: string[],
     requirement?: FeatureRequirement,
-    negate?: boolean
+    negate?: boolean,
+    context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ) => Promise<boolean>
 }
 
@@ -87,6 +97,10 @@ export interface FeatureProps {
   requirement?: FeatureRequirement
   /** When true, render children when the feature is off */
   negate?: boolean
+  /** Entity / page object for Context Property filters */
+  context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null
+  /** Catalog kind when `context` is a domain object */
+  contextKind?: string
   /** Content to render when the gate passes */
   children: ReactNode
   /** Content to render while loading */

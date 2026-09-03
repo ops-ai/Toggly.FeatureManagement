@@ -1,3 +1,11 @@
+## 1.3.0
+
+2026-09-03
+
+### Added
+- Optional `context` / `contextKind` on `<Feature>`, `<FeatureGate>`, hooks, and provider helpers
+  for entity-gated flags (parity with the Next.js server package).
+
 # Changelog
 
 

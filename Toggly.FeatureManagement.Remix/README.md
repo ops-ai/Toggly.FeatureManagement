@@ -81,7 +81,7 @@ export default function App() {
 
 ```tsx
 // app/routes/dashboard.tsx
-import { useFeature, Feature, FeatureEnabled } from '@ops-ai/remix-toggly-client';
+import { useFeature, Feature } from '@ops-ai/remix-toggly-client';
 
 export default function Dashboard() {
   // Hook-based API
@@ -92,15 +92,17 @@ export default function Dashboard() {
       {/* Hook usage */}
       {showNewDashboard ? <NewDashboard /> : <LegacyDashboard />}
 
-      {/* Component-based API */}
-      <Feature featureKey="premium-analytics" fallback={<BasicAnalytics />}>
+      {/* On path + off path with negate (same as .NET / Next.js) */}
+      <Feature featureKey="premium-analytics">
         <PremiumAnalytics />
       </Feature>
+      <Feature featureKey="premium-analytics" negate>
+        <BasicAnalytics />
+      </Feature>
 
-      {/* Show only when enabled */}
-      <FeatureEnabled featureKey="beta-features">
+      <Feature featureKey="beta-features">
         <BetaBanner />
-      </FeatureEnabled>
+      </Feature>
     </div>
   );
 }
@@ -219,8 +221,6 @@ function MyComponent() {
 ```tsx
 import {
   Feature,
-  FeatureEnabled,
-  FeatureDisabled,
   FeatureSwitch,
   FeatureGate,
 } from '@ops-ai/remix-toggly-client';
@@ -230,9 +230,12 @@ import {
   <NewUIComponent />
 </Feature>
 
-// With fallback
-<Feature featureKey="new-ui" fallback={<OldUI />}>
+// Off path with negate (preferred over FeatureDisabled)
+<Feature featureKey="new-ui">
   <NewUI />
+</Feature>
+<Feature featureKey="new-ui" negate>
+  <OldUI />
 </Feature>
 
 // Multiple features
@@ -250,16 +253,7 @@ import {
   <div className={enabled ? 'dark' : 'light'}>Content</div>
 )} />
 
-// Simple helpers
-<FeatureEnabled featureKey="beta">
-  <BetaBanner />
-</FeatureEnabled>
-
-<FeatureDisabled featureKey="legacy">
-  <DeprecationNotice />
-</FeatureDisabled>
-
-// Switch between two UIs
+// Dual-slot switch (kept for variant-style layouts; prefer Feature+negate for the off path)
 <FeatureSwitch
   featureKey="new-checkout"
   enabled={<NewCheckout />}

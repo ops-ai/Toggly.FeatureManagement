@@ -436,6 +436,13 @@ describe('Client Store', () => {
       expect($gate(['F3'], 'all', true).get()).toBe(true);
     });
 
+    it('should accept entity context and contextKind without throwing', () => {
+      const ctx = { kind: 'Order', key: '1', attributes: {} };
+      expect($gate(['F1'], 'all', false, ctx).get()).toBe(true);
+      expect($gate(['F1'], 'all', true, ctx).get()).toBe(false);
+      expect($gate(['F1'], 'all', false, { id: '1' }, 'Order').get()).toBe(true);
+    });
+
     it('should react to store changes', () => {
       const gate = $gate(['F1', 'F2']);
       expect(gate.get()).toBe(true);

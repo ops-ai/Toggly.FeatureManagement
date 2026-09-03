@@ -1,3 +1,14 @@
+## 1.2.0
+
+2026-09-03
+
+### Changed
+- `<Feature>` no longer renders a `#fallback` slot for the off path. Use `negate`.
+- `FeatureEnabled` / `FeatureDisabled` are deprecated; prefer `<Feature>` / `<Feature negate>`.
+
+### Added
+- Optional `context` / `contextKind` on `<Feature>` and gate composables for entity-gated flags.
+
 # Changelog
 
 

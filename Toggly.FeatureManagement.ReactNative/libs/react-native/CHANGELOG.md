@@ -1,3 +1,13 @@
+## 1.3.0
+
+2026-09-03
+
+### Changed
+- `<Feature>` no longer accepts a disabled-branch `fallback` prop. Use `negate` for the off path.
+
+### Added
+- Optional `context` / `contextKind` on `<Feature>`, `useFeatureFlag`, and `useFeatureGate`.
+
 # Changelog
 
 

@@ -1,3 +1,16 @@
+## 1.8.0
+
+2026-09-03
+
+### Changed
+- `<Feature>` / `<FeatureGate>` use `negate` for the off path (aligned with
+  .NET `<feature negate>`). Removed the disabled-branch `fallback` prop.
+- Use `loading` for the not-ready placeholder (not an off-path branch).
+
+### Added
+- Optional `context` / `contextKind` on `<Feature>` and `<FeatureGate>` for
+  entity-gated flags.
+
 ## 1.7.0
 
 2026-09-02

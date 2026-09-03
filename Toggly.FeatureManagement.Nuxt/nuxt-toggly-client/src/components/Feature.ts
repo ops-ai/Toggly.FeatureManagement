@@ -1,6 +1,7 @@
-import { defineComponent, h, type PropType, type VNode } from 'vue'
+import { defineComponent, type PropType } from 'vue'
 import { useFeatureProps } from '../composables/useFeatureGate'
 import type { FeatureRequirement } from '@ops-ai/nuxt-toggly-core'
+import type { TogglyEntityContext } from '@ops-ai/nuxt-toggly-core'
 
 /**
  * Feature component for conditional rendering based on feature flags
@@ -18,19 +19,14 @@ import type { FeatureRequirement } from '@ops-ai/nuxt-toggly-core'
  *     <FullExperience />
  *   </Feature>
  *
- *   <!-- With fallback slot -->
- *   <Feature feature-key="beta-feature">
- *     <template #default>
- *       <BetaContent />
- *     </template>
- *     <template #fallback>
- *       <StableContent />
- *     </template>
- *   </Feature>
- *
  *   <!-- Negated (show when disabled) -->
  *   <Feature feature-key="maintenance-mode" negate>
  *     <MainContent />
+ *   </Feature>
+ *
+ *   <!-- Entity context -->
+ *   <Feature feature-key="OrderBadge" :context="order" context-kind="Order">
+ *     <Badge />
  *   </Feature>
  * </template>
  * ```
@@ -70,6 +66,20 @@ export const Feature = defineComponent({
       type: Boolean,
       default: false,
     },
+    /**
+     * Entity instance or canonical entity context for entity-gated flags
+     */
+    context: {
+      type: Object as PropType<TogglyEntityContext | Record<string, unknown> | null>,
+      default: null,
+    },
+    /**
+     * Context kind for registerContext mapper lookup when `context` is a domain object
+     */
+    contextKind: {
+      type: String,
+      default: undefined,
+    },
   },
 
   setup(props, { slots }) {
@@ -81,13 +91,12 @@ export const Feature = defineComponent({
         return slots.loading()
       }
 
-      // Show content or fallback based on feature state
       if (isEnabled.value) {
         return slots.default?.() ?? null
       }
 
-      // Return fallback slot if available
-      return slots.fallback?.() ?? null
+      // Off path: use a separate Feature with negate (no #fallback slot)
+      return null
     }
   },
 })
@@ -95,6 +104,7 @@ export const Feature = defineComponent({
 /**
  * FeatureEnabled component - convenience wrapper
  * Only renders when feature is enabled
+ * @deprecated Use `<Feature feature-key="…">` instead
  */
 export const FeatureEnabled = defineComponent({
   name: 'FeatureEnabled',
@@ -121,6 +131,7 @@ export const FeatureEnabled = defineComponent({
 /**
  * FeatureDisabled component - convenience wrapper
  * Only renders when feature is disabled
+ * @deprecated Use `<Feature feature-key="…" negate>` instead
  */
 export const FeatureDisabled = defineComponent({
   name: 'FeatureDisabled',
