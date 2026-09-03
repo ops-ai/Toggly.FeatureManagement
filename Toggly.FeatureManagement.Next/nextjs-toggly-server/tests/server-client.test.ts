@@ -3,6 +3,7 @@ import type { FeatureDefinitionModel } from '@ops-ai/nextjs-toggly-core'
 import {
   initServerToggly,
   getServerToggly,
+  waitForServerToggly,
   useServerToggly,
   isServerFeatureOn,
   isServerFeatureOff,
@@ -197,6 +198,72 @@ describe('Server Client', () => {
       expect(destroySpy).toHaveBeenCalledTimes(1)
       expect(second).not.toBeNull()
       expect(second).not.toBe(first)
+    })
+
+    it('coalesces concurrent init calls onto one client', async () => {
+      mockFetch.mockResolvedValue(defsResponse([alwaysOn]))
+
+      const first = initServerToggly({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+      })
+      const second = initServerToggly({
+        appKey: 'other-key',
+        enableLiveUpdates: false,
+      })
+      const waiting = waitForServerToggly()
+
+      const [a, b, waited] = await Promise.all([first, second, waiting])
+
+      expect(a).toBe(b)
+      expect(waited).toBe(a)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(getServerToggly()).toBe(a)
+    })
+  })
+
+  describe('waitForServerToggly', () => {
+    it('returns null when nothing is initializing', async () => {
+      await expect(waitForServerToggly()).resolves.toBeNull()
+    })
+
+    it('awaits in-flight init before evaluating definitions', async () => {
+      let releaseFetch!: () => void
+      const fetchGate = new Promise<void>((resolve) => {
+        releaseFetch = resolve
+      })
+      mockFetch.mockImplementation(async () => {
+        await fetchGate
+        return defsResponse([alwaysOn])
+      })
+
+      const initPromise = initServerToggly({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+      })
+
+      // Let createAndBind install the singleton and reach the pending fetch.
+      await vi.waitFor(() => {
+        expect(getServerToggly()).not.toBeNull()
+      })
+      expect(getServerToggly()!.getDefinitions().size).toBe(0)
+
+      let waitSettled = false
+      const waitPromise = waitForServerToggly().then((client) => {
+        waitSettled = true
+        return client
+      })
+
+      await Promise.resolve()
+      expect(waitSettled).toBe(false)
+
+      releaseFetch()
+      const [waited] = await Promise.all([waitPromise, initPromise])
+
+      expect(waitSettled).toBe(true)
+      expect(waited).not.toBeNull()
+      expect(waited!.getDefinitions().size).toBeGreaterThan(0)
+      await expect(waited!.isFeatureOn('feature-a')).resolves.toBe(true)
     })
   })
 

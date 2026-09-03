@@ -1,5 +1,5 @@
 import { unstable_cache } from 'next/cache'
-import { getServerToggly } from './server-client'
+import { waitForServerToggly } from './server-client'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
 import {
   snapshotEvaluatedBooleans,
@@ -47,7 +47,7 @@ export function cachedIsFeatureOn(
 
   const cached = unstable_cache(
     async () => {
-      const client = getServerToggly()
+      const client = await waitForServerToggly()
       if (!client) {
         return false
       }
@@ -94,7 +94,7 @@ export function cachedEvaluateFeatureGate(
 
   const cached = unstable_cache(
     async () => {
-      const client = getServerToggly()
+      const client = await waitForServerToggly()
       if (!client) {
         return negate
       }
@@ -133,7 +133,7 @@ export function cachedGetFeatures(options: {
 
   const cached = unstable_cache(
     async () => {
-      const client = getServerToggly()
+      const client = await waitForServerToggly()
       if (!client) {
         return {}
       }

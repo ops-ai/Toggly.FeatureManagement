@@ -7,7 +7,7 @@ import {
   resolveFeatureCheckArgs,
   type FeatureCheckOptions,
 } from './feature-check'
-import { getServerToggly } from './server-client'
+import { waitForServerToggly } from './server-client'
 import type { FeatureGateResult } from './types'
 
 /**
@@ -31,7 +31,7 @@ export async function checkFeature(
   featureKey: string,
   identityOrOptions?: string | FeatureCheckOptions
 ): Promise<boolean> {
-  const client = getServerToggly()
+  const client = await waitForServerToggly()
 
   if (!client) {
     console.warn('[Toggly] Server client not initialized in checkFeature')
@@ -92,7 +92,7 @@ export async function checkFeatureGate(options: {
   } = options
 
   const featureKeys = Array.isArray(rawKeys) ? rawKeys : [rawKeys]
-  const client = getServerToggly()
+  const client = await waitForServerToggly()
 
   if (!client) {
     return {
@@ -185,7 +185,7 @@ export function withFeature<T extends unknown[], R>(
  * Get all current feature states (for hydration)
  */
 export async function getFeatures(): Promise<Record<string, boolean>> {
-  const client = getServerToggly()
+  const client = await waitForServerToggly()
 
   if (!client) {
     return {}
@@ -213,7 +213,7 @@ export async function getFeatureStates(
   featureKeys: string[],
   identityOrOptions?: string | FeatureCheckOptions
 ): Promise<Record<string, boolean>> {
-  const client = getServerToggly()
+  const client = await waitForServerToggly()
 
   if (!client) {
     return Object.fromEntries(featureKeys.map((key) => [key, false]))

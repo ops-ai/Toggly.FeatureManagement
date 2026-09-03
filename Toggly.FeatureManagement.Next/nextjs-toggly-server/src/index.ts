@@ -2,6 +2,7 @@
 export {
   initServerToggly,
   getServerToggly,
+  waitForServerToggly,
   useServerToggly,
   refreshServerToggly,
   isServerFeatureOn,
