@@ -132,10 +132,10 @@ module Toggly
         "#{@key_prefix}:snapshot"
       end
 
-      def with_redis(&block)
+      def with_redis(&)
         if @redis.respond_to?(:with)
           # ConnectionPool
-          @redis.with(&block)
+          @redis.with(&)
         else
           # Direct Redis client
           yield @redis
