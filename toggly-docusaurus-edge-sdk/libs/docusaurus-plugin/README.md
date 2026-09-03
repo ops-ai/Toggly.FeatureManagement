@@ -128,16 +128,22 @@ function MyComponent() {
   return (
     <div>
       <h1>Public Content</h1>
-      
-      <Feature flag="beta_advanced_filters">
 
+      <Feature flag="beta_advanced_filters">
         <h2>Advanced Filters (Beta)</h2>
         <p>This feature is in beta...</p>
+      </Feature>
+
+      {/* Off path — same pattern as .NET <feature negate> */}
+      <Feature flag="beta_advanced_filters" negate>
+        <p>Stable filters (beta off).</p>
       </Feature>
     </div>
   );
 }
 ```
+
+With an edge worker in front, SSR emits `data-feature` wrappers. Positive matches are stripped when the flag is off; wrappers with `data-toggly-negate="true"` stay in the HTML so the client can hydrate the off path without a mismatch.
 
 ### Using the useFlag Hook
 
@@ -182,7 +188,7 @@ function MyComponent() {
 
 ## Edge / Hydration Contract
 
-When the companion `@ops-ai/toggly-cloudflare-worker` is in front of the site, the worker streams the static HTML through `HTMLRewriter`, removes `[data-feature]` elements whose flag is disabled, and **injects a `<script>` near the top of `<head>` that pins the resolved flag map onto `window.__TOGGLY_EDGE_FLAGS__`**.
+When the companion `@ops-ai/toggly-cloudflare-worker` is in front of the site, the worker streams the static HTML through `HTMLRewriter`, removes `[data-feature]` elements whose flag is disabled (**except** elements marked `data-toggly-negate="true"`, which hydrate client-side), and **injects a `<script>` near the top of `<head>` that pins the resolved flag map onto `window.__TOGGLY_EDGE_FLAGS__`**.
 
 `TogglyProvider` reads that snapshot synchronously via `readEdgeFlagsSnapshot()` and seeds its initial `flags` / `isReady` state from it, so the very first client render evaluates `Feature` components against the same flag values the edge used. That keeps the React tree aligned with the post-strip DOM and lets React 18 hydrate without a recoverable error / full-root re-render.
 

@@ -109,15 +109,15 @@ import Feature from '@ops-ai/astro-feature-flags-toggly/components/Feature.astro
   <p>At least one feature must be enabled</p>
 </Feature>
 
-<!-- With fallback content -->
+<!-- On + off with negate (preferred over a fallback slot) -->
 <Feature flag="premium-feature">
   <p>Premium content</p>
-  <div slot="fallback">
-    <p>Upgrade to unlock this feature</p>
-  </div>
+</Feature>
+<Feature flag="premium-feature" negate={true}>
+  <p>Upgrade to unlock this feature</p>
 </Feature>
 
-<!-- Negated (show when disabled) -->
+<!-- Negated only (show when disabled) -->
 <Feature flag="old-feature" negate={true}>
   <p>This shows when the feature is OFF</p>
 </Feature>
@@ -219,9 +219,9 @@ const { enabled } = useFeatureFlag('new-feature');
 <template>
   <Feature flag="beta-widget">
     <BetaWidget />
-    <template #fallback>
-      <ComingSoon />
-    </template>
+  </Feature>
+  <Feature flag="beta-widget" :negate="true">
+    <ComingSoon />
   </Feature>
 
   <div v-if="enabled">
@@ -243,9 +243,9 @@ const newDashboard = featureFlag('new-dashboard');
 
 <Feature flag="beta-feature">
   <BetaContent />
-  <svelte:fragment slot="fallback">
-    <RegularContent />
-  </svelte:fragment>
+</Feature>
+<Feature flag="beta-feature" negate={true}>
+  <RegularContent />
 </Feature>
 
 {#if $newDashboard}
