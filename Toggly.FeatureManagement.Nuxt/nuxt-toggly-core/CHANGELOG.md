@@ -1,3 +1,12 @@
+## 1.8.1
+
+2026-09-03
+
+### Fixed
+- Re-export `TogglyEntityContext`, `EvaluatedDefinitions`, `EntityGate`, and
+  entity-context helpers from the package entry so `@ops-ai/nuxt-toggly-client`
+  typecheck (and consumers) can import them [OPS-850].
+
 ## 1.8.0
 
 2026-09-02
