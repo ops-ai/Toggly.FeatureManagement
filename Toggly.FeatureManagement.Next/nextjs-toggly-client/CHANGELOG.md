@@ -1,3 +1,13 @@
+## 1.3.1
+
+2026-09-03
+
+### Fixed
+- Defer `TogglyProvider` unmount `destroy()` behind a mount-tracking microtask so
+  React Strict Mode's synchronous mount/cleanup/remount cycle does not
+  permanently brick the shared client (`[Toggly] Client has been destroyed` on
+  later `init()` / `refresh()` in Next.js dev).
+
 ## 1.3.0
 
 2026-09-03

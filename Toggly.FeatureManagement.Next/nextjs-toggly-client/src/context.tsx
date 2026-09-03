@@ -7,6 +7,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react'
 import {
@@ -240,10 +241,32 @@ export function TogglyProvider({
     }
   }, [autoInit, init, isReady, isLoading])
 
-  // Cleanup on unmount
+  // Cleanup on unmount.
+  //
+  // React Strict Mode (on by default in Next.js dev) synchronously
+  // mounts -> cleans up -> remounts every component once, to surface
+  // exactly this class of bug. Since `client` is created once via the
+  // useState initializer above, the "remount" reuses the *same*
+  // client instance. `destroy()` is one-way and unrecoverable, so
+  // calling it unconditionally here would permanently brick the
+  // client after the very first render in dev mode.
+  //
+  // Defer the real destroy to a microtask and bail out if the
+  // component has already remounted by the time it runs. Strict
+  // Mode's mount/cleanup/mount cycle happens synchronously in the
+  // same commit (no microtask flush in between), so `mountedRef`
+  // will already be back to `true` when this is just a phantom
+  // unmount, and still `false` on a genuine unmount.
+  const mountedRef = useRef(true)
   useEffect(() => {
+    mountedRef.current = true
     return () => {
-      client.destroy()
+      mountedRef.current = false
+      queueMicrotask(() => {
+        if (!mountedRef.current) {
+          client.destroy()
+        }
+      })
     }
   }, [client])
 
