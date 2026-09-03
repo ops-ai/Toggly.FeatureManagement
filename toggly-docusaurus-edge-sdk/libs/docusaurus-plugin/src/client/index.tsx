@@ -272,10 +272,10 @@ export function useFlag(
 export interface FeatureProps {
   /** The feature flag key to check */
   flag: string;
-  /** Content to render when flag is enabled */
+  /** Content to render when the gate passes */
   children: ReactNode;
-  /** Content to render when flag is disabled (optional) */
-  fallback?: ReactNode;
+  /** When true, render children when the feature is off */
+  negate?: boolean;
   /** Default value if flag is not found (default: false) */
   defaultValue?: boolean;
   /**
@@ -350,7 +350,7 @@ function getWrapperStyle(
 export function Feature({
   flag,
   children,
-  fallback = null,
+  negate = false,
   defaultValue = false,
   as: Element = 'div',
 }: FeatureProps): JSX.Element {
@@ -361,14 +361,24 @@ export function Feature({
   // using the same baked-in map — no runtime API, no flash.
   if (isStaticGatingMode() && buildFlags) {
     const enabled = buildFlags[flag] ?? defaultValue;
-    if (!enabled) {
-      return <>{fallback}</>;
+    const show = negate ? !enabled : enabled;
+    if (!show) {
+      return <></>;
     }
     return <Element style={wrapperStyle}>{children}</Element>;
   }
 
   // Edge mode: SSR emits data-feature wrappers for the worker to strip.
+  // Negate is evaluated on the client; edge HTMLRewriter only strips positive
+  // `data-feature` matches, so negated content always hydrates client-side.
   if (isSSR) {
+    if (negate) {
+      return (
+        <Element data-feature={flag} data-toggly-negate="true" style={wrapperStyle}>
+          {children}
+        </Element>
+      );
+    }
     return (
       <Element data-feature={flag} style={wrapperStyle}>
         {children}
@@ -380,7 +390,7 @@ export function Feature({
   return (
     <FeatureClient
       flag={flag}
-      fallback={fallback}
+      negate={negate}
       defaultValue={defaultValue}
       as={Element}
     >
@@ -396,12 +406,13 @@ export function Feature({
 function FeatureClient({
   flag,
   children,
-  fallback = null,
+  negate = false,
   defaultValue = false,
   as: Element = 'div',
 }: FeatureProps): JSX.Element {
   const { enabled, isReady } = useFlag(flag, defaultValue);
   const wrapperStyle = getWrapperStyle(Element);
+  const show = negate ? !enabled : enabled;
 
   // Always wrap with data-feature for edge worker compatibility
 
@@ -414,9 +425,8 @@ function FeatureClient({
     );
   }
 
-  // When ready, show enabled content or fallback
-  // Keep the wrapper for consistency (edge worker will handle removal if disabled)
-  if (enabled) {
+  // When ready, show content when the gate passes
+  if (show) {
     return (
       <Element data-feature={flag} style={wrapperStyle}>
         {children}
@@ -424,6 +434,6 @@ function FeatureClient({
     );
   }
 
-  // Feature is disabled - render fallback (no wrapper needed)
-  return <>{fallback}</>;
+  // Feature gate failed - render nothing (use a separate Feature with negate for off path)
+  return <></>;
 }

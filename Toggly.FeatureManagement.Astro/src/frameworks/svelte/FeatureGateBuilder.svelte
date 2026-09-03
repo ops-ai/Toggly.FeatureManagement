@@ -11,6 +11,8 @@ export let flag: string | undefined = undefined;
 export let flags: string[] | undefined = undefined;
 export let requirement: 'all' | 'any' = 'all';
 export let negate: boolean = false;
+export let context: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null = null;
+export let contextKind: string | undefined = undefined;
 
 $: flagKeys = (() => {
   const keys: string[] = [];
@@ -19,7 +21,7 @@ $: flagKeys = (() => {
   return keys;
 })();
 
-$: gateAtom = $gate(flagKeys, requirement, negate);
+$: gateAtom = $gate(flagKeys, requirement, negate, context, contextKind);
 
 $: enabled = (() => {
   if (!$isReady) {

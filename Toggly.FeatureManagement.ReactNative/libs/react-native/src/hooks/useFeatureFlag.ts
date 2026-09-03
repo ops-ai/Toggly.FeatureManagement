@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { FeatureRequirement } from '@ops-ai/react-native-toggly-core';
+import type { FeatureRequirement, TogglyEntityContext } from '@ops-ai/react-native-toggly-core';
 import { useTogglyContext } from '../contexts/TogglyContext';
 
 /**
@@ -17,6 +17,16 @@ export interface UseFeatureFlagOptions {
    * @default false
    */
   negate?: boolean;
+
+  /**
+   * Entity instance or canonical entity context for entity-gated flags
+   */
+  context?: TogglyEntityContext | Record<string, unknown> | null;
+
+  /**
+   * Context kind for registerContext mapper lookup when `context` is a domain object
+   */
+  contextKind?: string;
 }
 
 /**
@@ -66,7 +76,7 @@ export function useFeatureFlag(
   featureKey: string,
   options: UseFeatureFlagOptions = {}
 ): UseFeatureFlagResult {
-  const { defaultValue = false, negate = false } = options;
+  const { defaultValue = false, negate = false, context, contextKind } = options;
   const { toggly, isReady } = useTogglyContext();
 
   const [isEnabled, setIsEnabled] = useState(defaultValue);
@@ -80,7 +90,13 @@ export function useFeatureFlag(
     setError(null);
 
     try {
-      const result = await toggly.evaluateFeatureGate([featureKey], 'all', negate);
+      const result = await toggly.evaluateFeatureGate(
+        [featureKey],
+        'all',
+        negate,
+        context,
+        contextKind,
+      );
       setIsEnabled(result);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Evaluation failed'));
@@ -88,7 +104,7 @@ export function useFeatureFlag(
     } finally {
       setIsLoading(false);
     }
-  }, [toggly, featureKey, negate, isReady, defaultValue]);
+  }, [toggly, featureKey, negate, isReady, defaultValue, context, contextKind]);
 
   useEffect(() => {
     evaluate();
@@ -157,6 +173,8 @@ export function useFeatureGate(
     defaultValue = false,
     negate = false,
     requirement = 'all',
+    context,
+    contextKind,
   } = options;
   const { toggly, isReady } = useTogglyContext();
 
@@ -176,7 +194,13 @@ export function useFeatureGate(
     setError(null);
 
     try {
-      const result = await toggly.evaluateFeatureGate(featureKeys, requirement, negate);
+      const result = await toggly.evaluateFeatureGate(
+        featureKeys,
+        requirement,
+        negate,
+        context,
+        contextKind,
+      );
       setIsEnabled(result);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Evaluation failed'));
@@ -184,7 +208,7 @@ export function useFeatureGate(
     } finally {
       setIsLoading(false);
     }
-  }, [toggly, featureKeys, requirement, negate, isReady, defaultValue]);
+  }, [toggly, featureKeys, requirement, negate, isReady, defaultValue, context, contextKind]);
 
   useEffect(() => {
     evaluate();

@@ -1,3 +1,14 @@
+## 0.8.0
+
+2026-09-03
+
+### Changed
+- `<Feature>` uses `negate` for the off path (aligned with .NET `<feature negate>`).
+- Removed the disabled-branch `fallback` prop.
+
+### Added
+- Optional `negate` prop on `<Feature>`.
+
 # Changelog
 
 

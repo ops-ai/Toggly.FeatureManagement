@@ -14,6 +14,10 @@ type FeatureProps = {
   /** Context kind for {@link registerContext} mapper lookup when `context` is a domain object. */
   contextKind?: string
   children?: React.ReactNode
+  /**
+   * @deprecated Off-path content: use a separate `<Feature negate>` instead.
+   * Still accepted for one release; prefer `negate`.
+   */
   fallback?: React.ReactNode
   /** Render prop for conditional styling; always invoked with resolved gate boolean. */
   render?: (enabled: boolean) => React.ReactNode
@@ -112,7 +116,19 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
       return <>{this.props.render(this.state.shouldShow)}</>
     }
 
-    return this.state.shouldShow ? this.props.children : (this.props.fallback ?? null)
+    // Off path: prefer a separate <Feature negate>. `fallback` is deprecated.
+    if (this.state.shouldShow) {
+      return this.props.children
+    }
+    if (this.props.fallback != null) {
+      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn(
+          '[Toggly] Feature `fallback` is deprecated. Use a separate <Feature negate> for the off path.',
+        )
+      }
+      return this.props.fallback
+    }
+    return null
   }
 }
 

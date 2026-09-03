@@ -59,23 +59,7 @@ describe('Feature', () => {
     });
   });
 
-  it('renders fallback when feature is disabled', async () => {
-    mockService.evaluateFeatureGate.mockResolvedValue(false);
-
-    const { getByText, queryByText } = render(
-      <Feature featureKey="disabledFeature" fallback={<div>Fallback</div>}>
-        <div>Feature Content</div>
-      </Feature>,
-      { wrapper: createWrapper(contextValue) }
-    );
-
-    await waitFor(() => {
-      expect(getByText('Fallback')).toBeTruthy();
-      expect(queryByText('Feature Content')).toBeNull();
-    });
-  });
-
-  it('renders nothing when feature is disabled and no fallback', async () => {
+  it('renders nothing when feature is disabled', async () => {
     mockService.evaluateFeatureGate.mockResolvedValue(false);
 
     const { queryByText } = render(
@@ -130,11 +114,7 @@ describe('Feature', () => {
     );
 
     await waitFor(() => {
-      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(
-        ['singleFeature'],
-        'all',
-        false
-      );
+      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['singleFeature'], 'all', false, undefined, undefined);
     });
   });
 
@@ -149,11 +129,7 @@ describe('Feature', () => {
     );
 
     await waitFor(() => {
-      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(
-        ['feature1', 'feature2'],
-        'any',
-        false
-      );
+      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['feature1', 'feature2'], 'any', false, undefined, undefined);
     });
   });
 
@@ -168,11 +144,7 @@ describe('Feature', () => {
     );
 
     await waitFor(() => {
-      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(
-        ['feature0', 'feature1', 'feature2'],
-        'all',
-        false
-      );
+      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['feature0', 'feature1', 'feature2'], 'all', false, undefined, undefined);
     });
   });
 
@@ -187,11 +159,7 @@ describe('Feature', () => {
     );
 
     await waitFor(() => {
-      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(
-        ['testFeature'],
-        'all',
-        true
-      );
+      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['testFeature'], 'all', true, undefined, undefined);
     });
   });
 
@@ -348,7 +316,7 @@ describe('withFeature', () => {
     });
   });
 
-  it('shows fallback when feature is disabled', async () => {
+  it('hides wrapped content when feature is disabled', async () => {
     mockService.evaluateFeatureGate.mockResolvedValue(false);
 
     const TestComponent = ({ message }: { message: string }) => (
@@ -357,16 +325,14 @@ describe('withFeature', () => {
 
     const WrappedComponent = withFeature(TestComponent, {
       featureKey: 'testFeature',
-      fallback: <div>Feature Disabled</div>,
     });
 
-    const { getByText, queryByText } = render(
+    const { queryByText } = render(
       <WrappedComponent message="Hello World" />,
       { wrapper: createWrapper(contextValue) }
     );
 
     await waitFor(() => {
-      expect(getByText('Feature Disabled')).toBeTruthy();
       expect(queryByText('Hello World')).toBeNull();
     });
   });
@@ -408,11 +374,7 @@ describe('withFeature', () => {
     );
 
     await waitFor(() => {
-      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(
-        ['feature1', 'feature2'],
-        'any',
-        false
-      );
+      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['feature1', 'feature2'], 'any', false, undefined, undefined);
     });
   });
 
@@ -432,11 +394,7 @@ describe('withFeature', () => {
     );
 
     await waitFor(() => {
-      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(
-        ['maintenance'],
-        'all',
-        true
-      );
+      expect(mockService.evaluateFeatureGate).toHaveBeenCalledWith(['maintenance'], 'all', true, undefined, undefined);
     });
   });
 });

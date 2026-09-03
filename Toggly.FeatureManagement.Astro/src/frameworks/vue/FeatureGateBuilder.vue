@@ -22,11 +22,16 @@ export interface FeatureGateBuilderProps {
   requirement?: 'all' | 'any';
   /** If true, negates the result (default: false) */
   negate?: boolean;
+  /** Entity instance or canonical entity context for entity-gated flags */
+  context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null;
+  /** Context kind for registerContext mapper lookup */
+  contextKind?: string;
 }
 
 const props = withDefaults(defineProps<FeatureGateBuilderProps>(), {
   requirement: 'all',
   negate: false,
+  context: null,
 });
 
 const isReady = useStore($isReady);
@@ -44,7 +49,7 @@ const flagKeys = computed(() => {
   return keys;
 });
 
-const gateAtom = computed(() => $gate(flagKeys.value, props.requirement, props.negate));
+const gateAtom = computed(() => $gate(flagKeys.value, props.requirement, props.negate, props.context, props.contextKind));
 
 const enabled = computed(() => {
   if (!isReady.value) {

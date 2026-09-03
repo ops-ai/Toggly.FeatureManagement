@@ -38,14 +38,24 @@ export interface UseTogglyReturn {
   /** Set user identity */
   setIdentity: (identity: string) => Promise<void>
   /** Check if a feature is enabled */
-  isFeatureOn: (featureKey: string) => Promise<boolean>
+  isFeatureOn: (
+    featureKey: string,
+    context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<boolean>
   /** Check if a feature is disabled */
-  isFeatureOff: (featureKey: string) => Promise<boolean>
+  isFeatureOff: (
+    featureKey: string,
+    context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<boolean>
   /** Evaluate a feature gate */
   evaluateFeatureGate: (
     featureKeys: string[],
     requirement?: FeatureRequirement,
-    negate?: boolean
+    negate?: boolean,
+    context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
   ) => Promise<boolean>
 }
 
@@ -89,6 +99,10 @@ export interface FeatureProps {
   requirement?: FeatureRequirement
   /** Negate the result */
   negate?: boolean
+  /** Entity instance or canonical entity context for entity-gated flags */
+  context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null
+  /** Context kind for registerContext mapper lookup when `context` is a domain object */
+  contextKind?: string
 }
 
 /**

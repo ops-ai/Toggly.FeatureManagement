@@ -3,6 +3,7 @@
  *
  * Use this component in React islands within Astro for client-side feature flagging.
  * Integrates with nanostores for reactive state management.
+ * Use `negate` for the off path (same as .NET `<feature negate>`).
  */
 
 import { useMemo } from 'react';
@@ -10,6 +11,7 @@ import { useStore } from '@nanostores/react';
 import { $flag, $gate, $isReady, $variants } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
 import type { ReactNode } from 'react';
+import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 
 export interface FeatureProps {
   /** Single feature flag key to check */
@@ -20,10 +22,14 @@ export interface FeatureProps {
   requirement?: 'all' | 'any';
   /** If true, negates the result (default: false) */
   negate?: boolean;
-  /** Content to render when flag is enabled */
+  /** Entity instance or canonical entity context for entity-gated flags */
+  context?: TogglyEntityContext | Record<string, unknown> | null;
+  /** Context kind for registerContext mapper lookup when `context` is a domain object */
+  contextKind?: string;
+  /** Content to render when the gate passes */
   children?: ReactNode;
-  /** Content to render when flag is disabled (optional) */
-  fallback?: ReactNode;
+  /** Content to render while flags are not ready (not an off-path branch) */
+  loading?: ReactNode;
   /** Render prop for conditional styling; always invoked with resolved gate boolean */
   render?: (enabled: boolean) => ReactNode;
 }
@@ -44,12 +50,14 @@ function useGateEnabled(
   flags?: string[],
   requirement: 'all' | 'any' = 'all',
   negate = false,
+  context?: TogglyEntityContext | Record<string, unknown> | null,
+  contextKind?: string,
 ): boolean {
   const flagKeys = useMemo(() => buildFlagKeys(flag, flags), [flag, flags]);
   const keysKey = flagKeys.join('\0');
   const gateAtom = useMemo(
-    () => $gate(flagKeys, requirement, negate),
-    [keysKey, requirement, negate],
+    () => $gate(flagKeys, requirement, negate, context, contextKind),
+    [keysKey, requirement, negate, context, contextKind],
   );
   return useStore(gateAtom);
 }
@@ -62,12 +70,14 @@ export function Feature({
   flags,
   requirement = 'all',
   negate = false,
+  context,
+  contextKind,
   children,
-  fallback = null,
+  loading = null,
   render,
 }: FeatureProps) {
   const isReady = useStore($isReady);
-  const isEnabled = useGateEnabled(flag, flags, requirement, negate);
+  const isEnabled = useGateEnabled(flag, flags, requirement, negate, context, contextKind);
 
   if (render) {
     if (!isReady) {
@@ -77,15 +87,10 @@ export function Feature({
   }
 
   if (!isReady) {
-    return <>{fallback}</>;
+    return <>{loading}</>;
   }
 
-  const flagKeys = buildFlagKeys(flag, flags);
-  if (flagKeys.length === 0) {
-    return <>{negate ? fallback : children}</>;
-  }
-
-  return <>{isEnabled ? children : fallback}</>;
+  return <>{isEnabled ? children : null}</>;
 }
 
 /**
@@ -94,8 +99,13 @@ export function Feature({
 export function useFeatureFlag(
   flagKey: string,
   defaultValue: boolean = false,
+  context?: TogglyEntityContext | Record<string, unknown> | null,
+  contextKind?: string,
 ): { enabled: boolean; isReady: boolean } {
-  const flagAtom = useMemo(() => $flag(flagKey, defaultValue), [flagKey, defaultValue]);
+  const flagAtom = useMemo(
+    () => $flag(flagKey, defaultValue, context, contextKind),
+    [flagKey, defaultValue, context, contextKind],
+  );
   const enabled = useStore(flagAtom);
   const isReady = useStore($isReady);
 
@@ -109,11 +119,13 @@ export function useFeatureGate(
   flagKeys: string[],
   requirement: 'all' | 'any' = 'all',
   negate: boolean = false,
+  context?: TogglyEntityContext | Record<string, unknown> | null,
+  contextKind?: string,
 ): { enabled: boolean; isReady: boolean } {
   const keysKey = flagKeys.join('\0');
   const gateAtom = useMemo(
-    () => $gate(flagKeys, requirement, negate),
-    [keysKey, requirement, negate],
+    () => $gate(flagKeys, requirement, negate, context, contextKind),
+    [keysKey, requirement, negate, context, contextKind],
   );
   const enabled = useStore(gateAtom);
   const isReady = useStore($isReady);

@@ -35,12 +35,20 @@ export interface UseTogglyResult {
   /**
    * Check if a feature is enabled
    */
-  isFeatureOn: (featureKey: string) => Promise<boolean>;
+  isFeatureOn: (
+    featureKey: string,
+    context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<boolean>;
 
   /**
    * Check if a feature is disabled
    */
-  isFeatureOff: (featureKey: string) => Promise<boolean>;
+  isFeatureOff: (
+    featureKey: string,
+    context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<boolean>;
 
   /**
    * Refresh feature flags from the server
@@ -131,15 +139,23 @@ export function useToggly(): UseTogglyResult {
   }, [toggly, isReady]);
 
   const isFeatureOn = useCallback(
-    async (featureKey: string): Promise<boolean> => {
-      return toggly.isFeatureOn(featureKey);
+    async (
+      featureKey: string,
+      context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ): Promise<boolean> => {
+      return toggly.isFeatureOn(featureKey, context, kind);
     },
     [toggly]
   );
 
   const isFeatureOff = useCallback(
-    async (featureKey: string): Promise<boolean> => {
-      return toggly.isFeatureOff(featureKey);
+    async (
+      featureKey: string,
+      context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ): Promise<boolean> => {
+      return toggly.isFeatureOff(featureKey, context, kind);
     },
     [toggly]
   );

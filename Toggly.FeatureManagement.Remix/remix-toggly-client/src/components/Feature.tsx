@@ -16,14 +16,12 @@ export interface FeatureProps {
   featureKeys?: string[];
   /** Requirement type when using multiple features */
   requirement?: FeatureRequirement;
-  /** Negate the feature check */
+  /** Negate the feature check — use for the off path (same as .NET `<feature negate>`) */
   negate?: boolean;
   /** Default value if feature is not found */
   defaultValue?: boolean;
-  /** Content to render when feature is enabled */
+  /** Content to render when the gate passes */
   children?: ReactNode;
-  /** Content to render when feature is disabled */
-  fallback?: ReactNode;
   /** Render prop for custom rendering */
   render?: (enabled: boolean) => ReactNode;
   /** Entity context for mixed evaluated-signed gates */
@@ -42,21 +40,15 @@ export interface FeatureProps {
  * </Feature>
  *
  * @example
- * // With fallback
- * <Feature featureKey="new-dashboard" fallback={<OldDashboard />}>
- *   <NewDashboard />
+ * // Off path with negate
+ * <Feature featureKey="maintenance-mode" negate>
+ *   <MainContent />
  * </Feature>
  *
  * @example
  * // Multiple features (all required)
  * <Feature featureKeys={["premium", "analytics"]} requirement="all">
  *   <PremiumAnalytics />
- * </Feature>
- *
- * @example
- * // Negated (show when disabled)
- * <Feature featureKey="maintenance-mode" negate>
- *   <MainContent />
  * </Feature>
  *
  * @example
@@ -72,7 +64,6 @@ export function Feature({
   negate = false,
   defaultValue = false,
   children,
-  fallback = null,
   render,
   context,
   contextKind,
@@ -104,12 +95,13 @@ export function Feature({
     return <>{render(enabled)}</>;
   }
 
-  // Conditional rendering
-  return <>{enabled ? children : fallback}</>;
+  // Conditional rendering — off path uses a separate Feature with negate
+  return enabled ? <>{children}</> : null;
 }
 
 /**
  * Props for FeatureEnabled component
+ * @deprecated Use `<Feature featureKey="…">` instead
  */
 export interface FeatureEnabledProps {
   /** Feature key to check */
@@ -123,22 +115,28 @@ export interface FeatureEnabledProps {
 /**
  * Component that only renders children when feature is enabled
  *
+ * @deprecated Use `<Feature featureKey="…">` instead
+ *
  * @example
- * <FeatureEnabled featureKey="premium">
+ * <Feature featureKey="premium">
  *   <PremiumContent />
- * </FeatureEnabled>
+ * </Feature>
  */
 export function FeatureEnabled({
   featureKey,
   defaultValue = false,
   children,
 }: FeatureEnabledProps): ReactElement | null {
-  const enabled = useFeature(featureKey, defaultValue);
-  return enabled ? <>{children}</> : null;
+  return (
+    <Feature featureKey={featureKey} defaultValue={defaultValue}>
+      {children}
+    </Feature>
+  );
 }
 
 /**
  * Props for FeatureDisabled component
+ * @deprecated Use `<Feature featureKey="…" negate>` instead
  */
 export interface FeatureDisabledProps {
   /** Feature key to check */
@@ -152,18 +150,23 @@ export interface FeatureDisabledProps {
 /**
  * Component that only renders children when feature is disabled
  *
+ * @deprecated Use `<Feature featureKey="…" negate>` instead
+ *
  * @example
- * <FeatureDisabled featureKey="new-ui">
+ * <Feature featureKey="new-ui" negate>
  *   <LegacyUI />
- * </FeatureDisabled>
+ * </Feature>
  */
 export function FeatureDisabled({
   featureKey,
   defaultValue = true,
   children,
 }: FeatureDisabledProps): ReactElement | null {
-  const enabled = useFeature(featureKey, !defaultValue);
-  return !enabled ? <>{children}</> : null;
+  return (
+    <Feature featureKey={featureKey} defaultValue={!defaultValue} negate>
+      {children}
+    </Feature>
+  );
 }
 
 /**
@@ -212,8 +215,10 @@ export interface FeatureGateProps {
   negate?: boolean;
   /** Content to render when gate passes */
   children: ReactNode;
-  /** Content to render when gate fails */
-  fallback?: ReactNode;
+  /** Entity context for mixed evaluated-signed gates */
+  context?: TogglyEntityContext | Record<string, unknown> | null;
+  /** Context kind for registerContext mapper lookup */
+  contextKind?: string;
 }
 
 /**
@@ -229,8 +234,9 @@ export function FeatureGate({
   requirement = 'all',
   negate = false,
   children,
-  fallback = null,
+  context,
+  contextKind,
 }: FeatureGateProps): ReactElement | null {
-  const enabled = useFeatureGate(featureKeys, requirement, negate);
-  return <>{enabled ? children : fallback}</>;
+  const enabled = useFeatureGate(featureKeys, requirement, negate, context, contextKind);
+  return enabled ? <>{children}</> : null;
 }

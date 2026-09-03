@@ -129,7 +129,8 @@ function MyComponent() {
     <div>
       <h1>Public Content</h1>
       
-      <Feature flag="beta_advanced_filters" fallback={<p>This feature is coming soon!</p>}>
+      <Feature flag="beta_advanced_filters">
+
         <h2>Advanced Filters (Beta)</h2>
         <p>This feature is in beta...</p>
       </Feature>
