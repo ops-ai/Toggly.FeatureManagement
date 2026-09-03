@@ -90,8 +90,8 @@ Add a short “Support floors” section to FeatureManagement `CONTRIBUTING.md` 
 - Confirm Ruby/Python analysis + release matrices include every documented floor.
 - Rust MSRV job name and summary match `rust-version`.
 
-## Open decisions — approved 2026-09-03
+## Open decisions — approved 2026-09-03; Ruby adjusted after CI
 
-1. **Ruby**: widen CI to 3.0–3.4 (Rails 8 excludes Ruby &lt; 3.2).
+1. **Ruby**: initially widen CI to 3.0–3.4; CI failed because lockfile Bundler 2.7.2 requires Ruby ≥ 3.2. **Raised floor to 3.2+** (gemspecs, README, CI matrices).
 2. **Python**: keep 3.8+; add 3.8 to release CI.
 3. **Spring Boot README**: document **3.2+** (matches pom pin).
