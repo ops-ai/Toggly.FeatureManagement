@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Raise required Ruby version to 3.2+ (matches Gemfile.lock Bundler and CI).
+- Use anonymous block forwarding in Rails testing and view helpers (RuboCop for Ruby 3.2+).
 
 ## [0.2.0] - 2026-08-21
 
