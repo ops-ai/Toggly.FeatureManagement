@@ -80,6 +80,8 @@ type TogglyServerGlobals = {
   __togglyServerStorage?: TogglyStorage
   __togglyServerClient?: TogglyClient | null
   __togglyServerConfig?: TogglyServerConfig | null
+  /** Coalesces concurrent initServerToggly calls onto one in-flight promise. */
+  __togglyServerInitPromise?: Promise<TogglyClient> | null
 }
 
 const togglyGlobal = globalThis as typeof globalThis & TogglyServerGlobals
@@ -105,6 +107,14 @@ function getServerConfigRef(): TogglyServerConfig | null {
 
 function setServerConfigRef(config: TogglyServerConfig | null): void {
   togglyGlobal.__togglyServerConfig = config
+}
+
+function getInitPromiseRef(): Promise<TogglyClient> | null {
+  return togglyGlobal.__togglyServerInitPromise ?? null
+}
+
+function setInitPromiseRef(promise: Promise<TogglyClient> | null): void {
+  togglyGlobal.__togglyServerInitPromise = promise
 }
 
 function definitionsCacheKey(config: TogglyServerConfig): string {
@@ -183,13 +193,7 @@ export function createMemoryStorage(): TogglyStorage {
   return new MemoryStorage()
 }
 
-/**
- * Initialize the server-side Toggly client
- *
- * Always uses local evaluation (`definitions-signed` + `@ops-ai/toggly-eval`).
- * Durable cache stores raw definition models (not evaluated booleans).
- */
-export async function initServerToggly(
+async function createAndBindServerClient(
   config: TogglyServerConfig
 ): Promise<TogglyClient> {
   const mergedConfig: TogglyServerConfig = {
@@ -197,7 +201,8 @@ export async function initServerToggly(
     ...config,
     // Prefer caller overrides; otherwise keep server live-update defaults
     refreshInterval: config.refreshInterval ?? DEFAULT_SERVER_CONFIG.refreshInterval,
-    enableLiveUpdates: config.enableLiveUpdates ?? DEFAULT_SERVER_CONFIG.enableLiveUpdates,
+    enableLiveUpdates:
+      config.enableLiveUpdates ?? DEFAULT_SERVER_CONFIG.enableLiveUpdates,
     webSocketImpl: config.webSocketImpl ?? DEFAULT_SERVER_CONFIG.webSocketImpl,
     // Server package is always on the local evaluation rail
     evaluationMode: 'local',
@@ -206,33 +211,68 @@ export async function initServerToggly(
   setServerConfigRef(mergedConfig)
   const serverStorage = getServerStorageRef()
 
-  const cachedDefs = mergedConfig.cache
-    ? await readCachedDefinitions(serverStorage, mergedConfig)
-    : null
-
-  // Replace any prior process-wide client (e.g. accidental double-init)
-  // so WebSockets/timers from the old instance do not leak.
+  // Install the new client before any await so concurrent Feature / helper
+  // reads never observe a null singleton mid-init (Turbopack double-invoke).
   const previousClient = getServerClientRef()
-  if (previousClient) {
-    previousClient.destroy()
-    setServerClientRef(null)
-  }
-
   const serverClient = createTogglyClient(mergedConfig as TogglyConfig)
   setServerClientRef(serverClient)
-  await serverClient.init()
 
-  // Last-known-good: if fetch failed, hydrate from durable definition cache
-  if (serverClient.state.error && cachedDefs && cachedDefs.length > 0) {
-    serverClient.hydrateDefinitions(cachedDefs)
+  try {
+    const cachedDefs = mergedConfig.cache
+      ? await readCachedDefinitions(serverStorage, mergedConfig)
+      : null
+
+    await serverClient.init()
+
+    // Last-known-good: if fetch failed, hydrate from durable definition cache
+    if (serverClient.state.error && cachedDefs && cachedDefs.length > 0) {
+      serverClient.hydrateDefinitions(cachedDefs)
+    }
+
+    // Persist definition models after a successful fetch (or hydrate)
+    if (mergedConfig.cache && serverClient.getDefinitions().size > 0) {
+      await writeCachedDefinitions(serverStorage, mergedConfig, serverClient)
+    }
+
+    return serverClient
+  } catch (error) {
+    if (getServerClientRef() === serverClient) {
+      setServerClientRef(previousClient)
+    }
+    throw error
+  } finally {
+    if (previousClient && previousClient !== getServerClientRef()) {
+      previousClient.destroy()
+    }
+  }
+}
+
+/**
+ * Initialize the server-side Toggly client
+ *
+ * Always uses local evaluation (`definitions-signed` + `@ops-ai/toggly-eval`).
+ * Durable cache stores raw definition models (not evaluated booleans).
+ *
+ * Concurrent calls share one in-flight promise (Turbopack / parallel RSC
+ * often double-invoke init before the singleton is set).
+ */
+export async function initServerToggly(
+  config: TogglyServerConfig
+): Promise<TogglyClient> {
+  const inFlight = getInitPromiseRef()
+  if (inFlight) {
+    return inFlight
   }
 
-  // Persist definition models after a successful fetch (or hydrate)
-  if (mergedConfig.cache && serverClient.getDefinitions().size > 0) {
-    await writeCachedDefinitions(serverStorage, mergedConfig, serverClient)
+  const initPromise = createAndBindServerClient(config)
+  setInitPromiseRef(initPromise)
+  try {
+    return await initPromise
+  } finally {
+    if (getInitPromiseRef() === initPromise) {
+      setInitPromiseRef(null)
+    }
   }
-
-  return serverClient
 }
 
 /**
@@ -241,6 +281,28 @@ export async function initServerToggly(
  */
 export function getServerToggly(): TogglyClient | null {
   return getServerClientRef()
+}
+
+/**
+ * Await an in-flight init if the singleton is not ready yet.
+ * Returns null when no client exists and nothing is initializing.
+ */
+export async function waitForServerToggly(): Promise<TogglyClient | null> {
+  const existing = getServerClientRef()
+  if (existing) {
+    return existing
+  }
+
+  const inFlight = getInitPromiseRef()
+  if (!inFlight) {
+    return null
+  }
+
+  try {
+    return await inFlight
+  } catch {
+    return getServerClientRef()
+  }
 }
 
 /**
@@ -321,6 +383,7 @@ export function getServerFeatures(): FeatureDefinitions {
  * Reset server client (useful for testing)
  */
 export function resetServerToggly(): void {
+  setInitPromiseRef(null)
   const serverClient = getServerClientRef()
   if (serverClient) {
     serverClient.destroy()

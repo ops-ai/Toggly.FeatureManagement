@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.1
+
+2026-09-03
+
+### Fixed
+- Compute sticky SHA-256 buckets with a pure-JS digest so Edge runtimes and
+  Turbopack never resolve a static `node:crypto` import (breaks Next.js
+  middleware). Golden percentile vectors unchanged.
+
 ## 2.0.0
 
 2026-09-02

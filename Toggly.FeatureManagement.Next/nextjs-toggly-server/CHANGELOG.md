@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.1
+
+2026-09-03
+
+### Fixed
+- Coalesce concurrent `initServerToggly` calls onto one in-flight promise and
+  swap the process-wide client before destroying the previous instance so
+  Turbopack / parallel RSC no longer observe a null singleton mid-init.
+- `<Feature>` / `<FeatureVariant>` await `waitForServerToggly()` so they can
+  join an in-flight init instead of failing closed.
+
+### Added
+- `waitForServerToggly()` — resolves the singleton or the current init promise.
+
 ## 1.3.0
 
 2026-09-02

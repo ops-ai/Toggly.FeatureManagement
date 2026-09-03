@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
 import type { EntityContextInput } from './feature-check'
-import { getServerToggly } from './server-client'
+import { waitForServerToggly } from './server-client'
 
 /**
  * Props for server Feature component
@@ -36,7 +36,7 @@ export async function Feature({
   contextKind,
   children,
 }: FeatureProps): Promise<ReactNode> {
-  const client = getServerToggly()
+  const client = await waitForServerToggly()
 
   if (!client) {
     console.warn('[Toggly] Server client not initialized in Feature component')
@@ -74,7 +74,7 @@ export async function FeatureVariant({
   enabled: ReactNode
   disabled: ReactNode
 }): Promise<ReactNode> {
-  const client = getServerToggly()
+  const client = await waitForServerToggly()
 
   if (!client) {
     console.warn('[Toggly] Server client not initialized in FeatureVariant')
