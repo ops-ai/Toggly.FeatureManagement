@@ -1,42 +1,56 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import React, { type ReactNode } from 'react'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
 import { useFeatureFlag, useFeatureGate } from './hooks'
 import type { FeatureProps } from './types'
 
-/**
- * Client Component for feature flag rendering
- *
- * @example
- * ```tsx
- * 'use client'
- * import { Feature } from '@ops-ai/nextjs-toggly-client'
- *
- * export function Dashboard() {
- *   return (
- *     <Feature
- *       featureKey="new-dashboard"
- *       fallback={<OldDashboard />}
- *       loading={<LoadingSpinner />}
- *     >
- *       <NewDashboard />
- *     </Feature>
- *   )
- * }
- * ```
- */
-export function Feature({
+function FeatureFallback({ children }: { children?: ReactNode }): ReactNode {
+  return children ?? null
+}
+
+function isFallbackElement(
+  child: ReactNode
+): child is React.ReactElement<{ children?: ReactNode }> {
+  return React.isValidElement(child) && child.type === FeatureFallback
+}
+
+function splitFallback(children: ReactNode): {
+  content: ReactNode
+  nestedFallback: ReactNode | undefined
+} {
+  const content: ReactNode[] = []
+  let nestedFallback: ReactNode | undefined
+
+  React.Children.forEach(children, (child) => {
+    if (isFallbackElement(child)) {
+      nestedFallback = child.props.children
+      return
+    }
+    content.push(child)
+  })
+
+  if (content.length === 0) {
+    return { content: null, nestedFallback }
+  }
+  if (content.length === 1) {
+    return { content: content[0], nestedFallback }
+  }
+  return { content, nestedFallback }
+}
+
+function FeatureRoot({
   featureKey,
   requirement = 'all',
   negate = false,
   children,
-  fallback = null,
+  fallback,
   loading = null,
 }: FeatureProps): ReactNode {
+  const { content, nestedFallback } = splitFallback(children)
+  const resolvedFallback = fallback ?? nestedFallback ?? null
   const featureKeys = Array.isArray(featureKey) ? featureKey : [featureKey]
 
-  // Use gate hook for multiple keys or single key
   const { isAllowed, isLoading } = useFeatureGate(
     featureKeys,
     requirement,
@@ -47,31 +61,22 @@ export function Feature({
     return loading
   }
 
-  return isAllowed ? children : fallback
+  return isAllowed ? content : resolvedFallback
 }
 
 /**
- * Client Component to render when feature is OFF
- *
- * @example
- * ```tsx
- * 'use client'
- * import { FeatureOff } from '@ops-ai/nextjs-toggly-client'
- *
- * export function MainContent() {
- *   return (
- *     <FeatureOff featureKey="maintenance-mode">
- *       <AppContent />
- *     </FeatureOff>
- *   )
- * }
- * ```
+ * Client Component for feature flag rendering.
+ * Disabled content: `fallback` prop or `<Feature.Fallback>`.
  */
-export function FeatureOff({
+export const Feature = Object.assign(FeatureRoot, {
+  Fallback: FeatureFallback,
+})
+
+function FeatureOffRoot({
   featureKey,
   requirement = 'all',
   children,
-  fallback = null,
+  fallback,
   loading = null,
 }: Omit<FeatureProps, 'negate'>): ReactNode {
   return (
@@ -88,24 +93,15 @@ export function FeatureOff({
 }
 
 /**
+ * Client Component to render when feature is OFF.
+ * Alternate content: `fallback` prop or `<FeatureOff.Fallback>`.
+ */
+export const FeatureOff = Object.assign(FeatureOffRoot, {
+  Fallback: FeatureFallback,
+})
+
+/**
  * Client Component for A/B testing / variant rendering
- *
- * @example
- * ```tsx
- * 'use client'
- * import { FeatureVariant } from '@ops-ai/nextjs-toggly-client'
- *
- * export function Checkout() {
- *   return (
- *     <FeatureVariant
- *       featureKey="checkout-v2"
- *       enabled={<NewCheckout />}
- *       disabled={<OldCheckout />}
- *       loading={<CheckoutSkeleton />}
- *     />
- *   )
- * }
- * ```
  */
 export function FeatureVariant({
   featureKey,
@@ -127,33 +123,12 @@ export function FeatureVariant({
   return isEnabled ? enabled : disabled
 }
 
-/**
- * Client Component for feature gate with multiple features
- *
- * @example
- * ```tsx
- * 'use client'
- * import { FeatureGate } from '@ops-ai/nextjs-toggly-client'
- *
- * export function AdminPanel() {
- *   return (
- *     <FeatureGate
- *       featureKeys={['admin-access', 'beta-user']}
- *       requirement="all"
- *       fallback={<AccessDenied />}
- *     >
- *       <AdminContent />
- *     </FeatureGate>
- *   )
- * }
- * ```
- */
-export function FeatureGate({
+function FeatureGateRoot({
   featureKeys,
   requirement = 'all',
   negate = false,
   children,
-  fallback = null,
+  fallback,
   loading = null,
 }: {
   featureKeys: string[]
@@ -163,6 +138,8 @@ export function FeatureGate({
   fallback?: ReactNode
   loading?: ReactNode
 }): ReactNode {
+  const { content, nestedFallback } = splitFallback(children)
+  const resolvedFallback = fallback ?? nestedFallback ?? null
   const { isAllowed, isLoading } = useFeatureGate(
     featureKeys,
     requirement,
@@ -173,30 +150,19 @@ export function FeatureGate({
     return loading
   }
 
-  return isAllowed ? children : fallback
+  return isAllowed ? content : resolvedFallback
 }
 
 /**
+ * Client Component for feature gate with multiple features.
+ * Failed-gate content: `fallback` prop or `<FeatureGate.Fallback>`.
+ */
+export const FeatureGate = Object.assign(FeatureGateRoot, {
+  Fallback: FeatureFallback,
+})
+
+/**
  * Client Component that renders different content based on feature state
- *
- * @example
- * ```tsx
- * 'use client'
- * import { FeatureSwitch } from '@ops-ai/nextjs-toggly-client'
- *
- * export function Navigation() {
- *   return (
- *     <FeatureSwitch
- *       featureKey="nav-style"
- *       cases={{
- *         on: <ModernNav />,
- *         off: <ClassicNav />,
- *         loading: <NavSkeleton />,
- *       }}
- *     />
- *   )
- * }
- * ```
  */
 export function FeatureSwitch({
   featureKey,

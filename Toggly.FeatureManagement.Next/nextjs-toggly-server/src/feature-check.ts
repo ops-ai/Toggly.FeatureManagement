@@ -38,7 +38,7 @@ function stableSerialize(value: unknown): unknown {
     return value.map(stableSerialize)
   }
   const obj = value as Record<string, unknown>
-  const keys = Object.keys(obj).sort()
+  const keys = Object.keys(obj).sort((a, b) => a.localeCompare(b))
   const out: Record<string, unknown> = {}
   for (const key of keys) {
     out[key] = stableSerialize(obj[key])

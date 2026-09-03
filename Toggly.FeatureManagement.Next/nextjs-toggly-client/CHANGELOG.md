@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 1.2.0
+
+2026-09-02
+
+### Added
+- `<Feature.Fallback>`, `<FeatureOff.Fallback>`, and `<FeatureGate.Fallback>`
+  nested children, in addition to the `fallback` prop.
+
 ## 1.1.2
 
 2026-09-02

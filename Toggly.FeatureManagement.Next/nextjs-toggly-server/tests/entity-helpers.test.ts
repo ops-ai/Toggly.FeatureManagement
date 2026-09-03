@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import React from 'react'
 import type { FeatureDefinitionModel } from '@ops-ai/nextjs-toggly-core'
 import {
   initServerToggly,
@@ -175,6 +176,47 @@ describe('entity context on server helpers', () => {
         disabled: 'old',
       })
     ).resolves.toBe('old')
+  })
+
+  it('Feature.Fallback nested child is equivalent to the fallback prop', async () => {
+    await initEntityClient()
+
+    await expect(
+      Feature({
+        featureKey: 'EntityGated',
+        context: orderOn,
+        children: ['on', React.createElement(Feature.Fallback, null, 'off')],
+      })
+    ).resolves.toBe('on')
+
+    await expect(
+      Feature({
+        featureKey: 'EntityGated',
+        children: ['on', React.createElement(Feature.Fallback, null, 'off')],
+      })
+    ).resolves.toBe('off')
+
+    await expect(
+      FeatureOff({
+        featureKey: 'EntityGated',
+        context: orderOn,
+        children: [
+          'hidden',
+          React.createElement(FeatureOff.Fallback, null, 'shown'),
+        ],
+      })
+    ).resolves.toBe('shown')
+
+    await expect(
+      Feature({
+        featureKey: 'EntityGated',
+        fallback: 'prop',
+        children: [
+          'on',
+          React.createElement(Feature.Fallback, null, 'nested'),
+        ],
+      })
+    ).resolves.toBe('prop')
   })
 
   it('checkFeature fails closed when the server client is missing', async () => {

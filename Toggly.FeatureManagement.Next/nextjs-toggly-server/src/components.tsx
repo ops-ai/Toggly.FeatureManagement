@@ -25,24 +25,45 @@ export interface FeatureProps {
   fallback?: React.ReactNode
 }
 
-/**
- * Server Component for feature flag rendering
- *
- * @example
- * ```tsx
- * // In a Server Component
- * import { Feature } from '@ops-ai/nextjs-toggly-server'
- *
- * export default async function Page() {
- *   return (
- *     <Feature featureKey="new-dashboard">
- *       <NewDashboard />
- *     </Feature>
- *   )
- * }
- * ```
- */
-export async function Feature({
+function FeatureFallback({
+  children,
+}: {
+  children?: React.ReactNode
+}): React.ReactNode {
+  return children ?? null
+}
+
+function isFallbackElement(
+  child: React.ReactNode
+): child is React.ReactElement<{ children?: React.ReactNode }> {
+  return React.isValidElement(child) && child.type === FeatureFallback
+}
+
+function splitFallback(children: React.ReactNode): {
+  content: React.ReactNode
+  nestedFallback: React.ReactNode | undefined
+} {
+  const content: React.ReactNode[] = []
+  let nestedFallback: React.ReactNode | undefined
+
+  React.Children.forEach(children, (child) => {
+    if (isFallbackElement(child)) {
+      nestedFallback = child.props.children
+      return
+    }
+    content.push(child)
+  })
+
+  if (content.length === 0) {
+    return { content: null, nestedFallback }
+  }
+  if (content.length === 1) {
+    return { content: content[0], nestedFallback }
+  }
+  return { content, nestedFallback }
+}
+
+async function FeatureRoot({
   featureKey,
   requirement = 'all',
   negate = false,
@@ -50,13 +71,15 @@ export async function Feature({
   context,
   contextKind,
   children,
-  fallback = null,
+  fallback,
 }: FeatureProps): Promise<React.ReactNode> {
+  const { content, nestedFallback } = splitFallback(children)
+  const resolvedFallback = fallback ?? nestedFallback ?? null
   const client = getServerToggly()
 
   if (!client) {
     console.warn('[Toggly] Server client not initialized in Feature component')
-    return negate ? children : fallback
+    return negate ? content : resolvedFallback
   }
 
   // Per-call identity / entity override (local eval); do not mutate shared client
@@ -70,33 +93,25 @@ export async function Feature({
     identity
   )
 
-  return isEnabled ? children : fallback
+  return isEnabled ? content : resolvedFallback
 }
 
 /**
- * Server Component to render when feature is OFF
- *
- * @example
- * ```tsx
- * import { FeatureOff } from '@ops-ai/nextjs-toggly-server'
- *
- * export default async function Page() {
- *   return (
- *     <FeatureOff featureKey="maintenance-mode">
- *       <MainContent />
- *     </FeatureOff>
- *   )
- * }
- * ```
+ * Server Component for feature flag rendering.
+ * Disabled content: `fallback` prop or `<Feature.Fallback>`.
  */
-export async function FeatureOff({
+export const Feature = Object.assign(FeatureRoot, {
+  Fallback: FeatureFallback,
+})
+
+async function FeatureOffRoot({
   featureKey,
   requirement = 'all',
   identity,
   context,
   contextKind,
   children,
-  fallback = null,
+  fallback,
 }: Omit<FeatureProps, 'negate'>): Promise<React.ReactNode> {
   return Feature({
     featureKey,
@@ -111,22 +126,15 @@ export async function FeatureOff({
 }
 
 /**
+ * Server Component to render when feature is OFF.
+ * Alternate content: `fallback` prop or `<FeatureOff.Fallback>`.
+ */
+export const FeatureOff = Object.assign(FeatureOffRoot, {
+  Fallback: FeatureFallback,
+})
+
+/**
  * Server Component for A/B testing / variant rendering
- *
- * @example
- * ```tsx
- * import { FeatureVariant } from '@ops-ai/nextjs-toggly-server'
- *
- * export default async function Page() {
- *   return (
- *     <FeatureVariant
- *       featureKey="checkout-flow"
- *       enabled={<NewCheckout />}
- *       disabled={<OldCheckout />}
- *     />
- *   )
- * }
- * ```
  */
 export async function FeatureVariant({
   featureKey,
