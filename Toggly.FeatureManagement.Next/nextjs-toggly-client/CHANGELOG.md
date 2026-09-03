@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 1.2.0
+
+2026-09-02
+
+### Changed
+- `<Feature negate>` renders children when the flag is off, matching .NET
+  `<feature negate>`. `<FeatureOff>`, the `fallback` prop, and
+  `<Feature.Fallback>` are removed.
+
 ## 1.1.2
 
 2026-09-02

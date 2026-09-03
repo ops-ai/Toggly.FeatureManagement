@@ -85,12 +85,10 @@ export interface FeatureProps {
   featureKey: string | string[]
   /** Requirement for multiple features */
   requirement?: FeatureRequirement
-  /** Negate the result */
+  /** When true, render children when the feature is off */
   negate?: boolean
-  /** Content to render when feature is enabled */
+  /** Content to render when the gate passes */
   children: ReactNode
-  /** Content to render when feature is disabled */
-  fallback?: ReactNode
   /** Content to render while loading */
   loading?: ReactNode
 }

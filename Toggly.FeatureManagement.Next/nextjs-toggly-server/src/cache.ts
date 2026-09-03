@@ -5,22 +5,17 @@ import {
   snapshotEvaluatedBooleans,
   toBooleanDefinitions,
 } from '@ops-ai/nextjs-toggly-core'
+import {
+  createFeatureCacheKey,
+  type FeatureCheckOptions,
+} from './feature-check'
+
+export { createFeatureCacheKey } from './feature-check'
 
 /**
  * Cache tags for feature flags
  */
 export const FEATURE_CACHE_TAG = 'toggly-features'
-
-/**
- * Create a cache key for a feature
- */
-export function createFeatureCacheKey(
-  featureKey: string,
-  identity?: string
-): string {
-  const base = `toggly:feature:${featureKey}`
-  return identity ? `${base}:${identity}` : base
-}
 
 /**
  * Cached feature check with Next.js cache
@@ -42,13 +37,13 @@ export function createFeatureCacheKey(
  */
 export function cachedIsFeatureOn(
   featureKey: string,
-  options: {
-    identity?: string
+  options: FeatureCheckOptions & {
     revalidate?: number | false
     tags?: string[]
   } = {}
 ): Promise<boolean> {
-  const { identity, revalidate = 60, tags = [] } = options
+  const { identity, context, contextKind, revalidate = 60, tags = [] } = options
+  const check: FeatureCheckOptions = { identity, context, contextKind }
 
   const cached = unstable_cache(
     async () => {
@@ -57,9 +52,9 @@ export function cachedIsFeatureOn(
         return false
       }
 
-      return client.isFeatureOn(featureKey, undefined, undefined, identity)
+      return client.isFeatureOn(featureKey, context, contextKind, identity)
     },
-    [createFeatureCacheKey(featureKey, identity)],
+    [createFeatureCacheKey(featureKey, check)],
     {
       revalidate,
       tags: [FEATURE_CACHE_TAG, `feature:${featureKey}`, ...tags],
@@ -74,10 +69,9 @@ export function cachedIsFeatureOn(
  */
 export function cachedEvaluateFeatureGate(
   featureKeys: string[],
-  options: {
+  options: FeatureCheckOptions & {
     requirement?: FeatureRequirement
     negate?: boolean
-    identity?: string
     revalidate?: number | false
     tags?: string[]
   } = {}
@@ -86,11 +80,17 @@ export function cachedEvaluateFeatureGate(
     requirement = 'all',
     negate = false,
     identity,
+    context,
+    contextKind,
     revalidate = 60,
     tags = [],
   } = options
 
-  const cacheKey = `toggly:gate:${featureKeys.join(',')}:${requirement}:${negate}:${identity || 'anonymous'}`
+  const cacheKey = createFeatureCacheKey(`gate:${featureKeys.join(',')}:${requirement}:${negate}`, {
+    identity,
+    context,
+    contextKind,
+  })
 
   const cached = unstable_cache(
     async () => {
@@ -103,8 +103,8 @@ export function cachedEvaluateFeatureGate(
         featureKeys,
         requirement,
         negate,
-        undefined,
-        undefined,
+        context,
+        contextKind,
         identity
       )
     },

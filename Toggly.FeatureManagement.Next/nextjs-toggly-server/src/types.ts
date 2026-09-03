@@ -1,4 +1,7 @@
 import type { TogglyConfig } from '@ops-ai/nextjs-toggly-core'
+import type { FeatureCheckOptions } from './feature-check'
+
+export type { EntityContextInput, FeatureCheckOptions } from './feature-check'
 
 /**
  * Server-side Toggly configuration
@@ -35,14 +38,10 @@ export interface RequestContext {
 }
 
 /**
- * Options for server-side feature checks
+ * Options for server-side feature checks (entity context + user identity).
+ * `context` is the entity / page object for Context Property filters, not HTTP request state.
  */
-export interface ServerFeatureOptions {
-  /** User identity for targeting */
-  identity?: string
-  /** Request context */
-  context?: RequestContext
-}
+export type ServerFeatureOptions = FeatureCheckOptions
 
 /**
  * Server action return type for feature gates
