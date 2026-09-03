@@ -8,11 +8,17 @@
 - Coalesce concurrent `initServerToggly` calls onto one in-flight promise and
   swap the process-wide client before destroying the previous instance so
   Turbopack / parallel RSC no longer observe a null singleton mid-init.
-- `<Feature>` / `<FeatureVariant>` await `waitForServerToggly()` so they can
-  join an in-flight init instead of failing closed.
+  Additional callers while init is in flight join that promise (their config
+  is ignored until the first init completes).
+- `waitForServerToggly()` always awaits the in-flight init promise so
+  `<Feature>`, actions, and cache helpers do not evaluate empty definitions
+  after install-before-await.
+- Destroy a failed replacement client after rolling back to the previous
+  singleton so partial init cannot leak timers/sockets.
 
 ### Added
-- `waitForServerToggly()` — resolves the singleton or the current init promise.
+- `waitForServerToggly()` — resolves after the current init promise (or the
+  ready singleton). Prefer this over `getServerToggly()` for evaluation.
 
 ## 1.3.0
 

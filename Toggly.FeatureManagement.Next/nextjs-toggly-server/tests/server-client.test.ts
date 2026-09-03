@@ -226,6 +226,45 @@ describe('Server Client', () => {
     it('returns null when nothing is initializing', async () => {
       await expect(waitForServerToggly()).resolves.toBeNull()
     })
+
+    it('awaits in-flight init before evaluating definitions', async () => {
+      let releaseFetch!: () => void
+      const fetchGate = new Promise<void>((resolve) => {
+        releaseFetch = resolve
+      })
+      mockFetch.mockImplementation(async () => {
+        await fetchGate
+        return defsResponse([alwaysOn])
+      })
+
+      const initPromise = initServerToggly({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+      })
+
+      // Let createAndBind install the singleton and reach the pending fetch.
+      await vi.waitFor(() => {
+        expect(getServerToggly()).not.toBeNull()
+      })
+      expect(getServerToggly()!.getDefinitions().size).toBe(0)
+
+      let waitSettled = false
+      const waitPromise = waitForServerToggly().then((client) => {
+        waitSettled = true
+        return client
+      })
+
+      await Promise.resolve()
+      expect(waitSettled).toBe(false)
+
+      releaseFetch()
+      const [waited] = await Promise.all([waitPromise, initPromise])
+
+      expect(waitSettled).toBe(true)
+      expect(waited).not.toBeNull()
+      expect(waited!.getDefinitions().size).toBeGreaterThan(0)
+      await expect(waited!.isFeatureOn('feature-a')).resolves.toBe(true)
+    })
   })
 
   describe('getServerToggly', () => {

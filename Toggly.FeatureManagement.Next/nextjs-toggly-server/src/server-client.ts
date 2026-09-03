@@ -239,6 +239,9 @@ async function createAndBindServerClient(
     if (getServerClientRef() === serverClient) {
       setServerClientRef(previousClient)
     }
+    // Replacement never became the live singleton — tear it down so timers /
+    // sockets from a partial init cannot leak.
+    serverClient.destroy()
     throw error
   } finally {
     if (previousClient && previousClient !== getServerClientRef()) {
@@ -254,7 +257,9 @@ async function createAndBindServerClient(
  * Durable cache stores raw definition models (not evaluated booleans).
  *
  * Concurrent calls share one in-flight promise (Turbopack / parallel RSC
- * often double-invoke init before the singleton is set).
+ * often double-invoke init before the singleton is set). While an init is
+ * in flight, additional callers join that promise — their config is ignored
+ * until the first init completes; call again afterward to replace.
  */
 export async function initServerToggly(
   config: TogglyServerConfig
@@ -277,32 +282,29 @@ export async function initServerToggly(
 
 /**
  * Get the server-side Toggly client
- * Returns null if not initialized
+ * Returns null if not initialized. May return a client whose `init()` is
+ * still in flight — prefer {@link waitForServerToggly} for evaluation.
  */
 export function getServerToggly(): TogglyClient | null {
   return getServerClientRef()
 }
 
 /**
- * Await an in-flight init if the singleton is not ready yet.
+ * Await an in-flight init if one is running, otherwise return the singleton.
+ * Always prefers the init promise so callers do not evaluate empty
+ * definitions mid-init (install-before-await).
  * Returns null when no client exists and nothing is initializing.
  */
 export async function waitForServerToggly(): Promise<TogglyClient | null> {
-  const existing = getServerClientRef()
-  if (existing) {
-    return existing
-  }
-
   const inFlight = getInitPromiseRef()
-  if (!inFlight) {
-    return null
+  if (inFlight) {
+    try {
+      return await inFlight
+    } catch {
+      return getServerClientRef()
+    }
   }
-
-  try {
-    return await inFlight
-  } catch {
-    return getServerClientRef()
-  }
+  return getServerClientRef()
 }
 
 /**
@@ -322,7 +324,7 @@ export function useServerToggly(): TogglyClient {
  * Refresh server-side definitions
  */
 export async function refreshServerToggly(): Promise<FeatureDefinitions | null> {
-  const serverClient = getServerClientRef()
+  const serverClient = await waitForServerToggly()
   const serverConfig = getServerConfigRef()
   if (!serverClient || !serverConfig) {
     return null
@@ -350,7 +352,12 @@ export async function isServerFeatureOn(
   featureKey: string,
   identityOrOptions?: string | FeatureCheckOptions
 ): Promise<boolean> {
-  const client = useServerToggly()
+  const client = await waitForServerToggly()
+  if (!client) {
+    throw new Error(
+      '[Toggly] Server client not initialized. Call initServerToggly() first.'
+    )
+  }
   const { identity, context, contextKind } =
     resolveFeatureCheckArgs(identityOrOptions)
   return client.isFeatureOn(featureKey, context, contextKind, identity)
