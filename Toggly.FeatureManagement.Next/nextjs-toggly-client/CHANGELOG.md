@@ -5,9 +5,10 @@
 
 2026-09-02
 
-### Added
-- `<Feature.Fallback>`, `<FeatureOff.Fallback>`, and `<FeatureGate.Fallback>`
-  nested children, in addition to the `fallback` prop.
+### Changed
+- `<Feature negate>` renders children when the flag is off, matching .NET
+  `<feature negate>`. `<FeatureOff>`, the `fallback` prop, and
+  `<Feature.Fallback>` are removed.
 
 ## 1.1.2
 

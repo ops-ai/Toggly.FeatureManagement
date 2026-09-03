@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { Feature, FeatureOff, FeatureGate } from '../src/components'
+import { Feature, FeatureGate } from '../src/components'
 import { TogglyProvider } from '../src/context'
 
 vi.stubGlobal('localStorage', {
@@ -26,7 +26,7 @@ function renderWithFeatures(
   )
 }
 
-describe('Feature.Fallback', () => {
+describe('Feature negate', () => {
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
@@ -35,84 +35,53 @@ describe('Feature.Fallback', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders the fallback prop when the feature is off', () => {
-    renderWithFeatures(
-      <Feature featureKey="new-ui" fallback={<span>legacy</span>}>
-        <span>next</span>
-      </Feature>,
-      { 'new-ui': false }
-    )
-    expect(screen.getByText('legacy')).toBeTruthy()
-    expect(screen.queryByText('next')).toBeNull()
-  })
-
-  it('renders nested Feature.Fallback when the feature is off', () => {
+  it('renders children when the feature is on', () => {
     renderWithFeatures(
       <Feature featureKey="new-ui">
         <span>next</span>
-        <Feature.Fallback>
-          <span>legacy</span>
-        </Feature.Fallback>
-      </Feature>,
-      { 'new-ui': false }
-    )
-    expect(screen.getByText('legacy')).toBeTruthy()
-    expect(screen.queryByText('next')).toBeNull()
-  })
-
-  it('prefers the fallback prop over nested Fallback', () => {
-    renderWithFeatures(
-      <Feature featureKey="new-ui" fallback={<span>prop</span>}>
-        <span>next</span>
-        <Feature.Fallback>
-          <span>nested</span>
-        </Feature.Fallback>
-      </Feature>,
-      { 'new-ui': false }
-    )
-    expect(screen.getByText('prop')).toBeTruthy()
-    expect(screen.queryByText('nested')).toBeNull()
-  })
-
-  it('does not render nested Fallback when the feature is on', () => {
-    renderWithFeatures(
-      <Feature featureKey="new-ui">
-        <span>next</span>
-        <Feature.Fallback>
-          <span>legacy</span>
-        </Feature.Fallback>
       </Feature>,
       { 'new-ui': true }
     )
     expect(screen.getByText('next')).toBeTruthy()
-    expect(screen.queryByText('legacy')).toBeNull()
   })
 
-  it('supports FeatureOff.Fallback', () => {
+  it('hides children when the feature is off', () => {
     renderWithFeatures(
-      <FeatureOff featureKey="maintenance-complete">
+      <Feature featureKey="new-ui">
+        <span>next</span>
+      </Feature>,
+      { 'new-ui': false }
+    )
+    expect(screen.queryByText('next')).toBeNull()
+  })
+
+  it('renders children when negate is set and the feature is off', () => {
+    renderWithFeatures(
+      <Feature featureKey="new-ui" negate>
+        <span>legacy</span>
+      </Feature>,
+      { 'new-ui': false }
+    )
+    expect(screen.getByText('legacy')).toBeTruthy()
+  })
+
+  it('hides children when negate is set and the feature is on', () => {
+    renderWithFeatures(
+      <Feature featureKey="maintenance-complete" negate>
         <span>banner</span>
-        <FeatureOff.Fallback>
-          <span>site</span>
-        </FeatureOff.Fallback>
-      </FeatureOff>,
+      </Feature>,
       { 'maintenance-complete': true }
     )
-    expect(screen.getByText('site')).toBeTruthy()
     expect(screen.queryByText('banner')).toBeNull()
   })
 
-  it('supports FeatureGate.Fallback', () => {
+  it('FeatureGate negate renders when the gate fails', () => {
     renderWithFeatures(
-      <FeatureGate featureKeys={['premium']}>
-        <span>paid</span>
-        <FeatureGate.Fallback>
-          <span>upgrade</span>
-        </FeatureGate.Fallback>
+      <FeatureGate featureKeys={['premium']} negate>
+        <span>upgrade</span>
       </FeatureGate>,
       { premium: false }
     )
     expect(screen.getByText('upgrade')).toBeTruthy()
-    expect(screen.queryByText('paid')).toBeNull()
   })
 })

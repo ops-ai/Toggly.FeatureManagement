@@ -10,8 +10,11 @@
   evaluation rail. A string second argument remains user identity.
 - Cache keys hash full entity attributes so two contexts that share kind/key
   cannot collide.
-- `<Feature.Fallback>` / `<FeatureOff.Fallback>` nested children, in addition
-  to the `fallback` prop.
+
+### Changed
+- `<Feature negate>` renders children when the flag is off, matching .NET
+  `<feature negate>`. `<FeatureOff>`, the `fallback` prop, and
+  `<Feature.Fallback>` are removed.
 
 ### Changed
 - `ServerFeatureOptions.context` is entity context (not an unused HTTP bag).

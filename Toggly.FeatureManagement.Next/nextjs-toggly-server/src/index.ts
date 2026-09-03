@@ -14,7 +14,7 @@ export {
 } from './server-client'
 
 // Server Components
-export { Feature, FeatureOff, FeatureVariant } from './components'
+export { Feature, FeatureVariant } from './components'
 export type { FeatureProps } from './components'
 
 // Server Actions

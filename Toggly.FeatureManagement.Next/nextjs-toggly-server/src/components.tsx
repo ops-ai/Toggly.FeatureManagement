@@ -1,4 +1,4 @@
-import React from 'react'
+import type { ReactNode } from 'react'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
 import type { EntityContextInput } from './feature-check'
 import { getServerToggly } from './server-client'
@@ -11,7 +11,7 @@ export interface FeatureProps {
   featureKey: string | string[]
   /** Requirement for multiple features: 'all' or 'any' */
   requirement?: FeatureRequirement
-  /** Negate the result */
+  /** When true, render children when the feature is off */
   negate?: boolean
   /** User identity for targeting (per-call; does not mutate the shared client) */
   identity?: string
@@ -19,51 +19,15 @@ export interface FeatureProps {
   context?: EntityContextInput
   /** Catalog kind when `context` is a domain object */
   contextKind?: string
-  /** Content to render when feature is enabled */
-  children: React.ReactNode
-  /** Content to render when feature is disabled */
-  fallback?: React.ReactNode
+  /** Content to render when the gate passes */
+  children: ReactNode
 }
 
-function FeatureFallback({
-  children,
-}: {
-  children?: React.ReactNode
-}): React.ReactNode {
-  return children ?? null
-}
-
-function isFallbackElement(
-  child: React.ReactNode
-): child is React.ReactElement<{ children?: React.ReactNode }> {
-  return React.isValidElement(child) && child.type === FeatureFallback
-}
-
-function splitFallback(children: React.ReactNode): {
-  content: React.ReactNode
-  nestedFallback: React.ReactNode | undefined
-} {
-  const content: React.ReactNode[] = []
-  let nestedFallback: React.ReactNode | undefined
-
-  React.Children.forEach(children, (child) => {
-    if (isFallbackElement(child)) {
-      nestedFallback = child.props.children
-      return
-    }
-    content.push(child)
-  })
-
-  if (content.length === 0) {
-    return { content: null, nestedFallback }
-  }
-  if (content.length === 1) {
-    return { content: content[0], nestedFallback }
-  }
-  return { content, nestedFallback }
-}
-
-async function FeatureRoot({
+/**
+ * Server Component for feature flag rendering.
+ * Use `negate` to render when the feature is off (same as .NET `<feature negate>`).
+ */
+export async function Feature({
   featureKey,
   requirement = 'all',
   negate = false,
@@ -71,18 +35,14 @@ async function FeatureRoot({
   context,
   contextKind,
   children,
-  fallback,
-}: FeatureProps): Promise<React.ReactNode> {
-  const { content, nestedFallback } = splitFallback(children)
-  const resolvedFallback = fallback ?? nestedFallback ?? null
+}: FeatureProps): Promise<ReactNode> {
   const client = getServerToggly()
 
   if (!client) {
     console.warn('[Toggly] Server client not initialized in Feature component')
-    return negate ? content : resolvedFallback
+    return negate ? children : null
   }
 
-  // Per-call identity / entity override (local eval); do not mutate shared client
   const featureKeys = Array.isArray(featureKey) ? featureKey : [featureKey]
   const isEnabled = await client.evaluateFeatureGate(
     featureKeys,
@@ -93,45 +53,8 @@ async function FeatureRoot({
     identity
   )
 
-  return isEnabled ? content : resolvedFallback
+  return isEnabled ? children : null
 }
-
-/**
- * Server Component for feature flag rendering.
- * Disabled content: `fallback` prop or `<Feature.Fallback>`.
- */
-export const Feature = Object.assign(FeatureRoot, {
-  Fallback: FeatureFallback,
-})
-
-async function FeatureOffRoot({
-  featureKey,
-  requirement = 'all',
-  identity,
-  context,
-  contextKind,
-  children,
-  fallback,
-}: Omit<FeatureProps, 'negate'>): Promise<React.ReactNode> {
-  return Feature({
-    featureKey,
-    requirement,
-    negate: true,
-    identity,
-    context,
-    contextKind,
-    children,
-    fallback,
-  })
-}
-
-/**
- * Server Component to render when feature is OFF.
- * Alternate content: `fallback` prop or `<FeatureOff.Fallback>`.
- */
-export const FeatureOff = Object.assign(FeatureOffRoot, {
-  Fallback: FeatureFallback,
-})
 
 /**
  * Server Component for A/B testing / variant rendering
@@ -148,15 +71,24 @@ export async function FeatureVariant({
   identity?: string
   context?: FeatureProps['context']
   contextKind?: string
-  enabled: React.ReactNode
-  disabled: React.ReactNode
-}): Promise<React.ReactNode> {
-  return Feature({
-    featureKey,
-    identity,
+  enabled: ReactNode
+  disabled: ReactNode
+}): Promise<ReactNode> {
+  const client = getServerToggly()
+
+  if (!client) {
+    console.warn('[Toggly] Server client not initialized in FeatureVariant')
+    return disabled
+  }
+
+  const isEnabled = await client.evaluateFeatureGate(
+    [featureKey],
+    'all',
+    false,
     context,
     contextKind,
-    children: enabled,
-    fallback: disabled,
-  })
+    identity
+  )
+
+  return isEnabled ? enabled : disabled
 }

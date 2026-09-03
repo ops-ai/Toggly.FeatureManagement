@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import React from 'react'
 import type { FeatureDefinitionModel } from '@ops-ai/nextjs-toggly-core'
 import {
   initServerToggly,
@@ -16,7 +15,7 @@ import {
   getFeatureStates,
   withFeature,
 } from '../src/actions'
-import { Feature, FeatureOff, FeatureVariant } from '../src/components'
+import { Feature, FeatureVariant } from '../src/components'
 
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
@@ -147,7 +146,6 @@ describe('entity context on server helpers', () => {
         featureKey: 'EntityGated',
         context: orderOn,
         children: 'on',
-        fallback: 'off',
       })
     ).resolves.toBe('on')
 
@@ -155,16 +153,23 @@ describe('entity context on server helpers', () => {
       Feature({
         featureKey: 'EntityGated',
         children: 'on',
-        fallback: 'off',
       })
-    ).resolves.toBe('off')
+    ).resolves.toBeNull()
 
     await expect(
-      FeatureOff({
+      Feature({
         featureKey: 'EntityGated',
         context: orderOn,
+        negate: true,
         children: 'hidden',
-        fallback: 'shown',
+      })
+    ).resolves.toBeNull()
+
+    await expect(
+      Feature({
+        featureKey: 'EntityGated',
+        negate: true,
+        children: 'shown',
       })
     ).resolves.toBe('shown')
 
@@ -176,47 +181,6 @@ describe('entity context on server helpers', () => {
         disabled: 'old',
       })
     ).resolves.toBe('old')
-  })
-
-  it('Feature.Fallback nested child is equivalent to the fallback prop', async () => {
-    await initEntityClient()
-
-    await expect(
-      Feature({
-        featureKey: 'EntityGated',
-        context: orderOn,
-        children: ['on', React.createElement(Feature.Fallback, null, 'off')],
-      })
-    ).resolves.toBe('on')
-
-    await expect(
-      Feature({
-        featureKey: 'EntityGated',
-        children: ['on', React.createElement(Feature.Fallback, null, 'off')],
-      })
-    ).resolves.toBe('off')
-
-    await expect(
-      FeatureOff({
-        featureKey: 'EntityGated',
-        context: orderOn,
-        children: [
-          'hidden',
-          React.createElement(FeatureOff.Fallback, null, 'shown'),
-        ],
-      })
-    ).resolves.toBe('shown')
-
-    await expect(
-      Feature({
-        featureKey: 'EntityGated',
-        fallback: 'prop',
-        children: [
-          'on',
-          React.createElement(Feature.Fallback, null, 'nested'),
-        ],
-      })
-    ).resolves.toBe('prop')
   })
 
   it('checkFeature fails closed when the server client is missing', async () => {
