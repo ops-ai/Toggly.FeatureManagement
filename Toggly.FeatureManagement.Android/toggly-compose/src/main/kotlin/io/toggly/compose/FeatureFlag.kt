@@ -92,19 +92,13 @@ fun rememberFeatureGate(
 
     if (context == null && contextKind == null) {
         return remember(featureFlags, featureKeys, requirement, negate) {
-            if (featureKeys.isEmpty()) return@remember true
-
-            val isEnabled = when (requirement) {
-                FeatureRequirement.ANY -> featureKeys.any { featureFlags[it] == true }
-                FeatureRequirement.ALL -> featureKeys.all { featureFlags[it] == true }
-            }
-
-            if (negate) !isEnabled else isEnabled
+            evaluateSnapshotFeatureGate(featureFlags, featureKeys, requirement, negate)
         }
     }
 
     return produceState(
         initialValue = defaultValue,
+        service,
         featureFlags,
         featureKeys,
         requirement,
