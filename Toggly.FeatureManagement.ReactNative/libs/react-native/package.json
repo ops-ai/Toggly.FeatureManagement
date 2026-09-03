@@ -54,8 +54,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@ops-ai/react-native-toggly-core": "^1.7.1",
-    "@ops-ai/toggly-hooks-types": "^1.1.0"
+    "@ops-ai/react-native-toggly-core": "^1.7.3",
+    "@ops-ai/toggly-hooks-types": "^1.4.3"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",

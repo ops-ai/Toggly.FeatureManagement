@@ -181,6 +181,20 @@ describe('React Framework Adapter', () => {
       expect(result).toBeTruthy();
     });
 
+    it('should accept entity context props', () => {
+      $flags.set({ MyFeature: true });
+      $isReady.set(true);
+
+      const result = Feature({
+        flag: 'MyFeature',
+        context: { kind: 'Order', key: '1', attributes: {} },
+        contextKind: 'Order',
+        children: React.createElement('div', null, 'entity'),
+      });
+
+      expect(result).toBeTruthy();
+    });
+
     it('should handle multiple flags with "any" requirement', () => {
       $flags.set({ F1: false, F2: true });
       $isReady.set(true);

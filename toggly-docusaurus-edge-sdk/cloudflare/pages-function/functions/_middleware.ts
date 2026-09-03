@@ -228,7 +228,12 @@ function transformHtmlResponse(response: Response, flags: Flags): Response {
   const transformer = new HTMLRewriter()
     .on('[data-feature]', {
       element(element) {
+        // Negated Feature wrappers hydrate client-side; do not strip them here.
         const featureKey = element.getAttribute('data-feature');
+        const negateAttr = element.getAttribute('data-toggly-negate');
+        if (negateAttr === 'true') {
+          return;
+        }
         if (featureKey && !flags[featureKey]) {
           element.remove();
         }

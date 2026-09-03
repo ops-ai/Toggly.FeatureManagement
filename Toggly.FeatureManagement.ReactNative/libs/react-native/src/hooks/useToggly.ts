@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type {
   FeatureFlags,
   TogglyDebugInfo,
+  TogglyEntityContext,
   TogglyEventType,
   TogglyEventListener,
   FeatureStateChangeHandler,
@@ -37,7 +38,7 @@ export interface UseTogglyResult {
    */
   isFeatureOn: (
     featureKey: string,
-    context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ) => Promise<boolean>;
 
@@ -46,7 +47,7 @@ export interface UseTogglyResult {
    */
   isFeatureOff: (
     featureKey: string,
-    context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ) => Promise<boolean>;
 
@@ -141,7 +142,7 @@ export function useToggly(): UseTogglyResult {
   const isFeatureOn = useCallback(
     async (
       featureKey: string,
-      context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+      context?: TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
     ): Promise<boolean> => {
       return toggly.isFeatureOn(featureKey, context, kind);
@@ -152,7 +153,7 @@ export function useToggly(): UseTogglyResult {
   const isFeatureOff = useCallback(
     async (
       featureKey: string,
-      context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
+      context?: TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
     ): Promise<boolean> => {
       return toggly.isFeatureOff(featureKey, context, kind);
