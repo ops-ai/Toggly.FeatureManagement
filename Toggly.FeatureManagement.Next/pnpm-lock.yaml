@@ -103,6 +103,9 @@ importers:
       '@ops-ai/nextjs-toggly-core':
         specifier: workspace:^
         version: link:../nextjs-toggly-core
+      '@ops-ai/toggly-hooks-types':
+        specifier: ^1.4.3
+        version: 1.4.3
       '@ops-ai/toggly-signed-defs':
         specifier: ^1.2.3
         version: 1.2.3
