@@ -100,8 +100,8 @@ export function Feature({
 }
 
 /**
- * Props for FeatureEnabled component
- * @deprecated Use `<Feature featureKey="…">` instead
+ * Props for FeatureEnabled component.
+ * Component is deprecated — prefer `<Feature featureKey="…">`.
  */
 export interface FeatureEnabledProps {
   /** Feature key to check */
@@ -126,7 +126,7 @@ export function FeatureEnabled({
   featureKey,
   defaultValue = false,
   children,
-}: FeatureEnabledProps): ReactElement | null {
+}: Readonly<FeatureEnabledProps>): ReactElement | null {
   return (
     <Feature featureKey={featureKey} defaultValue={defaultValue}>
       {children}
@@ -135,8 +135,8 @@ export function FeatureEnabled({
 }
 
 /**
- * Props for FeatureDisabled component
- * @deprecated Use `<Feature featureKey="…" negate>` instead
+ * Props for FeatureDisabled component.
+ * Component is deprecated — prefer `<Feature featureKey="…" negate>`.
  */
 export interface FeatureDisabledProps {
   /** Feature key to check */
@@ -161,7 +161,7 @@ export function FeatureDisabled({
   featureKey,
   defaultValue = true,
   children,
-}: FeatureDisabledProps): ReactElement | null {
+}: Readonly<FeatureDisabledProps>): ReactElement | null {
   return (
     <Feature featureKey={featureKey} defaultValue={!defaultValue} negate>
       {children}
