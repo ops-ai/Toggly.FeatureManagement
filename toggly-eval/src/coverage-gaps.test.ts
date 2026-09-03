@@ -212,24 +212,107 @@ describe('percentage and targeting branches', () => {
     ).toBe(false)
   })
 
-  it('TimeWindow rejects missing or invalid bounds', () => {
-    expect(
-      evaluateDefinition({
-        featureKey: 'f',
-        filters: [{ name: 'TimeWindow', parameters: { Start: '2020-01-01T00:00:00Z' } }],
-      }),
-    ).toBe(false)
-    expect(
-      evaluateDefinition({
-        featureKey: 'f',
-        filters: [
-          {
-            name: 'TimeWindow',
-            parameters: { Start: 'not-a-date', End: 'also-bad' },
-          },
-        ],
-      }),
-    ).toBe(false)
+  it('TimeWindow allows open-ended sides and fails closed on invalid present side', () => {
+    const now = new Date('2025-01-02T03:04:05.000Z')
+    setTimeWindowNow(() => now)
+    try {
+      // Start-only: past start → unconstrained end → true
+      expect(
+        evaluateDefinition({
+          featureKey: 'f',
+          filters: [
+            {
+              name: 'TimeWindow',
+              parameters: { Start: '2020-01-01T00:00:00Z' },
+            },
+          ],
+        }),
+      ).toBe(true)
+
+      // Start-only: future start → false
+      expect(
+        evaluateDefinition({
+          featureKey: 'f',
+          filters: [
+            {
+              name: 'TimeWindow',
+              parameters: { Start: '2030-01-01T00:00:00Z' },
+            },
+          ],
+        }),
+      ).toBe(false)
+
+      // End-only: future end → unconstrained start → true
+      expect(
+        evaluateDefinition({
+          featureKey: 'f',
+          filters: [
+            {
+              name: 'TimeWindow',
+              parameters: { End: '2030-01-01T00:00:00Z' },
+            },
+          ],
+        }),
+      ).toBe(true)
+
+      // End-only: past end → false
+      expect(
+        evaluateDefinition({
+          featureKey: 'f',
+          filters: [
+            {
+              name: 'TimeWindow',
+              parameters: { End: '2020-01-01T00:00:00Z' },
+            },
+          ],
+        }),
+      ).toBe(false)
+
+      // Neither bound → true
+      expect(
+        evaluateDefinition({
+          featureKey: 'f',
+          filters: [{ name: 'TimeWindow', parameters: {} }],
+        }),
+      ).toBe(true)
+
+      // Invalid present side fails closed
+      expect(
+        evaluateDefinition({
+          featureKey: 'f',
+          filters: [
+            {
+              name: 'TimeWindow',
+              parameters: { Start: 'not-a-date', End: 'also-bad' },
+            },
+          ],
+        }),
+      ).toBe(false)
+      expect(
+        evaluateDefinition({
+          featureKey: 'f',
+          filters: [
+            {
+              name: 'TimeWindow',
+              parameters: { Start: 'not-a-date' },
+            },
+          ],
+        }),
+      ).toBe(false)
+      expect(
+        evaluateDefinition({
+          featureKey: 'f',
+          filters: [
+            {
+              name: 'TimeWindow',
+              parameters: { End: 'also-bad' },
+            },
+          ],
+        }),
+      ).toBe(false)
+    } finally {
+      setTimeWindowNow(undefined)
+    }
   })
 })
 

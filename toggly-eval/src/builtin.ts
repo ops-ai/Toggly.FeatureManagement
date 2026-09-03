@@ -54,18 +54,27 @@ export function setTimeWindowNow(fn: (() => Date) | undefined): void {
 }
 
 export const timeWindow: FilterEvaluator = (_featureKey, params, _ctx) => {
+  // Definitions parity: each side is optional; missing side is unconstrained;
+  // neither Start nor End → true; invalid present side fails closed.
   const startS = asString(params, 'Start')
   const endS = asString(params, 'End')
-  if (!startS || !endS) {
-    return false
-  }
-  const start = parseTime(startS)
-  const end = parseTime(endS)
-  if (!start || !end) {
-    return false
-  }
   const now = (timeWindowNow?.() ?? new Date()).getTime()
-  return now >= start.getTime() && now <= end.getTime()
+
+  if (startS) {
+    const start = parseTime(startS)
+    if (!start || now < start.getTime()) {
+      return false
+    }
+  }
+
+  if (endS) {
+    const end = parseTime(endS)
+    if (!end || now > end.getTime()) {
+      return false
+    }
+  }
+
+  return true
 }
 
 export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
