@@ -13,6 +13,8 @@ export type {
   Hook,
   HookMetadata,
   EvaluationMode,
+  EvaluatedDefinitions,
+  TogglyEntityContext,
 } from './types'
 
 // Constants
@@ -37,6 +39,15 @@ export {
 
 // Client
 export { createTogglyClient } from './client'
+
+// Entity context helpers, re-exported so wrapper packages share one implementation
+export {
+  normalizeEntityContext,
+  registerContext,
+  resolveEvaluatedDefinition,
+  toBooleanDefinitions,
+} from '@ops-ai/toggly-hooks-types'
+export type { EntityGate } from '@ops-ai/toggly-hooks-types'
 
 // Local evaluation helpers (server packages hydrate / snapshot via these)
 export {
