@@ -9,6 +9,7 @@ import {
   type FeatureDefinitionsResponse,
   type FeatureRequirement,
 } from '@ops-ai/nextjs-toggly-core'
+import { appendEvaluationContext } from '@ops-ai/toggly-hooks-types'
 import type { TogglyEdgeConfig, EdgeClientState } from './types'
 import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
 
@@ -94,11 +95,25 @@ export class TogglyEdgeClient {
       }
     }
 
-    const url = API_ENDPOINTS.definitions(
-      this.config.baseUri ?? DEFAULT_CONFIG.baseUri,
-      this.config.appKey,
-      this.config.environment ?? DEFAULT_CONFIG.environment
+    // Definitions reads evaluation context from query params only (?u=, ?g=, claim.*).
+    // Keep x-toggly-identity for app middleware; it is not a substitute for URL context.
+    const fetchUrl = new URL(
+      API_ENDPOINTS.evaluatedSigned(
+        this.config.baseUri ?? DEFAULT_CONFIG.baseUri,
+        this.config.appKey,
+        this.config.environment ?? DEFAULT_CONFIG.environment
+      )
     )
+    appendEvaluationContext(
+      fetchUrl,
+      {
+        identity: this.config.identity,
+        groups: this.config.groups,
+        claims: this.config.claims,
+      },
+      'evaluated',
+    )
+    const url = fetchUrl.toString()
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
