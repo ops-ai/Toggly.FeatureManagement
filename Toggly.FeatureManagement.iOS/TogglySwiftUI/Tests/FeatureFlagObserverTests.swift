@@ -55,4 +55,38 @@ final class FeatureFlagObserverTests: XCTestCase {
 
         XCTAssertFalse(observer.isEnabled)
     }
+
+    func testObserverNegateShowsWhenDisabled() async {
+        let config = TogglyConfig(featureDefaults: ["maintenance": false])
+        let service = TogglyService(config: config)
+        await service.initialize()
+
+        let observer = FeatureFlagObserver(
+            key: "maintenance",
+            defaultValue: false,
+            negate: true,
+            service: service
+        )
+
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertTrue(observer.isEnabled)
+    }
+
+    func testGateObserverNegateInverts() async {
+        let config = TogglyConfig(featureDefaults: ["f1": true])
+        let service = TogglyService(config: config)
+        await service.initialize()
+
+        let observer = FeatureGateObserver(
+            keys: ["f1"],
+            requirement: .all,
+            negate: true,
+            service: service
+        )
+
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertFalse(observer.isEnabled)
+    }
 }
