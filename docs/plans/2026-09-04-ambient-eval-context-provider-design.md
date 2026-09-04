@@ -1,8 +1,8 @@
 # Ambient EvalContext providers (server DX)
 
-**Linear:** [OPS-886](https://linear.app/opsai/issue/OPS-886/ambient-evalcontext-providers-server-dx)  
-**Date:** 2026-09-04  
-**Status:** Approved  
+**Linear:** [OPS-886](https://linear.app/opsai/issue/OPS-886/ambient-evalcontext-providers-server-dx)
+**Date:** 2026-09-04
+**Status:** Approved
 **mode:** medium (JS hosts + Node + docs; other languages backlog-only)
 
 ## Goal
