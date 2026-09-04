@@ -1,8 +1,8 @@
 # Full EvalContext through local-eval SDKs
 
-**Linear:** [OPS-874](https://linear.app/opsai/issue/OPS-874/pass-full-evalcontext-claims-groups-request-through-local-eval-sdks)  
-**Date:** 2026-09-03  
-**Status:** Approved  
+**Linear:** [OPS-874](https://linear.app/opsai/issue/OPS-874/pass-full-evalcontext-claims-groups-request-through-local-eval-sdks)
+**Date:** 2026-09-03
+**Status:** Approved
 **mode:** large (one envelope)
 
 ## Goal
