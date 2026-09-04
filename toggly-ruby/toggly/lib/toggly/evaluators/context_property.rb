@@ -5,7 +5,11 @@ module Toggly
     # Evaluator for ContextProperty entity filters. Fail closed.
     class ContextProperty < Base
       def self.type
-        "contextproperty"
+        "ContextProperty"
+      end
+
+      def self.aliases
+        %w[contextproperty]
       end
 
       def evaluate(rule, context, feature_key: nil)

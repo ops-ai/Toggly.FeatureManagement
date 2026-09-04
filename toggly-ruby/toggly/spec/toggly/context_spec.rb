@@ -144,7 +144,10 @@ RSpec.describe Toggly::Context do
       expect(context.to_h).to eq(
         identity: "user-123",
         groups: ["beta"],
-        traits: { "country" => "US" }
+        traits: { "country" => "US" },
+        claims: {},
+        request: nil,
+        entity: nil
       )
     end
   end

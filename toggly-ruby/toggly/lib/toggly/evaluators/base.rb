@@ -12,6 +12,13 @@ module Toggly
         raise NotImplementedError, "Subclass must implement .type"
       end
 
+      # Optional alternate registration names (e.g. Microsoft.* aliases).
+      #
+      # @return [Array<String>]
+      def self.aliases
+        []
+      end
+
       # Evaluate a rule against a context
       #
       # @param rule [Hash] The rule configuration
@@ -27,19 +34,30 @@ module Toggly
       # @param rule_type [String] The rule type
       # @return [Boolean]
       def handles?(rule_type)
-        rule_type.to_s.downcase == self.class.type.to_s.downcase
+        Registry.normalize_key(rule_type) == Registry.normalize_key(self.class.type)
       end
 
       protected
 
-      # Get a value from rule with fallback
+      # Get a value from rule with fallback (supports nested +parameters+).
       #
       # @param rule [Hash] The rule
       # @param key [String, Symbol] The key to lookup
       # @param default [Object] Default value
       # @return [Object]
       def rule_value(rule, key, default = nil)
-        rule[key.to_s] || rule[key.to_sym] || default
+        return default unless rule.is_a?(Hash)
+
+        params = rule["parameters"] || rule[:parameters]
+        candidates = [rule]
+        candidates << params if params.is_a?(Hash)
+
+        candidates.each do |source|
+          value = source[key.to_s] || source[key.to_sym] ||
+                  source.find { |k, _| k.to_s.casecmp?(key.to_s) }&.last
+          return value unless value.nil?
+        end
+        default
       end
 
       # Log evaluation result (if logger available)

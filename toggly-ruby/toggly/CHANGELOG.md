@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-04
+
+### Added
+
+- EvalContext fields `claims` and `request` (`userAgent`, `acceptLanguage`,
+  `country`) plus `Toggly::RequestContext` and `Toggly::HttpRequestMapper`
+  (headers → request; country order `cf-ipcountry` → `x-vercel-ip-country` →
+  `cloudfront-viewer-country`).
+- Segment filters: `BrowserFamily`, `BrowserLanguage`, `Country` /
+  `CountryFamily`, `DeviceType`, `OS` / `OperatingSystem` with indexed params
+  and Percentage fail-closed gating.
+- `UserClaims` filter (`Claim` + `Value`).
+- `Microsoft.Percentage`, `Microsoft.TimeWindow`, and `Microsoft.Targeting`
+  aliases; golden fixtures under `docs/filter-parity/fixtures/`.
+
+### Changed
+
+- Sticky percentage hashing now uses Definitions / toggly-eval SHA-256
+  (`featureKey + "\n" + userId`, little-endian uint32 / `0xFFFFFFFF * 100`)
+  instead of FNV-1a. Existing sticky cohorts shift when upgrading from 0.2.x.
+- Unknown filter names fail closed.
+- Percentage missing or `≤0` fails closed (aligned with filter-parity contract).
+
 ## [0.2.1] - 2026-09-03
 
 ### Changed

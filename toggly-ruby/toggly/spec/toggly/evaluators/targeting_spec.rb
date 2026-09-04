@@ -5,7 +5,7 @@ RSpec.describe Toggly::Evaluators::Targeting do
 
   describe ".type" do
     it "returns targeting" do
-      expect(described_class.type).to eq("targeting")
+      expect(described_class.type).to eq("Targeting")
     end
   end
 
