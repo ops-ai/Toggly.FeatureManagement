@@ -130,7 +130,7 @@ describe('local evaluation mode', () => {
     client.destroy()
   })
 
-  it('does not refresh on setIdentity in local mode', async () => {
+  it('does not refresh on setIdentity in local mode but re-snapshots', async () => {
     mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
     const client = createTogglyClient({
@@ -143,10 +143,17 @@ describe('local evaluation mode', () => {
     await client.init()
     expect(mockFetch).toHaveBeenCalledTimes(1)
 
+    let notified = 0
+    client.subscribeFeaturesRefresh(() => {
+      notified += 1
+    })
+
     await client.setIdentity('user-b')
 
     expect(client.identity).toBe('user-b')
     expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(notified).toBeGreaterThanOrEqual(1)
+    expect(await client.isFeatureOn('AlwaysOnFlag')).toBe(true)
 
     client.destroy()
   })
