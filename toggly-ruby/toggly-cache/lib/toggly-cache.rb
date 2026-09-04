@@ -41,8 +41,8 @@ module Toggly
       # @param redis [Redis, ConnectionPool] Redis client or connection pool
       # @param options [Hash] Additional options
       # @return [RedisSnapshotProvider]
-      def redis_provider(redis:, **options)
-        RedisSnapshotProvider.new(redis: redis, **options)
+      def redis_provider(redis:, **)
+        RedisSnapshotProvider.new(redis: redis, **)
       end
     end
   end

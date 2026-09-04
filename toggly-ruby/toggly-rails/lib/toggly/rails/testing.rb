@@ -82,16 +82,16 @@ module Toggly
       #
       # @param feature_key [String, Symbol] Feature key
       # @yield Block during which the feature is enabled
-      def enable_feature(feature_key, &block)
-        with_feature(feature_key, enabled: true, &block)
+      def enable_feature(feature_key, &)
+        with_feature(feature_key, enabled: true, &)
       end
 
       # Disable a feature for the duration of a block
       #
       # @param feature_key [String, Symbol] Feature key
       # @yield Block during which the feature is disabled
-      def disable_feature(feature_key, &block)
-        with_feature(feature_key, enabled: false, &block)
+      def disable_feature(feature_key, &)
+        with_feature(feature_key, enabled: false, &)
       end
 
       # RSpec helpers

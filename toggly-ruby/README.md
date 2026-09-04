@@ -19,7 +19,7 @@ High-performance Ruby SDK for [Toggly](https://toggly.io) feature flag managemen
 
 ## Requirements
 
-- Ruby 3.0+
+- Ruby 3.2+
 - Rails 7.0+ (for toggly-rails)
 
 ## Installation
