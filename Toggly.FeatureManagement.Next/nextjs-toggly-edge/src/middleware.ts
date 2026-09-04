@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest, type NextMiddleware } from 'next/server'
 import { normalizeFeatureKeys } from '@ops-ai/nextjs-toggly-core'
-import { getEdgeToggly, initEdgeToggly } from './edge-client'
+import {
+  getEdgeToggly,
+  initEdgeToggly,
+  buildEdgeEvalOverrides,
+} from './edge-client'
 import type {
   TogglyEdgeConfig,
   MiddlewareFeatureOptions,
@@ -8,6 +12,18 @@ import type {
   FeatureMiddlewareContext,
   FeaturePathMatcher,
 } from './types'
+
+function resolveRequestOverrides(
+  request: NextRequest,
+  config: TogglyEdgeConfig,
+) {
+  const identity = getIdentityFromRequest(request, config)
+  return buildEdgeEvalOverrides(request.headers, {
+    identity,
+    groups: config.groups,
+    claims: config.claims,
+  })
+}
 
 /**
  * Create a feature flag middleware
@@ -46,24 +62,18 @@ export function createFeatureMiddleware(
       client = await initEdgeToggly(config)
     }
 
-    // Get identity from request
-    const identity = getIdentityFromRequest(request, config)
-    if (identity) {
-      client.identity = identity
-    }
-
-    // Ensure features are loaded
+    const overrides = resolveRequestOverrides(request, config)
     await client.init()
 
     const featureKeys = normalizeFeatureKeys(options.featureKey)
     const isEnabled = client.evaluateFeatureGateSync(
       featureKeys,
       options.requirement ?? 'all',
-      options.negate ?? false
+      options.negate ?? false,
+      overrides,
     )
 
     if (!isEnabled) {
-      // Handle disabled feature
       if (options.onDisabled) {
         return options.onDisabled(request)
       }
@@ -80,7 +90,6 @@ export function createFeatureMiddleware(
         return NextResponse.rewrite(url)
       }
 
-      // Default: return 404
       return new NextResponse('Feature not available', { status: 404 })
     }
 
@@ -123,7 +132,6 @@ export function createPathFeatureMiddleware(options: {
   return async (request) => {
     const pathname = request.nextUrl.pathname
 
-    // Find matching route
     for (const route of routes) {
       const matches =
         typeof route.path === 'string'
@@ -136,7 +144,6 @@ export function createPathFeatureMiddleware(options: {
       }
     }
 
-    // No matching route, continue or use fallthrough
     if (fallthrough) {
       return fallthrough(request, { waitUntil: () => {} } as any)
     }
@@ -146,24 +153,7 @@ export function createPathFeatureMiddleware(options: {
 }
 
 /**
- * Higher-order function to wrap existing middleware with feature gates
- *
- * @example
- * ```ts
- * // middleware.ts
- * import { withFeatureGate } from '@ops-ai/nextjs-toggly-edge'
- *
- * const myMiddleware = async (request: NextRequest) => {
- *   // Your existing middleware logic
- *   return NextResponse.next()
- * }
- *
- * export const middleware = withFeatureGate(myMiddleware, {
- *   config: { appKey: process.env.TOGGLY_APP_KEY! },
- *   featureKey: 'middleware-feature',
- *   onDisabled: (request) => NextResponse.redirect(new URL('/disabled', request.url)),
- * })
- * ```
+ * Wrap an existing middleware with a feature gate
  */
 export function withFeatureGate(
   middleware: NextMiddleware,
@@ -182,19 +172,15 @@ export function withFeatureGate(
       client = await initEdgeToggly(options.config)
     }
 
-    // Get identity from request
-    const identity = getIdentityFromRequest(request, options.config)
-    if (identity) {
-      client.identity = identity
-    }
-
+    const overrides = resolveRequestOverrides(request, options.config)
     await client.init()
 
     const featureKeys = normalizeFeatureKeys(options.featureKey)
     const isEnabled = client.evaluateFeatureGateSync(
       featureKeys,
       options.requirement ?? 'all',
-      options.negate ?? false
+      options.negate ?? false,
+      overrides,
     )
 
     if (!isEnabled) {
@@ -210,23 +196,6 @@ export function withFeatureGate(
 
 /**
  * Create a middleware handler with feature context
- *
- * @example
- * ```ts
- * import { createFeatureHandler } from '@ops-ai/nextjs-toggly-edge'
- *
- * export const middleware = createFeatureHandler({
- *   config: { appKey: process.env.TOGGLY_APP_KEY! },
- *   handler: async (request, context) => {
- *     if (context.isEnabled) {
- *       // Feature is enabled
- *       return NextResponse.next()
- *     }
- *     return NextResponse.redirect(new URL('/disabled', request.url))
- *   },
- *   featureKey: 'my-feature',
- * })
- * ```
  */
 export function createFeatureHandler(options: {
   config: TogglyEdgeConfig
@@ -242,25 +211,22 @@ export function createFeatureHandler(options: {
       client = await initEdgeToggly(options.config)
     }
 
-    const identity = getIdentityFromRequest(request, options.config)
-    if (identity) {
-      client.identity = identity
-    }
-
+    const overrides = resolveRequestOverrides(request, options.config)
     await client.init()
 
     const featureKeys = normalizeFeatureKeys(options.featureKey)
     const isEnabled = client.evaluateFeatureGateSync(
       featureKeys,
       options.requirement ?? 'all',
-      options.negate ?? false
+      options.negate ?? false,
+      overrides,
     )
 
     const context: FeatureMiddlewareContext = {
       isEnabled,
       featureKeys,
-      features: client.getFeatures(),
-      identity: client.identity,
+      features: client.getFeatures(overrides),
+      identity: overrides.identity ?? client.identity,
     }
 
     return options.handler(request, context)
@@ -274,19 +240,16 @@ function getIdentityFromRequest(
   request: NextRequest,
   config: TogglyEdgeConfig
 ): string | undefined {
-  // Check header
   const headerIdentity = request.headers.get('x-toggly-identity')
   if (headerIdentity) {
     return headerIdentity
   }
 
-  // Check cookie
   const cookieIdentity = request.cookies.get('toggly-identity')?.value
   if (cookieIdentity) {
     return cookieIdentity
   }
 
-  // Use config identity
   return config.identity
 }
 
@@ -298,7 +261,6 @@ function matchPath(pathname: string, pattern: string): boolean {
     return true
   }
 
-  // Handle wildcard patterns
   if (pattern.endsWith('/*')) {
     const prefix = pattern.slice(0, -2)
     return pathname === prefix || pathname.startsWith(prefix + '/')
@@ -314,7 +276,6 @@ function matchPath(pathname: string, pattern: string): boolean {
 
 /**
  * Check if a feature is enabled for a request
- * Utility function for use in custom middleware
  */
 export async function isFeatureEnabledForRequest(
   request: NextRequest,
@@ -327,19 +288,14 @@ export async function isFeatureEnabledForRequest(
     client = await initEdgeToggly(config)
   }
 
-  const identity = getIdentityFromRequest(request, config)
-  if (identity) {
-    client.identity = identity
-  }
-
+  const overrides = resolveRequestOverrides(request, config)
   await client.init()
 
-  return client.isFeatureOnSync(featureKey)
+  return client.isFeatureOnSync(featureKey, overrides)
 }
 
 /**
  * Get all features for a request
- * Utility function for use in custom middleware
  */
 export async function getFeaturesForRequest(
   request: NextRequest,
@@ -351,12 +307,8 @@ export async function getFeaturesForRequest(
     client = await initEdgeToggly(config)
   }
 
-  const identity = getIdentityFromRequest(request, config)
-  if (identity) {
-    client.identity = identity
-  }
-
+  const overrides = resolveRequestOverrides(request, config)
   await client.init()
 
-  return client.getFeatures()
+  return client.getFeatures(overrides)
 }

@@ -13,11 +13,19 @@ npm install @ops-ai/nextjs-toggly-edge
 - [docs.toggly.io](https://docs.toggly.io)
 - SDK catalog: [root README](../../README.md)
 
-## Entity context
+## Evaluation model
 
-Edge middleware has no per-request entity. Mixed `boolean | EntityGate` definitions are collapsed with `toBooleanDefinitions()` **without** entity context, so gated flags evaluate to `false` in middleware.
+The edge package fetches **`definitions-signed`** (shared, identity-agnostic)
+and evaluates filters **per request** with overrides from headers/cookies
+(`x-toggly-identity` / `toggly-identity`, User-Agent, country headers, etc.).
 
-Evaluate entity gates in Node/server or client code (`@ops-ai/nextjs-toggly-core`) where you can pass per-eval context. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
+Do **not** assign `client.identity` on the shared singleton from concurrent
+middleware — pass overrides into `isFeatureOn` / `evaluateFeatureGate` (or use
+the built-in middleware helpers, which already do this).
+
+For multi-tenant or entity-gated pages, prefer evaluating in
+`@ops-ai/nextjs-toggly-server` with per-call `context` / `contextKind`, or pass
+entity context into the edge helpers when you have it.
 
 ## License
 
