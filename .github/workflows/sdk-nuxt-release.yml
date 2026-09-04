@@ -107,6 +107,12 @@ jobs:
         if: steps.release.outputs.action != 'fail'
         run: pnpm install --frozen-lockfile
 
+      # Workspace includes ../toggly-eval via workspace:^; package only ships dist/.
+      # Build it before typecheck/build so tsc can resolve types (OPS-895).
+      - name: Build workspace toggly-eval
+        if: steps.release.outputs.action != 'fail'
+        run: pnpm --filter @ops-ai/toggly-eval build
+
       - name: Determine unpublished packages
         if: steps.release.outputs.action != 'fail'
         id: packages
