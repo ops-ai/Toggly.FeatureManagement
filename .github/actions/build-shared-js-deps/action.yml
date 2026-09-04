@@ -1,0 +1,62 @@
+name: Build shared JS deps
+description: >-
+  Install and build in-repo shared JS packages (hooks-types, signed-defs, eval)
+  once so SDK CI jobs can restore dist/ via artifact instead of rebuilding per cell.
+
+inputs:
+  packages:
+    description: >-
+      Comma-separated package keys among hooks-types, signed-defs, eval
+    required: false
+    default: 'hooks-types,signed-defs,eval'
+  node-version:
+    description: Node.js version for the shared builds
+    required: false
+    default: 'lts/*'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Build selected shared packages
+      shell: bash
+      run: |
+        set -euo pipefail
+        IFS=',' read -ra PKGS <<< "${{ inputs.packages }}"
+        built=0
+        for raw in "${PKGS[@]}"; do
+          pkg="$(echo "$raw" | xargs)"
+          [[ -z "$pkg" ]] && continue
+          case "$pkg" in
+            hooks-types)
+              echo "::group::Build toggly-hooks-types"
+              (cd toggly-hooks-types && (npm ci || npm install) && npm run build)
+              echo "::endgroup::"
+              built=$((built + 1))
+              ;;
+            signed-defs)
+              echo "::group::Build toggly-signed-defs"
+              (cd toggly-signed-defs && (npm ci || npm install) && npm run build)
+              echo "::endgroup::"
+              built=$((built + 1))
+              ;;
+            eval)
+              echo "::group::Build toggly-eval"
+              (cd toggly-eval && (npm ci || npm install) && npm run build)
+              echo "::endgroup::"
+              built=$((built + 1))
+              ;;
+            *)
+              echo "Unknown shared package key: '$pkg' (expected hooks-types, signed-defs, eval)" >&2
+              exit 1
+              ;;
+          esac
+        done
+        if [[ "$built" -eq 0 ]]; then
+          echo "No shared packages were built; check the packages input." >&2
+          exit 1
+        fi
