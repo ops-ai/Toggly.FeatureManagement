@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.0
+
+2026-09-04
+
+### Added
+- Request-scoped ambient EvalContext via `runWithEvalContext`,
+  `withEvalContext`, and `getAmbientEvalOverrides` (AsyncLocalStorage)
+  [OPS-888].
+- `isServerFeatureOn`, `<Feature>` / `<FeatureVariant>`, server actions, and
+  cached helpers merge ambient defaults with per-call `FeatureCheckOptions`
+  (per-call wins field-by-field). Bind once, then check without threading
+  identity/groups/claims/headers on every call.
+- Never mutates the process-global client identity under concurrent requests.
+
 ## 1.4.1
 
 2026-09-03

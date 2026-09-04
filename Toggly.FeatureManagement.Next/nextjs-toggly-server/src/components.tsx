@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
 import {
+  resolveFeatureCheckWithAmbient,
   toEvalOverrides,
   type EntityContextInput,
   type FeatureCheckOptions,
@@ -37,7 +38,9 @@ export interface FeatureProps {
 
 /**
  * Server Component for feature flag rendering.
- * Use `negate` to render when the feature is off (same as .NET `<feature negate>`).
+ * Ambient EvalContext from `runWithEvalContext` / `withEvalContext` is merged;
+ * prop overrides win field-by-field. Use `negate` to render when the feature
+ * is off (same as .NET `<feature negate>`).
  */
 export async function Feature({
   featureKey,
@@ -59,14 +62,23 @@ export async function Feature({
     return negate ? children : null
   }
 
+  const options = resolveFeatureCheckWithAmbient({
+    identity,
+    groups,
+    claims,
+    request,
+    headers,
+    context,
+    contextKind,
+  })
   const featureKeys = Array.isArray(featureKey) ? featureKey : [featureKey]
   const isEnabled = await client.evaluateFeatureGate(
     featureKeys,
     requirement,
     negate,
-    context,
-    contextKind,
-    toEvalOverrides({ identity, groups, claims, request, headers }),
+    options.context,
+    options.contextKind,
+    toEvalOverrides(options),
   )
 
   return isEnabled ? children : null
@@ -105,13 +117,22 @@ export async function FeatureVariant({
     return disabled
   }
 
+  const options = resolveFeatureCheckWithAmbient({
+    identity,
+    groups,
+    claims,
+    request,
+    headers,
+    context,
+    contextKind,
+  })
   const isEnabled = await client.evaluateFeatureGate(
     [featureKey],
     'all',
     false,
-    context,
-    contextKind,
-    toEvalOverrides({ identity, groups, claims, request, headers }),
+    options.context,
+    options.contextKind,
+    toEvalOverrides(options),
   )
 
   return isEnabled ? enabled : disabled
