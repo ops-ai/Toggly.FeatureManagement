@@ -4,6 +4,8 @@
 
 ### Changed
 - Raise `@ops-ai/toggly-eval` floor to `^2.0.3` [OPS-874].
+- Monorepo installs link in-repo `@ops-ai/toggly-eval@2.0.3` via
+  `workspace:^` until that version is published [OPS-874].
 
 ## 1.9.0
 
