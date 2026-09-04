@@ -229,9 +229,7 @@ impl EvalContextBuilder {
 
     /// Add a claim.
     pub fn claim(mut self, claim_type: impl Into<String>, value: impl Into<String>) -> Self {
-        self.context
-            .claims
-            .insert(claim_type.into(), value.into());
+        self.context.claims.insert(claim_type.into(), value.into());
         self
     }
 

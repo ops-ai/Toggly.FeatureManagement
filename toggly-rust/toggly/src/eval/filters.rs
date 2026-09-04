@@ -75,7 +75,9 @@ fn collect_indexed_values(filter: &FeatureFilter, prefixes: &[&str]) -> Vec<Stri
 }
 
 fn contains_ignore_case(haystack: &str, needle: &str) -> bool {
-    haystack.to_ascii_lowercase().contains(&needle.to_ascii_lowercase())
+    haystack
+        .to_ascii_lowercase()
+        .contains(&needle.to_ascii_lowercase())
 }
 
 fn equals_ignore_case(left: &str, right: &str) -> bool {
@@ -83,10 +85,7 @@ fn equals_ignore_case(left: &str, right: &str) -> bool {
 }
 
 fn identity_str(context: &EvalContext) -> Option<&str> {
-    context
-        .identity
-        .as_deref()
-        .filter(|s| !s.is_empty())
+    context.identity.as_deref().filter(|s| !s.is_empty())
 }
 
 fn append_list_values(out: &mut Vec<String>, raw: Option<&serde_json::Value>) {
@@ -189,7 +188,10 @@ pub struct TargetingEvaluator;
 impl TargetingEvaluator {
     fn collect_users(filter: &FeatureFilter) -> Vec<String> {
         let mut users = Vec::new();
-        append_list_values(&mut users, param(filter, "users").or_else(|| param(filter, "Users")));
+        append_list_values(
+            &mut users,
+            param(filter, "users").or_else(|| param(filter, "Users")),
+        );
         append_list_values(
             &mut users,
             param(filter, "Audience").or_else(|| param(filter, "audience")),

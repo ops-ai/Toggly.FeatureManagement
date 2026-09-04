@@ -134,9 +134,10 @@ fn to_context(root: &FixtureRoot) -> EvalContext {
         None => EvalContext::default(),
     };
     match &root.http_headers {
-        Some(headers) if !headers.is_empty() => {
-            HttpRequestMapper::merge_into(headers.iter().map(|(k, v)| (k.as_str(), v.as_str())), Some(&base))
-        }
+        Some(headers) if !headers.is_empty() => HttpRequestMapper::merge_into(
+            headers.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+            Some(&base),
+        ),
         _ => base,
     }
 }
@@ -145,10 +146,7 @@ fn to_context(root: &FixtureRoot) -> EvalContext {
 fn loads_required_wave1_cases() {
     let ids: HashSet<_> = load_fixtures().into_iter().map(|(id, _)| id).collect();
     for required in REQUIRED_IDS {
-        assert!(
-            ids.contains(*required),
-            "missing fixture {required}"
-        );
+        assert!(ids.contains(*required), "missing fixture {required}");
     }
 }
 
