@@ -511,6 +511,26 @@ describe('Middleware', () => {
       expect(cached?.identity).toBe('alice')
     })
 
+    it('fills request.country when getContext returns empty request object', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse([countryFlag]))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+      })
+
+      configureEventEvalContext({
+        getContext: () => ({
+          identity: 'alice',
+          request: {},
+        }),
+      })
+
+      const event = createMockEvent({ 'cf-ipcountry': 'US' })
+      expect(await isEventFeatureOn(event, 'country-flag')).toBe(true)
+      expect(getCachedEventEvalContext(event)?.request?.country).toBe('US')
+    })
+
     it('lets per-call options override ambient field-by-field', async () => {
       mockFetch.mockResolvedValueOnce(
         createMockResponse([targetingAlice, claimsFlag])

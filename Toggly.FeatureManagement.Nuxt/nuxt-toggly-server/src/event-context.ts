@@ -113,7 +113,11 @@ export async function resolveEventEvalContext(
       identity: custom.identity,
       groups: custom.groups,
       claims: custom.claims,
-      request: custom.request ?? headerRequest,
+      // Field-merge: custom.request wins per field; headers fill gaps (Node OPS-887).
+      request: {
+        ...headerRequest,
+        ...custom.request,
+      },
       headers: custom.headers,
     }
   } else {
