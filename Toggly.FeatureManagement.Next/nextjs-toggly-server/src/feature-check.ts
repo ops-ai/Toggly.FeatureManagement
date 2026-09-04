@@ -6,6 +6,10 @@ import {
   type EvalContextOverrides,
   type TogglyEntityContext,
 } from '@ops-ai/nextjs-toggly-core'
+import {
+  getAmbientEvalOverrides,
+  mergeFeatureCheckOptions,
+} from './eval-context-store'
 
 /** Domain object or already-normalized entity context for Context Property filters. */
 export type EntityContextInput =
@@ -39,6 +43,18 @@ export function resolveFeatureCheckArgs(
     return { identity: identityOrOptions }
   }
   return identityOrOptions
+}
+
+/**
+ * Resolve per-call args and merge ambient EvalContext (per-call wins field-by-field).
+ */
+export function resolveFeatureCheckWithAmbient(
+  identityOrOptions?: string | FeatureCheckOptions
+): FeatureCheckOptions {
+  return mergeFeatureCheckOptions(
+    getAmbientEvalOverrides(),
+    resolveFeatureCheckArgs(identityOrOptions)
+  )
 }
 
 /**

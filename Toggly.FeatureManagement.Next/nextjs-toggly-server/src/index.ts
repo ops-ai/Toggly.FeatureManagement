@@ -14,6 +14,14 @@ export {
   createMemoryStorage,
 } from './server-client'
 
+// Ambient EvalContext (request-scoped)
+export {
+  getAmbientEvalOverrides,
+  runWithEvalContext,
+  withEvalContext,
+  mergeFeatureCheckOptions,
+} from './eval-context-store'
+
 // Server Components
 export { Feature, FeatureVariant } from './components'
 export type { FeatureProps } from './components'

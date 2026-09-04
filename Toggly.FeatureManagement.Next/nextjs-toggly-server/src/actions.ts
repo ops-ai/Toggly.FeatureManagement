@@ -4,7 +4,7 @@ import {
   toBooleanDefinitions,
 } from '@ops-ai/nextjs-toggly-core'
 import {
-  resolveFeatureCheckArgs,
+  resolveFeatureCheckWithAmbient,
   toEvalOverrides,
   type FeatureCheckOptions,
 } from './feature-check'
@@ -39,7 +39,7 @@ export async function checkFeature(
     return false
   }
 
-  const options = resolveFeatureCheckArgs(identityOrOptions)
+  const options = resolveFeatureCheckWithAmbient(identityOrOptions)
   return client.isFeatureOn(
     featureKey,
     options.context,
@@ -116,13 +116,22 @@ export async function checkFeatureGate(options: {
   }
 
   try {
+    const resolved = resolveFeatureCheckWithAmbient({
+      identity,
+      groups,
+      claims,
+      request,
+      headers,
+      context,
+      contextKind,
+    })
     const allowed = await client.evaluateFeatureGate(
       featureKeys,
       requirement,
       negate,
-      context,
-      contextKind,
-      toEvalOverrides({ identity, groups, claims, request, headers }),
+      resolved.context,
+      resolved.contextKind,
+      toEvalOverrides(resolved),
     )
 
     return {
@@ -244,7 +253,7 @@ export async function getFeatureStates(
     return Object.fromEntries(featureKeys.map((key) => [key, false]))
   }
 
-  const options = resolveFeatureCheckArgs(identityOrOptions)
+  const options = resolveFeatureCheckWithAmbient(identityOrOptions)
   const result: Record<string, boolean> = {}
   for (const key of featureKeys) {
     result[key] = await client.isFeatureOn(

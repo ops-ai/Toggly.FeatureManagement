@@ -9,7 +9,7 @@ import {
 } from '@ops-ai/nextjs-toggly-core'
 import WebSocket from 'ws'
 import {
-  resolveFeatureCheckArgs,
+  resolveFeatureCheckWithAmbient,
   toEvalOverrides,
   type FeatureCheckOptions,
 } from './feature-check'
@@ -348,7 +348,9 @@ export async function refreshServerToggly(): Promise<FeatureDefinitions | null> 
  * Check if a feature is enabled on the server.
  * Pass a user `identity` string or
  * `{ identity, groups, claims, request, headers, context, contextKind }` for
- * per-call local eval. The shared client is reused; identity is not mutated.
+ * per-call local eval. Ambient context from `runWithEvalContext` /
+ * `withEvalContext` is merged in; per-call fields win. The shared client is
+ * reused; identity is not mutated.
  */
 export async function isServerFeatureOn(
   featureKey: string,
@@ -360,7 +362,7 @@ export async function isServerFeatureOn(
       '[Toggly] Server client not initialized. Call initServerToggly() first.'
     )
   }
-  const options = resolveFeatureCheckArgs(identityOrOptions)
+  const options = resolveFeatureCheckWithAmbient(identityOrOptions)
   return client.isFeatureOn(
     featureKey,
     options.context,

@@ -7,6 +7,7 @@ import {
 } from '@ops-ai/nextjs-toggly-core'
 import {
   createFeatureCacheKey,
+  resolveFeatureCheckWithAmbient,
   toEvalOverrides,
   type FeatureCheckOptions,
 } from './feature-check'
@@ -54,7 +55,7 @@ export function cachedIsFeatureOn(
     revalidate = 60,
     tags = [],
   } = options
-  const check: FeatureCheckOptions = {
+  const check = resolveFeatureCheckWithAmbient({
     identity,
     groups,
     claims,
@@ -62,7 +63,7 @@ export function cachedIsFeatureOn(
     headers,
     context,
     contextKind,
-  }
+  })
 
   const cached = unstable_cache(
     async () => {
@@ -73,8 +74,8 @@ export function cachedIsFeatureOn(
 
       return client.isFeatureOn(
         featureKey,
-        context,
-        contextKind,
+        check.context,
+        check.contextKind,
         toEvalOverrides(check),
       )
     },
@@ -114,7 +115,7 @@ export function cachedEvaluateFeatureGate(
     tags = [],
   } = options
 
-  const check: FeatureCheckOptions = {
+  const check = resolveFeatureCheckWithAmbient({
     identity,
     groups,
     claims,
@@ -122,7 +123,7 @@ export function cachedEvaluateFeatureGate(
     headers,
     context,
     contextKind,
-  }
+  })
 
   const cacheKey = createFeatureCacheKey(
     `gate:${featureKeys.join(',')}:${requirement}:${negate}`,
@@ -140,8 +141,8 @@ export function cachedEvaluateFeatureGate(
         featureKeys,
         requirement,
         negate,
-        context,
-        contextKind,
+        check.context,
+        check.contextKind,
         toEvalOverrides(check),
       )
     },
