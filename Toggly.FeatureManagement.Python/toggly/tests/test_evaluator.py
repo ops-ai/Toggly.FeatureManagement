@@ -118,18 +118,17 @@ class TestPercentageEvaluator:
         result = evaluator.evaluate(filter_, "test-feature", context)
         assert result is True
 
-    def test_fnv1a_hash_consistency(self) -> None:
-        """Test FNV-1a hash produces consistent results."""
-        evaluator = PercentageEvaluator()
+    def test_sha256_bucket_consistency(self) -> None:
+        """Test SHA-256 sticky buckets are deterministic and Definitions-aligned."""
+        from toggly.evaluator import compute_percentile
 
-        # Same input should always produce same hash
-        hash1 = evaluator._fnv1a_32(b"test:feature")
-        hash2 = evaluator._fnv1a_32(b"test:feature")
-        assert hash1 == hash2
+        bucket1 = compute_percentile("user-123", "test-feature")
+        bucket2 = compute_percentile("user-123", "test-feature")
+        assert bucket1 == bucket2
+        assert 0 <= bucket1 < 100
 
-        # Different inputs should produce different hashes
-        hash3 = evaluator._fnv1a_32(b"different:input")
-        assert hash1 != hash3
+        bucket3 = compute_percentile("other-user", "test-feature")
+        assert bucket1 != bucket3
 
 
 class TestTimeWindowEvaluator:
@@ -291,9 +290,17 @@ class TestEvaluatorRegistry:
         registry = EvaluatorRegistry()
 
         assert registry.get("AlwaysOn") is not None
+        assert registry.get("AlwaysOff") is not None
         assert registry.get("Percentage") is not None
+        assert registry.get("Microsoft.Percentage") is not None
         assert registry.get("TimeWindow") is not None
+        assert registry.get("Microsoft.TimeWindow") is not None
         assert registry.get("Targeting") is not None
+        assert registry.get("Microsoft.Targeting") is not None
+        assert registry.get("BrowserFamily") is not None
+        assert registry.get("UserClaims") is not None
+        assert registry.get("CountryFamily") is not None
+        assert registry.get("OperatingSystem") is not None
 
     def test_unknown_evaluator_returns_none(self) -> None:
         """Test unknown evaluator returns None."""

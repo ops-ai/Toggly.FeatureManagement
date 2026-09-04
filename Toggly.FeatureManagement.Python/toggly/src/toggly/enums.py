@@ -35,6 +35,9 @@ class FilterType(Enum):
     ALWAYS_ON = "AlwaysOn"
     """Feature is always enabled."""
 
+    ALWAYS_OFF = "AlwaysOff"
+    """Feature is always disabled."""
+
     PERCENTAGE = "Percentage"
     """Percentage-based rollout."""
 
@@ -43,6 +46,27 @@ class FilterType(Enum):
 
     TARGETING = "Targeting"
     """User/group targeting rules."""
+
+    USER_CLAIMS = "UserClaims"
+    """Principal claim matching."""
+
+    BROWSER_FAMILY = "BrowserFamily"
+    """Browser family segment filter."""
+
+    BROWSER_LANGUAGE = "BrowserLanguage"
+    """Accept-Language segment filter."""
+
+    COUNTRY = "Country"
+    """Country segment filter."""
+
+    DEVICE_TYPE = "DeviceType"
+    """Device type segment filter."""
+
+    OS = "OS"
+    """Operating system segment filter."""
+
+    CONTEXT_PROPERTY = "ContextProperty"
+    """Entity attribute ContextProperty filter."""
 
 
 class AppState(Enum):

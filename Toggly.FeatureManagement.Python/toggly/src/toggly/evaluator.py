@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import random
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any
@@ -35,6 +37,153 @@ class FilterEvaluator(ABC):
         pass
 
 
+def _as_float(params: dict[str, Any], *keys: str) -> float | None:
+    """Read the first present float parameter; None when missing/invalid."""
+    for key in keys:
+        if key not in params or params[key] is None:
+            continue
+        value = params[key]
+        if isinstance(value, bool):
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _as_string(params: dict[str, Any], key: str) -> str | None:
+    value = params.get(key)
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
+
+
+def _collect_indexed_values(params: dict[str, Any], *prefixes: str) -> list[str]:
+    """Collect indexed RavenDB / legacy colon-prefixed parameter values."""
+    out: list[str] = []
+    for key, value in params.items():
+        if value is None:
+            continue
+        for prefix in prefixes:
+            if key.startswith(prefix + ":"):
+                text = str(value)
+                if text:
+                    out.append(text)
+                break
+    return out
+
+
+def _contains_ignore_case(haystack: str | None, needle: str | None) -> bool:
+    if haystack is None or needle is None:
+        return False
+    return needle.lower() in haystack.lower()
+
+
+def _equals_ignore_case(a: str | None, b: str | None) -> bool:
+    if a is None or b is None:
+        return False
+    return a.lower() == b.lower()
+
+
+def compute_percentile(user_id: str, feature_key: str) -> float:
+    """Sticky bucket in [0, 100) matching Definitions / toggly-eval SHA-256.
+
+    Hash input is ``featureKey + "\\n" + userId``; little-endian uint32 from the
+    first 4 digest bytes, then ``(value / 0xFFFFFFFF) * 100``.
+    """
+    digest = hashlib.sha256(f"{feature_key}\n{user_id}".encode("utf-8")).digest()
+    value = int.from_bytes(digest[:4], byteorder="little", signed=False)
+    return (value / float(0xFFFFFFFF)) * 100.0
+
+
+def segment_percentage_passes(
+    percentage: float | None,
+    feature_key: str,
+    identity: str | None,
+) -> bool:
+    """Percentage gate for segment filters; missing or ≤0 fails closed."""
+    if percentage is None or percentage <= 0:
+        return False
+    if percentage >= 100:
+        return True
+    if identity:
+        return compute_percentile(identity, feature_key) < percentage
+    return random.random() * 100 < percentage
+
+
+class ParsedUserAgent:
+    """Best-effort User-Agent parse result for segment filters."""
+
+    __slots__ = ("browser_family", "os_family", "device_family")
+
+    def __init__(self, browser_family: str, os_family: str, device_family: str) -> None:
+        self.browser_family = browser_family
+        self.os_family = os_family
+        self.device_family = device_family
+
+
+def parse_user_agent(user_agent: str | None) -> ParsedUserAgent | None:
+    """Parse a User-Agent string (best-effort parity with toggly-eval / Java)."""
+    if not user_agent:
+        return None
+    return ParsedUserAgent(
+        _detect_browser(user_agent),
+        _detect_os(user_agent),
+        _detect_device(user_agent),
+    )
+
+
+def _detect_browser(ua: str) -> str:
+    if "Edg/" in ua or "EdgiOS/" in ua:
+        return "Edge"
+    if "OPR/" in ua or "Opera" in ua:
+        return "Opera"
+    if "Chrome/" in ua or "CriOS/" in ua:
+        return "Chrome"
+    if "Firefox/" in ua or "FxiOS/" in ua:
+        return "Firefox"
+    if (
+        "Safari/" in ua
+        and "Version/" in ua
+        and "Chrome" not in ua
+        and "Chromium" not in ua
+    ):
+        return "Safari"
+    return "Other"
+
+
+def _detect_os(ua: str) -> str:
+    if "Android" in ua:
+        return "Android"
+    if (
+        "iPhone" in ua
+        or "iPad" in ua
+        or "iPod" in ua
+        or "CPU iPhone OS" in ua
+        or "CPU OS" in ua
+    ):
+        return "iOS"
+    if "Mac OS X" in ua or "Macintosh" in ua:
+        return "Mac OS"
+    if "Windows" in ua:
+        return "Windows"
+    if "Linux" in ua:
+        return "Linux"
+    return "Other"
+
+
+def _detect_device(ua: str) -> str:
+    if "iPhone" in ua:
+        return "iPhone"
+    if "iPad" in ua:
+        return "iPad"
+    if "iPod" in ua:
+        return "iPod"
+    return "Other"
+
+
 class AlwaysOnEvaluator(FilterEvaluator):
     """Evaluator for AlwaysOn filter - always returns True."""
 
@@ -44,25 +193,28 @@ class AlwaysOnEvaluator(FilterEvaluator):
         feature_key: str,
         context: EvaluationContext,
     ) -> bool:
-        """Evaluate AlwaysOn filter.
-
-        Args:
-            filter_: The filter to evaluate.
-            feature_key: The feature key being evaluated.
-            context: The evaluation context.
-
-        Returns:
-            Always True.
-
-        """
+        """Evaluate AlwaysOn filter."""
         return True
+
+
+class AlwaysOffEvaluator(FilterEvaluator):
+    """Evaluator for AlwaysOff filter - always returns False."""
+
+    def evaluate(
+        self,
+        filter_: FeatureFilter,
+        feature_key: str,
+        context: EvaluationContext,
+    ) -> bool:
+        """Evaluate AlwaysOff filter."""
+        return False
 
 
 class PercentageEvaluator(FilterEvaluator):
     """Evaluator for percentage-based rollouts.
 
-    Uses deterministic hashing based on identity + feature key to ensure
-    consistent results for the same user.
+    Uses Definitions-aligned sticky SHA-256 hashing
+    (``featureKey + "\\n" + identity``) for consistent buckets.
     """
 
     def evaluate(
@@ -71,83 +223,22 @@ class PercentageEvaluator(FilterEvaluator):
         feature_key: str,
         context: EvaluationContext,
     ) -> bool:
-        """Evaluate percentage filter.
-
-        Args:
-            filter_: The filter to evaluate.
-            feature_key: The feature key being evaluated.
-            context: The evaluation context.
-
-        Returns:
-            True if the user falls within the rollout percentage.
-
-        """
-        # Get percentage from parameters (support both 'Value' and 'Percentage')
-        percentage = filter_.parameters.get("Value") or filter_.parameters.get(
-            "Percentage", filter_.parameters.get("percentage", 0)
-        )
-
-        try:
-            percentage = float(percentage)
-        except (TypeError, ValueError):
-            return False
-
-        if percentage <= 0:
+        """Evaluate percentage filter."""
+        percentage = _as_float(filter_.parameters, "Value", "Percentage", "percentage")
+        if percentage is None or percentage <= 0:
             return False
         if percentage >= 100:
             return True
 
-        # Need identity for percentage rollout
         identity = context.identity
         if not identity:
             return False
 
-        # Calculate deterministic bucket
-        bucket = self._calculate_bucket(identity, feature_key)
-        return bucket < percentage
+        return self._calculate_bucket(identity, feature_key) < percentage
 
     def _calculate_bucket(self, identity: str, feature_key: str) -> float:
-        """Calculate a deterministic bucket (0-100) for the identity.
-
-        Uses FNV-1a hash for consistency with other SDKs.
-
-        Args:
-            identity: User identity.
-            feature_key: Feature key.
-
-        Returns:
-            A bucket value between 0 and 99.99.
-
-        """
-        # Combine identity and feature key
-        hash_input = f"{identity}:{feature_key}"
-
-        # Use FNV-1a 32-bit hash for consistency with Go SDK
-        hash_value = self._fnv1a_32(hash_input.encode("utf-8"))
-
-        # Convert to percentage (0-99.99)
-        return (hash_value % 10000) / 100.0
-
-    @staticmethod
-    def _fnv1a_32(data: bytes) -> int:
-        """Calculate FNV-1a 32-bit hash.
-
-        Args:
-            data: Data to hash.
-
-        Returns:
-            32-bit hash value.
-
-        """
-        fnv_32_prime = 0x01000193
-        fnv1_32a_init = 0x811C9DC5
-
-        hash_value = fnv1_32a_init
-        for byte in data:
-            hash_value ^= byte
-            hash_value = (hash_value * fnv_32_prime) & 0xFFFFFFFF
-
-        return hash_value
+        """Calculate a deterministic bucket in [0, 100) for the identity."""
+        return compute_percentile(identity, feature_key)
 
 
 class TimeWindowEvaluator(FilterEvaluator):
@@ -159,35 +250,23 @@ class TimeWindowEvaluator(FilterEvaluator):
         feature_key: str,
         context: EvaluationContext,
     ) -> bool:
-        """Evaluate time window filter.
-
-        Args:
-            filter_: The filter to evaluate.
-            feature_key: The feature key being evaluated.
-            context: The evaluation context.
-
-        Returns:
-            True if current time is within the window.
-
-        """
+        """Evaluate time window filter."""
         now = datetime.now(timezone.utc)
         params = filter_.parameters
 
-        # Check start time
         start_str = params.get("Start") or params.get("start")
         if start_str:
             try:
-                start = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                start = datetime.fromisoformat(str(start_str).replace("Z", "+00:00"))
                 if now < start:
                     return False
             except (ValueError, TypeError):
                 pass
 
-        # Check end time
         end_str = params.get("End") or params.get("end")
         if end_str:
             try:
-                end = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                end = datetime.fromisoformat(str(end_str).replace("Z", "+00:00"))
                 if now > end:
                     return False
             except (ValueError, TypeError):
@@ -205,38 +284,18 @@ class TargetingEvaluator(FilterEvaluator):
         feature_key: str,
         context: EvaluationContext,
     ) -> bool:
-        """Evaluate targeting filter.
-
-        Args:
-            filter_: The filter to evaluate.
-            feature_key: The feature key being evaluated.
-            context: The evaluation context.
-
-        Returns:
-            True if the user/group matches targeting rules.
-
-        """
+        """Evaluate targeting filter."""
         params = filter_.parameters
 
-        # Check specific users
         users = self._get_users(params)
         if users and context.identity in users:
             return True
 
-        # Check groups
         groups = self._get_groups(params)
         if groups and context.groups and any(g in groups for g in context.groups):
             return True
 
-        # Check default rollout percentage
-        default_percentage = params.get("DefaultRolloutPercentage") or params.get(
-            "defaultRolloutPercentage", params.get("default_percentage", 0)
-        )
-        try:
-            default_percentage = float(default_percentage)
-        except (TypeError, ValueError):
-            default_percentage = 0
-
+        default_percentage = self._get_default_percentage(params)
         if default_percentage > 0 and context.identity:
             bucket = PercentageEvaluator()._calculate_bucket(context.identity, feature_key)
             return bucket < default_percentage
@@ -244,23 +303,13 @@ class TargetingEvaluator(FilterEvaluator):
         return False
 
     def _get_users(self, params: dict[str, Any]) -> set[str]:
-        """Extract user list from parameters.
-
-        Args:
-            params: Filter parameters.
-
-        Returns:
-            Set of user identities.
-
-        """
+        """Extract user list from parameters."""
         users: set[str] = set()
 
-        # Try 'users' parameter (comma-separated)
         users_str = params.get("users") or params.get("Users")
         if users_str:
             users.update(u.strip() for u in str(users_str).split(",") if u.strip())
 
-        # Try indexed 'Audience.Users:N' format (Go SDK pattern)
         for key, value in params.items():
             if key.startswith("Audience.Users:") and value:
                 users.add(str(value))
@@ -268,28 +317,171 @@ class TargetingEvaluator(FilterEvaluator):
         return users
 
     def _get_groups(self, params: dict[str, Any]) -> set[str]:
-        """Extract group list from parameters.
-
-        Args:
-            params: Filter parameters.
-
-        Returns:
-            Set of group names.
-
-        """
+        """Extract group list from parameters."""
         groups: set[str] = set()
 
-        # Try 'groups' parameter (comma-separated)
         groups_str = params.get("groups") or params.get("Groups")
         if groups_str:
             groups.update(g.strip() for g in str(groups_str).split(",") if g.strip())
 
-        # Try indexed 'Audience.Groups:N' format (Go SDK pattern)
         for key, value in params.items():
             if key.startswith("Audience.Groups:") and value:
                 groups.add(str(value))
 
         return groups
+
+    def _get_default_percentage(self, params: dict[str, Any]) -> float:
+        percentage = _as_float(
+            params,
+            "Audience.DefaultRolloutPercentage",
+            "DefaultRolloutPercentage",
+            "defaultRolloutPercentage",
+            "default_percentage",
+            "Percentage",
+        )
+        return percentage if percentage is not None else 0.0
+
+
+class BrowserFamilyEvaluator(FilterEvaluator):
+    """Evaluator for BrowserFamily segment filters."""
+
+    def evaluate(
+        self,
+        filter_: FeatureFilter,
+        feature_key: str,
+        context: EvaluationContext,
+    ) -> bool:
+        """Evaluate BrowserFamily filter."""
+        percentage = _as_float(filter_.parameters, "Percentage")
+        identity = context.identity if context else None
+        if not segment_percentage_passes(percentage, feature_key, identity):
+            return False
+        values = _collect_indexed_values(filter_.parameters, "BrowserFamily")
+        if not values:
+            return False
+        ua = context.request.user_agent if context and context.request else None
+        parsed = parse_user_agent(ua)
+        if parsed is None or parsed.browser_family == "Other":
+            return False
+        return any(_contains_ignore_case(parsed.browser_family, value) for value in values)
+
+
+class BrowserLanguageEvaluator(FilterEvaluator):
+    """Evaluator for BrowserLanguage segment filters."""
+
+    def evaluate(
+        self,
+        filter_: FeatureFilter,
+        feature_key: str,
+        context: EvaluationContext,
+    ) -> bool:
+        """Evaluate BrowserLanguage filter."""
+        percentage = _as_float(filter_.parameters, "Percentage")
+        identity = context.identity if context else None
+        if not segment_percentage_passes(percentage, feature_key, identity):
+            return False
+        values = _collect_indexed_values(filter_.parameters, "BrowserLanguage")
+        if not values:
+            return False
+        accept = context.request.accept_language if context and context.request else None
+        if not accept:
+            return False
+        return any(_contains_ignore_case(accept, value) for value in values)
+
+
+class CountryEvaluator(FilterEvaluator):
+    """Evaluator for Country / CountryFamily segment filters."""
+
+    def evaluate(
+        self,
+        filter_: FeatureFilter,
+        feature_key: str,
+        context: EvaluationContext,
+    ) -> bool:
+        """Evaluate Country filter."""
+        percentage = _as_float(filter_.parameters, "Percentage")
+        identity = context.identity if context else None
+        if not segment_percentage_passes(percentage, feature_key, identity):
+            return False
+        values = _collect_indexed_values(filter_.parameters, "Country")
+        if not values:
+            return False
+        country = context.request.country if context and context.request else None
+        if not country:
+            return False
+        return any(_equals_ignore_case(value, country) for value in values)
+
+
+class DeviceTypeEvaluator(FilterEvaluator):
+    """Evaluator for DeviceType segment filters."""
+
+    def evaluate(
+        self,
+        filter_: FeatureFilter,
+        feature_key: str,
+        context: EvaluationContext,
+    ) -> bool:
+        """Evaluate DeviceType filter."""
+        percentage = _as_float(filter_.parameters, "Percentage")
+        identity = context.identity if context else None
+        if not segment_percentage_passes(percentage, feature_key, identity):
+            return False
+        values = _collect_indexed_values(filter_.parameters, "DeviceType")
+        if not values:
+            return False
+        ua = context.request.user_agent if context and context.request else None
+        parsed = parse_user_agent(ua)
+        if parsed is None or parsed.device_family == "Other":
+            return False
+        return any(_contains_ignore_case(parsed.device_family, value) for value in values)
+
+
+class OperatingSystemEvaluator(FilterEvaluator):
+    """Evaluator for OS / OperatingSystem segment filters."""
+
+    def evaluate(
+        self,
+        filter_: FeatureFilter,
+        feature_key: str,
+        context: EvaluationContext,
+    ) -> bool:
+        """Evaluate OperatingSystem filter."""
+        percentage = _as_float(filter_.parameters, "Percentage")
+        identity = context.identity if context else None
+        if not segment_percentage_passes(percentage, feature_key, identity):
+            return False
+        values = _collect_indexed_values(filter_.parameters, "OperatingSystem")
+        if not values:
+            return False
+        ua = context.request.user_agent if context and context.request else None
+        parsed = parse_user_agent(ua)
+        if parsed is None or parsed.os_family == "Other":
+            return False
+        return any(_contains_ignore_case(parsed.os_family, value) for value in values)
+
+
+class UserClaimsEvaluator(FilterEvaluator):
+    """Evaluator for UserClaims filters (Claim + Value params)."""
+
+    def evaluate(
+        self,
+        filter_: FeatureFilter,
+        feature_key: str,
+        context: EvaluationContext,
+    ) -> bool:
+        """Evaluate UserClaims filter."""
+        percentage = _as_float(filter_.parameters, "Percentage")
+        identity = context.identity if context else None
+        if not segment_percentage_passes(percentage, feature_key, identity):
+            return False
+        claim_type = _as_string(filter_.parameters, "Claim")
+        claim_value = _as_string(filter_.parameters, "Value")
+        if claim_type is None or claim_value is None or context is None:
+            return False
+        claims = context.claims
+        if not claims or claim_type not in claims:
+            return False
+        return claim_value == claims[claim_type]
 
 
 FILTER_CONTEXT_PROPERTY = "ContextProperty"
@@ -464,34 +656,45 @@ class EvaluatorRegistry:
 
     def __init__(self) -> None:
         """Initialize the evaluator registry with built-in evaluators."""
+        always_on = AlwaysOnEvaluator()
+        always_off = AlwaysOffEvaluator()
+        percentage = PercentageEvaluator()
+        time_window = TimeWindowEvaluator()
+        targeting = TargetingEvaluator()
+        context_property = ContextPropertyEvaluator()
+        browser_family = BrowserFamilyEvaluator()
+        browser_language = BrowserLanguageEvaluator()
+        country = CountryEvaluator()
+        device_type = DeviceTypeEvaluator()
+        operating_system = OperatingSystemEvaluator()
+        user_claims = UserClaimsEvaluator()
+
         self._evaluators: dict[str, FilterEvaluator] = {
-            "AlwaysOn": AlwaysOnEvaluator(),
-            "Percentage": PercentageEvaluator(),
-            "TimeWindow": TimeWindowEvaluator(),
-            "Targeting": TargetingEvaluator(),
-            "ContextProperty": ContextPropertyEvaluator(),
+            "AlwaysOn": always_on,
+            "AlwaysOff": always_off,
+            "Percentage": percentage,
+            "Microsoft.Percentage": percentage,
+            "TimeWindow": time_window,
+            "Microsoft.TimeWindow": time_window,
+            "Targeting": targeting,
+            "Microsoft.Targeting": targeting,
+            "ContextProperty": context_property,
+            "BrowserFamily": browser_family,
+            "BrowserLanguage": browser_language,
+            "Country": country,
+            "CountryFamily": country,
+            "DeviceType": device_type,
+            "OS": operating_system,
+            "OperatingSystem": operating_system,
+            "UserClaims": user_claims,
         }
 
     def register(self, name: str, evaluator: FilterEvaluator) -> None:
-        """Register a custom evaluator.
-
-        Args:
-            name: Name of the filter type.
-            evaluator: The evaluator instance.
-
-        """
+        """Register a custom evaluator."""
         self._evaluators[name] = evaluator
 
     def get(self, name: str) -> FilterEvaluator | None:
-        """Get an evaluator by name.
-
-        Args:
-            name: Name of the filter type.
-
-        Returns:
-            The evaluator or None if not found.
-
-        """
+        """Get an evaluator by name."""
         return self._evaluators.get(name)
 
     def evaluate_filter(
@@ -502,18 +705,10 @@ class EvaluatorRegistry:
     ) -> bool:
         """Evaluate a filter using the appropriate evaluator.
 
-        Args:
-            filter_: The filter to evaluate.
-            feature_key: The feature key being evaluated.
-            context: The evaluation context.
-
-        Returns:
-            True if the filter passes, False otherwise.
-
+        Unknown filter types fail closed (False).
         """
         evaluator = self.get(filter_.name)
         if evaluator is None:
-            # Unknown filter type - treat as False for safety
             return False
         return evaluator.evaluate(filter_, feature_key, context)
 
@@ -522,12 +717,7 @@ class EvaluationEngine:
     """Engine for evaluating feature flags."""
 
     def __init__(self, registry: EvaluatorRegistry | None = None) -> None:
-        """Initialize the evaluation engine.
-
-        Args:
-            registry: Custom evaluator registry. Uses default if not provided.
-
-        """
+        """Initialize the evaluation engine."""
         self._registry = registry or EvaluatorRegistry()
 
     @property
@@ -540,18 +730,8 @@ class EvaluationEngine:
         definition: FeatureDefinition,
         context: EvaluationContext,
     ) -> bool:
-        """Evaluate a feature definition.
-
-        Args:
-            definition: The feature definition to evaluate.
-            context: The evaluation context.
-
-        Returns:
-            True if the feature should be enabled.
-
-        """
+        """Evaluate a feature definition."""
         if not definition.filters:
-            # No filters means feature is disabled
             return False
 
         entity_filters = ContextPropertyEvaluator.entity_filters(definition)
@@ -602,21 +782,8 @@ class EvaluationEngine:
         requirement: FeatureRequirement = FeatureRequirement.ALL,
         negate: bool = False,
     ) -> bool:
-        """Evaluate multiple features as a gate.
-
-        Args:
-            definitions: Dictionary of feature definitions.
-            feature_keys: List of feature keys to evaluate.
-            context: The evaluation context.
-            requirement: Whether ALL or ANY features must be enabled.
-            negate: Whether to negate the final result.
-
-        Returns:
-            True if the gate passes.
-
-        """
+        """Evaluate multiple features as a gate."""
         if not feature_keys:
-            # Empty list returns True (no requirements to fail)
             result = True
         elif requirement == FeatureRequirement.ALL:
             result = all(
@@ -636,16 +803,7 @@ class EvaluationEngine:
         definition: FeatureDefinition | None,
         context: EvaluationContext,
     ) -> bool:
-        """Evaluate a single feature.
-
-        Args:
-            definition: The feature definition (may be None).
-            context: The evaluation context.
-
-        Returns:
-            True if the feature is enabled.
-
-        """
+        """Evaluate a single feature."""
         if definition is None:
             return False
         return self.evaluate(definition, context)
