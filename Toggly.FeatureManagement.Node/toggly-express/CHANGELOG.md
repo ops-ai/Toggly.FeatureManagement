@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 0.2.0
+
+2026-09-04
+
+### Added
+- Optional `getGroups` / `getClaims` config and ambient EvalContext merge:
+  providers bind identity/groups/claims per request; missing `request` is
+  still filled from headers via `fromHttpRequest` even when `getContext`
+  is used [OPS-887].
+
 ## 0.1.6
 
 2026-09-02

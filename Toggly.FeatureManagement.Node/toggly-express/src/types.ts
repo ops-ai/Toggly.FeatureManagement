@@ -18,7 +18,22 @@ export interface TogglyExpressConfig extends Omit<TogglyServerConfig, 'onError'>
   getIdentity?: (req: Request) => string | undefined | Promise<string | undefined>
 
   /**
-   * Function to extract evaluation context from request
+   * Function to extract group memberships from request
+   * Default: Uses session.groups when present
+   */
+  getGroups?: (req: Request) => string[] | undefined | Promise<string[] | undefined>
+
+  /**
+   * Function to extract principal / JWT-style claims from request
+   */
+  getClaims?: (
+    req: Request
+  ) => Record<string, string> | undefined | Promise<Record<string, string> | undefined>
+
+  /**
+   * Function to extract evaluation context from request.
+   * When provided, returned fields are used; missing `request` is still
+   * filled from HTTP headers via `fromHttpRequest`.
    */
   getContext?: (req: Request) => EvaluationContext | Promise<EvaluationContext>
 

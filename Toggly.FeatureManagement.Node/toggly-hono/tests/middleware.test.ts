@@ -141,6 +141,113 @@ describe('togglyMiddleware', () => {
     await app.request('/test')
   })
 
+  it('should attach getGroups and getClaims to ambient context', async () => {
+    app.use(
+      '*',
+      togglyMiddleware({
+        appKey: 'test-app',
+        getIdentity: () => 'user-claims',
+        getGroups: () => ['beta', 'staff'],
+        getClaims: () => ({ role: 'admin', plan: 'pro' }),
+      })
+    )
+
+    app.get('/test', (c) => {
+      const toggly = c.get('toggly')
+      expect(toggly.context.identity).toBe('user-claims')
+      expect(toggly.context.groups).toEqual(['beta', 'staff'])
+      expect(toggly.context.claims).toEqual({ role: 'admin', plan: 'pro' })
+      return c.json({ success: true })
+    })
+
+    await app.request('/test')
+  })
+
+  it('should fill request.country from cf-ipcountry when getContext omits request', async () => {
+    app.use(
+      '*',
+      togglyMiddleware({
+        appKey: 'test-app',
+        getContext: () => ({
+          identity: 'ctx-user',
+          groups: ['admin'],
+          claims: { role: 'admin' },
+        }),
+      })
+    )
+
+    app.get('/test', (c) => {
+      const toggly = c.get('toggly')
+      expect(toggly.context.identity).toBe('ctx-user')
+      expect(toggly.context.groups).toEqual(['admin'])
+      expect(toggly.context.claims).toEqual({ role: 'admin' })
+      expect(toggly.context.request?.country).toBe('DE')
+      expect(toggly.context.request?.userAgent).toBe('Chrome/120')
+      return c.json({ success: true })
+    })
+
+    await app.request('/test', {
+      headers: {
+        'cf-ipcountry': 'DE',
+        'user-agent': 'Chrome/120',
+      },
+    })
+  })
+
+  it('should enrich partial getContext.request from headers', async () => {
+    app.use(
+      '*',
+      togglyMiddleware({
+        appKey: 'test-app',
+        getContext: () => ({
+          identity: 'ctx-user',
+          request: { country: 'US' },
+        }),
+      })
+    )
+
+    app.get('/test', (c) => {
+      const toggly = c.get('toggly')
+      expect(toggly.context.request?.country).toBe('US')
+      expect(toggly.context.request?.userAgent).toBe('Chrome/120')
+      return c.json({ success: true })
+    })
+
+    await app.request('/test', {
+      headers: {
+        'cf-ipcountry': 'DE',
+        'user-agent': 'Chrome/120',
+      },
+    })
+  })
+
+  it('should enrich empty getContext.request object from headers', async () => {
+    app.use(
+      '*',
+      togglyMiddleware({
+        appKey: 'test-app',
+        getContext: () => ({
+          identity: 'ctx-user',
+          request: {},
+        }),
+      })
+    )
+
+    app.get('/test', (c) => {
+      const toggly = c.get('toggly')
+      expect(toggly.context.request?.country).toBe('FR')
+      expect(toggly.context.request?.userAgent).toBe('Firefox/121')
+      return c.json({ success: true })
+    })
+
+    await app.request('/test', {
+      headers: {
+        'cf-ipcountry': 'FR',
+        'user-agent': 'Firefox/121',
+      },
+    })
+  })
+
   it('should provide feature checking functions', async () => {
     app.use('*', togglyMiddleware({ appKey: 'test-app' }))
 
