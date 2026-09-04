@@ -20,6 +20,10 @@ module Toggly
         "contextual"
       end
 
+      def self.aliases
+        %w[ContextualTargeting]
+      end
+
       # Evaluate contextual targeting rule
       #
       # @param rule [Hash] Rule with "conditions" array

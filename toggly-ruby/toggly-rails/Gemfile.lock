@@ -1,7 +1,7 @@
 PATH
   remote: ../toggly
   specs:
-    toggly (0.2.1)
+    toggly (0.3.0)
 
 PATH
   remote: .

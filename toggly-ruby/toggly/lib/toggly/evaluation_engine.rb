@@ -97,7 +97,7 @@ module Toggly
     def evaluate_filter_group(rules, requirement_type, context, feature_key, result)
       req = (requirement_type || "Any").to_s
       evaluations = rules.map do |rule|
-        rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "always_on"
+        rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "AlwaysOn"
         evaluator = @registry.get(rule_type)
         next false unless evaluator
 
@@ -115,12 +115,13 @@ module Toggly
 
     def sequential_rules(rules, definition, context, result)
       rules.each_with_index do |rule, index|
-        rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "always_on"
+        rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "AlwaysOn"
         evaluator = @registry.get(rule_type)
 
         unless evaluator
           log_warn("Unknown evaluator type: #{rule_type} for feature #{definition.feature_key}")
-          next
+          result&.reason = "unknown_filter"
+          return false
         end
 
         begin

@@ -2,10 +2,15 @@
 
 require_relative "toggly/version"
 require_relative "toggly/config"
+require_relative "toggly/request_context"
+require_relative "toggly/http_request_mapper"
+require_relative "toggly/sticky_hash"
+require_relative "toggly/user_agent_parser"
 require_relative "toggly/context"
 require_relative "toggly/errors"
 require_relative "toggly/feature_definition"
 require_relative "toggly/evaluators/base"
+require_relative "toggly/evaluators/segment_helpers"
 require_relative "toggly/evaluators/always_on"
 require_relative "toggly/evaluators/always_off"
 require_relative "toggly/evaluators/percentage"
@@ -13,6 +18,12 @@ require_relative "toggly/evaluators/targeting"
 require_relative "toggly/evaluators/time_window"
 require_relative "toggly/evaluators/contextual_targeting"
 require_relative "toggly/evaluators/context_property"
+require_relative "toggly/evaluators/browser_family"
+require_relative "toggly/evaluators/browser_language"
+require_relative "toggly/evaluators/country"
+require_relative "toggly/evaluators/device_type"
+require_relative "toggly/evaluators/operating_system"
+require_relative "toggly/evaluators/user_claims"
 require_relative "toggly/entity_context"
 require_relative "toggly/registry"
 require_relative "toggly/evaluation_engine"
@@ -38,7 +49,9 @@ require_relative "toggly/client"
 #   context = Toggly::Context.new(
 #     identity: "user-123",
 #     groups: ["beta-testers"],
-#     traits: { country: "US" }
+#     claims: { "role" => "admin" },
+#     request: Toggly::RequestContext.new(country: "US"),
+#     traits: { plan: "enterprise" }
 #   )
 #
 #   if client.enabled?("premium-feature", context: context)

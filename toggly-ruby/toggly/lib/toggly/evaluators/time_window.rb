@@ -7,12 +7,16 @@ module Toggly
     # Enables features within a specific time range.
     class TimeWindow < Base
       def self.type
-        "time_window"
+        "TimeWindow"
+      end
+
+      def self.aliases
+        %w[Microsoft.TimeWindow time_window]
       end
 
       # Evaluate time window rule
       #
-      # @param rule [Hash] Rule with "startTime"/"start_time" and/or "endTime"/"end_time"
+      # @param rule [Hash] Rule with Start/End or startTime/endTime
       # @param context [Context] Evaluation context (ignored)
       # @param feature_key [String] The feature key
       # @return [Boolean] True if current time is within window
@@ -20,19 +24,20 @@ module Toggly
         now = Time.now.utc
 
         start_time = parse_time(
-          rule_value(rule, "startTime") || rule_value(rule, "start_time")
+          rule_value(rule, "Start") ||
+          rule_value(rule, "start") ||
+          rule_value(rule, "startTime") ||
+          rule_value(rule, "start_time")
         )
         end_time = parse_time(
-          rule_value(rule, "endTime") || rule_value(rule, "end_time")
+          rule_value(rule, "End") ||
+          rule_value(rule, "end") ||
+          rule_value(rule, "endTime") ||
+          rule_value(rule, "end_time")
         )
 
-        # No time constraints means always valid
         return true if start_time.nil? && end_time.nil?
-
-        # Check start time
         return false if start_time && now < start_time
-
-        # Check end time
         return false if end_time && now > end_time
 
         true

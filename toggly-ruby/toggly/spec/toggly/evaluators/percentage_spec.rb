@@ -5,7 +5,7 @@ RSpec.describe Toggly::Evaluators::Percentage do
 
   describe ".type" do
     it "returns percentage" do
-      expect(described_class.type).to eq("percentage")
+      expect(described_class.type).to eq("Percentage")
     end
   end
 
