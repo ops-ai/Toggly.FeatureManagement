@@ -1,0 +1,23 @@
+{
+  "id": "user-claims-match",
+  "description": "UserClaims matches when claim type and value are present",
+  "featureKey": "parity-user-claims-match",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "UserClaims",
+      "parameters": {
+        "Percentage": 100,
+        "Claim": "role",
+        "Value": "admin"
+      }
+    }
+  ],
+  "context": {
+    "identity": "u",
+    "claims": {
+      "role": "admin"
+    }
+  },
+  "expected": true
+}

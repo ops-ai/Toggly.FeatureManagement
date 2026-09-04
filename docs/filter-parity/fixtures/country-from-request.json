@@ -1,0 +1,22 @@
+{
+  "id": "country-from-request",
+  "description": "Country matches EvalContext.request.country (case-insensitive)",
+  "featureKey": "parity-country-request",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "Country",
+      "parameters": {
+        "Percentage": 100,
+        "Country:0": "US"
+      }
+    }
+  ],
+  "context": {
+    "identity": "u",
+    "request": {
+      "country": "us"
+    }
+  },
+  "expected": true
+}

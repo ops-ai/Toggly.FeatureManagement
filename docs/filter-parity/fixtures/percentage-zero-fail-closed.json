@@ -1,0 +1,18 @@
+{
+  "id": "percentage-zero-fail-closed",
+  "description": "Percentage Value ≤ 0 fails closed",
+  "featureKey": "parity-percentage-zero",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "Percentage",
+      "parameters": {
+        "Value": 0
+      }
+    }
+  ],
+  "context": {
+    "identity": "u"
+  },
+  "expected": false
+}

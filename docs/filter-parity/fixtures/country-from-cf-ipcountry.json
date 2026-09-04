@@ -1,0 +1,22 @@
+{
+  "id": "country-from-cf-ipcountry",
+  "description": "Country from cf-ipcountry via fromHttpRequest header mapping",
+  "featureKey": "parity-country-header",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "Country",
+      "parameters": {
+        "Percentage": 100,
+        "Country:0": "US"
+      }
+    }
+  ],
+  "context": {
+    "identity": "u"
+  },
+  "httpHeaders": {
+    "cf-ipcountry": "US"
+  },
+  "expected": true
+}

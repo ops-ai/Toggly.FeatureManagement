@@ -1,0 +1,16 @@
+{
+  "id": "percentage-missing-fail-closed",
+  "description": "Percentage filter with empty parameters fails closed",
+  "featureKey": "parity-percentage-missing",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "Percentage",
+      "parameters": {}
+    }
+  ],
+  "context": {
+    "identity": "u"
+  },
+  "expected": false
+}
