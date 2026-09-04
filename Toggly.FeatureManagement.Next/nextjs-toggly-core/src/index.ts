@@ -43,6 +43,7 @@ export type {
   EvalContext,
   FeatureDefinitionModel,
 } from '@ops-ai/toggly-eval'
+export { fromHttpRequest } from '@ops-ai/toggly-eval'
 
 // Types
 export type {
@@ -59,4 +60,6 @@ export type {
   Hook,
   HookMetadata,
   EvaluationMode,
+  EvalContextOverrides,
+  EvalContextArg,
 } from './types'

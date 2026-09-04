@@ -1,3 +1,13 @@
+## 1.8.0
+
+2026-09-03
+
+### Added
+- Per-call `EvalContextOverrides` (`identity`, `groups`, `claims`, `request`)
+  for local evaluation; string identity override remains supported [OPS-874].
+- Re-export `fromHttpRequest` from `@ops-ai/toggly-eval` for header → request
+  mapping (Country / BrowserFamily / language filters).
+
 ## 1.7.0
 
 2026-09-02

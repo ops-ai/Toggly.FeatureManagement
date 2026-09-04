@@ -13,6 +13,20 @@ export type { LocalGate }
 /** 'remote' (default): evaluated-signed client rail. 'local': definitions-signed + toggly-eval. */
 export type EvaluationMode = 'local' | 'remote'
 
+/**
+ * Per-call overrides for local evaluation context.
+ * A bare string is still accepted as an identity override for backward compatibility.
+ */
+export type EvalContextOverrides = {
+  identity?: string
+  groups?: string[]
+  claims?: Record<string, string>
+  request?: import('@ops-ai/toggly-eval').EvalContext['request']
+}
+
+/** Last arg to isFeatureOn / Off / evaluateFeatureGate: string identity or full overrides. */
+export type EvalContextArg = string | EvalContextOverrides
+
 export interface TogglyConfig {
   /** Your Toggly application key */
   appKey?: string
@@ -211,13 +225,14 @@ export interface TogglyClient {
 
   /**
    * Check if a single feature is enabled.
-   * In local mode, `identityOverride` replaces config.identity for this evaluation only.
+   * In local mode, the last arg overrides identity/groups/claims/request for this
+   * evaluation only (string identity remains supported).
    */
   isFeatureOn(
     featureKey: string,
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
-    identityOverride?: string,
+    overrides?: EvalContextArg,
   ): Promise<boolean>
 
   /** Check if a single feature is disabled */
@@ -225,7 +240,7 @@ export interface TogglyClient {
     featureKey: string,
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
-    identityOverride?: string,
+    overrides?: EvalContextArg,
   ): Promise<boolean>
 
   /** Evaluate a feature gate with multiple features */
@@ -235,7 +250,7 @@ export interface TogglyClient {
     negate?: boolean,
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
-    identityOverride?: string,
+    overrides?: EvalContextArg,
   ): Promise<boolean>
 
   /** Register an entity context mapper for a catalog kind */
