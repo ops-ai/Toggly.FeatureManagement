@@ -1,19 +1,20 @@
 """Tests for Toggly models."""
 
-import pytest
 from datetime import datetime, timezone
 
+import pytest
+
 from toggly import (
+    DebugInfo,
     EvaluatedVariantDef,
     FeatureDefinition,
     FeatureFilter,
     FeatureState,
-    TogglyInitResponse,
-    LoadStatus,
-    DebugInfo,
-    NetworkState,
     JsonWebKey,
     JsonWebKeySet,
+    LoadStatus,
+    NetworkState,
+    TogglyInitResponse,
     VariantResult,
 )
 

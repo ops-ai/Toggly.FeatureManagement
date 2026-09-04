@@ -1,17 +1,16 @@
 """Tests for feature flag decorators."""
 
-import pytest
 
 from toggly import (
-    TogglyClient,
-    TogglyConfig,
     EvaluationContext,
     FeatureRequirement,
+    TogglyClient,
+    TogglyConfig,
+    feature_context,
     feature_flag,
     feature_gate,
-    feature_context,
-    set_default_client,
     get_default_client,
+    set_default_client,
 )
 
 

@@ -256,9 +256,16 @@ class EvaluationContext:
                 attributes=entity_data.get("attributes") or {},
             )
         claims_raw = data.get("claims") or {}
-        claims = {str(k): str(v) for k, v in claims_raw.items()} if isinstance(claims_raw, dict) else {}
+        if isinstance(claims_raw, dict):
+            claims = {str(k): str(v) for k, v in claims_raw.items()}
+        else:
+            claims = {}
         request_data = data.get("request")
-        request = RequestContext.from_dict(request_data) if isinstance(request_data, dict) else None
+        request = (
+            RequestContext.from_dict(request_data)
+            if isinstance(request_data, dict)
+            else None
+        )
         return cls(
             identity=data.get("identity"),
             groups=data.get("groups", []),

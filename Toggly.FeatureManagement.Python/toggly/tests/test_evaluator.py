@@ -1,7 +1,6 @@
 """Tests for feature flag evaluation."""
 
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from toggly import (
     EvaluationContext,
@@ -10,12 +9,12 @@ from toggly import (
     FeatureRequirement,
 )
 from toggly.evaluator import (
+    AlwaysOnEvaluator,
     EvaluationEngine,
     EvaluatorRegistry,
-    AlwaysOnEvaluator,
     PercentageEvaluator,
-    TimeWindowEvaluator,
     TargetingEvaluator,
+    TimeWindowEvaluator,
 )
 
 

@@ -88,12 +88,12 @@ def _equals_ignore_case(a: str | None, b: str | None) -> bool:
 
 
 def compute_percentile(user_id: str, feature_key: str) -> float:
-    """Sticky bucket in [0, 100) matching Definitions / toggly-eval SHA-256.
+    r"""Sticky bucket in [0, 100) matching Definitions / toggly-eval SHA-256.
 
-    Hash input is ``featureKey + "\\n" + userId``; little-endian uint32 from the
+    Hash input is ``featureKey + "\n" + userId``; little-endian uint32 from the
     first 4 digest bytes, then ``(value / 0xFFFFFFFF) * 100``.
     """
-    digest = hashlib.sha256(f"{feature_key}\n{user_id}".encode("utf-8")).digest()
+    digest = hashlib.sha256(f"{feature_key}\n{user_id}".encode()).digest()
     value = int.from_bytes(digest[:4], byteorder="little", signed=False)
     return (value / float(0xFFFFFFFF)) * 100.0
 
@@ -119,6 +119,7 @@ class ParsedUserAgent:
     __slots__ = ("browser_family", "os_family", "device_family")
 
     def __init__(self, browser_family: str, os_family: str, device_family: str) -> None:
+        """Store parsed browser, OS, and device family labels."""
         self.browser_family = browser_family
         self.os_family = os_family
         self.device_family = device_family
@@ -211,10 +212,10 @@ class AlwaysOffEvaluator(FilterEvaluator):
 
 
 class PercentageEvaluator(FilterEvaluator):
-    """Evaluator for percentage-based rollouts.
+    r"""Evaluator for percentage-based rollouts.
 
     Uses Definitions-aligned sticky SHA-256 hashing
-    (``featureKey + "\\n" + identity``) for consistent buckets.
+    (``featureKey + "\n" + identity``) for consistent buckets.
     """
 
     def evaluate(
