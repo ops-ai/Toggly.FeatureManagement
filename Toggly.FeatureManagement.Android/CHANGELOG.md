@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0
+
+2026-09-02
+
+### Changed
+- Compose: `Feature` is the primary UI API with `negate` for the off path and
+  optional `context` / `contextKind` for entity-aware evaluation. `FeatureGate`
+  accepts the same entity parameters.
+- Compose: `FeatureFlag` and `FeatureFlagOff` are deprecated in favor of
+  `Feature` / `Feature(negate = true)`. `FeatureSwitch` remains as a
+  Variant-style dual-slot helper, not the primary Off API.
+- Views: docs and helpers prefer `bindToFeatureGate(..., negate = true)` for
+  the off path; `showWhenFeatureDisabled` remains as a convenience wrapper.
+
 ## 1.2.0
 
 2026-08-21

@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nextjs-toggly-edge",
-  "version": "1.2.1",
+  "version": "1.2.3",
   "description": "Edge Runtime feature flags for Next.js - Middleware and Edge Functions",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -55,7 +55,8 @@
   },
   "homepage": "https://docs.toggly.io/sdks/nextjs/edge",
   "dependencies": {
-    "@ops-ai/nextjs-toggly-core": "workspace:*",
+    "@ops-ai/nextjs-toggly-core": "workspace:^",
+    "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
   },
   "peerDependencies": {
@@ -65,7 +66,7 @@
     "@types/node": "^22.13.1",
     "@vitest/coverage-v8": "^3.0.4",
     "eslint": "^9.19.0",
-    "next": "^15.1.6",
+    "next": "^15.5.18",
     "tsup": "^8.3.5",
     "typescript": "^5.7.3",
     "vitest": "^3.0.4"

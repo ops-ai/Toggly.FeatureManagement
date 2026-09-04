@@ -1,8 +1,74 @@
 import type { H3Event, EventHandler } from 'h3'
-import { createError, defineEventHandler, getHeader, setResponseStatus } from 'h3'
-import { normalizeFeatureKeys, evaluateGate } from '@ops-ai/nuxt-toggly-core'
+import { createError, defineEventHandler, getHeader } from 'h3'
+import { normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core'
+import type { TogglyClient } from '@ops-ai/nuxt-toggly-core'
 import type { FeatureMiddlewareOptions } from './types'
 import { getServerToggly, useServerToggly } from './server-client'
+
+/**
+ * Request-scoped view of the shared server client that binds identityOverride
+ * without mutating process-wide `client.identity`.
+ */
+function bindRequestIdentity(
+  client: TogglyClient,
+  identity: string | undefined
+): TogglyClient {
+  if (!identity) {
+    return client
+  }
+
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      if (prop === 'identity') {
+        return identity
+      }
+      if (prop === 'isFeatureOn') {
+        return (
+          featureKey: string,
+          context?: Parameters<TogglyClient['isFeatureOn']>[1],
+          kind?: string,
+        ) => target.isFeatureOn(featureKey, context, kind, identity)
+      }
+      if (prop === 'isFeatureOff') {
+        return (
+          featureKey: string,
+          context?: Parameters<TogglyClient['isFeatureOff']>[1],
+          kind?: string,
+        ) => target.isFeatureOff(featureKey, context, kind, identity)
+      }
+      if (prop === 'evaluateFeatureGate') {
+        return (
+          featureKeys: string[],
+          requirement?: Parameters<TogglyClient['evaluateFeatureGate']>[1],
+          negate?: boolean,
+          context?: Parameters<TogglyClient['evaluateFeatureGate']>[3],
+          kind?: string,
+        ) =>
+          target.evaluateFeatureGate(
+            featureKeys,
+            requirement,
+            negate,
+            context,
+            kind,
+            identity,
+          )
+      }
+      const value = Reflect.get(target, prop, receiver)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+    set(target, prop, value, receiver) {
+      if (prop === 'identity') {
+        // Ignore — request identity must not mutate the shared client.
+        return true
+      }
+      return Reflect.set(target, prop, value, receiver)
+    },
+  })
+}
+
+function requestIdentity(event: H3Event): string | undefined {
+  return getHeader(event, 'x-toggly-identity') || undefined
+}
 
 /**
  * Create a feature flag middleware for Nitro/H3
@@ -44,16 +110,14 @@ export function defineFeatureMiddleware(
       })
     }
 
-    // Get identity from header if present
-    const identity = getHeader(event, 'x-toggly-identity')
-    if (identity) {
-      client.identity = identity
-    }
-
+    const identity = requestIdentity(event)
     const isEnabled = await client.evaluateFeatureGate(
       featureKeys,
       requirement,
-      negate
+      negate,
+      undefined,
+      undefined,
+      identity,
     )
 
     if (!isEnabled) {
@@ -108,16 +172,14 @@ export function defineFeatureHandler(
       })
     }
 
-    // Get identity from header if present
-    const identity = getHeader(event, 'x-toggly-identity')
-    if (identity) {
-      client.identity = identity
-    }
-
+    const identity = requestIdentity(event)
     const isEnabled = await client.evaluateFeatureGate(
       featureKeys,
       requirement,
-      negate
+      negate,
+      undefined,
+      undefined,
+      identity,
     )
 
     if (!isEnabled) {
@@ -150,14 +212,7 @@ export function defineFeatureHandler(
  */
 export function useEventToggly(event: H3Event) {
   const client = useServerToggly()
-
-  // Get identity from header if present
-  const identity = getHeader(event, 'x-toggly-identity')
-  if (identity) {
-    client.identity = identity
-  }
-
-  return client
+  return bindRequestIdentity(client, requestIdentity(event))
 }
 
 /**
@@ -184,12 +239,12 @@ export async function isEventFeatureOn(
     return false
   }
 
-  const identity = getHeader(event, 'x-toggly-identity')
-  if (identity) {
-    client.identity = identity
-  }
-
-  return client.isFeatureOn(featureKey)
+  return client.isFeatureOn(
+    featureKey,
+    undefined,
+    undefined,
+    requestIdentity(event),
+  )
 }
 
 /**
@@ -231,10 +286,12 @@ export async function evaluateEventFeatureGate(
     return false
   }
 
-  const identity = getHeader(event, 'x-toggly-identity')
-  if (identity) {
-    client.identity = identity
-  }
-
-  return client.evaluateFeatureGate(featureKeys, requirement, negate)
+  return client.evaluateFeatureGate(
+    featureKeys,
+    requirement,
+    negate,
+    undefined,
+    undefined,
+    requestIdentity(event),
+  )
 }

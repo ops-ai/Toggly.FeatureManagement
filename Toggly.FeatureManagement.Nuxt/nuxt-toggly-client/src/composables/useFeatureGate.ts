@@ -3,6 +3,7 @@ import { useToggly } from './useToggly'
 import { evaluateGate, normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core'
 import type { UseFeatureGateReturn, FeatureProps } from '../types'
 import type { FeatureRequirement } from '@ops-ai/nuxt-toggly-core'
+import type { TogglyEntityContext } from '@ops-ai/nuxt-toggly-core'
 
 /**
  * Composable for evaluating multiple feature flags as a gate
@@ -24,7 +25,9 @@ import type { FeatureRequirement } from '@ops-ai/nuxt-toggly-core'
 export function useFeatureGate(
   featureKeys: MaybeRef<string | string[]>,
   requirement: MaybeRef<FeatureRequirement> = 'all',
-  negate: MaybeRef<boolean> = false
+  negate: MaybeRef<boolean> = false,
+  context?: MaybeRef<TogglyEntityContext | Record<string, unknown> | null | undefined>,
+  contextKind?: MaybeRef<string | undefined>,
 ): UseFeatureGateReturn {
   const toggly = useToggly()
   const isLoading = ref(true)
@@ -33,10 +36,12 @@ export function useFeatureGate(
   const keys = computed(() => normalizeFeatureKeys(toValue(featureKeys)))
   const req = computed(() => toValue(requirement))
   const neg = computed(() => toValue(negate))
+  const entity = computed(() => toValue(context) ?? null)
+  const kind = computed(() => toValue(contextKind))
 
   const checkGate = async () => {
     if (!toggly.isReady.value) {
-      // Use local evaluation
+      // Use local evaluation (booleans only; entity gates need the client)
       enabled.value = evaluateGate(
         toggly.features.value,
         keys.value,
@@ -52,7 +57,9 @@ export function useFeatureGate(
       enabled.value = await toggly.evaluateFeatureGate(
         keys.value,
         req.value,
-        neg.value
+        neg.value,
+        entity.value,
+        kind.value,
       )
     } catch {
       enabled.value = false
@@ -63,7 +70,7 @@ export function useFeatureGate(
 
   // Check gate when ready or when inputs change
   watch(
-    [() => toggly.isReady.value, keys, req, neg],
+    [() => toggly.isReady.value, keys, req, neg, entity, kind],
     async ([ready]) => {
       if (ready) {
         await checkGate()
@@ -72,7 +79,7 @@ export function useFeatureGate(
     { immediate: true }
   )
 
-  // Also check when features change
+  // Also check when features change (sync local map for boolean defs)
   watch(
     () => toggly.features.value,
     () => {
@@ -123,6 +130,8 @@ export function useFeatureProps(props: FeatureProps): UseFeatureGateReturn {
   return useFeatureGate(
     keys,
     computed(() => props.requirement ?? 'all'),
-    computed(() => props.negate ?? false)
+    computed(() => props.negate ?? false),
+    computed(() => props.context ?? null),
+    computed(() => props.contextKind),
   )
 }

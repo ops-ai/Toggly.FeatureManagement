@@ -171,11 +171,20 @@ export interface UseTogglyResult {
 export interface FeatureProps {
   /** Feature flag key to check */
   flag: string;
-  
-  /** Fallback content when feature is disabled */
-  fallback?: React.ReactNode;
-  
-  /** Children to render when feature is enabled */
+
+  /** When true, render children when the feature is off */
+  negate?: boolean;
+
+  /** Entity instance or canonical entity context for entity-gated flags */
+  context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null;
+
+  /** Context kind for registerContext mapper lookup when `context` is a domain object */
+  contextKind?: string;
+
+  /** Content to render while flags are not ready (not an off-path branch) */
+  loading?: React.ReactNode;
+
+  /** Children to render when the gate passes */
   children: React.ReactNode;
 }
 
@@ -185,16 +194,22 @@ export interface FeatureProps {
 export interface FeatureGateProps {
   /** Array of feature flag keys */
   flags: string[];
-  
+
   /** Gate requirement: 'all' or 'any' */
   requirement?: GateRequirement;
-  
+
   /** Negate the gate result */
   negate?: boolean;
-  
-  /** Fallback content when gate is not met */
-  fallback?: React.ReactNode;
-  
+
+  /** Entity instance or canonical entity context for entity-gated flags */
+  context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null;
+
+  /** Context kind for registerContext mapper lookup when `context` is a domain object */
+  contextKind?: string;
+
+  /** Content to render while flags are not ready (not an off-path branch) */
+  loading?: React.ReactNode;
+
   /** Children to render when gate is met */
   children: React.ReactNode;
 }

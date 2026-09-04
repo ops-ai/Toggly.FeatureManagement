@@ -2,6 +2,7 @@
 export {
   initServerToggly,
   getServerToggly,
+  waitForServerToggly,
   useServerToggly,
   refreshServerToggly,
   isServerFeatureOn,
@@ -14,7 +15,7 @@ export {
 } from './server-client'
 
 // Server Components
-export { Feature, FeatureOff, FeatureVariant } from './components'
+export { Feature, FeatureVariant } from './components'
 export type { FeatureProps } from './components'
 
 // Server Actions
@@ -43,7 +44,11 @@ export type {
   RequestContext,
   ServerFeatureOptions,
   FeatureGateResult,
+  FeatureCheckOptions,
+  EntityContextInput,
 } from './types'
+
+export type { TogglyEntityContext } from '@ops-ai/nextjs-toggly-core'
 
 // Re-export core types
 export type {

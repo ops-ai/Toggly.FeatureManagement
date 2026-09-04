@@ -13,13 +13,20 @@ import {
   TogglyNetworkError,
   mergeConfig,
   buildDefinitionsUrl,
-  isFeatureEnabled,
+  isFeatureEnabledLocal,
+  parseDefinitionsPayload,
+  snapshotEvaluatedBooleans,
   fetchWithTimeout,
   createLogger,
   normalizeEntityContext,
   registerContext as registerEntityContext,
 } from '@ops-ai/remix-toggly-core';
-import type { TogglyEntityContext } from '@ops-ai/remix-toggly-core';
+import type {
+  TogglyEntityContext,
+  DefinitionsByKey,
+  EvalContext,
+  FeatureDefinitionModel,
+} from '@ops-ai/remix-toggly-core';
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -41,7 +48,6 @@ import { buildDefinitionFetchHeaders } from './sdk-identity';
 import {
   parseEvaluatedResponseBody,
   readResponseBody,
-  unwrapDefsPayload,
 } from './signed-response';
 
 /**
@@ -50,9 +56,14 @@ import {
 export class TogglyServerClient {
   private readonly config: TogglyConfig;
   private readonly logger: ReturnType<typeof createLogger>;
+  /** Compatibility snapshot of locally evaluated booleans (hydration / afterRefresh). */
   private flags: FeatureFlags = {};
+  /** Raw definitions-signed models keyed by featureKey. */
+  private definitions: Map<string, FeatureDefinitionModel> = new Map();
   private hooks: TogglyHook[] = [];
   private initialized = false;
+  /** Dedupes concurrent cold-start definition fetches. */
+  private definitionsLoadPromise: Promise<void> | null = null;
 
   // WebSocket live updates
   private ws: WebSocket | null = null;
@@ -70,7 +81,8 @@ export class TogglyServerClient {
   private readonly localGatesListeners = new Set<() => void>();
 
   constructor(config: TogglyConfig) {
-    this.config = mergeConfig(config);
+    // Server always uses definitions-signed + local evaluation (OPS-825).
+    this.config = mergeConfig({ ...config, evaluationMode: 'local' });
     this.logger = createLogger(this.config.debug ?? false);
 
     if (this.config.localGates) {
@@ -146,13 +158,66 @@ export class TogglyServerClient {
     };
   }
 
+  private buildEvalContext(
+    identityOverride?: IdentityContext,
+    entityContext?: TogglyEntityContext | null,
+  ): EvalContext {
+    // When an override object is provided, use its fields (including
+    // `identity: undefined` for anonymous). Only fall back to process
+    // defaults when no override object is passed.
+    if (identityOverride) {
+      const claims =
+        (identityOverride.claims as Record<string, string> | undefined) ??
+        (this.config.claims as Record<string, string> | undefined);
+      return {
+        identity: identityOverride.identity,
+        groups: identityOverride.groups ?? this.config.groups,
+        traits:
+          identityOverride.traits ??
+          identityOverride.claims ??
+          this.config.claims,
+        claims,
+        entity: entityContext ?? null,
+      };
+    }
+
+    const claims = this.config.claims as Record<string, string> | undefined;
+    return {
+      identity: this.identity,
+      groups: this.config.groups,
+      traits: this.config.claims,
+      claims,
+      entity: entityContext ?? null,
+    };
+  }
+
+  /**
+   * Evaluate a boolean snapshot for a specific identity without relying on
+   * shared mutable `this.flags` / `this.identity` (safe under concurrency).
+   */
+  snapshotFlags(identityOverride?: IdentityContext): FeatureFlags {
+    return {
+      ...(this.config.featureDefaults ?? {}),
+      ...snapshotEvaluatedBooleans(
+        this.definitions as DefinitionsByKey,
+        this.buildEvalContext(identityOverride),
+      ),
+    };
+  }
+
   private getEffectiveFlag(
     featureKey: string,
     defaultValue = false,
     entityContext?: TogglyEntityContext | null,
+    identityOverride?: IdentityContext,
   ): boolean {
-    const remote = isFeatureEnabled(this.flags, featureKey, defaultValue, entityContext);
-    return applyLocalGate(remote, featureKey, this.localGates, this.localGateIndex);
+    const evaluated = isFeatureEnabledLocal(
+      this.definitions as DefinitionsByKey,
+      featureKey,
+      this.buildEvalContext(identityOverride, entityContext),
+      this.config.featureDefaults?.[featureKey] ?? defaultValue,
+    );
+    return applyLocalGate(evaluated, featureKey, this.localGates, this.localGateIndex);
   }
 
   private getDefinitionsRevision(): string | null {
@@ -211,6 +276,7 @@ export class TogglyServerClient {
     negate = false,
     defaultValue = false,
     entityContext?: TogglyEntityContext | null,
+    identityOverride?: IdentityContext,
   ): boolean {
     if (featureKeys.length === 0) {
       return !negate;
@@ -218,9 +284,13 @@ export class TogglyServerClient {
 
     let result: boolean;
     if (requirement === 'any') {
-      result = featureKeys.some((key) => this.getEffectiveFlag(key, defaultValue, entityContext));
+      result = featureKeys.some((key) =>
+        this.getEffectiveFlag(key, defaultValue, entityContext, identityOverride),
+      );
     } else {
-      result = featureKeys.every((key) => this.getEffectiveFlag(key, defaultValue, entityContext));
+      result = featureKeys.every((key) =>
+        this.getEffectiveFlag(key, defaultValue, entityContext, identityOverride),
+      );
     }
 
     return negate ? !result : result;
@@ -234,41 +304,53 @@ export class TogglyServerClient {
   }
 
   /**
-   * Initialize the client by fetching feature flags
+   * Initialize the client by fetching feature definitions.
+   * When already initialized, rebinds identity (including clearing it) and
+   * re-snapshots flags without re-fetching (definitions are identity-agnostic).
+   * Concurrent cold starts share one fetch; each caller still receives a
+   * request-local snapshot for its identity.
    */
   async init(identity?: string): Promise<FeatureFlags> {
-    if (this.initialized && Object.keys(this.flags).length > 0) {
-      this.logger.debug('Client already initialized, returning cached flags.');
-      return this.flags;
+    const wasWarm = this.initialized && this.definitions.size > 0;
+
+    if (!wasWarm) {
+      if (!this.definitionsLoadPromise) {
+        this.definitionsLoadPromise = (async () => {
+          await this.fetchFlags();
+          this.initialized = true;
+          this.startWebSocket();
+        })().finally(() => {
+          this.definitionsLoadPromise = null;
+        });
+      }
+      await this.definitionsLoadPromise;
+
+      if (identity) {
+        await this.executeBeforeIdentify(identity);
+        await this.executeAfterIdentify(identity);
+      }
     }
 
+    // Always rebind — including `undefined` so identified→anonymous is correct.
     this.identity = identity;
-
-    // Execute beforeIdentify hooks if identity provided
-    if (identity) {
-      await this.executeBeforeIdentify(identity);
+    this.flags = this.snapshotFlags({ identity });
+    if (wasWarm) {
+      this.logger.debug('Client already initialized; re-snapshotted for identity.');
     }
-
-    await this.fetchFlags(identity);
-    this.initialized = true;
-
-    // Execute afterIdentify hooks if identity provided
-    if (identity) {
-      await this.executeAfterIdentify(identity);
-    }
-
-    // Start WebSocket live updates
-    this.startWebSocket();
-
     return this.flags;
   }
 
   /**
-   * Fetch feature flags from the API
+   * Fetch feature definitions from the API (definitions-signed; no identity query).
    */
   async fetchFlags(identity?: string): Promise<FeatureFlags> {
+    if (identity !== undefined) {
+      this.identity = identity;
+    }
+
     if (!this.config.appKey) {
       this.logger.debug('No appKey, using featureDefaults.');
+      this.definitions = new Map();
       this.flags = this.config.featureDefaults ?? {};
       return this.flags;
     }
@@ -276,11 +358,12 @@ export class TogglyServerClient {
     try {
       const pin = this.pendingDefinitionsPin;
       this.pendingDefinitionsPin = null;
+      // Local mode: do not pass identity into URL builder (no evaluation query params).
       const url = appendDefinitionsRevisionParam(
-        buildDefinitionsUrl(this.config, identity),
+        buildDefinitionsUrl(this.config),
         pin,
       );
-      this.logger.debug(`Fetching flags from: ${url}`);
+      this.logger.debug(`Fetching definitions from: ${url}`);
 
       const revision = pin ? null : this.getDefinitionsRevision();
       const headers = buildDefinitionFetchHeaders(
@@ -311,17 +394,12 @@ export class TogglyServerClient {
         headers: buildDefinitionFetchHeaders({}),
       });
 
-      if (this.config.verifySignatures) {
-        this.flags = unwrapDefsPayload(parsed) as FeatureFlags;
-      } else if (parsed && typeof parsed === 'object' && 'defs' in (parsed as Record<string, unknown>)) {
-        this.flags = ((parsed as { defs?: FeatureFlags }).defs ?? {}) as FeatureFlags;
-      } else {
-        this.flags =
-          parsed && typeof parsed === 'object'
-            ? (parsed as FeatureFlags)
-            : {};
-      }
-      this.logger.debug(`Fetched ${Object.keys(this.flags).length} flags.`);
+      this.definitions = parseDefinitionsPayload(parsed);
+      this.flags = {
+        ...(this.config.featureDefaults ?? {}),
+        ...snapshotEvaluatedBooleans(this.definitions, this.buildEvalContext()),
+      };
+      this.logger.debug(`Fetched ${this.definitions.size} definitions.`);
 
       // Execute afterRefresh hooks
       await this.executeAfterRefresh(this.flags);
@@ -349,7 +427,7 @@ export class TogglyServerClient {
    */
   async isEnabled(
     featureKey: string,
-    _context?: IdentityContext,
+    context?: IdentityContext,
     defaultValue = false,
     entity?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
@@ -359,7 +437,7 @@ export class TogglyServerClient {
     // Execute beforeEvaluation hooks
     const hookData = await this.executeBeforeEvaluation(featureKey, defaultValue);
 
-    const result = this.getEffectiveFlag(featureKey, defaultValue, entityContext);
+    const result = this.getEffectiveFlag(featureKey, defaultValue, entityContext, context);
 
     // Execute afterEvaluation hooks
     await this.executeAfterEvaluation(featureKey, hookData, result);
@@ -397,6 +475,7 @@ export class TogglyServerClient {
     defaultValue = false,
     entity?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
+    identityOverride?: IdentityContext,
   ): Promise<boolean> {
     const entityContext = normalizeEntityContext(entity, kind);
 
@@ -410,6 +489,7 @@ export class TogglyServerClient {
       negate,
       defaultValue,
       entityContext,
+      identityOverride,
     );
 
     // Execute afterEvaluation

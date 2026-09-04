@@ -101,7 +101,7 @@ import { Feature } from '@ops-ai/toggly-docusaurus-plugin/client';
 
 Here is the standard dashboard.
 
-<Feature flag="beta_widgets" fallback={<p>New widgets coming soon!</p>}>
+<Feature flag="beta_widgets">
   ## Beta Widgets
   
   This section is only visible to users with the `beta_widgets` flag enabled.

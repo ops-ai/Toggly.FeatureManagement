@@ -3,6 +3,9 @@ contact_links:
   - name: Documentation
     url: https://docs.toggly.io
     about: Guides, SDK references, and how-to content for integrating Toggly.
+  - name: Community Discussions
+    url: https://github.com/ops-ai/Toggly.FeatureManagement/discussions
+    about: Ask questions, share ideas, and talk with the community.
   - name: Toggly website
     url: https://toggly.io
     about: Product overview, pricing, and sign-up (Always Free plan available).

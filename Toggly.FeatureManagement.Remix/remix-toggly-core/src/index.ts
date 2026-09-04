@@ -9,6 +9,7 @@
 // Types
 export type {
   FeatureRequirement,
+  EvaluationMode,
   TogglyConfig,
   IdentityContext,
   FeatureFlags,
@@ -28,8 +29,24 @@ export type {
   TogglyEntityContext,
 } from './types';
 
+// Local evaluation types (definitions-signed rail)
+export type {
+  DefinitionsByKey,
+  EvalContext,
+  EntityEvalContext,
+  FeatureDefinitionModel,
+} from '@ops-ai/toggly-eval';
+
 // Entity context helpers, re-exported so wrapper packages share one implementation
 export { resolveEvaluatedDefinition, toBooleanDefinitions } from '@ops-ai/toggly-hooks-types';
+
+// Local evaluation engine helpers for remix-toggly-server
+export {
+  evaluateDefinitions,
+  indexDefinitions,
+  parseDefinitionsPayload,
+  snapshotEvaluatedBooleans,
+} from '@ops-ai/toggly-eval';
 
 // Error classes
 export {
@@ -45,7 +62,9 @@ export {
   mergeConfig,
   buildDefinitionsUrl,
   isFeatureEnabled,
+  isFeatureEnabledLocal,
   evaluateFeatureGate,
+  evaluateFeatureGateLocal,
   normalizeEntityContext,
   registerContext,
   clearRegisteredContexts,

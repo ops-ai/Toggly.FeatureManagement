@@ -7,14 +7,24 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.Nuxt/**'
+      - 'toggly-eval/**'
+      - 'toggly-signed-defs/**'
       - '.github/workflows/analysis-nuxt.yml'
+      - '.github/actions/build-shared-js-deps/**'
+      - '.github/actions/upload-shared-js-deps/**'
+      - '.github/actions/download-shared-js-deps/**'
   pull_request:
     branches:
       - develop
       - main
     paths:
       - 'Toggly.FeatureManagement.Nuxt/**'
+      - 'toggly-eval/**'
+      - 'toggly-signed-defs/**'
       - '.github/workflows/analysis-nuxt.yml'
+      - '.github/actions/build-shared-js-deps/**'
+      - '.github/actions/upload-shared-js-deps/**'
+      - '.github/actions/download-shared-js-deps/**'
   workflow_dispatch:
 
 env:
@@ -25,8 +35,26 @@ defaults:
     working-directory: Toggly.FeatureManagement.Nuxt
 
 jobs:
+  build-shared-js-deps:
+    name: Build shared JS deps
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build shared packages
+        uses: ./.github/actions/build-shared-js-deps
+        with:
+          packages: signed-defs,eval
+          node-version: '20'
+
+      - name: Upload shared package dist artifacts
+        uses: ./.github/actions/upload-shared-js-deps
+
   test:
     name: Test (${{ matrix.package }})
+    needs: [build-shared-js-deps]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -57,9 +85,8 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
-      - name: Build shared toggly-signed-defs package
-        working-directory: toggly-signed-defs
-        run: (npm ci || npm install) && npm run build
+      - name: Restore shared JS deps
+        uses: ./.github/actions/download-shared-js-deps
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -81,8 +108,9 @@ jobs:
 
   smoke-test:
     name: Smoke Test
+    needs: [build-shared-js-deps]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -100,9 +128,8 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
-      - name: Build shared toggly-signed-defs package
-        working-directory: toggly-signed-defs
-        run: (npm ci || npm install) && npm run build
+      - name: Restore shared JS deps
+        uses: ./.github/actions/download-shared-js-deps
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -120,7 +147,7 @@ jobs:
   sonar:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [test, dependency-check]
+    needs: [build-shared-js-deps, test, dependency-check]
     if: always()
 
     steps:
@@ -138,6 +165,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Restore shared JS deps
+        if: needs.build-shared-js-deps.result == 'success'
+        uses: ./.github/actions/download-shared-js-deps
 
       - name: Install dependencies for TypeScript analysis
         working-directory: ${{ env.SDK_ROOT }}

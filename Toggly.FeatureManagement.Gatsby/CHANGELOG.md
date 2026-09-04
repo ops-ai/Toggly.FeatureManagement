@@ -1,3 +1,30 @@
+## 1.8.0
+
+2026-09-03
+
+### Changed
+- `<Feature>` / `<FeatureGate>` use `negate` for the off path (aligned with
+  .NET `<feature negate>`). Removed the disabled-branch `fallback` prop.
+- Use `loading` for the not-ready placeholder (not an off-path branch).
+
+### Added
+- Optional `context` / `contextKind` on `<Feature>` and `<FeatureGate>` for
+  entity-gated flags.
+
+## 1.7.0
+
+2026-09-02
+
+### Changed
+- Server client fetches `definitions-signed` (no identity query) and
+  evaluates with `@ops-ai/toggly-eval` at `getFlag` / `evaluateGate`
+  (OPS-825). Browser client remains on `evaluated-signed`.
+- Local evaluation depends on `@ops-ai/toggly-eval@^2.0.0` SHA-256
+  sticky buckets (cohort shift vs FNV / eval 1.x) [OPS-832].
+
+### Added
+- Dependency on `@ops-ai/toggly-eval` for local definition evaluation.
+
 ## 1.6.1
 
 2026-08-30

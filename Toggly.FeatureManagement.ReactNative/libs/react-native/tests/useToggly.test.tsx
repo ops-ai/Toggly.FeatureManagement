@@ -101,7 +101,7 @@ describe('useToggly', () => {
 
     const isOn = await result.isFeatureOn('feature1');
 
-    expect(mockService.isFeatureOn).toHaveBeenCalledWith('feature1');
+    expect(mockService.isFeatureOn).toHaveBeenCalledWith('feature1', undefined, undefined);
     expect(isOn).toBe(true);
   });
 
@@ -120,7 +120,7 @@ describe('useToggly', () => {
 
     const isOff = await result.isFeatureOff('feature1');
 
-    expect(mockService.isFeatureOff).toHaveBeenCalledWith('feature1');
+    expect(mockService.isFeatureOff).toHaveBeenCalledWith('feature1', undefined, undefined);
     expect(isOff).toBe(false);
   });
 

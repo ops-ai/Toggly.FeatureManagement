@@ -37,6 +37,7 @@ export const INITIAL_STATE: TogglyState = {
   initialized: false,
   loading: false,
   features: {},
+  definitions: new Map(),
   error: null,
   lastRefresh: null,
   etag: null,

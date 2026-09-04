@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Feature flags for Nuxt 3 - composables, components, directives, and server utilities",
   "type": "module",
   "main": "./dist/module.cjs",
@@ -49,9 +49,9 @@
   "homepage": "https://docs.toggly.io/sdks/nuxt",
   "dependencies": {
     "@nuxt/kit": "^3.16.0",
-    "@ops-ai/nuxt-toggly-core": "workspace:*",
-    "@ops-ai/nuxt-toggly-client": "workspace:*",
-    "@ops-ai/nuxt-toggly-server": "workspace:*"
+    "@ops-ai/nuxt-toggly-core": "workspace:^",
+    "@ops-ai/nuxt-toggly-client": "workspace:^",
+    "@ops-ai/nuxt-toggly-server": "workspace:^"
   },
   "peerDependencies": {
     "nuxt": "^3.0.0"

@@ -12,6 +12,25 @@ This repository is the official multi-platform SDK monorepo. We welcome well-sco
 
 Please wait for maintainer feedback on the issue before opening a large PR.
 
+## Support floors (canonical minima)
+
+Documented runtime floors must match package metadata and CI. Prefer raising docs to what we enforce over promising older versions we do not test.
+
+| SDK | Minimum | Source of truth |
+|-----|---------|-----------------|
+| Java | Java **17+**; Spring Boot **3.2+** for Spring modules | `Toggly.FeatureManagement.Java/pom.xml`, analysis-java JDK 17/21 |
+| Rust | Rust **1.88+** (MSRV) | `toggly-rust/Cargo.toml` `rust-version`, analysis-rust MSRV job |
+| Go | Go **1.24+** | `toggly-go/go.mod`, analysis-go |
+| Ruby | Ruby **3.2+**; Rails **7.0+** | gemspecs; analysis-ruby + sdk-ruby-release matrices |
+| Python | Python **3.8+** (FastAPI package **3.9+**) | `pyproject.toml`; analysis-python + sdk-python-release |
+| Node / Next / Nuxt / Remix | Node **18+** | `engines.node`; analysis matrices 18/20/22 |
+| Android | API **24+**, Java **17+** | README + `minSdk` / AGP toolchain |
+| iOS | iOS **14+**, Swift **5.5+**, Xcode **15+** | iOS README |
+
+Dependabot and dependency PRs must stay inside these floors. Framework majors (Next 16, Nuxt 4, Spring Boot 4, AGP 9, etc.) are product decisions — see `.github/dependabot.yml`.
+
+Angular peers are **15+** (CI builds against the monorepo Angular version). .NET multi-TFM packages are built for listed targets; automated tests run on **net9.0**.
+
 ## Pull requests
 
 - Keep changes focused on one package or concern.

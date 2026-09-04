@@ -36,10 +36,10 @@ module Toggly
       # @param context [Toggly::Context, nil] Optional override context
       # @yield Content to render when enabled
       # @return [String, nil]
-      def when_feature_enabled(feature_key, context: nil, &block)
+      def when_feature_enabled(feature_key, context: nil, &)
         return unless feature_enabled?(feature_key, context: context)
 
-        capture(&block) if block_given?
+        capture(&) if block_given?
       end
 
       # Render content only if feature is disabled
@@ -48,10 +48,10 @@ module Toggly
       # @param context [Toggly::Context, nil] Optional override context
       # @yield Content to render when disabled
       # @return [String, nil]
-      def when_feature_disabled(feature_key, context: nil, &block)
+      def when_feature_disabled(feature_key, context: nil, &)
         return if feature_enabled?(feature_key, context: context)
 
-        capture(&block) if block_given?
+        capture(&) if block_given?
       end
 
       # Render enabled or disabled content based on feature state

@@ -1,0 +1,6 @@
+[
+  { "featureKey": "demo-feature", "userId": "user-123", "bucket": 60.099955033534194 },
+  { "featureKey": "demo-feature", "userId": "user-456", "bucket": 42.58172634117811 },
+  { "featureKey": "other-flag", "userId": "user-123", "bucket": 59.53490104515452 },
+  { "featureKey": "Checkout", "userId": "alice@example.com", "bucket": 43.90914511026562 }
+]

@@ -12,6 +12,25 @@ function mockOkResponse(body: unknown, status = 200) {
   } as Response;
 }
 
+function featureDefs(flags: Record<string, boolean>) {
+  return Object.entries(flags).map(([featureKey, enabled]) => ({
+    featureKey,
+    filters: [{ name: enabled ? 'AlwaysOn' : 'AlwaysOff', parameters: {} }],
+  }));
+}
+
+function defsResponse(flags: Record<string, boolean>, status = 200) {
+  const defs = featureDefs(flags);
+  const bodyText = JSON.stringify(defs);
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 200 ? 'OK' : 'Error',
+    text: async () => bodyText,
+    json: async () => defs,
+  } as Response;
+}
+
 
 describe('TogglyServer', () => {
   beforeEach(() => {
@@ -54,10 +73,7 @@ describe('TogglyServer', () => {
     });
 
     it('should fetch flags when appKey provided', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true, F2: true }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true, F2: true }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -89,10 +105,7 @@ describe('TogglyServer', () => {
     });
 
     it('should use cache for subsequent calls', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -107,10 +120,7 @@ describe('TogglyServer', () => {
     });
 
     it('should refresh cache when expired', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -142,10 +152,7 @@ describe('TogglyServer', () => {
       vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
         callCount++;
         if (callCount === 1) {
-          return {
-            ok: true,
-            json: () => Promise.resolve({ F1: true, F2: true }),
-          } as Response;
+          return defsResponse({ F1: true, F2: true });
         }
         throw new Error('Network error');
       });
@@ -182,10 +189,7 @@ describe('TogglyServer', () => {
     });
 
     it('should construct correct API URL', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({}),
-      } as Response);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({}));
 
       const server = new TogglyServer({
         appKey: 'my-key',
@@ -195,16 +199,13 @@ describe('TogglyServer', () => {
 
       await server.getFlags();
       expect(fetchSpy).toHaveBeenCalledWith(
-        'https://api.toggly.io/evaluated-signed/my-key/Staging',
+        'https://api.toggly.io/definitions-signed/my-key/Staging',
         expect.any(Object)
       );
     });
 
-    it('should include identity in URL', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({}),
-      } as Response);
+    it('should not include identity in definitions-signed URL', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({}));
 
       const server = new TogglyServer({
         appKey: 'my-key',
@@ -213,7 +214,7 @@ describe('TogglyServer', () => {
 
       await server.getFlags();
       expect(fetchSpy).toHaveBeenCalledWith(
-        expect.stringContaining('?u=user-42'),
+        'https://definitions.toggly.io/definitions-signed/my-key/Production',
         expect.any(Object)
       );
     });
@@ -222,10 +223,7 @@ describe('TogglyServer', () => {
   // ─── getFlag ──────────────────────
   describe('getFlag', () => {
     it('should return true for enabled flag', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));
 
       const server = new TogglyServer({ appKey: 'test-key' });
       const result = await server.getFlag('F1');
@@ -233,10 +231,7 @@ describe('TogglyServer', () => {
     });
 
     it('should return false for disabled flag', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: false }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: false }));
 
       const server = new TogglyServer({ appKey: 'test-key' });
       const result = await server.getFlag('F1');
@@ -244,10 +239,7 @@ describe('TogglyServer', () => {
     });
 
     it('should return default value for missing flag', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));
 
       const server = new TogglyServer({ appKey: 'test-key' });
       const result = await server.getFlag('F2', true);
@@ -255,10 +247,7 @@ describe('TogglyServer', () => {
     });
 
     it('should check flagDefaults before defaultValue', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -270,10 +259,7 @@ describe('TogglyServer', () => {
     });
 
     it('should use false as default when not specified', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({}),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({}));
 
       const server = new TogglyServer({ appKey: 'test-key' });
       const result = await server.getFlag('Unknown');
@@ -284,10 +270,7 @@ describe('TogglyServer', () => {
   // ─── evaluateGate ──────────────────────
   describe('evaluateGate', () => {
     it('should evaluate "all" requirement - all true', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true, F2: true }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true, F2: true }));
 
       const server = new TogglyServer({ appKey: 'test-key' });
       const result = await server.evaluateGate(['F1', 'F2'], 'all');
@@ -295,10 +278,7 @@ describe('TogglyServer', () => {
     });
 
     it('should evaluate "all" requirement - one false', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true, F2: false }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true, F2: false }));
 
       const server = new TogglyServer({ appKey: 'test-key' });
       const result = await server.evaluateGate(['F1', 'F2'], 'all');
@@ -306,10 +286,7 @@ describe('TogglyServer', () => {
     });
 
     it('should evaluate "any" requirement', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true, F2: false }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true, F2: false }));
 
       const server = new TogglyServer({ appKey: 'test-key' });
       const result = await server.evaluateGate(['F1', 'F2'], 'any');
@@ -317,10 +294,7 @@ describe('TogglyServer', () => {
     });
 
     it('should evaluate "any" requirement - all false', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: false, F2: false }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: false, F2: false }));
 
       const server = new TogglyServer({ appKey: 'test-key' });
       const result = await server.evaluateGate(['F1', 'F2'], 'any');
@@ -328,10 +302,7 @@ describe('TogglyServer', () => {
     });
 
     it('should support negate', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));
 
       const server = new TogglyServer({ appKey: 'test-key' });
       const result = await server.evaluateGate(['F1'], 'all', true);
@@ -354,10 +325,7 @@ describe('TogglyServer', () => {
   // ─── refreshFlags ──────────────────────
   describe('refreshFlags', () => {
     it('should fetch and cache flags', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));
 
       const server = new TogglyServer({ appKey: 'test-key' });
       await server.refreshFlags();
@@ -383,10 +351,7 @@ describe('TogglyServer', () => {
       const refresh2 = server.refreshFlags();
 
       // Resolve the fetch
-      resolvePromise!({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      resolvePromise!(defsResponse({ F1: true }));
 
       await refresh1;
       await refresh2;
@@ -397,10 +362,7 @@ describe('TogglyServer', () => {
 
     it('should log in debug mode', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));
 
       const server = new TogglyServer({
         appKey: 'test-key',
@@ -417,10 +379,7 @@ describe('TogglyServer', () => {
   // ─── allFeaturesEnabledDuringBuild ──────────────────────
   describe('allFeaturesEnabledDuringBuild', () => {
     it('should enable all features during build', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true, F2: false }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true, F2: false }));
 
       const server = new TogglyServer(
         {
@@ -438,10 +397,7 @@ describe('TogglyServer', () => {
     });
 
     it('should not override when not build time', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true, F2: false }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true, F2: false }));
 
       const server = new TogglyServer(
         {
@@ -456,10 +412,7 @@ describe('TogglyServer', () => {
     });
 
     it('should not override when allFeaturesEnabledDuringBuild is false', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true, F2: false }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true, F2: false }));
 
       const server = new TogglyServer(
         {
@@ -475,10 +428,7 @@ describe('TogglyServer', () => {
 
     it('should log in debug mode during build override', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));
 
       const server = new TogglyServer(
         {
@@ -504,10 +454,7 @@ describe('TogglyServer', () => {
     });
 
     it('should pass isBuildTime parameter', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: false }),
-      } as Response);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: false }));
 
       const client = createTogglyServerClient(
         { appKey: 'test-key', allFeaturesEnabledDuringBuild: true },

@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/remix-toggly-core",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "Core types and utilities for Toggly Remix SDK - shared between server and client packages",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -45,6 +45,7 @@
   },
   "homepage": "https://docs.toggly.io/sdks/remix",
   "dependencies": {
+    "@ops-ai/toggly-eval": "^2.0.0",
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1"
   },

@@ -1,3 +1,45 @@
+## 1.8.1
+
+2026-09-03
+
+### Fixed
+- Re-export `TogglyEntityContext`, `EvaluatedDefinitions`, `EntityGate`, and
+  entity-context helpers from the package entry so `@ops-ai/nuxt-toggly-client`
+  typecheck (and consumers) can import them [OPS-850].
+
+## 1.8.0
+
+2026-09-02
+
+### Added
+- Per-call `identityOverride` on `isFeatureOn` / `isFeatureOff` /
+  `evaluateFeatureGate` so server packages can evaluate without mutating
+  shared `client.identity` (OPS-825 Oracle).
+- `getDefinitions()` and `hydrateDefinitions()` for durable definition-cache
+  hydration on server packages.
+- Re-export local-eval helpers (`snapshotEvaluatedBooleans`,
+  `indexDefinitions`, `FeatureDefinitionModel`, …) for server wrappers.
+
+### Changed
+- Local evaluation uses `@ops-ai/toggly-eval@2` SHA-256 sticky buckets
+  (cohort shift vs FNV). Config claims forwarded as EvalContext.claims
+  [OPS-832].
+
+## 1.7.0
+
+2026-09-02
+
+### Added
+- `evaluationMode: 'local' | 'remote'` dual-rail (default `'remote'`) [OPS-825].
+  Local mode fetches `definitions-signed` and evaluates with `@ops-ai/toggly-eval`
+  at read time (identity / groups / claims / entity). Remote mode keeps the
+  existing `evaluated-signed` + `appendEvaluationContext` behavior.
+- Dependency on `@ops-ai/toggly-eval` for local definition evaluation.
+
+### Changed
+- In local mode, `setIdentity` updates identity only and does not force a
+  refresh (identity is eval-time). Remote mode still refreshes after identify.
+
 ## 1.6.1
 
 2026-08-30

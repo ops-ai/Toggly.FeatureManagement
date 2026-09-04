@@ -2,7 +2,9 @@ import type { TogglyConfig, FeatureRequirement } from '@ops-ai/nextjs-toggly-cor
 import type { NextRequest, NextResponse } from 'next/server'
 
 /**
- * Edge runtime Toggly configuration
+ * Edge runtime Toggly configuration.
+ * Inherits `identity`, `groups`, and `claims` from {@link TogglyConfig};
+ * those are appended to evaluated-signed fetch URLs for Definitions targeting.
  */
 export interface TogglyEdgeConfig extends TogglyConfig {
   /** Cache feature definitions at the edge (default: true) */

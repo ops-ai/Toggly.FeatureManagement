@@ -411,6 +411,18 @@ Use `*featureFlag` and `TogglyService.isFeatureOn` with a **per-row entity** and
 </div>
 ```
 
+Also on the `<feature>` component:
+
+```html
+<feature featureKey="ExpressCheckout" [context]="order" contextKind="Order">
+  <ng-template featureTemplate>
+    <app-checkout />
+  </ng-template>
+</feature>
+```
+
+
+
 ## License
 
 MIT

@@ -110,15 +110,27 @@ struct ContentView: View {
                 NewFeatureView()
             }
 
-            // View modifier
+            // View modifier — use negate for the off path
             Button("Beta Feature")
                 .featureFlag("beta-feature")
 
-            // Feature view with fallback
+            Button("Legacy Banner")
+                .featureFlag("new-checkout", negate: true)
+
+            // Feature view (preferred off path: negate)
             FeatureView("dark-mode") {
                 DarkModeSettings()
+            }
+
+            FeatureView("maintenance-mode", negate: true) {
+                MainContent()
+            }
+
+            // Dual-slot else: is Variant-style, not the primary Off API
+            FeatureView("experiment") {
+                VariantA()
             } else: {
-                Text("Coming soon!")
+                VariantB()
             }
         }
     }
@@ -247,19 +259,25 @@ let debug = await Toggly.shared.getDebugInfo()
 ```swift
 // Property wrapper
 @FeatureFlag("key") var isEnabled: Bool
-@FeatureFlag("key", defaultValue: true) var isEnabled: Bool
+@FeatureFlag("key", negate: true) var isOff: Bool
+@FeatureFlag("key", context: order, kind: "Order") var entityEnabled: Bool
 
 // Feature gate (multiple features)
 @FeatureGate(["feature1", "feature2"], requirement: .all) var allEnabled
+@FeatureGate(["feature1"], negate: true) var negated
 
-// View modifiers
-.featureFlag("key")           // Show when enabled
-.featureFlagOff("key")        // Show when disabled
-.featureFlag("key") { fallback }  // With fallback
+// View modifiers — prefer negate for the off path
+.featureFlag("key")                    // Show when enabled
+.featureFlag("key", negate: true)      // Show when disabled (preferred)
+.featureFlag("key") { fallback }       // Variant-style dual slot
 
 // Views
 FeatureView("key") { EnabledContent() }
+FeatureView("key", negate: true) { OffPathContent() }
+FeatureView("key", context: order, kind: "Order") { EntityContent() }
+// Dual-slot else: is Variant-style, not the primary Off API
 FeatureView("key") { EnabledContent() } else: { DisabledContent() }
+FeatureGateView(["a", "b"], negate: true) { OffPathContent() }
 ```
 
 ### Combine Publishers

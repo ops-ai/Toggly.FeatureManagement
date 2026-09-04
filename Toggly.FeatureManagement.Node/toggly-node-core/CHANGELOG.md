@@ -1,3 +1,31 @@
+# Changelog
+
+## 0.7.0
+
+2026-09-02
+
+### Changed
+- Depends on `@ops-ai/toggly-eval@2` SHA-256 sticky buckets (breaking cohort
+  shift vs FNV from 0.6 / eval 1.x) [OPS-832].
+
+### Added
+- `EvaluationContext.claims` and `request` forwarded into local eval.
+- Re-export `fromHttpRequest` for mapping HTTP headers → eval request fields.
+
+## 0.6.0
+
+2026-09-02
+
+### Changed
+- Fetch `definitions-signed` (rules payload) instead of `evaluated-signed` and
+  evaluate locally via `@ops-ai/toggly-eval` [OPS-825]. Identity is eval-time
+  only — it is no longer sent as `?u=` and `setIdentity` no longer forces a
+  refresh. `state.features` remains a snapshot for hooks; `isFeatureOn` /
+  gates always evaluate from stored definitions with call-site context.
+
+### Added
+- Dependency on `@ops-ai/toggly-eval` for local definition evaluation.
+
 ## 0.5.0
 
 2026-08-30

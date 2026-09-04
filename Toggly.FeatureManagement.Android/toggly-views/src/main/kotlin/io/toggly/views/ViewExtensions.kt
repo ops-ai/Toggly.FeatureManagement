@@ -79,9 +79,14 @@ fun View.bindAlphaToFeatureFlag(
 /**
  * Bind a View's visibility to a feature gate.
  *
+ * Prefer `negate = true` for the off path instead of [showWhenFeatureDisabled]:
+ * ```
+ * view.bindToFeatureGate(listOf("new-checkout"), this, negate = true)
+ * ```
+ *
  * @param featureKeys The feature keys to evaluate
  * @param requirement Whether all or any features must be enabled
- * @param negate Whether to negate the result
+ * @param negate Whether to negate the result (show when the gate fails)
  * @param service The TogglyService to use (defaults to global Toggly)
  * @param visibleWhenEnabled Visibility when gate passes (default: VISIBLE)
  * @param visibleWhenDisabled Visibility when gate fails (default: GONE)
@@ -105,32 +110,34 @@ fun View.bindToFeatureGate(
 
 /**
  * Show a View only when a feature is enabled.
+ *
+ * Equivalent to [bindToFeatureGate] with a single key.
  */
 fun View.showWhenFeatureEnabled(
     featureKey: String,
     lifecycleOwner: LifecycleOwner,
     service: TogglyService = Toggly.shared
-): Job = bindToFeatureFlag(
-    featureKey = featureKey,
+): Job = bindToFeatureGate(
+    featureKeys = listOf(featureKey),
     lifecycleOwner = lifecycleOwner,
-    service = service,
-    visibleWhenEnabled = View.VISIBLE,
-    visibleWhenDisabled = View.GONE
+    service = service
 )
 
 /**
  * Show a View only when a feature is disabled.
+ *
+ * Prefer [bindToFeatureGate] with `negate = true` as the primary off-path API.
+ * This helper remains for convenience.
  */
 fun View.showWhenFeatureDisabled(
     featureKey: String,
     lifecycleOwner: LifecycleOwner,
     service: TogglyService = Toggly.shared
-): Job = bindToFeatureFlag(
-    featureKey = featureKey,
+): Job = bindToFeatureGate(
+    featureKeys = listOf(featureKey),
     lifecycleOwner = lifecycleOwner,
-    service = service,
-    visibleWhenEnabled = View.GONE,
-    visibleWhenDisabled = View.VISIBLE
+    negate = true,
+    service = service
 )
 
 /**

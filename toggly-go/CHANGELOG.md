@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.4.1
+
+2026-09-03
+
+### Fixed
+- TimeWindow matches Definitions: Start-only, End-only, both, or neither
+  (neither → true). Missing side is unconstrained; invalid present side
+  fails closed [OPS-856].
+
+## 0.4.0
+
+2026-09-02
+
+### Breaking
+
+- Percentage / Targeting default rollout now use Definitions-aligned SHA-256
+  sticky buckets (`featureKey + "\n" + userId`) instead of FNV-1a. Cohorts
+  shift for any consumer of the 0.3.x FNV behavior [OPS-832].
+
+### Added
+
+- Segment filters: BrowserFamily, BrowserLanguage, Country / CountryFamily,
+  DeviceType, OS / OperatingSystem, UserClaims (sticky `%` with identity,
+  random without). Context gains `Claims` and `Request`.
+- Golden vector tests under `toggly/eval/testdata/`.
+- Dependency on `github.com/mileusna/useragent` (best-effort UA families; may
+  differ from `ua-parser-js` / UAParser.NET).
+
+## 0.3.2
+
+2026-09-02
+
+### Fixed
+- Register `Microsoft.Targeting` / `Microsoft.Percentage` /
+  `Microsoft.TimeWindow` aliases.
+- Accept colon-form audience keys alongside dotted form.
+
+## 0.3.1
+
+2026-09-02
+
+### Fixed
+- Targeting honors `Audience.Exclusion.Users` / `Audience.Exclusion.Groups`
+  before inclusions and default rollout (Definitions parity).
+- `IgnoreCase` defaults to `true` when unset (Definitions parity).
+
 ## 0.3.0
 
 2026-08-21

@@ -1,6 +1,29 @@
 # Changelog
 
 
+## 1.5.0
+
+2026-09-02
+
+### Added
+
+- `evaluationMode?: 'local' | 'remote'` on `TogglyConfig` (default `remote`) for
+  dual-rail definitions fetches.
+- Local evaluation helpers `isFeatureEnabledLocal` and
+  `evaluateFeatureGateLocal` backed by `@ops-ai/toggly-eval`.
+- Re-exports of `evaluateDefinitions`, `indexDefinitions`,
+  `parseDefinitionsPayload`, `snapshotEvaluatedBooleans`, and related types for
+  remix-toggly-server wiring.
+
+### Changed
+
+- `buildDefinitionsUrl` uses `definitions-signed` (no context query params)
+  when `evaluationMode` is `local`; remote mode keeps `evaluated-signed`.
+- Depends on `@ops-ai/toggly-eval@^2.0.0` SHA-256 sticky buckets (cohort
+  shift vs FNV / eval 1.x) [OPS-832].
+- Rollup leaves `@ops-ai/toggly-eval` (and sibling `@ops-ai/*` deps) external
+  so the published package installs eval from npm instead of bundling it.
+
 ## 1.4.2
 
 - Normalize public npm metadata for provenance and docs links (no API change).

@@ -1,0 +1,54 @@
+{
+  "name": "@ops-ai/toggly-eval",
+  "version": "2.0.2",
+  "description": "Local feature-definition evaluation engine for Toggly server SDKs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run clean && npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "toggly",
+    "feature-flags",
+    "evaluation",
+    "definitions-signed",
+    "server-side",
+    "typescript",
+    "feature-management"
+  ],
+  "author": "Toggly <support@toggly.io>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "toggly-eval"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "homepage": "https://docs.toggly.io/sdks",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/ua-parser-js": "^0.7.39",
+    "@vitest/coverage-v8": "^3.0.4",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.4"
+  },
+  "dependencies": {
+    "ua-parser-js": "^2.0.10"
+  }
+}

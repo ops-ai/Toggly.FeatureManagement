@@ -56,14 +56,14 @@ const FeaturesPage = () => {
 
       <section style={styles.section}>
         <h2>FeatureGate Component</h2>
-        <FeatureGate
-          flags={['premium-content']}
-          fallback={<div style={styles.fallback}>Premium content not available</div>}
-        >
+        <FeatureGate flags={['premium-content']}>
           <div style={styles.premium}>
             <h3>🌟 Premium Content</h3>
             <p>This is exclusive premium content!</p>
           </div>
+        </FeatureGate>
+        <FeatureGate flags={['premium-content']} negate>
+          <div style={styles.fallback}>Premium content not available</div>
         </FeatureGate>
       </section>
 

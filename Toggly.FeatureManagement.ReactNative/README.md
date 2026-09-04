@@ -255,15 +255,15 @@ import { Feature } from '@ops-ai/react-native-toggly';
   <NormalContent />
 </Feature>
 
-// With fallback content
-<Feature
-  featureKey="premium-feature"
-  fallback={<UpgradePrompt />}
->
+// On + off with negate (preferred over a disabled-branch fallback prop)
+<Feature featureKey="premium-feature">
   <PremiumContent />
 </Feature>
+<Feature featureKey="premium-feature" negate>
+  <UpgradePrompt />
+</Feature>
 
-// With loading state
+// With loading state (not an off-path branch)
 <Feature
   featureKey="new-feature"
   loading={<Skeleton />}

@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.6.0
+
+2026-09-02
+
+### Changed
+- Sticky SHA-256 percentile buckets now match Cloudflare Definitions /
+  `@ops-ai/toggly-eval` / Go: UTF-8 `${featureKey}\n${userId}`, little-endian
+  first 4 bytes → `[0, 100)`. Stock Microsoft.FeatureManagement order
+  (`${userId}\nhint`) is no longer used for Percentage or Targeting default
+  rollout (cohorts shift vs prior MF hashing / random Percentage).
+- Web segment filters (BrowserFamily, BrowserLanguage, Country, DeviceType, OS,
+  UserClaims) use the same sticky bucket when a targeting user id is available;
+  otherwise they keep the previous non-sticky random gate.
+
+### Added
+- Public `Percentile.Compute` / `Percentile.IsInRollout` helper and golden-vector
+  tests (`testdata/eval-percentile-golden.json`).
+- `TogglyPercentageFilter` and `TogglyTargetingFilter` registered by
+  `AddTogglyFeatureManagement` (stock `PercentageFilter` / `TargetingFilter`
+  removed to avoid ambiguous filter matches).
+- `WithTogglyTargeting<T>` — prefer over Microsoft's `WithTargeting` so stock
+  targeting is not re-registered.
+
 ## 3.5.0
 
 2026-08-19

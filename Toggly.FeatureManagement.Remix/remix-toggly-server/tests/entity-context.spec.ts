@@ -3,7 +3,8 @@
  */
 
 import { TogglyServerClient } from '../src/client';
-import { clearRegisteredContexts, type EntityGate } from '@ops-ai/remix-toggly-core';
+import { clearRegisteredContexts } from '@ops-ai/remix-toggly-core';
+import type { FeatureDefinitionModel } from '@ops-ai/remix-toggly-core';
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -18,10 +19,29 @@ jest.mock('ws', () => {
   }));
 });
 
-const datetimeGate: EntityGate = {
-  requirement: 'all',
-  rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' }],
+const entityGated: FeatureDefinitionModel = {
+  featureKey: 'EntityGated',
+  requirementType: 'Any',
+  contextRequirementType: 'All',
+  filters: [
+    {
+      name: 'ContextProperty',
+      parameters: {
+        Property: 'BirthDate',
+        Operator: 'gt',
+        Value: '2026-01-01',
+        ValueType: 'datetime',
+      },
+    },
+    { name: 'AlwaysOn', parameters: {} },
+  ],
 };
+
+const definitionsPayload: FeatureDefinitionModel[] = [
+  { featureKey: 'PlainOn', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+  { featureKey: 'PlainOff', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+  entityGated,
+];
 
 const orderContext = {
   kind: 'Order',
@@ -30,15 +50,14 @@ const orderContext = {
 };
 
 async function createClient() {
-  const body = JSON.stringify({
-    defs: { PlainOn: true, PlainOff: false, EntityGated: datetimeGate },
-  });
+  const body = JSON.stringify(definitionsPayload);
 
   mockFetch.mockResolvedValueOnce({
     ok: true,
     status: 200,
     text: () => Promise.resolve(body),
-    json: () => Promise.resolve(JSON.parse(body)),
+    json: () => Promise.resolve(definitionsPayload),
+    headers: { get: () => null },
   });
 
   const client = new TogglyServerClient({ appKey: 'test-app-key', environment: 'test' });
@@ -133,12 +152,13 @@ describe('entity context evaluation', () => {
     client.close();
   });
 
-  it('hydrates entity gates so the client can evaluate them with context', async () => {
+  it('hydrates a boolean snapshot (entity gates fail closed without context)', async () => {
     const client = await createClient();
 
     const context = client.getServerContext();
     expect(context.flags.PlainOn).toBe(true);
-    expect(context.flags.EntityGated).toEqual(datetimeGate);
+    expect(context.flags.PlainOff).toBe(false);
+    expect(context.flags.EntityGated).toBe(false);
 
     client.close();
   });

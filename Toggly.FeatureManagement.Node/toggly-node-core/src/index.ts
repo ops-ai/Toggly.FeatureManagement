@@ -23,6 +23,7 @@ export type {
   TogglyRequestContext,
   TogglyEntityContext,
   EvaluatedDefinitions,
+  FeatureDefinitionModel,
   Hook,
   HookMetadata,
   EvaluationSeriesData,
@@ -66,6 +67,25 @@ export {
   validateAndParseEs256Key,
 } from './verify.js'
 export type { VerifyFreshnessOptions } from './verify.js'
+
+// Local evaluation (re-export for consumers)
+export {
+  evaluateDefinition,
+  evaluateDefinitions,
+  evaluateFeatureGate as evaluateDefinitionsGate,
+  indexDefinitions,
+  parseDefinitionsPayload,
+  snapshotEvaluatedBooleans,
+  fromHttpRequest,
+} from '@ops-ai/toggly-eval'
+export type {
+  DefinitionsByKey,
+  EvalContext,
+  EntityEvalContext,
+  FeatureFilter,
+  GateRequirement,
+  HttpHeaderBag,
+} from '@ops-ai/toggly-eval'
 
 export {
   registerContext,

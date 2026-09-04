@@ -1,3 +1,30 @@
+## 1.12.0
+
+2026-09-03
+
+### Changed
+- Removed disabled-branch `fallback` slot/prop from Feature components (Astro, React, Vue, Svelte islands).
+  Use `negate` for the off path. Use `loading` on the React island for not-ready placeholders.
+
+### Added
+- Optional `context` / `contextKind` on Feature components and FeatureGateBuilders.
+
+## 1.11.0
+
+2026-09-02
+
+### Changed
+- Server client fetches `definitions-signed` (no identity query) and
+  evaluates with `@ops-ai/toggly-eval` at `getFlag` / `evaluateGate`
+  (OPS-825). Browser client remains on `evaluated-signed`.
+- `enableVariants` still uses `evaluated-variants-signed` for remote
+  variant assignment.
+- Local evaluation depends on `@ops-ai/toggly-eval@^2.0.0` SHA-256
+  sticky buckets (cohort shift vs FNV / eval 1.x) [OPS-832].
+
+### Added
+- Dependency on `@ops-ai/toggly-eval` for local definition evaluation.
+
 ## 1.10.0
 
 2026-08-28

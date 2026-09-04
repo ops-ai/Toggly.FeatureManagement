@@ -7,6 +7,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react'
 import {
@@ -199,15 +200,23 @@ export function TogglyProvider({
   )
 
   const isFeatureOn = useCallback(
-    async (featureKey: string) => {
-      return client.isFeatureOn(featureKey)
+    async (
+      featureKey: string,
+      context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ) => {
+      return client.isFeatureOn(featureKey, context, kind)
     },
     [client]
   )
 
   const isFeatureOff = useCallback(
-    async (featureKey: string) => {
-      return client.isFeatureOff(featureKey)
+    async (
+      featureKey: string,
+      context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
+    ) => {
+      return client.isFeatureOff(featureKey, context, kind)
     },
     [client]
   )
@@ -216,9 +225,11 @@ export function TogglyProvider({
     async (
       featureKeys: string[],
       requirement: FeatureRequirement = 'all',
-      negate: boolean = false
+      negate: boolean = false,
+      context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      kind?: string,
     ) => {
-      return client.evaluateFeatureGate(featureKeys, requirement, negate)
+      return client.evaluateFeatureGate(featureKeys, requirement, negate, context, kind)
     },
     [client]
   )
@@ -230,10 +241,32 @@ export function TogglyProvider({
     }
   }, [autoInit, init, isReady, isLoading])
 
-  // Cleanup on unmount
+  // Cleanup on unmount.
+  //
+  // React Strict Mode (on by default in Next.js dev) synchronously
+  // mounts -> cleans up -> remounts every component once, to surface
+  // exactly this class of bug. Since `client` is created once via the
+  // useState initializer above, the "remount" reuses the *same*
+  // client instance. `destroy()` is one-way and unrecoverable, so
+  // calling it unconditionally here would permanently brick the
+  // client after the very first render in dev mode.
+  //
+  // Defer the real destroy to a microtask and bail out if the
+  // component has already remounted by the time it runs. Strict
+  // Mode's mount/cleanup/mount cycle happens synchronously in the
+  // same commit (no microtask flush in between), so `mountedRef`
+  // will already be back to `true` when this is just a phantom
+  // unmount, and still `false` on a genuine unmount.
+  const mountedRef = useRef(true)
   useEffect(() => {
+    mountedRef.current = true
     return () => {
-      client.destroy()
+      mountedRef.current = false
+      queueMicrotask(() => {
+        if (!mountedRef.current) {
+          client.destroy()
+        }
+      })
     }
   }, [client])
 

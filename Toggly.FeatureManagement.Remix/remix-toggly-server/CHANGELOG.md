@@ -1,3 +1,45 @@
+## 1.6.0
+
+2026-09-02
+
+### Changed
+- Local evaluation uses `@ops-ai/toggly-eval@2` SHA-256 sticky buckets
+  (cohort shift vs FNV). Claims forwarded as EvalContext.claims [OPS-832].
+
+## 1.5.2
+
+2026-09-02
+
+### Fixed
+- Warm `init(undefined)` clears prior identity (identified→anonymous).
+- `snapshotFlags({ identity })` returns a request-local evaluation; loaders
+  and actions use it so concurrent requests do not share mutable flag state.
+- Identity override objects treat `identity: undefined` as anonymous instead
+  of falling back to the shared client identity.
+- Concurrent cold-start `init` calls share one definitions fetch.
+
+## 1.5.1
+
+2026-09-02
+
+### Fixed
+- Re-init after warm start rebinds identity and re-snapshots flags from
+  definitions (no stale first-user identity) [OPS-825 Oracle].
+- Loader / action helpers pass request `IdentityContext` into each eval so
+  concurrent requests do not share process-wide client identity.
+- `evaluateGate` accepts optional `identityOverride`.
+
+## 1.5.0
+
+2026-09-02
+
+### Changed
+- Server client always uses `evaluationMode: 'local'`: fetch
+  `definitions-signed` (no identity query) and evaluate with
+  `@ops-ai/toggly-eval` at `isEnabled` / `evaluateGate` (OPS-825).
+- Keep a boolean snapshot of local evaluation for hydration /
+  `afterRefresh` compatibility.
+
 ## 1.4.4
 
 2026-08-30

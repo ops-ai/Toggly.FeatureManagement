@@ -4,16 +4,16 @@
   "private": true,
   "description": "Toggly Feature Flags SDK for Nuxt 3 - Monorepo",
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "pnpm -r --filter \"./nuxt-*\" build",
     "build:core": "pnpm --filter @ops-ai/nuxt-toggly-core build",
     "build:server": "pnpm --filter @ops-ai/nuxt-toggly-server build",
     "build:client": "pnpm --filter @ops-ai/nuxt-toggly-client build",
     "build:module": "pnpm --filter @ops-ai/nuxt-toggly build",
-    "test": "pnpm -r test",
-    "test:coverage": "pnpm -r test:coverage",
-    "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck",
-    "clean": "pnpm -r exec rm -rf dist coverage node_modules",
+    "test": "pnpm -r --filter \"./nuxt-*\" test",
+    "test:coverage": "pnpm -r --filter \"./nuxt-*\" test:coverage",
+    "lint": "pnpm -r --filter \"./nuxt-*\" lint",
+    "typecheck": "pnpm -r --filter \"./nuxt-*\" typecheck",
+    "clean": "pnpm -r --filter \"./nuxt-*\" exec rm -rf dist coverage node_modules",
     "dev:playground": "pnpm --filter @ops-ai/nuxt-toggly dev"
   },
   "keywords": [

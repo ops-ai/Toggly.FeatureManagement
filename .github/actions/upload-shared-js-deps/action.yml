@@ -1,0 +1,43 @@
+name: Upload shared JS deps
+description: >-
+  Upload built shared JS package dist/ directories for download by sibling jobs.
+
+inputs:
+  artifact-name:
+    description: Artifact name for download-shared-js-deps consumers
+    required: false
+    default: shared-js-deps
+  retention-days:
+    description: Artifact retention in days
+    required: false
+    default: '1'
+
+runs:
+  using: composite
+  steps:
+    - name: Verify at least one shared dist exists
+      shell: bash
+      run: |
+        set -euo pipefail
+        found=0
+        for d in toggly-hooks-types/dist toggly-signed-defs/dist toggly-eval/dist; do
+          if [[ -d "$d" ]]; then
+            echo "Found $d"
+            found=1
+          fi
+        done
+        if [[ "$found" -eq 0 ]]; then
+          echo "No shared package dist/ directories found to upload." >&2
+          exit 1
+        fi
+
+    - name: Upload shared JS deps artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          toggly-hooks-types/dist
+          toggly-signed-defs/dist
+          toggly-eval/dist
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: ignore

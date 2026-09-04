@@ -1,11 +1,31 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TogglyServer } from '../server/toggly-server.js';
-import { clearRegisteredContexts, type EntityGate } from '@ops-ai/toggly-hooks-types';
+import { clearRegisteredContexts } from '@ops-ai/toggly-hooks-types';
+import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval';
 
-const datetimeGate: EntityGate = {
-  requirement: 'all',
-  rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' }],
+const entityGated: FeatureDefinitionModel = {
+  featureKey: 'EntityGated',
+  requirementType: 'Any',
+  contextRequirementType: 'All',
+  filters: [
+    {
+      name: 'ContextProperty',
+      parameters: {
+        Property: 'BirthDate',
+        Operator: 'gt',
+        Value: '2026-01-01',
+        ValueType: 'datetime',
+      },
+    },
+    { name: 'AlwaysOn', parameters: {} },
+  ],
 };
+
+const definitionsPayload: FeatureDefinitionModel[] = [
+  { featureKey: 'PlainOn', filters: [{ name: 'AlwaysOn', parameters: {} }] },
+  { featureKey: 'PlainOff', filters: [{ name: 'AlwaysOff', parameters: {} }] },
+  entityGated,
+];
 
 const orderContext = {
   kind: 'Order',
@@ -14,23 +34,12 @@ const orderContext = {
 };
 
 function createServer() {
+  const body = JSON.stringify(definitionsPayload);
   vi.spyOn(globalThis, 'fetch').mockResolvedValue({
     ok: true,
     status: 200,
-    json: () =>
-      Promise.resolve({
-        PlainOn: true,
-        PlainOff: false,
-        EntityGated: datetimeGate,
-      }),
-    text: () =>
-      Promise.resolve(
-        JSON.stringify({
-          PlainOn: true,
-          PlainOff: false,
-          EntityGated: datetimeGate,
-        }),
-      ),
+    json: () => Promise.resolve(definitionsPayload),
+    text: () => Promise.resolve(body),
   } as Response);
 
   return new TogglyServer({ appKey: 'test-key', environment: 'Production' });

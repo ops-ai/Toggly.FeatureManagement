@@ -35,6 +35,14 @@ import {
   type LiveSocket,
 } from './live-socket'
 import { appendEvaluationContext, normalizeEntityContext, registerContext as registerEntityContext, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types'
+import {
+  evaluateDefinitions,
+  indexDefinitions,
+  parseDefinitionsPayload,
+  snapshotEvaluatedBooleans,
+  type EvalContext,
+  type FeatureDefinitionModel,
+} from '@ops-ai/toggly-eval'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
 import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
 
@@ -68,6 +76,7 @@ export function createTogglyClient(
       | 'refreshInterval'
       | 'showFeatureDuringEvaluation'
       | 'enableLiveUpdates'
+      | 'evaluationMode'
     >
   > &
     TogglyConfig = {
@@ -78,6 +87,7 @@ export function createTogglyClient(
       showFeatureDuringEvaluation:
         initialConfig.showFeatureDuringEvaluation ?? DEFAULT_CONFIG.showFeatureDuringEvaluation,
       enableLiveUpdates: initialConfig.enableLiveUpdates ?? DEFAULT_CONFIG.enableLiveUpdates,
+      evaluationMode: initialConfig.evaluationMode ?? DEFAULT_CONFIG.evaluationMode,
       featureDefaults: initialConfig.featureDefaults ?? {},
     }
 
@@ -86,6 +96,7 @@ export function createTogglyClient(
     initialized: false,
     loading: false,
     features: { ...config.featureDefaults },
+    definitions: new Map(),
     error: null,
     lastRefresh: null,
     wsConnected: false,
@@ -172,10 +183,68 @@ export function createTogglyClient(
     })
   }
 
+  function isLocalEvaluation(): boolean {
+    return (config.evaluationMode ?? DEFAULT_CONFIG.evaluationMode) === 'local'
+  }
+
+  function buildEvalContext(
+    entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
+    identityOverride?: string,
+  ): EvalContext {
+    return {
+      identity: identityOverride ?? config.identity,
+      groups: config.groups,
+      traits: config.claims,
+      claims: config.claims,
+      entity: entityContext ?? null,
+    }
+  }
+
+  function applyLocalDefinitions(
+    defs: Map<string, FeatureDefinitionModel>,
+  ): FeatureDefinitions {
+    state.definitions = defs
+    const snapshot = snapshotEvaluatedBooleans(defs, {
+      identity: config.identity,
+      groups: config.groups,
+      traits: config.claims,
+      claims: config.claims,
+    })
+    state.features = {
+      ...config.featureDefaults,
+      ...snapshot,
+    }
+    return state.features
+  }
+
+  function evaluateLocalFeature(
+    featureKey: string,
+    entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
+    identityOverride?: string,
+  ): boolean {
+    if (state.definitions.has(featureKey)) {
+      return evaluateDefinitions(
+        state.definitions,
+        featureKey,
+        buildEvalContext(entityContext, identityOverride),
+      )
+    }
+    return config.featureDefaults?.[featureKey] ?? false
+  }
+
   function getEffectiveFlag(
     featureKey: string,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
+    identityOverride?: string,
   ): boolean {
+    if (isLocalEvaluation()) {
+      const evaluated = evaluateLocalFeature(
+        featureKey,
+        entityContext,
+        identityOverride,
+      )
+      return applyLocalGate(evaluated, featureKey, localGates, localGateIndex)
+    }
     const remote = resolveEvaluatedDefinition(state.features[featureKey], entityContext)
     return applyLocalGate(remote, featureKey, localGates, localGateIndex)
   }
@@ -185,6 +254,7 @@ export function createTogglyClient(
     requirement: FeatureRequirement = 'all',
     negate = false,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
+    identityOverride?: string,
   ): boolean {
     if (featureKeys.length === 0) {
       return !negate
@@ -192,9 +262,13 @@ export function createTogglyClient(
 
     let result: boolean
     if (requirement === 'any') {
-      result = featureKeys.some((key) => getEffectiveFlag(key, entityContext))
+      result = featureKeys.some((key) =>
+        getEffectiveFlag(key, entityContext, identityOverride),
+      )
     } else {
-      result = featureKeys.every((key) => getEffectiveFlag(key, entityContext))
+      result = featureKeys.every((key) =>
+        getEffectiveFlag(key, entityContext, identityOverride),
+      )
     }
 
     return negate ? !result : result
@@ -209,22 +283,24 @@ export function createTogglyClient(
       return { ...config.featureDefaults }
     }
 
+    const local = isLocalEvaluation()
+    const endpoint = local
+      ? API_ENDPOINTS.definitionsSigned
+      : API_ENDPOINTS.evaluatedSigned
     const fetchUrl = new URL(
-      API_ENDPOINTS.definitions(
-        config.baseUri,
-        config.appKey,
-        config.environment
+      endpoint(config.baseUri, config.appKey, config.environment)
+    )
+    if (!local) {
+      appendEvaluationContext(
+        fetchUrl,
+        {
+          identity: config.identity,
+          groups: config.groups,
+          claims: config.claims,
+        },
+        'evaluated',
       )
-    )
-    appendEvaluationContext(
-      fetchUrl,
-      {
-        identity: config.identity,
-        groups: config.groups,
-        claims: config.claims,
-      },
-      'evaluated',
-    )
+    }
     const pin = pendingDefinitionsPin
     pendingDefinitionsPin = null
     const url = appendDefinitionsRevisionParam(fetchUrl.toString(), pin)
@@ -266,6 +342,10 @@ export function createTogglyClient(
         }),
       })
 
+      if (local) {
+        return applyLocalDefinitions(parseDefinitionsPayload(parsed))
+      }
+
       const definitions: FeatureDefinitions = {}
       if (config.verifySignatures) {
         const data = parsed as
@@ -299,6 +379,7 @@ export function createTogglyClient(
         }
       }
 
+      state.definitions = new Map()
       return definitions
     } catch (error) {
       console.error('[Toggly] Failed to fetch feature definitions:', error)
@@ -564,6 +645,7 @@ export function createTogglyClient(
       featureKey: string,
       context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
+      identityOverride?: string,
     ): Promise<boolean> {
       if (destroyed) {
         return config.featureDefaults?.[featureKey] ?? false
@@ -577,7 +659,7 @@ export function createTogglyClient(
         config.featureDefaults?.[featureKey]
       )
 
-      const result = getEffectiveFlag(featureKey, entityContext)
+      const result = getEffectiveFlag(featureKey, entityContext, identityOverride)
 
       // Execute after hooks (fire-and-forget)
       hookExecutor.executeAfterEvaluation(featureKey, dataMap, result).catch(() => {
@@ -591,8 +673,14 @@ export function createTogglyClient(
       featureKey: string,
       context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
+      identityOverride?: string,
     ): Promise<boolean> {
-      const isOn = await client.isFeatureOn(featureKey, context, kind)
+      const isOn = await client.isFeatureOn(
+        featureKey,
+        context,
+        kind,
+        identityOverride,
+      )
       return !isOn
     },
 
@@ -602,6 +690,7 @@ export function createTogglyClient(
       negate: boolean = false,
       context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
+      identityOverride?: string,
     ): Promise<boolean> {
       if (destroyed) {
         return evaluateGate(
@@ -628,11 +717,17 @@ export function createTogglyClient(
         dataMaps.push({ key, dataMap })
       }
 
-      const result = evaluateGateEffective(featureKeys, requirement, negate, entityContext)
+      const result = evaluateGateEffective(
+        featureKeys,
+        requirement,
+        negate,
+        entityContext,
+        identityOverride,
+      )
 
       // Execute after hooks for each key (fire-and-forget)
       for (const { key, dataMap } of dataMaps) {
-        const keyResult = getEffectiveFlag(key, entityContext)
+        const keyResult = getEffectiveFlag(key, entityContext, identityOverride)
         hookExecutor
           .executeAfterEvaluation(key, dataMap, keyResult)
           .catch(() => {
@@ -663,10 +758,26 @@ export function createTogglyClient(
       // Execute after hooks
       await hookExecutor.executeAfterIdentify(identity, dataMap)
 
-      // Refresh with new identity
-      if (state.initialized) {
+      // Remote rail: identity is baked into evaluated-signed fetch — refresh.
+      // Local rail: identity is eval-time only — do not re-fetch definitions.
+      if (state.initialized && !isLocalEvaluation()) {
         await client.refresh()
       }
+    },
+
+    getDefinitions(): Map<string, FeatureDefinitionModel> {
+      return state.definitions
+    },
+
+    /**
+     * Apply a cached definitions-signed payload without fetching.
+     * Used by server packages for last-known-good hydration.
+     */
+    hydrateDefinitions(defs: FeatureDefinitionModel[]): FeatureDefinitions {
+      if (destroyed) {
+        return state.features
+      }
+      return applyLocalDefinitions(indexDefinitions(defs))
     },
 
     addHook(hook: Hook): void {

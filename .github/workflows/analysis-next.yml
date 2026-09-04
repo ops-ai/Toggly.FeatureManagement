@@ -7,22 +7,50 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.Next/**'
+      - 'toggly-eval/**'
+      - 'toggly-signed-defs/**'
       - '.github/workflows/analysis-next.yml'
+      - '.github/actions/build-shared-js-deps/**'
+      - '.github/actions/upload-shared-js-deps/**'
+      - '.github/actions/download-shared-js-deps/**'
   pull_request:
     branches:
       - develop
       - main
     paths:
       - 'Toggly.FeatureManagement.Next/**'
+      - 'toggly-eval/**'
+      - 'toggly-signed-defs/**'
       - '.github/workflows/analysis-next.yml'
+      - '.github/actions/build-shared-js-deps/**'
+      - '.github/actions/upload-shared-js-deps/**'
+      - '.github/actions/download-shared-js-deps/**'
   workflow_dispatch:
 
 env:
   SDK_ROOT: Toggly.FeatureManagement.Next
 
 jobs:
+  build-shared-js-deps:
+    name: Build shared JS deps
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build shared packages
+        uses: ./.github/actions/build-shared-js-deps
+        with:
+          packages: signed-defs,eval
+          node-version: '20.x'
+
+      - name: Upload shared package dist artifacts
+        uses: ./.github/actions/upload-shared-js-deps
+
   build-and-test:
     name: Test (Node ${{ matrix.node-version }})
+    needs: [build-shared-js-deps]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -47,13 +75,8 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
-      - name: Build shared toggly-signed-defs package
-        working-directory: toggly-signed-defs
-        run: (npm ci || npm install) && npm run build
-
-      - name: Build shared toggly-signed-defs package
-        working-directory: toggly-signed-defs
-        run: (npm ci || npm install) && npm run build
+      - name: Restore shared JS deps
+        uses: ./.github/actions/download-shared-js-deps
 
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
@@ -73,6 +96,7 @@ jobs:
 
   lint:
     name: Lint
+    needs: [build-shared-js-deps]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -90,9 +114,8 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
-      - name: Build shared toggly-signed-defs package
-        working-directory: toggly-signed-defs
-        run: (npm ci || npm install) && npm run build
+      - name: Restore shared JS deps
+        uses: ./.github/actions/download-shared-js-deps
 
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
@@ -109,6 +132,7 @@ jobs:
 
   coverage:
     name: Coverage
+    needs: [build-shared-js-deps]
     runs-on: ubuntu-latest
 
     steps:
@@ -129,9 +153,8 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
-      - name: Build shared toggly-signed-defs package
-        working-directory: toggly-signed-defs
-        run: (npm ci || npm install) && npm run build
+      - name: Restore shared JS deps
+        uses: ./.github/actions/download-shared-js-deps
 
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
@@ -160,8 +183,9 @@ jobs:
 
   smoke-test:
     name: Smoke Test
+    needs: [build-shared-js-deps]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -179,9 +203,8 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
-      - name: Build shared toggly-signed-defs package
-        working-directory: toggly-signed-defs
-        run: (npm ci || npm install) && npm run build
+      - name: Restore shared JS deps
+        uses: ./.github/actions/download-shared-js-deps
 
       - name: Install dependencies
         working-directory: ${{ env.SDK_ROOT }}
@@ -201,7 +224,7 @@ jobs:
   sonar:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [coverage, dependency-check]
+    needs: [build-shared-js-deps, coverage, dependency-check]
     if: always()
 
     steps:
@@ -219,6 +242,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
+
+      - name: Restore shared JS deps
+        if: needs.build-shared-js-deps.result == 'success'
+        uses: ./.github/actions/download-shared-js-deps
 
       - name: Install dependencies for TypeScript analysis
         working-directory: ${{ env.SDK_ROOT }}

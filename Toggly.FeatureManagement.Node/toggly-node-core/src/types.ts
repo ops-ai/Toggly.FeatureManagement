@@ -1,3 +1,9 @@
+import type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
+
+export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+export type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
+
 /**
  * Feature requirement type for evaluating multiple features
  */
@@ -13,6 +19,14 @@ export interface EvaluationContext {
   groups?: string[]
   /** Custom attributes for advanced targeting rules */
   traits?: Record<string, unknown>
+  /** Principal / JWT-style claims for UserClaims filters */
+  claims?: Record<string, string>
+  /** HTTP request fields for segment identity filters */
+  request?: {
+    userAgent?: string
+    acceptLanguage?: string
+    country?: string
+  }
 }
 
 /**
@@ -56,7 +70,7 @@ export interface TogglyServerConfig extends TogglyConfig {
   /** Use ETag-based polling for efficient updates (default: true) */
   useEtag?: boolean
   /**
-   * Verify signed envelopes from evaluated-signed / definitions-signed.
+   * Verify signed envelopes from definitions-signed.
    * Uses exact raw `defs` JSON bytes (never re-serialized).
    */
   verifySignatures?: boolean
@@ -86,7 +100,8 @@ export interface CacheProvider {
 }
 
 /**
- * Feature definitions from API response
+ * Legacy evaluated feature entry (boolean snapshot shape).
+ * @deprecated Prefer FeatureDefinitionModel from `@ops-ai/toggly-eval`.
  */
 export interface FeatureDefinition {
   featureKey: string
@@ -98,19 +113,15 @@ export interface FeatureDefinition {
  */
 export interface FeatureDefinitionsResponse {
   features?: FeatureDefinition[]
-  defs?: FeatureDefinitions
+  defs?: FeatureDefinitionModel[] | FeatureDefinitions
   signature?: string
   timestamp?: number
   kid?: string
 }
 
 /**
- * Feature definitions map (boolean or entity gate per flag)
+ * Feature definitions map (boolean snapshot per flag for hooks / defaults)
  */
-import type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
-
-export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
-
 export type FeatureDefinitions = EvaluatedDefinitions
 
 /**
@@ -119,7 +130,10 @@ export type FeatureDefinitions = EvaluatedDefinitions
 export interface TogglyState {
   initialized: boolean
   loading: boolean
+  /** Snapshot evaluated with config identity (for afterRefresh hooks / inspection). */
   features: FeatureDefinitions
+  /** Raw definitions-signed rules used for call-site local evaluation. */
+  definitions: Map<string, FeatureDefinitionModel>
   error: Error | null
   lastRefresh: number | null
   etag: string | null

@@ -1,3 +1,12 @@
+## 1.3.0
+
+2026-09-03
+
+### Changed
+- `<Feature>` / `<FeatureGate>` no longer accept a disabled-branch `fallback` prop.
+  Use `negate` (or a separate `<Feature negate>`) for the off path.
+- `FeatureEnabled` / `FeatureDisabled` are deprecated; prefer `<Feature>` / `<Feature negate>`.
+
 ## 1.2.1
 
 

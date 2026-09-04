@@ -31,8 +31,11 @@ const IndexPage = () => {
         <h2>2. Using Components</h2>
         <div style={styles.card}>
           <h3>Feature Component</h3>
-          <Feature flag="beta-feature" fallback={<BetaDisabled />}>
+          <Feature flag="beta-feature">
             <BetaEnabled />
+          </Feature>
+          <Feature flag="beta-feature" negate>
+            <BetaDisabled />
           </Feature>
         </div>
       </section>

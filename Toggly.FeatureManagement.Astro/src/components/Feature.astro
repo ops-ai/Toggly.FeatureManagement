@@ -1,31 +1,28 @@
 ---
 /**
  * Feature - Server-rendered feature flag component for Astro
- * 
+ *
  * This component evaluates feature flags on the server side during SSR/SSG.
- * Use this for content that should be evaluated at build time or on each request.
- * 
+ * Use `negate` for the off path (same as .NET `<feature negate>`).
+ *
  * @example
  * ```astro
  * <Feature flag="new-dashboard">
  *   <p>This content is only shown when the feature is enabled</p>
  * </Feature>
  * ```
- * 
- * @example Multiple flags with 'any' requirement
+ *
+ * @example Off path with negate
  * ```astro
- * <Feature flags={['feature1', 'feature2']} requirement="any">
- *   <p>Shown if at least one feature is enabled</p>
+ * <Feature flag="maintenance-mode" negate={true}>
+ *   <p>Main app while maintenance is off</p>
  * </Feature>
  * ```
- * 
- * @example With fallback content
+ *
+ * @example Entity context
  * ```astro
- * <Feature flag="beta-feature">
- *   <p>Beta content</p>
- *   <div slot="fallback">
- *     <p>Beta feature not available yet</p>
- *   </div>
+ * <Feature flag="OrderBadge" context={order} contextKind="Order">
+ *   <Badge />
  * </Feature>
  * ```
  */
@@ -39,9 +36,13 @@ interface Props {
   requirement?: 'all' | 'any';
   /** If true, negates the result (default: false) */
   negate?: boolean;
+  /** Entity instance or canonical entity context for entity-gated flags */
+  context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null;
+  /** Context kind for registerContext mapper lookup when `context` is a domain object */
+  contextKind?: string;
 }
 
-const { flag, flags, requirement = 'all', negate = false } = Astro.props;
+const { flag, flags, requirement = 'all', negate = false, context = null, contextKind } = Astro.props;
 
 // Get Toggly client from Astro.locals
 const toggly = Astro.locals.toggly;
@@ -66,14 +67,14 @@ if (flags && Array.isArray(flags)) {
 let isEnabled = false;
 if (toggly && flagKeys.length > 0) {
   try {
-    isEnabled = await toggly.evaluateGate(flagKeys, requirement, negate);
+    isEnabled = await toggly.evaluateGate(flagKeys, requirement, negate, context, contextKind);
   } catch (error) {
     console.error('[Toggly Feature] Error evaluating feature gate:', error);
     isEnabled = false;
   }
+} else if (flagKeys.length === 0) {
+  isEnabled = !negate;
 }
 ---
 
-{isEnabled ? <slot /> : <slot name="fallback" />}
-
-
+{isEnabled ? <slot /> : null}

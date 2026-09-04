@@ -3,7 +3,6 @@ import type {
   TogglyServerConfig,
   TogglyState,
   FeatureDefinitions,
-  FeatureDefinitionsResponse,
   FeatureRequirement,
   EvaluationContext,
   Hook,
@@ -17,7 +16,6 @@ import {
 } from './cache.js'
 import {
   generateUUID,
-  evaluateGate,
   deepMerge,
   createLogger,
 } from './utils.js'
@@ -42,9 +40,17 @@ import {
 } from './verify.js'
 import {
   normalizeEntityContext,
-  resolveEvaluatedDefinition,
   type TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types'
+import {
+  evaluateDefinitions,
+  evaluateFeatureGate as evaluateLocalFeatureGate,
+  indexDefinitions,
+  parseDefinitionsPayload,
+  snapshotEvaluatedBooleans,
+  type EvalContext,
+  type FeatureDefinitionModel,
+} from '@ops-ai/toggly-eval'
 import {
   registerContext as registerEntityContext,
   registerEntityContextsAtStartup,
@@ -62,8 +68,12 @@ export function createTogglyClient(
     initialConfig
   )
 
-  // Initialize state
-  const state: TogglyState = { ...INITIAL_STATE }
+  // Initialize state (fresh Map — do not share INITIAL_STATE.definitions)
+  const state: TogglyState = {
+    ...INITIAL_STATE,
+    features: { ...INITIAL_STATE.features },
+    definitions: new Map(),
+  }
 
   // Initialize logger
   let logger = createLogger(config.debug ?? false)
@@ -145,6 +155,75 @@ export function createTogglyClient(
     } catch (hookError) {
       logger.error('Error in onError callback:', hookError)
     }
+  }
+
+  function buildEvalContext(
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): EvalContext {
+    return {
+      identity: context?.identity ?? config.identity,
+      groups: context?.groups,
+      traits: context?.traits,
+      claims: context?.claims,
+      request: context?.request,
+      entity: normalizeEntityContext(entity, kind),
+    }
+  }
+
+  function applyDefinitions(
+    defs: Map<string, FeatureDefinitionModel>
+  ): FeatureDefinitions {
+    state.definitions = defs
+    const snapshot = snapshotEvaluatedBooleans(defs, {
+      identity: config.identity,
+    })
+    state.features = {
+      ...config.featureDefaults,
+      ...snapshot,
+    }
+    return state.features
+  }
+
+  function evaluateLocalFeature(
+    featureKey: string,
+    ctx: EvalContext,
+  ): boolean {
+    if (state.definitions.has(featureKey)) {
+      return evaluateDefinitions(state.definitions, featureKey, ctx)
+    }
+    return config.featureDefaults?.[featureKey] ?? false
+  }
+
+  function evaluateLocalGate(
+    featureKeys: string[],
+    requirement: FeatureRequirement,
+    negate: boolean,
+    ctx: EvalContext,
+  ): boolean {
+    if (featureKeys.length === 0) {
+      return !negate
+    }
+
+    // Prefer toggly-eval when every key has a stored definition (no defaults-only keys).
+    const allDefined = featureKeys.every((key) => state.definitions.has(key))
+    if (allDefined) {
+      return evaluateLocalFeatureGate(
+        state.definitions,
+        featureKeys,
+        requirement,
+        negate,
+        ctx,
+      )
+    }
+
+    const check = (key: string) => evaluateLocalFeature(key, ctx)
+    const result =
+      requirement === 'any'
+        ? featureKeys.some(check)
+        : featureKeys.every(check)
+    return negate ? !result : result
   }
 
   async function loadOrFetchJwks(force = false): Promise<JwkSet> {
@@ -237,7 +316,7 @@ export function createTogglyClient(
   }
 
   /**
-   * Build the API URL for fetching definitions
+   * Build the API URL for fetching definitions (server rail — no identity query).
    */
   function buildApiUrl(): string {
     const baseUrl = config.baseUrl ?? DEFAULT_CONFIG.baseUrl
@@ -248,22 +327,16 @@ export function createTogglyClient(
       throw new Error('Toggly: appKey is required for API mode')
     }
 
-    let url = `${baseUrl}/evaluated-signed/${appKey}/${environment}`
-
-    if (config.identity) {
-      url += `?u=${encodeURIComponent(config.identity)}`
-    }
-
-    return url
+    return `${baseUrl}/definitions-signed/${appKey}/${environment}`
   }
 
   /**
-   * Fetch feature definitions from API
+   * Fetch raw feature definitions from definitions-signed
    */
-  async function fetchDefinitions(): Promise<FeatureDefinitions> {
+  async function fetchDefinitions(): Promise<Map<string, FeatureDefinitionModel>> {
     if (!config.appKey) {
       logger.debug('No appKey provided, using defaults only')
-      return config.featureDefaults ?? {}
+      return new Map()
     }
 
     const pin = pendingDefinitionsPin
@@ -301,7 +374,7 @@ export function createTogglyClient(
       // Handle 304 Not Modified
       if (response.status === 304) {
         logger.debug('Definitions unchanged (304)')
-        return state.features
+        return state.definitions
       }
 
       if (!response.ok) {
@@ -312,7 +385,8 @@ export function createTogglyClient(
         typeof response.text === 'function'
           ? await response.text()
           : JSON.stringify(await response.json())
-      const features: FeatureDefinitions = {}
+
+      let defsMap: Map<string, FeatureDefinitionModel>
 
       if (config.verifySignatures) {
         const { envelope, defsRaw } = parseSignedEnvelope(bodyText)
@@ -323,40 +397,15 @@ export function createTogglyClient(
 
         // Apply verified raw bytes — never envelope.defs from the outer parse.
         const defs = parseDefinitionsFromRaw(defsRaw)
-        if (defs && typeof defs === 'object' && !Array.isArray(defs)) {
-          Object.assign(features, defs as FeatureDefinitions)
-        } else if (Array.isArray(defs)) {
-          for (const definition of defs as Array<{
-            featureKey: string
-            filters?: Array<{ name?: string }>
-          }>) {
-            features[definition.featureKey] = !!definition.filters?.some(
-              (filter) => filter.name === 'AlwaysOn'
-            )
-          }
-        }
+        defsMap = parseDefinitionsPayload(defs)
       } else {
-        const data = JSON.parse(bodyText) as
-          | FeatureDefinitionsResponse
-          | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
-        if (Array.isArray(data)) {
-          for (const definition of data) {
-            features[definition.featureKey] = !!definition.filters?.some(
-              (filter) => filter.name === 'AlwaysOn'
-            )
-          }
-        } else if ('defs' in data && data.defs) {
-          Object.assign(features, data.defs)
-        } else if ('features' in data && Array.isArray(data.features)) {
-          for (const feature of data.features) {
-            features[feature.featureKey] = feature.enabled
-          }
-        }
+        const data = JSON.parse(bodyText) as unknown
+        defsMap = parseDefinitionsPayload(data)
       }
 
-      logger.debug('Fetched', Object.keys(features).length, 'features')
+      logger.debug('Fetched', defsMap.size, 'definitions')
 
-      return features
+      return defsMap
     } catch (error) {
       clearTimeout(timeoutId)
 
@@ -375,20 +424,18 @@ export function createTogglyClient(
     state.loading = true
 
     try {
-      const features = await fetchDefinitions()
-
-      // Merge with defaults (defaults are fallback, not override)
-      state.features = {
-        ...config.featureDefaults,
-        ...features,
-      }
+      const defs = await fetchDefinitions()
+      applyDefinitions(defs)
 
       state.lastRefresh = Date.now()
       state.error = null
 
       // Cache definitions + revision
       if (cache) {
-        await cache.setDefinitions(CACHE_KEYS.DEFINITIONS, state.features)
+        await cache.setDefinitionModels(
+          CACHE_KEYS.DEFINITIONS,
+          Array.from(state.definitions.values())
+        )
         const revision = getDefinitionsRevision()
         if (revision) {
           await cache.setEtag(CACHE_KEYS.ETAG, revision)
@@ -406,26 +453,23 @@ export function createTogglyClient(
       logger.error('Failed to refresh features:', err)
       await reportError(err, 'refresh')
 
-      // Preserve last-known-good in-memory flags first.
-      if (Object.keys(state.features).length > 0) {
+      // Preserve last-known-good in-memory definitions first.
+      if (state.definitions.size > 0 || Object.keys(state.features).length > 0) {
         logger.debug('Preserving last-known-good in-memory features')
         return state.features
       }
 
       // Then try durable cache
       if (cache) {
-        const cachedFeatures = await cache.getDefinitions(CACHE_KEYS.DEFINITIONS)
-        if (cachedFeatures) {
+        const cachedDefs = await cache.getDefinitionModels(CACHE_KEYS.DEFINITIONS)
+        if (cachedDefs) {
           logger.debug('Using cached definitions (last-known-good)')
-          state.features = {
-            ...config.featureDefaults,
-            ...cachedFeatures,
-          }
-          return state.features
+          return applyDefinitions(indexDefinitions(cachedDefs))
         }
       }
 
       // Fall back to defaults only when no last-known-good flags exist.
+      state.definitions = new Map()
       state.features = config.featureDefaults ?? {}
       return state.features
     } finally {
@@ -437,6 +481,7 @@ export function createTogglyClient(
    * Clear in-memory features, ETag/revision, JWKS, and durable cache entries.
    */
   async function clearCache(): Promise<void> {
+    state.definitions = new Map()
     state.features = { ...(config.featureDefaults ?? {}) }
     state.etag = null
     cachedDefinitionsRevision = null
@@ -626,7 +671,7 @@ export function createTogglyClient(
 
     logger.debug('Initializing Toggly client')
 
-    // Generate identity if not provided
+    // Generate identity if not provided (used at eval time, not on fetch URL)
     if (!config.identity) {
       config.identity = generateUUID()
       logger.debug('Generated identity:', config.identity)
@@ -634,13 +679,10 @@ export function createTogglyClient(
 
     // Try to load from cache first
     if (cache) {
-      const cachedFeatures = await cache.getDefinitions(CACHE_KEYS.DEFINITIONS)
-      if (cachedFeatures) {
-        state.features = {
-          ...config.featureDefaults,
-          ...cachedFeatures,
-        }
-        logger.debug('Loaded', Object.keys(cachedFeatures).length, 'features from cache')
+      const cachedDefs = await cache.getDefinitionModels(CACHE_KEYS.DEFINITIONS)
+      if (cachedDefs) {
+        applyDefinitions(indexDefinitions(cachedDefs))
+        logger.debug('Loaded', cachedDefs.length, 'definitions from cache')
       }
       const cachedEtag = await cache.getEtag(CACHE_KEYS.ETAG)
       if (cachedEtag) {
@@ -673,7 +715,7 @@ export function createTogglyClient(
   }
 
   /**
-   * Evaluate a single feature
+   * Evaluate a single feature locally from stored definitions
    */
   async function isFeatureOn(
     featureKey: string,
@@ -681,24 +723,24 @@ export function createTogglyClient(
     entity?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ): Promise<boolean> {
-    const evalContext: EvaluationContext = {
-      identity: context?.identity ?? config.identity,
-      groups: context?.groups,
-      traits: context?.traits,
+    const evalContext = buildEvalContext(context, entity, kind)
+    const hookContext: EvaluationContext = {
+      identity: evalContext.identity,
+      groups: evalContext.groups,
+      traits: evalContext.traits,
     }
-    const entityContext = normalizeEntityContext(entity, kind)
 
     // Execute beforeEvaluation hooks
     const hookData = await hookExecutor.executeBeforeEvaluation(
       featureKey,
-      evalContext,
+      hookContext,
       config.featureDefaults?.[featureKey]
     )
 
-    const result = resolveEvaluatedDefinition(state.features[featureKey], entityContext)
+    const result = evaluateLocalFeature(featureKey, evalContext)
 
     // Execute afterEvaluation hooks
-    await hookExecutor.executeAfterEvaluation(featureKey, evalContext, hookData, result)
+    await hookExecutor.executeAfterEvaluation(featureKey, hookContext, hookData, result)
 
     return result
   }
@@ -721,35 +763,35 @@ export function createTogglyClient(
     entity?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ): Promise<boolean> {
-    const entityContext = normalizeEntityContext(entity, kind)
+    const evalContext = buildEvalContext(context, entity, kind)
 
     // Execute hooks for each feature
     for (const key of featureKeys) {
-      const evalContext: EvaluationContext = {
-        identity: context?.identity ?? config.identity,
-        groups: context?.groups,
-        traits: context?.traits,
+      const hookContext: EvaluationContext = {
+        identity: evalContext.identity,
+        groups: evalContext.groups,
+        traits: evalContext.traits,
       }
 
       await hookExecutor.executeBeforeEvaluation(
         key,
-        evalContext,
+        hookContext,
         config.featureDefaults?.[key]
       )
     }
 
-    const result = evaluateGate(state.features, featureKeys, requirement, negate, entityContext)
+    const result = evaluateLocalGate(featureKeys, requirement, negate, evalContext)
 
     // Execute after hooks
     for (const key of featureKeys) {
-      const evalContext: EvaluationContext = {
-        identity: context?.identity ?? config.identity,
-        groups: context?.groups,
-        traits: context?.traits,
+      const hookContext: EvaluationContext = {
+        identity: evalContext.identity,
+        groups: evalContext.groups,
+        traits: evalContext.traits,
       }
 
-      const featureResult = resolveEvaluatedDefinition(state.features[key], entityContext)
-      await hookExecutor.executeAfterEvaluation(key, evalContext, [], featureResult)
+      const featureResult = evaluateLocalFeature(key, evalContext)
+      await hookExecutor.executeAfterEvaluation(key, hookContext, [], featureResult)
     }
 
     return result
@@ -768,7 +810,7 @@ export function createTogglyClient(
   }
 
   /**
-   * Set user identity
+   * Set user identity (eval-time only — does not re-fetch definitions)
    */
   async function setIdentity(identity: string): Promise<void> {
     // Execute beforeIdentify hooks
@@ -778,9 +820,6 @@ export function createTogglyClient(
 
     // Execute afterIdentify hooks
     await hookExecutor.executeAfterIdentify(identity, hookData)
-
-    // Refresh with new identity
-    await refresh()
   }
 
   /**
@@ -810,7 +849,7 @@ export function createTogglyClient(
   // Build and return client
   return {
     get state(): TogglyState {
-      return { ...state, wsConnected }
+      return { ...state, wsConnected, definitions: state.definitions }
     },
     get config(): TogglyServerConfig {
       return { ...config }
