@@ -1,7 +1,7 @@
 """Tests for EvaluationContext."""
 
 
-from toggly import EvaluationContext
+from toggly import EvaluationContext, HttpRequestMapper, RequestContext
 
 
 class TestEvaluationContext:
@@ -14,6 +14,8 @@ class TestEvaluationContext:
         assert context.identity is None
         assert context.groups == []
         assert context.traits == {}
+        assert context.claims == {}
+        assert context.request is None
 
     def test_context_with_identity(self) -> None:
         """Test context with identity."""
@@ -39,6 +41,19 @@ class TestEvaluationContext:
         assert context.groups == []
         assert context.traits == {"country": "US", "plan": "enterprise"}
 
+    def test_context_with_claims_and_request(self) -> None:
+        """Test context with claims and request fields."""
+        request = RequestContext(user_agent="UA", accept_language="en-US", country="US")
+        context = EvaluationContext(
+            identity="user-123",
+            claims={"role": "admin"},
+            request=request,
+        )
+
+        assert context.claims == {"role": "admin"}
+        assert context.request is not None
+        assert context.request.country == "US"
+
     def test_context_with_all_fields(self) -> None:
         """Test context with all fields."""
         context = EvaluationContext(
@@ -53,12 +68,13 @@ class TestEvaluationContext:
 
     def test_with_identity_creates_new_context(self) -> None:
         """Test with_identity creates a new context."""
-        original = EvaluationContext(groups=["admin"])
+        original = EvaluationContext(groups=["admin"], claims={"role": "admin"})
         new_context = original.with_identity("user-456")
 
         assert original.identity is None
         assert new_context.identity == "user-456"
         assert new_context.groups == ["admin"]
+        assert new_context.claims == {"role": "admin"}
 
     def test_with_groups_creates_new_context(self) -> None:
         """Test with_groups creates a new context."""
@@ -101,6 +117,8 @@ class TestEvaluationContext:
             "identity": "user-123",
             "groups": ["beta"],
             "traits": {"country": "US"},
+            "claims": {},
+            "request": None,
             "entity": None,
         }
 
@@ -109,13 +127,19 @@ class TestEvaluationContext:
         data = {
             "identity": "user-123",
             "groups": ["beta"],
-            "traits": {"country": "US"}
+            "traits": {"country": "US"},
+            "claims": {"role": "admin"},
+            "request": {"userAgent": "UA", "country": "US"},
         }
         context = EvaluationContext.from_dict(data)
 
         assert context.identity == "user-123"
         assert context.groups == ["beta"]
         assert context.traits == {"country": "US"}
+        assert context.claims == {"role": "admin"}
+        assert context.request is not None
+        assert context.request.user_agent == "UA"
+        assert context.request.country == "US"
 
     def test_from_dict_with_missing_fields(self) -> None:
         """Test from_dict with missing fields uses defaults."""
@@ -124,6 +148,8 @@ class TestEvaluationContext:
         assert context.identity is None
         assert context.groups == []
         assert context.traits == {}
+        assert context.claims == {}
+        assert context.request is None
 
     def test_anonymous_factory(self) -> None:
         """Test anonymous factory method."""
@@ -153,14 +179,17 @@ class TestEvaluationContext:
         context = EvaluationContext(traits={"country": "US"})
         assert context
 
+    def test_bool_true_with_claims(self) -> None:
+        """Test bool returns True with claims."""
+        context = EvaluationContext(claims={"role": "admin"})
+        assert context
+
     def test_immutability_of_groups(self) -> None:
         """Test that groups list is copied."""
         original_groups = ["beta"]
         context = EvaluationContext(groups=original_groups)
         original_groups.append("admin")
 
-        # Original groups list was modified but context should be unaffected
-        # (depends on implementation - test the expected behavior)
         new_context = context.with_groups("vip")
         assert "beta" in new_context.groups
         assert "vip" in new_context.groups
@@ -172,6 +201,88 @@ class TestEvaluationContext:
         original_traits["country"] = "UK"
 
         new_context = context.with_traits(plan="premium")
-        # The new context should have the original country
-        # (depends on implementation)
         assert "plan" in new_context.traits
+
+
+class TestHttpRequestMapper:
+    """Tests for HTTP header → RequestContext mapping."""
+
+    def test_maps_user_agent_and_accept_language(self) -> None:
+        """Test standard header mapping."""
+        request = HttpRequestMapper.from_http_headers(
+            {
+                "User-Agent": "Mozilla/5.0",
+                "Accept-Language": "en-US",
+            }
+        )
+        assert request.user_agent == "Mozilla/5.0"
+        assert request.accept_language == "en-US"
+
+    def test_country_prefers_cf_ipcountry(self) -> None:
+        """Test CF-IPCountry wins for country."""
+        request = HttpRequestMapper.from_http_headers(
+            {
+                "cf-ipcountry": "US",
+                "x-vercel-ip-country": "DE",
+            }
+        )
+        assert request.country == "US"
+
+    def test_merge_into_preserves_identity(self) -> None:
+        """Test merge_into keeps identity/groups/claims."""
+        base = EvaluationContext(identity="u", groups=["beta"], claims={"role": "admin"})
+        merged = HttpRequestMapper.merge_into({"cf-ipcountry": "US"}, base)
+        assert merged.identity == "u"
+        assert merged.groups == ["beta"]
+        assert merged.claims == {"role": "admin"}
+        assert merged.request is not None
+        assert merged.request.country == "US"
+
+    def test_empty_headers_and_vercel_country(self) -> None:
+        """Empty headers yield empty request; Vercel country used when CF absent."""
+        empty = HttpRequestMapper.from_http_headers(None)
+        assert empty.user_agent is None
+        assert empty.country is None
+        vercel = HttpRequestMapper.from_http_headers(
+            {"x-vercel-ip-country": "DE"}
+        )
+        assert vercel.country == "DE"
+        cloudfront = HttpRequestMapper.from_http_headers(
+            {"cloudfront-viewer-country": "FR"}
+        )
+        assert cloudfront.country == "FR"
+        merged = HttpRequestMapper.merge_into({"user-agent": "ua"}, None)
+        assert merged.request is not None
+        assert merged.request.user_agent == "ua"
+
+
+class TestEvaluationContextClaimsRequestRoundTrip:
+    """Claims / request / entity serialization edges for filter parity."""
+
+    def test_from_dict_claims_non_dict_and_request(self) -> None:
+        """Non-dict claims become {}; request maps from nested dict."""
+        ctx = EvaluationContext.from_dict(
+            {
+                "identity": "u",
+                "claims": "not-a-dict",
+                "request": {"userAgent": "ua", "country": "US"},
+                "entity": {"kind": "org", "key": "1", "attributes": {"a": 1}},
+            }
+        )
+        assert ctx.claims == {}
+        assert ctx.request is not None
+        assert ctx.request.user_agent == "ua"
+        assert ctx.request.country == "US"
+        assert ctx.entity is not None
+        assert ctx.entity.kind == "org"
+
+    def test_with_claims_and_request(self) -> None:
+        """with_claims / with_request copy identity and replace fields."""
+        base = EvaluationContext(identity="u", groups=["g"])
+        with_claims = base.with_claims({"role": "admin"})
+        assert with_claims.claims == {"role": "admin"}
+        assert with_claims.identity == "u"
+        req = RequestContext(country="CA")
+        with_req = base.with_request(req)
+        assert with_req.request is req
+        assert with_req.groups == ["g"]

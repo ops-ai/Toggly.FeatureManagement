@@ -4,8 +4,6 @@ import json
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from toggly import EvaluatedVariantDef, FeatureDefinition, FeatureFilter, JsonWebKey, JsonWebKeySet
 from toggly.providers import (
     DefinitionsSnapshot,

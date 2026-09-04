@@ -4,7 +4,6 @@ import os
 
 from toggly import TogglyClient, TogglyConfig
 
-
 SMOKE_ENVIRONMENT = "Production"
 FLAG_ON = "FlagOn"
 FLAG_OFF = "FlagOff"

@@ -2,17 +2,15 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from toggly import (
-    TogglyClient,
-    TogglyConfig,
     EvaluationContext,
     FeatureDefinition,
     FeatureFilter,
     FeatureRequirement,
     LoadStatus,
     MemorySnapshotProvider,
+    TogglyClient,
+    TogglyConfig,
 )
 from toggly.providers import DefinitionsSnapshot
 

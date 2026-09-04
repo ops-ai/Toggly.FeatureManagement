@@ -28,6 +28,8 @@ pip install toggly
 
 Entity `ContextProperty` filters evaluate `{kind, key, attributes}` and are ANDed with user filters. Register kinds with `register_context` (startup PUT to `sdk/{appKey}/contexts`, opt out via `register_contexts_on_startup=False`).
 
+Segment filters (`BrowserFamily`, `BrowserLanguage`, `Country`, `DeviceType`, `OS`) and `UserClaims` read `EvaluationContext.request` / `claims`. Map HTTP headers with `HttpRequestMapper.from_http_headers` (or set `RequestContext` directly). Sticky percentage buckets use Definitions SHA-256 (`featureKey\nidentity`).
+
 ## Quick Start
 
 ### Basic Usage with Toggly.io
