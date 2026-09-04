@@ -31,4 +31,4 @@ futures-util = "0.3"
 
 [dev-dependencies]
 tokio-test = { workspace = true }
-axum-test = "14.0"
+axum-test = "21.1"
