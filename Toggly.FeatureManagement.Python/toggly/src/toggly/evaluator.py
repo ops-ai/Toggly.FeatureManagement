@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-import random
+import secrets
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any
@@ -11,6 +11,11 @@ from typing import Any
 from toggly.context import EvaluationContext
 from toggly.enums import FeatureRequirement
 from toggly.models import FeatureDefinition, FeatureFilter
+
+# ISO-8601 Zulu → offset form accepted by datetime.fromisoformat.
+_UTC_Z_OFFSET = "+00:00"
+# Anonymous percentage sampling (no sticky identity) uses a CSPRNG.
+_SECURE_RANDOM = secrets.SystemRandom()
 
 
 class FilterEvaluator(ABC):
@@ -110,7 +115,7 @@ def segment_percentage_passes(
         return True
     if identity:
         return compute_percentile(identity, feature_key) < percentage
-    return random.random() * 100 < percentage
+    return _SECURE_RANDOM.random() * 100 < percentage
 
 
 class ParsedUserAgent:
@@ -258,7 +263,9 @@ class TimeWindowEvaluator(FilterEvaluator):
         start_str = params.get("Start") or params.get("start")
         if start_str:
             try:
-                start = datetime.fromisoformat(str(start_str).replace("Z", "+00:00"))
+                start = datetime.fromisoformat(
+                    str(start_str).replace("Z", _UTC_Z_OFFSET)
+                )
                 if now < start:
                     return False
             except (ValueError, TypeError):
@@ -267,7 +274,7 @@ class TimeWindowEvaluator(FilterEvaluator):
         end_str = params.get("End") or params.get("end")
         if end_str:
             try:
-                end = datetime.fromisoformat(str(end_str).replace("Z", "+00:00"))
+                end = datetime.fromisoformat(str(end_str).replace("Z", _UTC_Z_OFFSET))
                 if now > end:
                     return False
             except (ValueError, TypeError):
@@ -644,7 +651,7 @@ class ContextPropertyEvaluator(FilterEvaluator):
             return value
         text = str(value)
         try:
-            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(text.replace("Z", _UTC_Z_OFFSET))
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=timezone.utc)
             return parsed

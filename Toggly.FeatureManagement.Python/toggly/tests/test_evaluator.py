@@ -8,13 +8,24 @@ from toggly import (
     FeatureFilter,
     FeatureRequirement,
 )
+from toggly.context import RequestContext
 from toggly.evaluator import (
+    AlwaysOffEvaluator,
     AlwaysOnEvaluator,
+    BrowserFamilyEvaluator,
+    BrowserLanguageEvaluator,
+    CountryEvaluator,
+    DeviceTypeEvaluator,
     EvaluationEngine,
     EvaluatorRegistry,
+    OperatingSystemEvaluator,
     PercentageEvaluator,
     TargetingEvaluator,
     TimeWindowEvaluator,
+    UserClaimsEvaluator,
+    compute_percentile,
+    parse_user_agent,
+    segment_percentage_passes,
 )
 
 
@@ -512,3 +523,271 @@ class TestEvaluationEngine:
             FeatureRequirement.ALL
         )
         assert result is False
+
+
+class TestAlwaysOffEvaluator:
+    """Tests for AlwaysOff filter evaluator."""
+
+    def test_always_returns_false(self) -> None:
+        """Test AlwaysOff always returns False."""
+        evaluator = AlwaysOffEvaluator()
+        filter_ = FeatureFilter(name="AlwaysOff")
+        assert evaluator.evaluate(filter_, "test-feature", EvaluationContext()) is False
+
+
+class TestSegmentPercentageAndUa:
+    """Sticky buckets, anonymous sampling, and UA parsing helpers."""
+
+    def test_segment_percentage_edges(self) -> None:
+        """Test fail-closed and always-on percentage gates."""
+        assert segment_percentage_passes(None, "f", "u") is False
+        assert segment_percentage_passes(0, "f", "u") is False
+        assert segment_percentage_passes(100, "f", None) is True
+        assert segment_percentage_passes(50, "f", "user-a") is (
+            compute_percentile("user-a", "f") < 50
+        )
+
+    def test_anonymous_percentage_uses_secure_sampler(self) -> None:
+        """Anonymous sampling is boolean; 0 fails, 100 passes without identity."""
+        assert segment_percentage_passes(0.0, "f", None) is False
+        assert segment_percentage_passes(100.0, "f", None) is True
+        # Mid-range without identity is non-deterministic; just ensure no crash.
+        result = segment_percentage_passes(50.0, "f", None)
+        assert result in (True, False)
+
+    def test_parse_user_agent_families(self) -> None:
+        """Test browser/OS/device detection branches."""
+        assert parse_user_agent(None) is None
+        assert parse_user_agent("") is None
+
+        edge = parse_user_agent(
+            "Mozilla/5.0 Edg/120.0 Chrome/120.0 Safari/537.36"
+        )
+        assert edge is not None
+        assert edge.browser_family == "Edge"
+
+        opera = parse_user_agent("Mozilla/5.0 OPR/90.0")
+        assert opera is not None
+        assert opera.browser_family == "Opera"
+
+        chrome = parse_user_agent("Mozilla/5.0 Chrome/120.0 Safari/537.36")
+        assert chrome is not None
+        assert chrome.browser_family == "Chrome"
+
+        firefox = parse_user_agent("Mozilla/5.0 Firefox/121.0")
+        assert firefox is not None
+        assert firefox.browser_family == "Firefox"
+
+        safari = parse_user_agent(
+            "Mozilla/5.0 Version/17.0 Safari/605.1.15 Macintosh"
+        )
+        assert safari is not None
+        assert safari.browser_family == "Safari"
+        assert safari.os_family == "Mac OS"
+
+        android = parse_user_agent("Mozilla/5.0 Android 14 Chrome/120.0")
+        assert android is not None
+        assert android.os_family == "Android"
+
+        ios = parse_user_agent("Mozilla/5.0 iPhone OS 17_0 like Mac OS X")
+        assert ios is not None
+        assert ios.os_family == "iOS"
+        assert ios.device_family == "iPhone"
+
+        ipad = parse_user_agent("Mozilla/5.0 iPad; CPU OS 17_0")
+        assert ipad is not None
+        assert ipad.device_family == "iPad"
+
+        windows = parse_user_agent("Mozilla/5.0 Windows NT 10.0 Firefox/121.0")
+        assert windows is not None
+        assert windows.os_family == "Windows"
+
+        linux = parse_user_agent("Mozilla/5.0 Linux x86_64 Firefox/121.0")
+        assert linux is not None
+        assert linux.os_family == "Linux"
+
+        other = parse_user_agent("curl/8.0")
+        assert other is not None
+        assert other.browser_family == "Other"
+        assert other.os_family == "Other"
+        assert other.device_family == "Other"
+
+
+class TestSegmentFilterEvaluators:
+    """Segment filter evaluators registered for filter parity."""
+
+    def test_browser_family_match(self) -> None:
+        """BrowserFamily matches parsed Chrome with sticky percentage."""
+        evaluator = BrowserFamilyEvaluator()
+        filter_ = FeatureFilter(
+            name="BrowserFamily",
+            parameters={
+                "Percentage": 100,
+                "BrowserFamily:0": "Chrome",
+            },
+        )
+        context = EvaluationContext(
+            identity="user-1",
+            request=RequestContext(
+                user_agent="Mozilla/5.0 Chrome/120.0 Safari/537.36"
+            ),
+        )
+        assert evaluator.evaluate(filter_, "feat", context) is True
+
+    def test_browser_family_fail_closed_paths(self) -> None:
+        """Missing values / Other UA fail closed."""
+        evaluator = BrowserFamilyEvaluator()
+        assert (
+            evaluator.evaluate(
+                FeatureFilter(name="BrowserFamily", parameters={"Percentage": 100}),
+                "feat",
+                EvaluationContext(identity="u"),
+            )
+            is False
+        )
+        assert (
+            evaluator.evaluate(
+                FeatureFilter(
+                    name="BrowserFamily",
+                    parameters={"Percentage": 100, "BrowserFamily:0": "Chrome"},
+                ),
+                "feat",
+                EvaluationContext(identity="u", request=RequestContext(user_agent="curl")),
+            )
+            is False
+        )
+
+    def test_browser_language_country_device_os(self) -> None:
+        """Language, country, device, and OS segment matchers."""
+        lang = BrowserLanguageEvaluator()
+        assert (
+            lang.evaluate(
+                FeatureFilter(
+                    name="BrowserLanguage",
+                    parameters={"Percentage": 100, "BrowserLanguage:0": "en"},
+                ),
+                "feat",
+                EvaluationContext(
+                    identity="u",
+                    request=RequestContext(accept_language="en-US,en;q=0.9"),
+                ),
+            )
+            is True
+        )
+        assert (
+            lang.evaluate(
+                FeatureFilter(
+                    name="BrowserLanguage",
+                    parameters={"Percentage": 100, "BrowserLanguage:0": "fr"},
+                ),
+                "feat",
+                EvaluationContext(identity="u", request=RequestContext()),
+            )
+            is False
+        )
+
+        country = CountryEvaluator()
+        assert (
+            country.evaluate(
+                FeatureFilter(
+                    name="Country",
+                    parameters={"Percentage": 100, "Country:0": "us"},
+                ),
+                "feat",
+                EvaluationContext(
+                    identity="u", request=RequestContext(country="US")
+                ),
+            )
+            is True
+        )
+        assert (
+            country.evaluate(
+                FeatureFilter(
+                    name="Country",
+                    parameters={"Percentage": 100, "Country:0": "US"},
+                ),
+                "feat",
+                EvaluationContext(identity="u"),
+            )
+            is False
+        )
+
+        device = DeviceTypeEvaluator()
+        assert (
+            device.evaluate(
+                FeatureFilter(
+                    name="DeviceType",
+                    parameters={"Percentage": 100, "DeviceType:0": "iPhone"},
+                ),
+                "feat",
+                EvaluationContext(
+                    identity="u",
+                    request=RequestContext(user_agent="Mozilla/5.0 iPhone"),
+                ),
+            )
+            is True
+        )
+
+        os_eval = OperatingSystemEvaluator()
+        assert (
+            os_eval.evaluate(
+                FeatureFilter(
+                    name="OperatingSystem",
+                    parameters={"Percentage": 100, "OperatingSystem:0": "Android"},
+                ),
+                "feat",
+                EvaluationContext(
+                    identity="u",
+                    request=RequestContext(user_agent="Mozilla/5.0 Android Chrome/1"),
+                ),
+            )
+            is True
+        )
+
+    def test_user_claims_match_and_fail_closed(self) -> None:
+        """UserClaims matches claim value; missing claim fails closed."""
+        evaluator = UserClaimsEvaluator()
+        filter_ = FeatureFilter(
+            name="UserClaims",
+            parameters={"Percentage": 100, "Claim": "role", "Value": "admin"},
+        )
+        assert (
+            evaluator.evaluate(
+                filter_,
+                "feat",
+                EvaluationContext(identity="u", claims={"role": "admin"}),
+            )
+            is True
+        )
+        assert (
+            evaluator.evaluate(
+                filter_,
+                "feat",
+                EvaluationContext(identity="u", claims={"role": "user"}),
+            )
+            is False
+        )
+        assert (
+            evaluator.evaluate(
+                FeatureFilter(
+                    name="UserClaims",
+                    parameters={"Percentage": 100, "Claim": "role"},
+                ),
+                "feat",
+                EvaluationContext(identity="u", claims={"role": "admin"}),
+            )
+            is False
+        )
+
+
+class TestTimeWindowZuluSuffix:
+    """TimeWindow accepts trailing Z via shared UTC offset constant."""
+
+    def test_zulu_start_in_past_passes(self) -> None:
+        """Past Start with Z suffix is inside the window."""
+        evaluator = TimeWindowEvaluator()
+        past = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        filter_ = FeatureFilter(name="TimeWindow", parameters={"Start": past})
+        assert evaluator.evaluate(filter_, "feat", EvaluationContext()) is True

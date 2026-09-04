@@ -237,3 +237,52 @@ class TestHttpRequestMapper:
         assert merged.claims == {"role": "admin"}
         assert merged.request is not None
         assert merged.request.country == "US"
+
+    def test_empty_headers_and_vercel_country(self) -> None:
+        """Empty headers yield empty request; Vercel country used when CF absent."""
+        empty = HttpRequestMapper.from_http_headers(None)
+        assert empty.user_agent is None
+        assert empty.country is None
+        vercel = HttpRequestMapper.from_http_headers(
+            {"x-vercel-ip-country": "DE"}
+        )
+        assert vercel.country == "DE"
+        cloudfront = HttpRequestMapper.from_http_headers(
+            {"cloudfront-viewer-country": "FR"}
+        )
+        assert cloudfront.country == "FR"
+        merged = HttpRequestMapper.merge_into({"user-agent": "ua"}, None)
+        assert merged.request is not None
+        assert merged.request.user_agent == "ua"
+
+
+class TestEvaluationContextClaimsRequestRoundTrip:
+    """Claims / request / entity serialization edges for filter parity."""
+
+    def test_from_dict_claims_non_dict_and_request(self) -> None:
+        """Non-dict claims become {}; request maps from nested dict."""
+        ctx = EvaluationContext.from_dict(
+            {
+                "identity": "u",
+                "claims": "not-a-dict",
+                "request": {"userAgent": "ua", "country": "US"},
+                "entity": {"kind": "org", "key": "1", "attributes": {"a": 1}},
+            }
+        )
+        assert ctx.claims == {}
+        assert ctx.request is not None
+        assert ctx.request.user_agent == "ua"
+        assert ctx.request.country == "US"
+        assert ctx.entity is not None
+        assert ctx.entity.kind == "org"
+
+    def test_with_claims_and_request(self) -> None:
+        """with_claims / with_request copy identity and replace fields."""
+        base = EvaluationContext(identity="u", groups=["g"])
+        with_claims = base.with_claims({"role": "admin"})
+        assert with_claims.claims == {"role": "admin"}
+        assert with_claims.identity == "u"
+        req = RequestContext(country="CA")
+        with_req = base.with_request(req)
+        assert with_req.request is req
+        assert with_req.groups == ["g"]
