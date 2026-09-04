@@ -101,9 +101,11 @@ public final class TargetingEvaluator implements FilterEvaluator {
     }
 
     private double getDefaultPercentage(Map<String, Object> params) {
-        Object value = params.get("DefaultRolloutPercentage");
+        Object value = params.get("Audience.DefaultRolloutPercentage");
+        if (value == null) value = params.get("DefaultRolloutPercentage");
         if (value == null) value = params.get("defaultRolloutPercentage");
         if (value == null) value = params.get("default_percentage");
+        if (value == null) value = params.get("Percentage");
 
         if (value == null) return 0;
 
