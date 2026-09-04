@@ -40,8 +40,10 @@ export function runWithEvalContext<T>(
 
 /**
  * Merge ambient defaults with per-call IdentityContext. Explicit per-call
- * fields win field-by-field (including `undefined`); missing per-call keys
- * keep ambient values.
+ * fields win field-by-field; a field counts as "set" only when its value is
+ * not `undefined` (a key present with an `undefined` value — e.g. from
+ * `{ claims: user.claims }` where `user.claims` is optional — falls back to
+ * ambient, same as an omitted key). Missing per-call keys keep ambient values.
  */
 export function mergeIdentityContext(
   ambient: IdentityContext | undefined,
@@ -57,14 +59,11 @@ export function mergeIdentityContext(
     return snapshot(ambient);
   }
 
-  const has = (key: keyof IdentityContext): boolean =>
-    Object.prototype.hasOwnProperty.call(perCall, key);
-
   return {
-    identity: has('identity') ? perCall.identity : ambient.identity,
-    groups: has('groups') ? perCall.groups : ambient.groups,
-    claims: has('claims') ? perCall.claims : ambient.claims,
-    traits: has('traits') ? perCall.traits : ambient.traits,
-    request: has('request') ? perCall.request : ambient.request,
+    identity: perCall.identity !== undefined ? perCall.identity : ambient.identity,
+    groups: perCall.groups !== undefined ? perCall.groups : ambient.groups,
+    claims: perCall.claims !== undefined ? perCall.claims : ambient.claims,
+    traits: perCall.traits !== undefined ? perCall.traits : ambient.traits,
+    request: perCall.request !== undefined ? perCall.request : ambient.request,
   };
 }
