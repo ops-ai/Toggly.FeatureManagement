@@ -3,7 +3,127 @@
 use crate::context::EvalContext;
 use crate::definitions::FeatureFilter;
 use crate::eval::registry::Evaluator;
-use sha2::{Digest, Sha256};
+use crate::eval::sticky_hash::{compute_percentile, segment_percentage_passes};
+use crate::eval::user_agent::parse_user_agent;
+
+fn param<'a>(filter: &'a FeatureFilter, key: &str) -> Option<&'a serde_json::Value> {
+    filter.parameters.get(key).or_else(|| {
+        filter
+            .parameters
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(key))
+            .map(|(_, v)| v)
+    })
+}
+
+fn as_float(filter: &FeatureFilter, keys: &[&str]) -> Option<f64> {
+    for key in keys {
+        let Some(value) = param(filter, key) else {
+            continue;
+        };
+        if value.is_boolean() {
+            continue;
+        }
+        if let Some(n) = value.as_f64() {
+            return Some(n);
+        }
+        if let Some(s) = value.as_str() {
+            if let Ok(n) = s.parse::<f64>() {
+                return Some(n);
+            }
+            return None;
+        }
+        return None;
+    }
+    None
+}
+
+fn as_string(filter: &FeatureFilter, key: &str) -> Option<String> {
+    let value = param(filter, key)?;
+    let text = match value {
+        serde_json::Value::String(s) => s.clone(),
+        other => other.to_string().trim_matches('"').to_string(),
+    };
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+fn collect_indexed_values(filter: &FeatureFilter, prefixes: &[&str]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (key, value) in &filter.parameters {
+        if value.is_null() {
+            continue;
+        }
+        for prefix in prefixes {
+            let needle = format!("{prefix}:");
+            if key.starts_with(&needle) {
+                let text = match value {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string().trim_matches('"').to_string(),
+                };
+                if !text.is_empty() {
+                    out.push(text);
+                }
+                break;
+            }
+        }
+    }
+    out
+}
+
+fn contains_ignore_case(haystack: &str, needle: &str) -> bool {
+    haystack.to_ascii_lowercase().contains(&needle.to_ascii_lowercase())
+}
+
+fn equals_ignore_case(left: &str, right: &str) -> bool {
+    left.eq_ignore_ascii_case(right)
+}
+
+fn identity_str(context: &EvalContext) -> Option<&str> {
+    context
+        .identity
+        .as_deref()
+        .filter(|s| !s.is_empty())
+}
+
+fn append_list_values(out: &mut Vec<String>, raw: Option<&serde_json::Value>) {
+    let Some(raw) = raw else {
+        return;
+    };
+    match raw {
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                if let Some(s) = item.as_str() {
+                    if !s.is_empty() {
+                        out.push(s.to_string());
+                    }
+                } else {
+                    let text = item.to_string().trim_matches('"').to_string();
+                    if !text.is_empty() {
+                        out.push(text);
+                    }
+                }
+            }
+        }
+        serde_json::Value::String(s) => {
+            for part in s.split(',') {
+                let trimmed = part.trim();
+                if !trimmed.is_empty() {
+                    out.push(trimmed.to_string());
+                }
+            }
+        }
+        other => {
+            let text = other.to_string().trim_matches('"').to_string();
+            if !text.is_empty() {
+                out.push(text);
+            }
+        }
+    }
+}
 
 /// AlwaysOn filter evaluator - always returns true.
 pub struct AlwaysOnEvaluator;
@@ -34,21 +154,10 @@ impl Evaluator for AlwaysOffEvaluator {
 }
 
 /// Percentage rollout filter evaluator.
+///
+/// Uses Definitions-aligned sticky SHA-256 hashing
+/// (`featureKey + "\n" + identity`) for consistent buckets.
 pub struct PercentageEvaluator;
-
-impl PercentageEvaluator {
-    /// Calculate a deterministic percentage based on identity and feature key.
-    fn calculate_percentage(identity: &str, feature_key: &str) -> f64 {
-        let mut hasher = Sha256::new();
-        hasher.update(identity.as_bytes());
-        hasher.update(feature_key.as_bytes());
-        let result = hasher.finalize();
-
-        // Use first 4 bytes as u32 and normalize to 0-100
-        let value = u32::from_be_bytes([result[0], result[1], result[2], result[3]]);
-        (value as f64 / u32::MAX as f64) * 100.0
-    }
-}
 
 impl Evaluator for PercentageEvaluator {
     fn evaluate(
@@ -57,90 +166,99 @@ impl Evaluator for PercentageEvaluator {
         filter: &FeatureFilter,
         context: &EvalContext,
     ) -> crate::Result<bool> {
-        let percentage = filter
-            .parameters
-            .get("Value")
-            .or_else(|| filter.parameters.get("value"))
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
-
-        // If no identity, use random percentage (non-deterministic)
-        let identity = match &context.identity {
-            Some(id) if !id.is_empty() => id.as_str(),
-            _ => {
-                // For anonymous users, use a random value
-                let random_pct = rand::random::<f64>() * 100.0;
-                return Ok(random_pct < percentage);
-            }
+        let percentage = as_float(filter, &["Value", "Percentage", "percentage", "value"]);
+        let Some(percentage) = percentage else {
+            return Ok(false);
         };
-
-        let calculated = Self::calculate_percentage(identity, feature_key);
-        Ok(calculated < percentage)
+        if percentage <= 0.0 {
+            return Ok(false);
+        }
+        if percentage >= 100.0 {
+            return Ok(true);
+        }
+        let Some(identity) = identity_str(context) else {
+            return Ok(false);
+        };
+        Ok(compute_percentile(identity, feature_key) < percentage)
     }
 }
 
 /// Targeting filter evaluator for identity-based targeting.
 pub struct TargetingEvaluator;
 
+impl TargetingEvaluator {
+    fn collect_users(filter: &FeatureFilter) -> Vec<String> {
+        let mut users = Vec::new();
+        append_list_values(&mut users, param(filter, "users").or_else(|| param(filter, "Users")));
+        append_list_values(
+            &mut users,
+            param(filter, "Audience").or_else(|| param(filter, "audience")),
+        );
+        for (key, value) in &filter.parameters {
+            if key.starts_with("Audience.Users:") && !value.is_null() {
+                append_list_values(&mut users, Some(value));
+            }
+        }
+        users.sort();
+        users.dedup();
+        users
+    }
+
+    fn collect_groups(filter: &FeatureFilter) -> Vec<String> {
+        let mut groups = Vec::new();
+        append_list_values(
+            &mut groups,
+            param(filter, "groups").or_else(|| param(filter, "Groups")),
+        );
+        for (key, value) in &filter.parameters {
+            if key.starts_with("Audience.Groups:") && !value.is_null() {
+                append_list_values(&mut groups, Some(value));
+            }
+        }
+        groups.sort();
+        groups.dedup();
+        groups
+    }
+}
+
 impl Evaluator for TargetingEvaluator {
     fn evaluate(
         &self,
-        _feature_key: &str,
+        feature_key: &str,
         filter: &FeatureFilter,
         context: &EvalContext,
     ) -> crate::Result<bool> {
-        let identity = match &context.identity {
-            Some(id) if !id.is_empty() => id,
-            _ => return Ok(false),
-        };
-
-        // Check Audience (list of identities)
-        if let Some(audience) = filter
-            .parameters
-            .get("Audience")
-            .or_else(|| filter.parameters.get("audience"))
-        {
-            if let Some(arr) = audience.as_array() {
-                let identities: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
-                if identities.contains(&identity.as_str()) {
-                    return Ok(true);
-                }
-            }
-            if let Some(s) = audience.as_str() {
-                // Comma-separated list
-                let identities: Vec<&str> = s.split(',').map(|s| s.trim()).collect();
-                if identities.contains(&identity.as_str()) {
-                    return Ok(true);
-                }
+        let users = Self::collect_users(filter);
+        if let Some(identity) = identity_str(context) {
+            if users.iter().any(|u| u == identity) {
+                return Ok(true);
             }
         }
 
-        // Check Groups
-        if let Some(groups) = filter
-            .parameters
-            .get("Groups")
-            .or_else(|| filter.parameters.get("groups"))
+        let groups = Self::collect_groups(filter);
+        if !groups.is_empty()
+            && context
+                .groups
+                .iter()
+                .any(|g| groups.iter().any(|tg| tg == g))
         {
-            if let Some(arr) = groups.as_array() {
-                let target_groups: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
-                for group in &context.groups {
-                    if target_groups.contains(&group.as_str()) {
-                        return Ok(true);
-                    }
-                }
-            }
+            return Ok(true);
         }
 
-        // Check DefaultRolloutPercentage for catch-all percentage
-        if let Some(default_pct) = filter
-            .parameters
-            .get("DefaultRolloutPercentage")
-            .or_else(|| filter.parameters.get("defaultRolloutPercentage"))
-            .and_then(|v| v.as_f64())
-        {
-            if default_pct > 0.0 {
-                let calculated = PercentageEvaluator::calculate_percentage(identity, _feature_key);
-                return Ok(calculated < default_pct);
+        let default_percentage = as_float(
+            filter,
+            &[
+                "Audience.DefaultRolloutPercentage",
+                "DefaultRolloutPercentage",
+                "defaultRolloutPercentage",
+                "default_percentage",
+                "Percentage",
+            ],
+        )
+        .unwrap_or(0.0);
+        if default_percentage > 0.0 {
+            if let Some(identity) = identity_str(context) {
+                return Ok(compute_percentile(identity, feature_key) < default_percentage);
             }
         }
 
@@ -160,12 +278,7 @@ impl Evaluator for TimeWindowEvaluator {
     ) -> crate::Result<bool> {
         let now = chrono::Utc::now();
 
-        // Check Start time
-        if let Some(start) = filter
-            .parameters
-            .get("Start")
-            .or_else(|| filter.parameters.get("start"))
-        {
+        if let Some(start) = param(filter, "Start").or_else(|| param(filter, "start")) {
             if let Some(start_str) = start.as_str() {
                 if let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(start_str) {
                     if now < start_time {
@@ -175,12 +288,7 @@ impl Evaluator for TimeWindowEvaluator {
             }
         }
 
-        // Check End time
-        if let Some(end) = filter
-            .parameters
-            .get("End")
-            .or_else(|| filter.parameters.get("end"))
-        {
+        if let Some(end) = param(filter, "End").or_else(|| param(filter, "end")) {
             if let Some(end_str) = end.as_str() {
                 if let Ok(end_time) = chrono::DateTime::parse_from_rfc3339(end_str) {
                     if now > end_time {
@@ -314,21 +422,13 @@ impl Evaluator for ContextualTargetingEvaluator {
         filter: &FeatureFilter,
         context: &EvalContext,
     ) -> crate::Result<bool> {
-        // Get conditions array
-        let conditions = match filter
-            .parameters
-            .get("Conditions")
-            .or_else(|| filter.parameters.get("conditions"))
-        {
+        let conditions = match param(filter, "Conditions").or_else(|| param(filter, "conditions")) {
             Some(v) if v.is_array() => v.as_array().unwrap(),
             _ => return Ok(false),
         };
 
-        // Get requirement type (default to "All")
-        let requirement = filter
-            .parameters
-            .get("RequirementType")
-            .or_else(|| filter.parameters.get("requirementType"))
+        let requirement = param(filter, "RequirementType")
+            .or_else(|| param(filter, "requirementType"))
             .and_then(|v| v.as_str())
             .unwrap_or("All");
 
@@ -375,9 +475,203 @@ impl Evaluator for ContextPropertyEvaluator {
     }
 }
 
+/// BrowserFamily segment filter evaluator.
+pub struct BrowserFamilyEvaluator;
+
+impl Evaluator for BrowserFamilyEvaluator {
+    fn evaluate(
+        &self,
+        feature_key: &str,
+        filter: &FeatureFilter,
+        context: &EvalContext,
+    ) -> crate::Result<bool> {
+        let percentage = as_float(filter, &["Percentage"]);
+        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
+            return Ok(false);
+        }
+        let values = collect_indexed_values(filter, &["BrowserFamily"]);
+        if values.is_empty() {
+            return Ok(false);
+        }
+        let ua = context
+            .request
+            .as_ref()
+            .and_then(|r| r.user_agent.as_deref());
+        let Some(parsed) = parse_user_agent(ua) else {
+            return Ok(false);
+        };
+        if parsed.browser_family == "Other" {
+            return Ok(false);
+        }
+        Ok(values
+            .iter()
+            .any(|value| contains_ignore_case(&parsed.browser_family, value)))
+    }
+}
+
+/// BrowserLanguage segment filter evaluator.
+pub struct BrowserLanguageEvaluator;
+
+impl Evaluator for BrowserLanguageEvaluator {
+    fn evaluate(
+        &self,
+        feature_key: &str,
+        filter: &FeatureFilter,
+        context: &EvalContext,
+    ) -> crate::Result<bool> {
+        let percentage = as_float(filter, &["Percentage"]);
+        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
+            return Ok(false);
+        }
+        let values = collect_indexed_values(filter, &["BrowserLanguage"]);
+        if values.is_empty() {
+            return Ok(false);
+        }
+        let Some(accept) = context
+            .request
+            .as_ref()
+            .and_then(|r| r.accept_language.as_deref())
+            .filter(|s| !s.is_empty())
+        else {
+            return Ok(false);
+        };
+        Ok(values
+            .iter()
+            .any(|value| contains_ignore_case(accept, value)))
+    }
+}
+
+/// Country / CountryFamily segment filter evaluator.
+pub struct CountryEvaluator;
+
+impl Evaluator for CountryEvaluator {
+    fn evaluate(
+        &self,
+        feature_key: &str,
+        filter: &FeatureFilter,
+        context: &EvalContext,
+    ) -> crate::Result<bool> {
+        let percentage = as_float(filter, &["Percentage"]);
+        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
+            return Ok(false);
+        }
+        let values = collect_indexed_values(filter, &["Country"]);
+        if values.is_empty() {
+            return Ok(false);
+        }
+        let Some(country) = context
+            .request
+            .as_ref()
+            .and_then(|r| r.country.as_deref())
+            .filter(|s| !s.is_empty())
+        else {
+            return Ok(false);
+        };
+        Ok(values
+            .iter()
+            .any(|value| equals_ignore_case(value, country)))
+    }
+}
+
+/// DeviceType segment filter evaluator.
+pub struct DeviceTypeEvaluator;
+
+impl Evaluator for DeviceTypeEvaluator {
+    fn evaluate(
+        &self,
+        feature_key: &str,
+        filter: &FeatureFilter,
+        context: &EvalContext,
+    ) -> crate::Result<bool> {
+        let percentage = as_float(filter, &["Percentage"]);
+        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
+            return Ok(false);
+        }
+        let values = collect_indexed_values(filter, &["DeviceType"]);
+        if values.is_empty() {
+            return Ok(false);
+        }
+        let ua = context
+            .request
+            .as_ref()
+            .and_then(|r| r.user_agent.as_deref());
+        let Some(parsed) = parse_user_agent(ua) else {
+            return Ok(false);
+        };
+        if parsed.device_family == "Other" {
+            return Ok(false);
+        }
+        Ok(values
+            .iter()
+            .any(|value| contains_ignore_case(&parsed.device_family, value)))
+    }
+}
+
+/// OS / OperatingSystem segment filter evaluator.
+pub struct OperatingSystemEvaluator;
+
+impl Evaluator for OperatingSystemEvaluator {
+    fn evaluate(
+        &self,
+        feature_key: &str,
+        filter: &FeatureFilter,
+        context: &EvalContext,
+    ) -> crate::Result<bool> {
+        let percentage = as_float(filter, &["Percentage"]);
+        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
+            return Ok(false);
+        }
+        let values = collect_indexed_values(filter, &["OperatingSystem"]);
+        if values.is_empty() {
+            return Ok(false);
+        }
+        let ua = context
+            .request
+            .as_ref()
+            .and_then(|r| r.user_agent.as_deref());
+        let Some(parsed) = parse_user_agent(ua) else {
+            return Ok(false);
+        };
+        if parsed.os_family == "Other" {
+            return Ok(false);
+        }
+        Ok(values
+            .iter()
+            .any(|value| contains_ignore_case(&parsed.os_family, value)))
+    }
+}
+
+/// UserClaims filter evaluator (`Claim` + `Value`).
+pub struct UserClaimsEvaluator;
+
+impl Evaluator for UserClaimsEvaluator {
+    fn evaluate(
+        &self,
+        feature_key: &str,
+        filter: &FeatureFilter,
+        context: &EvalContext,
+    ) -> crate::Result<bool> {
+        let percentage = as_float(filter, &["Percentage"]);
+        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
+            return Ok(false);
+        }
+        let Some(claim_type) = as_string(filter, "Claim") else {
+            return Ok(false);
+        };
+        let Some(claim_value) = as_string(filter, "Value") else {
+            return Ok(false);
+        };
+        match context.claims.get(&claim_type) {
+            Some(actual) => Ok(actual == &claim_value),
+            None => Ok(false),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::RequestContext;
     use std::collections::HashMap;
 
     fn make_filter(name: &str, params: serde_json::Value) -> FeatureFilter {
@@ -416,10 +710,17 @@ mod tests {
         let filter = make_filter("Percentage", serde_json::json!({"Value": 50}));
         let context = EvalContext::with_identity("user-123");
 
-        // Should be deterministic
         let result1 = evaluator.evaluate("feature", &filter, &context).unwrap();
         let result2 = evaluator.evaluate("feature", &filter, &context).unwrap();
         assert_eq!(result1, result2);
+    }
+
+    #[test]
+    fn test_percentage_missing_fail_closed() {
+        let evaluator = PercentageEvaluator;
+        let filter = make_filter("Percentage", serde_json::json!({}));
+        let context = EvalContext::with_identity("user-123");
+        assert!(!evaluator.evaluate("feature", &filter, &context).unwrap());
     }
 
     #[test]
@@ -438,11 +739,14 @@ mod tests {
     }
 
     #[test]
-    fn test_targeting_with_groups() {
+    fn test_targeting_with_indexed_groups() {
         let evaluator = TargetingEvaluator;
         let filter = make_filter(
             "Targeting",
-            serde_json::json!({"Groups": ["beta", "premium"]}),
+            serde_json::json!({
+                "Audience.DefaultRolloutPercentage": 0,
+                "Audience.Groups:0": "beta"
+            }),
         );
 
         let context1 = EvalContext::builder()
@@ -478,5 +782,45 @@ mod tests {
 
         let context = EvalContext::builder().traits(traits).build();
         assert!(evaluator.evaluate("test", &filter, &context).unwrap());
+    }
+
+    #[test]
+    fn test_browser_family_match() {
+        let evaluator = BrowserFamilyEvaluator;
+        let filter = make_filter(
+            "BrowserFamily",
+            serde_json::json!({
+                "Percentage": 100,
+                "BrowserFamily:0": "Chrome"
+            }),
+        );
+        let context = EvalContext::builder()
+            .identity("u")
+            .request(RequestContext {
+                user_agent: Some(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".into(),
+                ),
+                ..Default::default()
+            })
+            .build();
+        assert!(evaluator.evaluate("parity", &filter, &context).unwrap());
+    }
+
+    #[test]
+    fn test_user_claims_match() {
+        let evaluator = UserClaimsEvaluator;
+        let filter = make_filter(
+            "UserClaims",
+            serde_json::json!({
+                "Percentage": 100,
+                "Claim": "role",
+                "Value": "admin"
+            }),
+        );
+        let context = EvalContext::builder()
+            .identity("u")
+            .claim("role", "admin")
+            .build();
+        assert!(evaluator.evaluate("parity", &filter, &context).unwrap());
     }
 }

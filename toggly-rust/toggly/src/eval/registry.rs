@@ -40,18 +40,40 @@ impl Registry {
     pub fn register_defaults(&self) {
         use super::filters::*;
 
-        self.register("AlwaysOn", Arc::new(AlwaysOnEvaluator));
-        self.register("On", Arc::new(AlwaysOnEvaluator));
-        self.register("AlwaysOff", Arc::new(AlwaysOffEvaluator));
-        self.register("Off", Arc::new(AlwaysOffEvaluator));
-        self.register("Percentage", Arc::new(PercentageEvaluator));
-        self.register("Targeting", Arc::new(TargetingEvaluator));
-        self.register("TimeWindow", Arc::new(TimeWindowEvaluator));
-        self.register(
-            "ContextualTargeting",
-            Arc::new(ContextualTargetingEvaluator),
-        );
-        self.register("ContextProperty", Arc::new(ContextPropertyEvaluator));
+        let always_on: Arc<dyn Evaluator> = Arc::new(AlwaysOnEvaluator);
+        let always_off: Arc<dyn Evaluator> = Arc::new(AlwaysOffEvaluator);
+        let percentage: Arc<dyn Evaluator> = Arc::new(PercentageEvaluator);
+        let targeting: Arc<dyn Evaluator> = Arc::new(TargetingEvaluator);
+        let time_window: Arc<dyn Evaluator> = Arc::new(TimeWindowEvaluator);
+        let contextual: Arc<dyn Evaluator> = Arc::new(ContextualTargetingEvaluator);
+        let context_property: Arc<dyn Evaluator> = Arc::new(ContextPropertyEvaluator);
+        let browser_family: Arc<dyn Evaluator> = Arc::new(BrowserFamilyEvaluator);
+        let browser_language: Arc<dyn Evaluator> = Arc::new(BrowserLanguageEvaluator);
+        let country: Arc<dyn Evaluator> = Arc::new(CountryEvaluator);
+        let device_type: Arc<dyn Evaluator> = Arc::new(DeviceTypeEvaluator);
+        let operating_system: Arc<dyn Evaluator> = Arc::new(OperatingSystemEvaluator);
+        let user_claims: Arc<dyn Evaluator> = Arc::new(UserClaimsEvaluator);
+
+        self.register("AlwaysOn", Arc::clone(&always_on));
+        self.register("On", Arc::clone(&always_on));
+        self.register("AlwaysOff", Arc::clone(&always_off));
+        self.register("Off", Arc::clone(&always_off));
+        self.register("Percentage", Arc::clone(&percentage));
+        self.register("Microsoft.Percentage", Arc::clone(&percentage));
+        self.register("Targeting", Arc::clone(&targeting));
+        self.register("Microsoft.Targeting", Arc::clone(&targeting));
+        self.register("TimeWindow", Arc::clone(&time_window));
+        self.register("Microsoft.TimeWindow", Arc::clone(&time_window));
+        self.register("ContextualTargeting", contextual);
+        self.register("ContextProperty", context_property);
+        self.register("BrowserFamily", browser_family);
+        self.register("BrowserLanguage", browser_language);
+        self.register("Country", Arc::clone(&country));
+        self.register("CountryFamily", country);
+        self.register("DeviceType", device_type);
+        self.register("OS", Arc::clone(&operating_system));
+        self.register("OperatingSystem", operating_system);
+        self.register("UserClaims", user_claims);
     }
 
     /// Register a filter evaluator.
@@ -121,7 +143,19 @@ mod tests {
         assert!(registry.contains("AlwaysOn"));
         assert!(registry.contains("AlwaysOff"));
         assert!(registry.contains("Percentage"));
+        assert!(registry.contains("Microsoft.Percentage"));
         assert!(registry.contains("Targeting"));
+        assert!(registry.contains("Microsoft.Targeting"));
+        assert!(registry.contains("TimeWindow"));
+        assert!(registry.contains("Microsoft.TimeWindow"));
+        assert!(registry.contains("BrowserFamily"));
+        assert!(registry.contains("BrowserLanguage"));
+        assert!(registry.contains("Country"));
+        assert!(registry.contains("CountryFamily"));
+        assert!(registry.contains("DeviceType"));
+        assert!(registry.contains("OS"));
+        assert!(registry.contains("OperatingSystem"));
+        assert!(registry.contains("UserClaims"));
     }
 
     #[test]

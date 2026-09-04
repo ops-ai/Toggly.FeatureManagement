@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.0
+
+2026-09-04
+
+### Added
+- EvalContext fields `claims` and `request` (`userAgent` / `user_agent`,
+  `acceptLanguage` / `accept_language`, `country`) plus `RequestContext` and
+  `HttpRequestMapper` (headers → request; country order `cf-ipcountry` →
+  `x-vercel-ip-country` → `cloudfront-viewer-country`).
+- Segment filters: `BrowserFamily`, `BrowserLanguage`, `Country` /
+  `CountryFamily`, `DeviceType`, `OS` / `OperatingSystem` with indexed params
+  and Percentage fail-closed gating.
+- `UserClaims` filter (`Claim` + `Value`).
+- `Microsoft.Percentage`, `Microsoft.TimeWindow`, and `Microsoft.Targeting`
+  aliases; golden fixtures under `docs/filter-parity/fixtures/`.
+
+### Changed
+- Sticky percentage hashing now uses Definitions / toggly-eval SHA-256
+  (`featureKey + "\n" + userId`, little-endian uint32 / `0xFFFFFFFF * 100`)
+  instead of identity+feature big-endian digest. Existing sticky cohorts shift
+  when upgrading from 0.3.x.
+- Percentage missing or `≤0` fails closed; anonymous Percentage fails closed
+  (aligned with filter-parity contract).
+- Targeting accepts Definitions `Audience.Users:` / `Audience.Groups:` indexed
+  params and related default rollout keys.
+- Unknown filter names fail closed.
+- Workspace package version bumped to 0.4.0; path dependency pins updated.
+
 ## 0.3.1
 
 2026-08-28
