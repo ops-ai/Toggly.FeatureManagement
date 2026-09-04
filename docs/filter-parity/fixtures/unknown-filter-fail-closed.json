@@ -1,0 +1,16 @@
+{
+  "id": "unknown-filter-fail-closed",
+  "description": "Unknown filter names fail closed (IgnoreMissingFeatureFilters)",
+  "featureKey": "parity-unknown-filter",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "DoesNotExist",
+      "parameters": {}
+    }
+  ],
+  "context": {
+    "identity": "u"
+  },
+  "expected": false
+}

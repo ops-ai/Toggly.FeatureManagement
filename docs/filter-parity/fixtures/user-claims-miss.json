@@ -1,0 +1,23 @@
+{
+  "id": "user-claims-miss",
+  "description": "UserClaims fails when claim value differs",
+  "featureKey": "parity-user-claims-miss",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "UserClaims",
+      "parameters": {
+        "Percentage": 100,
+        "Claim": "role",
+        "Value": "admin"
+      }
+    }
+  ],
+  "context": {
+    "identity": "u",
+    "claims": {
+      "role": "user"
+    }
+  },
+  "expected": false
+}
