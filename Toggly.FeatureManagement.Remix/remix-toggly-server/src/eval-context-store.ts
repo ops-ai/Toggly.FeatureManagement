@@ -40,10 +40,12 @@ export function runWithEvalContext<T>(
 
 /**
  * Merge ambient defaults with per-call IdentityContext. Explicit per-call
- * fields win field-by-field; a field counts as "set" only when its value is
- * not `undefined` (a key present with an `undefined` value — e.g. from
- * `{ claims: user.claims }` where `user.claims` is optional — falls back to
- * ambient, same as an omitted key). Missing per-call keys keep ambient values.
+ * fields win field-by-field via `??`, so a field only overrides ambient when
+ * its value is not `undefined` — a key present with an `undefined` value
+ * (e.g. from `{ claims: user.claims }` where `user.claims` is optional)
+ * falls back to ambient, same as an omitted key. No `IdentityContext` field
+ * is typed nullable, so `??` and an explicit `!== undefined` check are
+ * equivalent here; prefer `??` per lint (S6606).
  */
 export function mergeIdentityContext(
   ambient: IdentityContext | undefined,
@@ -60,10 +62,10 @@ export function mergeIdentityContext(
   }
 
   return {
-    identity: perCall.identity !== undefined ? perCall.identity : ambient.identity,
-    groups: perCall.groups !== undefined ? perCall.groups : ambient.groups,
-    claims: perCall.claims !== undefined ? perCall.claims : ambient.claims,
-    traits: perCall.traits !== undefined ? perCall.traits : ambient.traits,
-    request: perCall.request !== undefined ? perCall.request : ambient.request,
+    identity: perCall.identity ?? ambient.identity,
+    groups: perCall.groups ?? ambient.groups,
+    claims: perCall.claims ?? ambient.claims,
+    traits: perCall.traits ?? ambient.traits,
+    request: perCall.request ?? ambient.request,
   };
 }
