@@ -58,7 +58,11 @@ async function extractContext(
     const custom = await config.getContext(ctx)
     return {
       ...custom,
-      request: custom.request ?? headerRequest,
+      // Field-level merge: custom wins; missing keys filled from headers
+      request: {
+        ...headerRequest,
+        ...custom.request,
+      },
     }
   }
 

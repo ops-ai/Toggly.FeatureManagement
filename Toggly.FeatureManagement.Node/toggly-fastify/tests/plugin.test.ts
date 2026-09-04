@@ -194,6 +194,56 @@ describe('togglyPlugin', () => {
     })
   })
 
+  it('should enrich partial getContext.request from headers', async () => {
+    await app.register(togglyPlugin, {
+      appKey: 'test-app',
+      getContext: () => ({
+        identity: 'ctx-user',
+        request: { country: 'US' },
+      }),
+    })
+
+    app.get('/test', async (request) => {
+      expect(request.toggly!.context.request?.country).toBe('US')
+      expect(request.toggly!.context.request?.userAgent).toBe('Chrome/120')
+      return { success: true }
+    })
+
+    await app.inject({
+      method: 'GET',
+      url: '/test',
+      headers: {
+        'cf-ipcountry': 'DE',
+        'user-agent': 'Chrome/120',
+      },
+    })
+  })
+
+  it('should enrich empty getContext.request object from headers', async () => {
+    await app.register(togglyPlugin, {
+      appKey: 'test-app',
+      getContext: () => ({
+        identity: 'ctx-user',
+        request: {},
+      }),
+    })
+
+    app.get('/test', async (request) => {
+      expect(request.toggly!.context.request?.country).toBe('FR')
+      expect(request.toggly!.context.request?.userAgent).toBe('Firefox/121')
+      return { success: true }
+    })
+
+    await app.inject({
+      method: 'GET',
+      url: '/test',
+      headers: {
+        'cf-ipcountry': 'FR',
+        'user-agent': 'Firefox/121',
+      },
+    })
+  })
+
   it('should provide feature checking functions', async () => {
     await app.register(togglyPlugin, { appKey: 'test-app' })
 

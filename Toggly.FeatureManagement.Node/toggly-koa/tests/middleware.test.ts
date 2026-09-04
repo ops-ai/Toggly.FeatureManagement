@@ -246,6 +246,50 @@ describe('togglyMiddleware', () => {
     })
   })
 
+  it('should enrich partial getContext.request from headers', async () => {
+    app.use(
+      togglyMiddleware({
+        appKey: 'test-app',
+        getContext: () => ({
+          identity: 'ctx-user',
+          request: { country: 'US' },
+        }),
+      })
+    )
+    app.use(async (ctx: Context) => {
+      expect(ctx.state.toggly!.context.request?.country).toBe('US')
+      expect(ctx.state.toggly!.context.request?.userAgent).toBe('Chrome/120')
+      ctx.body = { success: true }
+    })
+
+    await makeRequest(app, 'GET', '/test', {
+      'cf-ipcountry': 'DE',
+      'user-agent': 'Chrome/120',
+    })
+  })
+
+  it('should enrich empty getContext.request object from headers', async () => {
+    app.use(
+      togglyMiddleware({
+        appKey: 'test-app',
+        getContext: () => ({
+          identity: 'ctx-user',
+          request: {},
+        }),
+      })
+    )
+    app.use(async (ctx: Context) => {
+      expect(ctx.state.toggly!.context.request?.country).toBe('FR')
+      expect(ctx.state.toggly!.context.request?.userAgent).toBe('Firefox/121')
+      ctx.body = { success: true }
+    })
+
+    await makeRequest(app, 'GET', '/test', {
+      'cf-ipcountry': 'FR',
+      'user-agent': 'Firefox/121',
+    })
+  })
+
   it('should provide feature checking functions', async () => {
     app.use(togglyMiddleware({ appKey: 'test-app' }))
     app.use(async (ctx: Context) => {

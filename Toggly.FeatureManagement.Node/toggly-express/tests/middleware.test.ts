@@ -196,6 +196,48 @@ describe('togglyMiddleware', () => {
     expect(context?.request?.userAgent).toBe('Chrome/120')
   })
 
+  it('should enrich partial getContext.request from headers', async () => {
+    const middleware = togglyMiddleware({
+      appKey: 'test-app',
+      getContext: () => ({
+        identity: 'ctx-user',
+        request: { country: 'US' },
+      }),
+    })
+    const req = createMockRequest({
+      headers: { 'cf-ipcountry': 'DE', 'user-agent': 'Chrome/120' },
+    })
+    const res = createMockResponse()
+    const next = vi.fn()
+
+    await middleware(req, res, next)
+
+    const context = (req as TogglyRequest).toggly?.context
+    expect(context?.request?.country).toBe('US')
+    expect(context?.request?.userAgent).toBe('Chrome/120')
+  })
+
+  it('should enrich empty getContext.request object from headers', async () => {
+    const middleware = togglyMiddleware({
+      appKey: 'test-app',
+      getContext: () => ({
+        identity: 'ctx-user',
+        request: {},
+      }),
+    })
+    const req = createMockRequest({
+      headers: { 'cf-ipcountry': 'FR', 'user-agent': 'Firefox/121' },
+    })
+    const res = createMockResponse()
+    const next = vi.fn()
+
+    await middleware(req, res, next)
+
+    const context = (req as TogglyRequest).toggly?.context
+    expect(context?.request?.country).toBe('FR')
+    expect(context?.request?.userAgent).toBe('Firefox/121')
+  })
+
   it('should provide feature checking functions', async () => {
     const middleware = togglyMiddleware({ appKey: 'test-app' })
     const req = createMockRequest()
