@@ -1,3 +1,15 @@
+## 1.8.0
+
+2026-09-04
+
+### Added
+- Ambient EvalContext for loaders and actions: optional `getGroups` /
+  `getClaims` / `getContext`, with `request.*` filled via `fromHttpRequest`
+  [OPS-891].
+- `run` helpers and ALS binding so `client.isEnabled('X')` needs no
+  IdentityContext arg for the loader/action duration; per-call overrides
+  still win field-by-field. UserClaims via `claims` only.
+
 ## 1.7.0
 
 2026-09-03

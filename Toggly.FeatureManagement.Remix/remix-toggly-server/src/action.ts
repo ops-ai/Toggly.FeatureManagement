@@ -4,9 +4,11 @@
 
 import type { ActionFunctionArgs } from '@remix-run/server-runtime';
 import { json, redirect } from '@remix-run/server-runtime';
-import type { FeatureFlags } from '@ops-ai/remix-toggly-core';
+import type { FeatureFlags, IdentityContext } from '@ops-ai/remix-toggly-core';
 import { TogglyServerClient, createServerClient } from './client';
 import type { TogglyLoaderOptions } from './loader';
+import { extractEvalContext } from './extract-context';
+import { runWithEvalContext } from './eval-context-store';
 
 /**
  * Options for feature-gated actions
@@ -19,7 +21,7 @@ export interface FeatureGatedActionOptions extends TogglyLoaderOptions {
   /** Response when feature is disabled */
   onFeatureDisabled?: (
     request: Request,
-    featureKeys: string[]
+    featureKeys: string[],
   ) => Response | Promise<Response>;
   /** Redirect URL when feature is disabled */
   redirectTo?: string;
@@ -37,16 +39,52 @@ export interface TogglyActionContext {
   client: TogglyServerClient;
   /** Feature flags */
   flags: FeatureFlags;
-  /** Check if feature is enabled */
-  isEnabled: (featureKey: string, defaultValue?: boolean) => Promise<boolean>;
+  /** Ambient EvalContext bound for this action */
+  context: IdentityContext;
+  /** Check if feature is enabled (uses ambient; optional override) */
+  isEnabled: (
+    featureKey: string,
+    defaultValue?: boolean,
+    override?: IdentityContext,
+  ) => Promise<boolean>;
   /** Check if feature is disabled */
-  isDisabled: (featureKey: string, defaultValue?: boolean) => Promise<boolean>;
+  isDisabled: (
+    featureKey: string,
+    defaultValue?: boolean,
+    override?: IdentityContext,
+  ) => Promise<boolean>;
   /** Evaluate feature gate */
   evaluateGate: (
     featureKeys: string[],
     requirement?: 'all' | 'any',
-    negate?: boolean
+    negate?: boolean,
+    override?: IdentityContext,
   ) => Promise<boolean>;
+}
+
+function buildActionContext(
+  client: TogglyServerClient,
+  ambient: IdentityContext,
+): TogglyActionContext {
+  return {
+    client,
+    flags: client.snapshotFlags(ambient),
+    context: ambient,
+    isEnabled: (key, def, override) =>
+      client.isEnabled(key, override ?? ambient, def),
+    isDisabled: (key, def, override) =>
+      client.isDisabled(key, override ?? ambient, def),
+    evaluateGate: (keys, req, neg, override) =>
+      client.evaluateGate(
+        keys,
+        req,
+        neg,
+        false,
+        undefined,
+        undefined,
+        override ?? ambient,
+      ),
+  };
 }
 
 /**
@@ -56,62 +94,55 @@ export function createFeatureGatedAction<T>(
   options: FeatureGatedActionOptions,
   handler: (
     args: ActionFunctionArgs,
-    toggly: TogglyActionContext
-  ) => Promise<T> | T
+    toggly: TogglyActionContext,
+  ) => Promise<T> | T,
 ) {
   return async (args: ActionFunctionArgs): Promise<T | Response> => {
     const { request } = args;
     const client = createServerClient(options);
+    const ambient = await extractEvalContext(request, options);
 
-    // Extract identity and initialize
-    let identity: string | undefined;
-    if (options.getIdentity) {
-      identity = await options.getIdentity(request);
-    }
-    await client.init(identity);
-    const identityCtx = { identity };
+    return runWithEvalContext(ambient, async () => {
+      await client.init(ambient.identity);
+      const togglyContext = buildActionContext(client, ambient);
 
-    // Create context
-    const togglyContext: TogglyActionContext = {
-      client,
-      flags: client.snapshotFlags(identityCtx),
-      isEnabled: (key, def) => client.isEnabled(key, identityCtx, def),
-      isDisabled: (key, def) => client.isDisabled(key, identityCtx, def),
-      evaluateGate: (keys, req, neg) =>
-        client.evaluateGate(keys, req, neg, false, undefined, undefined, identityCtx),
-    };
+      if (options.requiredFeatures) {
+        const featureKeys = Array.isArray(options.requiredFeatures)
+          ? options.requiredFeatures
+          : [options.requiredFeatures];
 
-    // Check required features
-    if (options.requiredFeatures) {
-      const featureKeys = Array.isArray(options.requiredFeatures)
-        ? options.requiredFeatures
-        : [options.requiredFeatures];
+        const requirement = options.requirement ?? 'all';
+        const isAllowed = await client.evaluateGate(
+          featureKeys,
+          requirement,
+          false,
+          false,
+          undefined,
+          undefined,
+          ambient,
+        );
 
-      const requirement = options.requirement ?? 'all';
-      const isAllowed = await client.evaluateGate(featureKeys, requirement);
+        if (!isAllowed) {
+          if (options.onFeatureDisabled) {
+            return options.onFeatureDisabled(request, featureKeys);
+          }
 
-      if (!isAllowed) {
-        // Handle disabled feature
-        if (options.onFeatureDisabled) {
-          return options.onFeatureDisabled(request, featureKeys);
+          if (options.redirectTo) {
+            return redirect(options.redirectTo);
+          }
+
+          return json(
+            {
+              error: options.errorMessage ?? 'Feature is not available',
+              featureKeys,
+            },
+            { status: options.errorStatus ?? 403 },
+          ) as Response;
         }
-
-        if (options.redirectTo) {
-          return redirect(options.redirectTo);
-        }
-
-        return json(
-          {
-            error: options.errorMessage ?? 'Feature is not available',
-            featureKeys,
-          },
-          { status: options.errorStatus ?? 403 }
-        ) as Response;
       }
-    }
 
-    // Execute handler
-    return handler(args, togglyContext);
+      return handler(args, togglyContext);
+    });
   };
 }
 
@@ -130,26 +161,32 @@ export function createTogglyAction(options: TogglyLoaderOptions) {
     },
 
     /**
-     * Initialize for an action request
+     * Initialize for an action request.
+     * Returned helpers close over ambient EvalContext so `toggly.isEnabled('X')`
+     * needs no IdentityContext. Prefer `run` when using `client.isEnabled('X')`
+     * directly for the full action duration.
      */
     async init(request: Request): Promise<TogglyActionContext> {
-      let identity: string | undefined;
+      const ambient = await extractEvalContext(request, options);
+      await client.init(ambient.identity);
+      return buildActionContext(client, ambient);
+    },
 
-      if (options.getIdentity) {
-        identity = await options.getIdentity(request);
-      }
-
-      await client.init(identity);
-      const identityCtx = { identity };
-
-      return {
-        client,
-        flags: client.snapshotFlags(identityCtx),
-        isEnabled: (key, def) => client.isEnabled(key, identityCtx, def),
-        isDisabled: (key, def) => client.isDisabled(key, identityCtx, def),
-        evaluateGate: (keys, req, neg) =>
-          client.evaluateGate(keys, req, neg, false, undefined, undefined, identityCtx),
-      };
+    /**
+     * Bind ambient EvalContext and run an action handler.
+     */
+    async run<T>(
+      args: ActionFunctionArgs,
+      fn: (
+        args: ActionFunctionArgs,
+        toggly: TogglyActionContext,
+      ) => T | Promise<T>,
+    ): Promise<T> {
+      const ambient = await extractEvalContext(args.request, options);
+      return runWithEvalContext(ambient, async () => {
+        await client.init(ambient.identity);
+        return fn(args, buildActionContext(client, ambient));
+      });
     },
 
     /**
@@ -159,9 +196,9 @@ export function createTogglyAction(options: TogglyLoaderOptions) {
       featureKey: string,
       handler: (
         args: ActionFunctionArgs,
-        toggly: TogglyActionContext
+        toggly: TogglyActionContext,
       ) => Promise<T> | T,
-      onDisabled?: () => Response | Promise<Response>
+      onDisabled?: () => Response | Promise<Response>,
     ) {
       return createFeatureGatedAction(
         {
@@ -169,7 +206,7 @@ export function createTogglyAction(options: TogglyLoaderOptions) {
           requiredFeatures: featureKey,
           onFeatureDisabled: onDisabled,
         },
-        handler
+        handler,
       );
     },
 
@@ -181,9 +218,9 @@ export function createTogglyAction(options: TogglyLoaderOptions) {
       requirement: 'all' | 'any',
       handler: (
         args: ActionFunctionArgs,
-        toggly: TogglyActionContext
+        toggly: TogglyActionContext,
       ) => Promise<T> | T,
-      onDisabled?: () => Response | Promise<Response>
+      onDisabled?: () => Response | Promise<Response>,
     ) {
       return createFeatureGatedAction(
         {
@@ -192,7 +229,7 @@ export function createTogglyAction(options: TogglyLoaderOptions) {
           requirement,
           onFeatureDisabled: onDisabled,
         },
-        handler
+        handler,
       );
     },
   };
@@ -204,13 +241,13 @@ export function createTogglyAction(options: TogglyLoaderOptions) {
 export function requireFeature(
   featureKey: string,
   options: TogglyLoaderOptions,
-  onDisabled?: () => Response | Promise<Response>
+  onDisabled?: () => Response | Promise<Response>,
 ) {
   return function <T>(
     handler: (
       args: ActionFunctionArgs,
-      toggly: TogglyActionContext
-    ) => Promise<T> | T
+      toggly: TogglyActionContext,
+    ) => Promise<T> | T,
   ) {
     return createFeatureGatedAction(
       {
@@ -220,7 +257,7 @@ export function requireFeature(
           ? () => onDisabled()
           : undefined,
       },
-      handler
+      handler,
     );
   };
 }
