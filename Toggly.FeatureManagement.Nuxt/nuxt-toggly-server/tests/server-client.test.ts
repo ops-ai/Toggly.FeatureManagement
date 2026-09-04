@@ -323,6 +323,32 @@ describe('Server Client', () => {
       expect(results).toEqual([true, false, true])
       expect(useServerToggly().identity).toBe('bob')
     })
+
+    it('evaluates Country from headers via fromHttpRequest', async () => {
+      const countryFlag: FeatureDefinitionModel = {
+        featureKey: 'country-flag',
+        filters: [
+          {
+            name: 'Country',
+            parameters: { Percentage: 100, 'Country:0': 'US' },
+          },
+        ],
+      }
+      mockFetch.mockResolvedValueOnce(createMockResponse([countryFlag]))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'user-1',
+        enableLiveUpdates: false,
+      })
+
+      expect(await isServerFeatureOn('country-flag')).toBe(false)
+      expect(
+        await isServerFeatureOn('country-flag', {
+          headers: { 'cf-ipcountry': 'US' },
+        }),
+      ).toBe(true)
+    })
   })
 
   describe('isServerFeatureOff', () => {

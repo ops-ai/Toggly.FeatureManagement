@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0
+
+2026-09-03
+
+### Added
+- `isServerFeatureOn` / `Off` accept `{ identity, groups, claims, request,
+  headers }` for full local EvalContext [OPS-874].
+- `fromHttpRequest` re-export; `headers` map via `fromHttpRequest` with
+  explicit `request` fields winning.
+
 ## 1.3.0
 
 2026-09-02

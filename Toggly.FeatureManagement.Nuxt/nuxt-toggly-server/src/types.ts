@@ -1,4 +1,7 @@
 import type { TogglyConfig, TogglyClient } from '@ops-ai/nuxt-toggly-core'
+import type { FeatureCheckOptions } from './feature-check'
+
+export type { FeatureCheckOptions } from './feature-check'
 
 /**
  * Server-side Toggly configuration extending core config
