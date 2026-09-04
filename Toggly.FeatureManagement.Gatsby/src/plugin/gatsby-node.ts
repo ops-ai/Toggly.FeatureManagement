@@ -112,6 +112,17 @@ export const pluginOptionsSchema: GatsbyNode['pluginOptionsSchema'] = ({ Joi }) 
     baseURI: Joi.string()
       .default('https://definitions.toggly.io')
       .description('Base URI for Toggly API'),
+    verifySignatures: Joi.boolean()
+      .default(false)
+      .description('Verify ES256 signed envelopes via JWKS'),
+    allowedKeyIds: Joi.array()
+      .items(Joi.string())
+      .optional()
+      .description('Optional allow-list of JWKS kid values when verifySignatures is enabled'),
+    maxSignatureAgeSeconds: Joi.number()
+      .integer()
+      .optional()
+      .description('Reject envelopes older than this many seconds; unset or <= 0 disables freshness checks'),
     flagDefaults: Joi.object()
       .pattern(Joi.string(), Joi.boolean())
       .default({})
@@ -130,6 +141,14 @@ export const pluginOptionsSchema: GatsbyNode['pluginOptionsSchema'] = ({ Joi }) 
     identity: Joi.string()
       .optional()
       .description('User identity for targeting'),
+    groups: Joi.array()
+      .items(Joi.string())
+      .optional()
+      .description('User groups for targeting'),
+    claims: Joi.object()
+      .pattern(Joi.string(), Joi.string())
+      .optional()
+      .description('Custom claims for targeting'),
     isDebug: Joi.boolean()
       .default(false)
       .description('Enable debug logging'),

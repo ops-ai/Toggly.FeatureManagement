@@ -1,3 +1,13 @@
+## 1.8.1
+
+2026-09-03
+
+### Fixed
+- Declare `groups`, `claims`, `verifySignatures`, `allowedKeyIds`, and
+  `maxSignatureAgeSeconds` in `pluginOptionsSchema` so Gatsby no longer
+  warns about unknown plugin options that `initTogglyClient` already
+  accepts.
+
 ## 1.8.0
 
 2026-09-03
