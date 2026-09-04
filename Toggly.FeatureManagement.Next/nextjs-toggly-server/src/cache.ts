@@ -7,6 +7,7 @@ import {
 } from '@ops-ai/nextjs-toggly-core'
 import {
   createFeatureCacheKey,
+  toEvalOverrides,
   type FeatureCheckOptions,
 } from './feature-check'
 
@@ -42,8 +43,26 @@ export function cachedIsFeatureOn(
     tags?: string[]
   } = {}
 ): Promise<boolean> {
-  const { identity, context, contextKind, revalidate = 60, tags = [] } = options
-  const check: FeatureCheckOptions = { identity, context, contextKind }
+  const {
+    identity,
+    groups,
+    claims,
+    request,
+    headers,
+    context,
+    contextKind,
+    revalidate = 60,
+    tags = [],
+  } = options
+  const check: FeatureCheckOptions = {
+    identity,
+    groups,
+    claims,
+    request,
+    headers,
+    context,
+    contextKind,
+  }
 
   const cached = unstable_cache(
     async () => {
@@ -52,7 +71,12 @@ export function cachedIsFeatureOn(
         return false
       }
 
-      return client.isFeatureOn(featureKey, context, contextKind, identity)
+      return client.isFeatureOn(
+        featureKey,
+        context,
+        contextKind,
+        toEvalOverrides(check),
+      )
     },
     [createFeatureCacheKey(featureKey, check)],
     {
@@ -80,17 +104,30 @@ export function cachedEvaluateFeatureGate(
     requirement = 'all',
     negate = false,
     identity,
+    groups,
+    claims,
+    request,
+    headers,
     context,
     contextKind,
     revalidate = 60,
     tags = [],
   } = options
 
-  const cacheKey = createFeatureCacheKey(`gate:${featureKeys.join(',')}:${requirement}:${negate}`, {
+  const check: FeatureCheckOptions = {
     identity,
+    groups,
+    claims,
+    request,
+    headers,
     context,
     contextKind,
-  })
+  }
+
+  const cacheKey = createFeatureCacheKey(
+    `gate:${featureKeys.join(',')}:${requirement}:${negate}`,
+    check,
+  )
 
   const cached = unstable_cache(
     async () => {
@@ -105,7 +142,7 @@ export function cachedEvaluateFeatureGate(
         negate,
         context,
         contextKind,
-        identity
+        toEvalOverrides(check),
       )
     },
     [cacheKey],

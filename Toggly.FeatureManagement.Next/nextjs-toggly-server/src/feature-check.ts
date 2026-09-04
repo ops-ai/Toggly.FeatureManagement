@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto'
-import type { TogglyEntityContext } from '@ops-ai/nextjs-toggly-core'
+import {
+  fromHttpRequest,
+  type EvalContext,
+  type EvalContextArg,
+  type EvalContextOverrides,
+  type TogglyEntityContext,
+} from '@ops-ai/nextjs-toggly-core'
 
 /** Domain object or already-normalized entity context for Context Property filters. */
 export type EntityContextInput =
@@ -11,9 +17,14 @@ export type EntityContextInput =
 /**
  * Per-call evaluation options for server helpers.
  * `identity` is user targeting; `context` / `contextKind` are entity gates.
+ * `groups` / `claims` / `request` / `headers` feed local EvalContext.
  */
 export interface FeatureCheckOptions {
   identity?: string
+  groups?: string[]
+  claims?: Record<string, string>
+  request?: NonNullable<EvalContext['request']>
+  headers?: Headers | Record<string, string | string[] | undefined>
   context?: EntityContextInput
   contextKind?: string
 }
@@ -28,6 +39,54 @@ export function resolveFeatureCheckArgs(
     return { identity: identityOrOptions }
   }
   return identityOrOptions
+}
+
+/**
+ * Map FeatureCheckOptions into core EvalContext overrides.
+ * When `headers` is set, maps via `fromHttpRequest`; explicit `request` fields win.
+ */
+export function toEvalOverrides(
+  options: FeatureCheckOptions
+): EvalContextArg | undefined {
+  const { identity, groups, claims, request, headers } = options
+
+  let resolvedRequest = request
+  if (headers != null) {
+    const fromReq = fromHttpRequest(
+      headers as Headers | Record<string, string | string[] | undefined>,
+      { identity, groups, claims },
+    )
+    resolvedRequest = {
+      ...fromReq.request,
+      ...request,
+    }
+  }
+
+  if (
+    identity == null &&
+    groups == null &&
+    claims == null &&
+    resolvedRequest == null
+  ) {
+    return undefined
+  }
+
+  // Preserve bare-string path for identity-only callers of core.
+  if (
+    identity != null &&
+    groups == null &&
+    claims == null &&
+    resolvedRequest == null
+  ) {
+    return identity
+  }
+
+  const overrides: EvalContextOverrides = {}
+  if (identity != null) overrides.identity = identity
+  if (groups != null) overrides.groups = groups
+  if (claims != null) overrides.claims = claims
+  if (resolvedRequest != null) overrides.request = resolvedRequest
+  return overrides
 }
 
 function stableSerialize(value: unknown): unknown {
@@ -46,28 +105,49 @@ function stableSerialize(value: unknown): unknown {
   return out
 }
 
+function hasHashedEvalFields(options: FeatureCheckOptions): boolean {
+  return (
+    options.context != null ||
+    options.contextKind != null ||
+    options.groups != null ||
+    options.claims != null ||
+    options.request != null ||
+    options.headers != null
+  )
+}
+
 /**
  * Cache key for a feature check.
  * Identity-only keys keep the historical `toggly:feature:{key}:{identity}` shape.
- * Entity context is hashed so attributes (not just kind+key) distinguish entries
- * and values cannot forge another key via delimiters.
+ * Entity context and eval overrides are hashed so attributes distinguish entries.
  */
 export function createFeatureCacheKey(
   featureKey: string,
   identityOrOptions?: string | FeatureCheckOptions
 ): string {
-  const { identity, context, contextKind } =
-    resolveFeatureCheckArgs(identityOrOptions)
+  const options = resolveFeatureCheckArgs(identityOrOptions)
+  const { identity, context, contextKind, groups, claims } = options
   const base = `toggly:feature:${featureKey}`
-  if (context == null && contextKind == null) {
+
+  if (!hasHashedEvalFields(options)) {
     return identity ? `${base}:${identity}` : base
   }
+
+  const overrides = toEvalOverrides(options)
+  const resolvedRequest =
+    typeof overrides === 'object' && overrides != null
+      ? overrides.request
+      : undefined
+
   const digest = createHash('sha256')
     .update(
       JSON.stringify({
         i: identity ?? '',
         k: contextKind ?? '',
         c: stableSerialize(context ?? null),
+        g: groups ? [...groups].sort((a, b) => a.localeCompare(b)) : null,
+        cl: stableSerialize(claims ?? null),
+        r: stableSerialize(resolvedRequest ?? null),
       })
     )
     .digest('hex')
