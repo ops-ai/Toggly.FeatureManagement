@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.2
+
+2026-09-03
+
+### Fixed
+- TimeWindow matches Definitions: Start-only, End-only, both, or neither
+  (neither → true). Missing side is unconstrained; invalid present side
+  fails closed [OPS-856].
+
 ## 2.0.1
 
 2026-09-03

@@ -48,25 +48,31 @@ type TimeWindowEvaluator struct {
 }
 
 func (t TimeWindowEvaluator) Evaluate(featureKey string, params map[string]any, ctx Context) (bool, error) {
+	// Definitions parity: each side is optional; missing side is unconstrained;
+	// neither Start nor End → true; invalid present side fails closed.
 	_, _ = featureKey, ctx
 	startS, _ := asString(params, "Start")
 	endS, _ := asString(params, "End")
-	if startS == "" || endS == "" {
-		return false, nil
-	}
-	start, ok := parseTime(startS)
-	if !ok {
-		return false, nil
-	}
-	end, ok := parseTime(endS)
-	if !ok {
-		return false, nil
-	}
 	now := time.Now().UTC()
 	if t.Now != nil {
 		now = t.Now().UTC()
 	}
-	return (now.Equal(start) || now.After(start)) && (now.Equal(end) || now.Before(end)), nil
+
+	if startS != "" {
+		start, ok := parseTime(startS)
+		if !ok || now.Before(start) {
+			return false, nil
+		}
+	}
+
+	if endS != "" {
+		end, ok := parseTime(endS)
+		if !ok || now.After(end) {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
 
 // TargetingEvaluator implements Targeting.
