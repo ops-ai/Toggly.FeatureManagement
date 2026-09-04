@@ -208,30 +208,54 @@ describe('gatsby-node', () => {
 
   // ─── pluginOptionsSchema ──────────────────────
   describe('pluginOptionsSchema', () => {
+    const createChainable = () => {
+      const obj: any = {};
+      const methods = [
+        'required', 'default', 'description', 'optional',
+        'integer', 'min', 'pattern', 'string', 'boolean', 'number',
+        'items', 'array',
+      ];
+      methods.forEach((method) => {
+        obj[method] = vi.fn().mockReturnValue(obj);
+      });
+      return obj;
+    };
+
+    const createMockJoi = () => ({
+      object: vi.fn().mockReturnValue(createChainable()),
+      string: vi.fn().mockReturnValue(createChainable()),
+      boolean: vi.fn().mockReturnValue(createChainable()),
+      number: vi.fn().mockReturnValue(createChainable()),
+      array: vi.fn().mockReturnValue(createChainable()),
+    });
+
     it('should return a Joi schema', () => {
-      // Create a mock Joi that returns objects with chainable methods
-      const createChainable = () => {
-        const obj: any = {};
-        const methods = [
-          'required', 'default', 'description', 'optional',
-          'integer', 'min', 'pattern', 'string', 'boolean', 'number',
-        ];
-        methods.forEach((method) => {
-          obj[method] = vi.fn().mockReturnValue(obj);
-        });
-        return obj;
-      };
-
-      const Joi = {
-        object: vi.fn().mockReturnValue(createChainable()),
-        string: vi.fn().mockReturnValue(createChainable()),
-        boolean: vi.fn().mockReturnValue(createChainable()),
-        number: vi.fn().mockReturnValue(createChainable()),
-      };
-
+      const Joi = createMockJoi();
       const result = pluginOptionsSchema!({ Joi } as any);
       expect(result).toBeTruthy();
       expect(Joi.object).toHaveBeenCalled();
+    });
+
+    it('declares groups, claims, and signing options accepted by init', () => {
+      const Joi = createMockJoi();
+      pluginOptionsSchema!({ Joi } as any);
+
+      // Nested Joi.object() for claims is evaluated before the top-level schema
+      // object is passed — find the call that received the plugin options map.
+      const schemaCall = Joi.object.mock.calls.find(
+        (call: unknown[]) => call[0] && typeof call[0] === 'object'
+      );
+      expect(schemaCall).toBeDefined();
+      const schemaKeys = Object.keys(schemaCall![0]);
+      expect(schemaKeys).toEqual(
+        expect.arrayContaining([
+          'groups',
+          'claims',
+          'verifySignatures',
+          'allowedKeyIds',
+          'maxSignatureAgeSeconds',
+        ])
+      );
     });
   });
 });
