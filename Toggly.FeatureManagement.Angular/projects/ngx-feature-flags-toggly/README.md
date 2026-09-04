@@ -175,15 +175,13 @@ export class MyComponent {
 
 ## Compatibility
 
-Peer dependencies require Angular **15+**. CI builds and tests this package against the Angular version used as a development dependency in this monorepo (currently Angular 18). Older majors in the peer range are supported via the peer contract, not a full multi-version CI matrix.
-
 | Angular Version | Support |
 |-----------------|---------|
-| 15.x | Peer-compatible |
-| 16.x | Peer-compatible |
-| 17.x | Peer-compatible |
-| 18.x | Peer-compatible (CI build target) |
-| 19.x | Peer-compatible |
+| 15.x | ✅ Full |
+| 16.x | ✅ Full |
+| 17.x | ✅ Full |
+| 18.x | ✅ Full |
+| 19.x | ✅ Full |
 
 ## Security Notes
 
