@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.6.1
+
+2026-09-04
+
+### Fixed
+- `TogglyFeatureProvider` maps catalog short filter names (`Percentage`,
+  `Targeting`, `TimeWindow`) to Microsoft.FeatureManagement aliases
+  (`Microsoft.Percentage`, `Microsoft.Targeting`, `Microsoft.TimeWindow`)
+  when building definitions for evaluation. Already-prefixed `Microsoft.*`
+  names and other filters are unchanged.
+
 ## 3.6.0
 
 2026-09-02
