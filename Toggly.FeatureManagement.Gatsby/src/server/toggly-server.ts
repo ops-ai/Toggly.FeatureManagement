@@ -96,6 +96,7 @@ export class TogglyServer implements TogglyServerClient {
       identity: this.config.identity,
       groups: this.config.groups,
       traits: this.config.claims,
+      claims: this.config.claims,
       entity: entity ?? null,
     };
   }

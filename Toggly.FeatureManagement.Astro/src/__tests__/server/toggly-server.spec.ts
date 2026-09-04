@@ -388,6 +388,38 @@ describe('TogglyServer', () => {
       expect(await server.getFlag('Feature2')).toBe(false);
     });
 
+    it('evaluates UserClaims filters using config claims', async () => {
+      const claimsDef = [
+        {
+          featureKey: 'ClaimsFlag',
+          filters: [
+            {
+              name: 'UserClaims',
+              parameters: { Percentage: 100, Claim: 'role', Value: 'admin' },
+            },
+          ],
+        },
+      ];
+
+      mockFetch.mockResolvedValueOnce(createMockResponse(claimsDef));
+      const denied = new TogglyServer({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-1',
+        claims: { role: 'user' },
+      });
+      expect(await denied.getFlag('ClaimsFlag')).toBe(false);
+
+      mockFetch.mockResolvedValueOnce(createMockResponse(claimsDef));
+      const allowed = new TogglyServer({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-1',
+        claims: { role: 'admin' },
+      });
+      expect(await allowed.getFlag('ClaimsFlag')).toBe(true);
+    });
+
     it('should return defaultValue when flag not found', async () => {
       mockFetch.mockResolvedValueOnce(createDefsResponse({ Feature1: true }));
 
