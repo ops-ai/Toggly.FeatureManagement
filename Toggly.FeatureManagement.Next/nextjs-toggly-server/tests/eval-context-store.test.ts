@@ -93,6 +93,27 @@ describe('mergeFeatureCheckOptions', () => {
       contextKind: undefined,
     })
   })
+
+  it('lets explicit null context clear ambient entity context', () => {
+    expect(
+      mergeFeatureCheckOptions(
+        {
+          identity: 'ambient',
+          context: { kind: 'order', key: 'o-1' },
+          contextKind: 'order',
+        },
+        { context: null }
+      )
+    ).toEqual({
+      identity: 'ambient',
+      groups: undefined,
+      claims: undefined,
+      request: undefined,
+      headers: undefined,
+      context: null,
+      contextKind: 'order',
+    })
+  })
 })
 
 describe('ambient EvalContext store', () => {

@@ -53,7 +53,8 @@ export async function withEvalContext<T>(
 
 /**
  * Merge ambient defaults with per-call options. Explicit per-call fields win
- * field-by-field; missing per-call fields keep ambient values.
+ * field-by-field (`undefined` = unset; `null` is a real override, e.g. clear
+ * entity `context`).
  */
 export function mergeFeatureCheckOptions(
   ambient: FeatureCheckOptions | undefined,
@@ -64,12 +65,19 @@ export function mergeFeatureCheckOptions(
   }
 
   return {
-    identity: perCall.identity ?? ambient.identity,
-    groups: perCall.groups ?? ambient.groups,
-    claims: perCall.claims ?? ambient.claims,
-    request: perCall.request ?? ambient.request,
-    headers: perCall.headers ?? ambient.headers,
-    context: perCall.context ?? ambient.context,
-    contextKind: perCall.contextKind ?? ambient.contextKind,
+    identity:
+      perCall.identity !== undefined ? perCall.identity : ambient.identity,
+    groups: perCall.groups !== undefined ? perCall.groups : ambient.groups,
+    claims: perCall.claims !== undefined ? perCall.claims : ambient.claims,
+    request:
+      perCall.request !== undefined ? perCall.request : ambient.request,
+    headers:
+      perCall.headers !== undefined ? perCall.headers : ambient.headers,
+    context:
+      perCall.context !== undefined ? perCall.context : ambient.context,
+    contextKind:
+      perCall.contextKind !== undefined
+        ? perCall.contextKind
+        : ambient.contextKind,
   }
 }
