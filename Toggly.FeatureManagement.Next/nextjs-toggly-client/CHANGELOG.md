@@ -1,3 +1,12 @@
+## 1.4.0
+
+2026-09-03
+
+### Added
+- `setContext({ identity?, groups?, claims? })` on the provider context and
+  `useIdentity()` so client callers can update targeting without re-init
+  [OPS-874].
+
 ## 1.3.1
 
 2026-09-03

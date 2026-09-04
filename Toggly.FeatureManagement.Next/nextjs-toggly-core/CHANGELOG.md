@@ -7,6 +7,8 @@
   for local evaluation; string identity override remains supported [OPS-874].
 - Re-export `fromHttpRequest` from `@ops-ai/toggly-eval` for header → request
   mapping (Country / BrowserFamily / language filters).
+- `setContext({ identity?, groups?, claims? })` to update shared config for
+  local targeting without a full re-init.
 
 ## 1.7.0
 

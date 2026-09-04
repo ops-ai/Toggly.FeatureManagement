@@ -199,6 +199,26 @@ export function TogglyProvider({
     [client, config.persistIdentity, config.identityStorageKey]
   )
 
+  const setContext = useCallback(
+    async (contextUpdate: {
+      identity?: string
+      groups?: string[]
+      claims?: Record<string, string>
+    }) => {
+      await client.setContext(contextUpdate)
+      if (contextUpdate.identity !== undefined) {
+        setIdentityState(contextUpdate.identity)
+        if (config.persistIdentity && typeof window !== 'undefined') {
+          localStorage.setItem(
+            config.identityStorageKey ?? 'toggly:identity',
+            contextUpdate.identity,
+          )
+        }
+      }
+    },
+    [client, config.persistIdentity, config.identityStorageKey],
+  )
+
   const isFeatureOn = useCallback(
     async (
       featureKey: string,
@@ -281,6 +301,7 @@ export function TogglyProvider({
       init,
       refresh,
       setIdentity,
+      setContext,
       isFeatureOn,
       isFeatureOff,
       evaluateFeatureGate,
@@ -295,6 +316,7 @@ export function TogglyProvider({
       init,
       refresh,
       setIdentity,
+      setContext,
       isFeatureOn,
       isFeatureOff,
       evaluateFeatureGate,

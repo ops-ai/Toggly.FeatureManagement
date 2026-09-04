@@ -263,6 +263,16 @@ export interface TogglyClient {
   setIdentity(identity: string): Promise<void>
 
   /**
+   * Update identity and/or targeting groups/claims on the shared config.
+   * In local mode this is eval-time only; remote mode refreshes when identity changes.
+   */
+  setContext(context: {
+    identity?: string
+    groups?: string[]
+    claims?: Record<string, string>
+  }): Promise<void>
+
+  /**
    * Raw definition map used for local evaluation (empty in remote mode).
    */
   getDefinitions(): Map<string, FeatureDefinitionModel>

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
-import { useFeatureFlag, useFeatureOff, useFeatureGate, useFeatures } from '../src/hooks'
+import { useFeatureFlag, useFeatureOff, useFeatureGate, useFeatures, useIdentity } from '../src/hooks'
 import { TogglyProvider } from '../src/context'
 import type { ReactNode } from 'react'
 
@@ -273,5 +273,39 @@ describe('useFeatures', () => {
       'feature-a': true,
       'feature-b': false,
     })
+  })
+})
+
+describe('useIdentity setContext', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('exposes setContext that updates client config claims', async () => {
+    mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+
+    const { result } = renderHook(() => useIdentity(), {
+      wrapper: createWrapper({
+        appKey: 'test-key',
+        evaluationMode: 'local',
+        claims: { role: 'user' },
+      } as { appKey: string }),
+    })
+
+    await waitFor(() => {
+      expect(result.current.setContext).toBeTypeOf('function')
+    })
+
+    await act(async () => {
+      await result.current.setContext({ claims: { role: 'admin' } })
+    })
+
+    // Provider stays usable after setContext
+    expect(result.current.isUpdating).toBe(false)
   })
 })

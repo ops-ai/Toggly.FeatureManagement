@@ -858,6 +858,38 @@ export function createTogglyClient(
       }
     },
 
+    async setContext(contextUpdate: {
+      identity?: string
+      groups?: string[]
+      claims?: Record<string, string>
+    }): Promise<void> {
+      if (destroyed) {
+        return
+      }
+
+      const identityChanged =
+        contextUpdate.identity !== undefined &&
+        contextUpdate.identity !== config.identity
+
+      if (contextUpdate.identity !== undefined) {
+        const dataMap = await hookExecutor.executeBeforeIdentify(
+          contextUpdate.identity,
+        )
+        config.identity = contextUpdate.identity
+        await hookExecutor.executeAfterIdentify(contextUpdate.identity, dataMap)
+      }
+      if (contextUpdate.groups !== undefined) {
+        config.groups = contextUpdate.groups
+      }
+      if (contextUpdate.claims !== undefined) {
+        config.claims = contextUpdate.claims
+      }
+
+      if (identityChanged && state.initialized && !isLocalMode()) {
+        await client.refresh()
+      }
+    },
+
     getDefinitions(): Map<string, FeatureDefinitionModel> {
       return state.definitions
     },

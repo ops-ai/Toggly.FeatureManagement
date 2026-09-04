@@ -322,6 +322,27 @@ describe('local evaluation mode', () => {
     client.destroy()
   })
 
+  it('setContext updates groups and claims for subsequent local eval', async () => {
+    mockFetch.mockResolvedValueOnce(defsResponse([claimsFlag]))
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      identity: 'user-1',
+      claims: { role: 'user' },
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await client.init()
+
+    await expect(client.isFeatureOn('ClaimsFlag')).resolves.toBe(false)
+    await client.setContext({ claims: { role: 'admin' } })
+    await expect(client.isFeatureOn('ClaimsFlag')).resolves.toBe(true)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    client.destroy()
+  })
+
   it('defaults to remote rail when evaluationMode is unset', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
