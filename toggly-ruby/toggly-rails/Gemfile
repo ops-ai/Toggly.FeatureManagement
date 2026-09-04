@@ -11,7 +11,7 @@ group :development, :test do
   gem "rails", ENV.fetch("RAILS_VERSION", ">= 7.0")
   gem "rake", "~> 13.0"
   gem "rspec", "~> 3.12"
-  gem "rspec-rails", "~> 6.0"
+  gem "rspec-rails", "~> 8.0"
   gem "rubocop", "~> 1.56", require: false
   gem "rubocop-rspec", "~> 2.24", require: false
   gem "simplecov", "~> 0.22", require: false
