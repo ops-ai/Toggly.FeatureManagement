@@ -137,4 +137,43 @@ describe('TogglyProvider identity safety [OPS-828]', () => {
 
     expect(result.current.features['feature-a']).toBe(true)
   })
+
+  it('keeps React features synced with client state when refresh fails', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        createMockResponse({
+          features: [{ featureKey: 'Gated', enabled: true }],
+        }),
+      )
+      .mockRejectedValueOnce(new Error('refresh failed'))
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <TogglyProvider
+          config={{
+            appKey: 'test-key',
+            refreshInterval: 0,
+            enableLiveUpdates: false,
+          }}
+          autoInit
+        >
+          {children}
+        </TogglyProvider>
+      )
+    }
+
+    const { result } = renderHook(() => useToggly(), { wrapper: Wrapper })
+
+    await waitFor(() => {
+      expect(result.current.isReady).toBe(true)
+      expect(result.current.features['Gated']).toBe(true)
+    })
+
+    await act(async () => {
+      await expect(result.current.refresh()).rejects.toThrow('refresh failed')
+    })
+
+    expect(result.current.features['Gated']).toBe(true)
+    expect(result.current.error).toBeInstanceOf(Error)
+  })
 })

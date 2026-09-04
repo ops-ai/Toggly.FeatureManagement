@@ -182,22 +182,24 @@ export function TogglyProvider({
 
   const refresh = useCallback(async () => {
     setIsLoading(true)
-      setError(client.state.error)
+    setError(client.state.error)
 
     try {
       const defs = await client.refresh()
       setFeatures(toBooleanDefinitions(defs))
-        setError(client.state.error)
+      setError(client.state.error)
 
       // Persist features if enabled
-        if (!client.state.error && config.persistFeatures && typeof window !== 'undefined') {
+      if (!client.state.error && config.persistFeatures && typeof window !== 'undefined') {
         localStorage.setItem(
           config.featuresStorageKey ?? 'toggly:features',
           JSON.stringify(defs)
         )
       }
     } catch (e) {
+      setFeatures(toBooleanDefinitions(client.state.features))
       setError(e as Error)
+      throw e
     } finally {
       setIsLoading(false)
     }
