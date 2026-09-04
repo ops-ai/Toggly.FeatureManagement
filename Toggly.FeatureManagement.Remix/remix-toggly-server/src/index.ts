@@ -28,6 +28,8 @@ export type {
   EvaluationResult,
 } from '@ops-ai/remix-toggly-core';
 
+export { fromHttpRequest } from '@ops-ai/remix-toggly-core';
+
 // Export server client
 export { TogglyServerClient, createServerClient } from './client';
 

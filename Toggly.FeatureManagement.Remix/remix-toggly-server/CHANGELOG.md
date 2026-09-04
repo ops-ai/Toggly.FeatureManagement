@@ -1,3 +1,12 @@
+## 1.7.0
+
+2026-09-03
+
+### Added
+- `buildEvalContext` merges `IdentityContext.request` into EvalContext so
+  Country / BrowserFamily / language filters evaluate per-call [OPS-874].
+- Re-export `fromHttpRequest` for header → request mapping in loaders.
+
 ## 1.6.0
 
 2026-09-02

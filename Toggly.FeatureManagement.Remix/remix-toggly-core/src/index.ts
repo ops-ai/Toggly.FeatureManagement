@@ -46,6 +46,7 @@ export {
   indexDefinitions,
   parseDefinitionsPayload,
   snapshotEvaluatedBooleans,
+  fromHttpRequest,
 } from '@ops-ai/toggly-eval';
 
 // Error classes
