@@ -308,4 +308,55 @@ describe('useIdentity setContext', () => {
     // Provider stays usable after setContext
     expect(result.current.isUpdating).toBe(false)
   })
+
+  it('reevaluates useFeatureFlag after setContext claims under local mode', async () => {
+    const claimsFlag = {
+      featureKey: 'ClaimsFlag',
+      filters: [
+        {
+          name: 'UserClaims',
+          parameters: { Percentage: 100, Claim: 'role', Value: 'admin' },
+        },
+      ],
+    }
+
+    const body = JSON.stringify([claimsFlag])
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => body,
+      json: async () => [claimsFlag],
+      headers: { get: () => null },
+    })
+
+    function useFlagAndContext() {
+      const flag = useFeatureFlag('ClaimsFlag')
+      const identity = useIdentity()
+      return { flag, identity }
+    }
+
+    const { result } = renderHook(() => useFlagAndContext(), {
+      wrapper: createWrapper({
+        appKey: 'test-key',
+        evaluationMode: 'local',
+        claims: { role: 'user' },
+        refreshInterval: 0,
+        enableLiveUpdates: false,
+      } as { appKey: string }),
+    })
+
+    await waitFor(() => {
+      expect(result.current.flag.isLoading).toBe(false)
+      expect(result.current.flag.isEnabled).toBe(false)
+    })
+
+    await act(async () => {
+      await result.current.identity.setContext({ claims: { role: 'admin' } })
+    })
+
+    await waitFor(() => {
+      expect(result.current.flag.isEnabled).toBe(true)
+    })
+  })
 })

@@ -336,10 +336,20 @@ describe('local evaluation mode', () => {
     await client.init()
 
     await expect(client.isFeatureOn('ClaimsFlag')).resolves.toBe(false)
+    expect(client.state.features['ClaimsFlag']).toBe(false)
+
+    let refreshNotified = 0
+    const unsubscribe = client.subscribeFeaturesRefresh(() => {
+      refreshNotified += 1
+    })
+
     await client.setContext({ claims: { role: 'admin' } })
     await expect(client.isFeatureOn('ClaimsFlag')).resolves.toBe(true)
+    expect(client.state.features['ClaimsFlag']).toBe(true)
+    expect(refreshNotified).toBe(1)
     expect(mockFetch).toHaveBeenCalledTimes(1)
 
+    unsubscribe()
     client.destroy()
   })
 

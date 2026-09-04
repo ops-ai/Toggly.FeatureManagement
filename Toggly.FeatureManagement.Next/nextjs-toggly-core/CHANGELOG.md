@@ -1,3 +1,15 @@
+## 1.8.1
+
+2026-09-03
+
+### Fixed
+- `setContext` re-evaluates the local feature snapshot and notifies subscribers
+  so React hooks refresh after claims/groups/identity changes; remote mode
+  refreshes when any of those fields change (not only identity) [OPS-874].
+
+### Changed
+- Raise `@ops-ai/toggly-eval` floor to `^2.0.3`.
+
 ## 1.8.0
 
 2026-09-03

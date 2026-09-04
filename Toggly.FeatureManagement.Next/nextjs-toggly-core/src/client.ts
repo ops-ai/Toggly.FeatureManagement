@@ -870,6 +870,12 @@ export function createTogglyClient(
       const identityChanged =
         contextUpdate.identity !== undefined &&
         contextUpdate.identity !== config.identity
+      const groupsChanged =
+        contextUpdate.groups !== undefined &&
+        JSON.stringify(contextUpdate.groups) !== JSON.stringify(config.groups)
+      const claimsChanged =
+        contextUpdate.claims !== undefined &&
+        JSON.stringify(contextUpdate.claims) !== JSON.stringify(config.claims)
 
       if (contextUpdate.identity !== undefined) {
         const dataMap = await hookExecutor.executeBeforeIdentify(
@@ -885,9 +891,25 @@ export function createTogglyClient(
         config.claims = contextUpdate.claims
       }
 
-      if (identityChanged && state.initialized && !isLocalMode()) {
-        await client.refresh()
+      if (!state.initialized) {
+        return
       }
+
+      const contextChanged = identityChanged || groupsChanged || claimsChanged
+      if (!contextChanged) {
+        return
+      }
+
+      // Local: re-snapshot with the new eval context so provider subscribers
+      // and hooks that depend on `features` pick up claim/group/identity changes.
+      if (isLocalMode()) {
+        applyLocalDefinitions(state.definitions)
+        notifyFeaturesRefresh()
+        return
+      }
+
+      // Remote: identity/groups/claims are baked into evaluated-signed — refresh.
+      await client.refresh()
     },
 
     getDefinitions(): Map<string, FeatureDefinitionModel> {
