@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.0
+
+2026-09-04
+
+### Added
+- Ambient EvalContext for Nuxt/Nitro event helpers: `configureEventEvalContext`
+  and `defineTogglyContextMiddleware` with `getIdentity` / `getGroups` /
+  `getClaims` or `getContext`; request fields from H3 headers via
+  `fromHttpRequest` [OPS-889].
+- `useEventToggly` / `getEventToggly` / `isEventFeatureOn` bind full ambient
+  context (identity, groups, claims, request) without per-call props;
+  per-call `FeatureCheckOptions` still win field-by-field.
+- `resolveEventEvalContext` caches ambient options on the H3 event
+  (request-scoped only — no process-global identity mutation).
+
 ## 1.4.1
 
 2026-09-03

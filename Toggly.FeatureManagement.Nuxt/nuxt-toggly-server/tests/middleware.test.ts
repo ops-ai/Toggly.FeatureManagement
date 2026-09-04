@@ -1,12 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { FeatureDefinitionModel } from '@ops-ai/nuxt-toggly-core'
 import {
   defineFeatureMiddleware,
   defineFeatureHandler,
+  defineTogglyContextMiddleware,
   useEventToggly,
+  getEventToggly,
   isEventFeatureOn,
   isEventFeatureOff,
   evaluateEventFeatureGate,
 } from '../src/middleware'
+import {
+  configureEventEvalContext,
+  resetEventEvalContextProviders,
+  resolveEventEvalContext,
+  getCachedEventEvalContext,
+} from '../src/event-context'
 import {
   initServerToggly,
   resetServerToggly,
@@ -18,7 +27,6 @@ import type { TogglyClient } from '@ops-ai/nuxt-toggly-core'
 // Mock fetch globally
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
-
 
 function featureDefs(flags: Record<string, boolean>) {
   return Object.entries(flags).map(([featureKey, enabled]) => ({
@@ -40,19 +48,77 @@ function createMockResponse(data: unknown, status = 200) {
 }
 
 function createMockEvent(headers: Record<string, string> = {}): H3Event {
+  const normalized: Record<string, string> = {}
+  for (const [key, value] of Object.entries(headers)) {
+    normalized[key.toLowerCase()] = value
+  }
   return {
     node: {
       req: {
-        headers,
+        headers: normalized,
       },
     },
+    context: {},
   } as unknown as H3Event
+}
+
+const targetingAlice: FeatureDefinitionModel = {
+  featureKey: 'targeted-flag',
+  filters: [
+    {
+      name: 'Targeting',
+      parameters: {
+        'Audience.Users:0': 'alice',
+        'Audience.DefaultRolloutPercentage': 0,
+      },
+    },
+  ],
+}
+
+const claimsFlag: FeatureDefinitionModel = {
+  featureKey: 'claims-flag',
+  filters: [
+    {
+      name: 'UserClaims',
+      parameters: { Percentage: 100, Claim: 'role', Value: 'admin' },
+    },
+  ],
+}
+
+const countryFlag: FeatureDefinitionModel = {
+  featureKey: 'country-flag',
+  filters: [
+    {
+      name: 'Country',
+      parameters: { Percentage: 100, 'Country:0': 'US' },
+    },
+  ],
+}
+
+const groupsFlag: FeatureDefinitionModel = {
+  featureKey: 'groups-flag',
+  filters: [
+    {
+      name: 'Targeting',
+      parameters: {
+        'Audience.Groups:0': 'beta',
+        'Audience.DefaultRolloutPercentage': 0,
+      },
+    },
+  ],
 }
 
 // Mock h3 functions
 vi.mock('h3', () => ({
-  createError: (options: { statusCode: number; message: string; statusMessage: string }) => {
-    const error = new Error(options.message) as Error & { statusCode: number; statusMessage: string }
+  createError: (options: {
+    statusCode: number
+    message: string
+    statusMessage: string
+  }) => {
+    const error = new Error(options.message) as Error & {
+      statusCode: number
+      statusMessage: string
+    }
     error.statusCode = options.statusCode
     error.statusMessage = options.statusMessage
     return error
@@ -62,6 +128,9 @@ vi.mock('h3', () => ({
     const headers = (event.node?.req?.headers || {}) as Record<string, string>
     return headers[header.toLowerCase()]
   },
+  getRequestHeaders: (event: H3Event) => {
+    return (event.node?.req?.headers || {}) as Record<string, string>
+  },
   setResponseStatus: vi.fn(),
 }))
 
@@ -69,12 +138,14 @@ describe('Middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetServerToggly()
+    resetEventEvalContextProviders()
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
   afterEach(() => {
     resetServerToggly()
+    resetEventEvalContextProviders()
   })
 
   describe('defineFeatureMiddleware', () => {
@@ -361,7 +432,7 @@ describe('Middleware', () => {
       )
     })
 
-    it('should return the shared client when no identity header is present', async () => {
+    it('falls back to shared client identity when no identity header', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(featureDefs({})))
 
       await initServerToggly({
@@ -371,8 +442,8 @@ describe('Middleware', () => {
       })
 
       const client = useEventToggly(createMockEvent())
-      expect(client).toBe(getServerToggly())
       expect(client.identity).toBe('default-user')
+      expect(getServerToggly()?.identity).toBe('default-user')
     })
 
     it('should throw if client not initialized', () => {
@@ -381,6 +452,223 @@ describe('Middleware', () => {
       expect(() => useEventToggly(event)).toThrow(
         '[Toggly] Server client not initialized'
       )
+    })
+  })
+
+  describe('ambient EvalContext', () => {
+    it('binds claims, groups, and country from providers without per-call props', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse([
+          targetingAlice,
+          claimsFlag,
+          countryFlag,
+          groupsFlag,
+        ])
+      )
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'bob',
+        enableLiveUpdates: false,
+      })
+
+      configureEventEvalContext({
+        getIdentity: () => 'alice',
+        getGroups: () => ['beta'],
+        getClaims: () => ({ role: 'admin' }),
+      })
+
+      const event = createMockEvent({
+        'cf-ipcountry': 'US',
+      })
+
+      expect(await isEventFeatureOn(event, 'targeted-flag')).toBe(true)
+      expect(await isEventFeatureOn(event, 'claims-flag')).toBe(true)
+      expect(await isEventFeatureOn(event, 'country-flag')).toBe(true)
+      expect(await isEventFeatureOn(event, 'groups-flag')).toBe(true)
+      expect(getServerToggly()?.identity).toBe('bob')
+    })
+
+    it('fills request.country from cf-ipcountry when getContext omits request', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse([countryFlag]))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+      })
+
+      configureEventEvalContext({
+        getContext: () => ({
+          identity: 'alice',
+          claims: { role: 'admin' },
+        }),
+      })
+
+      const event = createMockEvent({ 'cf-ipcountry': 'US' })
+      expect(await isEventFeatureOn(event, 'country-flag')).toBe(true)
+      const cached = getCachedEventEvalContext(event)
+      expect(cached?.request?.country).toBe('US')
+      expect(cached?.identity).toBe('alice')
+    })
+
+    it('fills request.country when getContext returns empty request object', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse([countryFlag]))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+      })
+
+      configureEventEvalContext({
+        getContext: () => ({
+          identity: 'alice',
+          request: {},
+        }),
+      })
+
+      const event = createMockEvent({ 'cf-ipcountry': 'US' })
+      expect(await isEventFeatureOn(event, 'country-flag')).toBe(true)
+      expect(getCachedEventEvalContext(event)?.request?.country).toBe('US')
+    })
+
+    it('lets per-call options override ambient field-by-field', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse([targetingAlice, claimsFlag])
+      )
+
+      await initServerToggly({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+      })
+
+      configureEventEvalContext({
+        getIdentity: () => 'alice',
+        getClaims: () => ({ role: 'admin' }),
+      })
+
+      const event = createMockEvent()
+
+      expect(await isEventFeatureOn(event, 'targeted-flag')).toBe(true)
+      expect(
+        await isEventFeatureOn(event, 'targeted-flag', { identity: 'bob' })
+      ).toBe(false)
+      // claims still ambient when only identity overridden
+      expect(
+        await isEventFeatureOn(event, 'claims-flag', { identity: 'bob' })
+      ).toBe(true)
+      expect(
+        await isEventFeatureOn(event, 'claims-flag', {
+          claims: { role: 'user' },
+        })
+      ).toBe(false)
+    })
+
+    it('isolates concurrent events without mutating shared identity', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse([targetingAlice]))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'shared',
+        enableLiveUpdates: false,
+      })
+
+      configureEventEvalContext({
+        getIdentity: (event) =>
+          (event.node?.req?.headers as Record<string, string>)[
+            'x-toggly-identity'
+          ],
+      })
+
+      const [left, right] = await Promise.all([
+        isEventFeatureOn(
+          createMockEvent({ 'x-toggly-identity': 'alice' }),
+          'targeted-flag'
+        ),
+        isEventFeatureOn(
+          createMockEvent({ 'x-toggly-identity': 'bob' }),
+          'targeted-flag'
+        ),
+      ])
+
+      expect(left).toBe(true)
+      expect(right).toBe(false)
+      expect(getServerToggly()?.identity).toBe('shared')
+    })
+
+    it('defineTogglyContextMiddleware caches ambient for useEventToggly', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse([targetingAlice, claimsFlag, countryFlag])
+      )
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'bob',
+        enableLiveUpdates: false,
+      })
+
+      const middleware = defineTogglyContextMiddleware({
+        getIdentity: () => 'alice',
+        getClaims: () => ({ role: 'admin' }),
+      })
+
+      const event = createMockEvent({ 'cf-ipcountry': 'US' })
+      await middleware(event)
+
+      expect(getCachedEventEvalContext(event)?.identity).toBe('alice')
+
+      const client = useEventToggly(event)
+      expect(await client.isFeatureOn('targeted-flag')).toBe(true)
+      expect(await client.isFeatureOn('claims-flag')).toBe(true)
+      expect(await client.isFeatureOn('country-flag')).toBe(true)
+      expect(getServerToggly()?.identity).toBe('bob')
+    })
+
+    it('getEventToggly resolves providers then binds', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse([targetingAlice]))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'bob',
+        enableLiveUpdates: false,
+      })
+
+      configureEventEvalContext({
+        getIdentity: async () => 'alice',
+      })
+
+      const client = await getEventToggly(createMockEvent())
+      expect(await client.isFeatureOn('targeted-flag')).toBe(true)
+      expect(getServerToggly()?.identity).toBe('bob')
+    })
+
+    it('proxy per-call EvalContextArg overrides win field-by-field', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse([targetingAlice, claimsFlag])
+      )
+
+      await initServerToggly({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+      })
+
+      const event = createMockEvent()
+      await resolveEventEvalContext(event, {
+        getIdentity: () => 'alice',
+        getClaims: () => ({ role: 'admin' }),
+      })
+
+      const client = useEventToggly(event)
+      expect(await client.isFeatureOn('targeted-flag')).toBe(true)
+      expect(
+        await client.isFeatureOn('targeted-flag', undefined, undefined, {
+          identity: 'bob',
+        })
+      ).toBe(false)
+      expect(
+        await client.isFeatureOn('claims-flag', undefined, undefined, {
+          identity: 'bob',
+        })
+      ).toBe(true)
     })
   })
 
