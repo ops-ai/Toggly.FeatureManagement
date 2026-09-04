@@ -1311,7 +1311,7 @@ public class TogglyFeatureProviderTests : IDisposable
         result.Should().NotBeNull();
         result.EnabledFor.Should().HaveCount(1);
         var filter = result.EnabledFor.First();
-        filter.Name.Should().Be("Percentage");
+        filter.Name.Should().Be("Microsoft.Percentage");
         filter.Parameters.Should().NotBeNull();
     }
 
@@ -1560,8 +1560,8 @@ public class TogglyFeatureProviderTests : IDisposable
         // Assert
         result.Should().NotBeNull();
         result.EnabledFor.Should().HaveCount(2);
-        result.EnabledFor.Should().Contain(f => f.Name == "Percentage");
-        result.EnabledFor.Should().Contain(f => f.Name == "TimeWindow");
+        result.EnabledFor.Should().Contain(f => f.Name == "Microsoft.Percentage");
+        result.EnabledFor.Should().Contain(f => f.Name == "Microsoft.TimeWindow");
     }
 
     #endregion
@@ -2332,7 +2332,7 @@ public class TogglyFeatureProviderTests : IDisposable
 
         // Assert
         result.EnabledFor.Should().HaveCount(4);
-        result.EnabledFor.Select(f => f.Name).Should().Contain(new[] { "Percentage", "TimeWindow", "Targeting", "AlwaysOn" });
+        result.EnabledFor.Select(f => f.Name).Should().Contain(new[] { "Microsoft.Percentage", "Microsoft.TimeWindow", "Microsoft.Targeting", "AlwaysOn" });
     }
 
     [Fact]

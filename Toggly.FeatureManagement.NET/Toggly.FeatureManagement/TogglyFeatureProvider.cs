@@ -1027,13 +1027,33 @@ namespace Toggly.FeatureManagement
                 EnabledFor = userFilters.Select(featureFilter =>
                     new FeatureFilterConfiguration
                     {
-                        Name = featureFilter.Name,
+                        Name = MapToMicrosoftFeatureFilterName(featureFilter.Name),
                         Parameters = new ConfigurationBuilder().AddInMemoryCollection(featureFilter.Parameters?.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)) ?? Enumerable.Empty<KeyValuePair<string, string?>>()).Build()
                     }),
                 RequirementType = featureDefinition.RequirementType,
                 Variants = MapVariantsToMicrosoft(featureDefinition.Variants),
                 Allocation = MapAllocationToMicrosoft(featureDefinition.Allocation)
             };
+        }
+
+        /// <summary>
+        /// Maps catalog/definitions short filter names to the Microsoft.FeatureManagement
+        /// aliases that .NET filter registrations use. Leaves already-prefixed
+        /// <c>Microsoft.*</c> names and all other filters unchanged.
+        /// </summary>
+        internal static string MapToMicrosoftFeatureFilterName(string? name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return name ?? string.Empty;
+
+            if (string.Equals(name, "Percentage", StringComparison.OrdinalIgnoreCase))
+                return "Microsoft.Percentage";
+            if (string.Equals(name, "Targeting", StringComparison.OrdinalIgnoreCase))
+                return "Microsoft.Targeting";
+            if (string.Equals(name, "TimeWindow", StringComparison.OrdinalIgnoreCase))
+                return "Microsoft.TimeWindow";
+
+            return name;
         }
 
         /// <inheritdoc />
