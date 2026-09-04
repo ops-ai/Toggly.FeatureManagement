@@ -57,18 +57,18 @@ fn collect_indexed_values(filter: &FeatureFilter, prefixes: &[&str]) -> Vec<Stri
         if value.is_null() {
             continue;
         }
-        for prefix in prefixes {
-            let needle = format!("{prefix}:");
-            if key.starts_with(&needle) {
-                let text = match value {
-                    serde_json::Value::String(s) => s.clone(),
-                    other => other.to_string().trim_matches('"').to_string(),
-                };
-                if !text.is_empty() {
-                    out.push(text);
-                }
-                break;
-            }
+        if !prefixes
+            .iter()
+            .any(|prefix| key.starts_with(&format!("{prefix}:")))
+        {
+            continue;
+        }
+        let text = match value {
+            serde_json::Value::String(s) => s.clone(),
+            other => other.to_string().trim_matches('"').to_string(),
+        };
+        if !text.is_empty() {
+            out.push(text);
         }
     }
     out
@@ -88,6 +88,13 @@ fn identity_str(context: &EvalContext) -> Option<&str> {
     context.identity.as_deref().filter(|s| !s.is_empty())
 }
 
+fn push_nonempty(out: &mut Vec<String>, text: impl AsRef<str>) {
+    let text = text.as_ref();
+    if !text.is_empty() {
+        out.push(text.to_string());
+    }
+}
+
 fn append_list_values(out: &mut Vec<String>, raw: Option<&serde_json::Value>) {
     let Some(raw) = raw else {
         return;
@@ -96,32 +103,57 @@ fn append_list_values(out: &mut Vec<String>, raw: Option<&serde_json::Value>) {
         serde_json::Value::Array(arr) => {
             for item in arr {
                 if let Some(s) = item.as_str() {
-                    if !s.is_empty() {
-                        out.push(s.to_string());
-                    }
+                    push_nonempty(out, s);
                 } else {
-                    let text = item.to_string().trim_matches('"').to_string();
-                    if !text.is_empty() {
-                        out.push(text);
-                    }
+                    push_nonempty(out, item.to_string().trim_matches('"'));
                 }
             }
         }
         serde_json::Value::String(s) => {
             for part in s.split(',') {
-                let trimmed = part.trim();
-                if !trimmed.is_empty() {
-                    out.push(trimmed.to_string());
-                }
+                push_nonempty(out, part.trim());
             }
         }
-        other => {
-            let text = other.to_string().trim_matches('"').to_string();
-            if !text.is_empty() {
-                out.push(text);
-            }
-        }
+        other => push_nonempty(out, other.to_string().trim_matches('"')),
     }
+}
+
+/// Shared segment Percentage + indexed-value gate used by HTTP segment filters.
+fn evaluate_segment_indexed(
+    feature_key: &str,
+    filter: &FeatureFilter,
+    context: &EvalContext,
+    prefixes: &[&str],
+    matches: impl FnOnce(&EvalContext, &[String]) -> bool,
+) -> crate::Result<bool> {
+    let percentage = as_float(filter, &["Percentage"]);
+    if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
+        return Ok(false);
+    }
+    let values = collect_indexed_values(filter, prefixes);
+    if values.is_empty() {
+        return Ok(false);
+    }
+    Ok(matches(context, &values))
+}
+
+fn match_ua_family(
+    context: &EvalContext,
+    values: &[String],
+    family: impl FnOnce(&crate::eval::user_agent::ParsedUserAgent) -> &str,
+) -> bool {
+    let ua = context
+        .request
+        .as_ref()
+        .and_then(|r| r.user_agent.as_deref());
+    let Some(parsed) = parse_user_agent(ua) else {
+        return false;
+    };
+    let family = family(&parsed);
+    family != "Other"
+        && values
+            .iter()
+            .any(|value| contains_ignore_case(family, value))
 }
 
 /// AlwaysOn filter evaluator - always returns true.
@@ -487,27 +519,13 @@ impl Evaluator for BrowserFamilyEvaluator {
         filter: &FeatureFilter,
         context: &EvalContext,
     ) -> crate::Result<bool> {
-        let percentage = as_float(filter, &["Percentage"]);
-        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
-            return Ok(false);
-        }
-        let values = collect_indexed_values(filter, &["BrowserFamily"]);
-        if values.is_empty() {
-            return Ok(false);
-        }
-        let ua = context
-            .request
-            .as_ref()
-            .and_then(|r| r.user_agent.as_deref());
-        let Some(parsed) = parse_user_agent(ua) else {
-            return Ok(false);
-        };
-        if parsed.browser_family == "Other" {
-            return Ok(false);
-        }
-        Ok(values
-            .iter()
-            .any(|value| contains_ignore_case(&parsed.browser_family, value)))
+        evaluate_segment_indexed(
+            feature_key,
+            filter,
+            context,
+            &["BrowserFamily"],
+            |ctx, values| match_ua_family(ctx, values, |p| p.browser_family.as_str()),
+        )
     }
 }
 
@@ -521,25 +539,25 @@ impl Evaluator for BrowserLanguageEvaluator {
         filter: &FeatureFilter,
         context: &EvalContext,
     ) -> crate::Result<bool> {
-        let percentage = as_float(filter, &["Percentage"]);
-        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
-            return Ok(false);
-        }
-        let values = collect_indexed_values(filter, &["BrowserLanguage"]);
-        if values.is_empty() {
-            return Ok(false);
-        }
-        let Some(accept) = context
-            .request
-            .as_ref()
-            .and_then(|r| r.accept_language.as_deref())
-            .filter(|s| !s.is_empty())
-        else {
-            return Ok(false);
-        };
-        Ok(values
-            .iter()
-            .any(|value| contains_ignore_case(accept, value)))
+        evaluate_segment_indexed(
+            feature_key,
+            filter,
+            context,
+            &["BrowserLanguage"],
+            |ctx, values| {
+                let Some(accept) = ctx
+                    .request
+                    .as_ref()
+                    .and_then(|r| r.accept_language.as_deref())
+                    .filter(|s| !s.is_empty())
+                else {
+                    return false;
+                };
+                values
+                    .iter()
+                    .any(|value| contains_ignore_case(accept, value))
+            },
+        )
     }
 }
 
@@ -553,25 +571,19 @@ impl Evaluator for CountryEvaluator {
         filter: &FeatureFilter,
         context: &EvalContext,
     ) -> crate::Result<bool> {
-        let percentage = as_float(filter, &["Percentage"]);
-        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
-            return Ok(false);
-        }
-        let values = collect_indexed_values(filter, &["Country"]);
-        if values.is_empty() {
-            return Ok(false);
-        }
-        let Some(country) = context
-            .request
-            .as_ref()
-            .and_then(|r| r.country.as_deref())
-            .filter(|s| !s.is_empty())
-        else {
-            return Ok(false);
-        };
-        Ok(values
-            .iter()
-            .any(|value| equals_ignore_case(value, country)))
+        evaluate_segment_indexed(feature_key, filter, context, &["Country"], |ctx, values| {
+            let Some(country) = ctx
+                .request
+                .as_ref()
+                .and_then(|r| r.country.as_deref())
+                .filter(|s| !s.is_empty())
+            else {
+                return false;
+            };
+            values
+                .iter()
+                .any(|value| equals_ignore_case(value, country))
+        })
     }
 }
 
@@ -585,27 +597,13 @@ impl Evaluator for DeviceTypeEvaluator {
         filter: &FeatureFilter,
         context: &EvalContext,
     ) -> crate::Result<bool> {
-        let percentage = as_float(filter, &["Percentage"]);
-        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
-            return Ok(false);
-        }
-        let values = collect_indexed_values(filter, &["DeviceType"]);
-        if values.is_empty() {
-            return Ok(false);
-        }
-        let ua = context
-            .request
-            .as_ref()
-            .and_then(|r| r.user_agent.as_deref());
-        let Some(parsed) = parse_user_agent(ua) else {
-            return Ok(false);
-        };
-        if parsed.device_family == "Other" {
-            return Ok(false);
-        }
-        Ok(values
-            .iter()
-            .any(|value| contains_ignore_case(&parsed.device_family, value)))
+        evaluate_segment_indexed(
+            feature_key,
+            filter,
+            context,
+            &["DeviceType"],
+            |ctx, values| match_ua_family(ctx, values, |p| p.device_family.as_str()),
+        )
     }
 }
 
@@ -619,27 +617,13 @@ impl Evaluator for OperatingSystemEvaluator {
         filter: &FeatureFilter,
         context: &EvalContext,
     ) -> crate::Result<bool> {
-        let percentage = as_float(filter, &["Percentage"]);
-        if !segment_percentage_passes(percentage, feature_key, identity_str(context)) {
-            return Ok(false);
-        }
-        let values = collect_indexed_values(filter, &["OperatingSystem"]);
-        if values.is_empty() {
-            return Ok(false);
-        }
-        let ua = context
-            .request
-            .as_ref()
-            .and_then(|r| r.user_agent.as_deref());
-        let Some(parsed) = parse_user_agent(ua) else {
-            return Ok(false);
-        };
-        if parsed.os_family == "Other" {
-            return Ok(false);
-        }
-        Ok(values
-            .iter()
-            .any(|value| contains_ignore_case(&parsed.os_family, value)))
+        evaluate_segment_indexed(
+            feature_key,
+            filter,
+            context,
+            &["OperatingSystem"],
+            |ctx, values| match_ua_family(ctx, values, |p| p.os_family.as_str()),
+        )
     }
 }
 

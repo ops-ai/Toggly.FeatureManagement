@@ -2,6 +2,7 @@
 
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use toggly::definitions::{FeatureDefinition, FeatureFilter, RequirementType};
@@ -79,9 +80,9 @@ fn load_fixtures() -> Vec<(String, FixtureRoot)> {
     let mut fixtures = Vec::new();
     let mut entries: Vec<_> = fs::read_dir(&directory)
         .unwrap_or_else(|e| panic!("read fixtures dir {}: {e}", directory.display()))
-        .filter_map(|e| e.ok())
+        .filter_map(Result::ok)
         .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .filter(|p| p.extension().and_then(OsStr::to_str) == Some("json"))
         .collect();
     entries.sort();
     for path in entries {

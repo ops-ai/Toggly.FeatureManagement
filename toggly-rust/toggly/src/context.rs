@@ -52,9 +52,9 @@ pub struct RequestContext {
 impl RequestContext {
     /// Whether any request field is set.
     pub fn is_empty(&self) -> bool {
-        self.user_agent.as_ref().is_none_or(|s| s.is_empty())
-            && self.accept_language.as_ref().is_none_or(|s| s.is_empty())
-            && self.country.as_ref().is_none_or(|s| s.is_empty())
+        self.user_agent.as_deref().is_none_or(str::is_empty)
+            && self.accept_language.as_deref().is_none_or(str::is_empty)
+            && self.country.as_deref().is_none_or(str::is_empty)
     }
 }
 
