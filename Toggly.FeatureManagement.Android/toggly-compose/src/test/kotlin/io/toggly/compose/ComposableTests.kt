@@ -2,6 +2,8 @@ package io.toggly.compose
 
 import io.mockk.*
 import io.toggly.core.TogglyService
+import io.toggly.core.TogglyEntityContext
+import io.toggly.core.clearRegisteredContexts
 import io.toggly.core.models.FeatureFlags
 import io.toggly.core.models.FeatureRequirement
 import io.toggly.core.models.TogglyConfig
@@ -31,6 +33,7 @@ class ComposableTests {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+        clearRegisteredContexts()
     }
 
     @Test
@@ -171,5 +174,54 @@ class ComposableTests {
 
         assertTrue(service.evaluateFeatureGate(listOf("f1"), FeatureRequirement.ALL, negate = false))
         assertFalse(service.evaluateFeatureGate(listOf("f1"), FeatureRequirement.ALL, negate = true))
+    }
+
+    @Test
+    fun `Feature off path uses negate via evaluateFeatureGate`() = runTest {
+        val config = TogglyConfig(
+            appKey = "test-key",
+            featureDefaults = mapOf("maintenance" to false, "banner" to true),
+            storage = MemoryStorage()
+        )
+        val service = TogglyService(config)
+
+        // Primary off-path story: Feature(key, negate = true) → evaluate with negate
+        assertTrue(
+            service.evaluateFeatureGate(
+                listOf("maintenance"),
+                FeatureRequirement.ALL,
+                negate = true
+            )
+        )
+        assertFalse(
+            service.evaluateFeatureGate(
+                listOf("banner"),
+                FeatureRequirement.ALL,
+                negate = true
+            )
+        )
+    }
+
+    @Test
+    fun `Feature entity context is evaluated through the service`() = runTest {
+        val config = TogglyConfig(
+            appKey = "test-key",
+            featureDefaults = mapOf("plain" to true),
+            storage = MemoryStorage()
+        )
+        val service = TogglyService(config)
+        service.registerContext("Order") { order: Map<String, String> ->
+            TogglyEntityContext("Order", order.getValue("id"), emptyMap())
+        }
+
+        assertTrue(
+            service.evaluateFeatureGate(
+                listOf("plain"),
+                FeatureRequirement.ALL,
+                negate = false,
+                mapOf("id" to "1"),
+                "Order"
+            )
+        )
     }
 }

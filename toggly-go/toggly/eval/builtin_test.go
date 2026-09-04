@@ -159,6 +159,32 @@ func TestTimeWindowEvaluator(t *testing.T) {
 	}
 }
 
+func TestTimeWindowEvaluator_OpenEnded(t *testing.T) {
+	now := time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
+	e := TimeWindowEvaluator{Now: func() time.Time { return now }}
+	ctx := Context{}
+
+	must := func(params map[string]any, want bool, label string) {
+		t.Helper()
+		on, err := e.Evaluate("f", params, ctx)
+		if err != nil {
+			t.Fatalf("%s: err: %v", label, err)
+		}
+		if on != want {
+			t.Fatalf("%s: got %v want %v", label, on, want)
+		}
+	}
+
+	must(map[string]any{"Start": "2020-01-01T00:00:00Z"}, true, "start-only past")
+	must(map[string]any{"Start": "2030-01-01T00:00:00Z"}, false, "start-only future")
+	must(map[string]any{"End": "2030-01-01T00:00:00Z"}, true, "end-only future")
+	must(map[string]any{"End": "2020-01-01T00:00:00Z"}, false, "end-only past")
+	must(map[string]any{}, true, "neither bound")
+	must(map[string]any{"Start": "not-a-date", "End": "also-bad"}, false, "invalid both")
+	must(map[string]any{"Start": "not-a-date"}, false, "invalid start-only")
+	must(map[string]any{"End": "also-bad"}, false, "invalid end-only")
+}
+
 func TestPercentageEvaluator_StickyFeatureKey(t *testing.T) {
 	e := PercentageEvaluator{}
 	params := map[string]any{"Value": float64(50)}

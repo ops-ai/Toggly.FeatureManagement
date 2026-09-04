@@ -1,5 +1,32 @@
+## 1.3.1
+
+2026-09-03
+
+### Fixed
+- Defer `TogglyProvider` unmount `destroy()` behind a mount-tracking microtask so
+  React Strict Mode's synchronous mount/cleanup/remount cycle does not
+  permanently brick the shared client (`[Toggly] Client has been destroyed` on
+  later `init()` / `refresh()` in Next.js dev).
+
+## 1.3.0
+
+2026-09-03
+
+### Added
+- Optional `context` / `contextKind` on `<Feature>`, `<FeatureGate>`, hooks, and provider helpers
+  for entity-gated flags (parity with the Next.js server package).
+
 # Changelog
 
+
+## 1.2.0
+
+2026-09-02
+
+### Changed
+- `<Feature negate>` renders children when the flag is off, matching .NET
+  `<feature negate>`. `<FeatureOff>`, the `fallback` prop, and
+  `<Feature.Fallback>` are removed.
 
 ## 1.1.2
 

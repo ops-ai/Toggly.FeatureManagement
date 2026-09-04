@@ -81,8 +81,11 @@ function MyPage() {
         <NewHeader />
       </Feature>
 
-      <Feature flag="beta-feature" fallback={<ComingSoon />}>
+      <Feature flag="beta-feature">
         <BetaContent />
+      </Feature>
+      <Feature flag="beta-feature" negate>
+        <ComingSoon />
       </Feature>
     </div>
   );
@@ -194,15 +197,22 @@ const {
 Conditionally render content based on a feature flag.
 
 ```tsx
-<Feature flag="my-feature" fallback={<Loading />}>
+<Feature flag="my-feature" loading={<Loading />}>
   <Content />
+</Feature>
+
+{/* Off path */}
+<Feature flag="maintenance-mode" negate>
+  <MainApp />
 </Feature>
 ```
 
 **Props:**
 - `flag` (string): Feature flag key
-- `fallback` (ReactNode, optional): Content when flag is disabled
-- `children` (ReactNode): Content when flag is enabled
+- `negate` (boolean, optional): Render when the feature is off
+- `context` / `contextKind` (optional): Entity context for entity-gated flags
+- `loading` (ReactNode, optional): Content while flags are not ready
+- `children` (ReactNode): Content when the gate passes
 
 #### `<FeatureGate>`
 
@@ -213,7 +223,6 @@ Conditionally render content based on multiple feature flags.
   flags={['feature1', 'feature2']}
   requirement="all"
   negate={false}
-  fallback={<Restricted />}
 >
   <Content />
 </FeatureGate>
@@ -223,7 +232,8 @@ Conditionally render content based on multiple feature flags.
 - `flags` (string[]): Array of feature flag keys
 - `requirement` ('all' | 'any', optional): Gate requirement (default: 'all')
 - `negate` (boolean, optional): Negate the result (default: false)
-- `fallback` (ReactNode, optional): Content when gate is not met
+- `context` / `contextKind` (optional): Entity context for entity-gated flags
+- `loading` (ReactNode, optional): Content while flags are not ready
 - `children` (ReactNode): Content when gate is met
 
 #### `<TogglyProvider>`
@@ -483,9 +493,11 @@ function PremiumContent() {
     <FeatureGate
       flags={['premium-tier', 'beta-access']}
       requirement="any"
-      fallback={<UpgradePrompt />}
     >
       <PremiumFeatures />
+    </FeatureGate>
+    <FeatureGate flags={['premium', 'enterprise']} requirement="any" negate>
+      <UpgradePrompt />
     </FeatureGate>
   );
 }
@@ -498,8 +510,11 @@ import { Feature } from '@ops-ai/gatsby-feature-flags-toggly';
 
 function App() {
   return (
-    <Feature flag="maintenance-mode" fallback={<MainApp />}>
+    <Feature flag="maintenance-mode">
       <MaintenancePage />
+    </Feature>
+    <Feature flag="maintenance-mode" negate>
+      <MainApp />
     </Feature>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, ReactNode } from 'react';
-import type { FeatureRequirement } from '@ops-ai/react-native-toggly-core';
+import type { FeatureRequirement, TogglyEntityContext } from '@ops-ai/react-native-toggly-core';
 import { useTogglyContext } from '../contexts/TogglyContext';
 
 /**
@@ -23,20 +23,25 @@ export interface FeatureProps {
   requirement?: FeatureRequirement;
 
   /**
-   * Whether to negate the result
+   * Whether to negate the result — use for the off path (same as .NET `<feature negate>`)
    * @default false
    */
   negate?: boolean;
 
   /**
-   * Content to show when feature is enabled
+   * Entity instance or canonical entity context for entity-gated flags
    */
-  children: ReactNode;
+  context?: TogglyEntityContext | Record<string, unknown> | null;
 
   /**
-   * Content to show when feature is disabled
+   * Context kind for registerContext mapper lookup when `context` is a domain object
    */
-  fallback?: ReactNode;
+  contextKind?: string;
+
+  /**
+   * Content to show when the gate passes
+   */
+  children: ReactNode;
 
   /**
    * Content to show while loading
@@ -54,9 +59,9 @@ export interface FeatureProps {
  *   <NewDashboard />
  * </Feature>
  *
- * // With fallback
- * <Feature featureKey="newDashboard" fallback={<OldDashboard />}>
- *   <NewDashboard />
+ * // Off path with negate
+ * <Feature featureKey="maintenance" negate>
+ *   <NormalContent />
  * </Feature>
  *
  * // Multiple features (all required)
@@ -64,14 +69,9 @@ export interface FeatureProps {
  *   <FullFeatureComponent />
  * </Feature>
  *
- * // Any of the features
- * <Feature featureKeys={['feature1', 'feature2']} requirement="any">
- *   <PartialFeatureComponent />
- * </Feature>
- *
- * // Negated (show when feature is OFF)
- * <Feature featureKey="maintenance" negate>
- *   <NormalContent />
+ * // Entity context
+ * <Feature featureKey="OrderBadge" context={order} contextKind="Order">
+ *   <Badge />
  * </Feature>
  * ```
  */
@@ -80,8 +80,9 @@ export function Feature({
   featureKeys = [],
   requirement = 'all',
   negate = false,
+  context,
+  contextKind,
   children,
-  fallback = null,
   loading = null,
 }: FeatureProps): React.ReactElement | null {
   const { toggly, isReady } = useTogglyContext();
@@ -105,7 +106,13 @@ export function Feature({
       }
 
       try {
-        const result = await toggly.evaluateFeatureGate(gate, requirement, negate);
+        const result = await toggly.evaluateFeatureGate(
+          gate,
+          requirement,
+          negate,
+          context,
+          contextKind,
+        );
         if (mounted) {
           setShouldShow(result);
         }
@@ -129,7 +136,7 @@ export function Feature({
       mounted = false;
       unsubscribe();
     };
-  }, [toggly, isReady, gate.join(','), requirement, negate]);
+  }, [toggly, isReady, gate.join(','), requirement, negate, context, contextKind]);
 
   // Show loading state while evaluating
   if (shouldShow === null) {
@@ -143,8 +150,8 @@ export function Feature({
     return null;
   }
 
-  // Render based on evaluation result
-  return <>{shouldShow ? children : fallback}</>;
+  // Render based on evaluation result — off path uses a separate Feature with negate
+  return shouldShow ? <>{children}</> : null;
 }
 
 /**
@@ -154,7 +161,12 @@ export function Feature({
  * ```tsx
  * const ProtectedComponent = withFeature(MyComponent, {
  *   featureKey: 'newFeature',
- *   fallback: <OldComponent />,
+ * });
+ *
+ * // Off path
+ * const LegacyComponent = withFeature(OldComponent, {
+ *   featureKey: 'newFeature',
+ *   negate: true,
  * });
  *
  * // Use in JSX

@@ -58,26 +58,21 @@ describe('Feature component', () => {
       expect(screen.queryByTestId('content')).not.toBeInTheDocument();
     });
 
-    it('should render fallback when feature is disabled', () => {
+    it('should render with negate when feature is disabled', () => {
       const serverContext: ServerFeatureContext = {
         flags: { feature1: false },
         fetchedAt: Date.now(),
       };
 
       renderWithProvider(
-        <Feature
-          featureKey="feature1"
-          fallback={<div data-testid="fallback">Fallback Content</div>}
-        >
-          <div data-testid="content">Enabled Content</div>
+        <Feature featureKey="feature1" negate>
+          <div data-testid="off-path">Off Path</div>
         </Feature>,
         serverContext
       );
 
-      expect(screen.queryByTestId('content')).not.toBeInTheDocument();
-      expect(screen.getByTestId('fallback')).toHaveTextContent('Fallback Content');
+      expect(screen.getByTestId('off-path')).toHaveTextContent('Off Path');
     });
-
     it('should use default value for missing feature', () => {
       const serverContext: ServerFeatureContext = {
         flags: {},
@@ -345,7 +340,7 @@ describe('FeatureGate component', () => {
     expect(screen.getByTestId('content')).toBeInTheDocument();
   });
 
-  it('should render fallback when gate fails', () => {
+  it('should not render children when gate fails', () => {
     const serverContext: ServerFeatureContext = {
       flags: { feature1: true, feature2: false },
       fetchedAt: Date.now(),
@@ -355,7 +350,6 @@ describe('FeatureGate component', () => {
       <FeatureGate
         featureKeys={['feature1', 'feature2']}
         requirement="all"
-        fallback={<div data-testid="fallback">Fallback</div>}
       >
         <div data-testid="content">Content</div>
       </FeatureGate>,
@@ -363,7 +357,6 @@ describe('FeatureGate component', () => {
     );
 
     expect(screen.queryByTestId('content')).not.toBeInTheDocument();
-    expect(screen.getByTestId('fallback')).toBeInTheDocument();
   });
 
   it('should support any requirement', () => {

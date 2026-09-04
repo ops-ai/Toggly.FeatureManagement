@@ -4,121 +4,56 @@ import type { ReactNode } from 'react'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
 import { useFeatureFlag, useFeatureGate } from './hooks'
 import type { FeatureProps } from './types'
+import type { TogglyEntityContext } from '@ops-ai/nextjs-toggly-core'
 
 /**
- * Client Component for feature flag rendering
- *
- * @example
- * ```tsx
- * 'use client'
- * import { Feature } from '@ops-ai/nextjs-toggly-client'
- *
- * export function Dashboard() {
- *   return (
- *     <Feature
- *       featureKey="new-dashboard"
- *       fallback={<OldDashboard />}
- *       loading={<LoadingSpinner />}
- *     >
- *       <NewDashboard />
- *     </Feature>
- *   )
- * }
- * ```
+ * Client Component for feature flag rendering.
+ * Use `negate` to render when the feature is off (same as .NET `<feature negate>`).
  */
 export function Feature({
   featureKey,
   requirement = 'all',
   negate = false,
+  context,
+  contextKind,
   children,
-  fallback = null,
   loading = null,
 }: FeatureProps): ReactNode {
   const featureKeys = Array.isArray(featureKey) ? featureKey : [featureKey]
-
-  // Use gate hook for multiple keys or single key
   const { isAllowed, isLoading } = useFeatureGate(
     featureKeys,
     requirement,
-    negate
+    negate,
+    context,
+    contextKind,
   )
 
   if (isLoading) {
     return loading
   }
 
-  return isAllowed ? children : fallback
-}
-
-/**
- * Client Component to render when feature is OFF
- *
- * @example
- * ```tsx
- * 'use client'
- * import { FeatureOff } from '@ops-ai/nextjs-toggly-client'
- *
- * export function MainContent() {
- *   return (
- *     <FeatureOff featureKey="maintenance-mode">
- *       <AppContent />
- *     </FeatureOff>
- *   )
- * }
- * ```
- */
-export function FeatureOff({
-  featureKey,
-  requirement = 'all',
-  children,
-  fallback = null,
-  loading = null,
-}: Omit<FeatureProps, 'negate'>): ReactNode {
-  return (
-    <Feature
-      featureKey={featureKey}
-      requirement={requirement}
-      negate={true}
-      fallback={fallback}
-      loading={loading}
-    >
-      {children}
-    </Feature>
-  )
+  return isAllowed ? children : null
 }
 
 /**
  * Client Component for A/B testing / variant rendering
- *
- * @example
- * ```tsx
- * 'use client'
- * import { FeatureVariant } from '@ops-ai/nextjs-toggly-client'
- *
- * export function Checkout() {
- *   return (
- *     <FeatureVariant
- *       featureKey="checkout-v2"
- *       enabled={<NewCheckout />}
- *       disabled={<OldCheckout />}
- *       loading={<CheckoutSkeleton />}
- *     />
- *   )
- * }
- * ```
  */
 export function FeatureVariant({
   featureKey,
   enabled,
   disabled,
   loading = null,
+  context,
+  contextKind,
 }: {
   featureKey: string
   enabled: ReactNode
   disabled: ReactNode
   loading?: ReactNode
+  context?: TogglyEntityContext | Record<string, unknown> | null
+  contextKind?: string
 }): ReactNode {
-  const { isEnabled, isLoading } = useFeatureFlag(featureKey)
+  const { isEnabled, isLoading } = useFeatureFlag(featureKey, { context, contextKind })
 
   if (isLoading) {
     return loading
@@ -128,79 +63,49 @@ export function FeatureVariant({
 }
 
 /**
- * Client Component for feature gate with multiple features
- *
- * @example
- * ```tsx
- * 'use client'
- * import { FeatureGate } from '@ops-ai/nextjs-toggly-client'
- *
- * export function AdminPanel() {
- *   return (
- *     <FeatureGate
- *       featureKeys={['admin-access', 'beta-user']}
- *       requirement="all"
- *       fallback={<AccessDenied />}
- *     >
- *       <AdminContent />
- *     </FeatureGate>
- *   )
- * }
- * ```
+ * Client Component for feature gate with multiple features.
+ * Use `negate` to render when the gate fails.
  */
 export function FeatureGate({
   featureKeys,
   requirement = 'all',
   negate = false,
+  context,
+  contextKind,
   children,
-  fallback = null,
   loading = null,
 }: {
   featureKeys: string[]
   requirement?: FeatureRequirement
   negate?: boolean
+  context?: TogglyEntityContext | Record<string, unknown> | null
+  contextKind?: string
   children: ReactNode
-  fallback?: ReactNode
   loading?: ReactNode
 }): ReactNode {
   const { isAllowed, isLoading } = useFeatureGate(
     featureKeys,
     requirement,
-    negate
+    negate,
+    context,
+    contextKind,
   )
 
   if (isLoading) {
     return loading
   }
 
-  return isAllowed ? children : fallback
+  return isAllowed ? children : null
 }
 
 /**
  * Client Component that renders different content based on feature state
- *
- * @example
- * ```tsx
- * 'use client'
- * import { FeatureSwitch } from '@ops-ai/nextjs-toggly-client'
- *
- * export function Navigation() {
- *   return (
- *     <FeatureSwitch
- *       featureKey="nav-style"
- *       cases={{
- *         on: <ModernNav />,
- *         off: <ClassicNav />,
- *         loading: <NavSkeleton />,
- *       }}
- *     />
- *   )
- * }
- * ```
  */
 export function FeatureSwitch({
   featureKey,
   cases,
+  context,
+  contextKind,
 }: {
   featureKey: string
   cases: {
@@ -208,8 +113,10 @@ export function FeatureSwitch({
     off: ReactNode
     loading?: ReactNode
   }
+  context?: TogglyEntityContext | Record<string, unknown> | null
+  contextKind?: string
 }): ReactNode {
-  const { isEnabled, isLoading } = useFeatureFlag(featureKey)
+  const { isEnabled, isLoading } = useFeatureFlag(featureKey, { context, contextKind })
 
   if (isLoading) {
     return cases.loading ?? null

@@ -1,6 +1,7 @@
-import React from 'react'
+import type { ReactNode } from 'react'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
-import { getServerToggly } from './server-client'
+import type { EntityContextInput } from './feature-check'
+import { waitForServerToggly } from './server-client'
 
 /**
  * Props for server Feature component
@@ -10,128 +11,84 @@ export interface FeatureProps {
   featureKey: string | string[]
   /** Requirement for multiple features: 'all' or 'any' */
   requirement?: FeatureRequirement
-  /** Negate the result */
+  /** When true, render children when the feature is off */
   negate?: boolean
-  /** User identity for targeting */
+  /** User identity for targeting (per-call; does not mutate the shared client) */
   identity?: string
-  /** Content to render when feature is enabled */
-  children: React.ReactNode
-  /** Content to render when feature is disabled */
-  fallback?: React.ReactNode
+  /** Entity / page object for Context Property filters */
+  context?: EntityContextInput
+  /** Catalog kind when `context` is a domain object */
+  contextKind?: string
+  /** Content to render when the gate passes */
+  children: ReactNode
 }
 
 /**
- * Server Component for feature flag rendering
- *
- * @example
- * ```tsx
- * // In a Server Component
- * import { Feature } from '@ops-ai/nextjs-toggly-server'
- *
- * export default async function Page() {
- *   return (
- *     <Feature featureKey="new-dashboard">
- *       <NewDashboard />
- *     </Feature>
- *   )
- * }
- * ```
+ * Server Component for feature flag rendering.
+ * Use `negate` to render when the feature is off (same as .NET `<feature negate>`).
  */
 export async function Feature({
   featureKey,
   requirement = 'all',
   negate = false,
   identity,
+  context,
+  contextKind,
   children,
-  fallback = null,
-}: FeatureProps): Promise<React.ReactNode> {
-  const client = getServerToggly()
+}: FeatureProps): Promise<ReactNode> {
+  const client = await waitForServerToggly()
 
   if (!client) {
     console.warn('[Toggly] Server client not initialized in Feature component')
-    return negate ? children : fallback
+    return negate ? children : null
   }
 
-  // Per-call identity override (local eval); do not mutate shared client identity
   const featureKeys = Array.isArray(featureKey) ? featureKey : [featureKey]
   const isEnabled = await client.evaluateFeatureGate(
     featureKeys,
     requirement,
     negate,
-    undefined,
-    undefined,
+    context,
+    contextKind,
     identity
   )
 
-  return isEnabled ? children : fallback
-}
-
-/**
- * Server Component to render when feature is OFF
- *
- * @example
- * ```tsx
- * import { FeatureOff } from '@ops-ai/nextjs-toggly-server'
- *
- * export default async function Page() {
- *   return (
- *     <FeatureOff featureKey="maintenance-mode">
- *       <MainContent />
- *     </FeatureOff>
- *   )
- * }
- * ```
- */
-export async function FeatureOff({
-  featureKey,
-  requirement = 'all',
-  identity,
-  children,
-  fallback = null,
-}: Omit<FeatureProps, 'negate'>): Promise<React.ReactNode> {
-  return Feature({
-    featureKey,
-    requirement,
-    negate: true,
-    identity,
-    children,
-    fallback,
-  })
+  return isEnabled ? children : null
 }
 
 /**
  * Server Component for A/B testing / variant rendering
- *
- * @example
- * ```tsx
- * import { FeatureVariant } from '@ops-ai/nextjs-toggly-server'
- *
- * export default async function Page() {
- *   return (
- *     <FeatureVariant
- *       featureKey="checkout-flow"
- *       enabled={<NewCheckout />}
- *       disabled={<OldCheckout />}
- *     />
- *   )
- * }
- * ```
  */
 export async function FeatureVariant({
   featureKey,
   identity,
+  context,
+  contextKind,
   enabled,
   disabled,
 }: {
   featureKey: string
   identity?: string
-  enabled: React.ReactNode
-  disabled: React.ReactNode
-}): Promise<React.ReactNode> {
-  return Feature({
-    featureKey,
-    identity,
-    children: enabled,
-    fallback: disabled,
-  })
+  context?: FeatureProps['context']
+  contextKind?: string
+  enabled: ReactNode
+  disabled: ReactNode
+}): Promise<ReactNode> {
+  const client = await waitForServerToggly()
+
+  if (!client) {
+    console.warn('[Toggly] Server client not initialized in FeatureVariant')
+    return disabled
+  }
+
+  const isEnabled = await client.evaluateFeatureGate(
+    [featureKey],
+    'all',
+    false,
+    context,
+    contextKind,
+    identity
+  )
+
+  return isEnabled ? enabled : disabled
 }

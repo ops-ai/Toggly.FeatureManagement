@@ -15,7 +15,6 @@ export {
 // Components
 export {
   Feature,
-  FeatureOff,
   FeatureVariant,
   FeatureGate,
   FeatureSwitch,

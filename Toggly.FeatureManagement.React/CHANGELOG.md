@@ -1,3 +1,11 @@
+## 1.11.0
+
+2026-09-03
+
+### Changed
+- `<Feature fallback>` is deprecated. Prefer a separate `<Feature negate>` for the off path
+  (aligned with .NET `<feature negate>`).
+
 ## 1.10.5
 
 2026-08-30

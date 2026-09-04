@@ -97,22 +97,22 @@ describe('FeatureGate Component', () => {
     expect(screen.getByText('Empty Gate')).toBeTruthy();
   });
 
-  it('should render fallback for empty flags with negate', () => {
-    render(
-      <FeatureGate flags={[]} negate={true} fallback={<span>Fallback</span>}>
+  it('should hide for empty flags with negate', () => {
+    const { container } = render(
+      <FeatureGate flags={[]} negate={true}>
         <span>Content</span>
       </FeatureGate>
     );
 
-    expect(screen.getByText('Fallback')).toBeTruthy();
+    expect(container.textContent).toBe('');
   });
 
-  it('should render fallback when not ready', () => {
+  it('should render loading when not ready', () => {
     $isReady.set(false);
     $flags.set({ F1: true });
 
     render(
-      <FeatureGate flags={['F1']} fallback={<span>Loading</span>}>
+      <FeatureGate flags={['F1']} loading={<span>Loading</span>}>
         <span>Content</span>
       </FeatureGate>
     );
@@ -121,15 +121,15 @@ describe('FeatureGate Component', () => {
     expect(screen.queryByText('Content')).toBeNull();
   });
 
-  it('should render fallback when gate not met', () => {
+  it('should render nothing when gate not met', () => {
     $flags.set({ F1: false });
 
-    render(
-      <FeatureGate flags={['F1']} fallback={<span>Fallback Content</span>}>
+    const { container } = render(
+      <FeatureGate flags={['F1']}>
         <span>Main Content</span>
       </FeatureGate>
     );
 
-    expect(screen.getByText('Fallback Content')).toBeTruthy();
+    expect(container.textContent).toBe('');
   });
 });

@@ -50,7 +50,7 @@ If you see "Failed to resolve @ops-ai/gatsby-feature-flags-toggly":
 ### 1. Home Page (`/`)
 
 - **useFeatureFlag Hook**: Demonstrates checking a single flag
-- **Feature Component**: Shows conditional rendering with fallback
+- **Feature Component**: Shows conditional rendering with `negate` for the off path
 
 ### 2. Features Page (`/features`)
 

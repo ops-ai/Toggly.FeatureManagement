@@ -34,18 +34,19 @@ describe('Feature component', () => {
     expect(wrapper.text()).toBe('enabled content')
   })
 
-  it('should render fallback slot when feature is disabled', () => {
+  it('should render nothing when feature is disabled (use negate for off path)', () => {
     mockUseFeatureProps.mockReturnValue(createMockReturn(false))
 
     const wrapper = mount(Feature, {
       props: { featureKey: 'my-feature' },
       slots: {
         default: () => h('div', 'enabled content'),
+        // legacy #fallback is ignored
         fallback: () => h('div', 'fallback content'),
       },
     })
 
-    expect(wrapper.text()).toBe('fallback content')
+    expect(wrapper.text()).toBe('')
   })
 
   it('should render nothing when disabled with no fallback', () => {

@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.3.1
+
+2026-09-03
+
+### Fixed
+- Coalesce concurrent `initServerToggly` calls onto one in-flight promise and
+  swap the process-wide client before destroying the previous instance so
+  Turbopack / parallel RSC no longer observe a null singleton mid-init.
+  Additional callers while init is in flight join that promise (their config
+  is ignored until the first init completes).
+- `waitForServerToggly()` always awaits the in-flight init promise so
+  `<Feature>`, actions, and cache helpers do not evaluate empty definitions
+  after install-before-await.
+- Destroy a failed replacement client after rolling back to the previous
+  singleton so partial init cannot leak timers/sockets.
+
+### Added
+- `waitForServerToggly()` — resolves after the current init promise (or the
+  ready singleton). Prefer this over `getServerToggly()` for evaluation.
+
+## 1.3.0
+
+2026-09-02
+
+### Added
+- `isServerFeatureOn`, `checkFeature`, `<Feature>`, cached helpers, and
+  related APIs accept `{ context, contextKind }` for entity gates on the local
+  evaluation rail. A string second argument remains user identity.
+- Cache keys hash full entity attributes so two contexts that share kind/key
+  cannot collide.
+
+### Changed
+- `<Feature negate>` renders children when the flag is off, matching .NET
+  `<feature negate>`. `<FeatureOff>`, the `fallback` prop, and
+  `<Feature.Fallback>` are removed.
+
+### Changed
+- `ServerFeatureOptions.context` is entity context (not an unused HTTP bag).
+  `RequestContext` remains exported.
+
 ## 1.2.0
 
 2026-09-02

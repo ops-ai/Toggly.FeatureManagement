@@ -3,7 +3,11 @@ import {
   snapshotEvaluatedBooleans,
   toBooleanDefinitions,
 } from '@ops-ai/nextjs-toggly-core'
-import { getServerToggly } from './server-client'
+import {
+  resolveFeatureCheckArgs,
+  type FeatureCheckOptions,
+} from './feature-check'
+import { waitForServerToggly } from './server-client'
 import type { FeatureGateResult } from './types'
 
 /**
@@ -25,16 +29,18 @@ import type { FeatureGateResult } from './types'
  */
 export async function checkFeature(
   featureKey: string,
-  identity?: string
+  identityOrOptions?: string | FeatureCheckOptions
 ): Promise<boolean> {
-  const client = getServerToggly()
+  const client = await waitForServerToggly()
 
   if (!client) {
     console.warn('[Toggly] Server client not initialized in checkFeature')
     return false
   }
 
-  return client.isFeatureOn(featureKey, undefined, undefined, identity)
+  const { identity, context, contextKind } =
+    resolveFeatureCheckArgs(identityOrOptions)
+  return client.isFeatureOn(featureKey, context, contextKind, identity)
 }
 
 /**
@@ -42,9 +48,9 @@ export async function checkFeature(
  */
 export async function checkFeatureOff(
   featureKey: string,
-  identity?: string
+  identityOrOptions?: string | FeatureCheckOptions
 ): Promise<boolean> {
-  const isOn = await checkFeature(featureKey, identity)
+  const isOn = await checkFeature(featureKey, identityOrOptions)
   return !isOn
 }
 
@@ -73,16 +79,20 @@ export async function checkFeatureGate(options: {
   requirement?: FeatureRequirement
   negate?: boolean
   identity?: string
+  context?: FeatureCheckOptions['context']
+  contextKind?: string
 }): Promise<FeatureGateResult> {
   const {
     featureKeys: rawKeys,
     requirement = 'all',
     negate = false,
     identity,
+    context,
+    contextKind,
   } = options
 
   const featureKeys = Array.isArray(rawKeys) ? rawKeys : [rawKeys]
-  const client = getServerToggly()
+  const client = await waitForServerToggly()
 
   if (!client) {
     return {
@@ -97,8 +107,8 @@ export async function checkFeatureGate(options: {
       featureKeys,
       requirement,
       negate,
-      undefined,
-      undefined,
+      context,
+      contextKind,
       identity
     )
 
@@ -136,10 +146,19 @@ export function withFeature<T extends unknown[], R>(
     requirement?: FeatureRequirement
     negate?: boolean
     identity?: string
+    context?: FeatureCheckOptions['context']
+    contextKind?: string
     onDisabled?: () => Promise<R>
   } = {}
 ): (...args: T) => Promise<R> {
-  const { requirement = 'all', negate = false, identity, onDisabled } = options
+  const {
+    requirement = 'all',
+    negate = false,
+    identity,
+    context,
+    contextKind,
+    onDisabled,
+  } = options
 
   return async (...args: T): Promise<R> => {
     const result = await checkFeatureGate({
@@ -147,6 +166,8 @@ export function withFeature<T extends unknown[], R>(
       requirement,
       negate,
       identity,
+      context,
+      contextKind,
     })
 
     if (!result.allowed) {
@@ -164,7 +185,7 @@ export function withFeature<T extends unknown[], R>(
  * Get all current feature states (for hydration)
  */
 export async function getFeatures(): Promise<Record<string, boolean>> {
-  const client = getServerToggly()
+  const client = await waitForServerToggly()
 
   if (!client) {
     return {}
@@ -189,17 +210,25 @@ export async function getFeatures(): Promise<Record<string, boolean>> {
  * Get specific feature states (for selective hydration)
  */
 export async function getFeatureStates(
-  featureKeys: string[]
+  featureKeys: string[],
+  identityOrOptions?: string | FeatureCheckOptions
 ): Promise<Record<string, boolean>> {
-  const client = getServerToggly()
+  const client = await waitForServerToggly()
 
   if (!client) {
     return Object.fromEntries(featureKeys.map((key) => [key, false]))
   }
 
+  const { identity, context, contextKind } =
+    resolveFeatureCheckArgs(identityOrOptions)
   const result: Record<string, boolean> = {}
   for (const key of featureKeys) {
-    result[key] = await client.isFeatureOn(key)
+    result[key] = await client.isFeatureOn(
+      key,
+      context,
+      contextKind,
+      identity
+    )
   }
 
   return result

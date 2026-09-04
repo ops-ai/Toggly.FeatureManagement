@@ -69,6 +69,42 @@ describe('TogglyEdgeClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
     })
 
+    it('includes u= on evaluated-signed URL when identity is set', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+
+      const client = new TogglyEdgeClient({
+        appKey: 'test-key',
+        identity: 'user-123',
+        cache: false,
+      })
+      await client.init()
+
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      const [url, init] = mockFetch.mock.calls[0]
+      expect(String(url)).toContain('/evaluated-signed/')
+      expect(String(url)).toContain('u=user-123')
+      expect(init.headers['x-toggly-identity']).toBe('user-123')
+    })
+
+    it('includes g= on evaluated-signed URL when groups are set', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+
+      const client = new TogglyEdgeClient({
+        appKey: 'test-key',
+        identity: 'user-123',
+        groups: ['beta', 'staff'],
+        claims: { plan: 'pro' },
+        cache: false,
+      })
+      await client.init()
+
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      const url = new URL(String(mockFetch.mock.calls[0][0]))
+      expect(url.searchParams.get('u')).toBe('user-123')
+      expect(url.searchParams.getAll('g')).toEqual(['beta', 'staff'])
+      expect(url.searchParams.get('claim.plan')).toBe('pro')
+    })
+
     it('reads unsigned defs and collapses entity gates', async () => {
       mockFetch.mockResolvedValueOnce(
         createMockResponse({

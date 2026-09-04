@@ -13,7 +13,7 @@ Native Android SDK for [Toggly.io](https://toggly.io) feature flags with Kotlin,
 
 - **Kotlin-first**: Built entirely in Kotlin with idiomatic APIs
 - **Coroutines & Flow**: Async-first with StateFlow for reactive updates
-- **Jetpack Compose**: `FeatureFlag`, `FeatureGate`, and `rememberFeatureFlag` composables
+- **Jetpack Compose**: `Feature`, `FeatureGate`, and `rememberFeature` composables
 - **Android Views**: View extensions, LiveData, and ViewModel support
 - **Multiple Storage Options**: SharedPreferences, Room, DataStore, or custom
 - **Offline Support**: Cached feature flags for offline operation
@@ -110,7 +110,7 @@ import io.toggly.compose.*
 @Composable
 fun MyScreen() {
     // Hook-style API
-    val isNewDashboard by rememberFeatureFlag("new-dashboard")
+    val isNewDashboard = rememberFeature("new-dashboard")
 
     if (isNewDashboard) {
         NewDashboardScreen()
@@ -119,18 +119,21 @@ fun MyScreen() {
     }
 }
 
-// Component-style API
+// Component-style API — Feature + negate for the off path
 @Composable
 fun WelcomeSection() {
-    FeatureFlag("welcome-banner") {
+    Feature("welcome-banner") {
         WelcomeBanner()
     }
 
-    FeatureFlag(
-        featureKey = "new-checkout",
-        enabled = { NewCheckoutFlow() },
-        disabled = { LegacyCheckoutFlow() }
-    )
+    Feature(featureKey = "maintenance-mode", negate = true) {
+        MainContent()
+    }
+
+    // Entity-aware evaluation
+    Feature(featureKey = "PresalePhotos", context = order, contextKind = "Order") {
+        PresalePhotos()
+    }
 }
 
 // Feature gates for multiple flags
@@ -160,12 +163,15 @@ class MyActivity : AppCompatActivity() {
         // Bind view visibility to feature flag
         newFeatureButton.bindToFeatureFlag("new-feature", this)
 
+        // Off path: prefer bindToFeatureGate with negate = true
+        legacyBanner.bindToFeatureGate(listOf("new-checkout"), this, negate = true)
+
         // Or use LiveData
         viewModel.featureFlagLiveData("new-dashboard").observe(this) { isEnabled ->
             newDashboardView.visibility = if (isEnabled) View.VISIBLE else View.GONE
         }
 
-        // Toggle between views
+        // Toggle between views (Variant-style dual slot)
         toggleViews(
             featureKey = "new-checkout",
             lifecycleOwner = this,

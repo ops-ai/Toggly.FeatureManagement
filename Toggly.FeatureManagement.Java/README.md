@@ -252,9 +252,9 @@ When using Spring Boot Actuator:
 
 ## Requirements
 
-- Java 11+
-- Spring Boot 3.0+ (for Spring modules)
-- Spring Framework 6.0+ (for Spring MVC/WebFlux)
+- Java 17+
+- Spring Boot 3.2+ (for Spring modules; CI tests against the Boot version pinned in `pom.xml`)
+- Spring Framework 6.1+ (for Spring MVC/WebFlux)
 
 ## Documentation
 

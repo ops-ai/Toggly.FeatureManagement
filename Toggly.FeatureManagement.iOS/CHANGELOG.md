@@ -2,6 +2,18 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.3.0
+
+2026-09-02
+
+### Changed
+- SwiftUI: `FeatureView` / `FeatureGateView` use `negate` as the primary off
+  path; dual-slot `else:` is documented as Variant-style, not the primary Off
+  API. Both views accept optional entity `context` / `kind`.
+- SwiftUI: `@FeatureFlag`, `@FeatureGate`, and `.featureFlag` support `negate`
+  and entity context. `.featureFlagOff` is deprecated in favor of
+  `.featureFlag(..., negate: true)`.
+
 ## 1.2.0
 
 2026-08-21

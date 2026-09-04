@@ -84,12 +84,10 @@ const { isEnabled } = useFeatureFlag('new-dashboard')
 ```vue
 <template>
   <Feature feature-key="beta-feature">
-    <template #default>
-      <BetaContent />
-    </template>
-    <template #fallback>
-      <StableContent />
-    </template>
+    <BetaContent />
+  </Feature>
+  <Feature feature-key="beta-feature" negate>
+    <StableContent />
   </Feature>
 </template>
 ```
@@ -195,32 +193,27 @@ const { isEnabled: showFallback } = useFeatureGate(['beta'], 'all', true)
     <PartialExperience />
   </Feature>
 
-  <!-- With fallback slot -->
+  <!-- Loading placeholder (not an off-path branch) -->
   <Feature feature-key="beta">
     <template #default>
       <BetaContent />
-    </template>
-    <template #fallback>
-      <StableContent />
     </template>
     <template #loading>
       <LoadingSpinner />
     </template>
   </Feature>
 
-  <!-- Negated (show when disabled) -->
+  <!-- Off path: second Feature with negate (same as .NET / Next.js) -->
+  <Feature feature-key="beta">
+    <BetaContent />
+  </Feature>
+  <Feature feature-key="beta" negate>
+    <StableContent />
+  </Feature>
+
   <Feature feature-key="maintenance" negate>
     <MainContent />
   </Feature>
-
-  <!-- Convenience components -->
-  <FeatureEnabled feature-key="promo">
-    <PromoBanner />
-  </FeatureEnabled>
-
-  <FeatureDisabled feature-key="promo">
-    <p>No promo available</p>
-  </FeatureDisabled>
 </template>
 ```
 

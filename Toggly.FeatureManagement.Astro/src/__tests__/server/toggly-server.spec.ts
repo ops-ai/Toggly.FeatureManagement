@@ -478,6 +478,26 @@ describe('TogglyServer', () => {
       expect(await server.evaluateGate(['F3'], 'all', true)).toBe(true);
     });
 
+    it('should evaluate boolean cache path when enableVariants is true', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          defs: {
+            F1: { enabled: true, variant: 'A' },
+            F2: { enabled: false, variant: 'control' },
+          },
+        }),
+      );
+      const server = new TogglyServer({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+      });
+
+      expect(await server.evaluateGate(['F1', 'F2'], 'any')).toBe(true);
+      expect(await server.evaluateGate(['F1', 'F2'], 'all')).toBe(false);
+      expect(await server.evaluateGate(['F2'], 'all', true)).toBe(true);
+    });
+
     it('should default to "all" requirement', async () => {
       const server = new TogglyServer({
         appKey: 'test-key',

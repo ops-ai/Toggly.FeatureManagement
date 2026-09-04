@@ -4,7 +4,9 @@
  * Two responsibilities, applied in a single streaming pass:
  *
  *  1. Strip `[data-feature]` elements whose flag is disabled, so disabled
- *     content never reaches the browser.
+ *     content never reaches the browser. Elements marked
+ *     `data-toggly-negate="true"` are left intact for client-side hydration
+ *     (negate is evaluated in React, not at the edge).
  *  2. Inject a synchronous `<script>` snapshot of the resolved flag map at
  *     the start of `<head>` as `window.__TOGGLY_EDGE_FLAGS__`. The Docusaurus
  *     plugin's React Provider reads this on first client render so the React
@@ -31,6 +33,21 @@ function buildSnapshotScript(flags: Record<string, boolean>): string {
 }
 
 /**
+ * Whether the edge rewriter should remove a `[data-feature]` element.
+ * Negated wrappers always stay for client hydration.
+ */
+export function shouldStripFeatureElement(
+  flags: Record<string, boolean>,
+  featureKey: string | null,
+  negateAttr: string | null,
+): boolean {
+  if (negateAttr === 'true') {
+    return false;
+  }
+  return Boolean(featureKey && !flags[featureKey]);
+}
+
+/**
  * Create an HTMLRewriter that strips disabled feature sections AND injects
  * the flag snapshot into `<head>`.
  */
@@ -41,7 +58,8 @@ export function createFeatureGateTransformer(flags: Record<string, boolean>) {
     .on('[data-feature]', {
       element(element: Element) {
         const featureKey = element.getAttribute('data-feature');
-        if (featureKey && !flags[featureKey]) {
+        const negateAttr = element.getAttribute('data-toggly-negate');
+        if (shouldStripFeatureElement(flags, featureKey, negateAttr)) {
           element.remove();
         }
       },
