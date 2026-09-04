@@ -83,6 +83,26 @@ describe('togglyPlugin', () => {
     })
   })
 
+  it('should set request.country from cf-ipcountry via fromHttpRequest', async () => {
+    await app.register(togglyPlugin, { appKey: 'test-app' })
+
+    app.get('/test', async (request) => {
+      expect(request.toggly!.context.request?.country).toBe('US')
+      expect(request.toggly!.context.request?.userAgent).toBe('Chrome/120')
+      expect(request.toggly!.context.traits?.userAgent).toBe('Chrome/120')
+      return { success: true }
+    })
+
+    await app.inject({
+      method: 'GET',
+      url: '/test',
+      headers: {
+        'cf-ipcountry': 'US',
+        'user-agent': 'Chrome/120',
+      },
+    })
+  })
+
   it('should use custom identity extractor', async () => {
     await app.register(togglyPlugin, {
       appKey: 'test-app',

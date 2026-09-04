@@ -14,6 +14,7 @@ import fp from 'fastify-plugin'
 import {
   createTogglyClient,
   normalizeFeatureKeys,
+  fromHttpRequest,
   type TogglyClient,
   type EvaluationContext,
 } from '@ops-ai/toggly-node-core'
@@ -66,11 +67,17 @@ async function extractContext(
     return config.getContext(request)
   }
 
-  // Default: extract basic context
+  // Default: extract basic context + segment request headers
   const identity = await extractIdentity(request, config)
+  const fromReq = fromHttpRequest(
+    request.headers as Record<string, string | string[] | undefined>,
+    { identity },
+  )
 
   return {
-    identity,
+    identity: fromReq.identity,
+    groups: fromReq.groups,
+    request: fromReq.request,
     traits: {
       ip: request.ip,
       userAgent: request.headers['user-agent'],

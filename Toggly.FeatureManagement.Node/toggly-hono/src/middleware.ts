@@ -2,6 +2,7 @@ import type { Context, MiddlewareHandler, Handler } from 'hono'
 import {
   createTogglyClient,
   normalizeFeatureKeys,
+  fromHttpRequest,
   type TogglyClient,
   type EvaluationContext,
 } from '@ops-ai/toggly-node-core'
@@ -54,11 +55,24 @@ async function extractContext(
     return config.getContext(c)
   }
 
-  // Default: extract basic context
+  // Default: extract basic context + segment request headers
   const identity = await extractIdentity(c, config)
+  const headerBag: Record<string, string | undefined> = {}
+  for (const name of [
+    'user-agent',
+    'accept-language',
+    'cf-ipcountry',
+    'x-vercel-ip-country',
+    'cloudfront-viewer-country',
+  ]) {
+    headerBag[name] = c.req.header(name)
+  }
+  const fromReq = fromHttpRequest(headerBag, { identity })
 
   return {
-    identity,
+    identity: fromReq.identity,
+    groups: fromReq.groups,
+    request: fromReq.request,
     traits: {
       ip: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
       userAgent: c.req.header('user-agent'),
