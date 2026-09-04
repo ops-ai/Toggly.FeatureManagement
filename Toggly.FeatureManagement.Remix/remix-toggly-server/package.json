@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/remix-toggly-server",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Server-side utilities for Toggly Remix SDK - loaders, actions, and server utilities",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

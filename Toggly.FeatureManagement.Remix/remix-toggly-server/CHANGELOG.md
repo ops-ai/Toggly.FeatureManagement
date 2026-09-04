@@ -1,3 +1,15 @@
+## 1.8.1
+
+2026-09-04
+
+### Fixed
+- `mergeIdentityContext` used `hasOwnProperty` to decide whether a per-call
+  field was overridden, so a key present with an explicit `undefined` value
+  (e.g. `{ identity: user.id, claims: user.claims }` where `user.claims` is
+  optional) discarded ambient `claims`/`groups`/`request` instead of falling
+  back to it. Now matches the Next.js ambient contract: a field only counts
+  as overridden when its value is not `undefined` [OPS-891].
+
 ## 1.8.0
 
 2026-09-04
