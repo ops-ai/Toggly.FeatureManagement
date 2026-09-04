@@ -38,7 +38,7 @@ module Toggly
     # Feature types
     TYPES = %w[Release Experiment Ops Permission].freeze
 
-    # rubocop:disable Metrics/ParameterLists
+    # rubocop:disable-next Metrics/ParameterLists
     def initialize(
       feature_key:,
       feature_type: "Release",
@@ -64,7 +64,6 @@ module Toggly
       @context_kind = context_kind
       @context_requirement_type = context_requirement_type
     end
-    # rubocop:enable Metrics/ParameterLists
 
     # Create from a hash (e.g., from JSON)
     #
