@@ -440,6 +440,57 @@ describe('createTogglyAction', () => {
       expect(calledUrl).toContain('/definitions-signed/');
       expect(new URL(calledUrl).searchParams.get('u')).toBeNull();
     });
+
+    it('should field-merge partial isEnabled override with ambient claims/request on init', async () => {
+      const countryFlag = {
+        featureKey: 'country-flag',
+        filters: [
+          {
+            name: 'Country',
+            parameters: { Percentage: 100, 'Country:0': 'US' },
+          },
+        ],
+      };
+      const claimsFlag = {
+        featureKey: 'claims-flag',
+        filters: [
+          {
+            name: 'UserClaims',
+            parameters: {
+              Percentage: 100,
+              Claim: 'role',
+              Value: 'admin',
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([countryFlag, claimsFlag]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([countryFlag, claimsFlag]),
+        headers: { get: () => null },
+      });
+
+      const togglyAction = createTogglyAction({
+        ...defaultOptions,
+        getIdentity: () => 'user-1',
+        getClaims: () => ({ role: 'admin' }),
+      });
+      const request = new Request('https://example.com', {
+        headers: { 'cf-ipcountry': 'US' },
+      });
+      const context = await togglyAction.init(request);
+
+      // Partial override changes identity only — claims/request stay ambient.
+      expect(
+        await context.isEnabled('claims-flag', false, { identity: 'user-2' }),
+      ).toBe(true);
+      expect(
+        await context.isEnabled('country-flag', false, { identity: 'user-2' }),
+      ).toBe(true);
+    });
   });
 
   describe('requireFeature', () => {

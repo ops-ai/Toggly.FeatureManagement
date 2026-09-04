@@ -8,7 +8,7 @@ import type { FeatureFlags, IdentityContext } from '@ops-ai/remix-toggly-core';
 import { TogglyServerClient, createServerClient } from './client';
 import type { TogglyLoaderOptions } from './loader';
 import { extractEvalContext } from './extract-context';
-import { runWithEvalContext } from './eval-context-store';
+import { mergeIdentityContext, runWithEvalContext } from './eval-context-store';
 
 /**
  * Options for feature-gated actions
@@ -71,9 +71,9 @@ function buildActionContext(
     flags: client.snapshotFlags(ambient),
     context: ambient,
     isEnabled: (key, def, override) =>
-      client.isEnabled(key, override ?? ambient, def),
+      client.isEnabled(key, mergeIdentityContext(ambient, override), def),
     isDisabled: (key, def, override) =>
-      client.isDisabled(key, override ?? ambient, def),
+      client.isDisabled(key, mergeIdentityContext(ambient, override), def),
     evaluateGate: (keys, req, neg, override) =>
       client.evaluateGate(
         keys,
@@ -82,7 +82,7 @@ function buildActionContext(
         false,
         undefined,
         undefined,
-        override ?? ambient,
+        mergeIdentityContext(ambient, override),
       ),
   };
 }
