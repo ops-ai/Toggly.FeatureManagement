@@ -1,40 +1,77 @@
 import type { H3Event, EventHandler } from 'h3'
-import { createError, defineEventHandler, getHeader } from 'h3'
+import { createError, defineEventHandler } from 'h3'
 import { normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core'
 import type { TogglyClient } from '@ops-ai/nuxt-toggly-core'
-import type { FeatureMiddlewareOptions } from './types'
+import type { EvalContextArg } from '@ops-ai/nuxt-toggly-core'
+import {
+  mergeEvalArg,
+  mergeFeatureCheckOptions,
+  resolveFeatureCheckArgs,
+  toEvalOverrides,
+  type FeatureCheckOptions,
+} from './feature-check'
+import {
+  getCachedEventEvalContext,
+  resolveEventEvalContext,
+  syncDefaultEventAmbient,
+} from './event-context'
+import type {
+  EventEvalContextProviders,
+  FeatureMiddlewareOptions,
+} from './types'
 import { getServerToggly, useServerToggly } from './server-client'
 
 /**
- * Request-scoped view of the shared server client that binds identityOverride
- * without mutating process-wide `client.identity`.
+ * Request-scoped view of the shared server client that binds ambient
+ * EvalContext without mutating process-wide `client.identity`.
  */
-function bindRequestIdentity(
+function bindEventEvalContext(
   client: TogglyClient,
-  identity: string | undefined
+  ambient: FeatureCheckOptions,
 ): TogglyClient {
-  if (!identity) {
+  const hasAmbient =
+    ambient.identity != null ||
+    ambient.groups != null ||
+    ambient.claims != null ||
+    ambient.request != null ||
+    ambient.headers != null
+
+  if (!hasAmbient) {
     return client
   }
 
   return new Proxy(client, {
     get(target, prop, receiver) {
       if (prop === 'identity') {
-        return identity
+        return ambient.identity ?? target.identity
       }
       if (prop === 'isFeatureOn') {
         return (
           featureKey: string,
           context?: Parameters<TogglyClient['isFeatureOn']>[1],
           kind?: string,
-        ) => target.isFeatureOn(featureKey, context, kind, identity)
+          overrides?: EvalContextArg,
+        ) =>
+          target.isFeatureOn(
+            featureKey,
+            context,
+            kind,
+            mergeEvalArg(ambient, overrides),
+          )
       }
       if (prop === 'isFeatureOff') {
         return (
           featureKey: string,
           context?: Parameters<TogglyClient['isFeatureOff']>[1],
           kind?: string,
-        ) => target.isFeatureOff(featureKey, context, kind, identity)
+          overrides?: EvalContextArg,
+        ) =>
+          target.isFeatureOff(
+            featureKey,
+            context,
+            kind,
+            mergeEvalArg(ambient, overrides),
+          )
       }
       if (prop === 'evaluateFeatureGate') {
         return (
@@ -43,6 +80,7 @@ function bindRequestIdentity(
           negate?: boolean,
           context?: Parameters<TogglyClient['evaluateFeatureGate']>[3],
           kind?: string,
+          overrides?: EvalContextArg,
         ) =>
           target.evaluateFeatureGate(
             featureKeys,
@@ -50,7 +88,7 @@ function bindRequestIdentity(
             negate,
             context,
             kind,
-            identity,
+            mergeEvalArg(ambient, overrides),
           )
       }
       const value = Reflect.get(target, prop, receiver)
@@ -66,8 +104,25 @@ function bindRequestIdentity(
   })
 }
 
-function requestIdentity(event: H3Event): string | undefined {
-  return getHeader(event, 'x-toggly-identity') || undefined
+/**
+ * Middleware that resolves and caches ambient EvalContext on the H3 event.
+ *
+ * @example
+ * ```ts
+ * // server/middleware/toggly-context.ts
+ * export default defineTogglyContextMiddleware({
+ *   getIdentity: (event) => getCookie(event, 'userId'),
+ *   getGroups: () => ['beta'],
+ *   getClaims: () => ({ role: 'admin' }),
+ * })
+ * ```
+ */
+export function defineTogglyContextMiddleware(
+  providers: EventEvalContextProviders = {},
+): EventHandler {
+  return defineEventHandler(async (event: H3Event) => {
+    await resolveEventEvalContext(event, providers)
+  })
 }
 
 /**
@@ -110,14 +165,14 @@ export function defineFeatureMiddleware(
       })
     }
 
-    const identity = requestIdentity(event)
+    const ambient = await resolveEventEvalContext(event)
     const isEnabled = await client.evaluateFeatureGate(
       featureKeys,
       requirement,
       negate,
       undefined,
       undefined,
-      identity,
+      toEvalOverrides(ambient),
     )
 
     if (!isEnabled) {
@@ -172,14 +227,14 @@ export function defineFeatureHandler(
       })
     }
 
-    const identity = requestIdentity(event)
+    const ambient = await resolveEventEvalContext(event)
     const isEnabled = await client.evaluateFeatureGate(
       featureKeys,
       requirement,
       negate,
       undefined,
       undefined,
-      identity,
+      toEvalOverrides(ambient),
     )
 
     if (!isEnabled) {
@@ -199,7 +254,12 @@ export function defineFeatureHandler(
 }
 
 /**
- * Get the Toggly client from an H3 event context
+ * Get the Toggly client from an H3 event context.
+ * Uses cached ambient EvalContext when present (from
+ * `defineTogglyContextMiddleware` / `resolveEventEvalContext`); otherwise
+ * binds sync defaults from H3 headers (`x-toggly-identity` + `fromHttpRequest`).
+ * For async providers, call `resolveEventEvalContext` (or the context
+ * middleware) before this helper.
  *
  * @example
  * ```ts
@@ -212,11 +272,24 @@ export function defineFeatureHandler(
  */
 export function useEventToggly(event: H3Event) {
   const client = useServerToggly()
-  return bindRequestIdentity(client, requestIdentity(event))
+  const ambient =
+    getCachedEventEvalContext(event) ?? syncDefaultEventAmbient(event)
+  return bindEventEvalContext(client, ambient)
 }
 
 /**
- * Check if a feature is enabled for the current request
+ * Resolve ambient EvalContext (providers + headers) and return a bound client.
+ */
+export async function getEventToggly(event: H3Event): Promise<TogglyClient> {
+  const client = useServerToggly()
+  const ambient = await resolveEventEvalContext(event)
+  return bindEventEvalContext(client, ambient)
+}
+
+/**
+ * Check if a feature is enabled for the current request.
+ * Ambient EvalContext is resolved from providers / H3 headers; pass
+ * `identityOrOptions` to override field-by-field.
  *
  * @example
  * ```ts
@@ -230,7 +303,8 @@ export function useEventToggly(event: H3Event) {
  */
 export async function isEventFeatureOn(
   event: H3Event,
-  featureKey: string
+  featureKey: string,
+  identityOrOptions?: string | FeatureCheckOptions,
 ): Promise<boolean> {
   const client = getServerToggly()
 
@@ -239,11 +313,16 @@ export async function isEventFeatureOn(
     return false
   }
 
+  const ambient = await resolveEventEvalContext(event)
+  const merged = mergeFeatureCheckOptions(
+    ambient,
+    resolveFeatureCheckArgs(identityOrOptions),
+  )
   return client.isFeatureOn(
     featureKey,
     undefined,
     undefined,
-    requestIdentity(event),
+    toEvalOverrides(merged),
   )
 }
 
@@ -252,9 +331,10 @@ export async function isEventFeatureOn(
  */
 export async function isEventFeatureOff(
   event: H3Event,
-  featureKey: string
+  featureKey: string,
+  identityOrOptions?: string | FeatureCheckOptions,
 ): Promise<boolean> {
-  const isOn = await isEventFeatureOn(event, featureKey)
+  const isOn = await isEventFeatureOn(event, featureKey, identityOrOptions)
   return !isOn
 }
 
@@ -277,7 +357,8 @@ export async function evaluateEventFeatureGate(
   event: H3Event,
   featureKeys: string[],
   requirement: 'all' | 'any' = 'all',
-  negate: boolean = false
+  negate: boolean = false,
+  identityOrOptions?: string | FeatureCheckOptions,
 ): Promise<boolean> {
   const client = getServerToggly()
 
@@ -286,12 +367,17 @@ export async function evaluateEventFeatureGate(
     return false
   }
 
+  const ambient = await resolveEventEvalContext(event)
+  const merged = mergeFeatureCheckOptions(
+    ambient,
+    resolveFeatureCheckArgs(identityOrOptions),
+  )
   return client.evaluateFeatureGate(
     featureKeys,
     requirement,
     negate,
     undefined,
     undefined,
-    requestIdentity(event),
+    toEvalOverrides(merged),
   )
 }

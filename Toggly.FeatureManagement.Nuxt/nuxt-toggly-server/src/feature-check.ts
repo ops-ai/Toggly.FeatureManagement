@@ -29,6 +29,27 @@ export function resolveFeatureCheckArgs(
 }
 
 /**
+ * Merge ambient defaults with per-call options. Explicit per-call fields win
+ * field-by-field; missing per-call fields keep ambient values.
+ */
+export function mergeFeatureCheckOptions(
+  ambient: FeatureCheckOptions | undefined,
+  perCall: FeatureCheckOptions,
+): FeatureCheckOptions {
+  if (ambient == null) {
+    return perCall
+  }
+
+  return {
+    identity: perCall.identity ?? ambient.identity,
+    groups: perCall.groups ?? ambient.groups,
+    claims: perCall.claims ?? ambient.claims,
+    request: perCall.request ?? ambient.request,
+    headers: perCall.headers ?? ambient.headers,
+  }
+}
+
+/**
  * Map FeatureCheckOptions into core EvalContext overrides.
  * When `headers` is set, maps via `fromHttpRequest`; explicit `request` fields win.
  */
@@ -70,4 +91,18 @@ export function toEvalOverrides(
   if (claims != null) overrides.claims = claims
   if (resolvedRequest != null) overrides.request = resolvedRequest
   return overrides
+}
+
+/**
+ * Merge ambient FeatureCheckOptions with a core EvalContextArg override.
+ */
+export function mergeEvalArg(
+  ambient: FeatureCheckOptions,
+  overrides?: EvalContextArg,
+): EvalContextArg | undefined {
+  const perCall =
+    typeof overrides === 'string'
+      ? { identity: overrides }
+      : (overrides ?? {})
+  return toEvalOverrides(mergeFeatureCheckOptions(ambient, perCall))
 }
