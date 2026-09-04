@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-fastify",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Toggly feature flags Fastify plugin",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

@@ -146,11 +146,54 @@ describe('togglyMiddleware', () => {
 
     await middleware(req, res, next)
 
-    expect((req as TogglyRequest).toggly?.context).toEqual({
-      identity: 'context-identity',
-      groups: ['admin'],
-      traits: { custom: 'value' },
+    const context = (req as TogglyRequest).toggly?.context
+    expect(context?.identity).toBe('context-identity')
+    expect(context?.groups).toEqual(['admin'])
+    expect(context?.traits).toEqual({ custom: 'value' })
+  })
+
+  it('should attach getGroups and getClaims to ambient context', async () => {
+    const middleware = togglyMiddleware({
+      appKey: 'test-app',
+      getIdentity: () => 'user-claims',
+      getGroups: () => ['beta', 'staff'],
+      getClaims: () => ({ role: 'admin', plan: 'pro' }),
     })
+    const req = createMockRequest()
+    const res = createMockResponse()
+    const next = vi.fn()
+
+    await middleware(req, res, next)
+
+    const context = (req as TogglyRequest).toggly?.context
+    expect(context?.identity).toBe('user-claims')
+    expect(context?.groups).toEqual(['beta', 'staff'])
+    expect(context?.claims).toEqual({ role: 'admin', plan: 'pro' })
+  })
+
+  it('should fill request.country from cf-ipcountry when getContext omits request', async () => {
+    const middleware = togglyMiddleware({
+      appKey: 'test-app',
+      getContext: () => ({
+        identity: 'ctx-user',
+        groups: ['admin'],
+        claims: { role: 'admin' },
+      }),
+    })
+    const req = createMockRequest({
+      headers: { 'cf-ipcountry': 'DE', 'user-agent': 'Chrome/120' },
+    })
+    const res = createMockResponse()
+    const next = vi.fn()
+
+    await middleware(req, res, next)
+
+    const context = (req as TogglyRequest).toggly?.context
+    expect(context?.identity).toBe('ctx-user')
+    expect(context?.groups).toEqual(['admin'])
+    expect(context?.claims).toEqual({ role: 'admin' })
+    expect(context?.request?.country).toBe('DE')
+    expect(context?.request?.userAgent).toBe('Chrome/120')
   })
 
   it('should provide feature checking functions', async () => {

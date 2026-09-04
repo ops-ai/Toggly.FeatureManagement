@@ -44,19 +44,9 @@ async function extractIdentity(
 }
 
 /**
- * Get evaluation context from Hono context
+ * Collect segment-relevant headers from a Hono request
  */
-async function extractContext(
-  c: Context,
-  config: TogglyHonoConfig
-): Promise<EvaluationContext> {
-  // Use custom extractor if provided
-  if (config.getContext) {
-    return config.getContext(c)
-  }
-
-  // Default: extract basic context + segment request headers
-  const identity = await extractIdentity(c, config)
+function segmentHeaders(c: Context): Record<string, string | undefined> {
   const headerBag: Record<string, string | undefined> = {}
   for (const name of [
     'user-agent',
@@ -67,11 +57,38 @@ async function extractContext(
   ]) {
     headerBag[name] = c.req.header(name)
   }
-  const fromReq = fromHttpRequest(headerBag, { identity })
+  return headerBag
+}
+
+/**
+ * Get evaluation context from Hono context
+ */
+async function extractContext(
+  c: Context,
+  config: TogglyHonoConfig
+): Promise<EvaluationContext> {
+  const headerBag = segmentHeaders(c)
+  const headerRequest = fromHttpRequest(headerBag).request
+
+  // Custom full context: use returned fields, fill missing request from headers
+  if (config.getContext) {
+    const custom = await config.getContext(c)
+    return {
+      ...custom,
+      request: custom.request ?? headerRequest,
+    }
+  }
+
+  // Default: identity / groups / claims providers + segment request headers
+  const identity = await extractIdentity(c, config)
+  const groups = config.getGroups ? await config.getGroups(c) : undefined
+  const claims = config.getClaims ? await config.getClaims(c) : undefined
+  const fromReq = fromHttpRequest(headerBag, { identity, groups, claims })
 
   return {
     identity: fromReq.identity,
     groups: fromReq.groups,
+    claims: fromReq.claims,
     request: fromReq.request,
     traits: {
       ip: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),

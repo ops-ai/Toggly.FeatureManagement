@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-express",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Toggly feature flags middleware for Express.js applications",
   "keywords": [
     "feature-flags",

@@ -62,21 +62,28 @@ async function extractContext(
   request: FastifyRequest,
   config: TogglyFastifyConfig
 ): Promise<EvaluationContext> {
-  // Use custom extractor if provided
+  const headers = request.headers as Record<string, string | string[] | undefined>
+  const headerRequest = fromHttpRequest(headers).request
+
+  // Custom full context: use returned fields, fill missing request from headers
   if (config.getContext) {
-    return config.getContext(request)
+    const custom = await config.getContext(request)
+    return {
+      ...custom,
+      request: custom.request ?? headerRequest,
+    }
   }
 
-  // Default: extract basic context + segment request headers
+  // Default: identity / groups / claims providers + segment request headers
   const identity = await extractIdentity(request, config)
-  const fromReq = fromHttpRequest(
-    request.headers as Record<string, string | string[] | undefined>,
-    { identity },
-  )
+  const groups = config.getGroups ? await config.getGroups(request) : undefined
+  const claims = config.getClaims ? await config.getClaims(request) : undefined
+  const fromReq = fromHttpRequest(headers, { identity, groups, claims })
 
   return {
     identity: fromReq.identity,
     groups: fromReq.groups,
+    claims: fromReq.claims,
     request: fromReq.request,
     traits: {
       ip: request.ip,

@@ -201,6 +201,51 @@ describe('togglyMiddleware', () => {
     await makeRequest(app, 'GET', '/test')
   })
 
+  it('should attach getGroups and getClaims to ambient context', async () => {
+    app.use(
+      togglyMiddleware({
+        appKey: 'test-app',
+        getIdentity: () => 'user-claims',
+        getGroups: () => ['beta', 'staff'],
+        getClaims: () => ({ role: 'admin', plan: 'pro' }),
+      })
+    )
+    app.use(async (ctx: Context) => {
+      expect(ctx.state.toggly!.context.identity).toBe('user-claims')
+      expect(ctx.state.toggly!.context.groups).toEqual(['beta', 'staff'])
+      expect(ctx.state.toggly!.context.claims).toEqual({ role: 'admin', plan: 'pro' })
+      ctx.body = { success: true }
+    })
+
+    await makeRequest(app, 'GET', '/test')
+  })
+
+  it('should fill request.country from cf-ipcountry when getContext omits request', async () => {
+    app.use(
+      togglyMiddleware({
+        appKey: 'test-app',
+        getContext: () => ({
+          identity: 'ctx-user',
+          groups: ['admin'],
+          claims: { role: 'admin' },
+        }),
+      })
+    )
+    app.use(async (ctx: Context) => {
+      expect(ctx.state.toggly!.context.identity).toBe('ctx-user')
+      expect(ctx.state.toggly!.context.groups).toEqual(['admin'])
+      expect(ctx.state.toggly!.context.claims).toEqual({ role: 'admin' })
+      expect(ctx.state.toggly!.context.request?.country).toBe('DE')
+      expect(ctx.state.toggly!.context.request?.userAgent).toBe('Chrome/120')
+      ctx.body = { success: true }
+    })
+
+    await makeRequest(app, 'GET', '/test', {
+      'cf-ipcountry': 'DE',
+      'user-agent': 'Chrome/120',
+    })
+  })
+
   it('should provide feature checking functions', async () => {
     app.use(togglyMiddleware({ appKey: 'test-app' }))
     app.use(async (ctx: Context) => {

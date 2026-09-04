@@ -18,7 +18,21 @@ export interface TogglyKoaConfig extends TogglyServerConfig {
   getIdentity?: (ctx: Context) => string | undefined | Promise<string | undefined>
 
   /**
-   * Function to extract evaluation context from Koa context
+   * Function to extract group memberships from Koa context
+   */
+  getGroups?: (ctx: Context) => string[] | undefined | Promise<string[] | undefined>
+
+  /**
+   * Function to extract principal / JWT-style claims from Koa context
+   */
+  getClaims?: (
+    ctx: Context
+  ) => Record<string, string> | undefined | Promise<Record<string, string> | undefined>
+
+  /**
+   * Function to extract evaluation context from Koa context.
+   * When provided, returned fields are used; missing `request` is still
+   * filled from HTTP headers via `fromHttpRequest`.
    */
   getContext?: (ctx: Context) => EvaluationContext | Promise<EvaluationContext>
 }
