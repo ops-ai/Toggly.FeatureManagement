@@ -1,22 +1,29 @@
 import type { EvalContext } from './types'
 
-/** Minimal header bag (Express / Fetch / IncomingMessage compatible). */
-export type HttpHeaderBag = {
-  get?(name: string): string | null | undefined
-  [key: string]: string | string[] | undefined | ((name: string) => string | null | undefined)
+/** Fetch Headers / Map-like bags with a `get` method. */
+export type HttpHeadersLike = {
+  get(name: string): string | null | undefined
 }
 
-function headerValue(
-  headers: HttpHeaderBag | Record<string, string | string[] | undefined>,
-  name: string,
-): string | undefined {
+/**
+ * Header bag accepted by `fromHttpRequest`.
+ * Union avoids an index signature that conflicts with the Fetch `Headers` class.
+ */
+export type HttpHeaderBag =
+  | HttpHeadersLike
+  | Record<string, string | string[] | undefined>
+
+function isHeadersLike(headers: HttpHeaderBag): headers is HttpHeadersLike {
+  return typeof (headers as HttpHeadersLike).get === 'function'
+}
+
+function headerValue(headers: HttpHeaderBag, name: string): string | undefined {
   const lower = name.toLowerCase()
-  if (typeof (headers as HttpHeaderBag).get === 'function') {
-    const v = (headers as HttpHeaderBag).get!(lower) ?? (headers as HttpHeaderBag).get!(name)
+  if (isHeadersLike(headers)) {
+    const v = headers.get(lower) ?? headers.get(name)
     return typeof v === 'string' && v.length > 0 ? v : undefined
   }
-  const rec = headers as Record<string, string | string[] | undefined>
-  const raw = rec[lower] ?? rec[name]
+  const raw = headers[lower] ?? headers[name]
   if (Array.isArray(raw)) {
     return raw[0]
   }
@@ -28,7 +35,7 @@ function headerValue(
  * Does not set identity/groups/claims — merge those separately.
  */
 export function fromHttpRequest(
-  headers: HttpHeaderBag | Record<string, string | string[] | undefined>,
+  headers: HttpHeaderBag,
   extras: Omit<EvalContext, 'request'> = {},
 ): EvalContext {
   return {

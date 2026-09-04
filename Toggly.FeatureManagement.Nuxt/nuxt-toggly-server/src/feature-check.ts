@@ -39,10 +39,7 @@ export function toEvalOverrides(
 
   let resolvedRequest = request
   if (headers != null) {
-    const fromReq = fromHttpRequest(
-      headers as Headers | Record<string, string | string[] | undefined>,
-      { identity, groups, claims },
-    )
+    const fromReq = fromHttpRequest(headers, { identity, groups, claims })
     resolvedRequest = {
       ...fromReq.request,
       ...request,

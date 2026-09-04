@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.3
+
+2026-09-03
+
+### Fixed
+- `HttpHeaderBag` is a `get()`-or-`Record` union so Fetch `Headers` assigns
+  to `fromHttpRequest` without conflicting index signatures [OPS-874].
+
 ## 2.0.2
 
 2026-09-03

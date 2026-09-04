@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.1
+
+2026-09-03
+
+### Fixed
+- Drop unnecessary `headers` cast; `@ops-ai/toggly-eval` 2.0.3 accepts Fetch
+  `Headers` in `fromHttpRequest` [OPS-874].
+
 ## 1.4.0
 
 2026-09-03

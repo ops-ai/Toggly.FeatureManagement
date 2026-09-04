@@ -31,4 +31,19 @@ describe('fromHttpRequest', () => {
     expect(ctx.request?.userAgent).toBe('UA')
     expect(ctx.request?.country).toBe('DE')
   })
+
+  it('accepts Fetch Headers instances', () => {
+    const headers = new Headers({
+      'user-agent': 'Mozilla/5.0',
+      'accept-language': 'fr-FR',
+      'cf-ipcountry': 'FR',
+    })
+    const ctx = fromHttpRequest(headers, { identity: 'u2' })
+    expect(ctx.identity).toBe('u2')
+    expect(ctx.request).toEqual({
+      userAgent: 'Mozilla/5.0',
+      acceptLanguage: 'fr-FR',
+      country: 'FR',
+    })
+  })
 })
