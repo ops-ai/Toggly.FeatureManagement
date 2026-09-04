@@ -9,7 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Registry of filter evaluators.
  *
- * <p>Pre-registers built-in evaluators and allows custom evaluator registration.</p>
+ * <p>Pre-registers built-in evaluators (including Microsoft.* and segment
+ * aliases) and allows custom evaluator registration.</p>
  */
 public final class EvaluatorRegistry {
 
@@ -19,12 +20,28 @@ public final class EvaluatorRegistry {
      * Creates a new registry with built-in evaluators.
      */
     public EvaluatorRegistry() {
-        // Register built-in evaluators
         register("AlwaysOn", AlwaysOnEvaluator.INSTANCE);
+        register("AlwaysOff", AlwaysOffEvaluator.INSTANCE);
+
         register("Percentage", PercentageEvaluator.INSTANCE);
+        register("Microsoft.Percentage", PercentageEvaluator.INSTANCE);
+
         register("TimeWindow", TimeWindowEvaluator.INSTANCE);
+        register("Microsoft.TimeWindow", TimeWindowEvaluator.INSTANCE);
+
         register("Targeting", TargetingEvaluator.INSTANCE);
+        register("Microsoft.Targeting", TargetingEvaluator.INSTANCE);
+
         register("ContextProperty", ContextPropertyEvaluator.INSTANCE);
+
+        register("BrowserFamily", BrowserFamilyEvaluator.INSTANCE);
+        register("BrowserLanguage", BrowserLanguageEvaluator.INSTANCE);
+        register("Country", CountryEvaluator.INSTANCE);
+        register("CountryFamily", CountryEvaluator.INSTANCE);
+        register("DeviceType", DeviceTypeEvaluator.INSTANCE);
+        register("OS", OperatingSystemEvaluator.INSTANCE);
+        register("OperatingSystem", OperatingSystemEvaluator.INSTANCE);
+        register("UserClaims", UserClaimsEvaluator.INSTANCE);
     }
 
     /**
@@ -71,7 +88,7 @@ public final class EvaluatorRegistry {
     public boolean evaluateFilter(FeatureFilter filter, String featureKey, EvaluationContext context) {
         FilterEvaluator evaluator = get(filter.getName());
         if (evaluator == null) {
-            // Unknown filter type - treat as false for safety
+            // Unknown filter type - treat as false for safety (fail closed)
             return false;
         }
         return evaluator.evaluate(filter, featureKey, context);
