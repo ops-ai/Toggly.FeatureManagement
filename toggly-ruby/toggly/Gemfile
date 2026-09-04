@@ -10,7 +10,7 @@ group :development, :test do
   gem "rspec", "~> 3.12"
   gem "rubocop", "~> 1.90", require: false
   gem "rubocop-rspec", "~> 2.24", require: false
-  gem "simplecov", "~> 0.22", require: false
+  gem "simplecov", "~> 1.1", require: false
   gem "webmock", "~> 3.26"
   gem "websocket-client-simple", "~> 0.8"
   gem "yard", "~> 0.9", require: false
