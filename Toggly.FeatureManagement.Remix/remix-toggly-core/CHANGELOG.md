@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 1.6.0
+
+2026-09-03
+
+### Added
+- `request` on `IdentityContext` (`userAgent`, `acceptLanguage`, `country`) for
+  segment filters on the local-eval rail [OPS-874].
+- Re-export `fromHttpRequest` from `@ops-ai/toggly-eval`.
+
 ## 1.5.0
 
 2026-09-02

@@ -230,6 +230,44 @@ describe('TogglyServer', () => {
       expect(result).toBe(true);
     });
 
+    it('evaluates UserClaims filters using config claims', async () => {
+      const claimsDef = [
+        {
+          featureKey: 'ClaimsFlag',
+          filters: [
+            {
+              name: 'UserClaims',
+              parameters: { Percentage: 100, Claim: 'role', Value: 'admin' },
+            },
+          ],
+        },
+      ];
+      const bodyText = JSON.stringify(claimsDef);
+      const claimsResponse = {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () => bodyText,
+        json: async () => claimsDef,
+      } as Response;
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(claimsResponse);
+      const denied = new TogglyServer({
+        appKey: 'test-key',
+        identity: 'user-1',
+        claims: { role: 'user' },
+      });
+      expect(await denied.getFlag('ClaimsFlag')).toBe(false);
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(claimsResponse);
+      const allowed = new TogglyServer({
+        appKey: 'test-key',
+        identity: 'user-1',
+        claims: { role: 'admin' },
+      });
+      expect(await allowed.getFlag('ClaimsFlag')).toBe(true);
+    });
+
     it('should return false for disabled flag', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: false }));
 

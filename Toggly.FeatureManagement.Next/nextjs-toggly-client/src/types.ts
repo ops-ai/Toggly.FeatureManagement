@@ -37,6 +37,14 @@ export interface TogglyContextValue {
   refresh: () => Promise<void>
   /** Set user identity */
   setIdentity: (identity: string) => Promise<void>
+  /**
+   * Update identity and/or targeting groups/claims on the shared client config.
+   */
+  setContext: (context: {
+    identity?: string
+    groups?: string[]
+    claims?: Record<string, string>
+  }) => Promise<void>
   /** Check if a feature is enabled */
   isFeatureOn: (
     featureKey: string,

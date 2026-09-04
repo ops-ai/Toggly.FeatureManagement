@@ -2,6 +2,7 @@ import type { Context, Middleware, Next } from 'koa'
 import {
   createTogglyClient,
   normalizeFeatureKeys,
+  fromHttpRequest,
   type TogglyClient,
   type EvaluationContext,
 } from '@ops-ai/toggly-node-core'
@@ -54,11 +55,17 @@ async function extractContext(
     return config.getContext(ctx)
   }
 
-  // Default: extract basic context
+  // Default: extract basic context + segment request headers
   const identity = await extractIdentity(ctx, config)
+  const fromReq = fromHttpRequest(
+    ctx.headers as Record<string, string | string[] | undefined>,
+    { identity },
+  )
 
   return {
-    identity,
+    identity: fromReq.identity,
+    groups: fromReq.groups,
+    request: fromReq.request,
     traits: {
       ip: ctx.ip,
       userAgent: ctx.get('user-agent'),

@@ -1,3 +1,29 @@
+## 1.8.1
+
+2026-09-03
+
+### Fixed
+- `setContext` re-evaluates the local feature snapshot and notifies subscribers
+  so React hooks refresh after claims/groups/identity changes; remote mode
+  refreshes when any of those fields change (not only identity) [OPS-874].
+
+### Changed
+- Raise `@ops-ai/toggly-eval` floor to `^2.0.3`.
+- Monorepo installs link in-repo `@ops-ai/toggly-eval@2.0.3` via
+  `workspace:^` until that version is published [OPS-874].
+
+## 1.8.0
+
+2026-09-03
+
+### Added
+- Per-call `EvalContextOverrides` (`identity`, `groups`, `claims`, `request`)
+  for local evaluation; string identity override remains supported [OPS-874].
+- Re-export `fromHttpRequest` from `@ops-ai/toggly-eval` for header → request
+  mapping (Country / BrowserFamily / language filters).
+- `setContext({ identity?, groups?, claims? })` to update shared config for
+  local targeting without a full re-init.
+
 ## 1.7.0
 
 2026-09-02

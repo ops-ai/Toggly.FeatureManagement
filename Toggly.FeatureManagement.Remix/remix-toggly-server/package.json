@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/remix-toggly-server",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Server-side utilities for Toggly Remix SDK - loaders, actions, and server utilities",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -47,7 +47,7 @@
   },
   "homepage": "https://docs.toggly.io/sdks/remix/server",
   "dependencies": {
-    "@ops-ai/remix-toggly-core": "^1.5.0",
+    "@ops-ai/remix-toggly-core": "^1.6.0",
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "ws": "^8.0.0",
     "@ops-ai/toggly-signed-defs": "^1.2.3"

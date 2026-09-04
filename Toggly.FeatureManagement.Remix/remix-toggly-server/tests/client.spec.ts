@@ -313,6 +313,37 @@ describe('TogglyServerClient', () => {
       expect(results).toEqual([true, false, true]);
     });
 
+    it('should evaluate Country from IdentityContext.request', async () => {
+      const countryFlag = {
+        featureKey: 'country-flag',
+        filters: [
+          {
+            name: 'Country',
+            parameters: { Percentage: 100, 'Country:0': 'US' },
+          },
+        ],
+      };
+      const body = JSON.stringify([countryFlag]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([countryFlag]),
+        headers: { get: () => null },
+      });
+
+      const client = new TogglyServerClient(defaultConfig);
+      await client.init('user-1');
+
+      expect(await client.isEnabled('country-flag')).toBe(false);
+      expect(
+        await client.isEnabled('country-flag', {
+          identity: 'user-1',
+          request: { country: 'us' },
+        }),
+      ).toBe(true);
+    });
+
     it('should fetch definitions-signed without identity query params', async () => {
       const flags: FeatureFlags = { feature1: true };
       mockFetch.mockResolvedValueOnce(mockDefsFetchResponse(flags));

@@ -5,6 +5,7 @@ import {
 } from '@ops-ai/nextjs-toggly-core'
 import {
   resolveFeatureCheckArgs,
+  toEvalOverrides,
   type FeatureCheckOptions,
 } from './feature-check'
 import { waitForServerToggly } from './server-client'
@@ -38,9 +39,13 @@ export async function checkFeature(
     return false
   }
 
-  const { identity, context, contextKind } =
-    resolveFeatureCheckArgs(identityOrOptions)
-  return client.isFeatureOn(featureKey, context, contextKind, identity)
+  const options = resolveFeatureCheckArgs(identityOrOptions)
+  return client.isFeatureOn(
+    featureKey,
+    options.context,
+    options.contextKind,
+    toEvalOverrides(options),
+  )
 }
 
 /**
@@ -79,6 +84,10 @@ export async function checkFeatureGate(options: {
   requirement?: FeatureRequirement
   negate?: boolean
   identity?: string
+  groups?: string[]
+  claims?: Record<string, string>
+  request?: FeatureCheckOptions['request']
+  headers?: FeatureCheckOptions['headers']
   context?: FeatureCheckOptions['context']
   contextKind?: string
 }): Promise<FeatureGateResult> {
@@ -87,6 +96,10 @@ export async function checkFeatureGate(options: {
     requirement = 'all',
     negate = false,
     identity,
+    groups,
+    claims,
+    request,
+    headers,
     context,
     contextKind,
   } = options
@@ -109,7 +122,7 @@ export async function checkFeatureGate(options: {
       negate,
       context,
       contextKind,
-      identity
+      toEvalOverrides({ identity, groups, claims, request, headers }),
     )
 
     return {
@@ -146,6 +159,10 @@ export function withFeature<T extends unknown[], R>(
     requirement?: FeatureRequirement
     negate?: boolean
     identity?: string
+    groups?: string[]
+    claims?: Record<string, string>
+    request?: FeatureCheckOptions['request']
+    headers?: FeatureCheckOptions['headers']
     context?: FeatureCheckOptions['context']
     contextKind?: string
     onDisabled?: () => Promise<R>
@@ -155,6 +172,10 @@ export function withFeature<T extends unknown[], R>(
     requirement = 'all',
     negate = false,
     identity,
+    groups,
+    claims,
+    request,
+    headers,
     context,
     contextKind,
     onDisabled,
@@ -166,6 +187,10 @@ export function withFeature<T extends unknown[], R>(
       requirement,
       negate,
       identity,
+      groups,
+      claims,
+      request,
+      headers,
       context,
       contextKind,
     })
@@ -219,15 +244,14 @@ export async function getFeatureStates(
     return Object.fromEntries(featureKeys.map((key) => [key, false]))
   }
 
-  const { identity, context, contextKind } =
-    resolveFeatureCheckArgs(identityOrOptions)
+  const options = resolveFeatureCheckArgs(identityOrOptions)
   const result: Record<string, boolean> = {}
   for (const key of featureKeys) {
     result[key] = await client.isFeatureOn(
       key,
-      context,
-      contextKind,
-      identity
+      options.context,
+      options.contextKind,
+      toEvalOverrides(options),
     )
   }
 

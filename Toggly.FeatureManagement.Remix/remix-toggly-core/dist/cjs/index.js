@@ -357,6 +357,10 @@ Object.defineProperty(exports, "evaluateDefinitions", {
     enumerable: true,
     get: function () { return togglyEval.evaluateDefinitions; }
 });
+Object.defineProperty(exports, "fromHttpRequest", {
+    enumerable: true,
+    get: function () { return togglyEval.fromHttpRequest; }
+});
 Object.defineProperty(exports, "indexDefinitions", {
     enumerable: true,
     get: function () { return togglyEval.indexDefinitions; }

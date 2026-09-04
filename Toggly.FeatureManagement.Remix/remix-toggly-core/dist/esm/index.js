@@ -1,7 +1,7 @@
 import { appendEvaluationContext, evaluateEvaluatedGate, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types';
 export { clearRegisteredContexts, normalizeEntityContext, registerContext, resolveEvaluatedDefinition, toBooleanDefinitions } from '@ops-ai/toggly-hooks-types';
 import { evaluateFeatureGate as evaluateFeatureGate$1, evaluateDefinitions } from '@ops-ai/toggly-eval';
-export { evaluateDefinitions, indexDefinitions, parseDefinitionsPayload, snapshotEvaluatedBooleans } from '@ops-ai/toggly-eval';
+export { evaluateDefinitions, fromHttpRequest, indexDefinitions, parseDefinitionsPayload, snapshotEvaluatedBooleans } from '@ops-ai/toggly-eval';
 
 /**
  * Core types for Toggly Remix SDK

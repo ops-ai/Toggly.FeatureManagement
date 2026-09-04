@@ -10,6 +10,7 @@ import {
 import WebSocket from 'ws'
 import {
   resolveFeatureCheckArgs,
+  toEvalOverrides,
   type FeatureCheckOptions,
 } from './feature-check'
 import type { TogglyServerConfig, TogglyStorage } from './types'
@@ -345,7 +346,8 @@ export async function refreshServerToggly(): Promise<FeatureDefinitions | null> 
 
 /**
  * Check if a feature is enabled on the server.
- * Pass a user `identity` string or `{ identity, context, contextKind }` for
+ * Pass a user `identity` string or
+ * `{ identity, groups, claims, request, headers, context, contextKind }` for
  * per-call local eval. The shared client is reused; identity is not mutated.
  */
 export async function isServerFeatureOn(
@@ -358,9 +360,13 @@ export async function isServerFeatureOn(
       '[Toggly] Server client not initialized. Call initServerToggly() first.'
     )
   }
-  const { identity, context, contextKind } =
-    resolveFeatureCheckArgs(identityOrOptions)
-  return client.isFeatureOn(featureKey, context, contextKind, identity)
+  const options = resolveFeatureCheckArgs(identityOrOptions)
+  return client.isFeatureOn(
+    featureKey,
+    options.context,
+    options.contextKind,
+    toEvalOverrides(options),
+  )
 }
 
 /**

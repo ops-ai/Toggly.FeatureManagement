@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-koa",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Toggly feature flags Koa middleware",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

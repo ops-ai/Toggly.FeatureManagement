@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.4.1
+
+2026-09-03
+
+### Fixed
+- Drop unnecessary `headers` cast; `@ops-ai/toggly-eval` 2.0.3 accepts Fetch
+  `Headers` in `fromHttpRequest` [OPS-874].
+
+## 1.4.0
+
+2026-09-03
+
+### Added
+- `FeatureCheckOptions` accepts `groups`, `claims`, `request`, and `headers`
+  for full local EvalContext (segment + UserClaims filters) [OPS-874].
+- `headers` map via `fromHttpRequest`; explicit `request` fields win.
+- Cache keys hash groups, claims, and resolved request alongside entity
+  context. Identity-only keys keep the historical shape.
+- `<Feature>` / `<FeatureVariant>` accept the same override props.
+
 ## 1.3.1
 
 2026-09-03

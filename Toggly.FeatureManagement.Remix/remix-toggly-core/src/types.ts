@@ -82,6 +82,12 @@ export interface IdentityContext {
   traits?: Record<string, string | number | boolean>;
   /** Custom claims for targeting */
   claims?: Record<string, string>;
+  /** HTTP request segment fields (UA / Accept-Language / country) */
+  request?: {
+    userAgent?: string;
+    acceptLanguage?: string;
+    country?: string;
+  };
 }
 
 /**

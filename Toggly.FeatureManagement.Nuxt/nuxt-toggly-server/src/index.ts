@@ -23,7 +23,15 @@ export type {
   TogglyEventContext,
   TogglyStorage,
   FeatureMiddlewareOptions,
+  FeatureCheckOptions,
 } from './types'
+
+export {
+  resolveFeatureCheckArgs,
+  toEvalOverrides,
+} from './feature-check'
+
+export { fromHttpRequest } from '@ops-ai/nuxt-toggly-core'
 
 // Server client
 export {

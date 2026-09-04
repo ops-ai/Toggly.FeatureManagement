@@ -1,3 +1,11 @@
+## 1.9.0
+
+2026-09-03
+
+### Added
+- Forward config `claims` as EvalContext.claims for UserClaims filters on
+  the local-eval server rail [OPS-874].
+
 ## 1.8.1
 
 2026-09-03

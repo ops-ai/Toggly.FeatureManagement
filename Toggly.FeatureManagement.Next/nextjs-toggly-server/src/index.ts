@@ -59,4 +59,8 @@ export type {
   FeatureRequirement,
   Hook,
   HookMetadata,
+  EvalContextOverrides,
+  EvalContextArg,
 } from '@ops-ai/nextjs-toggly-core'
+
+export { fromHttpRequest } from '@ops-ai/nextjs-toggly-core'

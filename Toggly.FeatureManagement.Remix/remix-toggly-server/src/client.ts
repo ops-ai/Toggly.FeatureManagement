@@ -177,6 +177,7 @@ export class TogglyServerClient {
           identityOverride.claims ??
           this.config.claims,
         claims,
+        request: identityOverride.request,
         entity: entityContext ?? null,
       };
     }

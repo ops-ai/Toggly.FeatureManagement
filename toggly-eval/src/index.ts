@@ -35,7 +35,7 @@ export {
 } from './context-property'
 
 export { fromHttpRequest } from './http'
-export type { HttpHeaderBag } from './http'
+export type { HttpHeaderBag, HttpHeadersLike } from './http'
 
 export {
   evaluateDefinition,
