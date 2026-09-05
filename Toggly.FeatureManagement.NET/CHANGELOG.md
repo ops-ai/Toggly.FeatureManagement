@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.6.2
+
+2026-09-05
+
+### Changed
+- Package author, company, icon, and repository metadata now present as Toggly
+  for all eleven NuGet packages. No API change.
+
 ## 3.6.1
 
 2026-09-04

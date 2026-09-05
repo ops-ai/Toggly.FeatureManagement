@@ -1,7 +1,18 @@
 <Project>
   <PropertyGroup>
-    <Version>3.6.1</Version>
+    <Version>3.6.2</Version>
     <!-- Suppress warnings about packages not supporting older target frameworks -->
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+    <Authors>Toggly</Authors>
+    <Company>Toggly</Company>
+    <PackageProjectUrl>https://toggly.io</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>toggly-package-icon.png</PackageIcon>
+    <PackageTags>toggly;feature-flags;feature-management</PackageTags>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)assets/toggly-package-icon.png" Pack="true" PackagePath="\" Condition="'$(IsPackable)' != 'false'" />
+  </ItemGroup>
 </Project>

@@ -6,21 +6,12 @@
 		<Nullable>enable</Nullable>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<PackageProjectUrl>https://toggly.io</PackageProjectUrl>
-		<PackageIcon>packagephoto.png</PackageIcon>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
-		<RepositoryType>git</RepositoryType>
-		<PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageTags>toggly;feature-flags;feature-management;dark release;feature flag management;blue green deployment;canary deployment</PackageTags>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
     <Description>Toggly.Metrics.SystemMetrics extends the Toggly feature management library by adding support for capturing performance metrics. Capture performance counters, giving you valuable insights into the performance of your application.</Description>
     <AssemblyTitle>Toggly System Metrics</AssemblyTitle>
   </PropertyGroup>
-
-  <ItemGroup>
-    <None Remove="packagephoto.png" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1">
@@ -28,13 +19,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="5.0.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="packagephoto.png">
-      <PackagePath>\</PackagePath>
-      <Pack>True</Pack>
-    </Content>
   </ItemGroup>
 
   <ItemGroup>

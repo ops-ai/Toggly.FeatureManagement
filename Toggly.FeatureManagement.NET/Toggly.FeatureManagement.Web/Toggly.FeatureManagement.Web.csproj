@@ -4,13 +4,8 @@
 	  <TargetFrameworks>netstandard2.1;netcoreapp3.1;net5.0;net6.0;net7.0;net8.0;net9.0</TargetFrameworks>
 	  <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 	  <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-	  <PackageProjectUrl>https://toggly.io</PackageProjectUrl>
-	  <PackageIcon>packagephoto.png</PackageIcon>
 	  <PackageReadmeFile>README.md</PackageReadmeFile>
-	  <RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
-	  <RepositoryType>git</RepositoryType>
-	  <PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
-	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	  <PackageTags>toggly;feature-flags;feature-management;dark release;feature flag management;blue green deployment;canary deployment</PackageTags>
 	  <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <Description>Adds filters for Browser Family, Browser Language, Country, OS and User Claims and a default implementation for HTTP context targeting that support users and groups</Description>
     <AssemblyTitle>Toggly Feature Management Web</AssemblyTitle>
@@ -21,20 +16,9 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <None Remove="packagephoto.png" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <Content Include="packagephoto.png">
-	    <Pack>True</Pack>
-	    <PackagePath>\</PackagePath>
-	  </Content>
-	</ItemGroup>
-	
 	<PropertyGroup>
 		<IncludeSymbols>true</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>

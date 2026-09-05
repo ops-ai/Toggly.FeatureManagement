@@ -6,13 +6,8 @@
     <Nullable>enable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <PackageProjectUrl>https://toggly.io</PackageProjectUrl>
-    <PackageIcon>toggly_favicon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>toggly;feature-flags;feature-management;dark release;feature flag management;blue green deployment;canary deployment</PackageTags>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <Description>Provides extensions to control hangfire jobs using feature flags via toggly.io</Description>
     <AssemblyTitle>Feature Flag Support for Hangfire</AssemblyTitle>
@@ -20,15 +15,10 @@
 
   <ItemGroup>
     <None Remove="README.md" />
-    <None Remove="toggly_favicon.png" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="README.md">
-      <PackagePath>\</PackagePath>
-      <Pack>True</Pack>
-    </Content>
-    <Content Include="toggly_favicon.png">
       <PackagePath>\</PackagePath>
       <Pack>True</Pack>
     </Content>

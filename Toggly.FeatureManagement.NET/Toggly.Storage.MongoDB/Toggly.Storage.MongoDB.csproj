@@ -8,30 +8,14 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>Toggly.FeatureManagement.Storage.MongoDB</PackageId>
     <Description>MongoDB snapshot provider for Toggly Feature Management. Store feature flag snapshots in MongoDB for high availability and scalability.</Description>
-    <PackageProjectUrl>https://toggly.io</PackageProjectUrl>
-    <PackageIcon>packagephoto.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageTags>feature management;toggly;feature flags;mongodb;nosql;snapshot provider</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>toggly;feature-flags;feature-management;mongodb;nosql;snapshot provider</PackageTags>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <AssemblyTitle>Toggly MongoDB Feature Snapshot Provider</AssemblyTitle>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Remove="packagephoto.png" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="packagephoto.png">
-      <PackagePath>\</PackagePath>
-      <Pack>True</Pack>
-    </Content>
   </ItemGroup>
 
   <ItemGroup>
