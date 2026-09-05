@@ -2,6 +2,7 @@ import type { Context, Middleware, Next } from 'koa'
 import {
   createTogglyClient,
   normalizeFeatureKeys,
+  fromHttpRequest,
   type TogglyClient,
   type EvaluationContext,
 } from '@ops-ai/toggly-node-core'
@@ -49,16 +50,33 @@ async function extractContext(
   ctx: Context,
   config: TogglyKoaConfig
 ): Promise<EvaluationContext> {
-  // Use custom extractor if provided
+  const headers = ctx.headers as Record<string, string | string[] | undefined>
+  const headerRequest = fromHttpRequest(headers).request
+
+  // Custom full context: use returned fields, fill missing request from headers
   if (config.getContext) {
-    return config.getContext(ctx)
+    const custom = await config.getContext(ctx)
+    return {
+      ...custom,
+      // Field-level merge: custom wins; missing keys filled from headers
+      request: {
+        ...headerRequest,
+        ...custom.request,
+      },
+    }
   }
 
-  // Default: extract basic context
+  // Default: identity / groups / claims providers + segment request headers
   const identity = await extractIdentity(ctx, config)
+  const groups = config.getGroups ? await config.getGroups(ctx) : undefined
+  const claims = config.getClaims ? await config.getClaims(ctx) : undefined
+  const fromReq = fromHttpRequest(headers, { identity, groups, claims })
 
   return {
-    identity,
+    identity: fromReq.identity,
+    groups: fromReq.groups,
+    claims: fromReq.claims,
+    request: fromReq.request,
     traits: {
       ip: ctx.ip,
       userAgent: ctx.get('user-agent'),

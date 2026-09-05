@@ -49,6 +49,10 @@ import {
   parseEvaluatedResponseBody,
   readResponseBody,
 } from './signed-response';
+import {
+  getAmbientEvalOverrides,
+  mergeIdentityContext,
+} from './eval-context-store';
 
 /**
  * Server-side Toggly client for fetching and evaluating feature flags
@@ -162,21 +166,24 @@ export class TogglyServerClient {
     identityOverride?: IdentityContext,
     entityContext?: TogglyEntityContext | null,
   ): EvalContext {
-    // When an override object is provided, use its fields (including
-    // `identity: undefined` for anonymous). Only fall back to process
-    // defaults when no override object is passed.
-    if (identityOverride) {
+    // Ambient (loader/action ALS) merges with per-call override; per-call wins.
+    // When neither is set, fall back to process defaults (identity / config).
+    const merged = mergeIdentityContext(
+      getAmbientEvalOverrides(),
+      identityOverride,
+    );
+
+    if (merged) {
+      // Prefer claims for UserClaims filters; traits remain a separate bag.
       const claims =
-        (identityOverride.claims as Record<string, string> | undefined) ??
+        (merged.claims as Record<string, string> | undefined) ??
         (this.config.claims as Record<string, string> | undefined);
       return {
-        identity: identityOverride.identity,
-        groups: identityOverride.groups ?? this.config.groups,
-        traits:
-          identityOverride.traits ??
-          identityOverride.claims ??
-          this.config.claims,
+        identity: merged.identity,
+        groups: merged.groups ?? this.config.groups,
+        traits: merged.traits ?? this.config.claims,
         claims,
+        request: merged.request,
         entity: entityContext ?? null,
       };
     }

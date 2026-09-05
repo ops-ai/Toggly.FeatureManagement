@@ -57,22 +57,38 @@ async function extractContext(
   req: Request,
   config: TogglyExpressConfig
 ): Promise<EvaluationContext> {
-  // Use custom extractor if provided
+  const headers = req.headers as Record<string, string | string[] | undefined>
+  const headerRequest = fromHttpRequest(headers).request
+
+  // Custom full context: use returned fields, fill missing request from headers
   if (config.getContext) {
-    return config.getContext(req)
+    const custom = await config.getContext(req)
+    return {
+      ...custom,
+      // Field-level merge: custom wins; missing keys filled from headers
+      // ({} or partial request must not block UA/country enrichment)
+      request: {
+        ...headerRequest,
+        ...custom.request,
+      },
+    }
   }
 
-  // Default: extract basic context + segment request headers
+  // Default: identity / groups / claims providers + segment request headers
   const identity = await extractIdentity(req, config)
   const session = (req as Request & { session?: { groups?: string[] } }).session
-  const fromReq = fromHttpRequest(req.headers as Record<string, string | string[] | undefined>, {
+  const groups = config.getGroups ? await config.getGroups(req) : session?.groups
+  const claims = config.getClaims ? await config.getClaims(req) : undefined
+  const fromReq = fromHttpRequest(headers, {
     identity,
-    groups: session?.groups,
+    groups,
+    claims,
   })
 
   return {
     identity: fromReq.identity,
     groups: fromReq.groups,
+    claims: fromReq.claims,
     request: fromReq.request,
     traits: {
       ip: req.ip,
@@ -97,8 +113,14 @@ export function togglyMiddleware(config: TogglyExpressConfig): RequestHandler {
 
   const initialize = async () => {
     if (!expressClient) {
-      const { onError: _onError, getIdentity: _getIdentity, getContext: _getContext, ...serverConfig } =
-        config
+      const {
+        onError: _onError,
+        getIdentity: _getIdentity,
+        getGroups: _getGroups,
+        getClaims: _getClaims,
+        getContext: _getContext,
+        ...serverConfig
+      } = config
       expressClient = createTogglyClient(serverConfig)
       await expressClient.init()
     }

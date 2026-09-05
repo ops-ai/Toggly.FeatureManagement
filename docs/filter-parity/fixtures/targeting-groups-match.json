@@ -1,0 +1,20 @@
+{
+  "id": "targeting-groups-match",
+  "description": "Targeting enables when identity group is in Audience.Groups",
+  "featureKey": "parity-targeting-groups",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "Targeting",
+      "parameters": {
+        "Audience.DefaultRolloutPercentage": 0,
+        "Audience.Groups:0": "beta"
+      }
+    }
+  ],
+  "context": {
+    "identity": "u",
+    "groups": ["beta"]
+  },
+  "expected": true
+}

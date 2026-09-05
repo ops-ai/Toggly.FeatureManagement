@@ -257,6 +257,69 @@ describe('local evaluation mode', () => {
     client.destroy()
   })
 
+  it('evaluates Country from request.country override', async () => {
+    const countryFlag: FeatureDefinitionModel = {
+      featureKey: 'CountryFlag',
+      filters: [
+        {
+          name: 'Country',
+          parameters: { Percentage: 100, 'Country:0': 'US' },
+        },
+      ],
+    }
+    mockFetch.mockResolvedValueOnce(createMockResponse([countryFlag]))
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      identity: 'user-1',
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await client.init()
+
+    await expect(client.isFeatureOn('CountryFlag')).resolves.toBe(false)
+    await expect(
+      client.isFeatureOn('CountryFlag', undefined, undefined, {
+        request: { country: 'us' },
+      }),
+    ).resolves.toBe(true)
+
+    client.destroy()
+  })
+
+  it('per-call claims override config claims', async () => {
+    const claimsFlag: FeatureDefinitionModel = {
+      featureKey: 'ClaimsFlag',
+      filters: [
+        {
+          name: 'UserClaims',
+          parameters: { Percentage: 100, Claim: 'role', Value: 'admin' },
+        },
+      ],
+    }
+    mockFetch.mockResolvedValueOnce(createMockResponse([claimsFlag]))
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      identity: 'user-1',
+      claims: { role: 'user' },
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await client.init()
+
+    await expect(client.isFeatureOn('ClaimsFlag')).resolves.toBe(false)
+    await expect(
+      client.isFeatureOn('ClaimsFlag', undefined, undefined, {
+        claims: { role: 'admin' },
+      }),
+    ).resolves.toBe(true)
+
+    client.destroy()
+  })
+
   it('hydrateDefinitions applies cached models without a fetch', () => {
     const client = createTogglyClient({
       appKey: 'test-key',

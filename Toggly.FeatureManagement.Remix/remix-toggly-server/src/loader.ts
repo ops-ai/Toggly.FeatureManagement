@@ -7,21 +7,38 @@ import {
   TogglyConfig,
   FeatureFlags,
   ServerFeatureContext,
+  IdentityContext,
   TOGGLY_LOADER_KEY,
-  parseIdentity,
-  HEADERS,
-  STORAGE_KEYS,
 } from '@ops-ai/remix-toggly-core';
 import { TogglyServerClient, createServerClient } from './client';
+import {
+  extractEvalContext,
+  type EvalContextProviders,
+} from './extract-context';
+import {
+  getAmbientEvalOverrides,
+  mergeIdentityContext,
+  runWithEvalContext,
+} from './eval-context-store';
 
 /**
  * Options for creating a Toggly loader
  */
-export interface TogglyLoaderOptions extends TogglyConfig {
-  /** Function to extract identity from request */
-  getIdentity?: (request: Request) => string | undefined | Promise<string | undefined>;
-  /** Function to extract identity from cookies */
-  getIdentityFromCookies?: (cookies: string | null) => string | undefined;
+export interface TogglyLoaderOptions
+  extends TogglyConfig, EvalContextProviders {}
+
+function resolveIdentityOverride(
+  override?: string | IdentityContext,
+): IdentityContext | undefined {
+  if (override == null) {
+    return getAmbientEvalOverrides();
+  }
+  if (typeof override === 'string') {
+    return mergeIdentityContext(getAmbientEvalOverrides(), {
+      identity: override,
+    });
+  }
+  return mergeIdentityContext(getAmbientEvalOverrides(), override);
 }
 
 /**
@@ -39,28 +56,18 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
     },
 
     /**
-     * Load feature flags for a loader function
+     * Load feature flags for a loader function.
+     * Builds ambient EvalContext (identity / groups / claims / request) for
+     * the snapshot. Prefer `run` when calling `client.isEnabled('X')` without
+     * an IdentityContext for the full loader duration.
      */
     async load(args: LoaderFunctionArgs): Promise<ServerFeatureContext> {
-      const { request } = args;
-
-      // Extract identity
-      let identity: string | undefined;
-
-      if (options.getIdentity) {
-        identity = await options.getIdentity(request);
-      } else {
-        // Try to get from headers or cookies
-        identity = getIdentityFromRequest(request, options.getIdentityFromCookies);
-      }
-
-      // Ensure definitions are loaded; request-local snapshot avoids shared flags race
-      await client.init(identity);
-      const identityCtx = { identity };
+      const ambient = await extractEvalContext(args.request, options);
+      await client.init(ambient.identity);
 
       return {
-        flags: client.snapshotFlags(identityCtx),
-        identity,
+        flags: client.snapshotFlags(ambient),
+        identity: ambient.identity,
         appKey: options.appKey,
         environment: options.environment,
         fetchedAt: Date.now(),
@@ -68,11 +75,37 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
     },
 
     /**
+     * Bind ambient EvalContext for the full loader duration, then run `fn`.
+     * Prefer this when calling `client.isEnabled('X')` without an IdentityContext.
+     */
+    async run<T>(
+      args: LoaderFunctionArgs,
+      fn: (
+        ctx: ServerFeatureContext & { client: TogglyServerClient },
+      ) => T | Promise<T>,
+    ): Promise<T> {
+      const ambient = await extractEvalContext(args.request, options);
+
+      return runWithEvalContext(ambient, async () => {
+        await client.init(ambient.identity);
+        const ctx: ServerFeatureContext & { client: TogglyServerClient } = {
+          flags: client.snapshotFlags(ambient),
+          identity: ambient.identity,
+          appKey: options.appKey,
+          environment: options.environment,
+          fetchedAt: Date.now(),
+          client,
+        };
+        return fn(ctx);
+      });
+    },
+
+    /**
      * Create loader data with feature context
      */
     async getLoaderData<T extends Record<string, unknown>>(
       args: LoaderFunctionArgs,
-      additionalData?: T
+      additionalData?: T,
     ): Promise<T & { [TOGGLY_LOADER_KEY]: ServerFeatureContext }> {
       const context = await this.load(args);
 
@@ -83,16 +116,20 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
     },
 
     /**
-     * Check if a feature is enabled for a request identity.
-     * Prefer passing `identity` (from `load()` / headers) so concurrent
-     * requests do not share process-wide client.identity.
+     * Check if a feature is enabled.
+     * Ambient EvalContext (from `run` / `load` ALS scope) is merged;
+     * per-call string identity or IdentityContext overrides field-by-field.
      */
     async isEnabled(
       featureKey: string,
       defaultValue = false,
-      identity?: string
+      identityOrContext?: string | IdentityContext,
     ): Promise<boolean> {
-      return client.isEnabled(featureKey, { identity }, defaultValue);
+      return client.isEnabled(
+        featureKey,
+        resolveIdentityOverride(identityOrContext),
+        defaultValue,
+      );
     },
 
     /**
@@ -101,9 +138,13 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
     async isDisabled(
       featureKey: string,
       defaultValue = true,
-      identity?: string
+      identityOrContext?: string | IdentityContext,
     ): Promise<boolean> {
-      return client.isDisabled(featureKey, { identity }, defaultValue);
+      return client.isDisabled(
+        featureKey,
+        resolveIdentityOverride(identityOrContext),
+        defaultValue,
+      );
     },
 
     /**
@@ -113,7 +154,7 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
       featureKeys: string[],
       requirement: 'all' | 'any' = 'all',
       negate = false,
-      identity?: string
+      identityOrContext?: string | IdentityContext,
     ): Promise<boolean> {
       return client.evaluateGate(
         featureKeys,
@@ -122,7 +163,7 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
         false,
         undefined,
         undefined,
-        { identity },
+        resolveIdentityOverride(identityOrContext),
       );
     },
 
@@ -136,62 +177,11 @@ export function createTogglyLoader(options: TogglyLoaderOptions) {
 }
 
 /**
- * Extract identity from request headers or cookies
- */
-function getIdentityFromRequest(
-  request: Request,
-  customCookieParser?: (cookies: string | null) => string | undefined
-): string | undefined {
-  // Try header first
-  const headerIdentity = request.headers.get(HEADERS.IDENTITY);
-  if (headerIdentity) {
-    return parseIdentity(headerIdentity);
-  }
-
-  // Try cookies
-  const cookies = request.headers.get('cookie');
-
-  if (customCookieParser) {
-    return customCookieParser(cookies);
-  }
-
-  if (cookies) {
-    // Parse cookie manually (simple implementation)
-    const identity = parseCookie(cookies, STORAGE_KEYS.IDENTITY);
-    if (identity) {
-      return parseIdentity(identity);
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * Simple cookie parser
- */
-function parseCookie(cookies: string, name: string): string | undefined {
-  const pairs = cookies.split(';');
-
-  for (const pair of pairs) {
-    const [key, value] = pair.trim().split('=');
-    if (key === name && value) {
-      try {
-        return decodeURIComponent(value);
-      } catch {
-        return value;
-      }
-    }
-  }
-
-  return undefined;
-}
-
-/**
  * Standalone function to get feature flags in a loader
  */
 export async function getFeatureFlags(
   request: Request,
-  options: TogglyLoaderOptions
+  options: TogglyLoaderOptions,
 ): Promise<ServerFeatureContext> {
   const loader = createTogglyLoader(options);
   return loader.load({ request, params: {}, context: {} });
@@ -204,11 +194,12 @@ export async function isFeatureEnabled(
   request: Request,
   featureKey: string,
   options: TogglyLoaderOptions,
-  defaultValue = false
+  defaultValue = false,
 ): Promise<boolean> {
   const loader = createTogglyLoader(options);
-  const ctx = await loader.load({ request, params: {}, context: {} });
-  return loader.isEnabled(featureKey, defaultValue, ctx.identity);
+  return loader.run({ request, params: {}, context: {} }, async ({ client }) =>
+    client.isEnabled(featureKey, undefined, defaultValue),
+  );
 }
 
 /**

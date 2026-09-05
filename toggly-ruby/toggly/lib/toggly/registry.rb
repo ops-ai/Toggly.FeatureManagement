@@ -12,13 +12,26 @@ module Toggly
       register_defaults
     end
 
-    # Register an evaluator
+    # Normalize filter / evaluator names for lookup.
+    # Strips non-alphanumeric characters so AlwaysOn and always_on match.
+    #
+    # @param type [String, Symbol]
+    # @return [String]
+    def self.normalize_key(type)
+      type.to_s.downcase.gsub(/[^a-z0-9]/, "")
+    end
+
+    # Register an evaluator (and optional extra aliases).
     #
     # @param evaluator [Evaluators::Base] The evaluator instance
+    # @param extra_aliases [Array<String>] Additional names
     # @return [self]
-    def register(evaluator)
+    def register(evaluator, *extra_aliases)
+      names = [evaluator.class.type, *Array(evaluator.class.aliases), *extra_aliases]
       @mutex.synchronize do
-        @evaluators[evaluator.class.type.to_s.downcase] = evaluator
+        names.compact.each do |name|
+          @evaluators[self.class.normalize_key(name)] = evaluator
+        end
       end
       self
     end
@@ -29,7 +42,7 @@ module Toggly
     # @return [Evaluators::Base, nil]
     def get(type)
       @mutex.synchronize do
-        @evaluators[type.to_s.downcase]
+        @evaluators[self.class.normalize_key(type)]
       end
     end
 
@@ -39,7 +52,7 @@ module Toggly
     # @return [Boolean]
     def registered?(type)
       @mutex.synchronize do
-        @evaluators.key?(type.to_s.downcase)
+        @evaluators.key?(self.class.normalize_key(type))
       end
     end
 
@@ -58,7 +71,7 @@ module Toggly
     # @return [Evaluators::Base, nil] The removed evaluator
     def unregister(type)
       @mutex.synchronize do
-        @evaluators.delete(type.to_s.downcase)
+        @evaluators.delete(self.class.normalize_key(type))
       end
     end
 
@@ -82,6 +95,12 @@ module Toggly
       register(Evaluators::TimeWindow.new)
       register(Evaluators::ContextualTargeting.new)
       register(Evaluators::ContextProperty.new)
+      register(Evaluators::BrowserFamily.new)
+      register(Evaluators::BrowserLanguage.new)
+      register(Evaluators::Country.new)
+      register(Evaluators::DeviceType.new)
+      register(Evaluators::OperatingSystem.new)
+      register(Evaluators::UserClaims.new)
     end
   end
 end

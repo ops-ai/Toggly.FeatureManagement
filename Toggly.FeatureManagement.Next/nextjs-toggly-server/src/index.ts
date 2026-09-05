@@ -14,6 +14,14 @@ export {
   createMemoryStorage,
 } from './server-client'
 
+// Ambient EvalContext (request-scoped)
+export {
+  getAmbientEvalOverrides,
+  runWithEvalContext,
+  withEvalContext,
+  mergeFeatureCheckOptions,
+} from './eval-context-store'
+
 // Server Components
 export { Feature, FeatureVariant } from './components'
 export type { FeatureProps } from './components'
@@ -59,4 +67,8 @@ export type {
   FeatureRequirement,
   Hook,
   HookMetadata,
+  EvalContextOverrides,
+  EvalContextArg,
 } from '@ops-ai/nextjs-toggly-core'
+
+export { fromHttpRequest } from '@ops-ai/nextjs-toggly-core'

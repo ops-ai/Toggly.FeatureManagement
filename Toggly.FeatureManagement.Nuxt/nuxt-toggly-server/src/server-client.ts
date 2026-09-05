@@ -7,6 +7,11 @@ import {
   type TogglyConfig,
 } from '@ops-ai/nuxt-toggly-core'
 import WebSocket from 'ws'
+import {
+  resolveFeatureCheckArgs,
+  toEvalOverrides,
+  type FeatureCheckOptions,
+} from './feature-check'
 import type { TogglyServerConfig, TogglyStorage } from './types'
 
 /**
@@ -231,14 +236,21 @@ export async function refreshServerToggly(): Promise<FeatureDefinitions | null> 
 
 /**
  * Check if a feature is enabled on the server.
- * Pass `identity` as a per-call override (local eval); shared client is reused.
+ * Pass a user `identity` string or
+ * `{ identity, groups, claims, request, headers }` for per-call local eval.
  */
 export async function isServerFeatureOn(
   featureKey: string,
-  identity?: string
+  identityOrOptions?: string | FeatureCheckOptions
 ): Promise<boolean> {
   const client = useServerToggly()
-  return client.isFeatureOn(featureKey, undefined, undefined, identity)
+  const options = resolveFeatureCheckArgs(identityOrOptions)
+  return client.isFeatureOn(
+    featureKey,
+    undefined,
+    undefined,
+    toEvalOverrides(options),
+  )
 }
 
 /**
@@ -246,9 +258,9 @@ export async function isServerFeatureOn(
  */
 export async function isServerFeatureOff(
   featureKey: string,
-  identity?: string
+  identityOrOptions?: string | FeatureCheckOptions
 ): Promise<boolean> {
-  const isOn = await isServerFeatureOn(featureKey, identity)
+  const isOn = await isServerFeatureOn(featureKey, identityOrOptions)
   return !isOn
 }
 

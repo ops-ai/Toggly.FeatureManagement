@@ -2,6 +2,7 @@ import type { Context, MiddlewareHandler, Handler } from 'hono'
 import {
   createTogglyClient,
   normalizeFeatureKeys,
+  fromHttpRequest,
   type TogglyClient,
   type EvaluationContext,
 } from '@ops-ai/toggly-node-core'
@@ -43,22 +44,56 @@ async function extractIdentity(
 }
 
 /**
+ * Collect segment-relevant headers from a Hono request
+ */
+function segmentHeaders(c: Context): Record<string, string | undefined> {
+  const headerBag: Record<string, string | undefined> = {}
+  for (const name of [
+    'user-agent',
+    'accept-language',
+    'cf-ipcountry',
+    'x-vercel-ip-country',
+    'cloudfront-viewer-country',
+  ]) {
+    headerBag[name] = c.req.header(name)
+  }
+  return headerBag
+}
+
+/**
  * Get evaluation context from Hono context
  */
 async function extractContext(
   c: Context,
   config: TogglyHonoConfig
 ): Promise<EvaluationContext> {
-  // Use custom extractor if provided
+  const headerBag = segmentHeaders(c)
+  const headerRequest = fromHttpRequest(headerBag).request
+
+  // Custom full context: use returned fields, fill missing request from headers
   if (config.getContext) {
-    return config.getContext(c)
+    const custom = await config.getContext(c)
+    return {
+      ...custom,
+      // Field-level merge: custom wins; missing keys filled from headers
+      request: {
+        ...headerRequest,
+        ...custom.request,
+      },
+    }
   }
 
-  // Default: extract basic context
+  // Default: identity / groups / claims providers + segment request headers
   const identity = await extractIdentity(c, config)
+  const groups = config.getGroups ? await config.getGroups(c) : undefined
+  const claims = config.getClaims ? await config.getClaims(c) : undefined
+  const fromReq = fromHttpRequest(headerBag, { identity, groups, claims })
 
   return {
-    identity,
+    identity: fromReq.identity,
+    groups: fromReq.groups,
+    claims: fromReq.claims,
+    request: fromReq.request,
     traits: {
       ip: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for'),
       userAgent: c.req.header('user-agent'),

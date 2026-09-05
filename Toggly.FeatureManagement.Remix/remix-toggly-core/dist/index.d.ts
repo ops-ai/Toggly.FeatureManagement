@@ -3,7 +3,7 @@ export { LocalGate } from '@ops-ai/toggly-local-gates';
 import { EvaluatedDefinitions, TogglyEvaluationContext, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 export { EntityGate, EntityGateRule, EvaluatedDefinitions, TogglyEntityContext, clearRegisteredContexts, normalizeEntityContext, registerContext, resolveEvaluatedDefinition, toBooleanDefinitions } from '@ops-ai/toggly-hooks-types';
 import { DefinitionsByKey, EvalContext } from '@ops-ai/toggly-eval';
-export { DefinitionsByKey, EntityEvalContext, EvalContext, FeatureDefinitionModel, evaluateDefinitions, indexDefinitions, parseDefinitionsPayload, snapshotEvaluatedBooleans } from '@ops-ai/toggly-eval';
+export { DefinitionsByKey, EntityEvalContext, EvalContext, FeatureDefinitionModel, evaluateDefinitions, fromHttpRequest, indexDefinitions, parseDefinitionsPayload, snapshotEvaluatedBooleans } from '@ops-ai/toggly-eval';
 
 /**
  * Core types for Toggly Remix SDK
@@ -74,6 +74,12 @@ interface IdentityContext {
     traits?: Record<string, string | number | boolean>;
     /** Custom claims for targeting */
     claims?: Record<string, string>;
+    /** HTTP request segment fields (UA / Accept-Language / country) */
+    request?: {
+        userAgent?: string;
+        acceptLanguage?: string;
+        country?: string;
+    };
 }
 /**
  * Feature flags state (boolean or entity gate per flag)

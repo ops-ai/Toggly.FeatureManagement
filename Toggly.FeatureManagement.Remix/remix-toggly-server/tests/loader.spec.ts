@@ -428,6 +428,137 @@ describe('createTogglyLoader', () => {
       expect(result).toEqual(flags);
     });
   });
+
+  describe('ambient EvalContext', () => {
+    it('should evaluate Country and UserClaims from getGroups/getClaims + headers without per-call IdentityContext', async () => {
+      const countryFlag = {
+        featureKey: 'country-flag',
+        filters: [
+          {
+            name: 'Country',
+            parameters: { Percentage: 100, 'Country:0': 'US' },
+          },
+        ],
+      };
+      const claimsFlag = {
+        featureKey: 'claims-flag',
+        filters: [
+          {
+            name: 'UserClaims',
+            parameters: {
+              Percentage: 100,
+              Claim: 'role',
+              Value: 'admin',
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([countryFlag, claimsFlag]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([countryFlag, claimsFlag]),
+        headers: { get: () => null },
+      });
+
+      const loader = createTogglyLoader({
+        ...defaultOptions,
+        getIdentity: () => 'user-1',
+        getGroups: () => ['beta'],
+        getClaims: () => ({ role: 'admin' }),
+      });
+
+      const request = createMockRequest({
+        headers: { 'cf-ipcountry': 'US', 'user-agent': 'TestAgent/1.0' },
+      });
+
+      await loader.run(createMockLoaderArgs(request), async ({ client, flags }) => {
+        expect(flags['country-flag']).toBe(true);
+        expect(flags['claims-flag']).toBe(true);
+        // No IdentityContext arg — ambient from run()
+        expect(await client.isEnabled('country-flag')).toBe(true);
+        expect(await client.isEnabled('claims-flag')).toBe(true);
+        expect(await loader.isEnabled('country-flag')).toBe(true);
+      });
+    });
+
+    it('should fill request.country from cf-ipcountry when getContext omits request', async () => {
+      const countryFlag = {
+        featureKey: 'country-flag',
+        filters: [
+          {
+            name: 'Country',
+            parameters: { Percentage: 100, 'Country:0': 'DE' },
+          },
+        ],
+      };
+      const body = JSON.stringify([countryFlag]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([countryFlag]),
+        headers: { get: () => null },
+      });
+
+      const loader = createTogglyLoader({
+        ...defaultOptions,
+        getContext: () => ({
+          identity: 'ctx-user',
+          claims: { plan: 'pro' },
+        }),
+      });
+
+      const request = createMockRequest({
+        headers: { 'cf-ipcountry': 'DE' },
+      });
+
+      const ctx = await loader.load(createMockLoaderArgs(request));
+      expect(ctx.identity).toBe('ctx-user');
+      expect(ctx.flags['country-flag']).toBe(true);
+    });
+
+    it('should let per-call IdentityContext override ambient field-by-field', async () => {
+      const countryFlag = {
+        featureKey: 'country-flag',
+        filters: [
+          {
+            name: 'Country',
+            parameters: { Percentage: 100, 'Country:0': 'US' },
+          },
+        ],
+      };
+      const body = JSON.stringify([countryFlag]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([countryFlag]),
+        headers: { get: () => null },
+      });
+
+      const loader = createTogglyLoader({
+        ...defaultOptions,
+        getIdentity: () => 'user-1',
+        getClaims: () => ({ role: 'admin' }),
+      });
+
+      const request = createMockRequest({
+        headers: { 'cf-ipcountry': 'US' },
+      });
+
+      await loader.run(createMockLoaderArgs(request), async ({ client }) => {
+        expect(await client.isEnabled('country-flag')).toBe(true);
+        expect(
+          await client.isEnabled('country-flag', {
+            identity: 'user-1',
+            request: { country: 'FR' },
+          }),
+        ).toBe(false);
+      });
+    });
+  });
 });
 
 describe('getFeatureFlags', () => {

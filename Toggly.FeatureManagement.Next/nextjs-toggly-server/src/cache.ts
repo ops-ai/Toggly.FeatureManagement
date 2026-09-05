@@ -7,6 +7,8 @@ import {
 } from '@ops-ai/nextjs-toggly-core'
 import {
   createFeatureCacheKey,
+  resolveFeatureCheckWithAmbient,
+  toEvalOverrides,
   type FeatureCheckOptions,
 } from './feature-check'
 
@@ -42,8 +44,26 @@ export function cachedIsFeatureOn(
     tags?: string[]
   } = {}
 ): Promise<boolean> {
-  const { identity, context, contextKind, revalidate = 60, tags = [] } = options
-  const check: FeatureCheckOptions = { identity, context, contextKind }
+  const {
+    identity,
+    groups,
+    claims,
+    request,
+    headers,
+    context,
+    contextKind,
+    revalidate = 60,
+    tags = [],
+  } = options
+  const check = resolveFeatureCheckWithAmbient({
+    identity,
+    groups,
+    claims,
+    request,
+    headers,
+    context,
+    contextKind,
+  })
 
   const cached = unstable_cache(
     async () => {
@@ -52,7 +72,12 @@ export function cachedIsFeatureOn(
         return false
       }
 
-      return client.isFeatureOn(featureKey, context, contextKind, identity)
+      return client.isFeatureOn(
+        featureKey,
+        check.context,
+        check.contextKind,
+        toEvalOverrides(check),
+      )
     },
     [createFeatureCacheKey(featureKey, check)],
     {
@@ -80,17 +105,30 @@ export function cachedEvaluateFeatureGate(
     requirement = 'all',
     negate = false,
     identity,
+    groups,
+    claims,
+    request,
+    headers,
     context,
     contextKind,
     revalidate = 60,
     tags = [],
   } = options
 
-  const cacheKey = createFeatureCacheKey(`gate:${featureKeys.join(',')}:${requirement}:${negate}`, {
+  const check = resolveFeatureCheckWithAmbient({
     identity,
+    groups,
+    claims,
+    request,
+    headers,
     context,
     contextKind,
   })
+
+  const cacheKey = createFeatureCacheKey(
+    `gate:${featureKeys.join(',')}:${requirement}:${negate}`,
+    check,
+  )
 
   const cached = unstable_cache(
     async () => {
@@ -103,9 +141,9 @@ export function cachedEvaluateFeatureGate(
         featureKeys,
         requirement,
         negate,
-        context,
-        contextKind,
-        identity
+        check.context,
+        check.contextKind,
+        toEvalOverrides(check),
       )
     },
     [cacheKey],

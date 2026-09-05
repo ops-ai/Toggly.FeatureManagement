@@ -13,7 +13,6 @@ import {
 import {
   createTogglyClient,
   toBooleanDefinitions,
-  type TogglyClient,
   type TogglyConfig,
   type FeatureRequirement,
 } from '@ops-ai/nextjs-toggly-core'
@@ -55,7 +54,7 @@ export function TogglyProvider({
   autoInit = true,
   children,
 }: TogglyProviderProps): ReactNode {
-  const [client] = useState<TogglyClient>(() => {
+  const [boot] = useState(() => {
     const mergedConfig: TogglyClientConfig = {
       persistIdentity: true,
       identityStorageKey: 'toggly:identity',
@@ -67,6 +66,8 @@ export function TogglyProvider({
         ...config.featureDefaults,
       },
     }
+
+    let persistedFeatures: Record<string, boolean> | undefined
 
     // Load persisted identity if available
     if (
@@ -82,20 +83,29 @@ export function TogglyProvider({
       }
     }
 
-    // Load persisted features if available
+    // Load persisted features if available — seed React state separately from
+    // ordinary featureDefaults (defaults alone are not evidence of a fetch).
     if (
       mergedConfig.persistFeatures &&
       typeof window !== 'undefined'
     ) {
-      const persistedFeatures = localStorage.getItem(
+      const raw = localStorage.getItem(
         mergedConfig.featuresStorageKey!
       )
-      if (persistedFeatures) {
+      if (raw) {
         try {
-          const parsed = JSON.parse(persistedFeatures)
-          mergedConfig.featureDefaults = {
-            ...parsed,
-            ...mergedConfig.featureDefaults,
+          const parsed = JSON.parse(raw) as unknown
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            !Array.isArray(parsed) &&
+            Object.values(parsed).every((value) => typeof value === 'boolean')
+          ) {
+            persistedFeatures = parsed as Record<string, boolean>
+            mergedConfig.featureDefaults = {
+              ...persistedFeatures,
+              ...mergedConfig.featureDefaults,
+            }
           }
         } catch {
           // Invalid JSON, ignore
@@ -103,17 +113,27 @@ export function TogglyProvider({
       }
     }
 
-    return createTogglyClient(mergedConfig)
+    return {
+      client: createTogglyClient(mergedConfig),
+      persistedFeatures,
+      initialIdentity: mergedConfig.identity ?? config.identity,
+    }
   })
+
+  const client = boot.client
 
   const [isReady, setIsReady] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [features, setFeatures] = useState<Record<string, boolean>>(
-    initialFeatures ?? config.featureDefaults ?? {}
+    () =>
+      boot.persistedFeatures ??
+      initialFeatures ??
+      config.featureDefaults ??
+      {}
   )
   const [identity, setIdentityState] = useState<string | undefined>(
-    config.identity
+    boot.initialIdentity
   )
 
   useEffect(() => {
@@ -162,22 +182,24 @@ export function TogglyProvider({
 
   const refresh = useCallback(async () => {
     setIsLoading(true)
-      setError(client.state.error)
+    setError(client.state.error)
 
     try {
       const defs = await client.refresh()
       setFeatures(toBooleanDefinitions(defs))
-        setError(client.state.error)
+      setError(client.state.error)
 
       // Persist features if enabled
-        if (!client.state.error && config.persistFeatures && typeof window !== 'undefined') {
+      if (!client.state.error && config.persistFeatures && typeof window !== 'undefined') {
         localStorage.setItem(
           config.featuresStorageKey ?? 'toggly:features',
           JSON.stringify(defs)
         )
       }
     } catch (e) {
+      setFeatures(toBooleanDefinitions(client.state.features))
       setError(e as Error)
+      throw e
     } finally {
       setIsLoading(false)
     }
@@ -185,18 +207,59 @@ export function TogglyProvider({
 
   const setIdentity = useCallback(
     async (newIdentity: string) => {
-      await client.setIdentity(newIdentity)
-      setIdentityState(newIdentity)
+      try {
+        await client.setIdentity(newIdentity)
+        setIdentityState(client.identity)
+        setFeatures(toBooleanDefinitions(client.state.features))
+        setError(client.state.error)
 
-      // Persist identity if enabled
-      if (config.persistIdentity && typeof window !== 'undefined') {
-        localStorage.setItem(
-          config.identityStorageKey ?? 'toggly:identity',
-          newIdentity
-        )
+        // Persist identity only after a successful core commit
+        if (config.persistIdentity && typeof window !== 'undefined') {
+          localStorage.setItem(
+            config.identityStorageKey ?? 'toggly:identity',
+            newIdentity
+          )
+        }
+      } catch (e) {
+        setIdentityState(client.identity)
+        setFeatures(toBooleanDefinitions(client.state.features))
+        setError(e as Error)
+        throw e
       }
     },
     [client, config.persistIdentity, config.identityStorageKey]
+  )
+
+  const setContext = useCallback(
+    async (contextUpdate: {
+      identity?: string
+      groups?: string[]
+      claims?: Record<string, string>
+    }) => {
+      try {
+        await client.setContext(contextUpdate)
+        setIdentityState(client.identity)
+        setFeatures(toBooleanDefinitions(client.state.features))
+        setError(client.state.error)
+
+        if (
+          contextUpdate.identity !== undefined &&
+          config.persistIdentity &&
+          typeof window !== 'undefined'
+        ) {
+          localStorage.setItem(
+            config.identityStorageKey ?? 'toggly:identity',
+            client.identity ?? contextUpdate.identity,
+          )
+        }
+      } catch (e) {
+        setIdentityState(client.identity)
+        setFeatures(toBooleanDefinitions(client.state.features))
+        setError(e as Error)
+        throw e
+      }
+    },
+    [client, config.persistIdentity, config.identityStorageKey],
   )
 
   const isFeatureOn = useCallback(
@@ -281,6 +344,7 @@ export function TogglyProvider({
       init,
       refresh,
       setIdentity,
+      setContext,
       isFeatureOn,
       isFeatureOff,
       evaluateFeatureGate,
@@ -295,6 +359,7 @@ export function TogglyProvider({
       init,
       refresh,
       setIdentity,
+      setContext,
       isFeatureOn,
       isFeatureOff,
       evaluateFeatureGate,

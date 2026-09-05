@@ -1,3 +1,11 @@
+## 1.9.6
+
+2026-09-04
+
+### Fixed
+- `setContext` withholds prior enables and restores on failed fetch [OPS-900].
+- P2 error-envelope hardening via #370; bump `toggly-signed-defs` after merge [OPS-900].
+
 ## 1.9.5
 
 2026-08-30

@@ -23,7 +23,28 @@ export type {
   TogglyEventContext,
   TogglyStorage,
   FeatureMiddlewareOptions,
+  FeatureCheckOptions,
+  EventEvalContextProviders,
 } from './types'
+
+export {
+  resolveFeatureCheckArgs,
+  mergeFeatureCheckOptions,
+  toEvalOverrides,
+  mergeEvalArg,
+} from './feature-check'
+
+export { fromHttpRequest } from '@ops-ai/nuxt-toggly-core'
+
+export {
+  configureEventEvalContext,
+  resetEventEvalContextProviders,
+  getEventEvalContextProviders,
+  getCachedEventEvalContext,
+  setCachedEventEvalContext,
+  syncDefaultEventAmbient,
+  resolveEventEvalContext,
+} from './event-context'
 
 // Server client
 export {
@@ -41,9 +62,11 @@ export {
 
 // Middleware utilities
 export {
+  defineTogglyContextMiddleware,
   defineFeatureMiddleware,
   defineFeatureHandler,
   useEventToggly,
+  getEventToggly,
   isEventFeatureOn,
   isEventFeatureOff,
   evaluateEventFeatureGate,

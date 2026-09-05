@@ -1,3 +1,31 @@
+## 1.9.2
+
+2026-09-04
+
+### Fixed
+- Reject evaluated-signed 2xx error envelopes; remote `setIdentity` withholds
+  prior enables and restores on failed refresh; `refresh()` rethrows [OPS-898].
+- Local `setIdentity` re-snapshots evaluated booleans for the new identity
+  [OPS-898].
+
+## 1.9.1
+
+2026-09-03
+
+### Changed
+- Raise `@ops-ai/toggly-eval` floor to `^2.0.3` from npm (temporary
+  in-repo `workspace:^` link removed after publish) [OPS-874] [OPS-895].
+
+## 1.9.0
+
+2026-09-03
+
+### Added
+- Per-call `EvalContextOverrides` (`identity`, `groups`, `claims`, `request`)
+  for local evaluation; string identity override remains supported [OPS-874].
+- Re-export `fromHttpRequest` from `@ops-ai/toggly-eval` for header → request
+  mapping.
+
 ## 1.8.1
 
 2026-09-03

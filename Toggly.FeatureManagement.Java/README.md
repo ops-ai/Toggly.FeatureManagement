@@ -29,48 +29,48 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-core</artifactId>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
 </dependency>
 
 <!-- Spring Boot (recommended) -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-boot-starter</artifactId>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
 </dependency>
 
 <!-- Spring MVC -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-mvc</artifactId>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
 </dependency>
 
 <!-- Spring WebFlux -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-webflux</artifactId>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
 </dependency>
 
 <!-- Servlet -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-servlet</artifactId>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
 </dependency>
 
 <!-- Caching (optional) -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-caffeine</artifactId>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
 </dependency>
 
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-redis</artifactId>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
 </dependency>
 ```
 

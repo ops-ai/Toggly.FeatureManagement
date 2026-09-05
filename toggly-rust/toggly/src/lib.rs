@@ -108,7 +108,9 @@ mod sdk_identity;
 
 pub use client::TogglyClient;
 pub use config::{OnErrorCallback, TogglyConfig, TogglyConfigBuilder};
-pub use context::{EvalContext, EvalContextBuilder, TogglyEntityContext};
+pub use context::{
+    EvalContext, EvalContextBuilder, HttpRequestMapper, RequestContext, TogglyEntityContext,
+};
 pub use entity_context::{
     map_entity, register_context, register_context_schema, EntityContextMapper,
     EntityContextPropertySchema, EntityContextSchemaRegistration,
@@ -131,7 +133,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Prelude module for convenient imports.
 pub mod prelude {
     pub use crate::{
-        Error, EvalContext, EvalContextBuilder, Requirement, Result, TogglyClient, TogglyConfig,
-        TogglyConfigBuilder,
+        Error, EvalContext, EvalContextBuilder, HttpRequestMapper, RequestContext, Requirement,
+        Result, TogglyClient, TogglyConfig, TogglyConfigBuilder,
     };
 }

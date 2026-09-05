@@ -13,6 +13,7 @@ import type {
   Hook,
   TogglyEntityContext,
   TogglyEvaluationContext,
+  TogglyServiceContextHost,
 } from '@ops-ai/toggly-hooks-types'
 import {
   appendEvaluationContext,
@@ -28,6 +29,7 @@ import {
   selectCacheLruKeysToEvict,
   serializeCacheLruIndex,
   touchCacheLruKey,
+  setBrowserSdkEvaluationContext,
 } from '@ops-ai/toggly-hooks-types'
 import {
   applyLocalGate,
@@ -257,18 +259,18 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   async setContext(context: TogglyEvaluationContext): Promise<void> {
-    if (context.identity !== undefined) {
-      this._config.identity = context.identity || undefined
-    }
-    if (context.groups !== undefined) {
-      this._groups = [...context.groups]
-    }
-    if (context.claims !== undefined) {
-      this._claims = { ...context.claims }
-    }
-    this._features = null
-    this._variants = null
-    await this._refreshFeatures()
+    return setBrowserSdkEvaluationContext(
+      this as unknown as TogglyServiceContextHost<
+        EvaluatedDefinitions,
+        { [key: string]: EvaluatedVariantDef } | null
+      >,
+      context,
+      (this._config.featureDefaults ?? {}) as EvaluatedDefinitions,
+      {
+        notifyFeaturesRefresh: () => this.notifyFeaturesRefresh(),
+        loadFeaturesStrict: () => this._loadFeatures(true, { strict: true }),
+      },
+    )
   }
 
   private _readCachedFlags(): EvaluatedDefinitions | null {
@@ -481,7 +483,10 @@ export class TogglyService implements ITogglyService, OnDestroy {
     }
   }
 
-  private _loadFeatures = async (forceRefresh = false) => {
+  private _loadFeatures = async (
+    forceRefresh = false,
+    options?: { strict?: boolean },
+  ) => {
     // Feature are currently being loaded
     if (this._loadingFeatures) {
       await new Promise<void>((resolve) => {
@@ -598,6 +603,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
           const cached = this._readCachedFlags()
           this._features = cached ?? this._config.featureDefaults ?? {}
         }
+      }
+      if (options?.strict) {
+        throw error
       }
       console.warn(
         'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',

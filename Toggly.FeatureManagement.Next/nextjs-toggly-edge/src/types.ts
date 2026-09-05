@@ -3,8 +3,8 @@ import type { NextRequest, NextResponse } from 'next/server'
 
 /**
  * Edge runtime Toggly configuration.
- * Inherits `identity`, `groups`, and `claims` from {@link TogglyConfig};
- * those are appended to evaluated-signed fetch URLs for Definitions targeting.
+ * Definitions are fetched via definitions-signed (identity-agnostic) and
+ * evaluated per request with overrides from headers/cookies/config.
  */
 export interface TogglyEdgeConfig extends TogglyConfig {
   /** Cache feature definitions at the edge (default: true) */

@@ -28,6 +28,18 @@ export type {
   EvaluationResult,
 } from '@ops-ai/remix-toggly-core';
 
+export { fromHttpRequest } from '@ops-ai/remix-toggly-core';
+
+// Ambient EvalContext store
+export {
+  getAmbientEvalOverrides,
+  mergeIdentityContext,
+  runWithEvalContext,
+} from './eval-context-store';
+
+export { extractEvalContext } from './extract-context';
+export type { EvalContextProviders } from './extract-context';
+
 // Export server client
 export { TogglyServerClient, createServerClient } from './client';
 

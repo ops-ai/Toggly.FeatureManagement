@@ -7,7 +7,12 @@ for synchronous and asynchronous APIs.
 from toggly.async_client import AsyncTogglyClient
 from toggly.client import TogglyClient
 from toggly.config import TogglyConfig
-from toggly.context import EvaluationContext, TogglyEntityContext
+from toggly.context import (
+    EvaluationContext,
+    HttpRequestMapper,
+    RequestContext,
+    TogglyEntityContext,
+)
 from toggly.decorators import (
     feature_context,
     feature_flag,
@@ -64,6 +69,8 @@ __all__ = [
     "TogglyConfig",
     # Context
     "EvaluationContext",
+    "HttpRequestMapper",
+    "RequestContext",
     "TogglyEntityContext",
     "register_context",
     "EntityContextPropertySchema",

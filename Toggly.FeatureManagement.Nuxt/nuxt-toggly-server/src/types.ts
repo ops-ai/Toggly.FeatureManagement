@@ -1,4 +1,8 @@
+import type { H3Event } from 'h3'
 import type { TogglyConfig, TogglyClient } from '@ops-ai/nuxt-toggly-core'
+import type { FeatureCheckOptions } from './feature-check'
+
+export type { FeatureCheckOptions } from './feature-check'
 
 /**
  * Server-side Toggly configuration extending core config
@@ -10,6 +14,42 @@ export interface TogglyServerConfig extends TogglyConfig {
   cacheTtl?: number
   /** Storage key prefix for cached definitions */
   cacheKeyPrefix?: string
+}
+
+/**
+ * Providers that build ambient EvalContext per H3 event.
+ * Prefer registering via `configureEventEvalContext` or
+ * `defineTogglyContextMiddleware`.
+ */
+export interface EventEvalContextProviders {
+  /**
+   * Extract identity from the event.
+   * Default (when unset): `x-toggly-identity` header.
+   */
+  getIdentity?: (
+    event: H3Event,
+  ) => string | undefined | Promise<string | undefined>
+
+  /** Extract group memberships for Targeting / Percentage filters. */
+  getGroups?: (
+    event: H3Event,
+  ) => string[] | undefined | Promise<string[] | undefined>
+
+  /** Extract principal / JWT-style claims for UserClaims filters. */
+  getClaims?: (
+    event: H3Event,
+  ) =>
+    | Record<string, string>
+    | undefined
+    | Promise<Record<string, string> | undefined>
+
+  /**
+   * Full ambient context. When provided, returned fields are used;
+   * missing `request` is still filled from H3 headers via `fromHttpRequest`.
+   */
+  getContext?: (
+    event: H3Event,
+  ) => FeatureCheckOptions | Promise<FeatureCheckOptions>
 }
 
 /**

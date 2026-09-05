@@ -130,7 +130,7 @@ describe('local evaluation mode', () => {
     client.destroy()
   })
 
-  it('does not refresh on setIdentity in local mode', async () => {
+  it('does not refresh on setIdentity in local mode but re-snapshots', async () => {
     mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
     const client = createTogglyClient({
@@ -143,10 +143,17 @@ describe('local evaluation mode', () => {
     await client.init()
     expect(mockFetch).toHaveBeenCalledTimes(1)
 
+    let notified = 0
+    client.subscribeFeaturesRefresh(() => {
+      notified += 1
+    })
+
     await client.setIdentity('user-b')
 
     expect(client.identity).toBe('user-b')
     expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(notified).toBeGreaterThanOrEqual(1)
+    expect(await client.isFeatureOn('AlwaysOnFlag')).toBe(true)
 
     client.destroy()
   })
@@ -165,6 +172,191 @@ describe('local evaluation mode', () => {
     expect(client.getDefinitions().has('AlwaysOnFlag')).toBe(true)
     expect(mockFetch).not.toHaveBeenCalled()
 
+    client.destroy()
+  })
+
+  const countryFlag: FeatureDefinitionModel = {
+    featureKey: 'CountryFlag',
+    filters: [
+      {
+        name: 'Country',
+        parameters: { Percentage: 100, 'Country:0': 'US' },
+      },
+    ],
+  }
+
+  const browserFlag: FeatureDefinitionModel = {
+    featureKey: 'BrowserFlag',
+    filters: [
+      {
+        name: 'BrowserFamily',
+        parameters: { Percentage: 100, 'BrowserFamily:0': 'Chrome' },
+      },
+    ],
+  }
+
+  const claimsFlag: FeatureDefinitionModel = {
+    featureKey: 'ClaimsFlag',
+    filters: [
+      {
+        name: 'UserClaims',
+        parameters: { Percentage: 100, Claim: 'role', Value: 'admin' },
+      },
+    ],
+  }
+
+  const groupsFlag: FeatureDefinitionModel = {
+    featureKey: 'GroupsFlag',
+    filters: [
+      {
+        name: 'Targeting',
+        parameters: {
+          'Audience.Groups:0': 'beta',
+          'Audience.DefaultRolloutPercentage': 0,
+        },
+      },
+    ],
+  }
+
+  const chromeUA =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+  it('evaluates Country from request.country override', async () => {
+    mockFetch.mockResolvedValueOnce(defsResponse([countryFlag]))
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      identity: 'user-1',
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await client.init()
+
+    await expect(client.isFeatureOn('CountryFlag')).resolves.toBe(false)
+    await expect(
+      client.isFeatureOn('CountryFlag', null, undefined, {
+        request: { country: 'us' },
+      }),
+    ).resolves.toBe(true)
+
+    client.destroy()
+  })
+
+  it('evaluates BrowserFamily from request.userAgent override', async () => {
+    mockFetch.mockResolvedValueOnce(defsResponse([browserFlag]))
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      identity: 'user-1',
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await client.init()
+
+    await expect(
+      client.isFeatureOn('BrowserFlag', null, undefined, {
+        request: { userAgent: chromeUA },
+      }),
+    ).resolves.toBe(true)
+
+    client.destroy()
+  })
+
+  it('per-call claims override config claims', async () => {
+    mockFetch.mockResolvedValueOnce(defsResponse([claimsFlag]))
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      identity: 'user-1',
+      claims: { role: 'user' },
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await client.init()
+
+    await expect(client.isFeatureOn('ClaimsFlag')).resolves.toBe(false)
+    await expect(
+      client.isFeatureOn('ClaimsFlag', null, undefined, {
+        claims: { role: 'admin' },
+      }),
+    ).resolves.toBe(true)
+
+    client.destroy()
+  })
+
+  it('per-call groups override config groups', async () => {
+    mockFetch.mockResolvedValueOnce(defsResponse([groupsFlag]))
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      identity: 'user-1',
+      groups: [],
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await client.init()
+
+    await expect(client.isFeatureOn('GroupsFlag')).resolves.toBe(false)
+    await expect(
+      client.isFeatureOn('GroupsFlag', null, undefined, {
+        groups: ['beta'],
+      }),
+    ).resolves.toBe(true)
+
+    client.destroy()
+  })
+
+  it('string identity override remains backward-compatible', async () => {
+    mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      identity: 'user-a',
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await client.init()
+
+    await expect(
+      client.isFeatureOn('AlwaysOnFlag', null, undefined, 'user-b'),
+    ).resolves.toBe(true)
+
+    client.destroy()
+  })
+
+  it('setContext updates groups and claims for subsequent local eval', async () => {
+    mockFetch.mockResolvedValueOnce(defsResponse([claimsFlag]))
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      identity: 'user-1',
+      claims: { role: 'user' },
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await client.init()
+
+    await expect(client.isFeatureOn('ClaimsFlag')).resolves.toBe(false)
+    expect(client.state.features['ClaimsFlag']).toBe(false)
+
+    let refreshNotified = 0
+    const unsubscribe = client.subscribeFeaturesRefresh(() => {
+      refreshNotified += 1
+    })
+
+    await client.setContext({ claims: { role: 'admin' } })
+    await expect(client.isFeatureOn('ClaimsFlag')).resolves.toBe(true)
+    expect(client.state.features['ClaimsFlag']).toBe(true)
+    expect(refreshNotified).toBe(1)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    unsubscribe()
     client.destroy()
   })
 

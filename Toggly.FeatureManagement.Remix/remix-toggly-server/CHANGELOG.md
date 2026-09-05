@@ -1,3 +1,36 @@
+## 1.8.1
+
+2026-09-04
+
+### Fixed
+- `mergeIdentityContext` used `hasOwnProperty` to decide whether a per-call
+  field was overridden, so a key present with an explicit `undefined` value
+  (e.g. `{ identity: user.id, claims: user.claims }` where `user.claims` is
+  optional) discarded ambient `claims`/`groups`/`request` instead of falling
+  back to it. Now matches the Next.js ambient contract: a field only counts
+  as overridden when its value is not `undefined` [OPS-891].
+
+## 1.8.0
+
+2026-09-04
+
+### Added
+- Ambient EvalContext for loaders and actions: optional `getGroups` /
+  `getClaims` / `getContext`, with `request.*` filled via `fromHttpRequest`
+  [OPS-891].
+- `run` helpers and ALS binding so `client.isEnabled('X')` needs no
+  IdentityContext arg for the loader/action duration; per-call overrides
+  still win field-by-field. UserClaims via `claims` only.
+
+## 1.7.0
+
+2026-09-03
+
+### Added
+- `buildEvalContext` merges `IdentityContext.request` into EvalContext so
+  Country / BrowserFamily / language filters evaluate per-call [OPS-874].
+- Re-export `fromHttpRequest` for header → request mapping in loaders.
+
 ## 1.6.0
 
 2026-09-02

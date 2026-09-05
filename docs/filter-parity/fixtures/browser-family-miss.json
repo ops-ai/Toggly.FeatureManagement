@@ -1,0 +1,22 @@
+{
+  "id": "browser-family-miss",
+  "description": "BrowserFamily fails when UA family does not match configured values",
+  "featureKey": "parity-browser-family-miss",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "BrowserFamily",
+      "parameters": {
+        "Percentage": 100,
+        "BrowserFamily:0": "Firefox"
+      }
+    }
+  ],
+  "context": {
+    "identity": "u",
+    "request": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+  },
+  "expected": false
+}

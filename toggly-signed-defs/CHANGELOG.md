@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.5
+
+2026-09-04
+
+### Fixed
+- Reject evaluated-signed 2xx error envelopes (`{"error":…}`) in
+  `unwrapDefsPayload`, `asVariantDefsRecord`, and `rejectEvaluatedErrorEnvelope`
+  so client SDKs cannot latch empty success [OPS-899].
 
 ## 1.2.4
 

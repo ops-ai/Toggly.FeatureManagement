@@ -1,0 +1,22 @@
+{
+  "id": "os-match",
+  "description": "OS alias matches Mac from Chrome desktop UA (OperatingSystem:N params)",
+  "featureKey": "parity-os",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "OS",
+      "parameters": {
+        "Percentage": 100,
+        "OperatingSystem:0": "Mac"
+      }
+    }
+  ],
+  "context": {
+    "identity": "u",
+    "request": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+  },
+  "expected": true
+}

@@ -7,7 +7,11 @@ module Toggly
     # Used for features that should be disabled for everyone.
     class AlwaysOff < Base
       def self.type
-        "always_off"
+        "AlwaysOff"
+      end
+
+      def self.aliases
+        %w[always_off]
       end
 
       # @param rule [Hash] The rule configuration (ignored)

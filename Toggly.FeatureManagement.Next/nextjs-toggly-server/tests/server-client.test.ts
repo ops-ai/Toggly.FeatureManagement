@@ -327,6 +327,59 @@ describe('Server Client', () => {
       expect(shared.identity).toBe('bob')
       expect(getServerToggly()).toBe(shared)
     })
+
+    it('evaluates Country from headers via fromHttpRequest', async () => {
+      const countryFlag: FeatureDefinitionModel = {
+        featureKey: 'country-flag',
+        filters: [
+          {
+            name: 'Country',
+            parameters: { Percentage: 100, 'Country:0': 'US' },
+          },
+        ],
+      }
+      mockFetch.mockResolvedValueOnce(defsResponse([countryFlag]))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'user-1',
+        enableLiveUpdates: false,
+      })
+
+      expect(await isServerFeatureOn('country-flag')).toBe(false)
+      expect(
+        await isServerFeatureOn('country-flag', {
+          headers: { 'cf-ipcountry': 'US' },
+        }),
+      ).toBe(true)
+    })
+
+    it('evaluates per-call claims override', async () => {
+      const claimsFlag: FeatureDefinitionModel = {
+        featureKey: 'claims-flag',
+        filters: [
+          {
+            name: 'UserClaims',
+            parameters: { Percentage: 100, Claim: 'role', Value: 'admin' },
+          },
+        ],
+      }
+      mockFetch.mockResolvedValueOnce(defsResponse([claimsFlag]))
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'user-1',
+        claims: { role: 'user' },
+        enableLiveUpdates: false,
+      })
+
+      expect(await isServerFeatureOn('claims-flag')).toBe(false)
+      expect(
+        await isServerFeatureOn('claims-flag', {
+          claims: { role: 'admin' },
+        }),
+      ).toBe(true)
+    })
   })
 
   describe('isServerFeatureOff', () => {

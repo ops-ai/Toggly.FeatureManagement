@@ -1,3 +1,42 @@
+## 1.8.2
+
+2026-09-04
+
+### Fixed
+- Reject evaluated-signed 2xx error envelopes (`{"error":...}`) instead of
+  treating them as empty successful definitions [OPS-828].
+- Remote `setIdentity` / `setContext` withhold prior enables, refresh for the
+  new targeting context, and restore the previous identity and features when
+  the refresh fails; `refresh()` rethrows after recording `state.error`
+  [OPS-828].
+- Local `setIdentity` re-snapshots evaluated booleans for the new identity
+  [OPS-828].
+
+## 1.8.1
+
+2026-09-03
+
+### Fixed
+- `setContext` re-evaluates the local feature snapshot and notifies subscribers
+  so React hooks refresh after claims/groups/identity changes; remote mode
+  refreshes when any of those fields change (not only identity) [OPS-874].
+
+### Changed
+- Raise `@ops-ai/toggly-eval` floor to `^2.0.3` from npm (temporary
+  in-repo `workspace:^` link removed after publish) [OPS-874] [OPS-895].
+
+## 1.8.0
+
+2026-09-03
+
+### Added
+- Per-call `EvalContextOverrides` (`identity`, `groups`, `claims`, `request`)
+  for local evaluation; string identity override remains supported [OPS-874].
+- Re-export `fromHttpRequest` from `@ops-ai/toggly-eval` for header → request
+  mapping (Country / BrowserFamily / language filters).
+- `setContext({ identity?, groups?, claims? })` to update shared config for
+  local targeting without a full re-init.
+
 ## 1.7.0
 
 2026-09-02

@@ -24,6 +24,7 @@ on:
       - '.github/actions/build-shared-js-deps/**'
       - '.github/actions/upload-shared-js-deps/**'
       - '.github/actions/download-shared-js-deps/**'
+      - '.github/actions/overlay-shared-js-deps/**'
   pull_request:
     branches:
       - develop
@@ -47,6 +48,7 @@ on:
       - '.github/actions/build-shared-js-deps/**'
       - '.github/actions/upload-shared-js-deps/**'
       - '.github/actions/download-shared-js-deps/**'
+      - '.github/actions/overlay-shared-js-deps/**'
   workflow_dispatch:
 
 jobs:
@@ -138,6 +140,11 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ matrix.path }}
         run: npm ci || npm install
+
+      - name: Overlay shared JS deps into node_modules
+        uses: ./.github/actions/overlay-shared-js-deps
+        with:
+          package-dir: ${{ matrix.path }}
 
       - name: Build package (if needed)
         working-directory: ${{ matrix.path }}
@@ -285,6 +292,11 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ matrix.path }}
         run: npm ci || npm install
+
+      - name: Overlay shared JS deps into node_modules
+        uses: ./.github/actions/overlay-shared-js-deps
+        with:
+          package-dir: ${{ matrix.path }}
 
       - name: Run smoke test
         timeout-minutes: 2

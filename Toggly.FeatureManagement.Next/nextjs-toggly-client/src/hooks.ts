@@ -277,9 +277,18 @@ export function useFeatures(): {
 export function useIdentity(): {
   identity: string | undefined
   setIdentity: (identity: string) => Promise<void>
+  setContext: (context: {
+    identity?: string
+    groups?: string[]
+    claims?: Record<string, string>
+  }) => Promise<void>
   isUpdating: boolean
 } {
-  const { identity, setIdentity: setContextIdentity } = useToggly()
+  const {
+    identity,
+    setIdentity: setContextIdentity,
+    setContext: setContextValue,
+  } = useToggly()
   const [isUpdating, setIsUpdating] = useState(false)
 
   const setIdentity = useCallback(
@@ -294,12 +303,29 @@ export function useIdentity(): {
     [setContextIdentity]
   )
 
+  const setContext = useCallback(
+    async (contextUpdate: {
+      identity?: string
+      groups?: string[]
+      claims?: Record<string, string>
+    }) => {
+      setIsUpdating(true)
+      try {
+        await setContextValue(contextUpdate)
+      } finally {
+        setIsUpdating(false)
+      }
+    },
+    [setContextValue],
+  )
+
   return useMemo(
     () => ({
       identity,
       setIdentity,
+      setContext,
       isUpdating,
     }),
-    [identity, setIdentity, isUpdating]
+    [identity, setIdentity, setContext, isUpdating]
   )
 }

@@ -15,6 +15,8 @@ export type {
   EvaluationMode,
   EvaluatedDefinitions,
   TogglyEntityContext,
+  EvalContextOverrides,
+  EvalContextArg,
 } from './types'
 
 // Constants
@@ -61,6 +63,7 @@ export type {
   EvalContext,
   FeatureDefinitionModel,
 } from '@ops-ai/toggly-eval'
+export { fromHttpRequest } from '@ops-ai/toggly-eval'
 
 // Live socket helpers
 export {

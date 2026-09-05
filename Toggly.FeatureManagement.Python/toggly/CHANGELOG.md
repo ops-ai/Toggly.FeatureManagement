@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0
+
+2026-09-04
+
+### Added
+- Server-side filter parity with `@ops-ai/toggly-eval` / Definitions: segment filters
+  (`BrowserFamily`, `BrowserLanguage`, `Country`/`CountryFamily`, `DeviceType`,
+  `OS`/`OperatingSystem`), `UserClaims`, and `AlwaysOff`.
+- `EvaluationContext` claims + `RequestContext` (user_agent, accept_language, country)
+  and `HttpRequestMapper.from_http_headers` for CF/Vercel/CloudFront country headers.
+- Microsoft.* aliases for Percentage, TimeWindow, and Targeting.
+- Golden fixture tests loading `docs/filter-parity/fixtures/`.
+
+### Changed
+- Percentage / segment sticky buckets now use Definitions SHA-256
+  (`featureKey\nuserId`) instead of FNV-1a (cohort shift for identified rollouts).
+
 ## 0.3.0
 
 2026-08-21

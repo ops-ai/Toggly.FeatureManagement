@@ -1,0 +1,22 @@
+{
+  "id": "browser-family-match",
+  "description": "BrowserFamily matches Chrome UA when segment percentage is 100",
+  "featureKey": "parity-browser-family-match",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "BrowserFamily",
+      "parameters": {
+        "Percentage": 100,
+        "BrowserFamily:0": "Chrome"
+      }
+    }
+  ],
+  "context": {
+    "identity": "u",
+    "request": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+  },
+  "expected": true
+}

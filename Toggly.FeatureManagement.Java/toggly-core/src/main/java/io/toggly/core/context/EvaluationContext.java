@@ -10,16 +10,19 @@ import java.util.Set;
 /**
  * Context for evaluating feature flags.
  *
- * <p>Contains user identity, group memberships, and custom traits for targeting rules.</p>
+ * <p>Contains user identity, group memberships, claims, request fields, and
+ * custom traits for targeting and segment rules.</p>
  *
  * <p>Example usage:</p>
  * <pre>{@code
  * EvaluationContext context = EvaluationContext.builder()
  *     .identity("user-123")
  *     .addGroup("premium")
- *     .addGroup("beta-testers")
- *     .trait("plan", "enterprise")
- *     .trait("country", "US")
+ *     .claim("role", "admin")
+ *     .request(RequestContext.builder()
+ *         .userAgent("Mozilla/5.0 ...")
+ *         .country("US")
+ *         .build())
  *     .build();
  *
  * boolean enabled = client.isEnabled("new-feature", context);
@@ -27,21 +30,33 @@ import java.util.Set;
  */
 public final class EvaluationContext {
 
-    private static final EvaluationContext EMPTY = new EvaluationContext(null, Collections.emptySet(), Collections.emptyMap(), null);
+    private static final EvaluationContext EMPTY = new EvaluationContext(
+            null,
+            Collections.emptySet(),
+            Collections.emptyMap(),
+            Collections.emptyMap(),
+            null,
+            null);
 
     private final String identity;
     private final Set<String> groups;
     private final Map<String, Object> traits;
+    private final Map<String, String> claims;
+    private final RequestContext request;
     private final TogglyEntityContext entity;
 
-    private EvaluationContext(String identity, Set<String> groups, Map<String, Object> traits) {
-        this(identity, groups, traits, null);
-    }
-
-    private EvaluationContext(String identity, Set<String> groups, Map<String, Object> traits, TogglyEntityContext entity) {
+    private EvaluationContext(
+            String identity,
+            Set<String> groups,
+            Map<String, Object> traits,
+            Map<String, String> claims,
+            RequestContext request,
+            TogglyEntityContext entity) {
         this.identity = identity;
         this.groups = Collections.unmodifiableSet(new HashSet<>(groups));
         this.traits = Collections.unmodifiableMap(new HashMap<>(traits));
+        this.claims = Collections.unmodifiableMap(new HashMap<>(claims));
+        this.request = request;
         this.entity = entity;
     }
 
@@ -61,7 +76,13 @@ public final class EvaluationContext {
      * @return a new context
      */
     public static EvaluationContext forIdentity(String identity) {
-        return new EvaluationContext(identity, Collections.emptySet(), Collections.emptyMap(), null);
+        return new EvaluationContext(
+                identity,
+                Collections.emptySet(),
+                Collections.emptyMap(),
+                Collections.emptyMap(),
+                null,
+                null);
     }
 
     /**
@@ -98,6 +119,24 @@ public final class EvaluationContext {
      */
     public Map<String, Object> getTraits() {
         return traits;
+    }
+
+    /**
+     * Returns principal / JWT-style claims for UserClaims filters.
+     *
+     * @return an unmodifiable map of claims
+     */
+    public Map<String, String> getClaims() {
+        return claims;
+    }
+
+    /**
+     * Returns HTTP request fields for segment filters.
+     *
+     * @return the request context or null
+     */
+    public RequestContext getRequest() {
+        return request;
     }
 
     /**
@@ -162,7 +201,7 @@ public final class EvaluationContext {
      * @return a new context with the identity
      */
     public EvaluationContext withIdentity(String identity) {
-        return new EvaluationContext(identity, this.groups, this.traits, this.entity);
+        return new EvaluationContext(identity, this.groups, this.traits, this.claims, this.request, this.entity);
     }
 
     /**
@@ -174,7 +213,7 @@ public final class EvaluationContext {
     public EvaluationContext withGroup(String group) {
         Set<String> newGroups = new HashSet<>(this.groups);
         newGroups.add(group);
-        return new EvaluationContext(this.identity, newGroups, this.traits, this.entity);
+        return new EvaluationContext(this.identity, newGroups, this.traits, this.claims, this.request, this.entity);
     }
 
     /**
@@ -187,7 +226,28 @@ public final class EvaluationContext {
     public EvaluationContext withTrait(String key, Object value) {
         Map<String, Object> newTraits = new HashMap<>(this.traits);
         newTraits.put(key, value);
-        return new EvaluationContext(this.identity, this.groups, newTraits, this.entity);
+        return new EvaluationContext(this.identity, this.groups, newTraits, this.claims, this.request, this.entity);
+    }
+
+    /**
+     * Creates a new context with the specified claims map.
+     *
+     * @param claims claim type → value
+     * @return a new context
+     */
+    public EvaluationContext withClaims(Map<String, String> claims) {
+        Map<String, String> copy = claims != null ? claims : Collections.emptyMap();
+        return new EvaluationContext(this.identity, this.groups, this.traits, copy, this.request, this.entity);
+    }
+
+    /**
+     * Creates a new context with the specified request fields.
+     *
+     * @param request the request context
+     * @return a new context
+     */
+    public EvaluationContext withRequest(RequestContext request) {
+        return new EvaluationContext(this.identity, this.groups, this.traits, this.claims, request, this.entity);
     }
 
     /**
@@ -197,7 +257,7 @@ public final class EvaluationContext {
      * @return a new context
      */
     public EvaluationContext withEntity(TogglyEntityContext entity) {
-        return new EvaluationContext(this.identity, this.groups, this.traits, entity);
+        return new EvaluationContext(this.identity, this.groups, this.traits, this.claims, this.request, entity);
     }
 
     /**
@@ -207,6 +267,8 @@ public final class EvaluationContext {
         private String identity;
         private final Set<String> groups = new HashSet<>();
         private final Map<String, Object> traits = new HashMap<>();
+        private final Map<String, String> claims = new HashMap<>();
+        private RequestContext request;
         private TogglyEntityContext entity;
 
         private Builder() {}
@@ -250,6 +312,24 @@ public final class EvaluationContext {
         }
 
         /**
+         * Sets group memberships from a list (fixture / JSON friendly).
+         *
+         * @param groups the groups
+         * @return this builder
+         */
+        public Builder groups(Iterable<String> groups) {
+            this.groups.clear();
+            if (groups != null) {
+                for (String group : groups) {
+                    if (group != null) {
+                        this.groups.add(group);
+                    }
+                }
+            }
+            return this;
+        }
+
+        /**
          * Adds a custom trait.
          *
          * @param key the trait key
@@ -276,10 +356,44 @@ public final class EvaluationContext {
         }
 
         /**
-         * Builds the EvaluationContext.
+         * Adds a principal claim.
          *
-         * @return a new EvaluationContext
+         * @param type claim type
+         * @param value claim value
+         * @return this builder
          */
+        public Builder claim(String type, String value) {
+            if (type != null) {
+                this.claims.put(type, value);
+            }
+            return this;
+        }
+
+        /**
+         * Sets all principal claims.
+         *
+         * @param claims claim type → value
+         * @return this builder
+         */
+        public Builder claims(Map<String, String> claims) {
+            this.claims.clear();
+            if (claims != null) {
+                this.claims.putAll(claims);
+            }
+            return this;
+        }
+
+        /**
+         * Sets HTTP request fields for segment filters.
+         *
+         * @param request the request context
+         * @return this builder
+         */
+        public Builder request(RequestContext request) {
+            this.request = request;
+            return this;
+        }
+
         /**
          * Sets the entity context for ContextProperty filters.
          *
@@ -291,8 +405,13 @@ public final class EvaluationContext {
             return this;
         }
 
+        /**
+         * Builds the EvaluationContext.
+         *
+         * @return a new EvaluationContext
+         */
         public EvaluationContext build() {
-            return new EvaluationContext(identity, groups, traits, entity);
+            return new EvaluationContext(identity, groups, traits, claims, request, entity);
         }
     }
 
@@ -304,12 +423,14 @@ public final class EvaluationContext {
         return Objects.equals(identity, that.identity) &&
                 Objects.equals(groups, that.groups) &&
                 Objects.equals(traits, that.traits) &&
+                Objects.equals(claims, that.claims) &&
+                Objects.equals(request, that.request) &&
                 Objects.equals(entity, that.entity);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(identity, groups, traits, entity);
+        return Objects.hash(identity, groups, traits, claims, request, entity);
     }
 
     @Override
@@ -317,6 +438,8 @@ public final class EvaluationContext {
         return "EvaluationContext{" +
                 "identity='" + identity + '\'' +
                 ", groups=" + groups +
+                ", claims=" + claims +
+                ", request=" + request +
                 ", traits=" + traits +
                 '}';
     }

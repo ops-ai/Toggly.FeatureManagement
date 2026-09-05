@@ -5,8 +5,9 @@ import type {
   FeatureDefinitions,
   FeatureRequirement,
   Hook,
-  FeatureDefinitionsResponse,
   EvaluationSeriesData,
+  EvalContextArg,
+  EvalContextOverrides,
 } from './types'
 import { HookExecutor } from './hooks'
 import { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
@@ -41,6 +42,7 @@ import {
   resolveEvaluatedDefinition,
 } from '@ops-ai/toggly-hooks-types'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
+import { parseRemoteEvaluatedPayload } from './parse-evaluated-payload'
 import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
 import {
   evaluateDefinitions,
@@ -226,13 +228,16 @@ export function createTogglyClient(
 
   function buildEvalContext(
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
-    identityOverride?: string,
+    overrides?: EvalContextArg,
   ): EvalContext {
+    const o: EvalContextOverrides =
+      typeof overrides === 'string' ? { identity: overrides } : overrides ?? {}
     return {
-      identity: identityOverride ?? config.identity,
-      groups: config.groups,
-      traits: config.claims,
-      claims: config.claims,
+      identity: o.identity ?? config.identity,
+      groups: o.groups ?? config.groups,
+      traits: o.claims ?? config.claims,
+      claims: o.claims ?? config.claims,
+      request: o.request,
       entity: entityContext ?? undefined,
     }
   }
@@ -257,13 +262,13 @@ export function createTogglyClient(
   function evaluateLocalFeature(
     featureKey: string,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
-    identityOverride?: string,
+    overrides?: EvalContextArg,
   ): boolean {
     if (state.definitions.has(featureKey)) {
       return evaluateDefinitions(
         state.definitions,
         featureKey,
-        buildEvalContext(entityContext, identityOverride),
+        buildEvalContext(entityContext, overrides),
       )
     }
     return config.featureDefaults?.[featureKey] ?? false
@@ -272,10 +277,10 @@ export function createTogglyClient(
   function getEffectiveFlag(
     featureKey: string,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
-    identityOverride?: string,
+    overrides?: EvalContextArg,
   ): boolean {
     const remote = isLocalMode()
-      ? evaluateLocalFeature(featureKey, entityContext, identityOverride)
+      ? evaluateLocalFeature(featureKey, entityContext, overrides)
       : resolveEvaluatedDefinition(state.features[featureKey], entityContext)
     return applyLocalGate(remote, featureKey, localGates, localGateIndex)
   }
@@ -285,7 +290,7 @@ export function createTogglyClient(
     requirement: FeatureRequirement = 'all',
     negate = false,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
-    identityOverride?: string,
+    overrides?: EvalContextArg,
   ): boolean {
     if (featureKeys.length === 0) {
       return !negate
@@ -294,11 +299,11 @@ export function createTogglyClient(
     let result: boolean
     if (requirement === 'any') {
       result = featureKeys.some((key) =>
-        getEffectiveFlag(key, entityContext, identityOverride),
+        getEffectiveFlag(key, entityContext, overrides),
       )
     } else {
       result = featureKeys.every((key) =>
-        getEffectiveFlag(key, entityContext, identityOverride),
+        getEffectiveFlag(key, entityContext, overrides),
       )
     }
 
@@ -375,41 +380,9 @@ export function createTogglyClient(
         }),
       })
 
-      const definitions: FeatureDefinitions = {}
-      if (config.verifySignatures) {
-        // Verified path returns raw defs (map or legacy array), never envelope.defs.
-        const data = parsed as
-          | FeatureDefinitions
-          | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
-        if (Array.isArray(data)) {
-          for (const definition of data) {
-            definitions[definition.featureKey] = !!definition.filters?.some(
-              (filter) => filter.name === 'AlwaysOn'
-            )
-          }
-        } else if (data && typeof data === 'object') {
-          Object.assign(definitions, data)
-        }
-      } else {
-        const data = parsed as
-          | FeatureDefinitionsResponse
-          | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
-        if (Array.isArray(data)) {
-          for (const definition of data) {
-            definitions[definition.featureKey] = !!definition.filters?.some(
-              (filter) => filter.name === 'AlwaysOn'
-            )
-          }
-        } else if ('defs' in data && data.defs) {
-          Object.assign(definitions, data.defs)
-        } else if ('features' in data && Array.isArray(data.features)) {
-          for (const feature of data.features) {
-            definitions[feature.featureKey] = feature.enabled
-          }
-        }
-      }
-
-      return definitions
+      return parseRemoteEvaluatedPayload(parsed, {
+        verifySignatures: config.verifySignatures,
+      })
     } catch (error) {
       console.error('[Toggly] Failed to fetch feature definitions:', error)
       reportError('Error fetching feature flags', error)
@@ -729,7 +702,7 @@ export function createTogglyClient(
       } catch (error) {
         state.error = error as Error
         reportError('Error refreshing feature flags', error)
-        return state.features
+        throw error
       } finally {
         state.loading = false
       }
@@ -739,7 +712,7 @@ export function createTogglyClient(
       featureKey: string,
       context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
-      identityOverride?: string,
+      overrides?: EvalContextArg,
     ): Promise<boolean> {
       if (destroyed) {
         return config.featureDefaults?.[featureKey] ?? false
@@ -753,7 +726,7 @@ export function createTogglyClient(
         config.featureDefaults?.[featureKey]
       )
 
-      const result = getEffectiveFlag(featureKey, entityContext, identityOverride)
+      const result = getEffectiveFlag(featureKey, entityContext, overrides)
 
       // Execute after hooks (fire-and-forget)
       hookExecutor.executeAfterEvaluation(featureKey, dataMap, result).catch(() => {
@@ -767,9 +740,9 @@ export function createTogglyClient(
       featureKey: string,
       context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
-      identityOverride?: string,
+      overrides?: EvalContextArg,
     ): Promise<boolean> {
-      const isOn = await client.isFeatureOn(featureKey, context, kind, identityOverride)
+      const isOn = await client.isFeatureOn(featureKey, context, kind, overrides)
       return !isOn
     },
 
@@ -779,7 +752,7 @@ export function createTogglyClient(
       negate: boolean = false,
       context?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
-      identityOverride?: string,
+      overrides?: EvalContextArg,
     ): Promise<boolean> {
       if (destroyed) {
         return evaluateGate(
@@ -811,12 +784,12 @@ export function createTogglyClient(
         requirement,
         negate,
         entityContext,
-        identityOverride,
+        overrides,
       )
 
       // Execute after hooks for each key (fire-and-forget)
       for (const { key, dataMap } of dataMaps) {
-        const keyResult = getEffectiveFlag(key, entityContext, identityOverride)
+        const keyResult = getEffectiveFlag(key, entityContext, overrides)
         hookExecutor
           .executeAfterEvaluation(key, dataMap, keyResult)
           .catch(() => {
@@ -839,17 +812,120 @@ export function createTogglyClient(
         return
       }
 
+      const previousIdentity = config.identity
+      const previousFeatures = { ...state.features }
+
       // Execute before hooks
       const dataMap = await hookExecutor.executeBeforeIdentify(identity)
 
-      config.identity = identity
+      if (!state.initialized) {
+        config.identity = identity
+        await hookExecutor.executeAfterIdentify(identity, dataMap)
+        return
+      }
 
-      // Execute after hooks
+      // Local: re-snapshot with the new identity (no remote refresh).
+      if (isLocalMode()) {
+        config.identity = identity
+        await hookExecutor.executeAfterIdentify(identity, dataMap)
+        applyLocalDefinitions(state.definitions)
+        notifyFeaturesRefresh()
+        return
+      }
+
+      // Remote: withhold prior enables before publishing the new identity.
+      state.features = { ...config.featureDefaults }
+      notifyFeaturesRefresh()
+
+      config.identity = identity
       await hookExecutor.executeAfterIdentify(identity, dataMap)
 
-      // Remote rail: identity is sent on fetch — refresh. Local: eval-time only.
-      if (state.initialized && !isLocalMode()) {
+      try {
         await client.refresh()
+      } catch (error) {
+        config.identity = previousIdentity
+        state.features = previousFeatures
+        notifyFeaturesRefresh()
+        throw error
+      }
+    },
+
+    async setContext(contextUpdate: {
+      identity?: string
+      groups?: string[]
+      claims?: Record<string, string>
+    }): Promise<void> {
+      if (destroyed) {
+        return
+      }
+
+      const identityChanged =
+        contextUpdate.identity !== undefined &&
+        contextUpdate.identity !== config.identity
+      const groupsChanged =
+        contextUpdate.groups !== undefined &&
+        JSON.stringify(contextUpdate.groups) !== JSON.stringify(config.groups)
+      const claimsChanged =
+        contextUpdate.claims !== undefined &&
+        JSON.stringify(contextUpdate.claims) !== JSON.stringify(config.claims)
+
+      const contextChanged = identityChanged || groupsChanged || claimsChanged
+      if (!contextChanged) {
+        return
+      }
+
+      const previousIdentity = config.identity
+      const previousGroups = config.groups
+      const previousClaims = config.claims
+      const previousFeatures = { ...state.features }
+
+      const applyContextFields = async () => {
+        if (contextUpdate.identity !== undefined) {
+          const dataMap = await hookExecutor.executeBeforeIdentify(
+            contextUpdate.identity,
+          )
+          config.identity = contextUpdate.identity
+          await hookExecutor.executeAfterIdentify(
+            contextUpdate.identity,
+            dataMap,
+          )
+        }
+        if (contextUpdate.groups !== undefined) {
+          config.groups = contextUpdate.groups
+        }
+        if (contextUpdate.claims !== undefined) {
+          config.claims = contextUpdate.claims
+        }
+      }
+
+      if (!state.initialized) {
+        await applyContextFields()
+        return
+      }
+
+      // Local: re-snapshot with the new eval context so provider subscribers
+      // and hooks that depend on `features` pick up claim/group/identity changes.
+      if (isLocalMode()) {
+        await applyContextFields()
+        applyLocalDefinitions(state.definitions)
+        notifyFeaturesRefresh()
+        return
+      }
+
+      // Remote: withhold prior targeting enables before applying new context.
+      state.features = { ...config.featureDefaults }
+      notifyFeaturesRefresh()
+      await applyContextFields()
+
+      try {
+        await client.refresh()
+      } catch (error) {
+        config.identity = previousIdentity
+        config.groups = previousGroups
+        config.claims = previousClaims
+        state.features = previousFeatures
+        notifyFeaturesRefresh()
+        throw error
       }
     },
 

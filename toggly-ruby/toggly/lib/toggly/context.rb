@@ -1,23 +1,31 @@
 # frozen_string_literal: true
 
 module Toggly
-  # Evaluation context containing user identity, groups, and traits.
+  # Evaluation context containing user identity, groups, claims, request, and traits.
   #
   # @example
   #   context = Toggly::Context.new(
   #     identity: "user-123",
   #     groups: ["beta-testers", "premium"],
-  #     traits: { country: "US", plan: "enterprise" }
+  #     claims: { "role" => "admin" },
+  #     request: Toggly::RequestContext.new(country: "US"),
+  #     traits: { plan: "enterprise" }
   #   )
   class Context
     # @return [String, nil] User identity for percentage rollouts and targeting
-    # identity, groups, traits, and optional entity for ContextProperty filters
-    attr_reader :identity, :groups, :traits, :entity
+    # @return [Array<String>] Audience groups
+    # @return [Hash{String => Object}] Legacy/custom traits
+    # @return [Hash{String => String}] Principal claims for UserClaims filters
+    # @return [RequestContext, nil] HTTP request fields for segment filters
+    # @return [EntityContext, nil] Optional entity for ContextProperty filters
+    attr_reader :identity, :groups, :traits, :claims, :request, :entity
 
-    def initialize(identity: nil, groups: [], traits: {}, entity: nil)
+    def initialize(identity: nil, groups: [], traits: {}, claims: {}, request: nil, entity: nil)
       @identity = identity&.to_s
       @groups = Array(groups).map(&:to_s)
       @traits = normalize_traits(traits)
+      @claims = normalize_claims(claims)
+      @request = coerce_request(request)
       @entity = entity
     end
 
@@ -34,6 +42,33 @@ module Toggly
     # @return [Context]
     def self.anonymous
       new
+    end
+
+    # Create from a hash (EvalContext / fixture style).
+    #
+    # @param data [Hash]
+    # @return [Context]
+    def self.from_hash(data)
+      return anonymous unless data.is_a?(Hash)
+
+      entity_data = data["entity"] || data[:entity]
+      entity = nil
+      if entity_data.is_a?(Hash)
+        entity = EntityContext.new(
+          kind: entity_data["kind"] || entity_data[:kind],
+          key: entity_data["key"] || entity_data[:key],
+          attributes: entity_data["attributes"] || entity_data[:attributes] || {}
+        )
+      end
+
+      new(
+        identity: data["identity"] || data[:identity],
+        groups: data["groups"] || data[:groups] || [],
+        traits: data["traits"] || data[:traits] || {},
+        claims: data["claims"] || data[:claims] || {},
+        request: RequestContext.from_hash(data["request"] || data[:request]),
+        entity: entity
+      )
     end
 
     # Check if context has an identity
@@ -77,6 +112,8 @@ module Toggly
         identity: @identity,
         groups: @groups,
         traits: @traits.merge(normalize_traits(new_traits)),
+        claims: @claims,
+        request: @request,
         entity: @entity
       )
     end
@@ -90,7 +127,54 @@ module Toggly
         identity: @identity,
         groups: @groups + new_groups.flatten.map(&:to_s),
         traits: @traits,
+        claims: @claims,
+        request: @request,
         entity: @entity
+      )
+    end
+
+    # Create a new context with the specified claims map.
+    #
+    # @param new_claims [Hash]
+    # @return [Context]
+    def with_claims(new_claims)
+      Context.new(
+        identity: @identity,
+        groups: @groups,
+        traits: @traits,
+        claims: new_claims,
+        request: @request,
+        entity: @entity
+      )
+    end
+
+    # Create a new context with the specified request fields.
+    #
+    # @param new_request [RequestContext, Hash, nil]
+    # @return [Context]
+    def with_request(new_request)
+      Context.new(
+        identity: @identity,
+        groups: @groups,
+        traits: @traits,
+        claims: @claims,
+        request: new_request,
+        entity: @entity
+      )
+    end
+
+    # Create a new context with the specified entity.
+    #
+    # @param new_entity [EntityContext, nil]
+    # @return [Context]
+    def with_entity(new_entity)
+      Context.new(
+        identity: @identity,
+        groups: @groups,
+        traits: @traits,
+        claims: @claims,
+        request: @request,
+        entity: new_entity
       )
     end
 
@@ -98,10 +182,24 @@ module Toggly
     #
     # @return [Hash]
     def to_h
+      entity_hash =
+        if @entity.nil?
+          nil
+        else
+          {
+            kind: @entity.kind,
+            key: @entity.key,
+            attributes: @entity.attributes
+          }
+        end
+
       {
         identity: @identity,
         groups: @groups,
-        traits: @traits
+        traits: @traits,
+        claims: @claims,
+        request: @request&.to_h,
+        entity: entity_hash
       }
     end
 
@@ -114,7 +212,10 @@ module Toggly
 
       @identity == other.identity &&
         @groups.sort == other.groups.sort &&
-        @traits == other.traits
+        @traits == other.traits &&
+        @claims == other.claims &&
+        @request == other.request &&
+        @entity == other.entity
     end
     alias eql? ==
 
@@ -122,14 +223,14 @@ module Toggly
     #
     # @return [Integer]
     def hash
-      [@identity, @groups.sort, @traits].hash
+      [@identity, @groups.sort, @traits, @claims, @request, @entity].hash
     end
 
     # Generate cache key
     #
     # @return [String]
     def cache_key
-      "#{@identity}:#{@groups.sort.join(",")}:#{traits_cache_key}"
+      "#{@identity}:#{@groups.sort.join(",")}:#{traits_cache_key}:#{claims_cache_key}:#{request_cache_key}"
     end
 
     private
@@ -140,8 +241,33 @@ module Toggly
       traits.transform_keys(&:to_s)
     end
 
+    def normalize_claims(claims)
+      return {} unless claims.is_a?(Hash)
+
+      claims.each_with_object({}) do |(key, value), memo|
+        memo[key.to_s] = value.to_s
+      end
+    end
+
+    def coerce_request(request)
+      return nil if request.nil?
+      return request if request.is_a?(RequestContext)
+
+      RequestContext.from_hash(request)
+    end
+
     def traits_cache_key
       @traits.sort.map { |k, v| "#{k}=#{v}" }.join(",")
+    end
+
+    def claims_cache_key
+      @claims.sort.map { |k, v| "#{k}=#{v}" }.join(",")
+    end
+
+    def request_cache_key
+      return "" unless @request
+
+      "#{@request.user_agent}|#{@request.accept_language}|#{@request.country}"
     end
   end
 end

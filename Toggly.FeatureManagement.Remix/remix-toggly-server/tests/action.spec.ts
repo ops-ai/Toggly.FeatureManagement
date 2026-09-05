@@ -293,6 +293,78 @@ describe('createFeatureGatedAction', () => {
       expect(calledUrl).toContain('/definitions-signed/');
       expect(new URL(calledUrl).searchParams.get('u')).toBeNull();
     });
+
+    it('should evaluate Country/UserClaims from ambient getClaims + headers without per-call IdentityContext', async () => {
+      const countryFlag = {
+        featureKey: 'country-flag',
+        filters: [
+          {
+            name: 'Country',
+            parameters: { Percentage: 100, 'Country:0': 'US' },
+          },
+        ],
+      };
+      const claimsFlag = {
+        featureKey: 'claims-flag',
+        filters: [
+          {
+            name: 'UserClaims',
+            parameters: {
+              Percentage: 100,
+              Claim: 'role',
+              Value: 'admin',
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([countryFlag, claimsFlag]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([countryFlag, claimsFlag]),
+        headers: { get: () => null },
+      });
+
+      const handler = jest.fn().mockImplementation(async (_args, toggly) => {
+        const country = await toggly.isEnabled('country-flag');
+        const claims = await toggly.isEnabled('claims-flag');
+        const viaClient = await toggly.client.isEnabled('claims-flag');
+        return { country, claims, viaClient, context: toggly.context };
+      });
+
+      const action = createFeatureGatedAction(
+        {
+          ...defaultOptions,
+          getIdentity: () => 'user-1',
+          getClaims: () => ({ role: 'admin' }),
+        },
+        handler
+      );
+
+      const request = new Request('https://example.com/action', {
+        method: 'POST',
+        headers: { 'cf-ipcountry': 'US' },
+      });
+
+      const result = await action({
+        request,
+        params: {},
+        context: {},
+      });
+
+      expect(handler).toHaveBeenCalled();
+      expect(result).toEqual({
+        country: true,
+        claims: true,
+        viaClient: true,
+        context: expect.objectContaining({
+          identity: 'user-1',
+          claims: { role: 'admin' },
+          request: expect.objectContaining({ country: 'US' }),
+        }),
+      });
+    });
   });
 });
 
@@ -367,6 +439,57 @@ describe('createTogglyAction', () => {
       const calledUrl = mockFetch.mock.calls[0][0] as string;
       expect(calledUrl).toContain('/definitions-signed/');
       expect(new URL(calledUrl).searchParams.get('u')).toBeNull();
+    });
+
+    it('should field-merge partial isEnabled override with ambient claims/request on init', async () => {
+      const countryFlag = {
+        featureKey: 'country-flag',
+        filters: [
+          {
+            name: 'Country',
+            parameters: { Percentage: 100, 'Country:0': 'US' },
+          },
+        ],
+      };
+      const claimsFlag = {
+        featureKey: 'claims-flag',
+        filters: [
+          {
+            name: 'UserClaims',
+            parameters: {
+              Percentage: 100,
+              Claim: 'role',
+              Value: 'admin',
+            },
+          },
+        ],
+      };
+      const body = JSON.stringify([countryFlag, claimsFlag]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve([countryFlag, claimsFlag]),
+        headers: { get: () => null },
+      });
+
+      const togglyAction = createTogglyAction({
+        ...defaultOptions,
+        getIdentity: () => 'user-1',
+        getClaims: () => ({ role: 'admin' }),
+      });
+      const request = new Request('https://example.com', {
+        headers: { 'cf-ipcountry': 'US' },
+      });
+      const context = await togglyAction.init(request);
+
+      // Partial override changes identity only — claims/request stay ambient.
+      expect(
+        await context.isEnabled('claims-flag', false, { identity: 'user-2' }),
+      ).toBe(true);
+      expect(
+        await context.isEnabled('country-flag', false, { identity: 'user-2' }),
+      ).toBe(true);
     });
   });
 

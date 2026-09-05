@@ -5,6 +5,7 @@ export {
   initEdgeToggly,
   getEdgeToggly,
   resetEdgeToggly,
+  buildEdgeEvalOverrides,
 } from './edge-client'
 
 // Middleware utilities

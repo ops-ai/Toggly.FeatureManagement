@@ -248,6 +248,34 @@ describe('Toggly Service', () => {
       );
     });
 
+    it('restores prior context when setContext fetch fails', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ Gated: true }),
+          text: () => Promise.resolve(JSON.stringify({ Gated: true })),
+        })
+        .mockRejectedValueOnce(new Error('refresh failed'))
+
+      const service = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-a',
+      })
+
+      await service._loadFeatures()
+      expect(await service.isFeatureOn('Gated')).toBe(true)
+
+      await expect(
+        service.setContext({ identity: 'user-b' }),
+      ).rejects.toThrow('refresh failed')
+
+      expect((service as any)._config.identity).toBe('user-a')
+      expect(await service.isFeatureOn('Gated')).toBe(true)
+    })
+
     it('should include groups and claims in API URL after setContext', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
