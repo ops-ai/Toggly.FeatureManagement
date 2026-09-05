@@ -13,9 +13,12 @@ import {
   registerContext as registerEntityContext,
   resolveEvaluatedDefinition,
   toBooleanDefinitions,
+  bindEvaluationContextChangeState,
+  setEvaluationContextSafely,
   type EvaluatedDefinitionValue,
   type Hook,
   type TogglyEntityContext,
+  type TogglyEvaluationContext,
 } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
@@ -238,7 +241,7 @@ class TogglyClientInstance {
     return url.toString();
   }
 
-  async fetchFlags(): Promise<Flags> {
+  async fetchFlags(options?: { strict?: boolean }): Promise<Flags> {
     const url = this.getApiUrl();
 
     if (!url || !this.config.appKey) {
@@ -305,6 +308,9 @@ class TogglyClientInstance {
       return flags;
     } catch (error) {
       const fetchError = error instanceof Error ? error : new Error(String(error));
+      if (options?.strict) {
+        throw fetchError;
+      }
       this.lastError = fetchError;
       this.config.onError?.('Error fetching feature flags', error);
       $error.set(fetchError);
@@ -504,9 +510,9 @@ class TogglyClientInstance {
     }
   }
 
-  async refresh(): Promise<void> {
+  async refresh(options?: { strict?: boolean }): Promise<void> {
     try {
-      const flags = await this.fetchFlags();
+      const flags = await this.fetchFlags(options);
       this.cache = flags;
       $flags.set(flags);
       $error.set(this.lastError);
@@ -518,6 +524,9 @@ class TogglyClientInstance {
         console.log('[Toggly Client] Flags refreshed');
       }
     } catch (error) {
+      if (options?.strict) {
+        throw error;
+      }
       console.error('[Toggly Client] Refresh error:', error);
     }
   }
@@ -559,14 +568,62 @@ class TogglyClientInstance {
     }
   }
 
-  setIdentity(identity: string): void {
-    this.config.identity = identity;
-    this.refresh(); // Refresh with new identity
+  private contextChangeBindings() {
+    return bindEvaluationContextChangeState({
+      identity: {
+        get: () => this.config.identity,
+        set: (value) => {
+          this.config.identity = value;
+        },
+      },
+      groups: {
+        get: () => this.config.groups ?? [],
+        set: (value) => {
+          this.config.groups = value;
+        },
+      },
+      claims: {
+        get: () => this.config.claims ?? {},
+        set: (value) => {
+          this.config.claims = value;
+        },
+      },
+      features: {
+        get: () => this.cache,
+        set: (value) => {
+          this.cache = value;
+        },
+      },
+      variants: {
+        get: () => null,
+        set: () => {},
+      },
+    });
   }
 
-  clearIdentity(): void {
-    this.config.identity = undefined;
-    this.refresh(); // Refresh without identity
+  private notifyContextRefresh(): void {
+    const flags = this.cache ?? { ...(this.config.flagDefaults ?? {}) };
+    $flags.set(flags);
+  }
+
+  async setContext(context: TogglyEvaluationContext): Promise<void> {
+    await setEvaluationContextSafely(
+      context,
+      this.config.flagDefaults ?? {},
+      {
+        ...this.contextChangeBindings(),
+        notifyRefresh: () => this.notifyContextRefresh(),
+        refreshStrict: () => this.refresh({ strict: true }),
+      },
+    );
+  }
+
+  async setIdentity(identity: string): Promise<void> {
+    await this.setContext({ identity });
+  }
+
+  async clearIdentity(): Promise<void> {
+    await this.setContext({ identity: '' });
   }
 }
 
@@ -602,25 +659,25 @@ export async function refreshFlags(): Promise<void> {
  *
  * @param identity - User identifier
  */
-export function setIdentity(identity: string): void {
+export async function setIdentity(identity: string): Promise<void> {
   if (!clientInstance) {
     console.error('[Toggly Client] Client not initialized');
     return;
   }
 
-  clientInstance.setIdentity(identity);
+  await clientInstance.setIdentity(identity);
 }
 
 /**
  * Clear user identity
  */
-export function clearIdentity(): void {
+export async function clearIdentity(): Promise<void> {
   if (!clientInstance) {
     console.error('[Toggly Client] Client not initialized');
     return;
   }
 
-  clientInstance.clearIdentity();
+  await clientInstance.clearIdentity();
 }
 
 /**

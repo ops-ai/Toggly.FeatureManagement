@@ -16,6 +16,8 @@ import {
   registerContext as registerEntityContext,
   resolveEvaluatedDefinition,
   toBooleanDefinitions,
+  bindEvaluationContextChangeState,
+  setEvaluationContextSafely,
 } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
@@ -343,32 +345,67 @@ export class Toggly {
     };
   }
 
-  static setContext(context: TogglyEvaluationContext): Promise<{ [key: string]: boolean }> {
-    if (context.identity !== undefined) {
-      if (context.identity) {
-        Toggly.identity = context.identity;
-      } else {
-        Toggly.clearIdentity();
-      }
-    }
-    if (context.groups !== undefined) {
-      Toggly.groups = context.groups;
-    }
-    if (context.claims !== undefined) {
-      Toggly.claims = context.claims;
-    }
-    Toggly._inMemoryFlags = null;
-    Toggly._hasLoadedFlags = false;
-    return Toggly.refresh();
+  static async setContext(context: TogglyEvaluationContext): Promise<{ [key: string]: boolean }> {
+    await setEvaluationContextSafely(
+      context,
+      Toggly._config.flagDefaults ?? {},
+      {
+        ...bindEvaluationContextChangeState({
+          identity: {
+            get: () => Toggly.identity || undefined,
+            set: (value) => {
+              if (value) {
+                Toggly.identity = value;
+              } else {
+                Toggly.clearIdentity();
+              }
+            },
+          },
+          groups: {
+            get: () => Toggly.groups,
+            set: (value) => {
+              Toggly.groups = value;
+            },
+          },
+          claims: {
+            get: () => Toggly.claims,
+            set: (value) => {
+              Toggly.claims = value;
+            },
+          },
+          features: {
+            get: () => Toggly._inMemoryFlags,
+            set: (value) => {
+              Toggly._inMemoryFlags = value;
+              Toggly._hasLoadedFlags = value !== null;
+            },
+          },
+          variants: {
+            get: () => Toggly.variantsValue,
+            set: (value) => {
+              if (value) {
+                Toggly.cacheVariants(value);
+              } else if (canUseStorage) {
+                try {
+                  localStorage.removeItem(Toggly._variantsCacheKey);
+                } catch (error) {
+                  Toggly._reportError('Error clearing variants cache', error);
+                }
+              }
+            },
+          },
+        }),
+        notifyRefresh: () => {},
+        refreshStrict: async () => {
+          await Toggly.fetchFeatureFlags({ strict: true });
+        },
+      },
+    );
+    return toBooleanDefinitions(Toggly.featureFlagsValue);
   }
 
-  static clearContext(): Promise<{ [key: string]: boolean }> {
-    Toggly.clearIdentity();
-    Toggly.groups = [];
-    Toggly.claims = {};
-    Toggly._inMemoryFlags = null;
-    Toggly._hasLoadedFlags = false;
-    return Toggly.refresh();
+  static async clearContext(): Promise<{ [key: string]: boolean }> {
+    return Toggly.setContext({ identity: '', groups: [], claims: {} });
   }
 
   private static buildEvaluatedUrl(mode: 'evaluated' | 'variants'): string {
@@ -602,12 +639,12 @@ export class Toggly {
     return variant?.configurationValue ?? null;
   }
 
-  static fetchFeatureFlags(): Promise<{ [key: string]: boolean }> {
+  static fetchFeatureFlags(options?: { strict?: boolean }): Promise<{ [key: string]: boolean }> {
     if (Toggly._config.enableVariants) {
-      return Toggly.fetchFeatureFlagsWithVariants();
+      return Toggly.fetchFeatureFlagsWithVariants(options);
     }
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const { url, headers } = Toggly.consumePendingDefinitionsRequest('evaluated');
 
       // Wrap the fetch invocation in a resolved Promise so that any synchronous
@@ -642,6 +679,10 @@ export class Toggly {
         })
         .catch((error) => {
           Toggly._reportError('Error fetching feature flags', error);
+          if (options?.strict) {
+            reject(error);
+            return;
+          }
           var flags = Toggly._getFallbackFlags();
           resolve(toBooleanDefinitions(flags));
 
@@ -650,8 +691,8 @@ export class Toggly {
     });
   }
 
-  private static fetchFeatureFlagsWithVariants(): Promise<{ [key: string]: boolean }> {
-    return new Promise((resolve) => {
+  private static fetchFeatureFlagsWithVariants(options?: { strict?: boolean }): Promise<{ [key: string]: boolean }> {
+    return new Promise((resolve, reject) => {
       const { url, headers } = Toggly.consumePendingDefinitionsRequest('variants');
 
       Promise.resolve()
@@ -692,6 +733,10 @@ export class Toggly {
         })
         .catch((error) => {
           Toggly._reportError('Error fetching feature flags', error);
+          if (options?.strict) {
+            reject(error);
+            return;
+          }
           const flags = Toggly._getFallbackFlags();
           resolve(toBooleanDefinitions(flags));
 

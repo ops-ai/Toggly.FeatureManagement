@@ -425,4 +425,20 @@ describe('createTogglyClient', () => {
     expect(flags).toEqual({});
     expect(slowFetch).toHaveBeenCalled();
   });
+
+  it('does not treat HTTP 200 error envelopes as feature definitions', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ error: 'invalid key' }),
+      json: async () => ({ error: 'invalid key' }),
+    } as Response);
+
+    const client = createTogglyClient({
+      ...defaultConfig,
+      flagDefaults: { Safe: true },
+    });
+
+    const flags = await client.getFlags();
+    expect(flags).toEqual({ Safe: true });
+  });
 });

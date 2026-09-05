@@ -1,6 +1,10 @@
 # Changelog
 
 
+## 0.2.3
+
+- Reject HTTP 2xx `{ "error": "…" }` envelopes before applying defs [OPS-901].
+
 ## 0.2.2
 
 - Normalize public npm metadata for provenance and docs links (no API change).

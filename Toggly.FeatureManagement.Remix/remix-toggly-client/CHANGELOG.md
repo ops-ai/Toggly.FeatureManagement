@@ -1,3 +1,11 @@
+## 1.3.1
+
+2026-09-05
+
+### Fixed
+- `identify` / `reset` withhold prior identity and flags; restore on failed fetch [OPS-901].
+- Reject HTTP 2xx `{ "error": "…" }` envelopes in client fetch [OPS-901].
+
 ## 1.3.0
 
 2026-09-03

@@ -903,6 +903,17 @@ describe('Toggly Core', () => {
       mockFetch.mockClear();
     });
 
+    it('restores prior context when setContext fetch fails', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('refresh failed'));
+
+      await expect(
+        Toggly.setContext({ identity: 'user-b' }),
+      ).rejects.toThrow('refresh failed');
+
+      expect(Toggly.identity).toBe('user-123');
+      expect(Toggly.featureFlagsValue.F1).toBe(true);
+    });
+
     it('should include groups and claims in API URL after setContext', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

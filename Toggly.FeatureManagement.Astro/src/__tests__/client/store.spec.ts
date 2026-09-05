@@ -276,17 +276,35 @@ describe('Client Store', () => {
 
       const callCountAfterInit = mockFetch.mock.calls.length;
 
-      setIdentity('user-123');
+      await setIdentity('user-123');
       await flushPromises();
 
       // Should have triggered another fetch
       expect(mockFetch.mock.calls.length).toBeGreaterThan(callCountAfterInit);
     });
 
-    it('should error if client not initialized', () => {
+    it('restores prior identity when setIdentity refresh fails', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse({ Gated: true }))
+        .mockRejectedValueOnce(new Error('refresh failed'));
+
+      await initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        identity: 'user-a',
+        featureFlagsRefreshInterval: 0,
+      });
+      await flushPromises();
+      expect($flags.get()).toEqual({ Gated: true });
+
+      await expect(setIdentity('user-b')).rejects.toThrow('refresh failed');
+      expect($flags.get()).toEqual({ Gated: true });
+    });
+
+    it('should error if client not initialized', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      setIdentity('user-123');
+      await setIdentity('user-123');
 
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Client not initialized')
