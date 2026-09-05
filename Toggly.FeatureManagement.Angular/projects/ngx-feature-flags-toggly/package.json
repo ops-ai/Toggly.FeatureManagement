@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@ops-ai/toggly-local-gates": "^1.0.1",
-    "@ops-ai/toggly-signed-defs": "^1.2.5",
+    "@ops-ai/toggly-signed-defs": "^1.2.3",
     "tslib": "^2.3.0"
   },
   "sideEffects": false,

@@ -68,7 +68,7 @@
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1",
-    "@ops-ai/toggly-signed-defs": "^1.2.5"
+    "@ops-ai/toggly-signed-defs": "^1.2.3"
   },
   "publishConfig": {
     "access": "public"

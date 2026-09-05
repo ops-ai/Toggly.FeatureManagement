@@ -3,8 +3,9 @@
 2026-09-04
 
 ### Fixed
-- `setContext` withholds prior enables, restores identity and features when fetch
-  fails, and bumps `@ops-ai/toggly-signed-defs` for 2xx error-envelope rejection
+- `setContext` withholds prior enables and restores identity/features when fetch
+  fails [OPS-900].
+- P2 error-envelope hardening via #370; bump `toggly-signed-defs` after merge
   [OPS-900].
 
 ## 1.11.0
