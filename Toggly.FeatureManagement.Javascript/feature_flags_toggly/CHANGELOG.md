@@ -1,3 +1,10 @@
+## 1.7.5
+
+2026-09-05
+
+### Fixed
+- `setContext` / `clearContext` withhold prior flags and restore on failed refresh [OPS-901].
+
 ## 1.7.4
 
 2026-08-30

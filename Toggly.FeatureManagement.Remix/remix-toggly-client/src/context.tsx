@@ -23,6 +23,10 @@ import {
   registerContext as registerEntityContext,
 } from '@ops-ai/remix-toggly-core';
 import type { TogglyEntityContext } from '@ops-ai/remix-toggly-core';
+import {
+  setEvaluationContextSafely,
+  type TogglyEvaluationContext,
+} from '@ops-ai/toggly-hooks-types';
 import { appendSdkQueryParams } from './sdk-identity';
 import {
   applyLocalGate,
@@ -142,6 +146,15 @@ export function TogglyProvider({
   const [hooks, setHooks] = useState<TogglyHook[]>([]);
   const [localGatesRevision, setLocalGatesRevision] = useState(0);
 
+  const identityRef = useRef(identity);
+  const flagsRef = useRef(flags);
+  useEffect(() => {
+    identityRef.current = identity;
+  }, [identity]);
+  useEffect(() => {
+    flagsRef.current = flags;
+  }, [flags]);
+
   const localGatesRef = useRef<LocalGate[]>(mergedConfig?.localGates ?? []);
   const localGateIndexRef = useRef<FlagGateIndex>(
     buildFlagGateIndex(localGatesRef.current)
@@ -229,10 +242,13 @@ export function TogglyProvider({
 
   // Fetch flags from API
   const fetchFlags = useCallback(
-    async (userIdentity?: string): Promise<FeatureFlags> => {
+    async (
+      userIdentity?: string,
+      options?: { strict?: boolean },
+    ): Promise<FeatureFlags> => {
       if (!mergedConfig?.appKey) {
         logger.debug('No appKey, using current flags.');
-        return flags;
+        return flagsRef.current;
       }
 
       try {
@@ -246,6 +262,22 @@ export function TogglyProvider({
         }
 
         const payload = await response.json();
+        if (
+          payload &&
+          typeof payload === 'object' &&
+          'error' in payload &&
+          (payload as { error?: unknown }).error != null &&
+          !('defs' in payload) &&
+          !('features' in payload)
+        ) {
+          const message =
+            typeof (payload as { error?: unknown }).error === 'string'
+              ? (payload as { error: string }).error
+              : 'error envelope';
+          throw new Error(
+            `[Toggly] Evaluated-signed response error envelope: ${message}`,
+          );
+        }
         const newFlags =
           payload && typeof payload === 'object'
             ? (payload as FeatureFlags)
@@ -254,11 +286,14 @@ export function TogglyProvider({
 
         return newFlags;
       } catch (error) {
+        if (options?.strict) {
+          throw error;
+        }
         logger.warn('Failed to fetch flags:', error);
-        return flags;
+        return flagsRef.current;
       }
     },
-    [mergedConfig, flags, logger]
+    [mergedConfig, logger]
   );
 
   // Update flags and trigger callbacks
@@ -332,6 +367,59 @@ export function TogglyProvider({
     [getEffectiveFlag]
   );
 
+  const applyContextState = useCallback(
+    (state: {
+      identity?: string;
+      features: FeatureFlags | null;
+    }) => {
+      setIdentity(state.identity);
+      identityRef.current = state.identity;
+      const nextFlags = state.features ?? mergedConfig?.featureDefaults ?? {};
+      setFlags(nextFlags);
+      flagsRef.current = nextFlags;
+    },
+    [mergedConfig?.featureDefaults],
+  );
+
+  const changeContextSafely = useCallback(
+    async (context: TogglyEvaluationContext): Promise<FeatureFlags> => {
+      const defaults = mergedConfig?.featureDefaults ?? {};
+      let fetchedFlags = flagsRef.current;
+
+      await setEvaluationContextSafely(context, defaults, {
+        readState: () => ({
+          identity: identityRef.current,
+          groups: [],
+          claims: {},
+          features: flagsRef.current,
+          variants: null,
+        }),
+        writeState: (state) => {
+          applyContextState({
+            identity: state.identity,
+            features: state.features as FeatureFlags | null,
+          });
+        },
+        notifyRefresh: () => {
+          applyContextState({
+            identity: identityRef.current,
+            features: flagsRef.current,
+          });
+        },
+        refreshStrict: async () => {
+          fetchedFlags = await fetchFlags(identityRef.current, { strict: true });
+          applyContextState({
+            identity: identityRef.current,
+            features: fetchedFlags,
+          });
+        },
+      });
+
+      return fetchedFlags;
+    },
+    [applyContextState, fetchFlags, mergedConfig?.featureDefaults],
+  );
+
   // Identify user
   const identify = useCallback(
     async (newIdentity: string, _context?: IdentityContext): Promise<void> => {
@@ -351,11 +439,8 @@ export function TogglyProvider({
         }
       }
 
-      setIdentity(newIdentity);
-
-      // Fetch new flags with identity
-      const newFlags = await fetchFlags(newIdentity);
-      await updateFlags(newFlags);
+      await changeContextSafely({ identity: newIdentity });
+      await updateFlags(flagsRef.current);
 
       // Execute afterIdentify hooks
       for (let i = hooks.length - 1; i >= 0; i--) {
@@ -374,18 +459,15 @@ export function TogglyProvider({
 
       setIsReady(true);
     },
-    [hooks, fetchFlags, updateFlags, logger]
+    [hooks, changeContextSafely, updateFlags, logger]
   );
 
   // Reset identity
   const reset = useCallback(async (): Promise<void> => {
     logger.debug('Resetting identity');
-    setIdentity(undefined);
-
-    // Fetch flags without identity
-    const newFlags = await fetchFlags();
-    await updateFlags(newFlags);
-  }, [fetchFlags, updateFlags, logger]);
+    await changeContextSafely({ identity: '' });
+    await updateFlags(flagsRef.current);
+  }, [changeContextSafely, updateFlags, logger]);
 
   // Refresh flags
   const refresh = useCallback(async (): Promise<void> => {

@@ -12,6 +12,8 @@ import {
   serializeCacheLruIndex,
   toBooleanDefinitions,
   touchCacheLruKey,
+  bindEvaluationContextChangeState,
+  setEvaluationContextSafely,
   type TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types';
 import {
@@ -449,7 +451,7 @@ export class TogglyService {
   /**
    * Fetch feature flags from the Toggly API.
    */
-  private async fetchFeatureFlags(): Promise<TogglyInitResponse> {
+  private async fetchFeatureFlags(options?: { strict?: boolean }): Promise<TogglyInitResponse> {
     // Prevent duplicate fetches
     if (this.featuresLoading) {
       await this.waitForFeaturesLoaded();
@@ -553,6 +555,10 @@ export class TogglyService {
         flags,
       };
     } catch (error) {
+      if (options?.strict) {
+        this.featuresLoading = false;
+        throw error;
+      }
       const hadLastKnownGood = this.features !== null;
       this.reportError('Error fetching feature flags', error);
 
@@ -805,65 +811,105 @@ export class TogglyService {
     }
   }
 
+  private async resolveIdentity(identity: string | null): Promise<string> {
+    if (identity) {
+      return identity;
+    }
+    let deviceId = await this.storage.get(STORAGE_KEYS.DEVICE_ID);
+    if (!deviceId) {
+      deviceId = generateUUID();
+      await this.storage.set(STORAGE_KEYS.DEVICE_ID, deviceId);
+    }
+    return deviceId;
+  }
+
   /**
    * Set user identity for targeting.
    * @param identity New identity string
    */
   async setIdentity(identity: string | null): Promise<TogglyInitResponse> {
-    const previousIdentity = this.identity;
-
-    // Execute beforeIdentify hooks
-    const dataMap = await this.hookExecutor.executeBeforeIdentify(
-      identity ?? ''
-    );
-
-    if (identity) {
-      this.identity = identity;
-    } else {
-      // Fall back to device ID
-      let deviceId = await this.storage.get(STORAGE_KEYS.DEVICE_ID);
-      if (!deviceId) {
-        deviceId = generateUUID();
-        await this.storage.set(STORAGE_KEYS.DEVICE_ID, deviceId);
-      }
-      this.identity = deviceId;
-    }
-
-    // Clear cache if identity changed
-    if (previousIdentity !== this.identity) {
-      await this.clearCache();
-    }
-
-    // Execute afterIdentify hooks
-    await this.hookExecutor.executeAfterIdentify(this.identity, dataMap);
-
-    // Emit event
-    this.eventEmitter.emit('identityChanged', {
-      previousIdentity,
-      newIdentity: this.identity,
-    });
-
-    return this.refresh();
+    return this.setContext({ identity: identity ?? '' });
   }
 
   /**
    * Set evaluation context (identity, groups, claims) and refresh flags.
    */
   async setContext(context: TogglyEvaluationContext): Promise<TogglyInitResponse> {
-    if (context.identity !== undefined) {
-      const identityResponse = await this.setIdentity(context.identity ?? null);
-      if (context.groups === undefined && context.claims === undefined) {
-        return identityResponse;
+    const previousIdentity = this.identity;
+    const identityChanging = context.identity !== undefined;
+    let hookData: unknown;
+
+    if (identityChanging) {
+      hookData = await this.hookExecutor.executeBeforeIdentify(context.identity ?? '');
+    }
+
+    const normalizedContext = { ...context };
+    if (normalizedContext.identity !== undefined) {
+      normalizedContext.identity = await this.resolveIdentity(
+        normalizedContext.identity || null,
+      );
+    }
+
+    let result: TogglyInitResponse = {
+      status: 'cached',
+      flags: this.features ?? this.config.featureDefaults ?? {},
+    };
+
+    await setEvaluationContextSafely(
+      normalizedContext,
+      this.config.featureDefaults ?? {},
+      {
+        ...bindEvaluationContextChangeState({
+          identity: {
+            get: () => this.identity,
+            set: (value) => {
+              this.identity = value ?? '';
+            },
+          },
+          groups: {
+            get: () => this.groups,
+            set: (value) => {
+              this.groups = value;
+            },
+          },
+          claims: {
+            get: () => this.claims,
+            set: (value) => {
+              this.claims = value;
+            },
+          },
+          features: {
+            get: () => this.features,
+            set: (value) => {
+              this.features = value;
+            },
+          },
+          variants: {
+            get: () => null,
+            set: () => {},
+          },
+        }),
+        notifyRefresh: () => {
+          this.emitEffectiveFlagsChanged(this.features ?? {});
+        },
+        refreshStrict: async () => {
+          await this.clearCache();
+          result = await this.fetchFeatureFlags({ strict: true });
+        },
+      },
+    );
+
+    if (identityChanging) {
+      await this.hookExecutor.executeAfterIdentify(this.identity, hookData);
+      if (previousIdentity !== this.identity) {
+        this.eventEmitter.emit('identityChanged', {
+          previousIdentity,
+          newIdentity: this.identity,
+        });
       }
     }
-    if (context.groups !== undefined) {
-      this.groups = [...context.groups];
-    }
-    if (context.claims !== undefined) {
-      this.claims = { ...context.claims };
-    }
-    await this.clearCache();
-    return this.refresh();
+
+    return result;
   }
 
   /**

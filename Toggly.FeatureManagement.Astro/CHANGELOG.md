@@ -1,3 +1,10 @@
+## 1.13.1
+
+2026-09-05
+
+### Fixed
+- `setIdentity` / `setContext` withhold prior flags and restore on failed refresh [OPS-901].
+
 ## 1.13.0
 
 2026-09-03

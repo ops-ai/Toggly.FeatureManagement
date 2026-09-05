@@ -406,6 +406,34 @@ describe('TogglyProvider', () => {
       expect(capturedContext?.identity).toBe('new-user');
       expect(mockFetch).toHaveBeenCalled();
     });
+
+    it('does not publish identity when identify fetch fails', async () => {
+      mockFetch.mockReset();
+      mockFetch.mockRejectedValue(new Error('refresh failed'));
+
+      const serverContext: ServerFeatureContext = {
+        flags: { feature1: true },
+        identity: 'user-a',
+        fetchedAt: Date.now(),
+      };
+
+      let capturedContext: TogglyContextValue | undefined;
+
+      render(
+        <TogglyProvider serverContext={serverContext} config={{ appKey: 'test' }}>
+          <TestConsumer onContext={(ctx) => (capturedContext = ctx)} />
+        </TogglyProvider>
+      );
+
+      await act(async () => {
+        await expect(capturedContext!.identify('user-b')).rejects.toThrow(
+          'refresh failed',
+        );
+      });
+
+      expect(capturedContext?.identity).toBe('user-a');
+      expect(capturedContext?.flags).toEqual({ feature1: true });
+    });
   });
 
   describe('reset', () => {
