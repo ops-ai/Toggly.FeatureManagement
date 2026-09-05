@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"testing"
+	"time"
 )
 
 func TestBatcher_MeasureIncrementObserve_VariantValues(t *testing.T) {
@@ -11,7 +12,7 @@ func TestBatcher_MeasureIncrementObserve_VariantValues(t *testing.T) {
 	b.Measure("revenue", 10, &feat, "enabled")
 	b.Measure("revenue", 5, &feat, "disabled")
 	b.Measure("revenue", 3, &feat, "enabled") // aggregate
-	b.Measure("standalone", 7, nil, "")        // defaults to enabled
+	b.Measure("standalone", 7, nil, "")       // defaults to enabled
 
 	b.Increment("clicks", 1, &feat, "enabled")
 	b.Increment("clicks", 2, &feat, "enabled")
@@ -87,5 +88,37 @@ func TestBatcher_DefaultVariantEnabled(t *testing.T) {
 	msg := b.buildAndReset()
 	if len(msg.Counters) != 1 || msg.Counters[0].VariantValues["enabled"] != 1 {
 		t.Fatalf("want enabled=1, got %+v", msg.Counters)
+	}
+}
+
+func TestBatcher_SameSecondObservations_BothSurviveFlush(t *testing.T) {
+	b := NewBatcher("app", "Production", "")
+	feat := "FeatA"
+	ts := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
+
+	// Two observations in the same Unix second (and one exact timestamp
+	// collision) must both survive Flush — no overwrite of same-variant values.
+	b.mu.Lock()
+	b.observations = []observation{
+		{time: ts, metric: "gauge", feature: feat, variant: "control", value: 10},
+		{time: ts.Add(250 * time.Millisecond), metric: "gauge", feature: feat, variant: "control", value: 20},
+		{time: ts.Add(250 * time.Millisecond), metric: "gauge", feature: feat, variant: "control", value: 30},
+	}
+	b.mu.Unlock()
+
+	msg := b.buildAndReset()
+	seen := map[float64]bool{}
+	for _, o := range msg.Observations {
+		if o.Metric != "gauge" {
+			continue
+		}
+		if v, ok := o.VariantValues["control"]; ok {
+			seen[v] = true
+		}
+	}
+	for _, want := range []float64{10, 20, 30} {
+		if !seen[want] {
+			t.Fatalf("missing observation value %v in %+v (seen=%v)", want, msg.Observations, seen)
+		}
 	}
 }

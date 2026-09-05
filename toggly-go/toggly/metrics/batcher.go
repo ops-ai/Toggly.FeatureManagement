@@ -102,16 +102,19 @@ func (b *Batcher) buildAndReset() *metricspb.MetricStat {
 		return &metricspb.MetricCounterMessage{Metric: metric, Feature: feature, VariantValues: values}
 	})
 
+	// Group by precise timestamp (not truncated second), matching .NET's
+	// DateTime bag key. If the same variant would overwrite within a group,
+	// emit a separate MetricObservationMessage so no values are lost.
 	type obsGroupKey struct {
-		sec     int64
+		nano    int64
 		metric  string
 		feature string
 	}
 	groups := map[obsGroupKey]*metricspb.MetricObservationMessage{}
 	for _, o := range b.observations {
-		gk := obsGroupKey{sec: o.time.Unix(), metric: o.metric, feature: o.feature}
+		gk := obsGroupKey{nano: o.time.UnixNano(), metric: o.metric, feature: o.feature}
 		msg, ok := groups[gk]
-		if !ok {
+		if !ok || hasVariant(msg.VariantValues, o.variant) {
 			msg = &metricspb.MetricObservationMessage{
 				Time:          timestamppb.New(o.time),
 				Metric:        o.metric,
@@ -122,17 +125,20 @@ func (b *Batcher) buildAndReset() *metricspb.MetricStat {
 				msg.Feature = &f
 			}
 			groups[gk] = msg
+			out.Observations = append(out.Observations, msg)
 		}
 		msg.VariantValues[o.variant] = o.value
-	}
-	for _, msg := range groups {
-		out.Observations = append(out.Observations, msg)
 	}
 
 	b.stats = map[aggKey]float64{}
 	b.counters = map[aggKey]float64{}
 	b.observations = nil
 	return out
+}
+
+func hasVariant(values map[string]float64, variant string) bool {
+	_, ok := values[variant]
+	return ok
 }
 
 func makeKey(metric string, feature *string, variant string) aggKey {
