@@ -2,8 +2,9 @@ import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { hashString } from '../utils.js'
 import { sdkUserAgent } from '../sdk-identity.js'
+
+const utf8Encoder = new TextEncoder()
 
 const require = createRequire(import.meta.url)
 
@@ -34,9 +35,18 @@ const protoRoot = resolveProtoRoot()
 export const DEFAULT_METRICS_BASE_URL = 'https://app.toggly.io/'
 export const DEFAULT_TELEMETRY_FLUSH_MS = 60_000
 
-/** FNV-1a 32-bit as signed int32 (matches Go usage hashIdentity). */
+/**
+ * FNV-1a 32-bit as signed int32 (matches Go `hash/fnv` New32a on `[]byte(s)`).
+ * Hashes UTF-8 bytes — not UTF-16 code units from `String.charCodeAt`.
+ */
 export function hashIdentity(identity: string): number {
-  const unsigned = hashString(identity)
+  let hash = 2166136261 // FNV offset basis
+  const bytes = utf8Encoder.encode(identity)
+  for (let i = 0; i < bytes.length; i++) {
+    hash ^= bytes[i]!
+    hash = Math.imul(hash, 16777619) // FNV prime
+  }
+  const unsigned = hash >>> 0
   return unsigned > 0x7fffffff ? unsigned - 0x100000000 : unsigned
 }
 

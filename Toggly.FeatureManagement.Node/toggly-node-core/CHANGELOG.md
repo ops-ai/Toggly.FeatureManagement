@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.3
+
+2026-09-05
+
+### Fixed
+- `requestCount` in usage batches maps to .NET UniqueRequest* semantics: only
+  increments when `uniqueRequest` is true (first check in a logical request),
+  not on every evaluation; Go leaves this field unset [OPS-912].
+- Identity hashes use UTF-8 FNV-1a (Go `hash/fnv` New32a on `[]byte`), not
+  UTF-16 `charCodeAt` units [OPS-912].
+
 ## 0.8.2
 
 2026-09-05

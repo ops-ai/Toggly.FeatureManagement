@@ -107,11 +107,29 @@ export class UsageBatcher {
     into.add(hash)
   }
 
-  recordCheck(feature: string, enabled: boolean, identity?: string, variant?: string): void {
+  /**
+   * Record a feature evaluation.
+   *
+   * `checkCount` increments on every call. `requestCount` maps to .NET
+   * UniqueRequestEnabled/Disabled: only the first check of a feature within a
+   * logical request. Pass `uniqueRequest: true` for that first access (Go
+   * leaves requestCount unset; without request scope, leave it false).
+   */
+  recordCheck(
+    feature: string,
+    enabled: boolean,
+    identity?: string,
+    variant?: string,
+    uniqueRequest = false,
+  ): void {
     const agg = this.get(feature)
     const name = variant ?? (enabled ? 'enabled' : 'disabled')
-    this.getVariant(agg, name).checkCount += 1
-    this.getVariant(agg, name).requestCount += 1
+    const stats = this.getVariant(agg, name)
+    stats.checkCount += 1
+    // Unique request ≠ every check (see JSDoc above).
+    if (uniqueRequest) {
+      stats.requestCount += 1
+    }
 
     if (identity) {
       const hash = hashIdentity(identity)

@@ -222,8 +222,14 @@ export class TelemetryRuntime {
     this.signalHandlers.length = 0
   }
 
-  recordCheck(feature: string, enabled: boolean, identity?: string, variant?: string): void {
-    this.usageBatcher?.recordCheck(feature, enabled, identity, variant)
+  recordCheck(
+    feature: string,
+    enabled: boolean,
+    identity?: string,
+    variant?: string,
+    uniqueRequest = false,
+  ): void {
+    this.usageBatcher?.recordCheck(feature, enabled, identity, variant, uniqueRequest)
   }
 
   recordUsage(feature: string, identity?: string, variant?: string): void {
