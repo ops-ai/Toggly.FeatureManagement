@@ -1,6 +1,11 @@
 # Changelog
 
 
+## 1.4.5
+
+- Add `setEvaluationContextSafely` and `bindEvaluationContextChangeState` for
+  shared browser SDK `setContext` withhold/restore behavior [OPS-900].
+
 ## 1.4.4
 
 - Normalize public npm metadata for provenance and docs links (no API change).

@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-hooks-types",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "TypeScript types for Toggly SDK hooks",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

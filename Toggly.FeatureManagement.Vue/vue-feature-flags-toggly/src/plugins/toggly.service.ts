@@ -19,6 +19,8 @@ import {
   selectCacheLruKeysToEvict,
   serializeCacheLruIndex,
   touchCacheLruKey,
+  bindEvaluationContextChangeState,
+  setEvaluationContextSafely,
 } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
@@ -510,38 +512,46 @@ export class Toggly implements TogglyService {
   }
 
   setContext = async (context: TogglyEvaluationContext): Promise<void> => {
-    const previousIdentity = this._config.identity
-    const previousGroups = [...this._groups]
-    const previousClaims = { ...this._claims }
-    const previousFeatures = this._features
-    const previousVariants = this._variants
-
-    const defaults = (this._config.featureDefaults ?? {}) as EvaluatedDefinitions
-    this._features = { ...defaults }
-    this._variants = null
-    this.notifyFeaturesRefresh()
-
-    if (context.identity !== undefined) {
-      this._config.identity = context.identity || undefined
-    }
-    if (context.groups !== undefined) {
-      this._groups = [...context.groups]
-    }
-    if (context.claims !== undefined) {
-      this._claims = { ...context.claims }
-    }
-
-    try {
-      await this._loadFeatures(true, { strict: true })
-    } catch (error) {
-      this._config.identity = previousIdentity
-      this._groups = previousGroups
-      this._claims = previousClaims
-      this._features = previousFeatures
-      this._variants = previousVariants
-      this.notifyFeaturesRefresh()
-      throw error
-    }
+    await setEvaluationContextSafely(
+      context,
+      (this._config.featureDefaults ?? {}) as EvaluatedDefinitions,
+      {
+        ...bindEvaluationContextChangeState({
+          identity: {
+            get: () => this._config.identity,
+            set: (value) => {
+              this._config.identity = value
+            },
+          },
+          groups: {
+            get: () => this._groups,
+            set: (value) => {
+              this._groups = value
+            },
+          },
+          claims: {
+            get: () => this._claims,
+            set: (value) => {
+              this._claims = value
+            },
+          },
+          features: {
+            get: () => this._features,
+            set: (value) => {
+              this._features = value
+            },
+          },
+          variants: {
+            get: () => this._variants,
+            set: (value) => {
+              this._variants = value
+            },
+          },
+        }),
+        notifyRefresh: () => this.notifyFeaturesRefresh(),
+        refreshStrict: () => this._loadFeatures(true, { strict: true }),
+      },
+    )
   }
 
   _loadFeatures = async (
