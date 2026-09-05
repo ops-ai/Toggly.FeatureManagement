@@ -196,27 +196,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node-version }}
-
+      # Install pnpm before setup-node so action-setup uses the runner Node,
+      # not matrix Node 18 (pnpm/action-setup@v6 @pnpm/exe breaks on 18).
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
           version: 9
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
         with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+          cache-dependency-path: Toggly.FeatureManagement.Node/pnpm-lock.yaml
 
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
@@ -315,15 +307,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 'lts/*'
-
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
           version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+          cache-dependency-path: Toggly.FeatureManagement.Node/pnpm-lock.yaml
 
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
@@ -355,15 +349,15 @@ jobs:
         with:
           fetch-depth: 0  # Full history for better analysis
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 'lts/*'
-
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
           version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
 
       - name: Restore shared JS deps
         if: needs.build-shared-js-deps.result == 'success'

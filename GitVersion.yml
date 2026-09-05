@@ -1,14 +1,19 @@
+# GitVersion 6.x config (gittools/actions v4 requires >=6.2).
+# develop/main are treated as the mainline with empty pre-release label.
+workflow: GitHubFlow/v1
 next-version: 3.0.4
 branches:
   main:
     regex: ^develop$|^main$
-    mode: ContinuousDelivery
-    tag: ''
+    mode: ManualDeployment
+    # null (not '') = stable versions on mainline; '' would yield 1.0.1-N pre-releases
+    label: null
     increment: Minor
-    prevent-increment-of-merged-branch-version: true
+    prevent-increment:
+      of-merged-branch: true
     track-merge-target: false
-    source-branches: [  ]
+    source-branches: []
     tracks-release-branches: false
     is-release-branch: false
-    is-mainline: true
+    is-main-branch: true
     pre-release-weight: 55000

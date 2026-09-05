@@ -69,28 +69,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node-version }}
-          registry-url: 'https://registry.npmjs.org'
-
+      # Install pnpm before setup-node so action-setup uses the runner Node,
+      # not matrix Node 18 (pnpm/action-setup@v6 @pnpm/exe breaks on 18).
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
           version: 9
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
         with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          node-version: ${{ matrix.node-version }}
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install
@@ -129,28 +121,18 @@ jobs:
           git_user_signingkey: true
           git_commit_gpgsign: true
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 'lts/*'
-          registry-url: 'https://registry.npmjs.org'
-
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
           version: 9
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
         with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install
