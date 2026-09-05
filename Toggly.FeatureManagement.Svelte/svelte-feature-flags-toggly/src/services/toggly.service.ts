@@ -13,8 +13,7 @@ import {
   serializeCacheLruIndex,
   toBooleanDefinitions,
   touchCacheLruKey,
-  bindTogglyServiceContextState,
-  setEvaluationContextSafely,
+  setBrowserSdkEvaluationContext,
 } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
@@ -525,20 +524,19 @@ export class Toggly implements TogglyService {
     }
   }
 
-  setContext = async (context: TogglyEvaluationContext): Promise<void> => {
-    await setEvaluationContextSafely(
+  setContext = async (context: TogglyEvaluationContext): Promise<void> =>
+    setBrowserSdkEvaluationContext(
+      this as unknown as TogglyServiceContextHost<
+        EvaluatedDefinitions,
+        { [key: string]: EvaluatedVariantDef } | null
+      >,
       context,
       (this._config.featureDefaults ?? {}) as EvaluatedDefinitions,
       {
-        ...bindTogglyServiceContextState(this as unknown as TogglyServiceContextHost<
-          EvaluatedDefinitions,
-          { [key: string]: EvaluatedVariantDef } | null
-        >),
-        notifyRefresh: () => this.notifyFeaturesRefresh(),
-        refreshStrict: () => this._loadFeatures(true, { strict: true }),
+        notifyFeaturesRefresh: () => this.notifyFeaturesRefresh(),
+        loadFeaturesStrict: () => this._loadFeatures(true, { strict: true }),
       },
     )
-  }
 
   _loadFeatures = async (
     forceRefresh = false,

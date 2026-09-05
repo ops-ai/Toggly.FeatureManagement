@@ -44,8 +44,13 @@ export interface TogglyServiceContextHost<TFeatures, TVariants> {
     _features: TFeatures | null;
     _variants: TVariants | null;
 }
-export declare function bindTogglyServiceContextState<TFeatures, TVariants>(host: TogglyServiceContextHost<TFeatures, TVariants>): Pick<SetEvaluationContextSafelyOptions<TFeatures, TVariants>, 'readState' | 'writeState'>;
 export declare function bindEvaluationContextChangeState<TFeatures, TVariants>(bindings: EvaluationContextChangeBindings<TFeatures, TVariants>): Pick<SetEvaluationContextSafelyOptions<TFeatures, TVariants>, 'readState' | 'writeState'>;
+export declare function bindTogglyServiceContextState<TFeatures, TVariants>(host: TogglyServiceContextHost<TFeatures, TVariants>): Pick<SetEvaluationContextSafelyOptions<TFeatures, TVariants>, 'readState' | 'writeState'>;
+export interface BrowserSdkContextRunner {
+    notifyFeaturesRefresh(): void;
+    loadFeaturesStrict(): Promise<unknown>;
+}
+export declare function setBrowserSdkEvaluationContext<TFeatures, TVariants>(host: TogglyServiceContextHost<TFeatures, TVariants>, context: TogglyEvaluationContext, featureDefaults: Record<string, unknown>, runner: BrowserSdkContextRunner): Promise<void>;
 /**
  * Withhold prior evaluated state, apply partial context updates, and refresh under
  * strict mode. Restores the prior snapshot when refresh fails.

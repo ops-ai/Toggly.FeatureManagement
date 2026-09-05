@@ -49,6 +49,27 @@ export interface TogglyServiceContextHost<TFeatures, TVariants> {
   _variants: TVariants | null;
 }
 
+export function bindEvaluationContextChangeState<TFeatures, TVariants>(
+  bindings: EvaluationContextChangeBindings<TFeatures, TVariants>,
+): Pick<SetEvaluationContextSafelyOptions<TFeatures, TVariants>, 'readState' | 'writeState'> {
+  return {
+    readState: () => ({
+      identity: bindings.identity.get(),
+      groups: [...bindings.groups.get()],
+      claims: { ...bindings.claims.get() },
+      features: bindings.features.get(),
+      variants: bindings.variants.get(),
+    }),
+    writeState: (state) => {
+      bindings.identity.set(state.identity);
+      bindings.groups.set([...state.groups]);
+      bindings.claims.set({ ...state.claims });
+      bindings.features.set(state.features);
+      bindings.variants.set(state.variants);
+    },
+  };
+}
+
 export function bindTogglyServiceContextState<TFeatures, TVariants>(
   host: TogglyServiceContextHost<TFeatures, TVariants>,
 ): Pick<SetEvaluationContextSafelyOptions<TFeatures, TVariants>, 'readState' | 'writeState'> {
@@ -86,25 +107,22 @@ export function bindTogglyServiceContextState<TFeatures, TVariants>(
   });
 }
 
-export function bindEvaluationContextChangeState<TFeatures, TVariants>(
-  bindings: EvaluationContextChangeBindings<TFeatures, TVariants>,
-): Pick<SetEvaluationContextSafelyOptions<TFeatures, TVariants>, 'readState' | 'writeState'> {
-  return {
-    readState: () => ({
-      identity: bindings.identity.get(),
-      groups: [...bindings.groups.get()],
-      claims: { ...bindings.claims.get() },
-      features: bindings.features.get(),
-      variants: bindings.variants.get(),
-    }),
-    writeState: (state) => {
-      bindings.identity.set(state.identity);
-      bindings.groups.set([...state.groups]);
-      bindings.claims.set({ ...state.claims });
-      bindings.features.set(state.features);
-      bindings.variants.set(state.variants);
-    },
-  };
+export interface BrowserSdkContextRunner {
+  notifyFeaturesRefresh(): void;
+  loadFeaturesStrict(): Promise<unknown>;
+}
+
+export async function setBrowserSdkEvaluationContext<TFeatures, TVariants>(
+  host: TogglyServiceContextHost<TFeatures, TVariants>,
+  context: TogglyEvaluationContext,
+  featureDefaults: Record<string, unknown>,
+  runner: BrowserSdkContextRunner,
+): Promise<void> {
+  return setEvaluationContextSafely(context, featureDefaults, {
+    ...bindTogglyServiceContextState(host),
+    notifyRefresh: () => runner.notifyFeaturesRefresh(),
+    refreshStrict: () => runner.loadFeaturesStrict(),
+  });
 }
 
 /**

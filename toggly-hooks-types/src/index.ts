@@ -91,10 +91,12 @@ export type {
   EvaluationContextChangeBindings,
   SetEvaluationContextSafelyOptions,
   TogglyServiceContextHost,
+  BrowserSdkContextRunner,
 } from './set-evaluation-context';
 export {
   bindEvaluationContextChangeState,
   bindTogglyServiceContextState,
+  setBrowserSdkEvaluationContext,
   setEvaluationContextSafely,
 } from './set-evaluation-context';
 export type {

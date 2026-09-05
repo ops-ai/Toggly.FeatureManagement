@@ -1,8 +1,27 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bindTogglyServiceContextState = bindTogglyServiceContextState;
 exports.bindEvaluationContextChangeState = bindEvaluationContextChangeState;
+exports.bindTogglyServiceContextState = bindTogglyServiceContextState;
+exports.setBrowserSdkEvaluationContext = setBrowserSdkEvaluationContext;
 exports.setEvaluationContextSafely = setEvaluationContextSafely;
+function bindEvaluationContextChangeState(bindings) {
+    return {
+        readState: () => ({
+            identity: bindings.identity.get(),
+            groups: [...bindings.groups.get()],
+            claims: { ...bindings.claims.get() },
+            features: bindings.features.get(),
+            variants: bindings.variants.get(),
+        }),
+        writeState: (state) => {
+            bindings.identity.set(state.identity);
+            bindings.groups.set([...state.groups]);
+            bindings.claims.set({ ...state.claims });
+            bindings.features.set(state.features);
+            bindings.variants.set(state.variants);
+        },
+    };
+}
 function bindTogglyServiceContextState(host) {
     return bindEvaluationContextChangeState({
         identity: {
@@ -37,23 +56,12 @@ function bindTogglyServiceContextState(host) {
         },
     });
 }
-function bindEvaluationContextChangeState(bindings) {
-    return {
-        readState: () => ({
-            identity: bindings.identity.get(),
-            groups: [...bindings.groups.get()],
-            claims: { ...bindings.claims.get() },
-            features: bindings.features.get(),
-            variants: bindings.variants.get(),
-        }),
-        writeState: (state) => {
-            bindings.identity.set(state.identity);
-            bindings.groups.set([...state.groups]);
-            bindings.claims.set({ ...state.claims });
-            bindings.features.set(state.features);
-            bindings.variants.set(state.variants);
-        },
-    };
+async function setBrowserSdkEvaluationContext(host, context, featureDefaults, runner) {
+    return setEvaluationContextSafely(context, featureDefaults, {
+        ...bindTogglyServiceContextState(host),
+        notifyRefresh: () => runner.notifyFeaturesRefresh(),
+        refreshStrict: () => runner.loadFeaturesStrict(),
+    });
 }
 /**
  * Withhold prior evaluated state, apply partial context updates, and refresh under

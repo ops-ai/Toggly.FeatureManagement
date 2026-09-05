@@ -29,8 +29,7 @@ import {
   selectCacheLruKeysToEvict,
   serializeCacheLruIndex,
   touchCacheLruKey,
-  bindTogglyServiceContextState,
-  setEvaluationContextSafely,
+  setBrowserSdkEvaluationContext,
 } from '@ops-ai/toggly-hooks-types'
 import {
   applyLocalGate,
@@ -260,16 +259,16 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   async setContext(context: TogglyEvaluationContext): Promise<void> {
-    await setEvaluationContextSafely(
+    return setBrowserSdkEvaluationContext(
+      this as unknown as TogglyServiceContextHost<
+        EvaluatedDefinitions,
+        { [key: string]: EvaluatedVariantDef } | null
+      >,
       context,
       (this._config.featureDefaults ?? {}) as EvaluatedDefinitions,
       {
-        ...bindTogglyServiceContextState(this as unknown as TogglyServiceContextHost<
-          EvaluatedDefinitions,
-          { [key: string]: EvaluatedVariantDef } | null
-        >),
-        notifyRefresh: () => this.notifyFeaturesRefresh(),
-        refreshStrict: () => this._loadFeatures(true, { strict: true }),
+        notifyFeaturesRefresh: () => this.notifyFeaturesRefresh(),
+        loadFeaturesStrict: () => this._loadFeatures(true, { strict: true }),
       },
     )
   }

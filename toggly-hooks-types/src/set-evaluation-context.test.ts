@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { setEvaluationContextSafely } from './set-evaluation-context';
+import {
+  bindTogglyServiceContextState,
+  setBrowserSdkEvaluationContext,
+  setEvaluationContextSafely,
+} from './set-evaluation-context';
 
 describe('setEvaluationContextSafely', () => {
   it('withholds defaults then refreshes on success', async () => {
@@ -72,5 +76,56 @@ describe('setEvaluationContextSafely', () => {
     expect(state.identity).toBe('user-a');
     expect(state.features).toEqual({ Gated: true });
     expect(notifyRefresh).toHaveBeenCalledTimes(2);
+  });
+
+  it('bindTogglyServiceContextState reads and writes host fields', () => {
+    const host = {
+      _config: { identity: 'user-a' as string | undefined },
+      _groups: ['beta'],
+      _claims: { role: 'viewer' },
+      _features: { Gated: true } as Record<string, boolean> | null,
+      _variants: null as Record<string, unknown> | null,
+    };
+
+    const bindings = bindTogglyServiceContextState(host);
+    const snapshot = bindings.readState();
+    expect(snapshot.identity).toBe('user-a');
+    expect(snapshot.groups).toEqual(['beta']);
+
+    bindings.writeState({
+      identity: 'user-b',
+      groups: ['gamma'],
+      claims: { role: 'admin' },
+      features: { Gated: false },
+      variants: null,
+    });
+
+    expect(host._config.identity).toBe('user-b');
+    expect(host._groups).toEqual(['gamma']);
+    expect(host._claims).toEqual({ role: 'admin' });
+    expect(host._features).toEqual({ Gated: false });
+  });
+
+  it('setBrowserSdkEvaluationContext delegates to runner hooks', async () => {
+    const host = {
+      _config: { identity: 'user-a' as string | undefined },
+      _groups: [] as string[],
+      _claims: {} as Record<string, string>,
+      _features: { Gated: true } as Record<string, boolean> | null,
+      _variants: null as Record<string, unknown> | null,
+    };
+    const notifyFeaturesRefresh = vi.fn();
+    const loadFeaturesStrict = vi.fn().mockResolvedValue(undefined);
+
+    await setBrowserSdkEvaluationContext(
+      host,
+      { identity: 'user-b' },
+      { Gated: false },
+      { notifyFeaturesRefresh, loadFeaturesStrict },
+    );
+
+    expect(host._config.identity).toBe('user-b');
+    expect(loadFeaturesStrict).toHaveBeenCalledTimes(1);
+    expect(notifyFeaturesRefresh).toHaveBeenCalledTimes(1);
   });
 });
