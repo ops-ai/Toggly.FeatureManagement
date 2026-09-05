@@ -38,7 +38,7 @@
     "ws": "^8.0.0"
   },
   "dependencies": {
-    "@ops-ai/toggly-hooks-types": "file:../toggly-hooks-types",
+    "@ops-ai/toggly-hooks-types": "^1.4.4",
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
   },
