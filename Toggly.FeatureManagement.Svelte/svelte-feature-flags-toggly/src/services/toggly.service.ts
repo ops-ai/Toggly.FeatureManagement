@@ -515,6 +515,17 @@ export class Toggly implements TogglyService {
   }
 
   setContext = async (context: TogglyEvaluationContext): Promise<void> => {
+    const previousIdentity = this._config.identity
+    const previousGroups = [...this._groups]
+    const previousClaims = { ...this._claims }
+    const previousFeatures = this._features
+    const previousVariants = this._variants
+
+    const defaults = (this._config.featureDefaults ?? {}) as EvaluatedDefinitions
+    this._features = { ...defaults }
+    this._variants = null
+    this.notifyFeaturesRefresh()
+
     if (context.identity !== undefined) {
       this._config.identity = context.identity || undefined
     }
@@ -524,12 +535,24 @@ export class Toggly implements TogglyService {
     if (context.claims !== undefined) {
       this._claims = { ...context.claims }
     }
-    this._features = null
-    this._variants = null
-    await this._loadFeatures(true)
+
+    try {
+      await this._loadFeatures(true, { strict: true })
+    } catch (error) {
+      this._config.identity = previousIdentity
+      this._groups = previousGroups
+      this._claims = previousClaims
+      this._features = previousFeatures
+      this._variants = previousVariants
+      this.notifyFeaturesRefresh()
+      throw error
+    }
   }
 
-  _loadFeatures = async (forceRefresh = false) => {
+  _loadFeatures = async (
+    forceRefresh = false,
+    options?: { strict?: boolean },
+  ) => {
     // Features are currently being loaded
     if (this._loadingFeatures) {
       await new Promise<void>((resolve) => {
@@ -639,6 +662,9 @@ export class Toggly implements TogglyService {
       if (recovered) {
         this._variants = recovered.variants
         this._features = recovered.features
+      }
+      if (options?.strict) {
+        throw error
       }
       console.warn(
         'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',
