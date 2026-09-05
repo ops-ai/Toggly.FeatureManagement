@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.0
+
+2026-09-05
+
+### Added
+- Batched feature usage (`recordUsage` / `recordView`, auto check on
+  `isFeatureOn`) and business metrics (`measure` / `incrementCounter` /
+  `observe`) via gRPC `Usage.SendStats` and `Metrics.SendMetrics` [OPS-912].
+- Config: `enableUsageTracking`, `enableMetrics`, `metricsBaseUrl`, flush
+  intervals, `instanceName`, `appVersion`; flush on `close` / process signals.
+- Optional dependencies `@grpc/grpc-js` and `@grpc/proto-loader` (flag eval
+  works without them).
+
 ## 0.7.0
 
 2026-09-02

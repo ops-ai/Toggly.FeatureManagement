@@ -55,6 +55,7 @@ import {
   registerContext as registerEntityContext,
   registerEntityContextsAtStartup,
 } from './entity-context-registration.js'
+import { TelemetryRuntime } from './telemetry/index.js'
 
 /**
  * Create a new Toggly client
@@ -121,6 +122,9 @@ export function createTogglyClient(
 
   // Streaming event source (for SSE) - legacy, kept for backward compat
   let streamingAbortController: AbortController | null = null
+
+  // Usage + business metrics telemetry (optional gRPC transport)
+  let telemetry: TelemetryRuntime | null = null
 
   function getDefinitionsRevision(): string | null {
     return cachedDefinitionsRevision ?? state.etag
@@ -701,6 +705,9 @@ export function createTogglyClient(
     // Start WebSocket live updates (always-on unless explicitly disabled)
     startStreaming()
 
+    // Start usage/metrics batching when enabled (default: on with appKey)
+    startTelemetry()
+
     logger.debug('Toggly client initialized')
 
     await registerEntityContextsAtStartup({
@@ -738,6 +745,10 @@ export function createTogglyClient(
     )
 
     const result = evaluateLocalFeature(featureKey, evalContext)
+
+    if (telemetry?.usageEnabled) {
+      telemetry.recordCheck(featureKey, result, evalContext.identity)
+    }
 
     // Execute afterEvaluation hooks
     await hookExecutor.executeAfterEvaluation(featureKey, hookContext, hookData, result)
@@ -836,12 +847,79 @@ export function createTogglyClient(
     return hookExecutor.removeHook(name)
   }
 
+  function recordUsage(featureKey: string, identity?: string, variant?: string): void {
+    telemetry?.recordUsage(featureKey, identity ?? config.identity, variant)
+  }
+
+  function recordView(featureKey: string, identity?: string, variant?: string): void {
+    telemetry?.recordView(featureKey, identity ?? config.identity, variant)
+  }
+
+  function measure(
+    metricKey: string,
+    value: number,
+    options?: { feature?: string; variant?: string },
+  ): void {
+    telemetry?.measure(metricKey, value, options)
+  }
+
+  function incrementCounter(
+    metricKey: string,
+    value = 1,
+    options?: { feature?: string; variant?: string },
+  ): void {
+    telemetry?.incrementCounter(metricKey, value, options)
+  }
+
+  function observe(
+    metricKey: string,
+    value: number,
+    options?: { feature?: string; variant?: string },
+  ): void {
+    telemetry?.observe(metricKey, value, options)
+  }
+
+  async function flushTelemetry(): Promise<void> {
+    await telemetry?.flushAll()
+  }
+
+  function startTelemetry(): void {
+    if (!config.appKey) {
+      return
+    }
+    if (telemetry) {
+      void telemetry.close()
+      telemetry = null
+    }
+    telemetry = new TelemetryRuntime(
+      {
+        appKey: config.appKey,
+        environment: config.environment ?? DEFAULT_CONFIG.environment,
+        metricsBaseUrl: config.metricsBaseUrl,
+        enableUsageTracking: config.enableUsageTracking,
+        enableMetrics: config.enableMetrics,
+        usageFlushInterval: config.usageFlushInterval,
+        metricsFlushInterval: config.metricsFlushInterval,
+        instanceName: config.instanceName,
+        appVersion: config.appVersion,
+        usageClient: config.usageClient,
+        metricsClient: config.metricsClient,
+      },
+      logger,
+    )
+    telemetry.start()
+  }
+
   /**
    * Close the client and cleanup
    */
-  function close(): void {
+  async function close(): Promise<void> {
     stopRefreshInterval()
     stopStreaming()
+    if (telemetry) {
+      await telemetry.close()
+      telemetry = null
+    }
     hookExecutor.clear()
     logger.debug('Toggly client closed')
   }
@@ -874,6 +952,12 @@ export function createTogglyClient(
     setIdentity,
     addHook,
     removeHook,
+    recordUsage,
+    recordView,
+    measure,
+    incrementCounter,
+    observe,
+    flushTelemetry,
     close,
   }
 }
@@ -919,9 +1003,10 @@ export function useToggly(): TogglyClient {
 /**
  * Close the default client
  */
-export function closeToggly(): void {
+export function closeToggly(): void | Promise<void> {
   if (defaultClient) {
-    defaultClient.close()
+    const client = defaultClient
     defaultClient = null
+    return client.close()
   }
 }

@@ -87,6 +87,38 @@ export interface TogglyServerConfig extends TogglyConfig {
   onError?: (error: Error, context?: string) => void | Promise<void>
   /** Register entity context schemas with Toggly on startup (default: true) */
   registerContextsOnStartup?: boolean
+  /**
+   * Base URL for usage/metrics gRPC (default: https://app.toggly.io/).
+   * Separate from `baseUrl`, which is for definitions/JWKS.
+   */
+  metricsBaseUrl?: string
+  /**
+   * Enable feature usage tracking via Usage.SendStats.
+   * Defaults to true when `appKey` is set.
+   */
+  enableUsageTracking?: boolean
+  /**
+   * Enable business metrics via Metrics.SendMetrics.
+   * Defaults to true when `appKey` is set.
+   */
+  enableMetrics?: boolean
+  /** Usage flush interval in ms (default: 60000). 0 disables the timer. */
+  usageFlushInterval?: number
+  /** Metrics flush interval in ms (default: 60000). 0 disables the timer. */
+  metricsFlushInterval?: number
+  /** Hostname/instance name reported with usage/metrics payloads. */
+  instanceName?: string
+  /** Application version reported with usage payloads. */
+  appVersion?: string
+  /**
+   * Injected gRPC stubs for tests (not part of the public config surface).
+   * @internal
+   */
+  usageClient?: import('./telemetry/grpc-clients.js').UsageGrpcClient | null
+  /**
+   * @internal
+   */
+  metricsClient?: import('./telemetry/grpc-clients.js').MetricsGrpcClient | null
 }
 
 /**
@@ -236,7 +268,32 @@ export interface TogglyClient {
   setIdentity(identity: string): Promise<void>
   addHook(hook: Hook): void
   removeHook(name: string): boolean
-  close(): void
+  /** Record a feature "used" interaction (usage telemetry). */
+  recordUsage(featureKey: string, identity?: string, variant?: string): void
+  /** Record a feature "viewed" event (usage telemetry). */
+  recordView(featureKey: string, identity?: string, variant?: string): void
+  /** Aggregate a measurement (sum over the flush window). */
+  measure(
+    metricKey: string,
+    value: number,
+    options?: { feature?: string; variant?: string },
+  ): void
+  /** Increment a counter metric. */
+  incrementCounter(
+    metricKey: string,
+    value?: number,
+    options?: { feature?: string; variant?: string },
+  ): void
+  /** Record a point-in-time observation (gauge). */
+  observe(
+    metricKey: string,
+    value: number,
+    options?: { feature?: string; variant?: string },
+  ): void
+  /** Flush pending usage and metrics batches. */
+  flushTelemetry(): Promise<void>
+  /** Stop timers, flush telemetry, and release resources. */
+  close(): void | Promise<void>
 }
 
 /**

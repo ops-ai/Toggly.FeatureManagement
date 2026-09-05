@@ -6,6 +6,10 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     exclude: [...configDefaults.exclude, '**/smoke*.test.ts', '**/smoke*.spec.ts'],
+    // Avoid dialing real gRPC during unit tests unless a test opts in explicitly.
+    env: {
+      TOGGLY_DISABLE_TELEMETRY: '1',
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],
