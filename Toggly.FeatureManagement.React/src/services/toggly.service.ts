@@ -19,7 +19,7 @@ import {
   selectCacheLruKeysToEvict,
   serializeCacheLruIndex,
   touchCacheLruKey,
-  bindEvaluationContextChangeState,
+  bindTogglyServiceContextState,
   setEvaluationContextSafely,
 } from '@ops-ai/toggly-hooks-types';
 import {
@@ -510,38 +510,7 @@ export class Toggly implements TogglyService {
       context,
       (this._config.featureDefaults ?? {}) as EvaluatedDefinitions,
       {
-        ...bindEvaluationContextChangeState({
-          identity: {
-            get: () => this._config.identity,
-            set: (value) => {
-              this._config.identity = value
-            },
-          },
-          groups: {
-            get: () => this._groups,
-            set: (value) => {
-              this._groups = value
-            },
-          },
-          claims: {
-            get: () => this._claims,
-            set: (value) => {
-              this._claims = value
-            },
-          },
-          features: {
-            get: () => this._features,
-            set: (value) => {
-              this._features = value
-            },
-          },
-          variants: {
-            get: () => this._variants,
-            set: (value) => {
-              this._variants = value
-            },
-          },
-        }),
+        ...bindTogglyServiceContextState(this),
         notifyRefresh: () => this.notifyFeaturesRefresh(),
         refreshStrict: () => this._loadFeatures(true, { strict: true }),
       },

@@ -34,6 +34,17 @@ export interface EvaluationContextChangeBindings<TFeatures, TVariants> {
         set: (value: TVariants | null) => void;
     };
 }
+export interface TogglyServiceContextHost<TFeatures, TVariants> {
+    _config: {
+        identity?: string;
+        featureDefaults?: Record<string, unknown>;
+    };
+    _groups: string[];
+    _claims: Record<string, string>;
+    _features: TFeatures | null;
+    _variants: TVariants | null;
+}
+export declare function bindTogglyServiceContextState<TFeatures, TVariants>(host: TogglyServiceContextHost<TFeatures, TVariants>): Pick<SetEvaluationContextSafelyOptions<TFeatures, TVariants>, 'readState' | 'writeState'>;
 export declare function bindEvaluationContextChangeState<TFeatures, TVariants>(bindings: EvaluationContextChangeBindings<TFeatures, TVariants>): Pick<SetEvaluationContextSafelyOptions<TFeatures, TVariants>, 'readState' | 'writeState'>;
 /**
  * Withhold prior evaluated state, apply partial context updates, and refresh under

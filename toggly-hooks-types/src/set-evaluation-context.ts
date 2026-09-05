@@ -38,6 +38,54 @@ export interface EvaluationContextChangeBindings<TFeatures, TVariants> {
   };
 }
 
+export interface TogglyServiceContextHost<TFeatures, TVariants> {
+  _config: {
+    identity?: string;
+    featureDefaults?: Record<string, unknown>;
+  };
+  _groups: string[];
+  _claims: Record<string, string>;
+  _features: TFeatures | null;
+  _variants: TVariants | null;
+}
+
+export function bindTogglyServiceContextState<TFeatures, TVariants>(
+  host: TogglyServiceContextHost<TFeatures, TVariants>,
+): Pick<SetEvaluationContextSafelyOptions<TFeatures, TVariants>, 'readState' | 'writeState'> {
+  return bindEvaluationContextChangeState({
+    identity: {
+      get: () => host._config.identity,
+      set: (value) => {
+        host._config.identity = value;
+      },
+    },
+    groups: {
+      get: () => host._groups,
+      set: (value) => {
+        host._groups = value;
+      },
+    },
+    claims: {
+      get: () => host._claims,
+      set: (value) => {
+        host._claims = value;
+      },
+    },
+    features: {
+      get: () => host._features,
+      set: (value) => {
+        host._features = value;
+      },
+    },
+    variants: {
+      get: () => host._variants,
+      set: (value) => {
+        host._variants = value;
+      },
+    },
+  });
+}
+
 export function bindEvaluationContextChangeState<TFeatures, TVariants>(
   bindings: EvaluationContextChangeBindings<TFeatures, TVariants>,
 ): Pick<SetEvaluationContextSafelyOptions<TFeatures, TVariants>, 'readState' | 'writeState'> {

@@ -3,8 +3,9 @@
 
 ## 1.4.5
 
-- Add `setEvaluationContextSafely` and `bindEvaluationContextChangeState` for
-  shared browser SDK `setContext` withhold/restore behavior [OPS-900].
+- Add `setEvaluationContextSafely`, `bindEvaluationContextChangeState`, and
+  `bindTogglyServiceContextState` for shared browser SDK `setContext`
+  withhold/restore behavior [OPS-900].
 
 ## 1.4.4
 

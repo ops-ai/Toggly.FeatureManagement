@@ -1,7 +1,42 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.bindTogglyServiceContextState = bindTogglyServiceContextState;
 exports.bindEvaluationContextChangeState = bindEvaluationContextChangeState;
 exports.setEvaluationContextSafely = setEvaluationContextSafely;
+function bindTogglyServiceContextState(host) {
+    return bindEvaluationContextChangeState({
+        identity: {
+            get: () => host._config.identity,
+            set: (value) => {
+                host._config.identity = value;
+            },
+        },
+        groups: {
+            get: () => host._groups,
+            set: (value) => {
+                host._groups = value;
+            },
+        },
+        claims: {
+            get: () => host._claims,
+            set: (value) => {
+                host._claims = value;
+            },
+        },
+        features: {
+            get: () => host._features,
+            set: (value) => {
+                host._features = value;
+            },
+        },
+        variants: {
+            get: () => host._variants,
+            set: (value) => {
+                host._variants = value;
+            },
+        },
+    });
+}
 function bindEvaluationContextChangeState(bindings) {
     return {
         readState: () => ({

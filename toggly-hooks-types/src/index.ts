@@ -90,9 +90,11 @@ export type {
   EvaluationContextChangeState,
   EvaluationContextChangeBindings,
   SetEvaluationContextSafelyOptions,
+  TogglyServiceContextHost,
 } from './set-evaluation-context';
 export {
   bindEvaluationContextChangeState,
+  bindTogglyServiceContextState,
   setEvaluationContextSafely,
 } from './set-evaluation-context';
 export type {
