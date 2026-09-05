@@ -32,7 +32,7 @@ type FeatureStat struct {
 	InstanceName     *string                `protobuf:"bytes,6,opt,name=instanceName,proto3,oneof" json:"instanceName,omitempty"`
 	ProcessStartTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=processStartTime,proto3,oneof" json:"processStartTime,omitempty"`
 	AppVersion       *string                `protobuf:"bytes,8,opt,name=appVersion,proto3,oneof" json:"appVersion,omitempty"`
-	UniqueUserHashes []int32                `protobuf:"varint,9,rep,packed,name=uniqueUserHashes,proto3" json:"uniqueUserHashes,omitempty"`
+	UniqueUserHashes []int32                `protobuf:"varint,9,rep,packed,name=uniqueUserHashes,proto3" json:"uniqueUserHashes,omitempty"` // Application-level unique user ID hashes
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -131,19 +131,28 @@ func (x *FeatureStat) GetUniqueUserHashes() []int32 {
 }
 
 type StatMessage struct {
-	state                                protoimpl.MessageState `protogen:"open.v1"`
-	Feature                              string                 `protobuf:"bytes,1,opt,name=feature,proto3" json:"feature,omitempty"`
-	EnabledCount                         int32                  `protobuf:"varint,2,opt,name=enabledCount,proto3" json:"enabledCount,omitempty"`
-	DisabledCount                        int32                  `protobuf:"varint,3,opt,name=disabledCount,proto3" json:"disabledCount,omitempty"`
-	UniqueContextIdentifierEnabledCount  int32                  `protobuf:"varint,4,opt,name=uniqueContextIdentifierEnabledCount,proto3" json:"uniqueContextIdentifierEnabledCount,omitempty"`
-	UniqueContextIdentifierDisabledCount int32                  `protobuf:"varint,5,opt,name=uniqueContextIdentifierDisabledCount,proto3" json:"uniqueContextIdentifierDisabledCount,omitempty"`
-	UniqueRequestEnabledCount            int32                  `protobuf:"varint,6,opt,name=uniqueRequestEnabledCount,proto3" json:"uniqueRequestEnabledCount,omitempty"`
-	UniqueRequestDisabledCount           int32                  `protobuf:"varint,7,opt,name=uniqueRequestDisabledCount,proto3" json:"uniqueRequestDisabledCount,omitempty"`
-	UsedCount                            int32                  `protobuf:"varint,8,opt,name=usedCount,proto3" json:"usedCount,omitempty"`
-	UniqueUsersUsedCount                 int32                  `protobuf:"varint,9,opt,name=uniqueUsersUsedCount,proto3" json:"uniqueUsersUsedCount,omitempty"`
-	UniqueUserHashes                     []int32                `protobuf:"varint,10,rep,packed,name=uniqueUserHashes,proto3" json:"uniqueUserHashes,omitempty"`
-	unknownFields                        protoimpl.UnknownFields
-	sizeCache                            protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Feature string                 `protobuf:"bytes,1,opt,name=feature,proto3" json:"feature,omitempty"`
+	// Deprecated: Marked as deprecated in usage.proto.
+	EnabledCount int32 `protobuf:"varint,2,opt,name=enabledCount,proto3" json:"enabledCount,omitempty"` // Legacy: use variantStats instead
+	// Deprecated: Marked as deprecated in usage.proto.
+	DisabledCount                        int32 `protobuf:"varint,3,opt,name=disabledCount,proto3" json:"disabledCount,omitempty"` // Legacy: use variantStats instead
+	UniqueContextIdentifierEnabledCount  int32 `protobuf:"varint,4,opt,name=uniqueContextIdentifierEnabledCount,proto3" json:"uniqueContextIdentifierEnabledCount,omitempty"`
+	UniqueContextIdentifierDisabledCount int32 `protobuf:"varint,5,opt,name=uniqueContextIdentifierDisabledCount,proto3" json:"uniqueContextIdentifierDisabledCount,omitempty"`
+	// Deprecated: Marked as deprecated in usage.proto.
+	UniqueRequestEnabledCount int32 `protobuf:"varint,6,opt,name=uniqueRequestEnabledCount,proto3" json:"uniqueRequestEnabledCount,omitempty"` // Legacy: use variantStats instead
+	// Deprecated: Marked as deprecated in usage.proto.
+	UniqueRequestDisabledCount int32 `protobuf:"varint,7,opt,name=uniqueRequestDisabledCount,proto3" json:"uniqueRequestDisabledCount,omitempty"` // Legacy: use variantStats instead
+	// Deprecated: Marked as deprecated in usage.proto.
+	UsedCount            int32   `protobuf:"varint,8,opt,name=usedCount,proto3" json:"usedCount,omitempty"` // Legacy: use variantStats instead
+	UniqueUsersUsedCount int32   `protobuf:"varint,9,opt,name=uniqueUsersUsedCount,proto3" json:"uniqueUsersUsedCount,omitempty"`
+	UniqueUserHashes     []int32 `protobuf:"varint,10,rep,packed,name=uniqueUserHashes,proto3" json:"uniqueUserHashes,omitempty"` // Unique user ID hashes for "used" tracking
+	// Multi-variate support - all new metrics should use this
+	VariantStats map[string]*VariantStats `protobuf:"bytes,11,rep,name=variantStats,proto3" json:"variantStats,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Key: variant name (e.g., "enabled", "disabled")
+	// Unique user tracking for "viewed" metric (per feature, not per variant)
+	UniqueViewedUserHashes []int32 `protobuf:"varint,12,rep,packed,name=uniqueViewedUserHashes,proto3" json:"uniqueViewedUserHashes,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *StatMessage) Reset() {
@@ -183,6 +192,7 @@ func (x *StatMessage) GetFeature() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in usage.proto.
 func (x *StatMessage) GetEnabledCount() int32 {
 	if x != nil {
 		return x.EnabledCount
@@ -190,6 +200,7 @@ func (x *StatMessage) GetEnabledCount() int32 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in usage.proto.
 func (x *StatMessage) GetDisabledCount() int32 {
 	if x != nil {
 		return x.DisabledCount
@@ -211,6 +222,7 @@ func (x *StatMessage) GetUniqueContextIdentifierDisabledCount() int32 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in usage.proto.
 func (x *StatMessage) GetUniqueRequestEnabledCount() int32 {
 	if x != nil {
 		return x.UniqueRequestEnabledCount
@@ -218,6 +230,7 @@ func (x *StatMessage) GetUniqueRequestEnabledCount() int32 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in usage.proto.
 func (x *StatMessage) GetUniqueRequestDisabledCount() int32 {
 	if x != nil {
 		return x.UniqueRequestDisabledCount
@@ -225,6 +238,7 @@ func (x *StatMessage) GetUniqueRequestDisabledCount() int32 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in usage.proto.
 func (x *StatMessage) GetUsedCount() int32 {
 	if x != nil {
 		return x.UsedCount
@@ -246,6 +260,88 @@ func (x *StatMessage) GetUniqueUserHashes() []int32 {
 	return nil
 }
 
+func (x *StatMessage) GetVariantStats() map[string]*VariantStats {
+	if x != nil {
+		return x.VariantStats
+	}
+	return nil
+}
+
+func (x *StatMessage) GetUniqueViewedUserHashes() []int32 {
+	if x != nil {
+		return x.UniqueViewedUserHashes
+	}
+	return nil
+}
+
+type VariantStats struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CheckCount    int32                  `protobuf:"varint,1,opt,name=checkCount,proto3" json:"checkCount,omitempty"`
+	RequestCount  int32                  `protobuf:"varint,2,opt,name=requestCount,proto3" json:"requestCount,omitempty"`
+	UsedCount     int32                  `protobuf:"varint,3,opt,name=usedCount,proto3" json:"usedCount,omitempty"`
+	ViewedCount   int32                  `protobuf:"varint,4,opt,name=viewedCount,proto3" json:"viewedCount,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VariantStats) Reset() {
+	*x = VariantStats{}
+	mi := &file_usage_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VariantStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VariantStats) ProtoMessage() {}
+
+func (x *VariantStats) ProtoReflect() protoreflect.Message {
+	mi := &file_usage_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VariantStats.ProtoReflect.Descriptor instead.
+func (*VariantStats) Descriptor() ([]byte, []int) {
+	return file_usage_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *VariantStats) GetCheckCount() int32 {
+	if x != nil {
+		return x.CheckCount
+	}
+	return 0
+}
+
+func (x *VariantStats) GetRequestCount() int32 {
+	if x != nil {
+		return x.RequestCount
+	}
+	return 0
+}
+
+func (x *VariantStats) GetUsedCount() int32 {
+	if x != nil {
+		return x.UsedCount
+	}
+	return 0
+}
+
+func (x *VariantStats) GetViewedCount() int32 {
+	if x != nil {
+		return x.ViewedCount
+	}
+	return 0
+}
+
 type StatResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	FeatureCount  int32                  `protobuf:"varint,1,opt,name=featureCount,proto3" json:"featureCount,omitempty"`
@@ -255,7 +351,7 @@ type StatResult struct {
 
 func (x *StatResult) Reset() {
 	*x = StatResult{}
-	mi := &file_usage_proto_msgTypes[2]
+	mi := &file_usage_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -267,7 +363,7 @@ func (x *StatResult) String() string {
 func (*StatResult) ProtoMessage() {}
 
 func (x *StatResult) ProtoReflect() protoreflect.Message {
-	mi := &file_usage_proto_msgTypes[2]
+	mi := &file_usage_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -280,7 +376,7 @@ func (x *StatResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatResult.ProtoReflect.Descriptor instead.
 func (*StatResult) Descriptor() ([]byte, []int) {
-	return file_usage_proto_rawDescGZIP(), []int{2}
+	return file_usage_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StatResult) GetFeatureCount() int32 {
@@ -294,7 +390,7 @@ var File_usage_proto protoreflect.FileDescriptor
 
 const file_usage_proto_rawDesc = "" +
 	"\n" +
-	"\vusage.proto\x12\x05Usage\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcd\x03\n" +
+	"\vusage.proto\x12\x05Usage\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc9\x03\n" +
 	"\vFeatureStat\x12\x16\n" +
 	"\x06appKey\x18\x01 \x01(\tR\x06appKey\x12 \n" +
 	"\venvironment\x18\x02 \x01(\tR\venvironment\x12.\n" +
@@ -305,23 +401,35 @@ const file_usage_proto_rawDesc = "" +
 	"\x10processStartTime\x18\a \x01(\v2\x1a.google.protobuf.TimestampH\x01R\x10processStartTime\x88\x01\x01\x12#\n" +
 	"\n" +
 	"appVersion\x18\b \x01(\tH\x02R\n" +
-	"appVersion\x88\x01\x01\x12.\n" +
-	"\x10uniqueUserHashes\x18\t \x03(\x05B\x02\x10\x01R\x10uniqueUserHashesB\x0f\n" +
+	"appVersion\x88\x01\x01\x12*\n" +
+	"\x10uniqueUserHashes\x18\t \x03(\x05R\x10uniqueUserHashesB\x0f\n" +
 	"\r_instanceNameB\x13\n" +
 	"\x11_processStartTimeB\r\n" +
-	"\v_appVersion\"\x97\x04\n" +
+	"\v_appVersion\"\xff\x05\n" +
 	"\vStatMessage\x12\x18\n" +
-	"\afeature\x18\x01 \x01(\tR\afeature\x12\"\n" +
-	"\fenabledCount\x18\x02 \x01(\x05R\fenabledCount\x12$\n" +
-	"\rdisabledCount\x18\x03 \x01(\x05R\rdisabledCount\x12P\n" +
+	"\afeature\x18\x01 \x01(\tR\afeature\x12&\n" +
+	"\fenabledCount\x18\x02 \x01(\x05B\x02\x18\x01R\fenabledCount\x12(\n" +
+	"\rdisabledCount\x18\x03 \x01(\x05B\x02\x18\x01R\rdisabledCount\x12P\n" +
 	"#uniqueContextIdentifierEnabledCount\x18\x04 \x01(\x05R#uniqueContextIdentifierEnabledCount\x12R\n" +
-	"$uniqueContextIdentifierDisabledCount\x18\x05 \x01(\x05R$uniqueContextIdentifierDisabledCount\x12<\n" +
-	"\x19uniqueRequestEnabledCount\x18\x06 \x01(\x05R\x19uniqueRequestEnabledCount\x12>\n" +
-	"\x1auniqueRequestDisabledCount\x18\a \x01(\x05R\x1auniqueRequestDisabledCount\x12\x1c\n" +
-	"\tusedCount\x18\b \x01(\x05R\tusedCount\x122\n" +
-	"\x14uniqueUsersUsedCount\x18\t \x01(\x05R\x14uniqueUsersUsedCount\x12.\n" +
+	"$uniqueContextIdentifierDisabledCount\x18\x05 \x01(\x05R$uniqueContextIdentifierDisabledCount\x12@\n" +
+	"\x19uniqueRequestEnabledCount\x18\x06 \x01(\x05B\x02\x18\x01R\x19uniqueRequestEnabledCount\x12B\n" +
+	"\x1auniqueRequestDisabledCount\x18\a \x01(\x05B\x02\x18\x01R\x1auniqueRequestDisabledCount\x12 \n" +
+	"\tusedCount\x18\b \x01(\x05B\x02\x18\x01R\tusedCount\x122\n" +
+	"\x14uniqueUsersUsedCount\x18\t \x01(\x05R\x14uniqueUsersUsedCount\x12*\n" +
 	"\x10uniqueUserHashes\x18\n" +
-	" \x03(\x05B\x02\x10\x01R\x10uniqueUserHashes\"0\n" +
+	" \x03(\x05R\x10uniqueUserHashes\x12H\n" +
+	"\fvariantStats\x18\v \x03(\v2$.Usage.StatMessage.VariantStatsEntryR\fvariantStats\x126\n" +
+	"\x16uniqueViewedUserHashes\x18\f \x03(\x05R\x16uniqueViewedUserHashes\x1aT\n" +
+	"\x11VariantStatsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
+	"\x05value\x18\x02 \x01(\v2\x13.Usage.VariantStatsR\x05value:\x028\x01\"\x92\x01\n" +
+	"\fVariantStats\x12\x1e\n" +
+	"\n" +
+	"checkCount\x18\x01 \x01(\x05R\n" +
+	"checkCount\x12\"\n" +
+	"\frequestCount\x18\x02 \x01(\x05R\frequestCount\x12\x1c\n" +
+	"\tusedCount\x18\x03 \x01(\x05R\tusedCount\x12 \n" +
+	"\vviewedCount\x18\x04 \x01(\x05R\vviewedCount\"0\n" +
 	"\n" +
 	"StatResult\x12\"\n" +
 	"\ffeatureCount\x18\x01 \x01(\x05R\ffeatureCount2;\n" +
@@ -340,24 +448,28 @@ func file_usage_proto_rawDescGZIP() []byte {
 	return file_usage_proto_rawDescData
 }
 
-var file_usage_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_usage_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_usage_proto_goTypes = []any{
 	(*FeatureStat)(nil),           // 0: Usage.FeatureStat
 	(*StatMessage)(nil),           // 1: Usage.StatMessage
-	(*StatResult)(nil),            // 2: Usage.StatResult
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
+	(*VariantStats)(nil),          // 2: Usage.VariantStats
+	(*StatResult)(nil),            // 3: Usage.StatResult
+	nil,                           // 4: Usage.StatMessage.VariantStatsEntry
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 }
 var file_usage_proto_depIdxs = []int32{
-	3, // 0: Usage.FeatureStat.time:type_name -> google.protobuf.Timestamp
+	5, // 0: Usage.FeatureStat.time:type_name -> google.protobuf.Timestamp
 	1, // 1: Usage.FeatureStat.stats:type_name -> Usage.StatMessage
-	3, // 2: Usage.FeatureStat.processStartTime:type_name -> google.protobuf.Timestamp
-	0, // 3: Usage.Usage.SendStats:input_type -> Usage.FeatureStat
-	2, // 4: Usage.Usage.SendStats:output_type -> Usage.StatResult
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 2: Usage.FeatureStat.processStartTime:type_name -> google.protobuf.Timestamp
+	4, // 3: Usage.StatMessage.variantStats:type_name -> Usage.StatMessage.VariantStatsEntry
+	2, // 4: Usage.StatMessage.VariantStatsEntry.value:type_name -> Usage.VariantStats
+	0, // 5: Usage.Usage.SendStats:input_type -> Usage.FeatureStat
+	3, // 6: Usage.Usage.SendStats:output_type -> Usage.StatResult
+	6, // [6:7] is the sub-list for method output_type
+	5, // [5:6] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_usage_proto_init() }
@@ -372,7 +484,7 @@ func file_usage_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_usage_proto_rawDesc), len(file_usage_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

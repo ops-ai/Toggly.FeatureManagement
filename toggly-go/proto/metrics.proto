@@ -18,24 +18,37 @@ message MetricStat {
 
 message MetricStatMessage {
   string metric = 1;
+  int32 enabledCount = 2 [deprecated = true];
+  int32 disabledCount = 3 [deprecated = true];
   optional string feature = 4;
-  double value = 5;
-  optional double valueDisabled = 6;
+  double value = 5 [deprecated = true];
+  optional double valueDisabled = 6 [deprecated = true];
+
+  // Multi-variate support - Key: variant name (e.g., "enabled", "control")
+  map<string, double> variantValues = 7;
 }
 
 message MetricCounterMessage {
   string metric = 1;
+  int32 enabledCount = 2 [deprecated = true];
+  int32 disabledCount = 3 [deprecated = true];
   optional string feature = 4;
-  double value = 5;
-  optional double valueDisabled = 6;
+  double value = 5 [deprecated = true];
+  optional double valueDisabled = 6 [deprecated = true];
+
+  map<string, double> variantValues = 7;
 }
 
 message MetricObservationMessage {
   google.protobuf.Timestamp time = 1;
   string metric = 2;
+  int32 enabledCount = 3 [deprecated = true];
+  int32 disabledCount = 4 [deprecated = true];
   optional string feature = 5;
-  double value = 6;
-  optional double valueDisabled = 7;
+  double value = 6 [deprecated = true];
+  optional double valueDisabled = 7 [deprecated = true];
+
+  map<string, double> variantValues = 8;
 }
 
 message MetricResult {
