@@ -19,18 +19,75 @@ type Evaluator interface {
 // Callers decide how identity/groups/traits are extracted.
 type ContextBuilder func(r *http.Request) toggly.Context
 
+// Options configures ambient EvalContext extraction for MiddlewareWith.
+//
+// Request headers (UA / Accept-Language / country) are always merged unless
+// the returned context already sets those request fields.
+type Options struct {
+	// GetIdentity extracts the principal identity for the request.
+	GetIdentity func(r *http.Request) string
+
+	// GetGroups extracts group memberships for the request.
+	GetGroups func(r *http.Request) []string
+
+	// GetClaims extracts principal / JWT-style claims for UserClaims filters.
+	GetClaims func(r *http.Request) map[string]string
+
+	// GetContext returns a full evaluation context. When set, its fields are
+	// used; missing request fields are still filled from HTTP headers.
+	// GetIdentity / GetGroups / GetClaims are ignored when GetContext is set.
+	GetContext func(r *http.Request) toggly.Context
+}
+
+// BuildContext builds ambient EvalContext from Options and HTTP headers.
+func BuildContext(r *http.Request, opts Options) toggly.Context {
+	if r == nil {
+		r = &http.Request{}
+	}
+
+	if opts.GetContext != nil {
+		custom := opts.GetContext(r)
+		custom.Request = mergeRequestFromHeaders(r.Header, custom.Request)
+		return custom
+	}
+
+	var out toggly.Context
+	if opts.GetIdentity != nil {
+		out.Identity = opts.GetIdentity(r)
+	}
+	if opts.GetGroups != nil {
+		out.Groups = opts.GetGroups(r)
+	}
+	if opts.GetClaims != nil {
+		out.Claims = opts.GetClaims(r)
+	}
+	out.Request = requestFromHeaders(r.Header)
+	return out
+}
+
 // Middleware stores the evaluation context on the request context.
 func Middleware(build ContextBuilder) func(http.Handler) http.Handler {
 	if build == nil {
-		build = func(*http.Request) toggly.Context { return toggly.Context{} }
+		build = func(r *http.Request) toggly.Context {
+			return FromHttpRequest(r)
+		}
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			evalCtx := build(r)
+			// Always enrich missing request fields from headers unless already set.
+			evalCtx.Request = mergeRequestFromHeaders(r.Header, evalCtx.Request)
 			r = r.WithContext(togglyctx.With(r.Context(), evalCtx))
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// MiddlewareWith stores ambient EvalContext built from Options (providers + headers).
+func MiddlewareWith(opts Options) func(http.Handler) http.Handler {
+	return Middleware(func(r *http.Request) toggly.Context {
+		return BuildContext(r, opts)
+	})
 }
 
 // DenyHandler handles requests when a feature is disabled.
@@ -68,7 +125,8 @@ func WithErrorHandler(h ErrorHandler) GateOption {
 // By default:
 // - deny => 404 Not Found
 // - error => 503 Service Unavailable
-// - evaluation context => extracted from request context (togglyctx.From)
+// - evaluation context => extracted from request context (togglyctx.From);
+//   Client.IsEnabled also merges ambient from context with any per-call overrides.
 func FeatureGate(e Evaluator, featureKey string, opts ...GateOption) func(http.Handler) http.Handler {
 	cfg := gateConfig{
 		onDeny: func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) },
@@ -91,6 +149,9 @@ func FeatureGate(e Evaluator, featureKey string, opts ...GateOption) func(http.H
 			if !ok {
 				if cfg.buildCtx != nil {
 					evalCtx = cfg.buildCtx(r)
+					evalCtx.Request = mergeRequestFromHeaders(r.Header, evalCtx.Request)
+				} else {
+					evalCtx = FromHttpRequest(r)
 				}
 			}
 
