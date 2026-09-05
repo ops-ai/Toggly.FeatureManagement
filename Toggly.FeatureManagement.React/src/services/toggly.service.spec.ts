@@ -272,7 +272,7 @@ describe('Toggly Service', () => {
         service.setContext({ identity: 'user-b' }),
       ).rejects.toThrow('refresh failed')
 
-      expect(service._config.identity).toBe('user-a')
+      expect((service as any)._config.identity).toBe('user-a')
       expect(await service.isFeatureOn('Gated')).toBe(true)
     })
 
