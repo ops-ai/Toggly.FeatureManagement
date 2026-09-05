@@ -23,7 +23,7 @@ a no-op (a warning is logged when telemetry is enabled).
 
 | Option | Default | Notes |
 |--------|---------|--------|
-| `enableUsageTracking` | `true` when `appKey` is set | Auto-records checks on `isFeatureOn` |
+| `enableUsageTracking` | `true` when `appKey` is set | Auto-records checks on `isFeatureOn` / `evaluateFeatureGate` |
 | `enableMetrics` | `true` when `appKey` is set | `measure` / `incrementCounter` / `observe` |
 | `metricsBaseUrl` | `https://app.toggly.io/` | gRPC host (separate from definitions `baseUrl`) |
 | `usageFlushInterval` / `metricsFlushInterval` | `60000` | ms; `0` disables the timer |
@@ -38,6 +38,7 @@ const client = createTogglyClient({
 await client.init()
 
 await client.isFeatureOn('Checkout') // records a check when usage is enabled
+await client.evaluateFeatureGate(['Checkout', 'Beta'], 'any') // records per feature
 client.recordUsage('Checkout')
 client.recordView('Checkout')
 client.measure('checkout_value', 42.5, { feature: 'Checkout' })

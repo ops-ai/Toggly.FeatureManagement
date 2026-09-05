@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.2
+
+2026-09-05
+
+### Fixed
+- `evaluateFeatureGate` records a usage check per evaluated feature when usage
+  tracking is enabled, so Express/Fastify/Hono/Koa `isEnabled` middleware
+  inherits check telemetry (shared with `isFeatureOn`) [OPS-912].
+
 ## 0.8.1
 
 2026-09-05

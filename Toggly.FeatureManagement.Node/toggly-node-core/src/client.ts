@@ -200,6 +200,19 @@ export function createTogglyClient(
     return config.featureDefaults?.[featureKey] ?? false
   }
 
+  /**
+   * Evaluate a feature and record a usage check once (when enabled).
+   * Shared by isFeatureOn and evaluateFeatureGate so middleware gates inherit
+   * recording without double-counting on the gate path.
+   */
+  function evaluateAndRecordCheck(featureKey: string, ctx: EvalContext): boolean {
+    const result = evaluateLocalFeature(featureKey, ctx)
+    if (telemetry?.usageEnabled) {
+      telemetry.recordCheck(featureKey, result, ctx.identity)
+    }
+    return result
+  }
+
   function evaluateLocalGate(
     featureKeys: string[],
     requirement: FeatureRequirement,
@@ -222,6 +235,7 @@ export function createTogglyClient(
       )
     }
 
+    // No usage recording here — evaluateFeatureGate records once per key below.
     const check = (key: string) => evaluateLocalFeature(key, ctx)
     const result =
       requirement === 'any'
@@ -744,11 +758,7 @@ export function createTogglyClient(
       config.featureDefaults?.[featureKey]
     )
 
-    const result = evaluateLocalFeature(featureKey, evalContext)
-
-    if (telemetry?.usageEnabled) {
-      telemetry.recordCheck(featureKey, result, evalContext.identity)
-    }
+    const result = evaluateAndRecordCheck(featureKey, evalContext)
 
     // Execute afterEvaluation hooks
     await hookExecutor.executeAfterEvaluation(featureKey, hookContext, hookData, result)
@@ -793,7 +803,8 @@ export function createTogglyClient(
 
     const result = evaluateLocalGate(featureKeys, requirement, negate, evalContext)
 
-    // Execute after hooks
+    // Record usage + after hooks once per evaluated feature (middleware isEnabled
+    // paths call evaluateFeatureGate, so this covers Express/Fastify/Hono/Koa).
     for (const key of featureKeys) {
       const hookContext: EvaluationContext = {
         identity: evalContext.identity,
@@ -801,7 +812,7 @@ export function createTogglyClient(
         traits: evalContext.traits,
       }
 
-      const featureResult = evaluateLocalFeature(key, evalContext)
+      const featureResult = evaluateAndRecordCheck(key, evalContext)
       await hookExecutor.executeAfterEvaluation(key, hookContext, [], featureResult)
     }
 
