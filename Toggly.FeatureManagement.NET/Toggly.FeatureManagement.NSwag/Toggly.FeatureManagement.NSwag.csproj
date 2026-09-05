@@ -6,13 +6,8 @@
     <Nullable>enable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <PackageProjectUrl>https://toggly.io</PackageProjectUrl>
-    <PackageIcon>packagephoto.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageTags>feature management;toggly;feature flags;dark release;feature flag management; blue green deployment;canary deployment;nswag;swagger;openapi</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>toggly;feature-flags;feature-management;dark release;feature flag management;blue green deployment;canary deployment;nswag;swagger;openapi</PackageTags>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <Description>Automatically excludes API endpoints from Swagger documentation when their feature flags are disabled</Description>
     <AssemblyTitle>Toggly Feature Management NSwag</AssemblyTitle>
@@ -29,7 +24,6 @@
 
   <ItemGroup>
     <None Remove="README.md" />
-    <None Remove="packagephoto.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,10 +32,6 @@
 
   <ItemGroup>
     <Content Include="README.md">
-      <PackagePath>\</PackagePath>
-      <Pack>True</Pack>
-    </Content>
-    <Content Include="packagephoto.png">
       <PackagePath>\</PackagePath>
       <Pack>True</Pack>
     </Content>

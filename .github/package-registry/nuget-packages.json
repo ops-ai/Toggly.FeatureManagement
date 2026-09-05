@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "organization": "Toggly",
+  "authors": "Toggly",
+  "company": "Toggly",
+  "packageProjectUrl": "https://toggly.io",
+  "repositoryUrl": "https://github.com/ops-ai/Toggly.FeatureManagement",
+  "license": "MIT",
+  "packageIcon": "toggly-package-icon.png",
+  "requiredTags": ["toggly", "feature-flags", "feature-management"],
+  "workflow": ".github/workflows/sdk-dotnet-release.yml",
+  "changelog": "Toggly.FeatureManagement.NET/CHANGELOG.md",
+  "sdkRoot": "Toggly.FeatureManagement.NET",
+  "packages": [
+    { "id": "Toggly.FeatureManagement", "project": "Toggly.FeatureManagement/Toggly.FeatureManagement.csproj" },
+    { "id": "Toggly.FeatureManagement.Web", "project": "Toggly.FeatureManagement.Web/Toggly.FeatureManagement.Web.csproj" },
+    { "id": "Toggly.FeatureManagement.Storage.RavenDB", "project": "Toggly.FeatureManagement.Storage.RavenDB/Toggly.FeatureManagement.Storage.RavenDB.csproj" },
+    { "id": "Toggly.FeatureManagement.Storage.DistributedCache", "project": "Toggly.FeatureManagement.Storage.DistributedCache/Toggly.FeatureManagement.Storage.DistributedCache.csproj" },
+    { "id": "Toggly.FeatureManagement.Hangfire", "project": "Toggly.FeatureManagement.Hangfire/Toggly.FeatureManagement.Hangfire.csproj" },
+    { "id": "Toggly.FeatureManagement.HealthChecks", "project": "Toggly.FeatureManagement.HealthChecks/Toggly.FeatureManagement.HealthChecks.csproj" },
+    { "id": "Toggly.FeatureManagement.NSwag", "project": "Toggly.FeatureManagement.NSwag/Toggly.FeatureManagement.NSwag.csproj" },
+    { "id": "Toggly.FeatureManagement.Storage.MongoDB", "project": "Toggly.Storage.MongoDB/Toggly.Storage.MongoDB.csproj" },
+    { "id": "Toggly.FeatureManagement.Storage.Dapper", "project": "Toggly.Storage.Dapper/Toggly.Storage.Dapper.csproj" },
+    { "id": "Toggly.FeatureManagement.Storage.EntityFramework", "project": "Toggly.Storage.EntityFramework/Toggly.Storage.EntityFramework.csproj" },
+    { "id": "Toggly.Metrics.SystemMetrics", "project": "Toggly.Metrics.SystemMetrics/Toggly.Metrics.SystemMetrics.csproj" }
+  ]
+}

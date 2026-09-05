@@ -6,13 +6,8 @@
     <Nullable>enable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <PackageProjectUrl>https://toggly.io</PackageProjectUrl>
-    <PackageIcon>toggly_favicon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/ops-ai/Toggly.FeatureManagement</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageTags>feature management;toggly;feature flags;health checks;aspnetcore;diagnostics</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>toggly;feature-flags;feature-management;health checks;aspnetcore;diagnostics</PackageTags>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <Description>ASP.NET Core Health Checks for Toggly Feature Management SDK. Monitor SDK connection status, definition staleness, and required feature availability.</Description>
     <AssemblyTitle>Toggly Feature Management Health Checks</AssemblyTitle>
@@ -20,7 +15,6 @@
 
   <ItemGroup>
     <None Remove="README.md" />
-    <None Remove="toggly_favicon.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,10 +33,6 @@
 
   <ItemGroup>
     <Content Include="README.md">
-      <PackagePath>\</PackagePath>
-      <Pack>True</Pack>
-    </Content>
-    <Content Include="toggly_favicon.png">
       <PackagePath>\</PackagePath>
       <Pack>True</Pack>
     </Content>
