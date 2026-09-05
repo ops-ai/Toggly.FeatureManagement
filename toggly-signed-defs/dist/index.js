@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isEvaluatedDefinitions = exports.isEntityGate = exports.resolveEvaluatedFetchErrorState = exports.asVariantDefsRecord = exports.unwrapDefsPayload = exports.parseEvaluatedResponseBody = exports.readResponseBody = exports.signedDefsClientOptions = exports.fetchEvaluatedSignedDefinitions = exports.readAndParseEvaluatedResponseCached = exports.readAndParseEvaluatedResponse = exports.InMemoryJwksCache = exports.verifySignedDefinitions = exports.computeKid = exports.derSignatureToP1363 = exports.base64ToBytes = exports.parseDefinitionsFromRaw = exports.parseSignedEnvelope = exports.extractRawJsonProperty = exports.assertEnvelopeFreshness = void 0;
+exports.isEvaluatedDefinitions = exports.isEntityGate = exports.resolveEvaluatedFetchErrorState = exports.asVariantDefsRecord = exports.rejectEvaluatedErrorEnvelope = exports.unwrapDefsPayload = exports.parseEvaluatedResponseBody = exports.readResponseBody = exports.signedDefsClientOptions = exports.fetchEvaluatedSignedDefinitions = exports.readAndParseEvaluatedResponseCached = exports.readAndParseEvaluatedResponse = exports.InMemoryJwksCache = exports.verifySignedDefinitions = exports.computeKid = exports.derSignatureToP1363 = exports.base64ToBytes = exports.parseDefinitionsFromRaw = exports.parseSignedEnvelope = exports.extractRawJsonProperty = exports.assertEnvelopeFreshness = void 0;
 var freshness_1 = require("./freshness");
 Object.defineProperty(exports, "assertEnvelopeFreshness", { enumerable: true, get: function () { return freshness_1.assertEnvelopeFreshness; } });
 var signed_defs_verify_1 = require("./signed-defs-verify");
@@ -20,6 +20,7 @@ Object.defineProperty(exports, "signedDefsClientOptions", { enumerable: true, ge
 Object.defineProperty(exports, "readResponseBody", { enumerable: true, get: function () { return signed_response_1.readResponseBody; } });
 Object.defineProperty(exports, "parseEvaluatedResponseBody", { enumerable: true, get: function () { return signed_response_1.parseEvaluatedResponseBody; } });
 Object.defineProperty(exports, "unwrapDefsPayload", { enumerable: true, get: function () { return signed_response_1.unwrapDefsPayload; } });
+Object.defineProperty(exports, "rejectEvaluatedErrorEnvelope", { enumerable: true, get: function () { return signed_response_1.rejectEvaluatedErrorEnvelope; } });
 Object.defineProperty(exports, "asVariantDefsRecord", { enumerable: true, get: function () { return signed_response_1.asVariantDefsRecord; } });
 Object.defineProperty(exports, "resolveEvaluatedFetchErrorState", { enumerable: true, get: function () { return signed_response_1.resolveEvaluatedFetchErrorState; } });
 var evaluated_definitions_1 = require("./evaluated-definitions");

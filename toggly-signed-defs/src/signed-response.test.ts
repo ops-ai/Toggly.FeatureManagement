@@ -6,6 +6,7 @@ import {
   parseEvaluatedResponseBody,
   readAndParseEvaluatedResponse,
   readAndParseEvaluatedResponseCached,
+  rejectEvaluatedErrorEnvelope,
   resolveEvaluatedFetchErrorState,
   signedDefsClientOptions,
   unwrapDefsPayload,
@@ -42,6 +43,20 @@ describe('signed-response helpers', () => {
   it('unwraps defs payload', () => {
     expect(unwrapDefsPayload({ defs: { A: true } })).toEqual({ A: true })
     expect(unwrapDefsPayload({ A: true })).toEqual({ A: true })
+  })
+
+  it('rejects error envelopes without defs or features', () => {
+    expect(() => rejectEvaluatedErrorEnvelope({ error: 'boom' })).toThrow(
+      /error envelope/i,
+    )
+    expect(() => unwrapDefsPayload({ error: 'boom' })).toThrow(/error envelope/i)
+    expect(() => asVariantDefsRecord({ error: 'boom' })).toThrow(/error envelope/i)
+  })
+
+  it('allows error field when defs are present', () => {
+    expect(unwrapDefsPayload({ error: 'ignored', defs: { A: true } })).toEqual({
+      A: true,
+    })
   })
 
   it('uses getJwks when verifying', async () => {
@@ -253,5 +268,18 @@ describe('fetchEvaluatedSignedDefinitions', () => {
       { verifySignatures: false, fetchImpl: fetchImpl as unknown as typeof fetch }
     )
     expect(result).toEqual({ notModified: false, defs: { On: true }, revision: 'rev-9' })
+  })
+
+  it('rejects a 2xx error envelope', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: 'boom' }, 200))
+    await expect(
+      fetchEvaluatedSignedDefinitions(
+        'https://example.test/evaluated-signed/app/Production',
+        new InMemoryJwksCache(),
+        { verifySignatures: false, fetchImpl: fetchImpl as unknown as typeof fetch },
+      ),
+    ).rejects.toThrow(/error envelope/i)
   })
 })

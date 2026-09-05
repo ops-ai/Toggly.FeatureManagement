@@ -20,6 +20,7 @@ export {
   readResponseBody,
   parseEvaluatedResponseBody,
   unwrapDefsPayload,
+  rejectEvaluatedErrorEnvelope,
   asVariantDefsRecord,
   resolveEvaluatedFetchErrorState,
 } from './signed-response'
