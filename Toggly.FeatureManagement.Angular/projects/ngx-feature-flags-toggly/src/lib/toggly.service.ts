@@ -264,7 +264,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
       context,
       (this._config.featureDefaults ?? {}) as EvaluatedDefinitions,
       {
-        ...bindTogglyServiceContextState(this as TogglyServiceContextHost<
+        ...bindTogglyServiceContextState(this as unknown as TogglyServiceContextHost<
           EvaluatedDefinitions,
           { [key: string]: EvaluatedVariantDef } | null
         >),
