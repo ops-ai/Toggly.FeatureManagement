@@ -87,6 +87,19 @@ export {
   normalizeEvaluationClaims,
 } from './evaluation-context';
 export type {
+  EvaluationContextChangeState,
+  EvaluationContextChangeBindings,
+  SetEvaluationContextSafelyOptions,
+  TogglyServiceContextHost,
+  BrowserSdkContextRunner,
+} from './set-evaluation-context';
+export {
+  bindEvaluationContextChangeState,
+  bindTogglyServiceContextState,
+  setBrowserSdkEvaluationContext,
+  setEvaluationContextSafely,
+} from './set-evaluation-context';
+export type {
   EntityGate,
   EntityGateRule,
   EvaluatedDefinitionValue,

@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/react-feature-flags-toggly",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "Provides feature flags support for React applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "scripts": {
     "build": "rollup -c",
@@ -38,7 +38,7 @@
     "ws": "^8.0.0"
   },
   "dependencies": {
-    "@ops-ai/toggly-hooks-types": "^1.4.3",
+    "@ops-ai/toggly-hooks-types": "^1.4.4",
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
   },

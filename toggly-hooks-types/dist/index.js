@@ -1,12 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.toBooleanDefinitions = exports.resolveEvaluatedDefinition = exports.resolveEntityContext = exports.registerContext = exports.normalizeEntityContext = exports.mapEntityContext = exports.isEntityGate = exports.evaluateStoredFeatureKeys = exports.evaluateResolvedKeys = exports.evaluateEvaluatedGate = exports.clearRegisteredContexts = exports.applyEntityGate = exports.serializeJsonForInlineScript = exports.touchCacheLruKey = exports.serializeCacheLruIndex = exports.selectCacheLruKeysToEvict = exports.removeCacheLruKeys = exports.parseCacheLruIndex = exports.isCacheLruEnabled = exports.emptyCacheLruIndex = exports.normalizeEvaluationClaims = exports.evaluationContextCacheKey = exports.buildEvaluatedSignedUrl = exports.appendEvaluationContext = exports.MAX_EVALUATION_CLAIMS = void 0;
+exports.toBooleanDefinitions = exports.resolveEvaluatedDefinition = exports.resolveEntityContext = exports.registerContext = exports.normalizeEntityContext = exports.mapEntityContext = exports.isEntityGate = exports.evaluateStoredFeatureKeys = exports.evaluateResolvedKeys = exports.evaluateEvaluatedGate = exports.clearRegisteredContexts = exports.applyEntityGate = exports.serializeJsonForInlineScript = exports.touchCacheLruKey = exports.serializeCacheLruIndex = exports.selectCacheLruKeysToEvict = exports.removeCacheLruKeys = exports.parseCacheLruIndex = exports.isCacheLruEnabled = exports.emptyCacheLruIndex = exports.setEvaluationContextSafely = exports.setBrowserSdkEvaluationContext = exports.bindTogglyServiceContextState = exports.bindEvaluationContextChangeState = exports.normalizeEvaluationClaims = exports.evaluationContextCacheKey = exports.buildEvaluatedSignedUrl = exports.appendEvaluationContext = exports.MAX_EVALUATION_CLAIMS = void 0;
 var evaluation_context_1 = require("./evaluation-context");
 Object.defineProperty(exports, "MAX_EVALUATION_CLAIMS", { enumerable: true, get: function () { return evaluation_context_1.MAX_EVALUATION_CLAIMS; } });
 Object.defineProperty(exports, "appendEvaluationContext", { enumerable: true, get: function () { return evaluation_context_1.appendEvaluationContext; } });
 Object.defineProperty(exports, "buildEvaluatedSignedUrl", { enumerable: true, get: function () { return evaluation_context_1.buildEvaluatedSignedUrl; } });
 Object.defineProperty(exports, "evaluationContextCacheKey", { enumerable: true, get: function () { return evaluation_context_1.evaluationContextCacheKey; } });
 Object.defineProperty(exports, "normalizeEvaluationClaims", { enumerable: true, get: function () { return evaluation_context_1.normalizeEvaluationClaims; } });
+var set_evaluation_context_1 = require("./set-evaluation-context");
+Object.defineProperty(exports, "bindEvaluationContextChangeState", { enumerable: true, get: function () { return set_evaluation_context_1.bindEvaluationContextChangeState; } });
+Object.defineProperty(exports, "bindTogglyServiceContextState", { enumerable: true, get: function () { return set_evaluation_context_1.bindTogglyServiceContextState; } });
+Object.defineProperty(exports, "setBrowserSdkEvaluationContext", { enumerable: true, get: function () { return set_evaluation_context_1.setBrowserSdkEvaluationContext; } });
+Object.defineProperty(exports, "setEvaluationContextSafely", { enumerable: true, get: function () { return set_evaluation_context_1.setEvaluationContextSafely; } });
 var cache_lru_1 = require("./cache-lru");
 Object.defineProperty(exports, "emptyCacheLruIndex", { enumerable: true, get: function () { return cache_lru_1.emptyCacheLruIndex; } });
 Object.defineProperty(exports, "isCacheLruEnabled", { enumerable: true, get: function () { return cache_lru_1.isCacheLruEnabled; } });

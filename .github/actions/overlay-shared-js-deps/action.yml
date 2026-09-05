@@ -1,0 +1,49 @@
+name: Overlay shared JS deps
+description: >-
+  Copy built in-repo shared package dist trees into node_modules after npm install
+  so PRs can test unpublished @ops-ai/* shared packages.
+
+inputs:
+  package-dir:
+    description: SDK directory containing node_modules (relative to repo root)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Overlay built shared packages into node_modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        wd="${{ inputs.package-dir }}"
+        if [[ "$wd" != /* ]]; then
+          wd="$GITHUB_WORKSPACE/$wd"
+        fi
+
+        overlay() {
+          local src_pkg="$1"
+          local npm_name="$2"
+          local src="$GITHUB_WORKSPACE/$src_pkg/dist"
+          local pkg_root="$wd/node_modules/$npm_name"
+          local dest="$pkg_root/dist"
+          if [[ ! -d "$src" ]]; then
+            echo "Skip overlay $npm_name (no built dist at $src)"
+            return 0
+          fi
+          if [[ ! -e "$pkg_root" ]]; then
+            echo "Skip overlay $npm_name (not installed under $wd)"
+            return 0
+          fi
+          if [[ -L "$pkg_root" ]]; then
+            echo "Skip overlay $npm_name (file: link already resolves to in-repo source)"
+            return 0
+          fi
+          mkdir -p "$(dirname "$dest")"
+          rm -rf "$dest"
+          cp -R "$src" "$dest"
+          echo "Overlaid $src_pkg/dist -> $dest"
+        }
+
+        overlay toggly-hooks-types @ops-ai/toggly-hooks-types
+        overlay toggly-signed-defs @ops-ai/toggly-signed-defs
+        overlay toggly-eval @ops-ai/toggly-eval
