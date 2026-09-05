@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.1
+
+2026-09-05
+
+### Fixed
+- Resolve vendored `proto/` from built `dist/` ESM/CJS and published package
+  layout (was one directory too high, causing ENOENT for `usage.proto`) [OPS-912].
+- SIGTERM/SIGINT handlers flush with a timeout then re-emit the signal so the
+  process exits instead of hanging on a custom listener [OPS-912].
+
 ## 0.8.0
 
 2026-09-05

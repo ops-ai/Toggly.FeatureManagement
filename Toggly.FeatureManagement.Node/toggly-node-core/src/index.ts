@@ -106,9 +106,11 @@ export {
 } from './telemetry/index.js'
 export {
   createGrpcClients,
+  getProtoRoot,
   grpcTarget,
   hashIdentity,
   isGrpcAvailable,
+  resolveProtoRoot,
   DEFAULT_METRICS_BASE_URL,
   DEFAULT_TELEMETRY_FLUSH_MS,
 } from './telemetry/grpc-clients.js'

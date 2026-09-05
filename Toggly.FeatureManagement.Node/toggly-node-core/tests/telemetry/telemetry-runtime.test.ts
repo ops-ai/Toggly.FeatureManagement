@@ -94,4 +94,43 @@ describe('TelemetryRuntime', () => {
 
     await runtime.close()
   })
+
+  it('SIGTERM flush re-emits signal so the process can exit', async () => {
+    vi.useRealTimers()
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 1 })
+    const usageClient: UsageGrpcClient = {
+      sendStats,
+      close: vi.fn(),
+    }
+    const metricsClient: MetricsGrpcClient = {
+      sendMetrics: vi.fn().mockResolvedValue({ count: 0 }),
+      close: vi.fn(),
+    }
+
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
+
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient,
+      metricsClient,
+    })
+    runtime.start()
+    runtime.recordCheck('FeatureA', true)
+
+    process.emit('SIGTERM', 'SIGTERM')
+
+    await vi.waitFor(() => {
+      expect(kill).toHaveBeenCalledWith(process.pid, 'SIGTERM')
+    })
+    expect(sendStats).toHaveBeenCalled()
+
+    kill.mockRestore()
+    // Runtime already closed via signal path; safe if already closed
+    await runtime.close()
+  })
 })

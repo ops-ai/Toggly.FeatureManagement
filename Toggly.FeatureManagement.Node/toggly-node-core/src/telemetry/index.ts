@@ -153,6 +153,9 @@ export class TelemetryRuntime {
     this.attachProcessHandlers()
   }
 
+  /** Best-effort flush budget before re-emitting the signal so Node can exit. */
+  static readonly SIGNAL_FLUSH_TIMEOUT_MS = 2_000
+
   private attachProcessHandlers(): void {
     if (typeof process === 'undefined' || typeof process.on !== 'function') {
       return
@@ -162,20 +165,50 @@ export class TelemetryRuntime {
       void this.flushAll()
     }
 
-    const onSignal = () => {
-      void this.close()
-    }
-
     process.on('beforeExit', flush)
     this.signalHandlers.push({ event: 'beforeExit', handler: flush })
 
     for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       try {
+        const onSignal = () => {
+          void this.handleProcessSignal(signal)
+        }
         process.on(signal, onSignal)
         this.signalHandlers.push({ event: signal, handler: onSignal })
       } catch {
         // Some runtimes disallow signal handlers
       }
+    }
+  }
+
+  /**
+   * Flush telemetry with a timeout, then restore default signal behavior and
+   * re-emit so the process does not hang with a custom handler installed.
+   */
+  private async handleProcessSignal(signal: NodeJS.Signals): Promise<void> {
+    try {
+      await Promise.race([
+        this.close(),
+        new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, TelemetryRuntime.SIGNAL_FLUSH_TIMEOUT_MS)
+          timer.unref?.()
+        }),
+      ])
+    } catch {
+      // Best-effort flush; still exit
+    } finally {
+      this.detachProcessHandlers()
+      this.reemitSignalAndExit(signal)
+    }
+  }
+
+  private reemitSignalAndExit(signal: NodeJS.Signals): void {
+    try {
+      // Default handler after our listener is gone terminates the process.
+      process.kill(process.pid, signal)
+    } catch {
+      const code = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 0
+      process.exit(code)
     }
   }
 

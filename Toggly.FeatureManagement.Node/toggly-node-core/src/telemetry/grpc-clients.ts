@@ -1,12 +1,35 @@
 import { createRequire } from 'node:module'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { hashString } from '../utils.js'
 import { sdkUserAgent } from '../sdk-identity.js'
 
 const require = createRequire(import.meta.url)
-const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-const protoRoot = path.join(packageRoot, 'proto')
+
+/**
+ * Resolve vendored proto/ for source (src/telemetry), bundled dist/ ESM+CJS,
+ * and the published package layout (files includes "proto").
+ */
+export function resolveProtoRoot(moduleUrl: string = import.meta.url): string {
+  const moduleDir = path.dirname(fileURLToPath(moduleUrl))
+  const candidates = [
+    // Built dist/index.js|cjs → packageRoot/proto
+    path.resolve(moduleDir, '..', 'proto'),
+    // Source src/telemetry/*.ts → packageRoot/proto
+    path.resolve(moduleDir, '..', '..', 'proto'),
+    // Proto colocated next to the module (edge layouts)
+    path.resolve(moduleDir, 'proto'),
+  ]
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'usage.proto'))) {
+      return candidate
+    }
+  }
+  return candidates[0]
+}
+
+const protoRoot = resolveProtoRoot()
 
 export const DEFAULT_METRICS_BASE_URL = 'https://app.toggly.io/'
 export const DEFAULT_TELEMETRY_FLUSH_MS = 60_000

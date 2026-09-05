@@ -4,9 +4,12 @@ import {
   getProtoRoot,
   isGrpcAvailable,
   createGrpcClients,
+  resolveProtoRoot,
 } from '../../src/telemetry/grpc-clients'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 describe('grpc-clients helpers', () => {
   it('parses metrics base URL into host:port', () => {
@@ -23,6 +26,29 @@ describe('grpc-clients helpers', () => {
     expect(usage).toContain('variantStats')
     expect(metrics).toContain('rpc SendMetrics')
     expect(metrics).toContain('variantValues')
+  })
+
+  it('resolveProtoRoot finds proto for source and dist-like layouts', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'toggly-proto-'))
+    try {
+      const packageProto = path.join(tmp, 'proto')
+      fs.mkdirSync(packageProto, { recursive: true })
+      fs.writeFileSync(path.join(packageProto, 'usage.proto'), 'syntax = "proto3";')
+
+      // Simulated dist/index.js → ../proto
+      const distDir = path.join(tmp, 'dist')
+      fs.mkdirSync(distDir)
+      const distModule = pathToFileURL(path.join(distDir, 'index.js')).href
+      expect(resolveProtoRoot(distModule)).toBe(path.resolve(packageProto))
+
+      // Simulated src/telemetry/grpc-clients.js → ../../proto
+      const telemetryDir = path.join(tmp, 'src', 'telemetry')
+      fs.mkdirSync(telemetryDir, { recursive: true })
+      const sourceModule = pathToFileURL(path.join(telemetryDir, 'grpc-clients.js')).href
+      expect(resolveProtoRoot(sourceModule)).toBe(path.resolve(packageProto))
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true })
+    }
   })
 
   it('loads package definitions when optional gRPC deps are present', () => {
