@@ -12,6 +12,10 @@
     <PackageIcon>toggly-package-icon.png</PackageIcon>
     <PackageTags>toggly;feature-flags;feature-management</PackageTags>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(TF_BUILD)' == 'true' Or '$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)assets/toggly-package-icon.png" Pack="true" PackagePath="\" Condition="'$(IsPackable)' != 'false'" />
   </ItemGroup>
