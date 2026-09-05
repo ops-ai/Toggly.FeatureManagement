@@ -123,10 +123,10 @@ func WithErrorHandler(h ErrorHandler) GateOption {
 // FeatureGate returns middleware that only allows requests through if the given feature is enabled.
 //
 // By default:
-// - deny => 404 Not Found
-// - error => 503 Service Unavailable
-// - evaluation context => extracted from request context (togglyctx.From);
-//   Client.IsEnabled also merges ambient from context with any per-call overrides.
+//   - deny => 404 Not Found
+//   - error => 503 Service Unavailable
+//   - evaluation context => extracted from request context (togglyctx.From);
+//     Client.IsEnabled also merges ambient from context with any per-call overrides.
 func FeatureGate(e Evaluator, featureKey string, opts ...GateOption) func(http.Handler) http.Handler {
 	cfg := gateConfig{
 		onDeny: func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) },
