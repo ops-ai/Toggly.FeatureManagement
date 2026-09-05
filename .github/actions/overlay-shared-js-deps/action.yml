@@ -24,12 +24,18 @@ runs:
           local src_pkg="$1"
           local npm_name="$2"
           local src="$GITHUB_WORKSPACE/$src_pkg/dist"
-          local dest="$wd/node_modules/$npm_name/dist"
+          local pkg_root="$wd/node_modules/$npm_name"
+          local dest="$pkg_root/dist"
           if [[ ! -d "$src" ]]; then
+            echo "Skip overlay $npm_name (no built dist at $src)"
             return 0
           fi
-          if [[ ! -d "$wd/node_modules/$npm_name" ]]; then
+          if [[ ! -e "$pkg_root" ]]; then
             echo "Skip overlay $npm_name (not installed under $wd)"
+            return 0
+          fi
+          if [[ -L "$pkg_root" ]]; then
+            echo "Skip overlay $npm_name (file: link already resolves to in-repo source)"
             return 0
           fi
           mkdir -p "$(dirname "$dest")"
