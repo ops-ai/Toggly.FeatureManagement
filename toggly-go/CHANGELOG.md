@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0
+
+2026-09-05
+
+### Added
+- Usage `RecordView` / unique viewed hashes and multi-variant `variantStats`
+  on `SendStats` (aligned with .NET) [OPS-916].
+- Business metrics `variantValues` aggregation for Measure / Increment /
+  Observe [OPS-916].
+- gRPC `UA` metadata on usage/metrics sends; best-effort flush on `Close`
+  [OPS-916].
+
+### Changed
+- Usage and metrics protos match .NET field shapes (`variantStats`,
+  `viewedCount`, `variantValues`) [OPS-916].
+
 ## 0.4.1
 
 2026-09-03

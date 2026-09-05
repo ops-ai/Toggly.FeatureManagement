@@ -41,12 +41,13 @@ func main() {
 
 	fmt.Printf("MyFeature enabled: %v\n", on)
 
-	// Record usage separately from checks.
+	// Record usage / view separately from checks.
 	client.RecordUsage("MyFeature", on, evalCtx)
+	client.RecordView("MyFeature", evalCtx)
 
-	// Example: emit a metric (if enabled).
+	// Example: emit a metric (if enabled). Empty variant defaults to "enabled".
 	if m := client.MetricsClient(); m != nil {
 		featureKey := "MyFeature"
-		m.Increment("MyFeature.Counter", 1, &featureKey)
+		m.Increment("MyFeature.Counter", 1, &featureKey, "")
 	}
 }
