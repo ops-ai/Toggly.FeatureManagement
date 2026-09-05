@@ -365,7 +365,7 @@ describe('createTogglyClient', () => {
       const client = createTogglyClient({ appKey: 'test-key', refreshInterval: 0 })
       await client.init()
 
-      await expect(client.refresh()).resolves.toEqual({ 'feature-a': true })
+      await expect(client.refresh()).rejects.toThrow('Network error')
       expect(client.state.features['feature-a']).toBe(true)
       expect(client.state.error).toBeInstanceOf(Error)
       expect(client.state.error?.message).toBe('Network error')
@@ -577,6 +577,97 @@ describe('createTogglyClient', () => {
 
       expect(beforeIdentify).toHaveBeenCalledWith('new-user')
       expect(afterIdentify).toHaveBeenCalledWith('new-user', undefined)
+
+      client.destroy()
+    })
+
+    it('restores prior identity and features when setIdentity refresh fails', async () => {
+      mockFetch
+        .mockResolvedValueOnce(
+          createMockResponse({
+            features: [{ featureKey: 'Gated', enabled: true }],
+          }),
+        )
+        .mockRejectedValueOnce(new Error('refresh failed'))
+
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        identity: 'user-a',
+        refreshInterval: 0,
+        enableLiveUpdates: false,
+      })
+      await client.init()
+      expect(await client.isFeatureOn('Gated')).toBe(true)
+
+      await expect(client.setIdentity('user-b')).rejects.toThrow('refresh failed')
+
+      expect(client.identity).toBe('user-a')
+      expect(await client.isFeatureOn('Gated')).toBe(true)
+      expect(client.state.error).toBeInstanceOf(Error)
+
+      client.destroy()
+    })
+
+    it('withholds prior enables while setIdentity refresh is in flight', async () => {
+      let resolveRefresh: ((value: unknown) => void) | undefined
+      mockFetch
+        .mockResolvedValueOnce(
+          createMockResponse({
+            features: [{ featureKey: 'Gated', enabled: true }],
+          }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveRefresh = resolve
+            }),
+        )
+
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        identity: 'user-a',
+        refreshInterval: 0,
+        enableLiveUpdates: false,
+      })
+      await client.init()
+
+      const pending = client.setIdentity('user-b')
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(client.identity).toBe('user-b')
+      expect(client.state.features['Gated']).toBeUndefined()
+
+      resolveRefresh!(
+        createMockResponse({
+          features: [{ featureKey: 'Gated', enabled: false }],
+        }),
+      )
+      await pending
+
+      expect(client.identity).toBe('user-b')
+      expect(await client.isFeatureOn('Gated')).toBe(false)
+
+      client.destroy()
+    })
+  })
+
+  describe('evaluated payload validation', () => {
+    it('rejects a 2xx error envelope instead of latching empty success', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ error: 'boom' }))
+
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        featureDefaults: { 'feature-a': false },
+        refreshInterval: 0,
+        enableLiveUpdates: false,
+      })
+
+      const features = await client.init()
+
+      expect(features['feature-a']).toBe(false)
+      expect(client.state.error).toBeInstanceOf(Error)
+      expect(String(client.state.error?.message)).toMatch(/error envelope|boom/i)
 
       client.destroy()
     })

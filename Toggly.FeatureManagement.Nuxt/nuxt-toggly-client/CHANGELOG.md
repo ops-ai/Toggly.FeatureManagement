@@ -1,3 +1,13 @@
+## 1.2.1
+
+2026-09-04
+
+### Fixed
+- `setIdentity` publishes Vue identity and persists to localStorage only after
+  the core client succeeds; failures restore prior identity and features
+  [OPS-898].
+- `refresh` syncs composable `features` from core state on failure [OPS-898].
+
 ## 1.2.0
 
 2026-09-03
