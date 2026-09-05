@@ -11,6 +11,7 @@ exports.readAndParseEvaluatedResponse = readAndParseEvaluatedResponse;
 exports.readAndParseEvaluatedResponseCached = readAndParseEvaluatedResponseCached;
 exports.fetchEvaluatedSignedDefinitions = fetchEvaluatedSignedDefinitions;
 exports.signedDefsClientOptions = signedDefsClientOptions;
+exports.rejectEvaluatedErrorEnvelope = rejectEvaluatedErrorEnvelope;
 exports.unwrapDefsPayload = unwrapDefsPayload;
 exports.asVariantDefsRecord = asVariantDefsRecord;
 exports.resolveEvaluatedFetchErrorState = resolveEvaluatedFetchErrorState;
@@ -168,8 +169,25 @@ function signedDefsClientOptions(config, jwks) {
         }),
     };
 }
+/**
+ * Reject HTTP 2xx bodies whose primary payload is an error envelope without
+ * defs or features. Mirrors nextjs-toggly-core parseRemoteEvaluatedPayload.
+ */
+function rejectEvaluatedErrorEnvelope(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return;
+    }
+    const data = payload;
+    const hasDefs = 'defs' in data && data.defs != null && typeof data.defs === 'object';
+    const hasFeatures = 'features' in data && Array.isArray(data.features);
+    if ('error' in data && data.error != null && !hasDefs && !hasFeatures) {
+        const message = typeof data.error === 'string' ? data.error : 'error envelope';
+        throw new Error(`[Toggly] Evaluated-signed response error envelope: ${message}`);
+    }
+}
 /** Unwrap `{ defs }` when present; otherwise treat payload as the defs map. */
 function unwrapDefsPayload(payload) {
+    rejectEvaluatedErrorEnvelope(payload);
     if (typeof payload === 'object' && payload !== null && 'defs' in payload) {
         const defs = payload.defs;
         if (defs !== undefined) {
@@ -180,6 +198,7 @@ function unwrapDefsPayload(payload) {
 }
 /** Coerce evaluated-variants payload to a defs map; arrays/primitives become `{}`. */
 function asVariantDefsRecord(parsedDefs) {
+    rejectEvaluatedErrorEnvelope(parsedDefs);
     if (parsedDefs && typeof parsedDefs === 'object' && !Array.isArray(parsedDefs)) {
         return parsedDefs;
     }

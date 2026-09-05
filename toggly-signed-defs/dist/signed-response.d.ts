@@ -81,6 +81,11 @@ export declare function fetchEvaluatedSignedDefinitions(url: string, jwks: InMem
 export declare function signedDefsClientOptions(config: Omit<Pick<VerifySignatureOptions, 'verifySignatures' | 'baseURI' | 'baseUri' | 'baseUrl' | 'allowedKeyIds' | 'maxSignatureAgeSeconds' | 'headers' | 'fetchImpl'>, 'maxSignatureAgeSeconds'> & {
     maxSignatureAgeSeconds?: number | null;
 }, jwks: InMemoryJwksCache): VerifySignatureOptions;
+/**
+ * Reject HTTP 2xx bodies whose primary payload is an error envelope without
+ * defs or features. Mirrors nextjs-toggly-core parseRemoteEvaluatedPayload.
+ */
+export declare function rejectEvaluatedErrorEnvelope(payload: unknown): void;
 /** Unwrap `{ defs }` when present; otherwise treat payload as the defs map. */
 export declare function unwrapDefsPayload(payload: unknown): unknown;
 /** Coerce evaluated-variants payload to a defs map; arrays/primitives become `{}`. */

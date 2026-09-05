@@ -271,8 +271,33 @@ export function signedDefsClientOptions(
   }
 }
 
+/**
+ * Reject HTTP 2xx bodies whose primary payload is an error envelope without
+ * defs or features. Mirrors nextjs-toggly-core parseRemoteEvaluatedPayload.
+ */
+export function rejectEvaluatedErrorEnvelope(payload: unknown): void {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return
+  }
+
+  const data = payload as Record<string, unknown>
+  const hasDefs =
+    'defs' in data && data.defs != null && typeof data.defs === 'object'
+  const hasFeatures = 'features' in data && Array.isArray(data.features)
+
+  if ('error' in data && data.error != null && !hasDefs && !hasFeatures) {
+    const message =
+      typeof data.error === 'string' ? data.error : 'error envelope'
+    throw new Error(
+      `[Toggly] Evaluated-signed response error envelope: ${message}`,
+    )
+  }
+}
+
 /** Unwrap `{ defs }` when present; otherwise treat payload as the defs map. */
 export function unwrapDefsPayload(payload: unknown): unknown {
+  rejectEvaluatedErrorEnvelope(payload)
+
   if (typeof payload === 'object' && payload !== null && 'defs' in payload) {
     const defs = (payload as { defs?: unknown }).defs
     if (defs !== undefined) {
@@ -284,6 +309,8 @@ export function unwrapDefsPayload(payload: unknown): unknown {
 
 /** Coerce evaluated-variants payload to a defs map; arrays/primitives become `{}`. */
 export function asVariantDefsRecord<T>(parsedDefs: unknown): Record<string, T> {
+  rejectEvaluatedErrorEnvelope(parsedDefs)
+
   if (parsedDefs && typeof parsedDefs === 'object' && !Array.isArray(parsedDefs)) {
     return parsedDefs as Record<string, T>
   }
