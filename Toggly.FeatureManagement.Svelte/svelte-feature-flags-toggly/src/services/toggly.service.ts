@@ -1,4 +1,4 @@
-import type { CacheLruIndex, EvaluatedDefinitions, Hook, TogglyEntityContext, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import type { CacheLruIndex, EvaluatedDefinitions, Hook, TogglyEntityContext, TogglyEvaluationContext, TogglyServiceContextHost } from '@ops-ai/toggly-hooks-types';
 import {
   buildEvaluatedSignedUrl,
   evaluationContextCacheKey,
@@ -530,7 +530,10 @@ export class Toggly implements TogglyService {
       context,
       (this._config.featureDefaults ?? {}) as EvaluatedDefinitions,
       {
-        ...bindTogglyServiceContextState(this),
+        ...bindTogglyServiceContextState(this as TogglyServiceContextHost<
+          EvaluatedDefinitions,
+          { [key: string]: EvaluatedVariantDef } | null
+        >),
         notifyRefresh: () => this.notifyFeaturesRefresh(),
         refreshStrict: () => this._loadFeatures(true, { strict: true }),
       },
