@@ -144,22 +144,32 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
           )
         }
       } catch (e) {
+        features.value = client.state.features as Record<string, boolean>
         error.value = e as Error
+        throw e
       } finally {
         isLoading.value = false
       }
     },
 
     async setIdentity(newIdentity: string) {
-      await client.setIdentity(newIdentity)
-      identity.value = newIdentity
+      try {
+        await client.setIdentity(newIdentity)
+        identity.value = client.identity
+        features.value = client.state.features as Record<string, boolean>
+        error.value = client.state.error
 
-      // Persist identity if enabled
-      if (
-        mergedConfig.persistIdentity &&
-        typeof localStorage !== 'undefined'
-      ) {
-        localStorage.setItem(mergedConfig.identityStorageKey!, newIdentity)
+        if (
+          mergedConfig.persistIdentity &&
+          typeof localStorage !== 'undefined'
+        ) {
+          localStorage.setItem(mergedConfig.identityStorageKey!, newIdentity)
+        }
+      } catch (e) {
+        identity.value = client.identity
+        features.value = client.state.features as Record<string, boolean>
+        error.value = e as Error
+        throw e
       }
     },
 

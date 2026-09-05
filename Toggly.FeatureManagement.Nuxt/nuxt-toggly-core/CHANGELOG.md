@@ -1,3 +1,13 @@
+## 1.9.2
+
+2026-09-04
+
+### Fixed
+- Reject evaluated-signed 2xx error envelopes; remote `setIdentity` withholds
+  prior enables and restores on failed refresh; `refresh()` rethrows [OPS-898].
+- Local `setIdentity` re-snapshots evaluated booleans for the new identity
+  [OPS-898].
+
 ## 1.9.1
 
 2026-09-03

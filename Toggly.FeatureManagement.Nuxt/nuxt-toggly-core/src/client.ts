@@ -5,7 +5,6 @@ import type {
   FeatureDefinitions,
   FeatureRequirement,
   Hook,
-  FeatureDefinitionsResponse,
   EvaluationSeriesData,
   EvalContextArg,
   EvalContextOverrides,
@@ -46,6 +45,7 @@ import {
   type FeatureDefinitionModel,
 } from '@ops-ai/toggly-eval'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
+import { parseRemoteEvaluatedPayload } from './parse-evaluated-payload'
 import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
 
 /**
@@ -351,41 +351,10 @@ export function createTogglyClient(
         return applyLocalDefinitions(parseDefinitionsPayload(parsed))
       }
 
-      const definitions: FeatureDefinitions = {}
-      if (config.verifySignatures) {
-        const data = parsed as
-          | FeatureDefinitions
-          | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
-        if (Array.isArray(data)) {
-          for (const definition of data) {
-            definitions[definition.featureKey] = !!definition.filters?.some(
-              (filter) => filter.name === 'AlwaysOn'
-            )
-          }
-        } else if (data && typeof data === 'object') {
-          Object.assign(definitions, data)
-        }
-      } else {
-        const data = parsed as
-          | FeatureDefinitionsResponse
-          | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
-        if (Array.isArray(data)) {
-          for (const definition of data) {
-            definitions[definition.featureKey] = !!definition.filters?.some(
-              (filter) => filter.name === 'AlwaysOn'
-            )
-          }
-        } else if ('defs' in data && data.defs) {
-          Object.assign(definitions, data.defs)
-        } else if ('features' in data && Array.isArray(data.features)) {
-          for (const feature of data.features) {
-            definitions[feature.featureKey] = feature.enabled
-          }
-        }
-      }
-
       state.definitions = new Map()
-      return definitions
+      return parseRemoteEvaluatedPayload(parsed, {
+        verifySignatures: config.verifySignatures,
+      })
     } catch (error) {
       console.error('[Toggly] Failed to fetch feature definitions:', error)
       reportError('Error fetching feature flags', error)
@@ -640,7 +609,7 @@ export function createTogglyClient(
       } catch (error) {
         state.error = error as Error
         reportError('Error refreshing feature flags', error)
-        return state.features
+        throw error
       } finally {
         state.loading = false
       }
@@ -755,18 +724,41 @@ export function createTogglyClient(
         return
       }
 
+      const previousIdentity = config.identity
+      const previousFeatures = { ...state.features }
+
       // Execute before hooks
       const dataMap = await hookExecutor.executeBeforeIdentify(identity)
 
-      config.identity = identity
+      if (!state.initialized) {
+        config.identity = identity
+        await hookExecutor.executeAfterIdentify(identity, dataMap)
+        return
+      }
 
-      // Execute after hooks
+      // Local: re-snapshot with the new identity (no remote refresh).
+      if (isLocalEvaluation()) {
+        config.identity = identity
+        await hookExecutor.executeAfterIdentify(identity, dataMap)
+        applyLocalDefinitions(state.definitions)
+        notifyFeaturesRefresh()
+        return
+      }
+
+      // Remote: withhold prior enables before publishing the new identity.
+      state.features = { ...config.featureDefaults }
+      notifyFeaturesRefresh()
+
+      config.identity = identity
       await hookExecutor.executeAfterIdentify(identity, dataMap)
 
-      // Remote rail: identity is baked into evaluated-signed fetch — refresh.
-      // Local rail: identity is eval-time only — do not re-fetch definitions.
-      if (state.initialized && !isLocalEvaluation()) {
+      try {
         await client.refresh()
+      } catch (error) {
+        config.identity = previousIdentity
+        state.features = previousFeatures
+        notifyFeaturesRefresh()
+        throw error
       }
     },
 
