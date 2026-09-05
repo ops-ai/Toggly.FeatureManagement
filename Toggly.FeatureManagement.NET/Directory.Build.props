@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <Version>3.6.2</Version>
+    <Version>3.6.3</Version>
     <!-- Suppress warnings about packages not supporting older target frameworks -->
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
     <Authors>Toggly</Authors>
@@ -11,11 +11,18 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>toggly-package-icon.png</PackageIcon>
     <PackageTags>toggly;feature-flags;feature-management</PackageTags>
+    <Deterministic>true</Deterministic>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TF_BUILD)' == 'true' Or '$(GITHUB_ACTIONS)' == 'true'">
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)assets/toggly-package-icon.png" Pack="true" PackagePath="\" Condition="'$(IsPackable)' != 'false'" />
   </ItemGroup>
