@@ -514,6 +514,15 @@ export class Toggly implements TogglyService {
     return evaluationContextCacheKey(this._getEvaluationContext())
   }
 
+  private notifyFeaturesRefresh(): void {
+    if (this._features && this.onFlagsUpdated) {
+      this.onFlagsUpdated(toBooleanDefinitions(this._features))
+    }
+    if (this._config.enableVariants && this.onVariantsUpdated) {
+      this.onVariantsUpdated(this._variants ?? {})
+    }
+  }
+
   setContext = async (context: TogglyEvaluationContext): Promise<void> => {
     const previousIdentity = this._config.identity
     const previousGroups = [...this._groups]
