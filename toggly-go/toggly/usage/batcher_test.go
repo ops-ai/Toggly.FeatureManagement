@@ -29,9 +29,6 @@ func TestBatcher_CheckUsedViewed_VariantStats(t *testing.T) {
 	if st.Feature != "FeatA" {
 		t.Fatalf("feature = %q", st.Feature)
 	}
-	if st.EnabledCount != 1 || st.DisabledCount != 1 || st.UsedCount != 1 {
-		t.Fatalf("legacy counts: enabled=%d disabled=%d used=%d", st.EnabledCount, st.DisabledCount, st.UsedCount)
-	}
 	if st.UniqueContextIdentifierEnabledCount != 1 || st.UniqueContextIdentifierDisabledCount != 1 {
 		t.Fatalf("unique context counts: enabled=%d disabled=%d", st.UniqueContextIdentifierEnabledCount, st.UniqueContextIdentifierDisabledCount)
 	}
@@ -90,8 +87,8 @@ func TestBatcher_UsedWhenDisabled_DoesNotCountUsed(t *testing.T) {
 	b.RecordUsed("Feat", false, "u1")
 	msg := b.buildAndReset()
 	st := msg.Stats[0]
-	if st.UsedCount != 0 {
-		t.Fatalf("usedCount = %d, want 0", st.UsedCount)
+	if en := st.VariantStats["enabled"]; en != nil && en.UsedCount != 0 {
+		t.Fatalf("enabled usedCount = %d, want 0 or absent", en.UsedCount)
 	}
 	// Identity still tracked for used hashes / unique users used (parity with prior Go behavior)
 	if st.UniqueUsersUsedCount != 1 || len(st.UniqueUserHashes) != 1 {

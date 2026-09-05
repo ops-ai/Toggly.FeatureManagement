@@ -133,13 +133,12 @@ func (b *Batcher) buildAndReset() *usagepb.FeatureStat {
 	out.ProcessStartTime = timestamppb.New(b.processStart)
 
 	for feature, agg := range b.perFeature {
+		// Do not populate deprecated StatMessage scalars (enabledCount,
+		// disabledCount, usedCount, uniqueRequest*); send via variantStats.
 		msg := &usagepb.StatMessage{
 			Feature:                              feature,
-			EnabledCount:                         agg.enabledCount,
-			DisabledCount:                        agg.disabledCount,
 			UniqueContextIdentifierEnabledCount:  int32(len(agg.uniqueUsersEnabled)),
 			UniqueContextIdentifierDisabledCount: int32(len(agg.uniqueUsersDisabled)),
-			UsedCount:                            agg.usedCount,
 			UniqueUsersUsedCount:                 int32(len(agg.uniqueUsersUsed)),
 			UniqueUserHashes:                     keys(agg.uniqueUsedHashes),
 			UniqueViewedUserHashes:               keys(agg.uniqueViewedHashes),

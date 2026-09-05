@@ -41,14 +41,6 @@ func TestBatcher_MeasureIncrementObserve_VariantValues(t *testing.T) {
 	if rev == nil || rev["enabled"] != 13 || rev["disabled"] != 5 {
 		t.Fatalf("revenue variantValues = %v", rev)
 	}
-	if findStat("revenue", "FeatA") != nil {
-		// deprecated Value should remain zero
-		for _, s := range msg.Stats {
-			if s.Metric == "revenue" && s.Value != 0 {
-				t.Fatalf("deprecated Value should be unset, got %v", s.Value)
-			}
-		}
-	}
 
 	stand := findStat("standalone", "")
 	if stand == nil || stand["enabled"] != 7 {
@@ -71,9 +63,6 @@ func TestBatcher_MeasureIncrementObserve_VariantValues(t *testing.T) {
 	obs := msg.Observations[0]
 	if obs.Metric != "gauge" || obs.VariantValues["control"] != 42 {
 		t.Fatalf("observation = %+v", obs)
-	}
-	if obs.Value != 0 {
-		t.Fatalf("deprecated observation Value should be unset, got %v", obs.Value)
 	}
 
 	empty := b.buildAndReset()
