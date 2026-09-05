@@ -9,6 +9,8 @@
   layout (was one directory too high, causing ENOENT for `usage.proto`) [OPS-912].
 - SIGTERM/SIGINT handlers flush with a timeout then re-emit the signal so the
   process exits instead of hanging on a custom listener [OPS-912].
+- Align `SDK_VERSION` and `package-lock.json` with package version `0.8.1`
+  [OPS-912].
 
 ## 0.8.0
 

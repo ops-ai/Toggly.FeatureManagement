@@ -1,5 +1,5 @@
 export const SDK_ID = 'node';
-export const SDK_VERSION = '0.8.0';
+export const SDK_VERSION = '0.8.1';
 
 export const SDK_HEADER_ID = 'X-Toggly-Sdk';
 export const SDK_HEADER_VERSION = 'X-Toggly-Sdk-Version';
