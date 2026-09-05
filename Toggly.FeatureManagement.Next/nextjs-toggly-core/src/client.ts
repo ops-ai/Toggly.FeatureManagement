@@ -5,7 +5,6 @@ import type {
   FeatureDefinitions,
   FeatureRequirement,
   Hook,
-  FeatureDefinitionsResponse,
   EvaluationSeriesData,
   EvalContextArg,
   EvalContextOverrides,
@@ -43,6 +42,7 @@ import {
   resolveEvaluatedDefinition,
 } from '@ops-ai/toggly-hooks-types'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
+import { parseRemoteEvaluatedPayload } from './parse-evaluated-payload'
 import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
 import {
   evaluateDefinitions,
@@ -380,41 +380,9 @@ export function createTogglyClient(
         }),
       })
 
-      const definitions: FeatureDefinitions = {}
-      if (config.verifySignatures) {
-        // Verified path returns raw defs (map or legacy array), never envelope.defs.
-        const data = parsed as
-          | FeatureDefinitions
-          | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
-        if (Array.isArray(data)) {
-          for (const definition of data) {
-            definitions[definition.featureKey] = !!definition.filters?.some(
-              (filter) => filter.name === 'AlwaysOn'
-            )
-          }
-        } else if (data && typeof data === 'object') {
-          Object.assign(definitions, data)
-        }
-      } else {
-        const data = parsed as
-          | FeatureDefinitionsResponse
-          | Array<{ featureKey: string; filters?: Array<{ name?: string }> }>
-        if (Array.isArray(data)) {
-          for (const definition of data) {
-            definitions[definition.featureKey] = !!definition.filters?.some(
-              (filter) => filter.name === 'AlwaysOn'
-            )
-          }
-        } else if ('defs' in data && data.defs) {
-          Object.assign(definitions, data.defs)
-        } else if ('features' in data && Array.isArray(data.features)) {
-          for (const feature of data.features) {
-            definitions[feature.featureKey] = feature.enabled
-          }
-        }
-      }
-
-      return definitions
+      return parseRemoteEvaluatedPayload(parsed, {
+        verifySignatures: config.verifySignatures,
+      })
     } catch (error) {
       console.error('[Toggly] Failed to fetch feature definitions:', error)
       reportError('Error fetching feature flags', error)
@@ -734,7 +702,7 @@ export function createTogglyClient(
       } catch (error) {
         state.error = error as Error
         reportError('Error refreshing feature flags', error)
-        return state.features
+        throw error
       } finally {
         state.loading = false
       }
@@ -844,17 +812,41 @@ export function createTogglyClient(
         return
       }
 
+      const previousIdentity = config.identity
+      const previousFeatures = { ...state.features }
+
       // Execute before hooks
       const dataMap = await hookExecutor.executeBeforeIdentify(identity)
 
-      config.identity = identity
+      if (!state.initialized) {
+        config.identity = identity
+        await hookExecutor.executeAfterIdentify(identity, dataMap)
+        return
+      }
 
-      // Execute after hooks
+      // Local: re-snapshot with the new identity (no remote refresh).
+      if (isLocalMode()) {
+        config.identity = identity
+        await hookExecutor.executeAfterIdentify(identity, dataMap)
+        applyLocalDefinitions(state.definitions)
+        notifyFeaturesRefresh()
+        return
+      }
+
+      // Remote: withhold prior enables before publishing the new identity.
+      state.features = { ...config.featureDefaults }
+      notifyFeaturesRefresh()
+
+      config.identity = identity
       await hookExecutor.executeAfterIdentify(identity, dataMap)
 
-      // Remote rail: identity is sent on fetch — refresh. Local: eval-time only.
-      if (state.initialized && !isLocalMode()) {
+      try {
         await client.refresh()
+      } catch (error) {
+        config.identity = previousIdentity
+        state.features = previousFeatures
+        notifyFeaturesRefresh()
+        throw error
       }
     },
 
@@ -877,39 +869,64 @@ export function createTogglyClient(
         contextUpdate.claims !== undefined &&
         JSON.stringify(contextUpdate.claims) !== JSON.stringify(config.claims)
 
-      if (contextUpdate.identity !== undefined) {
-        const dataMap = await hookExecutor.executeBeforeIdentify(
-          contextUpdate.identity,
-        )
-        config.identity = contextUpdate.identity
-        await hookExecutor.executeAfterIdentify(contextUpdate.identity, dataMap)
-      }
-      if (contextUpdate.groups !== undefined) {
-        config.groups = contextUpdate.groups
-      }
-      if (contextUpdate.claims !== undefined) {
-        config.claims = contextUpdate.claims
-      }
-
-      if (!state.initialized) {
+      const contextChanged = identityChanged || groupsChanged || claimsChanged
+      if (!contextChanged) {
         return
       }
 
-      const contextChanged = identityChanged || groupsChanged || claimsChanged
-      if (!contextChanged) {
+      const previousIdentity = config.identity
+      const previousGroups = config.groups
+      const previousClaims = config.claims
+      const previousFeatures = { ...state.features }
+
+      const applyContextFields = async () => {
+        if (contextUpdate.identity !== undefined) {
+          const dataMap = await hookExecutor.executeBeforeIdentify(
+            contextUpdate.identity,
+          )
+          config.identity = contextUpdate.identity
+          await hookExecutor.executeAfterIdentify(
+            contextUpdate.identity,
+            dataMap,
+          )
+        }
+        if (contextUpdate.groups !== undefined) {
+          config.groups = contextUpdate.groups
+        }
+        if (contextUpdate.claims !== undefined) {
+          config.claims = contextUpdate.claims
+        }
+      }
+
+      if (!state.initialized) {
+        await applyContextFields()
         return
       }
 
       // Local: re-snapshot with the new eval context so provider subscribers
       // and hooks that depend on `features` pick up claim/group/identity changes.
       if (isLocalMode()) {
+        await applyContextFields()
         applyLocalDefinitions(state.definitions)
         notifyFeaturesRefresh()
         return
       }
 
-      // Remote: identity/groups/claims are baked into evaluated-signed — refresh.
-      await client.refresh()
+      // Remote: withhold prior targeting enables before applying new context.
+      state.features = { ...config.featureDefaults }
+      notifyFeaturesRefresh()
+      await applyContextFields()
+
+      try {
+        await client.refresh()
+      } catch (error) {
+        config.identity = previousIdentity
+        config.groups = previousGroups
+        config.claims = previousClaims
+        state.features = previousFeatures
+        notifyFeaturesRefresh()
+        throw error
+      }
     },
 
     getDefinitions(): Map<string, FeatureDefinitionModel> {

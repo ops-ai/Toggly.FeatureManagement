@@ -1,3 +1,17 @@
+## 1.8.2
+
+2026-09-04
+
+### Fixed
+- Reject evaluated-signed 2xx error envelopes (`{"error":...}`) instead of
+  treating them as empty successful definitions [OPS-828].
+- Remote `setIdentity` / `setContext` withhold prior enables, refresh for the
+  new targeting context, and restore the previous identity and features when
+  the refresh fails; `refresh()` rethrows after recording `state.error`
+  [OPS-828].
+- Local `setIdentity` re-snapshots evaluated booleans for the new identity
+  [OPS-828].
+
 ## 1.8.1
 
 2026-09-03

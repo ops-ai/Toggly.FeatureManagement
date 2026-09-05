@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nextjs-toggly-edge",
-  "version": "1.2.3",
+  "version": "1.3.0",
   "description": "Edge Runtime feature flags for Next.js - Middleware and Edge Functions",
   "type": "module",
   "main": "./dist/index.cjs",

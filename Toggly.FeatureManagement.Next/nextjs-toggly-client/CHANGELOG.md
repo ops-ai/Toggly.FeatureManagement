@@ -1,3 +1,14 @@
+## 1.4.1
+
+2026-09-04
+
+### Fixed
+- `setIdentity` / `setContext` publish React identity and persist to
+  localStorage only after the core client succeeds; failures restore the
+  prior identity and feature snapshot [OPS-828].
+- When `persistFeatures` is enabled, valid last-known-good flags from
+  localStorage seed React `features` (not only core defaults) [OPS-828].
+
 ## 1.4.0
 
 2026-09-03

@@ -6,8 +6,8 @@ import {
   getEdgeToggly,
   resetEdgeToggly,
 } from '../src/edge-client'
+import type { FeatureDefinitionModel } from '@ops-ai/nextjs-toggly-core'
 
-// Mock fetch globally
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
@@ -19,6 +19,28 @@ function createMockResponse(data: unknown, status = 200) {
     statusText: status === 200 ? 'OK' : 'Error',
     text: async () => bodyText,
     json: async () => (typeof data === 'string' ? JSON.parse(data) : data),
+  }
+}
+
+function alwaysOn(featureKey: string): FeatureDefinitionModel {
+  return {
+    featureKey,
+    filters: [{ name: 'AlwaysOn', parameters: {} }],
+  }
+}
+
+function targeting(featureKey: string, identity: string): FeatureDefinitionModel {
+  return {
+    featureKey,
+    filters: [
+      {
+        name: 'Targeting',
+        parameters: {
+          'Audience.Users:0': identity,
+          'Audience.DefaultRolloutPercentage': 0,
+        },
+      },
+    ],
   }
 }
 
@@ -38,12 +60,11 @@ describe('TogglyEdgeClient', () => {
   describe('initialization', () => {
     it('should create a client with default config', () => {
       const client = new TogglyEdgeClient({ appKey: 'test-key' })
-
       expect(client.identity).toBeDefined()
     })
 
     it('should initialize with feature defaults', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+      mockFetch.mockResolvedValueOnce(createMockResponse([]))
 
       const client = new TogglyEdgeClient({
         appKey: 'test-key',
@@ -55,83 +76,61 @@ describe('TogglyEdgeClient', () => {
       expect(client.isFeatureOnSync('feature-a')).toBe(true)
     })
 
-    it('should fetch features from API', async () => {
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
-      )
-
-      const client = new TogglyEdgeClient({ appKey: 'test-key' })
-      await client.init()
-
-      expect(client.isFeatureOnSync('feature-a')).toBe(true)
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-    })
-
-    it('includes u= on evaluated-signed URL when identity is set', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+    it('fetches definitions-signed without identity query params', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse([alwaysOn('feature-a')]))
 
       const client = new TogglyEdgeClient({
         appKey: 'test-key',
         identity: 'user-123',
-        cache: false,
-      })
-      await client.init()
-
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-      const [url, init] = mockFetch.mock.calls[0]
-      expect(String(url)).toContain('/evaluated-signed/')
-      expect(String(url)).toContain('u=user-123')
-      expect(init.headers['x-toggly-identity']).toBe('user-123')
-    })
-
-    it('includes g= on evaluated-signed URL when groups are set', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
-
-      const client = new TogglyEdgeClient({
-        appKey: 'test-key',
-        identity: 'user-123',
-        groups: ['beta', 'staff'],
+        groups: ['beta'],
         claims: { plan: 'pro' },
         cache: false,
       })
       await client.init()
 
       expect(mockFetch).toHaveBeenCalledTimes(1)
-      const url = new URL(String(mockFetch.mock.calls[0][0]))
-      expect(url.searchParams.get('u')).toBe('user-123')
-      expect(url.searchParams.getAll('g')).toEqual(['beta', 'staff'])
-      expect(url.searchParams.get('claim.plan')).toBe('pro')
+      const [url] = mockFetch.mock.calls[0]
+      expect(String(url)).toContain('/definitions-signed/')
+      expect(String(url)).not.toContain('u=')
+      expect(String(url)).not.toContain('g=')
+      expect(client.isFeatureOnSync('feature-a')).toBe(true)
     })
 
-    it('reads unsigned defs and collapses entity gates', async () => {
-      mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          defs: {
-            'feature-a': true,
-            EntityGated: {
-              requirement: 'all',
-              rules: [{ property: 'BirthDate', op: 'gt', value: '2026-01-01', type: 'datetime' }],
+    it('evaluates entity gates with per-call context', async () => {
+      const entityFlag: FeatureDefinitionModel = {
+        featureKey: 'EntityGated',
+        requirementType: 'Any',
+        contextRequirementType: 'All',
+        filters: [
+          {
+            name: 'ContextProperty',
+            parameters: {
+              Property: 'BirthDate',
+              Operator: 'gt',
+              Value: '2026-01-01',
+              ValueType: 'datetime',
             },
           },
-        })
-      )
+          { name: 'AlwaysOn', parameters: {} },
+        ],
+      }
+      mockFetch.mockResolvedValueOnce(createMockResponse([entityFlag]))
 
-      const client = new TogglyEdgeClient({ appKey: 'test-key' })
+      const client = new TogglyEdgeClient({ appKey: 'test-key', cache: false })
       await client.init()
 
-      expect(client.isFeatureOnSync('feature-a')).toBe(true)
       expect(client.isFeatureOnSync('EntityGated')).toBe(false)
-    })
-
-    it('reads a raw unsigned definition map', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse({ 'feature-a': true }))
-
-      const client = new TogglyEdgeClient({ appKey: 'test-key' })
-      await client.init()
-
-      expect(client.isFeatureOnSync('feature-a')).toBe(true)
+      expect(
+        client.isFeatureOnSync(
+          'EntityGated',
+          undefined,
+          {
+            kind: 'Order',
+            key: '1',
+            attributes: { BirthDate: '2026-06-15T00:00:00Z' },
+          },
+        ),
+      ).toBe(true)
     })
 
     it('reads text() and falls back when verifySignatures gets invalid envelope', async () => {
@@ -160,9 +159,7 @@ describe('TogglyEdgeClient', () => {
   describe('feature evaluation', () => {
     it('should evaluate single feature', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse([alwaysOn('feature-a')]),
       )
 
       const client = new TogglyEdgeClient({ appKey: 'test-key' })
@@ -173,9 +170,7 @@ describe('TogglyEdgeClient', () => {
 
     it('should evaluate feature off', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: false }],
-        })
+        createMockResponse([{ featureKey: 'feature-a', filters: [] }]),
       )
 
       const client = new TogglyEdgeClient({ appKey: 'test-key' })
@@ -186,18 +181,13 @@ describe('TogglyEdgeClient', () => {
 
     it('should evaluate feature gate with all requirement', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: true },
-          ],
-        })
+        createMockResponse([alwaysOn('feature-a'), alwaysOn('feature-b')]),
       )
 
       const client = new TogglyEdgeClient({ appKey: 'test-key' })
       const result = await client.evaluateFeatureGate(
         ['feature-a', 'feature-b'],
-        'all'
+        'all',
       )
 
       expect(result).toBe(true)
@@ -205,18 +195,16 @@ describe('TogglyEdgeClient', () => {
 
     it('should evaluate feature gate with any requirement', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [
-            { featureKey: 'feature-a', enabled: true },
-            { featureKey: 'feature-b', enabled: false },
-          ],
-        })
+        createMockResponse([
+          alwaysOn('feature-a'),
+          { featureKey: 'feature-b', filters: [] },
+        ]),
       )
 
       const client = new TogglyEdgeClient({ appKey: 'test-key' })
       const result = await client.evaluateFeatureGate(
         ['feature-a', 'feature-b'],
-        'any'
+        'any',
       )
 
       expect(result).toBe(true)
@@ -224,28 +212,47 @@ describe('TogglyEdgeClient', () => {
 
     it('should evaluate feature gate with negate', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse([alwaysOn('feature-a')]),
       )
 
       const client = new TogglyEdgeClient({ appKey: 'test-key' })
       const result = await client.evaluateFeatureGate(
         ['feature-a'],
         'all',
-        true
+        true,
       )
 
       expect(result).toBe(false)
     })
+
+    it('evaluates concurrent identities via overrides without mutating singleton', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse([targeting('vip-only', 'alice')]),
+      )
+
+      const client = new TogglyEdgeClient({
+        appKey: 'test-key',
+        identity: 'shared',
+        cache: false,
+      })
+      await client.init()
+      const sharedBefore = client.identity
+
+      const [alice, bob] = await Promise.all([
+        client.isFeatureOn('vip-only', { identity: 'alice' }),
+        client.isFeatureOn('vip-only', { identity: 'bob' }),
+      ])
+
+      expect(alice).toBe(true)
+      expect(bob).toBe(false)
+      expect(client.identity).toBe(sharedBefore)
+    })
   })
 
   describe('caching', () => {
-    it('should use cached features within TTL', async () => {
+    it('should use cached definitions within TTL', async () => {
       mockFetch.mockResolvedValueOnce(
-        createMockResponse({
-          features: [{ featureKey: 'feature-a', enabled: true }],
-        })
+        createMockResponse([alwaysOn('feature-a')]),
       )
 
       const client = new TogglyEdgeClient({
@@ -255,7 +262,7 @@ describe('TogglyEdgeClient', () => {
       })
 
       await client.init()
-      await client.fetchDefinitions() // Should use cache
+      await client.fetchDefinitions()
 
       expect(mockFetch).toHaveBeenCalledTimes(1)
     })
@@ -263,14 +270,10 @@ describe('TogglyEdgeClient', () => {
     it('should refresh when cache expires', async () => {
       mockFetch
         .mockResolvedValueOnce(
-          createMockResponse({
-            features: [{ featureKey: 'feature-a', enabled: false }],
-          })
+          createMockResponse([{ featureKey: 'feature-a', filters: [] }]),
         )
         .mockResolvedValueOnce(
-          createMockResponse({
-            features: [{ featureKey: 'feature-a', enabled: true }],
-          })
+          createMockResponse([alwaysOn('feature-a')]),
         )
 
       const client = new TogglyEdgeClient({ appKey: 'test-key' })
@@ -278,8 +281,29 @@ describe('TogglyEdgeClient', () => {
       await client.init()
       expect(client.isFeatureOnSync('feature-a')).toBe(false)
 
-      await client.refresh() // Force refresh
+      await client.refresh()
       expect(client.isFeatureOnSync('feature-a')).toBe(true)
+    })
+
+    it('does not serve identity A results as identity B from boolean cache', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse([targeting('vip-only', 'alice')]),
+      )
+
+      const client = new TogglyEdgeClient({
+        appKey: 'test-key',
+        cache: true,
+        cacheTtl: 60,
+      })
+      await client.init()
+
+      expect(client.isFeatureOnSync('vip-only', { identity: 'alice' })).toBe(
+        true,
+      )
+      expect(client.isFeatureOnSync('vip-only', { identity: 'bob' })).toBe(
+        false,
+      )
+      expect(mockFetch).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -324,7 +348,7 @@ describe('Global edge client', () => {
   })
 
   it('should initialize global client', async () => {
-    mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+    mockFetch.mockResolvedValueOnce(createMockResponse([]))
 
     const client = await initEdgeToggly({ appKey: 'test-key' })
 
@@ -337,7 +361,7 @@ describe('Global edge client', () => {
   })
 
   it('should reset global client', async () => {
-    mockFetch.mockResolvedValueOnce(createMockResponse({ features: [] }))
+    mockFetch.mockResolvedValueOnce(createMockResponse([]))
 
     await initEdgeToggly({ appKey: 'test-key' })
     expect(getEdgeToggly()).not.toBeNull()

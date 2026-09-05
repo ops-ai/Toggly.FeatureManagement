@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.0
+
+2026-09-04
+
+### Changed
+- Switch to local evaluation: fetch identity-agnostic `definitions-signed`,
+  cache definitions (not per-identity booleans), and evaluate per call with
+  overrides [OPS-831].
+- Middleware helpers no longer assign `client.identity` on the shared
+  singleton; they pass request identity/headers via `buildEdgeEvalOverrides`
+  [OPS-831].
+
+### Added
+- `buildEdgeEvalOverrides` for mapping request headers + identity into eval
+  overrides.
+- Optional entity context on `isFeatureOn` / `evaluateFeatureGate` (sync and
+  async) once definitions are loaded locally [OPS-831].
 
 ## 1.2.3
 
