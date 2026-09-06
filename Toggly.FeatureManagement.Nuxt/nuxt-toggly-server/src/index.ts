@@ -55,9 +55,16 @@ export {
   isServerFeatureOn,
   isServerFeatureOff,
   resetServerToggly,
+  closeServerToggly,
   setServerStorage,
   getServerStorage,
   createMemoryStorage,
+  recordServerUsage,
+  recordServerView,
+  measureServerMetric,
+  incrementServerCounter,
+  observeServerMetric,
+  flushServerTelemetry,
 } from './server-client'
 
 // Middleware utilities

@@ -309,6 +309,14 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
+### Telemetry (usage + business metrics)
+
+When `appKey` is set, `@ops-ai/nuxt-toggly-server` enables feature usage and
+business metrics by default (gRPC on Node/Nitro; HTTPS on Nitro edge via
+`telemetryTransport: 'https'`). Opt out with `enableUsageTracking: false` /
+`enableMetrics: false` or `TOGGLY_DISABLE_TELEMETRY=1`. Browser
+`@ops-ai/nuxt-toggly-client` does not send this telemetry.
+
 ## Users and Rollouts
 
 Set user identity for percentage-based rollouts and targeting:
