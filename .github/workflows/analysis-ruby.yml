@@ -60,6 +60,9 @@ jobs:
     name: Smoke Test
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Skip native grpc/protobuf compile; smoke_spec does not need them.
+    env:
+      BUNDLE_WITHOUT: grpc_test
 
     steps:
       - name: Checkout code
@@ -174,6 +177,9 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    # RuboCop does not need native grpc/protobuf; keep install lean.
+    env:
+      BUNDLE_WITHOUT: grpc_test
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

@@ -20,11 +20,12 @@ Gem::Specification.new do |spec|
   spec.metadata["documentation_uri"] = "https://docs.toggly.io/sdks/ruby"
   spec.metadata["rubygems_mfa_required"] = "true"
 
-  spec.files = Dir.glob("lib/**/*") + %w[README.md LICENSE CHANGELOG.md]
+  spec.files = Dir.glob("lib/**/*") + Dir.glob("proto/**/*") + %w[README.md LICENSE CHANGELOG.md]
   spec.require_paths = ["lib"]
 
   # Zero runtime dependencies for core gem
 
-  # Optional: enables WebSocket live updates for real-time flag changes
-  spec.metadata["optional_dependencies"] = "websocket-client-simple"
+  # Optional: websocket-client-simple enables live updates;
+  # grpc + google-protobuf enable usage/metrics telemetry send.
+  spec.metadata["optional_dependencies"] = "websocket-client-simple, grpc, google-protobuf"
 end

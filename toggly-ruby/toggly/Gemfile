@@ -15,3 +15,10 @@ group :development, :test do
   gem "websocket-client-simple", "~> 0.8"
   gem "yard", "~> 0.9", require: false
 end
+
+# Optional native gems for telemetry conversion specs (gRPC/protobuf).
+# Kept out of Smoke/Lint via BUNDLE_WITHOUT=grpc_test so those jobs stay lean.
+group :grpc_test do
+  gem "google-protobuf", ">= 3.25"
+  gem "grpc", ">= 1.62"
+end
