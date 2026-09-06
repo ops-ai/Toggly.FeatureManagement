@@ -383,6 +383,41 @@ jobs:
       - name: CLI Build Summary
         run: echo "✅ CLI build completed successfully" >> $GITHUB_STEP_SUMMARY
 
+  pack-packages:
+    name: Pack NuGet packages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            6.0.x
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Pack
+        working-directory: Toggly.FeatureManagement.NET
+        run: |
+          # GeneratePackageOnBuild=true races across multi-TFM projects and
+          # produces NU5026 (dll to be packed was not found). Build first with
+          # packaging off, then pack from the built outputs.
+          dotnet build Toggly.FeatureManagement.sln -c Release -p:GeneratePackageOnBuild=false
+          dotnet pack Toggly.FeatureManagement.sln -c Release --no-build --output ./nupkgs
+          ls -la ./nupkgs
+
+      - name: Upload NuGet packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-packages
+          path: Toggly.FeatureManagement.NET/nupkgs/*.nupkg
+          if-no-files-found: error
+          retention-days: 7
+
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
