@@ -93,3 +93,27 @@ export {
   registerEntityContextsAtStartup,
 } from './entity-context-registration.js'
 export type { EntityContextPropertySchema, EntityContextSchemaRegistration } from './entity-context-registration.js'
+
+// Telemetry (usage + business metrics)
+export {
+  UsageBatcher,
+} from './telemetry/usage-batcher.js'
+export {
+  MetricsBatcher,
+} from './telemetry/metrics-batcher.js'
+export {
+  TelemetryRuntime,
+} from './telemetry/index.js'
+export {
+  createGrpcClients,
+  getProtoRoot,
+  grpcTarget,
+  hashIdentity,
+  isGrpcAvailable,
+  resolveProtoRoot,
+  DEFAULT_METRICS_BASE_URL,
+  DEFAULT_TELEMETRY_FLUSH_MS,
+} from './telemetry/grpc-clients.js'
+export type { MetricsFeatureOptions } from './telemetry/metrics-batcher.js'
+export type { FeatureStatPayload } from './telemetry/usage-batcher.js'
+export type { MetricStatPayload } from './telemetry/metrics-batcher.js'

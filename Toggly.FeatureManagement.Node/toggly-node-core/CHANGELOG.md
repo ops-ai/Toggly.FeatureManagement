@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.8.3
+
+2026-09-05
+
+### Fixed
+- `requestCount` in usage batches maps to .NET UniqueRequest* semantics: only
+  increments when `uniqueRequest` is true (first check in a logical request),
+  not on every evaluation; Go leaves this field unset [OPS-912].
+- Identity hashes use UTF-8 FNV-1a (Go `hash/fnv` New32a on `[]byte`), not
+  UTF-16 `charCodeAt` units [OPS-912].
+
+## 0.8.2
+
+2026-09-05
+
+### Fixed
+- `evaluateFeatureGate` records a usage check per evaluated feature when usage
+  tracking is enabled, so Express/Fastify/Hono/Koa `isEnabled` middleware
+  inherits check telemetry (shared with `isFeatureOn`) [OPS-912].
+
+## 0.8.1
+
+2026-09-05
+
+### Fixed
+- Resolve vendored `proto/` from built `dist/` ESM/CJS and published package
+  layout (was one directory too high, causing ENOENT for `usage.proto`) [OPS-912].
+- SIGTERM/SIGINT handlers flush with a timeout then re-emit the signal so the
+  process exits instead of hanging on a custom listener [OPS-912].
+- Align `SDK_VERSION` and `package-lock.json` with package version `0.8.1`
+  [OPS-912].
+
+## 0.8.0
+
+2026-09-05
+
+### Added
+- Batched feature usage (`recordUsage` / `recordView`, auto check on
+  `isFeatureOn`) and business metrics (`measure` / `incrementCounter` /
+  `observe`) via gRPC `Usage.SendStats` and `Metrics.SendMetrics` [OPS-912].
+- Config: `enableUsageTracking`, `enableMetrics`, `metricsBaseUrl`, flush
+  intervals, `instanceName`, `appVersion`; flush on `close` / process signals.
+- Optional dependencies `@grpc/grpc-js` and `@grpc/proto-loader` (flag eval
+  works without them).
+
 ## 0.7.0
 
 2026-09-02

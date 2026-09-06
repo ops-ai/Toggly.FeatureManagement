@@ -8,6 +8,49 @@ Core Toggly feature flags SDK for Node.js - zero browser dependencies
 npm install @ops-ai/toggly-node-core
 ```
 
+### Usage + business metrics (optional gRPC)
+
+Feature usage (`Usage.SendStats`) and business metrics (`Metrics.SendMetrics`)
+are batched in-process and sent over native gRPC. Install the optional transport
+packages when you want telemetry to leave the process:
+
+```bash
+npm install @grpc/grpc-js @grpc/proto-loader
+```
+
+Without those packages, flag evaluation still works; usage/metrics recording is
+a no-op (a warning is logged when telemetry is enabled).
+
+| Option | Default | Notes |
+|--------|---------|--------|
+| `enableUsageTracking` | `true` when `appKey` is set | Auto-records checks on `isFeatureOn` / `evaluateFeatureGate` |
+| `enableMetrics` | `true` when `appKey` is set | `measure` / `incrementCounter` / `observe` |
+| `metricsBaseUrl` | `https://app.toggly.io/` | gRPC host (separate from definitions `baseUrl`) |
+| `usageFlushInterval` / `metricsFlushInterval` | `60000` | ms; `0` disables the timer |
+| `instanceName` / `appVersion` | unset | Included on wire payloads |
+
+```ts
+const client = createTogglyClient({
+  appKey: '…',
+  enableUsageTracking: true,
+  enableMetrics: true,
+})
+await client.init()
+
+await client.isFeatureOn('Checkout') // records a check when usage is enabled
+await client.evaluateFeatureGate(['Checkout', 'Beta'], 'any') // records per feature
+client.recordUsage('Checkout')
+client.recordView('Checkout')
+client.measure('checkout_value', 42.5, { feature: 'Checkout' })
+client.incrementCounter('checkout_started')
+client.observe('queue_depth', 3)
+
+await client.flushTelemetry() // optional; also runs on close / SIGTERM
+await client.close()
+```
+
+gRPC metadata includes `UA` from `sdk-identity` (`toggly-node/<version>`).
+
 ## Documentation
 
 - [docs.toggly.io](https://docs.toggly.io)

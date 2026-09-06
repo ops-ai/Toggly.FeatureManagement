@@ -513,8 +513,11 @@ describe('singleton functions', () => {
       mockFetch.mockResolvedValue(defsResponse([]))
 
       const client1 = await initToggly({ appKey: 'app-1' })
+      const closeSpy = vi.spyOn(client1, 'close')
       const client2 = await initToggly({ appKey: 'app-2' })
 
+      expect(closeSpy).toHaveBeenCalled()
+      await expect(closeSpy.mock.results[0]?.value).resolves.toBeUndefined()
       expect(client1).not.toBe(client2)
       expect(getToggly()).toBe(client2)
     })
