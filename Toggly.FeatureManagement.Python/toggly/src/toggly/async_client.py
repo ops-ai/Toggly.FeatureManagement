@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Mapping, Optional
+from typing import Any, AsyncIterator
 
 from toggly.config import TogglyConfig
 from toggly.context import EvaluationContext
@@ -39,12 +38,13 @@ from toggly.providers import (
     MemorySnapshotProvider,
     VariantsSnapshot,
 )
-from toggly.telemetry import TelemetryRuntime
+from toggly.telemetry.client_api import TelemetryClientMixin
+from toggly.telemetry.runtime import TelemetryRuntime
 
 logger = logging.getLogger("toggly")
 
 
-class AsyncTogglyClient:
+class AsyncTogglyClient(TelemetryClientMixin):
     """Async client for Toggly feature flag management.
 
     Provides asynchronous API for evaluating feature flags.
@@ -454,111 +454,6 @@ class AsyncTogglyClient:
         if self._telemetry is not None:
             self._telemetry.close()
             self._telemetry = None
-
-    def record_usage(
-        self,
-        feature_key: str,
-        identity: Optional[str] = None,
-        variant: str = "enabled",
-    ) -> None:
-        """Record a feature used/interaction event."""
-        if self._telemetry is None or not self._telemetry.usage_enabled:
-            return
-        self._telemetry.record_usage(
-            feature_key,
-            identity if identity is not None else self._identity,
-            variant,
-        )
-
-    def record_view(
-        self,
-        feature_key: str,
-        identity: Optional[str] = None,
-        variant: str = "enabled",
-    ) -> None:
-        """Record a feature viewed/rendered event."""
-        if self._telemetry is None or not self._telemetry.usage_enabled:
-            return
-        self._telemetry.record_view(
-            feature_key,
-            identity if identity is not None else self._identity,
-            variant,
-        )
-
-    def measure(
-        self,
-        metric: str,
-        value: float,
-        options: Optional[Mapping[str, Any]] = None,
-    ) -> None:
-        """Aggregate a business measurement (sum over the flush window)."""
-        if self._telemetry is None or not self._telemetry.metrics_enabled:
-            return
-        self._telemetry.measure(metric, value, options)
-
-    def increment_counter(
-        self,
-        metric: str,
-        value: float = 1.0,
-        options: Optional[Mapping[str, Any]] = None,
-    ) -> None:
-        """Increment a business counter."""
-        if self._telemetry is None or not self._telemetry.metrics_enabled:
-            return
-        self._telemetry.increment_counter(metric, value, options)
-
-    def observe(
-        self,
-        metric: str,
-        value: float,
-        options: Optional[Mapping[str, Any]] = None,
-    ) -> None:
-        """Record a point-in-time business observation."""
-        if self._telemetry is None or not self._telemetry.metrics_enabled:
-            return
-        self._telemetry.observe(metric, value, options)
-
-    def flush_telemetry(self) -> None:
-        """Flush pending usage and metrics batches."""
-        if self._telemetry is not None:
-            self._telemetry.flush_all()
-
-    def _record_check(
-        self,
-        feature_key: str,
-        enabled: bool,
-        identity: Optional[str],
-    ) -> None:
-        if self._telemetry is None or not self._telemetry.usage_enabled:
-            return
-        self._telemetry.record_check(feature_key, enabled, identity)
-
-    def _start_telemetry(self) -> None:
-        if not self._config.app_key:
-            return
-        if os.environ.get("TOGGLY_DISABLE_TELEMETRY") == "1":
-            return
-        if not self._config.enable_usage_tracking and not self._config.enable_metrics:
-            return
-
-        usage_provided = self._config.usage_client is not None
-        metrics_provided = self._config.metrics_client is not None
-        self._telemetry = TelemetryRuntime(
-            app_key=self._config.app_key,
-            environment=self._config.environment,
-            metrics_base_url=self._config.metrics_base_url,
-            enable_usage_tracking=self._config.enable_usage_tracking,
-            enable_metrics=self._config.enable_metrics,
-            usage_flush_interval=self._config.usage_flush_interval,
-            metrics_flush_interval=self._config.metrics_flush_interval,
-            instance_name=self._config.instance_name,
-            app_version=self._config.app_version,
-            usage_client=self._config.usage_client,
-            metrics_client=self._config.metrics_client,
-            usage_client_provided=usage_provided,
-            metrics_client_provided=metrics_provided,
-        )
-        self._telemetry.start()
 
     @asynccontextmanager
     async def feature_context(
