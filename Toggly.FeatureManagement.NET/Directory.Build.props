@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <Version>3.6.3</Version>
+    <Version>3.6.4</Version>
     <!-- Suppress warnings about packages not supporting older target frameworks -->
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
     <Authors>Toggly</Authors>
@@ -15,8 +15,13 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- Portable PDBs stay in the .nupkg so nuget.info / Package Explorer can
+         validate Source Link, Deterministic, and Compiler Flags without the
+         separate symbol server. snupkg remains for nuget.org symbol feed. -->
+    <DebugType>portable</DebugType>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TF_BUILD)' == 'true' Or '$(GITHUB_ACTIONS)' == 'true'">
+  <PropertyGroup Condition="'$(TF_BUILD)' == 'true' Or '$(GITHUB_ACTIONS)' == 'true' Or '$(CI)' == 'true'">
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>

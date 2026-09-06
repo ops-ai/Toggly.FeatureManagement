@@ -17,7 +17,7 @@ test('Directory.Build.props enables ContinuousIntegrationBuild on GITHUB_ACTIONS
   assert.match(props, /ContinuousIntegrationBuild/);
   assert.match(
     props,
-    /Condition="'\$\(TF_BUILD\)' == 'true' Or '\$\(GITHUB_ACTIONS\)' == 'true'"/,
+    /Condition="'\$\(TF_BUILD\)' == 'true' Or '\$\(GITHUB_ACTIONS\)' == 'true'( Or '\$\(CI\)' == 'true')?"/,
   );
 });
 
