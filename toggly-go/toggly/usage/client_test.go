@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/autoflush"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage/usagepb"
 )
 
@@ -48,7 +49,7 @@ func TestClient_Flush_AttachesUAMetadata(t *testing.T) {
 		api:       api,
 		batcher:   NewBatcher("app", "Production", "", ""),
 		userAgent: "toggly-go/0.5.0",
-		stop:      make(chan struct{}),
+		flush:     autoflush.New(),
 	}
 	c.RecordCheck("F", true, "u1")
 	if err := c.Flush(context.Background()); err != nil {
@@ -73,7 +74,7 @@ func TestClient_Close_WaitsForInFlightAutoFlush(t *testing.T) {
 		conn:    conn,
 		api:     api,
 		batcher: NewBatcher("app", "Production", "", ""),
-		stop:    make(chan struct{}),
+		flush:   autoflush.New(),
 	}
 	c.RecordCheck("F", true, "u1")
 	c.StartAutoFlush(20 * time.Millisecond)
