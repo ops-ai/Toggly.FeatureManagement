@@ -202,6 +202,52 @@ describe('TelemetryRuntime', () => {
     expect(sendMetrics).toHaveBeenCalledTimes(2)
     await runtime.close()
   })
+
+  it('builds HTTPS clients when transport is https and no clients are injected', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true })
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: true,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      transport: 'https',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      attachProcessHandlers: false,
+    })
+    runtime.start()
+    runtime.recordCheck('FeatureA', true, 'user-1')
+    runtime.observe('depth', 2)
+    await runtime.flush()
+    expect(fetchImpl).toHaveBeenCalled()
+    const urls = fetchImpl.mock.calls.map((c) => String(c[0]))
+    expect(urls.some((u) => u.includes('api/usage/stats'))).toBe(true)
+    expect(urls.some((u) => u.includes('api/metrics'))).toBe(true)
+    await runtime.close()
+  })
+
+  it('warns when gRPC transport has no injected clients', () => {
+    const warn = vi.fn()
+    const runtime = new TelemetryRuntime(
+      {
+        appKey: 'app',
+        environment: 'Production',
+        enableUsageTracking: true,
+        enableMetrics: false,
+        usageFlushInterval: 0,
+        metricsFlushInterval: 0,
+        transport: 'grpc',
+        attachProcessHandlers: false,
+      },
+      { debug: () => {}, warn, error: () => {} },
+    )
+    runtime.start()
+    expect(warn).toHaveBeenCalled()
+    runtime.recordCheck('FeatureA', true)
+    void runtime.flushUsage()
+    void runtime.flushMetrics()
+  })
 })
 
 describe('HttpsTelemetryClient', () => {

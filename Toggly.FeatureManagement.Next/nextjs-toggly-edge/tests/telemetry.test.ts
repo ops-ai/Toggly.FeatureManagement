@@ -78,4 +78,30 @@ describe('edge telemetry', () => {
     expect(sendStats).not.toHaveBeenCalled()
     await client.close()
   })
+
+  it('scheduleFlush hands flushTelemetry to waitUntil', async () => {
+    const sendStats = vi.fn().mockResolvedValue({})
+    const client = createEdgeClient({
+      appKey: 'app',
+      environment: 'Production',
+      featureDefaults: { FeatureA: true },
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: null,
+      cache: false,
+    })
+    vi.spyOn(client, 'fetchDefinitions').mockResolvedValue({ FeatureA: true })
+    await client.init()
+    await client.isFeatureOn('FeatureA')
+
+    const waitUntil = vi.fn((p: Promise<unknown>) => p)
+    client.scheduleFlush(waitUntil)
+    expect(waitUntil).toHaveBeenCalledTimes(1)
+    await waitUntil.mock.calls[0]![0]
+    expect(sendStats).toHaveBeenCalled()
+    await client.close()
+  })
 })
