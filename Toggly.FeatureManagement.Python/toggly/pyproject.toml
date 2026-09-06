@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toggly"
-version = "0.4.0"
+version = "0.5.0"
 description = "Feature flag management SDK for Python - zero dependencies core library"
 readme = "README.md"
 license = {text = "MIT"}
@@ -51,6 +51,10 @@ Changelog = "https://github.com/ops-ai/toggly-sdks/blob/main/Toggly.FeatureManag
 websocket = [
     "websocket-client>=1.6.0"
 ]
+telemetry = [
+    "grpcio>=1.60.0",
+    "protobuf>=4.25.0"
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -58,14 +62,16 @@ dev = [
     "mypy>=1.0.0",
     "ruff>=0.1.0",
     "websockets>=12.0",
-    "websocket-client>=1.6.0"
+    "websocket-client>=1.6.0",
+    "grpcio>=1.60.0",
+    "protobuf>=4.25.0"
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-toggly = ["py.typed"]
+toggly = ["py.typed", "telemetry/pb/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

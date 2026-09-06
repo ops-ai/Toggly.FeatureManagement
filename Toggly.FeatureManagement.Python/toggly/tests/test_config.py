@@ -188,9 +188,20 @@ class TestTogglyConfig:
         assert config.enable_usage_tracking is True
 
     def test_config_enable_metrics_default(self) -> None:
-        """Test metrics is disabled by default."""
+        """Test metrics is enabled by default."""
         config = TogglyConfig(app_key="key")
-        assert config.enable_metrics is False
+        assert config.enable_metrics is True
+
+    def test_config_metrics_base_url_default(self) -> None:
+        """Test metrics base URL defaults to app.toggly.io."""
+        config = TogglyConfig(app_key="key")
+        assert config.metrics_base_url == "https://app.toggly.io"
+
+    def test_config_flush_intervals_default(self) -> None:
+        """Test telemetry flush intervals default to 60 seconds."""
+        config = TogglyConfig(app_key="key")
+        assert config.usage_flush_interval == 60.0
+        assert config.metrics_flush_interval == 60.0
 
     def test_config_debug_default(self) -> None:
         """Test debug is disabled by default."""
