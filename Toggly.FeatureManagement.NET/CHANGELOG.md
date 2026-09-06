@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.6.3
+
+2026-09-05
+
+### Changed
+- Deterministic builds, centralized SourceLink (`Microsoft.SourceLink.GitHub`
+  8.0.0), and snupkg symbol packages now apply to all eleven NuGet packages
+  (including Hangfire and EntityFramework) via `Directory.Build.props`.
+- Release signs both `.nupkg` and `.snupkg` with the existing Key Vault
+  certificate; GitHub Releases publish GPG-signed SHA-256 checksums.
+
 ## 3.6.2
 
 2026-09-05

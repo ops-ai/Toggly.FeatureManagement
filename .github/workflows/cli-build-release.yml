@@ -161,6 +161,23 @@ jobs:
           pattern: toggly-cli-*
           merge-multiple: false
 
+      - name: Import GPG key for checksum signing
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Generate and GPG-sign SHA-256 checksums
+        run: |
+          find ./artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) -print0 \
+            | sort -z \
+            | while IFS= read -r -d '' f; do
+                sha256sum "$f" | awk -v name="$(basename "$f")" '{ print $1 "  " name }'
+              done > SHA256SUMS
+          gpg --batch --yes --detach-sign --armor SHA256SUMS
+          cat SHA256SUMS
+
       - name: Commit version bump
         if: needs.validate.outputs.manifest_changed == 'true'
         run: |
@@ -179,9 +196,15 @@ jobs:
             ## Toggly CLI ${{ needs.validate.outputs.version }}
 
             See the [CLI documentation](https://docs.toggly.io/docs/using-toggly/cli) for installation instructions.
+
+            Release assets include `SHA256SUMS` and `SHA256SUMS.asc` (GPG-signed).
+            Authenticode for Windows `toggly-cli.exe` is not enabled yet — see
+            `.github/package-registry/nuget-signing-status.md`.
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
+            SHA256SUMS
+            SHA256SUMS.asc
           draft: false
           prerelease: false
         env:

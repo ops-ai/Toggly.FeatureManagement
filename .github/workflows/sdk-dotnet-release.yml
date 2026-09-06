@@ -239,12 +239,36 @@ jobs:
         env:
           NUGET_SIGN_CA_CHAIN_B64: ${{ secrets.NUGET_SIGN_CA_CHAIN_B64 }}
 
-      - name: Sign NuGet packages
+      - name: Sign NuGet packages and symbols
         id: sign_packages
         if: steps.should_publish.outputs.publish == 'true'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
+          shopt -s nullglob
+          NUPKGS=(./nupkgs/*.nupkg)
+          SNUPKGS=(./nupkgs/*.snupkg)
+          if [ ${#NUPKGS[@]} -eq 0 ]; then
+            echo "No .nupkg files found to sign in ./nupkgs"
+            ls -la ./nupkgs || true
+            exit 1
+          fi
+          if [ ${#SNUPKGS[@]} -eq 0 ]; then
+            echo "No .snupkg files found to sign in ./nupkgs"
+            ls -la ./nupkgs || true
+            exit 1
+          fi
+
           NuGetKeyVaultSignTool sign ./nupkgs/*.nupkg \
+            --file-digest sha256 \
+            --timestamp-rfc3161 http://timestamp.globalsign.com/tsa/r6advanced1 \
+            --timestamp-digest sha256 \
+            --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
+            --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
+            --azure-key-vault-tenant-id "$AZURE_KEY_VAULT_TENANT_ID" \
+            --azure-key-vault-client-secret "$AZURE_KEY_VAULT_CLIENT_SECRET" \
+            --azure-key-vault-certificate "$AZURE_KEY_VAULT_CERTIFICATE"
+
+          NuGetKeyVaultSignTool sign ./nupkgs/*.snupkg \
             --file-digest sha256 \
             --timestamp-rfc3161 http://timestamp.globalsign.com/tsa/r6advanced1 \
             --timestamp-digest sha256 \
@@ -272,10 +296,34 @@ jobs:
           fi
 
           echo "Pushing package: $PACKAGE_TO_PUSH"
+          # nuget.org accepts the adjacent .snupkg when pushing the .nupkg from the same folder.
           dotnet nuget push "$PACKAGE_TO_PUSH" \
             --api-key ${{ secrets.NUGET_API_KEY }} \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
+
+          SYMBOL_TO_PUSH="${PACKAGE_TO_PUSH%.nupkg}.snupkg"
+          if [ -f "$SYMBOL_TO_PUSH" ]; then
+            echo "Pushing symbols: $SYMBOL_TO_PUSH"
+            dotnet nuget push "$SYMBOL_TO_PUSH" \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          else
+            echo "Expected symbol package missing: $SYMBOL_TO_PUSH"
+            exit 1
+          fi
+
+      - name: Upload signed packages for release checksums
+        if: steps.should_publish.outputs.publish == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-${{ matrix.project }}
+          path: |
+            ${{ env.SDK_ROOT }}/nupkgs/*.nupkg
+            ${{ env.SDK_ROOT }}/nupkgs/*.snupkg
+          if-no-files-found: error
+          retention-days: 14
 
   release:
     needs: [publish, validate]
@@ -334,6 +382,22 @@ jobs:
           git tag -s -m ".NET SDK v${{ needs.validate.outputs.version }}" "dotnet-sdk-v${{ needs.validate.outputs.version }}"
           git push origin "dotnet-sdk-v${{ needs.validate.outputs.version }}"
 
+      - name: Download signed NuGet packages
+        uses: actions/download-artifact@v8
+        with:
+          path: ./release-packages
+          pattern: nuget-*
+          merge-multiple: true
+
+      - name: Generate and GPG-sign SHA-256 checksums
+        run: |
+          cd ./release-packages
+          sha256sum *.nupkg *.snupkg | sort -k2 > ../SHA256SUMS
+          cd ..
+          gpg --batch --yes --detach-sign --armor SHA256SUMS
+          echo "Checksum entries: $(wc -l < SHA256SUMS)"
+          cat SHA256SUMS
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -364,9 +428,16 @@ jobs:
             | `Toggly.Storage.EntityFramework` | Entity Framework storage provider |
             | `Toggly.Metrics.SystemMetrics` | System metrics collection |
 
+            ### Verification
+
+            Release assets include `SHA256SUMS` and `SHA256SUMS.asc` (GPG-signed with the same key used for the release tag). Packages are also NuGet-signed via Azure Key Vault.
+
             ### Requirements
 
             - .NET Standard 2.1 / .NET Core 3.1 / .NET 5.0–10.0
+          files: |
+            SHA256SUMS
+            SHA256SUMS.asc
           prerelease: ${{ github.event.inputs.prerelease }}
           generate_release_notes: true
         env:

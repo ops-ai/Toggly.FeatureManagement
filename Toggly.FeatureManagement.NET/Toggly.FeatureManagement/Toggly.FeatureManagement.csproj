@@ -21,12 +21,6 @@
 		<Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
 	</ItemGroup>
 
-	<PropertyGroup>
-		<IncludeSymbols>true</IncludeSymbols>
-		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
-	</PropertyGroup>
-
-
 	<!-- Common packages for all target frameworks -->
 	<ItemGroup>
 		<PackageReference Include="Azure.Messaging.WebPubSub" Version="1.*" />
@@ -42,10 +36,6 @@
 		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="3.1.0" />
 		<PackageReference Include="Microsoft.FeatureManagement" Version="*" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1">
-		  <PrivateAssets>all</PrivateAssets>
-		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
 		<PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="*">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

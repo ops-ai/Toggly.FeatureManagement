@@ -54,3 +54,6 @@ jobs:
 
       - name: Verify NuGet CI props for GitHub Actions
         run: node --test .github/package-registry/verify-nuget-ci-props.test.mjs
+
+      - name: Verify NuGet SourceLink, deterministic packs, and signing coverage
+        run: node --test .github/package-registry/verify-nuget-sourcelink.test.mjs

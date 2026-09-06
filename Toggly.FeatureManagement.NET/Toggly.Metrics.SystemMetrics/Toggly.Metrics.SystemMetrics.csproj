@@ -14,10 +14,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
+
     <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="5.0.1" />
   </ItemGroup>
 
@@ -25,13 +22,7 @@
     <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-  </PropertyGroup>
-
-
-  <ItemGroup>
+<ItemGroup>
     <None Include="..\README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
