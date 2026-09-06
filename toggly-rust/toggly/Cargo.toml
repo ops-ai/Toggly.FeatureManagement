@@ -20,7 +20,14 @@ native-tls = ["reqwest/native-tls"]
 # Local Prometheus / `metrics` crate integration — not Toggly gRPC export.
 metrics = ["dep:metrics", "dep:prometheus"]
 # Batched Usage.SendStats + Metrics.SendMetrics via tonic/prost.
-telemetry = ["dep:tonic", "dep:prost", "dep:prost-types", "dep:tower"]
+# Also gates build-dep tonic-build so feature-off stays free of prost tooling.
+telemetry = [
+    "dep:tonic",
+    "dep:prost",
+    "dep:prost-types",
+    "dep:tower",
+    "dep:tonic-build",
+]
 
 [dependencies]
 tokio = { workspace = true }
@@ -62,7 +69,7 @@ futures-util = { workspace = true }
 url = "2.5"
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-build = { version = "0.12", optional = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }

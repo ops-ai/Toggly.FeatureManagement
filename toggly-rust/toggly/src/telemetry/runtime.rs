@@ -21,7 +21,7 @@ pub struct TelemetryRuntimeConfig {
     pub environment: String,
     /// gRPC base URL (default `https://app.toggly.io/`).
     pub metrics_base_url: String,
-    /// Explicit usage opt-in/out; `None` uses default (app key present, env not disabled).
+    /// Explicit usage opt-in/out; `None` uses default when recording is allowed.
     pub enable_usage_tracking: Option<bool>,
     /// Explicit metrics opt-in/out; `None` uses the same default as usage.
     pub enable_metrics: Option<bool>,
@@ -90,6 +90,23 @@ fn resolve_enabled(explicit: Option<bool>, default_on: bool) -> bool {
     explicit.unwrap_or(default_on)
 }
 
+/// True when recording/export is allowed.
+///
+/// Without the `telemetry` Cargo feature there is no native transport, so we
+/// only allow buffering when the caller injected senders (tests). Otherwise
+/// tracking stays off so identity maps cannot grow unbounded.
+fn recording_allowed(senders_provided: bool) -> bool {
+    #[cfg(feature = "telemetry")]
+    {
+        let _ = senders_provided;
+        true
+    }
+    #[cfg(not(feature = "telemetry"))]
+    {
+        senders_provided
+    }
+}
+
 /// Owns usage + metrics batchers, flush timers, and process-exit flush.
 pub struct TelemetryRuntime {
     inner: Arc<Inner>,
@@ -115,9 +132,21 @@ impl TelemetryRuntime {
     /// Create and start batchers / flush timers when either side is enabled.
     pub fn start(config: TelemetryRuntimeConfig) -> Self {
         let has_app_key = !config.app_key.is_empty();
-        let default_on = has_app_key && !telemetry_env_disabled();
-        let enable_usage = resolve_enabled(config.enable_usage_tracking, default_on);
-        let enable_metrics = resolve_enabled(config.enable_metrics, default_on);
+        let allowed = recording_allowed(config.senders_provided);
+        // Feature-off (no injected senders): defaults stay off — no unbounded buffering.
+        let default_on = allowed && has_app_key && !telemetry_env_disabled();
+
+        let mut enable_usage = resolve_enabled(config.enable_usage_tracking, default_on);
+        let mut enable_metrics = resolve_enabled(config.enable_metrics, default_on);
+
+        let warn_feature_off = !allowed
+            && (config.enable_usage_tracking == Some(true)
+                || config.enable_metrics == Some(true));
+
+        if !allowed {
+            enable_usage = false;
+            enable_metrics = false;
+        }
 
         let (cancel_tx, cancel_rx) = watch::channel(false);
 
@@ -141,12 +170,12 @@ impl TelemetryRuntime {
             inner: inner.clone(),
         };
 
-        if !enable_usage && !enable_metrics {
-            return runtime;
+        if warn_feature_off {
+            runtime.warn_feature_required();
         }
 
-        if !config.senders_provided {
-            runtime.warn_if_missing_native();
+        if !enable_usage && !enable_metrics {
+            return runtime;
         }
 
         if enable_usage {
@@ -158,11 +187,7 @@ impl TelemetryRuntime {
                 None,
             ));
             if !config.usage_flush_interval.is_zero() {
-                runtime.spawn_flush_loop(
-                    cancel_rx.clone(),
-                    config.usage_flush_interval,
-                    true,
-                );
+                runtime.spawn_flush_loop(cancel_rx.clone(), config.usage_flush_interval, true);
             }
         }
 
@@ -173,35 +198,24 @@ impl TelemetryRuntime {
                 config.instance_name,
             ));
             if !config.metrics_flush_interval.is_zero() {
-                runtime.spawn_flush_loop(
-                    cancel_rx,
-                    config.metrics_flush_interval,
-                    false,
-                );
+                runtime.spawn_flush_loop(cancel_rx, config.metrics_flush_interval, false);
             }
         }
 
         runtime
     }
 
-    fn warn_if_missing_native(&self) {
-        #[cfg(not(feature = "telemetry"))]
+    fn warn_feature_required(&self) {
+        if self
+            .inner
+            .warned_missing_transport
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
         {
-            if self
-                .inner
-                .warned_missing_transport
-                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
-            {
-                warn!(
-                    "Usage/metrics enabled but the optional `telemetry` Cargo feature is off. \
-                     Enable `toggly/telemetry` (tonic) to send telemetry to Toggly."
-                );
-            }
-        }
-        #[cfg(feature = "telemetry")]
-        {
-            let _ = &self.inner;
+            warn!(
+                "Usage/metrics requested but the optional `telemetry` Cargo feature is off. \
+                 Recording is a no-op until you enable `toggly/telemetry` (or inject senders)."
+            );
         }
     }
 
@@ -354,7 +368,9 @@ impl Inner {
                         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
                         .is_ok()
                     {
-                        warn!("Failed to create Toggly gRPC clients; telemetry send disabled: {err}");
+                        warn!(
+                            "Failed to create Toggly gRPC clients; telemetry send disabled: {err}"
+                        );
                     }
                 }
             }
@@ -362,113 +378,109 @@ impl Inner {
 
         #[cfg(not(feature = "telemetry"))]
         {
-            // Already warned at start; keep base URL for feature-on rebuilds.
             let _ = &self.metrics_base_url;
         }
     }
 
     async fn flush_usage(&self) {
-        if !self
+        if self
             .sending_usage
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
+            .is_err()
         {
             return;
         }
 
-        let result = async {
-            let empty = {
-                let guard = self.usage_batcher.lock();
-                match guard.as_ref() {
-                    Some(b) => b.is_empty(),
-                    None => true,
-                }
-            };
-            if empty {
-                return;
+        let empty = {
+            let guard = self.usage_batcher.lock();
+            match guard.as_ref() {
+                Some(b) => b.is_empty(),
+                None => true,
             }
+        };
+        if empty {
+            self.sending_usage.store(false, Ordering::SeqCst);
+            return;
+        }
 
-            self.ensure_native_clients().await;
-            let sender = self.senders.lock().usage.clone();
-            let Some(sender) = sender else {
-                debug!("Usage flush skipped: no gRPC client");
-                return;
-            };
+        self.ensure_native_clients().await;
+        let sender = self.senders.lock().usage.clone();
+        let Some(sender) = sender else {
+            debug!("Usage flush skipped: no gRPC client");
+            self.sending_usage.store(false, Ordering::SeqCst);
+            return;
+        };
 
-            let drained = {
-                let guard = self.usage_batcher.lock();
-                match guard.as_ref() {
-                    Some(b) => b.build_and_reset(),
-                    None => None,
-                }
-            };
-            let Some((payload, snapshot)) = drained else {
-                return;
-            };
+        let drained = {
+            let guard = self.usage_batcher.lock();
+            match guard.as_ref() {
+                Some(b) => b.build_and_reset(),
+                None => None,
+            }
+        };
+        let Some((payload, snapshot)) = drained else {
+            self.sending_usage.store(false, Ordering::SeqCst);
+            return;
+        };
 
-            if let Err(err) = sender.send_stats(&payload).await {
-                error!("Failed to send usage stats: {err}");
-                // Snapshot/restore unique maps + counters (.NET lesson).
-                if let Some(batcher) = self.usage_batcher.lock().as_ref() {
-                    batcher.restore_snapshot(snapshot);
-                }
+        if let Err(err) = sender.send_stats(&payload).await {
+            error!("Failed to send usage stats: {err}");
+            if let Some(batcher) = self.usage_batcher.lock().as_ref() {
+                batcher.restore_snapshot(snapshot);
             }
         }
-        .await;
 
-        let _ = result;
         self.sending_usage.store(false, Ordering::SeqCst);
     }
 
     async fn flush_metrics(&self) {
-        if !self
+        if self
             .sending_metrics
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
+            .is_err()
         {
             return;
         }
 
-        let result = async {
-            let empty = {
-                let guard = self.metrics_batcher.lock();
-                match guard.as_ref() {
-                    Some(b) => b.is_empty(),
-                    None => true,
-                }
-            };
-            if empty {
-                return;
+        let empty = {
+            let guard = self.metrics_batcher.lock();
+            match guard.as_ref() {
+                Some(b) => b.is_empty(),
+                None => true,
             }
+        };
+        if empty {
+            self.sending_metrics.store(false, Ordering::SeqCst);
+            return;
+        }
 
-            self.ensure_native_clients().await;
-            let sender = self.senders.lock().metrics.clone();
-            let Some(sender) = sender else {
-                debug!("Metrics flush skipped: no gRPC client");
-                return;
-            };
+        self.ensure_native_clients().await;
+        let sender = self.senders.lock().metrics.clone();
+        let Some(sender) = sender else {
+            debug!("Metrics flush skipped: no gRPC client");
+            self.sending_metrics.store(false, Ordering::SeqCst);
+            return;
+        };
 
-            let drained = {
-                let guard = self.metrics_batcher.lock();
-                match guard.as_ref() {
-                    Some(b) => b.build_and_reset(),
-                    None => None,
-                }
-            };
-            let Some((payload, snapshot)) = drained else {
-                return;
-            };
+        let drained = {
+            let guard = self.metrics_batcher.lock();
+            match guard.as_ref() {
+                Some(b) => b.build_and_reset(),
+                None => None,
+            }
+        };
+        let Some((payload, snapshot)) = drained else {
+            self.sending_metrics.store(false, Ordering::SeqCst);
+            return;
+        };
 
-            if let Err(err) = sender.send_metrics(&payload).await {
-                error!("Failed to send metrics: {err}");
-                if let Some(batcher) = self.metrics_batcher.lock().as_ref() {
-                    batcher.restore_snapshot(snapshot);
-                }
+        if let Err(err) = sender.send_metrics(&payload).await {
+            error!("Failed to send metrics: {err}");
+            if let Some(batcher) = self.metrics_batcher.lock().as_ref() {
+                batcher.restore_snapshot(snapshot);
             }
         }
-        .await;
 
-        let _ = result;
         self.sending_metrics.store(false, Ordering::SeqCst);
     }
 }
@@ -476,7 +488,6 @@ impl Inner {
 impl Drop for TelemetryRuntime {
     fn drop(&mut self) {
         let _ = self.inner.cancel_tx.send(true);
-        // Best-effort: if a Tokio runtime is available, spawn a final flush.
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let inner = self.inner.clone();
             handle.spawn(async move {
@@ -536,13 +547,60 @@ mod tests {
         config.senders_provided = true;
 
         let runtime = TelemetryRuntime::start(config);
+        assert!(runtime.usage_enabled());
         runtime.record_check("FeatureA", true, Some("user-1"), None, false);
         runtime.flush_all().await;
 
         assert_eq!(*failing.calls.lock().unwrap(), 1);
-        // Restored — second flush should attempt again.
         runtime.flush_all().await;
         assert_eq!(*failing.calls.lock().unwrap(), 2);
         runtime.close().await;
+    }
+
+    #[tokio::test]
+    async fn feature_off_without_senders_does_not_buffer() {
+        // Without `telemetry` feature and without injected senders, even an
+        // explicit enable must no-op (no batcher / no identity growth).
+        #[cfg(not(feature = "telemetry"))]
+        {
+            let config = TelemetryRuntimeConfig::from_client_config(
+                "app",
+                "Production",
+                None,
+                Some(true),
+                Some(true),
+                Some(Duration::from_secs(0)),
+                Some(Duration::from_secs(0)),
+                None,
+                None,
+            );
+            let runtime = TelemetryRuntime::start(config);
+            assert!(!runtime.usage_enabled());
+            assert!(!runtime.metrics_enabled());
+            runtime.record_check("FeatureA", true, Some("user-1"), None, false);
+            runtime.record_usage("FeatureA", Some("user-1"), "enabled");
+            runtime.measure("m", 1.0, None);
+            // No batchers — flush is a no-op.
+            runtime.flush_all().await;
+            runtime.close().await;
+        }
+        #[cfg(feature = "telemetry")]
+        {
+            // With feature on, defaults/explicit enable create batchers.
+            let config = TelemetryRuntimeConfig::from_client_config(
+                "app",
+                "Production",
+                None,
+                Some(true),
+                Some(false),
+                Some(Duration::from_secs(0)),
+                Some(Duration::from_secs(0)),
+                None,
+                None,
+            );
+            let runtime = TelemetryRuntime::start(config);
+            assert!(runtime.usage_enabled());
+            runtime.close().await;
+        }
     }
 }

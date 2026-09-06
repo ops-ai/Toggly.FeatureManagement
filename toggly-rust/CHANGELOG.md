@@ -21,6 +21,11 @@
 - Workspace package version bumped to 0.5.0; path dependency pins updated.
 - Existing Cargo feature `metrics` remains local Prometheus only — distinct
   from Toggly gRPC telemetry.
+- Without the `telemetry` feature, usage/metrics tracking defaults off and
+  recording is a no-op (no unbounded identity buffering). Enable
+  `toggly/telemetry` (or inject senders in tests) to record and export.
+- `tonic-build` is an optional build-dependency gated by `telemetry`, so
+  feature-off builds do not pull prost/tonic build tooling.
 
 ## 0.4.0
 

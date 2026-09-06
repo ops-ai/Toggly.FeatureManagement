@@ -1,7 +1,8 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Only codegen when the optional `telemetry` Cargo feature is enabled so
-    // core builds stay free of tonic/prost.
-    if std::env::var_os("CARGO_FEATURE_TELEMETRY").is_some() {
+    // `tonic-build` is an optional build-dependency enabled only by the
+    // `telemetry` feature — feature-off must not compile or link prost tooling.
+    #[cfg(feature = "telemetry")]
+    {
         tonic_build::configure()
             .build_server(false)
             .compile_protos(&["proto/usage.proto", "proto/metrics.proto"], &["proto"])?;
