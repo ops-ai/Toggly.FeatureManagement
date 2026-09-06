@@ -4,7 +4,7 @@ import { createTogglyClient, type Flags } from './index';
 describe('createTogglyClient', () => {
   const mockFetch = vi.fn();
   const defaultConfig = {
-    baseURI: 'https://client.toggly.io',
+    baseURI: 'https://definitions.toggly.io',
     environment: 'Production',
     appKey: 'test-app',
     fetch: mockFetch,
@@ -42,7 +42,7 @@ describe('createTogglyClient', () => {
     expect(flags).toEqual(mockFlags);
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://client.toggly.io/test-app/evaluated-signed',
+      'https://definitions.toggly.io/evaluated-signed/test-app/Production',
       expect.objectContaining({
         method: 'GET',
         headers: {
@@ -287,7 +287,7 @@ describe('createTogglyClient', () => {
 
   it('should use flagDefaults when appKey is not provided', async () => {
     const client = createTogglyClient({
-      baseURI: 'https://client.toggly.io',
+      baseURI: 'https://definitions.toggly.io',
       environment: 'Production',
       // No appKey
       flagDefaults: {
@@ -319,10 +319,11 @@ describe('createTogglyClient', () => {
 
     await client.getFlags();
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      'https://client.toggly.io/test-app/evaluated-signed?u=user-123',
-      expect.any(Object)
+    const fetchedUrl = new URL(String(mockFetch.mock.calls[0]?.[0]));
+    expect(fetchedUrl.origin + fetchedUrl.pathname).toBe(
+      'https://definitions.toggly.io/evaluated-signed/test-app/Production',
     );
+    expect(fetchedUrl.searchParams.get('u')).toBe('user-123');
   });
 
   it('should handle baseURI with trailing slash', async () => {
@@ -333,13 +334,33 @@ describe('createTogglyClient', () => {
 
     const client = createTogglyClient({
       ...defaultConfig,
-      baseURI: 'https://client.toggly.io/',
+      baseURI: 'https://definitions.toggly.io/',
     });
 
     await client.getFlags();
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://client.toggly.io/test-app/evaluated-signed',
+      'https://definitions.toggly.io/evaluated-signed/test-app/Production',
+      expect.any(Object)
+    );
+  });
+
+  it('should include environment in the evaluated-signed path', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ Test1: true }),
+    } as Response);
+
+    const client = createTogglyClient({
+      ...defaultConfig,
+      baseURI: 'https://example.invalid',
+      environment: 'Staging',
+    });
+
+    await client.getFlags();
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://example.invalid/evaluated-signed/test-app/Staging',
       expect.any(Object)
     );
   });
@@ -359,7 +380,7 @@ describe('createTogglyClient', () => {
     await client.getFlags();
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://definitions.toggly.io/test-app/evaluated-signed',
+      'https://definitions.toggly.io/evaluated-signed/test-app/Production',
       expect.any(Object)
     );
   });
@@ -373,7 +394,7 @@ describe('createTogglyClient', () => {
 
       expect(() => {
         createTogglyClient({
-          baseURI: 'https://client.toggly.io',
+          baseURI: 'https://definitions.toggly.io',
           environment: 'Production',
           appKey: 'test-app',
           // No fetch provided

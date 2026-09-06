@@ -1,6 +1,8 @@
 # @ops-ai/toggly-client-core
 
-Framework-agnostic Toggly client for feature flag evaluation
+Framework-agnostic Toggly client for feature flag evaluation. Flag fetches use
+`${baseURI}/evaluated-signed/${appKey}/${environment}` (default base
+`https://definitions.toggly.io`).
 
 ## Install
 
