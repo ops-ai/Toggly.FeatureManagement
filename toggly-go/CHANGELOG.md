@@ -11,6 +11,19 @@
   Observe [OPS-916].
 - gRPC `UA` metadata on usage/metrics sends; best-effort flush on `Close`
   [OPS-916].
+- Ambient EvalContext DX: `togglyhttp.FromHttpRequest` maps UA /
+  Accept-Language / country headers (`cf-ipcountry`, `x-vercel-ip-country`,
+  `cloudfront-viewer-country`) [OPS-934].
+- `togglyhttp.MiddlewareWith` / `Options` with optional `GetIdentity`,
+  `GetGroups`, `GetClaims`, `GetContext`; request headers always enrich
+  missing `Request` fields.
+- `Client.IsEnabled` merges request-scoped ambient context
+  (`toggly.WithEvalContext` / `togglyctx.With`) with per-call Context —
+  non-empty / non-nil per-call fields win field-by-field.
+- `toggly.MergeContext` / `ResolveEvalContext` and `togglyctx.Merge` /
+  `Resolve` helpers.
+- `FromHttpRequest` merges `extras.Request` field-by-field with headers
+  (non-empty extras win), matching Middleware / BuildContext.
 
 ### Changed
 - Usage and metrics protos match .NET field shapes (`variantStats`,

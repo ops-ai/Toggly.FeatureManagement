@@ -57,3 +57,6 @@ jobs:
 
       - name: Verify NuGet SourceLink, deterministic packs, and signing coverage
         run: node --test .github/package-registry/verify-nuget-sourcelink.test.mjs
+
+      - name: Verify NuGet trusted publishing contract
+        run: node --test .github/package-registry/verify-nuget-trusted-publishing.test.mjs
