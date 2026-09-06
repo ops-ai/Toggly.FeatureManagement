@@ -15,6 +15,11 @@ logger = logging.getLogger("toggly.telemetry")
 DEFAULT_METRICS_BASE_URL = "https://app.toggly.io/"
 DEFAULT_TELEMETRY_FLUSH_SECONDS = 60.0
 
+# HTTP/2 metadata is case-insensitive; .NET/Go/Node send ``UA``.
+# grpcio requires lowercase ASCII keys, so the Python client uses ``ua``
+# with the same user-agent semantics.
+GRPC_USER_AGENT_METADATA_KEY = "ua"
+
 
 def hash_identity(identity: str) -> int:
     """FNV-1a 32-bit as signed int32 (UTF-8 bytes; matches Go/Node)."""
@@ -58,7 +63,7 @@ def grpc_target(base_url: str) -> str:
 
 
 def resolve_user_agent(override: Optional[str] = None) -> str:
-    """Return gRPC ``UA`` metadata value."""
+    """Return gRPC user-agent metadata value (``ua`` key; matches .NET/Go UA)."""
     return override or f"toggly-python/{__version__}"
 
 
@@ -324,7 +329,7 @@ def create_grpc_clients(
     channel = grpc.secure_channel(target, grpc.ssl_channel_credentials())
     shared = _SharedChannel(channel)
     ua = resolve_user_agent(user_agent)
-    default_meta = {"UA": ua}
+    default_meta = {GRPC_USER_AGENT_METADATA_KEY: ua}
 
     usage_stub = usage_pb2_grpc.UsageStub(channel)
     metrics_stub = metrics_pb2_grpc.MetricsStub(channel)

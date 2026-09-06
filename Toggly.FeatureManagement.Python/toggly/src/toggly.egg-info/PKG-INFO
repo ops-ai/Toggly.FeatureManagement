@@ -29,7 +29,7 @@ License-File: LICENSE
 Provides-Extra: websocket
 Requires-Dist: websocket-client>=1.6.0; extra == "websocket"
 Provides-Extra: telemetry
-Requires-Dist: grpcio>=1.60.0; extra == "telemetry"
+Requires-Dist: grpcio>=1.80.0; extra == "telemetry"
 Requires-Dist: protobuf>=4.25.0; extra == "telemetry"
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0.0; extra == "dev"
@@ -39,7 +39,7 @@ Requires-Dist: mypy>=1.0.0; extra == "dev"
 Requires-Dist: ruff>=0.1.0; extra == "dev"
 Requires-Dist: websockets>=12.0; extra == "dev"
 Requires-Dist: websocket-client>=1.6.0; extra == "dev"
-Requires-Dist: grpcio>=1.60.0; extra == "dev"
+Requires-Dist: grpcio>=1.80.0; extra == "dev"
 Requires-Dist: protobuf>=4.25.0; extra == "dev"
 Dynamic: license-file
 

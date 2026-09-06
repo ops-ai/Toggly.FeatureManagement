@@ -113,6 +113,8 @@ async def main():
 When an `app_key` is set, the client batches feature usage and business metrics
 and sends them to Toggly over gRPC (~1 minute, plus flush on `close()` / process
 exit). Core evaluate works without gRPC; install `toggly[telemetry]` to send.
+gRPC calls attach metadata key `ua` (lowercase for grpcio; same semantics as
+.NET/Go/Node `UA`).
 
 ```python
 # Checks are recorded automatically from is_enabled when enable_usage_tracking

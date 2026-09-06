@@ -7,12 +7,13 @@
 ### Added
 - Batched gRPC telemetry for feature usage (`Usage.SendStats`) and business
   metrics (`Metrics.SendMetrics`), matching .NET / Go / Node payload shape
-  (`variantStats` / `variantValues`, UTF-8 FNV-1a identity hashes, `UA` metadata).
+  (`variantStats` / `variantValues`, UTF-8 FNV-1a identity hashes, `ua`
+  metadata — same semantics as .NET/Go/Node `UA`; lowercase for grpcio).
 - Public APIs: `record_usage`, `record_view`, `measure`, `increment_counter`,
   `observe`, `flush_telemetry`; automatic check recording from `is_enabled`
   when usage tracking is enabled.
-- Optional `telemetry` extra (`grpcio` + `protobuf`) so core evaluate stays
-  zero-dependency; install with `pip install toggly[telemetry]`.
+- Optional `telemetry` extra (`grpcio>=1.80.0` + `protobuf`) so core evaluate
+  stays zero-dependency; install with `pip install toggly[telemetry]`.
 - Config: `enable_metrics` (default on), `metrics_base_url`, flush intervals,
   `instance_name`, `app_version`.
 
