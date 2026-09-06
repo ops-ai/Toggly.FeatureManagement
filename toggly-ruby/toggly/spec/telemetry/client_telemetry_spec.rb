@@ -35,15 +35,11 @@ RSpec.describe "Client telemetry wiring" do
   end
 
   around do |example|
-    previous = ENV["TOGGLY_DISABLE_TELEMETRY"]
+    previous = ENV.fetch("TOGGLY_DISABLE_TELEMETRY", nil)
     ENV.delete("TOGGLY_DISABLE_TELEMETRY")
     example.run
   ensure
-    if previous.nil?
-      ENV["TOGGLY_DISABLE_TELEMETRY"] = "1"
-    else
-      ENV["TOGGLY_DISABLE_TELEMETRY"] = previous
-    end
+    ENV["TOGGLY_DISABLE_TELEMETRY"] = previous.nil? ? "1" : previous
   end
 
   before do

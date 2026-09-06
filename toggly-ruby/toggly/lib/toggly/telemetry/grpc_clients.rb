@@ -45,15 +45,15 @@ module Toggly
       # nil until assigned — callers must assign the returned object, not mutate
       # ``msg.time.seconds``.
       #
-      # @param ts [Hash, nil]
+      # @param timestamp_hash [Hash, nil]
       # @return [Google::Protobuf::Timestamp, nil]
-      def build_timestamp(ts)
-        return nil unless ts.is_a?(Hash)
+      def build_timestamp(timestamp_hash)
+        return nil unless timestamp_hash.is_a?(Hash)
 
         require "google/protobuf/timestamp_pb"
         Google::Protobuf::Timestamp.new(
-          seconds: ts[:seconds].to_i,
-          nanos: ts[:nanos].to_i
+          seconds: timestamp_hash[:seconds].to_i,
+          nanos: timestamp_hash[:nanos].to_i
         )
       end
 
@@ -194,38 +194,47 @@ module Toggly
             totalUniqueUsers: payload[:totalUniqueUsers].to_i,
             uniqueUserHashes: Array(payload[:uniqueUserHashes]).map(&:to_i)
           )
-          ts = GrpcClients.build_timestamp(payload[:time])
-          msg.time = ts if ts
+          apply_feature_stat_metadata(msg, payload)
+          Array(payload[:stats]).each do |stat|
+            next unless stat.is_a?(Hash)
+
+            msg.stats << stat_message_from_hash(stat)
+          end
+          msg
+        end
+
+        def self.apply_feature_stat_metadata(msg, payload)
+          timestamp = GrpcClients.build_timestamp(payload[:time])
+          msg.time = timestamp if timestamp
           msg.instanceName = payload[:instanceName].to_s if payload[:instanceName]
           msg.appVersion = payload[:appVersion].to_s if payload[:appVersion]
           process_start = GrpcClients.build_timestamp(payload[:processStartTime])
           msg.processStartTime = process_start if process_start
-
-          Array(payload[:stats]).each do |stat|
-            next unless stat.is_a?(Hash)
-
-            sm = Pb::Usage::StatMessage.new(
-              feature: stat[:feature].to_s,
-              uniqueContextIdentifierEnabledCount: stat[:uniqueContextIdentifierEnabledCount].to_i,
-              uniqueContextIdentifierDisabledCount: stat[:uniqueContextIdentifierDisabledCount].to_i,
-              uniqueUsersUsedCount: stat[:uniqueUsersUsedCount].to_i,
-              uniqueUserHashes: Array(stat[:uniqueUserHashes]).map(&:to_i),
-              uniqueViewedUserHashes: Array(stat[:uniqueViewedUserHashes]).map(&:to_i)
-            )
-            (stat[:variantStats] || {}).each do |name, vs|
-              next unless vs.is_a?(Hash)
-
-              sm.variantStats[name.to_s] = Pb::Usage::VariantStats.new(
-                checkCount: vs[:checkCount].to_i,
-                requestCount: vs[:requestCount].to_i,
-                usedCount: vs[:usedCount].to_i,
-                viewedCount: vs[:viewedCount].to_i
-              )
-            end
-            msg.stats << sm
-          end
-          msg
         end
+        private_class_method :apply_feature_stat_metadata
+
+        def self.stat_message_from_hash(stat)
+          sm = Pb::Usage::StatMessage.new(
+            feature: stat[:feature].to_s,
+            uniqueContextIdentifierEnabledCount: stat[:uniqueContextIdentifierEnabledCount].to_i,
+            uniqueContextIdentifierDisabledCount: stat[:uniqueContextIdentifierDisabledCount].to_i,
+            uniqueUsersUsedCount: stat[:uniqueUsersUsedCount].to_i,
+            uniqueUserHashes: Array(stat[:uniqueUserHashes]).map(&:to_i),
+            uniqueViewedUserHashes: Array(stat[:uniqueViewedUserHashes]).map(&:to_i)
+          )
+          (stat[:variantStats] || {}).each do |name, vs|
+            next unless vs.is_a?(Hash)
+
+            sm.variantStats[name.to_s] = Pb::Usage::VariantStats.new(
+              checkCount: vs[:checkCount].to_i,
+              requestCount: vs[:requestCount].to_i,
+              usedCount: vs[:usedCount].to_i,
+              viewedCount: vs[:viewedCount].to_i
+            )
+          end
+          sm
+        end
+        private_class_method :stat_message_from_hash
       end
 
       # Converts batcher hashes into Metrics.MetricStat and sends via stub.
@@ -256,11 +265,22 @@ module Toggly
             appKey: payload[:appKey].to_s,
             environment: payload[:environment].to_s
           )
-          ts = GrpcClients.build_timestamp(payload[:time])
-          msg.time = ts if ts
-          msg.instanceName = payload[:instanceName].to_s if payload[:instanceName]
+          apply_metric_stat_metadata(msg, payload)
+          append_metric_stats(msg, payload[:stats])
+          append_metric_counters(msg, payload[:counters])
+          append_metric_observations(msg, payload[:observations])
+          msg
+        end
 
-          Array(payload[:stats]).each do |item|
+        def self.apply_metric_stat_metadata(msg, payload)
+          timestamp = GrpcClients.build_timestamp(payload[:time])
+          msg.time = timestamp if timestamp
+          msg.instanceName = payload[:instanceName].to_s if payload[:instanceName]
+        end
+        private_class_method :apply_metric_stat_metadata
+
+        def self.append_metric_stats(msg, items)
+          Array(items).each do |item|
             next unless item.is_a?(Hash)
 
             sm = Pb::Metrics::MetricStatMessage.new(metric: item[:metric].to_s)
@@ -268,8 +288,11 @@ module Toggly
             fill_variant_values(sm, item[:variantValues])
             msg.stats << sm
           end
+        end
+        private_class_method :append_metric_stats
 
-          Array(payload[:counters]).each do |item|
+        def self.append_metric_counters(msg, items)
+          Array(items).each do |item|
             next unless item.is_a?(Hash)
 
             cm = Pb::Metrics::MetricCounterMessage.new(metric: item[:metric].to_s)
@@ -277,8 +300,11 @@ module Toggly
             fill_variant_values(cm, item[:variantValues])
             msg.counters << cm
           end
+        end
+        private_class_method :append_metric_counters
 
-          Array(payload[:observations]).each do |item|
+        def self.append_metric_observations(msg, items)
+          Array(items).each do |item|
             next unless item.is_a?(Hash)
 
             om = Pb::Metrics::MetricObservationMessage.new(metric: item[:metric].to_s)
@@ -288,8 +314,8 @@ module Toggly
             fill_variant_values(om, item[:variantValues])
             msg.observations << om
           end
-          msg
         end
+        private_class_method :append_metric_observations
 
         def self.fill_variant_values(target, variant_values)
           return unless variant_values.is_a?(Hash)
@@ -298,6 +324,7 @@ module Toggly
             target.variantValues[name.to_s] = value.to_f
           end
         end
+        private_class_method :fill_variant_values
       end
     end
   end

@@ -6,6 +6,7 @@ module Toggly
     class Runtime
       TIMER_JOIN_TIMEOUT_SECONDS = 2.0
 
+      # rubocop:disable Metrics/ParameterLists -- mirrors other SDK telemetry config surfaces
       def initialize(
         app_key:,
         environment:,
@@ -22,6 +23,7 @@ module Toggly
         metrics_client_provided: false,
         logger: nil
       )
+        # rubocop:enable Metrics/ParameterLists
         has_app_key = !app_key.nil? && !app_key.to_s.empty?
         telemetry_env_disabled = ENV["TOGGLY_DISABLE_TELEMETRY"] == "1"
         default_on = has_app_key && !telemetry_env_disabled
@@ -29,8 +31,10 @@ module Toggly
         @app_key = app_key
         @environment = environment
         @metrics_base_url = normalize_url(metrics_base_url || GrpcClients::DEFAULT_METRICS_BASE_URL)
-        @enable_usage = enable_usage_tracking.nil? ? default_on : !!enable_usage_tracking
-        @enable_metrics = enable_metrics.nil? ? default_on : !!enable_metrics
+        @enable_usage = default_on
+        @enable_usage = enable_usage_tracking ? true : false unless enable_usage_tracking.nil?
+        @enable_metrics = default_on
+        @enable_metrics = enable_metrics ? true : false unless enable_metrics.nil?
         @usage_flush_interval = usage_flush_interval.nil? ? GrpcClients::DEFAULT_TELEMETRY_FLUSH_SECONDS : usage_flush_interval.to_f
         @metrics_flush_interval = metrics_flush_interval.nil? ? GrpcClients::DEFAULT_TELEMETRY_FLUSH_SECONDS : metrics_flush_interval.to_f
         @instance_name = instance_name

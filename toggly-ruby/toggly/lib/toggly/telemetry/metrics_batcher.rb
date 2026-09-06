@@ -48,33 +48,13 @@ module Toggly
         @mutex.synchronize do
           return nil if @measures.empty? && @counters.empty? && @observations.empty?
 
-          observation_messages = []
-          groups = {}
-          @observations.each do |obs|
-            when_t = obs[:time]
-            group_key = "#{when_t.to_f}\0#{obs[:metric]}\0#{obs[:feature] || ''}"
-            group = groups[group_key]
-            if group.nil? || group[:variantValues].key?(obs[:variant])
-              group = {
-                time: GrpcClients.to_protobuf_timestamp(when_t),
-                metric: obs[:metric],
-                variantValues: {}
-              }
-              group[:feature] = obs[:feature] if obs[:feature] && !obs[:feature].to_s.empty?
-              groups[group_key] = group
-              observation_messages << group
-            end
-            group[:variantValues][obs[:variant]] = obs[:value]
-          end
-          @observations = []
-
           payload = {
             appKey: @app_key,
             environment: @environment,
             time: GrpcClients.to_protobuf_timestamp,
             stats: drain_map(@measures),
             counters: drain_map(@counters),
-            observations: observation_messages
+            observations: drain_observations
           }
           payload[:instanceName] = @instance_name if @instance_name
           payload
@@ -126,6 +106,34 @@ module Toggly
         end
         store.clear
         out
+      end
+
+      def drain_observations
+        observation_messages = []
+        groups = {}
+        @observations.each do |obs|
+          when_t = obs[:time]
+          group_key = "#{when_t.to_f}\0#{obs[:metric]}\0#{obs[:feature] || ""}"
+          group = groups[group_key]
+          if group.nil? || group[:variantValues].key?(obs[:variant])
+            group = new_observation_group(when_t, obs)
+            groups[group_key] = group
+            observation_messages << group
+          end
+          group[:variantValues][obs[:variant]] = obs[:value]
+        end
+        @observations = []
+        observation_messages
+      end
+
+      def new_observation_group(when_t, obs)
+        group = {
+          time: GrpcClients.to_protobuf_timestamp(when_t),
+          metric: obs[:metric],
+          variantValues: {}
+        }
+        group[:feature] = obs[:feature] if obs[:feature] && !obs[:feature].to_s.empty?
+        group
       end
     end
   end

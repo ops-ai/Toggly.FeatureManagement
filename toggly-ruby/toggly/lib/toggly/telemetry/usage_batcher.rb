@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "set"
-
 module Toggly
   module Telemetry
     # In-memory feature usage aggregator (Usage.SendStats payload shape).
@@ -56,7 +54,11 @@ module Toggly
       def record_check(feature, enabled, identity = nil, variant: nil, unique_request: false)
         @mutex.synchronize do
           agg = get_feature(feature)
-          name = variant.nil? ? (enabled ? "enabled" : "disabled") : variant.to_s
+          name = if variant.nil?
+                   enabled ? "enabled" : "disabled"
+                 else
+                   variant.to_s
+                 end
           stats = get_variant(agg, name)
           stats.check_count += 1
           stats.request_count += 1 if unique_request
@@ -78,9 +80,7 @@ module Toggly
           agg = get_feature(feature)
           get_variant(agg, variant.to_s).used_count += 1
           track_identity(identity, agg.unique_users_used)
-          if identity && !identity.to_s.empty?
-            agg.unique_user_hashes.add(GrpcClients.hash_identity(identity))
-          end
+          agg.unique_user_hashes.add(GrpcClients.hash_identity(identity)) if identity && !identity.to_s.empty?
         end
       end
 
@@ -104,38 +104,8 @@ module Toggly
         @mutex.synchronize do
           return nil if @per_feature.empty? && @app_unique.empty?
 
-          payload = {
-            appKey: @app_key,
-            environment: @environment,
-            time: GrpcClients.to_protobuf_timestamp,
-            stats: [],
-            totalUniqueUsers: @app_unique.size,
-            uniqueUserHashes: @app_unique.to_a,
-            processStartTime: GrpcClients.to_protobuf_timestamp(@process_start_time)
-          }
-          payload[:instanceName] = @instance_name if @instance_name
-          payload[:appVersion] = @app_version if @app_version
-
-          stats_out = @per_feature.map do |feature, agg|
-            variant_stats = {}
-            agg.variant_stats.each do |name, vs|
-              next unless vs.check_count.positive? || vs.request_count.positive? ||
-                          vs.used_count.positive? || vs.viewed_count.positive?
-
-              variant_stats[name] = vs.to_wire
-            end
-            {
-              feature: feature,
-              uniqueContextIdentifierEnabledCount: agg.unique_users_enabled.size,
-              uniqueContextIdentifierDisabledCount: agg.unique_users_disabled.size,
-              uniqueUsersUsedCount: agg.unique_users_used.size,
-              uniqueUserHashes: agg.unique_user_hashes.to_a,
-              uniqueViewedUserHashes: agg.unique_viewed_user_hashes.to_a,
-              variantStats: variant_stats
-            }
-          end
-          payload[:stats] = stats_out
-
+          payload = base_payload
+          payload[:stats] = drain_feature_stats
           @per_feature = {}
           @app_unique = Set.new
           payload
@@ -143,6 +113,46 @@ module Toggly
       end
 
       private
+
+      def base_payload
+        payload = {
+          appKey: @app_key,
+          environment: @environment,
+          time: GrpcClients.to_protobuf_timestamp,
+          stats: [],
+          totalUniqueUsers: @app_unique.size,
+          uniqueUserHashes: @app_unique.to_a,
+          processStartTime: GrpcClients.to_protobuf_timestamp(@process_start_time)
+        }
+        payload[:instanceName] = @instance_name if @instance_name
+        payload[:appVersion] = @app_version if @app_version
+        payload
+      end
+
+      def drain_feature_stats
+        @per_feature.map do |feature, agg|
+          {
+            feature: feature,
+            uniqueContextIdentifierEnabledCount: agg.unique_users_enabled.size,
+            uniqueContextIdentifierDisabledCount: agg.unique_users_disabled.size,
+            uniqueUsersUsedCount: agg.unique_users_used.size,
+            uniqueUserHashes: agg.unique_user_hashes.to_a,
+            uniqueViewedUserHashes: agg.unique_viewed_user_hashes.to_a,
+            variantStats: wire_variant_stats(agg)
+          }
+        end
+      end
+
+      def wire_variant_stats(agg)
+        variant_stats = {}
+        agg.variant_stats.each do |name, vs|
+          next unless vs.check_count.positive? || vs.request_count.positive? ||
+                      vs.used_count.positive? || vs.viewed_count.positive?
+
+          variant_stats[name] = vs.to_wire
+        end
+        variant_stats
+      end
 
       def get_feature(feature)
         @per_feature[feature] ||= FeatureUsageAgg.new
