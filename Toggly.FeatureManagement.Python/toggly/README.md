@@ -24,6 +24,9 @@ A feature flag (or feature toggle) is a software development technique that allo
 
 ```bash
 pip install toggly
+
+# Optional: send usage/metrics over gRPC
+pip install toggly[telemetry]
 ```
 
 Entity `ContextProperty` filters evaluate `{kind, key, attributes}` and are ANDed with user filters. Register kinds with `register_context` (startup PUT to `sdk/{appKey}/contexts`, opt out via `register_contexts_on_startup=False`).
@@ -104,6 +107,35 @@ async def main():
     if await client.is_enabled("new-feature"):
         await do_new_thing()
 ```
+
+## Usage and business metrics
+
+When an `app_key` is set, the client batches feature usage and business metrics
+and sends them to Toggly over gRPC (~1 minute, plus flush on `close()` / process
+exit). Core evaluate works without gRPC; install `toggly[telemetry]` to send.
+gRPC calls attach metadata key `ua` (lowercase for grpcio; same semantics as
+.NET/Go/Node `UA`).
+
+```python
+# Checks are recorded automatically from is_enabled when enable_usage_tracking
+if client.is_enabled("new-checkout-flow"):
+    client.record_usage("new-checkout-flow")  # interaction
+    client.record_view("new-checkout-flow")   # rendered
+
+client.measure("revenue", 9.99, {"feature": "new-checkout-flow"})
+client.increment_counter("checkout_clicks")
+client.observe("cart_depth", 3)
+client.flush_telemetry()  # optional; also runs on close()
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enable_usage_tracking` | `True` | Record checks / usage / views via `Usage.SendStats` |
+| `enable_metrics` | `True` | `measure` / `increment_counter` / `observe` via `Metrics.SendMetrics` |
+| `metrics_base_url` | `https://app.toggly.io` | gRPC endpoint (separate from definitions `base_url`) |
+| `usage_flush_interval` / `metrics_flush_interval` | `60` | Seconds; `0` disables the timer |
+
+Set `TOGGLY_DISABLE_TELEMETRY=1` to disable both pipelines.
 
 ## Feature Gates (Multiple Features)
 
@@ -240,7 +272,11 @@ client.registry.register("CustomFilter", CustomEvaluator())
 | `connect_timeout` | `float` | `10.0` | Connection timeout (seconds) |
 | `request_timeout` | `float` | `30.0` | Request timeout (seconds) |
 | `snapshot_provider` | `SnapshotProvider` | `None` | Cache provider |
-| `enable_usage_tracking` | `bool` | `True` | Track feature usage |
+| `enable_usage_tracking` | `bool` | `True` | Track feature usage via gRPC |
+| `enable_metrics` | `bool` | `True` | Send business metrics via gRPC |
+| `metrics_base_url` | `str` | `"https://app.toggly.io"` | Usage/metrics gRPC base URL |
+| `usage_flush_interval` | `float` | `60.0` | Usage flush interval (seconds) |
+| `metrics_flush_interval` | `float` | `60.0` | Metrics flush interval (seconds) |
 | `disable_background_refresh` | `bool` | `False` | Disable auto-refresh |
 
 ## Debug Information
@@ -267,7 +303,9 @@ For framework-specific features, use the integration packages:
 ## Requirements
 
 - Python 3.8+
-- No dependencies (zero dependencies core)
+- No required dependencies (zero-dependency core)
+- Optional: `toggly[telemetry]` for usage/metrics gRPC (`grpcio`, `protobuf`)
+- Optional: `toggly[websocket]` for live updates
 
 ## Type Hints
 

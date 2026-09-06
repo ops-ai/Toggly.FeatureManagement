@@ -464,7 +464,9 @@ jobs:
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Python"
             -Dsonar.sources=${{ env.SDK_ROOT }}
-            -Dsonar.exclusions=**/venv/**,**/.venv/**,**/dist/**,**/build/**,**/*.egg-info/**,**/tests/**,**/__pycache__/**,**/.pytest_cache/**
+            -Dsonar.exclusions=**/venv/**,**/.venv/**,**/dist/**,**/build/**,**/*.egg-info/**,**/tests/**,**/__pycache__/**,**/.pytest_cache/**,**/telemetry/pb/**
+            -Dsonar.coverage.exclusions=**/telemetry/pb/**
+            -Dsonar.cpd.exclusions=**/tests/**,**/telemetry/pb/**
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/tests/**
             -Dsonar.python.coverage.reportPaths=coverage/*-coverage.xml
@@ -487,7 +489,9 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-python
             -Dsonar.projectName="Toggly SDKs - Python"
             -Dsonar.sources=${{ env.SDK_ROOT }}
-            -Dsonar.exclusions=**/venv/**,**/.venv/**,**/dist/**,**/build/**,**/*.egg-info/**,**/tests/**,**/__pycache__/**,**/.pytest_cache/**
+            -Dsonar.exclusions=**/venv/**,**/.venv/**,**/dist/**,**/build/**,**/*.egg-info/**,**/tests/**,**/__pycache__/**,**/.pytest_cache/**,**/telemetry/pb/**
+            -Dsonar.coverage.exclusions=**/telemetry/pb/**
+            -Dsonar.cpd.exclusions=**/tests/**,**/telemetry/pb/**
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/tests/**
             -Dsonar.python.coverage.reportPaths=coverage/*-coverage.xml

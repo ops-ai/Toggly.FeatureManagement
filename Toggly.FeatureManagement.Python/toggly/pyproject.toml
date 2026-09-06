@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toggly"
-version = "0.4.0"
+version = "0.5.0"
 description = "Feature flag management SDK for Python - zero dependencies core library"
 readme = "README.md"
 license = {text = "MIT"}
@@ -51,6 +51,12 @@ Changelog = "https://github.com/ops-ai/toggly-sdks/blob/main/Toggly.FeatureManag
 websocket = [
     "websocket-client>=1.6.0"
 ]
+telemetry = [
+    # grpcio 1.80+ requires Python >=3.9; keep 3.8 on the last supporting line.
+    "grpcio>=1.62.0,<1.71; python_version < '3.9'",
+    "grpcio>=1.80.0; python_version >= '3.9'",
+    "protobuf>=4.25.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -58,14 +64,17 @@ dev = [
     "mypy>=1.0.0",
     "ruff>=0.1.0",
     "websockets>=12.0",
-    "websocket-client>=1.6.0"
+    "websocket-client>=1.6.0",
+    "grpcio>=1.62.0,<1.71; python_version < '3.9'",
+    "grpcio>=1.80.0; python_version >= '3.9'",
+    "protobuf>=4.25.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-toggly = ["py.typed"]
+toggly = ["py.typed", "telemetry/pb/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -78,17 +87,30 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 
+[[tool.mypy.overrides]]
+module = ["toggly.telemetry.pb.*"]
+ignore_errors = true
+
 [tool.ruff]
 target-version = "py38"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "D", "UP", "B", "C4", "SIM"]
-ignore = ["D100", "D104"]
+# UP045 (X | None) needs 3.10+ at runtime without postponed annotations; keep
+# Optional in public APIs while requires-python remains >=3.8.
+ignore = ["D100", "D104", "UP045"]
+
+[tool.ruff.lint.per-file-ignores]
+# Generated protobuf/gRPC stubs — do not hand-edit or lint-fix.
+"**/telemetry/pb/*" = ["E", "F", "W", "I", "N", "D", "UP", "B", "C4", "SIM"]
 
 [tool.coverage.run]
 source = ["src/toggly"]
 branch = true
+omit = [
+    "*/telemetry/pb/*",
+]
 
 [tool.coverage.report]
 exclude_lines = [

@@ -38,11 +38,13 @@ from toggly.providers import (
     MemorySnapshotProvider,
     VariantsSnapshot,
 )
+from toggly.telemetry.client_api import TelemetryClientMixin
+from toggly.telemetry.runtime import TelemetryRuntime
 
 logger = logging.getLogger("toggly")
 
 
-class AsyncTogglyClient:
+class AsyncTogglyClient(TelemetryClientMixin):
     """Async client for Toggly feature flag management.
 
     Provides asynchronous API for evaluating feature flags.
@@ -107,6 +109,10 @@ class AsyncTogglyClient:
         # Background refresh
         self._refresh_task: asyncio.Task[None] | None = None
         self._stop_refresh = asyncio.Event()
+
+        # Usage + business metrics telemetry (optional gRPC)
+        self._telemetry: TelemetryRuntime | None = None
+        self._start_telemetry()
 
         if config.app_key:
             register_entity_contexts_at_startup(
@@ -252,17 +258,22 @@ class AsyncTogglyClient:
             context = EvaluationContext(identity=self._identity)
 
         async with self._lock:
+            result: bool | None = None
             if self._config.enable_variants:
                 variant_entry = self._variant_defs.get(feature_key)
                 if variant_entry is not None:
-                    return variant_entry.enabled
+                    result = variant_entry.enabled
 
-            definition = self._definitions.get(feature_key)
+            if result is None:
+                definition = self._definitions.get(feature_key)
 
-            if definition is None:
-                return self._flags.get(feature_key, default)
+                if definition is None:
+                    result = self._flags.get(feature_key, default)
+                else:
+                    result = self._engine.evaluate(definition, context)
 
-            return self._engine.evaluate(definition, context)
+        self._record_check(feature_key, result, context.identity)
+        return result
 
     async def is_disabled(
         self,
@@ -440,6 +451,9 @@ class AsyncTogglyClient:
             self._refresh_task.cancel()
             with suppress(asyncio.CancelledError):
                 await self._refresh_task
+        if self._telemetry is not None:
+            self._telemetry.close()
+            self._telemetry = None
 
     @asynccontextmanager
     async def feature_context(

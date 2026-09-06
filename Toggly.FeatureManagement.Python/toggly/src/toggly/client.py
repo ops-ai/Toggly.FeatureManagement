@@ -52,12 +52,14 @@ from toggly.providers import (
     MemorySnapshotProvider,
     VariantsSnapshot,
 )
+from toggly.telemetry.client_api import TelemetryClientMixin
+from toggly.telemetry.runtime import TelemetryRuntime
 from toggly.version import __version__
 
 logger = logging.getLogger("toggly")
 
 
-class TogglyClient:
+class TogglyClient(TelemetryClientMixin):
     """Main client for Toggly feature flag management.
 
     Provides synchronous API for evaluating feature flags.
@@ -138,6 +140,10 @@ class TogglyClient:
         self._ws_thread: threading.Thread | None = None
         self._last_fallback_refresh: float = 0.0
         self._ws_stop_event = threading.Event()
+
+        # Usage + business metrics telemetry (optional gRPC)
+        self._telemetry: TelemetryRuntime | None = None
+        self._start_telemetry()
 
         if config.app_key:
             register_entity_contexts_at_startup(
@@ -306,18 +312,23 @@ class TogglyClient:
             context = EvaluationContext(identity=self._identity)
 
         with self._lock:
+            result: bool | None = None
             if self._config.enable_variants:
                 variant_entry = self._variant_defs.get(feature_key)
                 if variant_entry is not None:
-                    return variant_entry.enabled
+                    result = variant_entry.enabled
 
-            definition = self._definitions.get(feature_key)
+            if result is None:
+                definition = self._definitions.get(feature_key)
 
-            if definition is None:
-                # Check static flags
-                return self._flags.get(feature_key, default)
+                if definition is None:
+                    # Check static flags
+                    result = self._flags.get(feature_key, default)
+                else:
+                    result = self._engine.evaluate(definition, context)
 
-            return self._engine.evaluate(definition, context)
+        self._record_check(feature_key, result, context.identity)
+        return result
 
     def is_disabled(
         self,
@@ -514,6 +525,9 @@ class TogglyClient:
         if self._refresh_thread and self._refresh_thread.is_alive():
             self._refresh_thread.join(timeout=5.0)
         self._stop_websocket()
+        if self._telemetry is not None:
+            self._telemetry.close()
+            self._telemetry = None
 
     @contextmanager
     def feature_context(

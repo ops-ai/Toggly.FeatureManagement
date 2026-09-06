@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.0
+
+2026-09-06
+
+### Added
+- Batched gRPC telemetry for feature usage (`Usage.SendStats`) and business
+  metrics (`Metrics.SendMetrics`), matching .NET / Go / Node payload shape
+  (`variantStats` / `variantValues`, UTF-8 FNV-1a identity hashes, `ua`
+  metadata — same semantics as .NET/Go/Node `UA`; lowercase for grpcio).
+- Public APIs: `record_usage`, `record_view`, `measure`, `increment_counter`,
+  `observe`, `flush_telemetry`; automatic check recording from `is_enabled`
+  when usage tracking is enabled.
+- Optional `telemetry` extra (`grpcio` + `protobuf`) so core evaluate stays
+  zero-dependency; install with `pip install toggly[telemetry]`
+  (`grpcio>=1.80` on Python ≥3.9; `grpcio>=1.62,<1.71` on Python 3.8).
+  Generated stub floor is `1.62.0` so both install lines can import the
+  native path.
+- Config: `enable_metrics` (default on), `metrics_base_url`, flush intervals,
+  `instance_name`, `app_version`.
+
 ## 0.4.0
 
 2026-09-04

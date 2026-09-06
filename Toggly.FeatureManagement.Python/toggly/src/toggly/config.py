@@ -67,10 +67,31 @@ class TogglyConfig:
     """Provider for caching definitions locally."""
 
     enable_usage_tracking: bool = True
-    """Whether to track feature flag usage."""
+    """Whether to track feature flag usage via Usage.SendStats."""
 
-    enable_metrics: bool = False
-    """Whether to collect custom metrics."""
+    enable_metrics: bool = True
+    """Whether to collect business metrics via Metrics.SendMetrics."""
+
+    metrics_base_url: str = "https://app.toggly.io"
+    """Base URL for usage/metrics gRPC (separate from definitions ``base_url``)."""
+
+    usage_flush_interval: float = 60.0
+    """Usage flush interval in seconds. 0 disables the periodic timer."""
+
+    metrics_flush_interval: float = 60.0
+    """Metrics flush interval in seconds. 0 disables the periodic timer."""
+
+    instance_name: str | None = None
+    """Optional hostname/instance name reported with usage/metrics payloads."""
+
+    app_version: str | None = None
+    """Optional application version reported with usage payloads."""
+
+    usage_client: Any = None
+    """Injected usage gRPC client for tests (not part of the public surface)."""
+
+    metrics_client: Any = None
+    """Injected metrics gRPC client for tests (not part of the public surface)."""
 
     disable_background_refresh: bool = False
     """Disable automatic background refresh."""
@@ -94,6 +115,7 @@ class TogglyConfig:
         """Validate configuration after initialization."""
         # Ensure base_url doesn't have trailing slash
         self.base_url = self.base_url.rstrip("/")
+        self.metrics_base_url = self.metrics_base_url.rstrip("/")
 
         # Set definitions URL if not provided
         if self.definitions_url is None:
@@ -102,6 +124,10 @@ class TogglyConfig:
         # Validate refresh interval
         if self.refresh_interval < 0:
             raise ValueError("refresh_interval must be non-negative")
+        if self.usage_flush_interval < 0:
+            raise ValueError("usage_flush_interval must be non-negative")
+        if self.metrics_flush_interval < 0:
+            raise ValueError("metrics_flush_interval must be non-negative")
 
         # Validate timeouts
         if self.connect_timeout <= 0:
@@ -198,6 +224,17 @@ class TogglyConfig:
             snapshot_provider=changes.get("snapshot_provider", self.snapshot_provider),
             enable_usage_tracking=changes.get("enable_usage_tracking", self.enable_usage_tracking),
             enable_metrics=changes.get("enable_metrics", self.enable_metrics),
+            metrics_base_url=changes.get("metrics_base_url", self.metrics_base_url),
+            usage_flush_interval=changes.get(
+                "usage_flush_interval", self.usage_flush_interval
+            ),
+            metrics_flush_interval=changes.get(
+                "metrics_flush_interval", self.metrics_flush_interval
+            ),
+            instance_name=changes.get("instance_name", self.instance_name),
+            app_version=changes.get("app_version", self.app_version),
+            usage_client=changes.get("usage_client", self.usage_client),
+            metrics_client=changes.get("metrics_client", self.metrics_client),
             disable_background_refresh=changes.get(
                 "disable_background_refresh", self.disable_background_refresh
             ),
@@ -228,6 +265,7 @@ class TogglyConfig:
             "enable_variants": self.enable_variants,
             "enable_usage_tracking": self.enable_usage_tracking,
             "enable_metrics": self.enable_metrics,
+            "metrics_base_url": self.metrics_base_url,
             "enable_live_updates": self.enable_live_updates,
             "debug": self.debug,
         }
