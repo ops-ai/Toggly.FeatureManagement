@@ -57,6 +57,32 @@ func TestFromHttpRequest_MapsHeaders(t *testing.T) {
 	}
 }
 
+func TestFromHttpRequest_PreservesExtrasRequestFields(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("Accept-Language", "en-US")
+	req.Header.Set("CF-IPCountry", "US")
+
+	ctx := FromHttpRequest(req, toggly.Context{
+		Identity: "u1",
+		Request: &toggly.RequestContext{
+			Country: "CA",
+		},
+	})
+	if ctx.Request == nil {
+		t.Fatal("expected request")
+	}
+	if ctx.Request.Country != "CA" {
+		t.Fatalf("extras country should win, got %q", ctx.Request.Country)
+	}
+	if ctx.Request.UserAgent != "Mozilla/5.0" {
+		t.Fatalf("empty extras UA should take header, got %q", ctx.Request.UserAgent)
+	}
+	if ctx.Request.AcceptLanguage != "en-US" {
+		t.Fatalf("empty extras lang should take header, got %q", ctx.Request.AcceptLanguage)
+	}
+}
+
 func TestFromHttpRequest_CountryFallbackOrder(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Vercel-IP-Country", "DE")

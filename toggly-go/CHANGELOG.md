@@ -16,6 +16,8 @@
   non-empty / non-nil per-call fields win field-by-field.
 - `toggly.MergeContext` / `ResolveEvalContext` and `togglyctx.Merge` /
   `Resolve` helpers.
+- `FromHttpRequest` merges `extras.Request` field-by-field with headers
+  (non-empty extras win), matching Middleware / BuildContext.
 
 ## 0.4.1
 

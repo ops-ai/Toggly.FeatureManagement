@@ -21,7 +21,9 @@ func FromHttpRequest(r *http.Request, extras ...toggly.Context) toggly.Context {
 	if r == nil {
 		return out
 	}
-	out.Request = requestFromHeaders(r.Header)
+	// Field-level merge: non-empty extras.Request fields win; empty fields
+	// take headers (same semantics as Middleware / BuildContext).
+	out.Request = mergeRequestFromHeaders(r.Header, out.Request)
 	return out
 }
 
