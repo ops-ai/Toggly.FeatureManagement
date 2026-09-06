@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-cloudflare-worker",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Cloudflare Worker for enforcing Toggly feature flag gating at the edge",
   "main": "./src/index.ts",
   "scripts": {
@@ -10,6 +10,7 @@
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
+    "test": "vitest run",
     "clean": "rm -rf .wrangler dist"
   },
   "keywords": [
@@ -27,6 +28,7 @@
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.57.0",
     "typescript": "^5.3.3",
+    "vitest": "^3.2.7",
     "wrangler": "^3.114.17"
   }
 }
