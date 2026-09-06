@@ -14,7 +14,8 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.d.ts', 'src/**/index.ts', 'src/**/types.ts'],
+      // Exclude package barrel only — telemetry/index.ts is runtime logic Sonar scores.
+      exclude: ['src/**/*.d.ts', 'src/index.ts', 'src/**/types.ts'],
       thresholds: {
         lines: 75,
         functions: 75,

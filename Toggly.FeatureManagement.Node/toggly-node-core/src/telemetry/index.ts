@@ -254,14 +254,15 @@ export class TelemetryRuntime {
 
   async flushUsage(): Promise<void> {
     if (!this.usageBatcher || this.sendingUsage) return
-    const payload = this.usageBatcher.buildAndReset()
-    if (!payload) return
 
     const client = this.clients?.usage
     if (!client?.sendStats) {
       this.logger.debug('Usage flush skipped: no gRPC client')
       return
     }
+
+    const payload = this.usageBatcher.buildAndReset()
+    if (!payload) return
 
     this.sendingUsage = true
     try {
@@ -276,14 +277,15 @@ export class TelemetryRuntime {
 
   async flushMetrics(): Promise<void> {
     if (!this.metricsBatcher || this.sendingMetrics) return
-    const payload = this.metricsBatcher.buildAndReset()
-    if (!payload) return
 
     const client = this.clients?.metrics
     if (!client?.sendMetrics) {
       this.logger.debug('Metrics flush skipped: no gRPC client')
       return
     }
+
+    const payload = this.metricsBatcher.buildAndReset()
+    if (!payload) return
 
     this.sendingMetrics = true
     try {

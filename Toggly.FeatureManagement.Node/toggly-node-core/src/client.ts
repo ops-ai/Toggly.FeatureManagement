@@ -983,7 +983,7 @@ export async function initToggly(
   config: TogglyServerConfig
 ): Promise<TogglyClient> {
   if (defaultClient) {
-    defaultClient.close()
+    await defaultClient.close()
   }
 
   defaultClient = createTogglyClient(config)
