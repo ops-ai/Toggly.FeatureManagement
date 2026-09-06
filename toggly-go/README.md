@@ -23,6 +23,19 @@ Official Go SDK for [Toggly](https://toggly.io) — local feature-flag evaluatio
 
 Entity `ContextProperty` filters evaluate `EntityContext` (`kind`, `key`, `attributes`) and are ANDed with user filters. `RegisterContext` optionally PUTs schemas to `sdk/{appKey}/contexts` (opt out with `DisableEntityContextRegistration`).
 
+## Usage and business metrics
+
+When `EnableUsage` / `EnableMetrics` are set, the SDK batches feature usage and business metrics and sends them over **native gRPC** (not gRPC-Web) to the Toggly gateway. Each `SendStats` / `SendMetrics` call includes `UA` metadata (`toggly-go/{version}`). `Close()` best-effort flushes pending batches before disconnecting.
+
+Public usage APIs on `toggly.Client`:
+
+- `RecordUsage` — interaction (“used”)
+- `RecordView` — rendered/displayed (“viewed”)
+
+Checks from `IsEnabled` are recorded automatically when usage is enabled. Wire payloads use multi-variant maps (`variantStats` / `variantValues`) aligned with the .NET SDK.
+
+**Non-goal:** Go does not ship a .NET-style `IMetricsRegistryService` / SystemMetrics pull-collector registry. Call `MetricsClient().Measure|Increment|Observe` directly (optional `feature` + `variant`; empty variant defaults to `enabled`). Experiment auto-correlation (metric → linked features) is also out of scope — pass the feature argument when you need correlation.
+
 ## Get started
 
 1. Create a free app at [toggly.io](https://toggly.io).
