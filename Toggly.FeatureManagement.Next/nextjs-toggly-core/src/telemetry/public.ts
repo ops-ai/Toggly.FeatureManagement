@@ -24,6 +24,7 @@ export {
   DEFAULT_TELEMETRY_FLUSH_MS,
   resolveMetricsBaseUrl,
   isTelemetryEnvDisabled,
+  resolveTelemetryEnableFlag,
   usagePayloadToHttpJson,
   metricsPayloadToHttpJson,
 } from './https-client.js'

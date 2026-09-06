@@ -9,7 +9,7 @@ import {
   DEFAULT_CONFIG,
   API_ENDPOINTS,
   fromHttpRequest,
-  isTelemetryEnvDisabled,
+  resolveTelemetryEnableFlag,
   TelemetryRuntime,
   type EvalContextArg,
   type EvalContextOverrides,
@@ -40,10 +40,13 @@ function resolveEdgeTelemetryFlags(config: TogglyEdgeConfig): {
   enableMetrics: boolean
 } {
   const hasAppKey = Boolean(config.appKey)
-  const disabled = isTelemetryEnvDisabled()
+  // TOGGLY_DISABLE_TELEMETRY=1 is authoritative over explicit true.
   return {
-    enableUsageTracking: config.enableUsageTracking ?? (hasAppKey && !disabled),
-    enableMetrics: config.enableMetrics ?? (hasAppKey && !disabled),
+    enableUsageTracking: resolveTelemetryEnableFlag(
+      config.enableUsageTracking,
+      hasAppKey,
+    ),
+    enableMetrics: resolveTelemetryEnableFlag(config.enableMetrics, hasAppKey),
   }
 }
 

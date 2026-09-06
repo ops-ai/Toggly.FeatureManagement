@@ -30,6 +30,7 @@ export {
   DEFAULT_TELEMETRY_FLUSH_MS,
   resolveMetricsBaseUrl,
   isTelemetryEnvDisabled,
+  resolveTelemetryEnableFlag,
   usagePayloadToHttpJson,
   metricsPayloadToHttpJson,
   MAX_FEATURES_PER_BATCH,

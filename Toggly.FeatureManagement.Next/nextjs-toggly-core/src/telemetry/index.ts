@@ -2,8 +2,8 @@ import {
   DEFAULT_METRICS_BASE_URL,
   DEFAULT_TELEMETRY_FLUSH_MS,
   HttpsTelemetryClient,
-  isTelemetryEnvDisabled,
   resolveMetricsBaseUrl,
+  resolveTelemetryEnableFlag,
 } from './https-client.js'
 import { MetricsBatcher, type MetricsFeatureOptions } from './metrics-batcher.js'
 import { UsageBatcher, type UsageFlushBundle } from './usage-batcher.js'
@@ -68,8 +68,10 @@ export class TelemetryRuntime {
   private httpsClient: HttpsTelemetryClient | null = null
   private usageTimer: ReturnType<typeof setInterval> | null = null
   private metricsTimer: ReturnType<typeof setInterval> | null = null
-  private sendingUsage = false
-  private sendingMetrics = false
+  /** Single-flight drain promise (CF Worker TelemetryRuntime pattern). */
+  private flushInFlight: Promise<void> | null = null
+  /** Set when flush/close is requested during an in-flight drain. */
+  private pendingDrain = false
   private closed = false
   private readonly processStartTime = new Date()
   private readonly signalHandlers: Array<{
@@ -96,7 +98,6 @@ export class TelemetryRuntime {
 
   constructor(config: TelemetryConfig, logger?: TelemetryLogger) {
     const hasAppKey = Boolean(config.appKey)
-    const telemetryEnvDisabled = isTelemetryEnvDisabled()
     this.transport = config.transport ?? 'grpc'
     this.attachProcessHandlers = config.attachProcessHandlers ?? this.transport === 'grpc'
     this.restoreOnSendFailure =
@@ -105,9 +106,12 @@ export class TelemetryRuntime {
       appKey: config.appKey,
       environment: config.environment,
       metricsBaseUrl: resolveMetricsBaseUrl(config.metricsBaseUrl ?? DEFAULT_METRICS_BASE_URL),
-      enableUsageTracking:
-        config.enableUsageTracking ?? (hasAppKey && !telemetryEnvDisabled),
-      enableMetrics: config.enableMetrics ?? (hasAppKey && !telemetryEnvDisabled),
+      // TOGGLY_DISABLE_TELEMETRY=1 wins over explicit true.
+      enableUsageTracking: resolveTelemetryEnableFlag(
+        config.enableUsageTracking,
+        hasAppKey,
+      ),
+      enableMetrics: resolveTelemetryEnableFlag(config.enableMetrics, hasAppKey),
       usageFlushInterval: config.usageFlushInterval ?? DEFAULT_TELEMETRY_FLUSH_MS,
       metricsFlushInterval: config.metricsFlushInterval ?? DEFAULT_TELEMETRY_FLUSH_MS,
       instanceName: config.instanceName,
@@ -178,7 +182,7 @@ export class TelemetryRuntime {
       })
       if (this.config.usageFlushInterval > 0) {
         this.usageTimer = setInterval(() => {
-          void this.flushUsage()
+          void this.flush()
         }, this.config.usageFlushInterval)
         this.usageTimer.unref?.()
       }
@@ -192,7 +196,7 @@ export class TelemetryRuntime {
       })
       if (this.config.metricsFlushInterval > 0) {
         this.metricsTimer = setInterval(() => {
-          void this.flushMetrics()
+          void this.flush()
         }, this.config.metricsFlushInterval)
         this.metricsTimer.unref?.()
       }
@@ -301,8 +305,57 @@ export class TelemetryRuntime {
     return Boolean(this.usageBatcher?.hitFeatureCap() || this.metricsBatcher?.hitCap())
   }
 
+  /**
+   * Single-flight flush with pending-drain follow-up (CF Worker parity).
+   * Concurrent flush/close during an active send coalesces onto one drain and
+   * runs another pass so batches recorded mid-send are not stranded.
+   */
+  async flush(): Promise<void> {
+    this.pendingDrain = true
+    if (this.flushInFlight) {
+      return this.flushInFlight
+    }
+
+    this.flushInFlight = this.drainUntilIdle()
+    return this.flushInFlight
+  }
+
+  async flushAll(): Promise<void> {
+    await this.flush()
+  }
+
+  /** @deprecated Prefer {@link flush}; kept for callers that split usage/metrics. */
   async flushUsage(): Promise<void> {
-    if (!this.usageBatcher || this.sendingUsage) return
+    await this.flush()
+  }
+
+  /** @deprecated Prefer {@link flush}; kept for callers that split usage/metrics. */
+  async flushMetrics(): Promise<void> {
+    await this.flush()
+  }
+
+  private async drainUntilIdle(): Promise<void> {
+    try {
+      while (this.pendingDrain) {
+        this.pendingDrain = false
+        await this.flushInternal()
+      }
+    } finally {
+      this.flushInFlight = null
+      // Race: another flush()/close() set pendingDrain after the while check
+      // but while we still owned inFlight — start a follow-up drain.
+      if (this.pendingDrain) {
+        await this.flush()
+      }
+    }
+  }
+
+  private async flushInternal(): Promise<void> {
+    await Promise.all([this.sendUsageOnce(), this.sendMetricsOnce()])
+  }
+
+  private async sendUsageOnce(): Promise<void> {
+    if (!this.usageBatcher) return
 
     const client = this.usageClient
     if (!client?.sendStats) {
@@ -313,7 +366,6 @@ export class TelemetryRuntime {
     const bundle = this.usageBatcher.buildAndReset()
     if (!bundle) return
 
-    this.sendingUsage = true
     try {
       const result = await client.sendStats(bundle.payload as unknown as Record<string, unknown>)
       if (
@@ -331,13 +383,11 @@ export class TelemetryRuntime {
         this.usageBatcher.restoreFromBundle(bundle)
       }
       this.logger.error('Failed to send usage stats:', error)
-    } finally {
-      this.sendingUsage = false
     }
   }
 
-  async flushMetrics(): Promise<void> {
-    if (!this.metricsBatcher || this.sendingMetrics) return
+  private async sendMetricsOnce(): Promise<void> {
+    if (!this.metricsBatcher) return
 
     const client = this.metricsClient
     if (!client?.sendMetrics) {
@@ -348,7 +398,6 @@ export class TelemetryRuntime {
     const payload = this.metricsBatcher.buildAndReset()
     if (!payload) return
 
-    this.sendingMetrics = true
     try {
       const result = await client.sendMetrics(payload as unknown as Record<string, unknown>)
       if (
@@ -366,18 +415,7 @@ export class TelemetryRuntime {
         this.metricsBatcher.restoreFromPayload(payload)
       }
       this.logger.error('Failed to send metrics:', error)
-    } finally {
-      this.sendingMetrics = false
     }
-  }
-
-  async flushAll(): Promise<void> {
-    await Promise.all([this.flushUsage(), this.flushMetrics()])
-  }
-
-  /** Alias used by edge helpers. */
-  async flush(): Promise<void> {
-    await this.flushAll()
   }
 
   async close(): Promise<void> {
@@ -396,7 +434,8 @@ export class TelemetryRuntime {
     this.detachProcessHandlers()
 
     try {
-      await this.flushAll()
+      // Sets pendingDrain so data recorded during an in-flight send is drained.
+      await this.flush()
     } finally {
       try {
         this.usageClient?.close?.()

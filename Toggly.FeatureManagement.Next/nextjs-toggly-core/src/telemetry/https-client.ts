@@ -107,3 +107,17 @@ export function isTelemetryEnvDisabled(): boolean {
     return false
   }
 }
+
+/**
+ * Resolve an enable flag. `TOGGLY_DISABLE_TELEMETRY=1` is authoritative and
+ * wins over any explicit `true` in config.
+ */
+export function resolveTelemetryEnableFlag(
+  explicit: boolean | undefined,
+  defaultWhenUnset: boolean,
+): boolean {
+  if (isTelemetryEnvDisabled()) {
+    return false
+  }
+  return explicit ?? defaultWhenUnset
+}

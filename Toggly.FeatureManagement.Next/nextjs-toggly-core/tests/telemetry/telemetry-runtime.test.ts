@@ -14,6 +14,7 @@ describe('TelemetryRuntime', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllEnvs()
   })
 
   it('flushes usage and metrics via injected senders', async () => {
@@ -76,6 +77,73 @@ describe('TelemetryRuntime', () => {
     expect(sendStats).toHaveBeenCalled()
     await runtime.close()
   })
+
+  it('drains a second feature recorded during an active send on close', async () => {
+    let releaseSend!: () => void
+    const sendGate = new Promise<void>((resolve) => {
+      releaseSend = resolve
+    })
+    const sendStats = vi.fn().mockImplementation(async () => {
+      await sendGate
+      return { featureCount: 1 }
+    })
+
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: null,
+      attachProcessHandlers: false,
+    })
+    runtime.start()
+
+    runtime.recordCheck('FeatureA', true, 'user-1')
+    const firstFlush = runtime.flush()
+
+    // Mid-send: another waitUntil/close path records more data.
+    runtime.recordCheck('FeatureB', false, 'user-2')
+    const closePromise = runtime.close()
+
+    releaseSend()
+    await firstFlush
+    await closePromise
+
+    expect(sendStats.mock.calls.length).toBeGreaterThanOrEqual(2)
+    const features = sendStats.mock.calls.flatMap((call) => {
+      const payload = call[0] as {
+        stats: Array<{ feature: string }>
+      }
+      return payload.stats.map((s) => s.feature)
+    })
+    expect(features).toEqual(expect.arrayContaining(['FeatureA', 'FeatureB']))
+  })
+
+  it('honors TOGGLY_DISABLE_TELEMETRY=1 over explicit enable flags', () => {
+    vi.stubEnv('TOGGLY_DISABLE_TELEMETRY', '1')
+    const sendStats = vi.fn()
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: true,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: { sendMetrics: vi.fn(), close: vi.fn() },
+      attachProcessHandlers: false,
+    })
+    runtime.start()
+    expect(runtime.usageEnabled).toBe(false)
+    expect(runtime.metricsEnabled).toBe(false)
+    runtime.recordCheck('FeatureA', true)
+    void runtime.flush()
+    expect(sendStats).not.toHaveBeenCalled()
+    vi.unstubAllEnvs()
+  })
 })
 
 describe('HttpsTelemetryClient', () => {
@@ -83,7 +151,7 @@ describe('HttpsTelemetryClient', () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true })
     const client = new HttpsTelemetryClient({
       metricsBaseUrl: 'https://app.toggly.io/',
-      userAgent: 'toggly-next/1.9.0',
+      userAgent: 'toggly-next/1.9.1',
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
 
@@ -95,7 +163,7 @@ describe('HttpsTelemetryClient', () => {
 
     await client.sendUsageStats(bundle.payload)
     expect(fetchImpl.mock.calls[0][0]).toBe('https://app.toggly.io/api/usage/stats')
-    expect(fetchImpl.mock.calls[0][1].headers['User-Agent']).toBe('toggly-next/1.9.0')
+    expect(fetchImpl.mock.calls[0][1].headers['User-Agent']).toBe('toggly-next/1.9.1')
     const body = JSON.parse(fetchImpl.mock.calls[0][1].body as string)
     expect(typeof body.time).toBe('string')
     expect(body.stats[0].variantStats.enabled.checkCount).toBe(1)

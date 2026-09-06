@@ -5,6 +5,7 @@ import type { UsageSender, MetricsSender } from '@ops-ai/nextjs-toggly-core'
 describe('edge telemetry', () => {
   afterEach(() => {
     resetEdgeToggly()
+    vi.unstubAllEnvs()
   })
 
   it('records checks over HTTPS senders and flushes payload shape', async () => {
@@ -26,7 +27,6 @@ describe('edge telemetry', () => {
       cache: false,
     })
 
-    // Skip network: mark initialized via defaults path
     vi.spyOn(client, 'fetchDefinitions').mockResolvedValue({ FeatureA: true })
     await client.init()
 
@@ -47,6 +47,35 @@ describe('edge telemetry', () => {
     expect(metricsPayload.stats[0].metric).toBe('revenue')
     expect(metricsPayload.stats[0].variantValues.enabled).toBe(4)
 
+    await client.close()
+  })
+
+  it('does not start telemetry when TOGGLY_DISABLE_TELEMETRY=1 even if explicitly enabled', async () => {
+    vi.stubEnv('TOGGLY_DISABLE_TELEMETRY', '1')
+
+    const sendStats = vi.fn().mockResolvedValue({})
+    const usageClient: UsageSender = { sendStats, close: vi.fn() }
+
+    const client = createEdgeClient({
+      appKey: 'app',
+      environment: 'Production',
+      featureDefaults: { FeatureA: true },
+      enableUsageTracking: true,
+      enableMetrics: true,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient,
+      metricsClient: { sendMetrics: vi.fn(), close: vi.fn() },
+      cache: false,
+    })
+
+    vi.spyOn(client, 'fetchDefinitions').mockResolvedValue({ FeatureA: true })
+    await client.init()
+    await client.isFeatureOn('FeatureA', { identity: 'user-1' })
+    client.measure('revenue', 1)
+    await client.flushTelemetry()
+
+    expect(sendStats).not.toHaveBeenCalled()
     await client.close()
   })
 })

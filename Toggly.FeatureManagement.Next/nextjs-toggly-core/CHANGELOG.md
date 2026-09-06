@@ -1,3 +1,13 @@
+## 1.9.1
+
+2026-09-06
+
+### Fixed
+- Drain telemetry until idle on flush/close so batches recorded during an
+  in-flight send are not stranded (CF Worker pending-drain parity) [OPS-921].
+- `TOGGLY_DISABLE_TELEMETRY=1` is authoritative over explicit
+  `enableUsageTracking` / `enableMetrics` true [OPS-921].
+
 ## 1.9.0
 
 2026-09-06

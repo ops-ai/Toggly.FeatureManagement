@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.1
+
+2026-09-06
+
+### Fixed
+- Honor `TOGGLY_DISABLE_TELEMETRY=1` even when
+  `enableUsageTracking` / `enableMetrics` are explicitly true [OPS-921].
+
 ## 1.4.0
 
 2026-09-06

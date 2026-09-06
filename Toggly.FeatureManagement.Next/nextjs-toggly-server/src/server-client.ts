@@ -2,7 +2,7 @@ import {
   createTogglyClient,
   snapshotEvaluatedBooleans,
   toBooleanDefinitions,
-  isTelemetryEnvDisabled,
+  resolveTelemetryEnableFlag,
   type FeatureDefinitionModel,
   type TogglyClient,
   type TogglyConfig,
@@ -43,10 +43,13 @@ function resolveServerTelemetryFlags(
   config: TogglyServerConfig,
 ): Pick<TogglyServerConfig, 'enableUsageTracking' | 'enableMetrics'> {
   const hasAppKey = Boolean(config.appKey)
-  const disabled = isTelemetryEnvDisabled()
+  // TOGGLY_DISABLE_TELEMETRY=1 is authoritative over explicit true.
   return {
-    enableUsageTracking: config.enableUsageTracking ?? (hasAppKey && !disabled),
-    enableMetrics: config.enableMetrics ?? (hasAppKey && !disabled),
+    enableUsageTracking: resolveTelemetryEnableFlag(
+      config.enableUsageTracking,
+      hasAppKey,
+    ),
+    enableMetrics: resolveTelemetryEnableFlag(config.enableMetrics, hasAppKey),
   }
 }
 
