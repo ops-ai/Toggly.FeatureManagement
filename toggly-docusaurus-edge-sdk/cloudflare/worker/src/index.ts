@@ -17,12 +17,39 @@ import { getFeatureKeyForPath } from './manifest';
 import { getFlags, isFeatureEnabled } from './flags';
 import { transformHtmlResponse } from './html-rewriter';
 import { fetchFromOrigin, probeOriginAccess } from './origin';
+import { RequestScopedUsageRecorder } from './request-usage';
+import { wrapReadableWithCompletion } from './stream-flush';
 import {
   getOrCreateTelemetry,
   parseBoolEnv,
   resolveMetricsBaseUrl,
   type TelemetryRuntime,
 } from './telemetry';
+
+// ---------------------------------------------------------------------------
+// Public package API (business metrics + usage helpers for Worker extensions)
+// ---------------------------------------------------------------------------
+
+export {
+  getOrCreateTelemetry,
+  resetTelemetrySingleton,
+  TelemetryRuntime,
+  parseBoolEnv,
+  resolveMetricsBaseUrl,
+  hashIdentity,
+  WORKER_VERSION,
+  WORKER_USER_AGENT,
+  DEFAULT_METRICS_BASE_URL,
+  type TelemetryConfig,
+  type MetricsFeatureOptions,
+  type FeatureStatHttpPayload,
+  type MetricStatHttpPayload,
+} from './telemetry';
+
+export { RequestScopedUsageRecorder } from './request-usage';
+export { wrapReadableWithCompletion } from './stream-flush';
+export type { Env, RequestContext, WorkerConfig } from './types';
+export { PageGateBehavior } from './types';
 
 // Worker configuration
 const WORKER_CONFIG: WorkerConfig = {
@@ -32,7 +59,11 @@ const WORKER_CONFIG: WorkerConfig = {
   manifestCacheTTL: 300, // 5 minutes
 };
 
-function createTelemetry(env: Env): TelemetryRuntime | null {
+/**
+ * Build isolate-scoped telemetry from Worker env (usage + business metrics).
+ * Prefer this from custom Worker extensions that need measure/counter/observe.
+ */
+export function createTelemetryFromEnv(env: Env): TelemetryRuntime | null {
   const hasAppKey = Boolean(env.TOGGLY_APP_KEY);
   return getOrCreateTelemetry({
     appKey: env.TOGGLY_APP_KEY,
@@ -84,16 +115,11 @@ async function handlePageLevelGate(
   cache: Cache | null,
   config: WorkerConfig,
   publicOrigin: string,
-  telemetry: TelemetryRuntime | null,
+  usage: RequestScopedUsageRecorder,
 ): Promise<Response | null> {
   const isEnabled = await isFeatureEnabled(featureKey, env, context, cache);
 
-  if (telemetry?.isUsageEnabled()) {
-    telemetry.recordCheck(featureKey, isEnabled, identityFromContext(context), true);
-    if (isEnabled) {
-      telemetry.recordView(featureKey, identityFromContext(context));
-    }
-  }
+  usage.recordGate(featureKey, isEnabled, identityFromContext(context));
 
   if (!isEnabled) {
     if (config.pageGateBehavior === PageGateBehavior.REDIRECT) {
@@ -162,8 +188,8 @@ function flushTelemetry(
 }
 
 /**
- * Return a teed HTML body and flush telemetry only after the rewriter stream
- * has been fully drained (section `data-feature` handlers run while pulling).
+ * Return HTML with telemetry flushed after the **client-consumed** stream
+ * completes. Pull-driven wrapper preserves backpressure (no tee + eager drain).
  */
 function respondHtmlWithDeferredFlush(
   response: Response,
@@ -176,29 +202,13 @@ function respondHtmlWithDeferredFlush(
     return response;
   }
 
-  const [clientBody, drainBody] = body.tee();
-  ctx.waitUntil(
-    (async () => {
-      try {
-        await drainBody.pipeTo(
-          new WritableStream({
-            write() {
-              /* discard — drives HTMLRewriter so section telemetry records */
-            },
-          }),
-        );
-      } catch {
-        // Client abort / stream errors must not break soft-fail flush
-      }
-      try {
-        await telemetry.flush();
-      } catch {
-        // soft-fail
-      }
-    })(),
+  const wrapped = wrapReadableWithCompletion(
+    body,
+    () => telemetry.flush(),
+    (promise) => ctx.waitUntil(promise),
   );
 
-  return new Response(clientBody, {
+  return new Response(wrapped, {
     status: response.status,
     statusText: response.statusText,
     headers: response.headers,
@@ -214,7 +224,8 @@ export default {
     env: Env,
     ctx: ExecutionContext,
   ): Promise<Response> {
-    const telemetry = createTelemetry(env);
+    const telemetry = createTelemetryFromEnv(env);
+    const usage = new RequestScopedUsageRecorder(telemetry);
 
     try {
       assertOriginConfigured(env);
@@ -260,7 +271,7 @@ export default {
           cache,
           WORKER_CONFIG,
           publicOrigin,
-          telemetry,
+          usage,
         );
 
         if (gateResponse) {
@@ -292,11 +303,7 @@ export default {
         response,
         flags,
         (sectionFeature, enabled) => {
-          if (!telemetry?.isUsageEnabled()) return;
-          telemetry.recordCheck(sectionFeature, enabled, identity, true);
-          if (enabled) {
-            telemetry.recordView(sectionFeature, identity);
-          }
+          usage.recordGate(sectionFeature, enabled, identity);
         },
       );
 

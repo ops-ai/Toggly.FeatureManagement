@@ -145,13 +145,28 @@ You can test the worker locally using `wrangler dev`.
 
 ## Telemetry
 
-When usage tracking is enabled, page and section gating records **check** (and **view** when enabled) into an in-memory batch. Business metrics APIs (`measure` / `incrementCounter` / `observe`) are available on the isolate-scoped runtime for callers that extend the worker.
+When usage tracking is enabled, page and section gating records **check** (and **view** when enabled) into an in-memory batch. `requestCount` is deduplicated per feature/variant within a single HTTP request.
+
+Business metrics (`measure` / `incrementCounter` / `observe`) are part of the **package root** public API:
+
+```ts
+import {
+  createTelemetryFromEnv,
+  getOrCreateTelemetry,
+  type Env,
+} from '@ops-ai/toggly-cloudflare-worker';
+
+const telemetry = createTelemetryFromEnv(env);
+telemetry?.measure('docs.render_ms', 12, { feature: 'beta_docs' });
+telemetry?.incrementCounter('docs.page_hits');
+telemetry?.observe('docs.payload_kb', 42);
+```
 
 - Transport: `POST` JSON to `{TOGGLY_METRICS_BASE_URL}api/usage/stats` and `.../api/metrics`
 - User-Agent: `toggly-docusaurus-edge-worker/{version}`
 - Wire fields: `variantStats` / `variantValues`; identity hashes are UTF-8 FNV-1a signed int32; HTTPS times are ISO-8601
 - Caps: unique hashes per feature / app (10k), max features (500), metric keys (500), observations (1000)
-- Flush: `ctx.waitUntil` after each request; for HTML, drain a teed rewriter stream first so section gates record, then flush (single-flight; restore batch on soft-fail)
+- Flush: `ctx.waitUntil` after each request; for HTML, a pull-driven stream wrapper flushes when the client-consumed body completes (preserves backpressure; no unbounded tee buffer)
 
 Extend `getRequestContext` in `src/index.ts` to include `userId` (or other identity) for unique usage hashing.
 

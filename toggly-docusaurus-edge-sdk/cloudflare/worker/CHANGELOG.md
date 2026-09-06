@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.1
+
+2026-09-06
+
+### Fixed
+- Flush HTML telemetry via a pull-driven stream wrapper (client-driven
+  backpressure) instead of `ReadableStream.tee()` + eager drain, which could
+  buffer an entire response.
+- Deduplicate `requestCount` per feature/variant within a single HTTP request
+  so repeated section gates no longer inflate unique-request stats.
+- Export business metrics APIs (`measure` / `incrementCounter` / `observe` via
+  `TelemetryRuntime` / `createTelemetryFromEnv`) from the package root.
+
 ## 0.3.0
 
 2026-09-06
