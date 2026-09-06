@@ -66,6 +66,14 @@ export function analyzeNugetTrustedPublishing(content) {
     errors.push('missing NuGet/login@v1 (or @v1.x)');
   }
 
+  // nuget.org matches OIDC to the trust-policy creator, not package owner.
+  if (!/user:\s*opsai\b/.test(content)) {
+    errors.push('NuGet/login user must be trust-policy creator opsai (not Toggly org)');
+  }
+  if (/user:\s*Toggly\b/.test(content)) {
+    errors.push('NuGet/login user must not be package-owner org Toggly');
+  }
+
   if (/secrets\.NUGET_API_KEY/.test(content)) {
     errors.push('still references secrets.NUGET_API_KEY on push');
   }

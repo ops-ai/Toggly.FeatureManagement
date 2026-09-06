@@ -53,8 +53,30 @@ jobs:
     steps:
       - uses: NuGet/login@v1
         with:
-          user: Toggly
+          user: opsai
 `;
   const errors = analyzeNugetTrustedPublishing(withCall);
   assert.ok(errors.some((e) => /workflow_call/.test(e)));
+});
+
+test('analyzer rejects NuGet/login user Toggly (package owner, not policy creator)', () => {
+  const wrongUser = `
+name: wrong-user
+on:
+  workflow_dispatch:
+jobs:
+  publish:
+    environment: nuget-publish
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: NuGet/login@v1
+        with:
+          user: Toggly
+      - run: echo ok
+`;
+  const errors = analyzeNugetTrustedPublishing(wrongUser);
+  assert.ok(errors.some((e) => /opsai/.test(e)));
+  assert.ok(errors.some((e) => /must not be package-owner org Toggly/.test(e)));
 });

@@ -25,8 +25,9 @@ Governance notes: [`.github/package-registry/npm-governance-status.md`](package-
 
 Trusted publishing: nuget.org policy must match repository `ops-ai/Toggly.FeatureManagement`,
 workflow `sdk-dotnet-release.yml`, environment `nuget-publish`.
-`NuGet/login@v1` user is the org profile name `Toggly`.
-Key Vault signing is unchanged. Do not store a NuGet API key in GitHub once OIDC has succeeded.
+`NuGet/login@v1` `user` is the trust-policy **creator** username (`opsai`), not the
+package-owner org (`Toggly`). Key Vault signing is unchanged. Do not store a NuGet
+API key in GitHub once OIDC has succeeded.
 
 ## Workflow inputs
 
