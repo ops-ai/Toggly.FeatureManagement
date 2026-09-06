@@ -293,7 +293,10 @@ jobs:
         id: nuget_login
         uses: NuGet/login@v1
         with:
-          user: Toggly
+          # nuget.org matches OIDC to the trust-policy *creator* username,
+          # not the package/org owner (Toggly). Policy "GitHub Toggly" was
+          # created while signed in as opsai.
+          user: opsai
 
       - name: Publish to NuGet
         if: steps.should_publish.outputs.publish == 'true'
