@@ -18,6 +18,14 @@ module Toggly
       GrpcClients.hash_identity(identity)
     end
 
+    def feature_stat_from_payload(payload)
+      GrpcClients.feature_stat_from_payload(payload)
+    end
+
+    def metric_stat_from_payload(payload)
+      GrpcClients.metric_stat_from_payload(payload)
+    end
+
     def grpc_available?
       GrpcClients.grpc_available?
     end

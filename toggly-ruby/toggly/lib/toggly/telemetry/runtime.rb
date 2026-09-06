@@ -4,6 +4,8 @@ module Toggly
   module Telemetry
     # Owns usage + metrics batchers, flush timers, and process-exit handlers.
     class Runtime
+      TIMER_JOIN_TIMEOUT_SECONDS = 2.0
+
       def initialize(
         app_key:,
         environment:,
@@ -48,6 +50,7 @@ module Toggly
         @sending_metrics = false
         @closed = false
         @mutex = Mutex.new
+        @timer_cv = ConditionVariable.new
         @process_start_time = Time.now.utc
         @atexit_registered = false
         @warned_missing_grpc = false
@@ -182,15 +185,19 @@ module Toggly
       end
 
       def close
+        timers = nil
         @mutex.synchronize do
           return if @closed
 
           @closed = true
-          @usage_timer&.kill
+          @timer_cv.broadcast
+          timers = [@usage_timer, @metrics_timer].compact
           @usage_timer = nil
-          @metrics_timer&.kill
           @metrics_timer = nil
         end
+
+        # Wait for flush loops (including in-flight sends) — do not Thread#kill.
+        timers.each { |thread| join_timer(thread) }
 
         begin
           flush_all
@@ -240,7 +247,7 @@ module Toggly
 
         @usage_timer = Thread.new do
           loop do
-            sleep(@usage_flush_interval)
+            wait_for_interval_or_stop(@usage_flush_interval)
             break if @closed
 
             flush_usage
@@ -254,13 +261,32 @@ module Toggly
 
         @metrics_timer = Thread.new do
           loop do
-            sleep(@metrics_flush_interval)
+            wait_for_interval_or_stop(@metrics_flush_interval)
             break if @closed
 
             flush_metrics
           end
         end
         @metrics_timer.abort_on_exception = false
+      end
+
+      # Interruptible interval wait — close broadcasts to wake early.
+      def wait_for_interval_or_stop(interval)
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + interval
+        @mutex.synchronize do
+          until @closed
+            remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            break if remaining <= 0
+
+            @timer_cv.wait(@mutex, remaining)
+          end
+        end
+      end
+
+      def join_timer(thread)
+        return if thread.nil? || !thread.alive?
+
+        thread.join(TIMER_JOIN_TIMEOUT_SECONDS)
       end
 
       def attach_exit_handlers

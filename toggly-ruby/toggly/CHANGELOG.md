@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - FNV-1a UTF-8 signed int32 identity hashing with golden vectors matching
   Go/Node/Python; `variantStats` / `variantValues` wire fields.
 
+### Fixed
+
+- Assign full `Google::Protobuf::Timestamp` objects for nested time fields
+  (FeatureStat/MetricStat/observations) instead of mutating nil fields.
+- Cooperative flush-timer stop on `close` (condition wake + join timeout)
+  instead of `Thread#kill` during an in-flight send.
+
 ## [0.3.0] - 2026-09-04
 
 ### Added

@@ -7,6 +7,10 @@ Core Ruby SDK for [Toggly](https://toggly.io) feature flag management.
 - `websocket-client-simple` — live definition updates
 - `grpc` + `google-protobuf` — usage / business metrics telemetry send
 
+The Gemfile `:development, :test` group also includes `grpc` and
+`google-protobuf` so `bundle exec rspec` can exercise the native conversion
+path without making them required runtime deps of the published gem.
+
 Entity `ContextProperty` filters evaluate `Toggly::EntityContext` (`kind`, `key`, `attributes`) and are ANDed with user filters. `Toggly.register_context` optionally PUTs schemas to `sdk/{appKey}/contexts`.
 
 ## Installation

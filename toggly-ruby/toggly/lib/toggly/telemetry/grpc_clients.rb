@@ -41,6 +41,22 @@ module Toggly
         }
       end
 
+      # Build a protobuf Timestamp from a batcher hash. Nested message fields are
+      # nil until assigned — callers must assign the returned object, not mutate
+      # ``msg.time.seconds``.
+      #
+      # @param ts [Hash, nil]
+      # @return [Google::Protobuf::Timestamp, nil]
+      def build_timestamp(ts)
+        return nil unless ts.is_a?(Hash)
+
+        require "google/protobuf/timestamp_pb"
+        Google::Protobuf::Timestamp.new(
+          seconds: ts[:seconds].to_i,
+          nanos: ts[:nanos].to_i
+        )
+      end
+
       # @param base_url [String]
       # @return [String] host:port for a gRPC channel
       def grpc_target(base_url)
@@ -78,6 +94,27 @@ module Toggly
         @grpc_available = true
       rescue LoadError
         @grpc_available = false
+      end
+
+      # Reset cached availability (tests only).
+      def reset_grpc_available!
+        @grpc_available = nil
+      end
+
+      # Convert a batcher dict into Usage.FeatureStat.
+      #
+      # @param payload [Hash]
+      # @return [Toggly::Telemetry::Pb::Usage::FeatureStat]
+      def feature_stat_from_payload(payload)
+        NativeUsageClient.feature_stat_from_payload(payload)
+      end
+
+      # Convert a batcher dict into Metrics.MetricStat.
+      #
+      # @param payload [Hash]
+      # @return [Toggly::Telemetry::Pb::Metrics::MetricStat]
+      def metric_stat_from_payload(payload)
+        NativeMetricsClient.metric_stat_from_payload(payload)
       end
 
       # @param metrics_base_url [String]
@@ -138,7 +175,7 @@ module Toggly
 
         def send_stats(request, metadata: nil)
           meta = @default_metadata.merge((metadata || {}).transform_keys(&:to_s))
-          msg = feature_stat_from_payload(request)
+          msg = self.class.feature_stat_from_payload(request)
           @stub.send_stats(msg, metadata: meta.to_a, deadline: Time.now + @timeout)
         end
 
@@ -146,19 +183,23 @@ module Toggly
           @shared.close
         end
 
-        private
+        # @param payload [Hash]
+        # @return [Toggly::Telemetry::Pb::Usage::FeatureStat]
+        def self.feature_stat_from_payload(payload)
+          require_relative "pb/usage_pb"
 
-        def feature_stat_from_payload(payload)
           msg = Pb::Usage::FeatureStat.new(
             appKey: payload[:appKey].to_s,
             environment: payload[:environment].to_s,
             totalUniqueUsers: payload[:totalUniqueUsers].to_i,
             uniqueUserHashes: Array(payload[:uniqueUserHashes]).map(&:to_i)
           )
-          apply_timestamp(msg.time, payload[:time])
+          ts = GrpcClients.build_timestamp(payload[:time])
+          msg.time = ts if ts
           msg.instanceName = payload[:instanceName].to_s if payload[:instanceName]
           msg.appVersion = payload[:appVersion].to_s if payload[:appVersion]
-          apply_timestamp(msg.processStartTime, payload[:processStartTime]) if payload[:processStartTime]
+          process_start = GrpcClients.build_timestamp(payload[:processStartTime])
+          msg.processStartTime = process_start if process_start
 
           Array(payload[:stats]).each do |stat|
             next unless stat.is_a?(Hash)
@@ -185,13 +226,6 @@ module Toggly
           end
           msg
         end
-
-        def apply_timestamp(field, ts)
-          return unless ts.is_a?(Hash)
-
-          field.seconds = ts[:seconds].to_i
-          field.nanos = ts[:nanos].to_i
-        end
       end
 
       # Converts batcher hashes into Metrics.MetricStat and sends via stub.
@@ -205,7 +239,7 @@ module Toggly
 
         def send_metrics(request, metadata: nil)
           meta = @default_metadata.merge((metadata || {}).transform_keys(&:to_s))
-          msg = metric_stat_from_payload(request)
+          msg = self.class.metric_stat_from_payload(request)
           @stub.send_metrics(msg, metadata: meta.to_a, deadline: Time.now + @timeout)
         end
 
@@ -213,14 +247,17 @@ module Toggly
           @shared.close
         end
 
-        private
+        # @param payload [Hash]
+        # @return [Toggly::Telemetry::Pb::Metrics::MetricStat]
+        def self.metric_stat_from_payload(payload)
+          require_relative "pb/metrics_pb"
 
-        def metric_stat_from_payload(payload)
           msg = Pb::Metrics::MetricStat.new(
             appKey: payload[:appKey].to_s,
             environment: payload[:environment].to_s
           )
-          apply_timestamp(msg.time, payload[:time])
+          ts = GrpcClients.build_timestamp(payload[:time])
+          msg.time = ts if ts
           msg.instanceName = payload[:instanceName].to_s if payload[:instanceName]
 
           Array(payload[:stats]).each do |item|
@@ -245,7 +282,8 @@ module Toggly
             next unless item.is_a?(Hash)
 
             om = Pb::Metrics::MetricObservationMessage.new(metric: item[:metric].to_s)
-            apply_timestamp(om.time, item[:time])
+            obs_ts = GrpcClients.build_timestamp(item[:time])
+            om.time = obs_ts if obs_ts
             om.feature = item[:feature].to_s if item[:feature]
             fill_variant_values(om, item[:variantValues])
             msg.observations << om
@@ -253,19 +291,12 @@ module Toggly
           msg
         end
 
-        def fill_variant_values(target, variant_values)
+        def self.fill_variant_values(target, variant_values)
           return unless variant_values.is_a?(Hash)
 
           variant_values.each do |name, value|
             target.variantValues[name.to_s] = value.to_f
           end
-        end
-
-        def apply_timestamp(field, ts)
-          return unless ts.is_a?(Hash)
-
-          field.seconds = ts[:seconds].to_i
-          field.nanos = ts[:nanos].to_i
         end
       end
     end
