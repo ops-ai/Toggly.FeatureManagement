@@ -5,6 +5,9 @@ use crate::config::{TogglyConfig, TogglyConfigBuilder};
 use crate::context::EvalContext;
 use crate::eval::Engine;
 use crate::provider::DefinitionsProvider;
+use crate::telemetry::{
+    MetricsFeatureOptions, TelemetryRuntime, TelemetryRuntimeConfig, TelemetrySenders,
+};
 use crate::Requirement;
 use std::sync::Arc;
 use tracing::{debug, info, instrument};
@@ -40,6 +43,7 @@ pub struct TogglyClient {
     provider: Arc<tokio::sync::RwLock<DefinitionsProvider>>,
     engine: Engine,
     cache: Cache<bool>,
+    telemetry: Option<TelemetryRuntime>,
 }
 
 impl TogglyClient {
@@ -50,6 +54,14 @@ impl TogglyClient {
 
     /// Create a new client with the given configuration.
     pub async fn new(config: TogglyConfig) -> crate::Result<Self> {
+        Self::new_with_senders(config, None).await
+    }
+
+    /// Create a client with optional injected telemetry senders (tests).
+    pub async fn new_with_senders(
+        config: TogglyConfig,
+        senders: Option<TelemetrySenders>,
+    ) -> crate::Result<Self> {
         config.validate()?;
 
         let mut provider = DefinitionsProvider::new(config.clone())?;
@@ -58,11 +70,29 @@ impl TogglyClient {
         let cache = Cache::new(config.cache_ttl, config.cache_max_entries);
         crate::entity_context::register_entity_contexts_at_startup(&config).await;
 
+        let mut runtime_config = TelemetryRuntimeConfig::from_client_config(
+            &config.app_key,
+            &config.environment,
+            config.metrics_base_url.as_deref(),
+            config.enable_usage_tracking,
+            config.enable_metrics,
+            config.usage_flush_interval,
+            config.metrics_flush_interval,
+            config.instance_name.as_deref(),
+            config.app_version.as_deref(),
+        );
+        if let Some(senders) = senders {
+            runtime_config.senders = senders;
+            runtime_config.senders_provided = true;
+        }
+        let telemetry = Some(TelemetryRuntime::start(runtime_config));
+
         Ok(Self {
             config,
             provider: Arc::new(tokio::sync::RwLock::new(provider)),
             engine: Engine::with_defaults(),
             cache,
+            telemetry,
         })
     }
 
@@ -78,56 +108,47 @@ impl TogglyClient {
 
     /// Check if a feature is enabled.
     ///
-    /// # Arguments
-    ///
-    /// * `feature_key` - The feature key to check
-    /// * `context` - The evaluation context
-    ///
-    /// # Returns
-    ///
-    /// `true` if the feature is enabled, `false` otherwise.
+    /// When usage tracking is enabled, each call records a usage check
+    /// (including cache hits).
     #[instrument(skip(self, context), fields(feature = %feature_key))]
     pub async fn is_enabled(&self, feature_key: &str, context: EvalContext) -> crate::Result<bool> {
         if feature_key.is_empty() {
             return Err(crate::Error::Config("feature_key is required".to_string()));
         }
 
-        // Check cache first
         let cache_key = self.cache_key(feature_key, &context);
         if let Some(cached) = self.cache.get(&cache_key) {
             debug!(feature = %feature_key, cached = %cached, "Cache hit");
+            self.record_check(feature_key, cached, context.identity.as_deref());
             return Ok(cached);
         }
 
-        // Get definition
         let provider = self.provider.read().await;
         let definition = match provider.get(feature_key) {
             Some(def) => def,
             None => {
-                // Feature not found
-                if self.config.enable_undefined_in_dev {
+                let result = if self.config.enable_undefined_in_dev {
                     debug!(feature = %feature_key, "Feature not found, returning true (dev mode)");
-                    return Ok(true);
-                }
-                debug!(feature = %feature_key, "Feature not found, returning false");
-                return Ok(false);
+                    true
+                } else {
+                    debug!(feature = %feature_key, "Feature not found, returning false");
+                    false
+                };
+                self.record_check(feature_key, result, context.identity.as_deref());
+                return Ok(result);
             }
         };
-        drop(provider); // Release lock before evaluation
+        drop(provider);
 
-        // Evaluate feature
         let result = self.engine.evaluate(&definition, &context)?;
-
-        // Cache result
         self.cache.insert(cache_key, result);
 
         debug!(feature = %feature_key, enabled = %result, "Feature evaluated");
+        self.record_check(feature_key, result, context.identity.as_deref());
         Ok(result)
     }
 
     /// Check if a feature is disabled.
-    ///
-    /// This is a convenience method that returns the inverse of `is_enabled`.
     pub async fn is_disabled(
         &self,
         feature_key: &str,
@@ -137,17 +158,6 @@ impl TogglyClient {
     }
 
     /// Evaluate a feature gate (multiple features with AND/OR logic).
-    ///
-    /// # Arguments
-    ///
-    /// * `feature_keys` - List of feature keys to evaluate
-    /// * `requirement` - Whether all or any features must be enabled
-    /// * `context` - The evaluation context
-    /// * `negate` - Whether to negate the result
-    ///
-    /// # Returns
-    ///
-    /// `true` if the gate passes, `false` otherwise.
     #[instrument(skip(self, context), fields(features = ?feature_keys))]
     pub async fn evaluate_gate(
         &self,
@@ -199,16 +209,10 @@ impl TogglyClient {
     }
 
     /// Check if a feature is defined (non-blocking, synchronous).
-    ///
-    /// This method attempts to check if a feature is defined without blocking.
-    /// If the lock cannot be acquired immediately, returns `false`.
-    ///
-    /// Use this for synchronous contexts like route guards where async is not available.
     pub fn is_defined_sync(&self, feature_key: &str) -> bool {
         match self.provider.try_read() {
             Ok(guard) => guard.contains(feature_key),
             Err(_) => {
-                // Lock is held, can't check - return false as safe default
                 debug!(feature = %feature_key, "Could not acquire lock for sync check");
                 false
             }
@@ -239,14 +243,81 @@ impl TogglyClient {
         self.provider.read().await.etag()
     }
 
-    /// Close the client and release resources.
+    /// Record a feature used/interaction event.
+    pub fn record_usage(&self, feature_key: &str, identity: Option<&str>, variant: &str) {
+        if let Some(tel) = &self.telemetry {
+            if tel.usage_enabled() {
+                tel.record_usage(feature_key, identity, variant);
+            }
+        }
+    }
+
+    /// Record a feature viewed/rendered event.
+    pub fn record_view(&self, feature_key: &str, identity: Option<&str>, variant: &str) {
+        if let Some(tel) = &self.telemetry {
+            if tel.usage_enabled() {
+                tel.record_view(feature_key, identity, variant);
+            }
+        }
+    }
+
+    /// Aggregate a business measurement (sum over the flush window).
+    pub fn measure(&self, metric: &str, value: f64, options: Option<&MetricsFeatureOptions>) {
+        if let Some(tel) = &self.telemetry {
+            if tel.metrics_enabled() {
+                tel.measure(metric, value, options);
+            }
+        }
+    }
+
+    /// Increment a business counter.
+    pub fn increment_counter(
+        &self,
+        metric: &str,
+        value: f64,
+        options: Option<&MetricsFeatureOptions>,
+    ) {
+        if let Some(tel) = &self.telemetry {
+            if tel.metrics_enabled() {
+                tel.increment_counter(metric, value, options);
+            }
+        }
+    }
+
+    /// Record a point-in-time business observation.
+    pub fn observe(&self, metric: &str, value: f64, options: Option<&MetricsFeatureOptions>) {
+        if let Some(tel) = &self.telemetry {
+            if tel.metrics_enabled() {
+                tel.observe(metric, value, options);
+            }
+        }
+    }
+
+    /// Flush pending usage and metrics batches (soft-fail on transport errors).
+    pub async fn flush_telemetry(&self) {
+        if let Some(tel) = &self.telemetry {
+            tel.flush_all().await;
+        }
+    }
+
+    /// Close the client and release resources (best-effort telemetry flush).
     pub async fn close(&self) {
+        if let Some(tel) = &self.telemetry {
+            tel.close().await;
+        }
         self.provider.write().await.shutdown();
         self.cache.clear();
         info!("Toggly client closed");
     }
 
-    /// Generate a cache key for the given feature and context.
+    fn record_check(&self, feature_key: &str, enabled: bool, identity: Option<&str>) {
+        if let Some(tel) = &self.telemetry {
+            if tel.usage_enabled() {
+                tel.record_check(feature_key, enabled, identity, None, false);
+            }
+        }
+    }
+
     fn cache_key(&self, feature_key: &str, context: &EvalContext) -> String {
         let identity = context.identity.as_deref().unwrap_or("");
         let groups = context.groups.join(",");
@@ -366,6 +437,36 @@ impl TogglyClientBuilder {
         self
     }
 
+    /// Enable or disable feature usage tracking.
+    pub fn enable_usage_tracking(mut self, enabled: bool) -> Self {
+        self.config_builder = self.config_builder.enable_usage_tracking(enabled);
+        self
+    }
+
+    /// Enable or disable business metrics export (Toggly gRPC).
+    pub fn enable_metrics(mut self, enabled: bool) -> Self {
+        self.config_builder = self.config_builder.enable_metrics(enabled);
+        self
+    }
+
+    /// Set the gRPC base URL for usage/metrics.
+    pub fn metrics_base_url(mut self, url: impl Into<String>) -> Self {
+        self.config_builder = self.config_builder.metrics_base_url(url);
+        self
+    }
+
+    /// Set the usage flush interval.
+    pub fn usage_flush_interval(mut self, interval: std::time::Duration) -> Self {
+        self.config_builder = self.config_builder.usage_flush_interval(interval);
+        self
+    }
+
+    /// Set the metrics flush interval.
+    pub fn metrics_flush_interval(mut self, interval: std::time::Duration) -> Self {
+        self.config_builder = self.config_builder.metrics_flush_interval(interval);
+        self
+    }
+
     /// Build the client.
     pub async fn build(self) -> crate::Result<TogglyClient> {
         TogglyClient::new(self.config_builder.build()).await
@@ -380,19 +481,17 @@ mod tests {
     fn test_builder() {
         let _builder = TogglyClient::builder()
             .app_key("test")
-            .environment("staging");
+            .environment("staging")
+            .enable_usage_tracking(false)
+            .enable_metrics(false);
     }
 
     #[tokio::test]
     async fn test_empty_feature_key() {
-        // This would fail validation if we could build without a server
-        // For now, just verify the error type
         let _config = TogglyConfig::builder()
             .app_key("test")
             .environment("test")
             .disable_background_refresh(true)
             .build();
-
-        // Would need mock server to test fully
     }
 }

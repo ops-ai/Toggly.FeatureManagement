@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Toggly <support@toggly.io>"]
 edition = "2021"
 rust-version = "1.88"
@@ -38,9 +38,15 @@ dashmap = "5.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# Metrics
+# Metrics (local Prometheus exporters — distinct from Toggly gRPC telemetry)
 metrics = "0.24"
 prometheus = "0.13"
+
+# Optional Toggly usage/metrics gRPC export (`telemetry` feature)
+tonic = { version = "0.12", features = ["tls", "tls-roots"] }
+prost = "0.13"
+prost-types = "0.13"
+tower = "0.4"
 
 # Framework integrations
 actix-web = ">=4.4, <4.13"
@@ -56,5 +62,5 @@ futures-util = "0.3"
 
 # Workspace crates — keep path pins in sync with workspace.package.version
 # so sibling crates resolve against the bumped package (CI / frozen installs).
-toggly = { version = "0.4.0", path = "toggly" }
-toggly-macros = { version = "0.4.0", path = "toggly-macros" }
+toggly = { version = "0.5.0", path = "toggly" }
+toggly-macros = { version = "0.5.0", path = "toggly-macros" }

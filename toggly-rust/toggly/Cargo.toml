@@ -17,7 +17,18 @@ readme = "../README.md"
 default = ["rustls-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
 native-tls = ["reqwest/native-tls"]
+# Local Prometheus / `metrics` crate integration — not Toggly gRPC export.
 metrics = ["dep:metrics", "dep:prometheus"]
+# Batched Usage.SendStats + Metrics.SendMetrics via tonic/prost.
+# Also gates build-dep tonic-build so feature-off stays free of prost tooling.
+telemetry = [
+    "dep:tonic",
+    "dep:prost",
+    "dep:prost-types",
+    "dep:tower",
+    "dep:tonic-build",
+    "dep:protoc-bin-vendored",
+]
 
 [dependencies]
 tokio = { workspace = true }
@@ -30,10 +41,15 @@ parking_lot = { workspace = true }
 dashmap = { workspace = true }
 tracing = { workspace = true }
 
-# Optional metrics
+# Optional local Prometheus metrics
 metrics = { workspace = true, optional = true }
 prometheus = { workspace = true, optional = true }
 
+# Optional Toggly usage / business-metrics gRPC export
+tonic = { workspace = true, optional = true }
+prost = { workspace = true, optional = true }
+prost-types = { workspace = true, optional = true }
+tower = { workspace = true, optional = true }
 
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
@@ -53,7 +69,13 @@ tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
 url = "2.5"
 
+[build-dependencies]
+tonic-build = { version = "0.12", optional = true }
+# Bundled protoc so CI / crates.io consumers do not need a system install.
+protoc-bin-vendored = { version = "3", optional = true }
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 wiremock = { workspace = true }
 tracing-subscriber = { workspace = true }
+async-trait = { workspace = true }
