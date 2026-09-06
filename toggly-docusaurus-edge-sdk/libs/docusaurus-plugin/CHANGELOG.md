@@ -1,3 +1,11 @@
+## 0.8.1
+
+2026-09-06
+
+### Changed
+- Install docs are plugin-only. The package already bundles its flag client;
+  `@ops-ai/toggly-client-core` is not a dependency.
+
 ## 0.8.0
 
 2026-09-03

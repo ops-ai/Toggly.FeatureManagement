@@ -82,6 +82,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 | Application Insights | `@ops-ai/toggly-appinsights-hook` | [`toggly-appinsights-hook`](toggly-appinsights-hook) | [Docs](https://docs.toggly.io) |
 | Hook types | `@ops-ai/toggly-hooks-types` | [`toggly-hooks-types`](toggly-hooks-types) | [Docs](https://docs.toggly.io) |
 | Docusaurus / edge | `@ops-ai/toggly-docusaurus-plugin`, Cloudflare helpers | [`toggly-docusaurus-edge-sdk`](toggly-docusaurus-edge-sdk) | [Docs](https://docs.toggly.io) |
+| Generic JS client | `@ops-ai/toggly-client-core` (standalone; not required by the plugin) | [`toggly-docusaurus-edge-sdk/libs/core`](toggly-docusaurus-edge-sdk/libs/core) | [Docs](https://docs.toggly.io) |
 | Local gates | `@ops-ai/toggly-local-gates` | [`toggly-local-gates`](toggly-local-gates) | [Docs](https://docs.toggly.io) |
 
 ### Tools

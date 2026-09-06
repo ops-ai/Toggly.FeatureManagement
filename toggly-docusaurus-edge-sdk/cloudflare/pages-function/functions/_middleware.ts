@@ -10,9 +10,9 @@
  *      `ASSETS` binding. No cross-origin fetch — the manifest is part of the
  *      static build this middleware fronts, so there is no Pages-vs-Worker
  *      domain dance and no Cloudflare Access service-token to manage.
- *   2. Fetches the live flag map from Toggly's definitions API using
- *      `@ops-ai/toggly-client-core`, edge-cached for `FLAGS_CACHE_TTL_SECONDS`
- *      via `caches.default`.
+ *   2. Fetches the live flag map from Toggly's definitions API
+ *      (`/evaluated-signed/{appKey}/{environment}`), edge-cached for
+ *      `FLAGS_CACHE_TTL_SECONDS` via `caches.default`.
  *   3. If the requested path is mapped to a feature flag and that flag is OFF,
  *      returns 404 (or a configurable redirect). Otherwise lets the static
  *      asset flow through and runs the HTML response through `HTMLRewriter` to:
@@ -25,8 +25,8 @@
  * in `cloudflare/worker/`. They are deliberately independent files: Pages
  * Functions read static assets via the `ASSETS` binding and never need an
  * external origin URL or Access service-token, so a single self-contained
- * file (with only `@ops-ai/toggly-client-core` as a runtime dep) is the least
- * surprising integration shape for users who already host on Pages.
+ * file with no npm runtime dependencies is the least surprising integration
+ * shape for users who already host on Pages.
  *
  * Required env vars (set in the Pages project's "Environment variables"):
  *   - TOGGLY_API_BASE_URL   e.g. https://definitions.toggly.io

@@ -38,17 +38,17 @@ graph TD
 
 ### Components
 
--   **`@ops-ai/toggly-client-core`**: Framework-agnostic Toggly client for feature flag evaluation. Used by all the runtime variants below.
 -   **`@ops-ai/toggly-docusaurus-plugin`**:
     -   Extracts `x-feature` frontmatter during build.
     -   Generates `toggly-page-features.json` manifest for the edge runtime.
     -   Injects configuration into the client bundle.
     -   Provides `<Feature>` components and hooks for the UI.
+    -   Bundles its own flag client (no `@ops-ai/toggly-client-core` dependency).
 -   **Edge enforcement** (pick one — both ship in this SDK):
     -   [`cloudflare/pages-function`](./cloudflare/pages-function/README.md) — drop-in
         `_middleware.ts` for sites already deployed on Cloudflare Pages.
-        Single file, single dep (`@ops-ai/toggly-client-core`), no separate
-        deploy step, no Cloudflare Access service-token to manage. **Recommended
+        Single self-contained file, no npm runtime deps, no separate deploy
+        step, no Cloudflare Access service-token to manage. **Recommended
         when your DNS already points at Pages.**
     -   [`cloudflare/worker`](./cloudflare/worker/README.md) — standalone Cloudflare
         Worker that fronts any HTML origin (Pages, GitHub Pages, Netlify, Vercel,
@@ -67,7 +67,7 @@ and inject the hydration-safe `window.__TOGGLY_EDGE_FLAGS__` snapshot.
 In your Docusaurus project:
 
 ```bash
-npm install @ops-ai/toggly-docusaurus-plugin @ops-ai/toggly-client-core
+npm install @ops-ai/toggly-docusaurus-plugin
 ```
 
 ### 2. Configure Docusaurus
@@ -175,7 +175,8 @@ pnpm test
 
 ## Project Structure
 
--   `libs/core`: Framework-agnostic Toggly client (`@ops-ai/toggly-client-core`).
+-   `libs/core`: Optional standalone JS client (`@ops-ai/toggly-client-core`).
+    Not used by the plugin or the Cloudflare templates in this folder.
 -   `libs/docusaurus-plugin`: Build-time plugin + React runtime
     (`@ops-ai/toggly-docusaurus-plugin`).
 -   `cloudflare/pages-function`: Drop-in Pages Functions middleware (`_middleware.ts`).

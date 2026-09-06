@@ -5,12 +5,14 @@ Docusaurus plugin and React bindings for gating documentation content with Toggl
 ## Installation
 
 ```bash
-npm install @ops-ai/toggly-docusaurus-plugin @ops-ai/toggly-client-core
+npm install @ops-ai/toggly-docusaurus-plugin
 # or
-pnpm add @ops-ai/toggly-docusaurus-plugin @ops-ai/toggly-client-core
+pnpm add @ops-ai/toggly-docusaurus-plugin
 # or
-yarn add @ops-ai/toggly-docusaurus-plugin @ops-ai/toggly-client-core
+yarn add @ops-ai/toggly-docusaurus-plugin
 ```
+
+The plugin bundles its own flag client. You do not need `@ops-ai/toggly-client-core`.
 
 ## Configuration
 

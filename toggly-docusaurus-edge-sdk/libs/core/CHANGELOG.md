@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 0.3.1
+
+2026-09-06
+
+### Changed
+- README: this package is a standalone client. The Docusaurus plugin and
+  Cloudflare templates do not depend on it.
+
 ## 0.3.0
 
 2026-09-06
