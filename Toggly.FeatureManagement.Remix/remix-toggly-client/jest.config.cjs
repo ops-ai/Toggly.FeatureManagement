@@ -28,6 +28,7 @@ const config = {
   },
   moduleNameMapper: {
     '^@ops-ai/remix-toggly-core$': '<rootDir>/../remix-toggly-core/src',
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   testPathIgnorePatterns: ['/node_modules/', '.*smoke.*\\.spec\\.ts$', '.*smoke.*\\.spec\\.tsx$', '.*smoke.*\\.test\\.ts$', '.*smoke.*\\.test\\.tsx$'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
