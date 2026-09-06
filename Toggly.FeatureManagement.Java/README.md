@@ -11,7 +11,8 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 
 ## Features
 
-- **Zero-dependency core** - Works anywhere Java runs
+- **Zero required dependencies for flag evaluation** - Optional gRPC jars for usage/metrics
+- **Usage + business metrics** - Batched `Usage.SendStats` / `Metrics.SendMetrics` over native gRPC
 - **Spring Boot auto-configuration** - Just add the dependency
 - **Spring MVC integration** - Interceptors, annotations, and argument resolvers
 - **Spring WebFlux support** - Reactive APIs and filters
@@ -29,48 +30,70 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-core</artifactId>
-    <version>1.3.0</version>
+    <version>1.4.0</version>
+</dependency>
+
+<!-- Optional: send usage/metrics over gRPC -->
+<dependency>
+    <groupId>io.grpc</groupId>
+    <artifactId>grpc-netty-shaded</artifactId>
+    <version>1.69.1</version>
+</dependency>
+<dependency>
+    <groupId>io.grpc</groupId>
+    <artifactId>grpc-protobuf</artifactId>
+    <version>1.69.1</version>
+</dependency>
+<dependency>
+    <groupId>io.grpc</groupId>
+    <artifactId>grpc-stub</artifactId>
+    <version>1.69.1</version>
+</dependency>
+<dependency>
+    <groupId>com.google.protobuf</groupId>
+    <artifactId>protobuf-java</artifactId>
+    <version>3.25.5</version>
 </dependency>
 
 <!-- Spring Boot (recommended) -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-boot-starter</artifactId>
-    <version>1.3.0</version>
+    <version>1.4.0</version>
 </dependency>
 
 <!-- Spring MVC -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-mvc</artifactId>
-    <version>1.3.0</version>
+    <version>1.4.0</version>
 </dependency>
 
 <!-- Spring WebFlux -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-webflux</artifactId>
-    <version>1.3.0</version>
+    <version>1.4.0</version>
 </dependency>
 
 <!-- Servlet -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-servlet</artifactId>
-    <version>1.3.0</version>
+    <version>1.4.0</version>
 </dependency>
 
 <!-- Caching (optional) -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-caffeine</artifactId>
-    <version>1.3.0</version>
+    <version>1.4.0</version>
 </dependency>
 
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-redis</artifactId>
-    <version>1.3.0</version>
+    <version>1.4.0</version>
 </dependency>
 ```
 
@@ -78,10 +101,10 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 
 ```kotlin
 // Core
-implementation("io.toggly:toggly-core:1.0.0")
+implementation("io.toggly:toggly-core:1.4.0")
 
 // Spring Boot
-implementation("io.toggly:toggly-spring-boot-starter:1.0.0")
+implementation("io.toggly:toggly-spring-boot-starter:1.4.0")
 ```
 
 ## Quick Start
@@ -129,9 +152,26 @@ TogglyConfig config = TogglyConfig.builder()
 TogglyClient client = new TogglyClient(config);
 
 if (client.isEnabled("my-feature")) {
-    // Feature is enabled
+    // Feature is enabled — usage check recorded when enableUsageTracking is on
 }
+
+client.recordUsage("my-feature", "user-123");
+client.recordView("my-feature", "user-123");
+client.measure("checkout_total", 42.0);
+client.incrementCounter("button_clicks");
+client.observe("queue_depth", 3);
+client.flushTelemetry(); // optional; also flushes on close()
 ```
+
+### Telemetry configuration
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `enableUsageTracking` | `true` | Feature checks / used / viewed via `Usage.SendStats` |
+| `enableMetrics` | `true` | `measure` / `incrementCounter` / `observe` via `Metrics.SendMetrics` |
+| `metricsBaseUrl` | `https://app.toggly.io/` | gRPC endpoint (not the definitions CDN) |
+
+Without the optional gRPC dependencies, flag evaluation still works; a warning is logged when telemetry is enabled but transport is missing.
 
 ### With User Context
 

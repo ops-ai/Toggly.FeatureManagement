@@ -68,6 +68,21 @@ public class TogglyProperties {
      */
     private boolean registerContextsOnStartup = true;
 
+    /**
+     * Enable feature usage telemetry ({@code Usage.SendStats}).
+     */
+    private boolean enableUsageTracking = true;
+
+    /**
+     * Enable business metrics telemetry ({@code Metrics.SendMetrics}).
+     */
+    private boolean enableMetrics = true;
+
+    /**
+     * Base URL for usage/metrics gRPC (default {@code https://app.toggly.io/}).
+     */
+    private String metricsBaseUrl = "https://app.toggly.io/";
+
     // Getters and Setters
 
     public String getAppKey() {
@@ -140,5 +155,29 @@ public class TogglyProperties {
 
     public void setRegisterContextsOnStartup(boolean registerContextsOnStartup) {
         this.registerContextsOnStartup = registerContextsOnStartup;
+    }
+
+    public boolean isEnableUsageTracking() {
+        return enableUsageTracking;
+    }
+
+    public void setEnableUsageTracking(boolean enableUsageTracking) {
+        this.enableUsageTracking = enableUsageTracking;
+    }
+
+    public boolean isEnableMetrics() {
+        return enableMetrics;
+    }
+
+    public void setEnableMetrics(boolean enableMetrics) {
+        this.enableMetrics = enableMetrics;
+    }
+
+    public String getMetricsBaseUrl() {
+        return metricsBaseUrl;
+    }
+
+    public void setMetricsBaseUrl(String metricsBaseUrl) {
+        this.metricsBaseUrl = metricsBaseUrl;
     }
 }

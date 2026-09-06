@@ -32,8 +32,11 @@ public class TogglyAutoConfiguration {
                 .appKey(properties.getAppKey())
                 .environment(properties.getEnvironment())
                 .baseUrl(properties.getBaseUrl())
+                .metricsBaseUrl(properties.getMetricsBaseUrl())
                 .refreshIntervalSeconds(properties.getRefreshIntervalSeconds())
                 .defaultFeatureState(properties.isDefaultFeatureState())
+                .enableUsageTracking(properties.isEnableUsageTracking())
+                .enableMetrics(properties.isEnableMetrics())
                 .registerContextsOnStartup(properties.isRegisterContextsOnStartup());
 
         if (properties.getDefaultIdentity() != null) {
