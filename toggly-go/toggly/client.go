@@ -121,10 +121,15 @@ func (c *Client) Close() error {
 }
 
 // IsEnabled evaluates a feature flag.
+//
+// When ctx carries ambient evaluation context (via WithEvalContext / togglyctx.With),
+// empty or nil per-call fields are filled from ambient; non-empty per-call fields win.
 func (c *Client) IsEnabled(ctx context.Context, featureKey string, evalCtx Context) (bool, error) {
 	if featureKey == "" {
 		return false, errors.New("toggly: featureKey is required")
 	}
+
+	evalCtx = ResolveEvalContext(ctx, evalCtx)
 
 	def, ok := c.provider.get(featureKey)
 	if !ok {
