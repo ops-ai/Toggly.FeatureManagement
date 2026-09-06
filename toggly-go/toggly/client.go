@@ -45,11 +45,12 @@ func NewClient(cfg Config) (*Client, error) {
 	eng := eval.NewEngine(reg)
 	c := &Client{cfg: cfg, provider: p, engine: eng, registry: reg}
 
+	ua := SDKUserAgent()
 	if cfg.EnableUsage {
 		if cfg.UsageClient != nil {
 			c.usage = cfg.UsageClient
 		} else {
-			u, err := usage.Dial(cfg.BaseURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, cfg.AppVersion)
+			u, err := usage.Dial(cfg.BaseURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, cfg.AppVersion, ua)
 			if err != nil {
 				return nil, err
 			}
@@ -62,7 +63,7 @@ func NewClient(cfg Config) (*Client, error) {
 		if cfg.MetricsClient != nil {
 			c.metrics = cfg.MetricsClient
 		} else {
-			m, err := metrics.Dial(cfg.BaseURL, cfg.AppKey, cfg.Environment, cfg.InstanceName)
+			m, err := metrics.Dial(cfg.BaseURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, ua)
 			if err != nil {
 				return nil, err
 			}
@@ -121,10 +122,15 @@ func (c *Client) Close() error {
 }
 
 // IsEnabled evaluates a feature flag.
+//
+// When ctx carries ambient evaluation context (via WithEvalContext / togglyctx.With),
+// empty or nil per-call fields are filled from ambient; non-empty per-call fields win.
 func (c *Client) IsEnabled(ctx context.Context, featureKey string, evalCtx Context) (bool, error) {
 	if featureKey == "" {
 		return false, errors.New("toggly: featureKey is required")
 	}
+
+	evalCtx = ResolveEvalContext(ctx, evalCtx)
 
 	def, ok := c.provider.get(featureKey)
 	if !ok {
@@ -252,6 +258,15 @@ func (c *Client) RecordUsage(featureKey string, enabled bool, evalCtx Context) {
 		return
 	}
 	c.usage.RecordUsed(featureKey, enabled, evalCtx.Identity)
+}
+
+// RecordView increments the "viewed" counter for a feature (rendered/displayed).
+// This is separate from IsEnabled checks and RecordUsage.
+func (c *Client) RecordView(featureKey string, evalCtx Context) {
+	if c == nil || c.usage == nil {
+		return
+	}
+	c.usage.RecordView(featureKey, evalCtx.Identity)
 }
 
 // MetricsClient returns the underlying metrics client (if enabled).

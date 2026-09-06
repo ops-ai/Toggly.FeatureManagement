@@ -115,11 +115,19 @@ func (x *MetricStat) GetInstanceName() string {
 }
 
 type MetricStatMessage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metric        string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
-	Feature       *string                `protobuf:"bytes,4,opt,name=feature,proto3,oneof" json:"feature,omitempty"`
-	Value         float64                `protobuf:"fixed64,5,opt,name=value,proto3" json:"value,omitempty"`
-	ValueDisabled *float64               `protobuf:"fixed64,6,opt,name=valueDisabled,proto3,oneof" json:"valueDisabled,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Metric string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	EnabledCount int32 `protobuf:"varint,2,opt,name=enabledCount,proto3" json:"enabledCount,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	DisabledCount int32   `protobuf:"varint,3,opt,name=disabledCount,proto3" json:"disabledCount,omitempty"`
+	Feature       *string `protobuf:"bytes,4,opt,name=feature,proto3,oneof" json:"feature,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	Value float64 `protobuf:"fixed64,5,opt,name=value,proto3" json:"value,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	ValueDisabled *float64 `protobuf:"fixed64,6,opt,name=valueDisabled,proto3,oneof" json:"valueDisabled,omitempty"`
+	// Multi-variate support - Key: variant name (e.g., "enabled", "control")
+	VariantValues map[string]float64 `protobuf:"bytes,7,rep,name=variantValues,proto3" json:"variantValues,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -161,6 +169,22 @@ func (x *MetricStatMessage) GetMetric() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in metrics.proto.
+func (x *MetricStatMessage) GetEnabledCount() int32 {
+	if x != nil {
+		return x.EnabledCount
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in metrics.proto.
+func (x *MetricStatMessage) GetDisabledCount() int32 {
+	if x != nil {
+		return x.DisabledCount
+	}
+	return 0
+}
+
 func (x *MetricStatMessage) GetFeature() string {
 	if x != nil && x.Feature != nil {
 		return *x.Feature
@@ -168,6 +192,7 @@ func (x *MetricStatMessage) GetFeature() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in metrics.proto.
 func (x *MetricStatMessage) GetValue() float64 {
 	if x != nil {
 		return x.Value
@@ -175,6 +200,7 @@ func (x *MetricStatMessage) GetValue() float64 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in metrics.proto.
 func (x *MetricStatMessage) GetValueDisabled() float64 {
 	if x != nil && x.ValueDisabled != nil {
 		return *x.ValueDisabled
@@ -182,12 +208,26 @@ func (x *MetricStatMessage) GetValueDisabled() float64 {
 	return 0
 }
 
+func (x *MetricStatMessage) GetVariantValues() map[string]float64 {
+	if x != nil {
+		return x.VariantValues
+	}
+	return nil
+}
+
 type MetricCounterMessage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metric        string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
-	Feature       *string                `protobuf:"bytes,4,opt,name=feature,proto3,oneof" json:"feature,omitempty"`
-	Value         float64                `protobuf:"fixed64,5,opt,name=value,proto3" json:"value,omitempty"`
-	ValueDisabled *float64               `protobuf:"fixed64,6,opt,name=valueDisabled,proto3,oneof" json:"valueDisabled,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Metric string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	EnabledCount int32 `protobuf:"varint,2,opt,name=enabledCount,proto3" json:"enabledCount,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	DisabledCount int32   `protobuf:"varint,3,opt,name=disabledCount,proto3" json:"disabledCount,omitempty"`
+	Feature       *string `protobuf:"bytes,4,opt,name=feature,proto3,oneof" json:"feature,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	Value float64 `protobuf:"fixed64,5,opt,name=value,proto3" json:"value,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	ValueDisabled *float64           `protobuf:"fixed64,6,opt,name=valueDisabled,proto3,oneof" json:"valueDisabled,omitempty"`
+	VariantValues map[string]float64 `protobuf:"bytes,7,rep,name=variantValues,proto3" json:"variantValues,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -229,6 +269,22 @@ func (x *MetricCounterMessage) GetMetric() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in metrics.proto.
+func (x *MetricCounterMessage) GetEnabledCount() int32 {
+	if x != nil {
+		return x.EnabledCount
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in metrics.proto.
+func (x *MetricCounterMessage) GetDisabledCount() int32 {
+	if x != nil {
+		return x.DisabledCount
+	}
+	return 0
+}
+
 func (x *MetricCounterMessage) GetFeature() string {
 	if x != nil && x.Feature != nil {
 		return *x.Feature
@@ -236,6 +292,7 @@ func (x *MetricCounterMessage) GetFeature() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in metrics.proto.
 func (x *MetricCounterMessage) GetValue() float64 {
 	if x != nil {
 		return x.Value
@@ -243,6 +300,7 @@ func (x *MetricCounterMessage) GetValue() float64 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in metrics.proto.
 func (x *MetricCounterMessage) GetValueDisabled() float64 {
 	if x != nil && x.ValueDisabled != nil {
 		return *x.ValueDisabled
@@ -250,13 +308,27 @@ func (x *MetricCounterMessage) GetValueDisabled() float64 {
 	return 0
 }
 
+func (x *MetricCounterMessage) GetVariantValues() map[string]float64 {
+	if x != nil {
+		return x.VariantValues
+	}
+	return nil
+}
+
 type MetricObservationMessage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Time          *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
-	Metric        string                 `protobuf:"bytes,2,opt,name=metric,proto3" json:"metric,omitempty"`
-	Feature       *string                `protobuf:"bytes,5,opt,name=feature,proto3,oneof" json:"feature,omitempty"`
-	Value         float64                `protobuf:"fixed64,6,opt,name=value,proto3" json:"value,omitempty"`
-	ValueDisabled *float64               `protobuf:"fixed64,7,opt,name=valueDisabled,proto3,oneof" json:"valueDisabled,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Time   *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
+	Metric string                 `protobuf:"bytes,2,opt,name=metric,proto3" json:"metric,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	EnabledCount int32 `protobuf:"varint,3,opt,name=enabledCount,proto3" json:"enabledCount,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	DisabledCount int32   `protobuf:"varint,4,opt,name=disabledCount,proto3" json:"disabledCount,omitempty"`
+	Feature       *string `protobuf:"bytes,5,opt,name=feature,proto3,oneof" json:"feature,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	Value float64 `protobuf:"fixed64,6,opt,name=value,proto3" json:"value,omitempty"`
+	// Deprecated: Marked as deprecated in metrics.proto.
+	ValueDisabled *float64           `protobuf:"fixed64,7,opt,name=valueDisabled,proto3,oneof" json:"valueDisabled,omitempty"`
+	VariantValues map[string]float64 `protobuf:"bytes,8,rep,name=variantValues,proto3" json:"variantValues,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -305,6 +377,22 @@ func (x *MetricObservationMessage) GetMetric() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in metrics.proto.
+func (x *MetricObservationMessage) GetEnabledCount() int32 {
+	if x != nil {
+		return x.EnabledCount
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in metrics.proto.
+func (x *MetricObservationMessage) GetDisabledCount() int32 {
+	if x != nil {
+		return x.DisabledCount
+	}
+	return 0
+}
+
 func (x *MetricObservationMessage) GetFeature() string {
 	if x != nil && x.Feature != nil {
 		return *x.Feature
@@ -312,6 +400,7 @@ func (x *MetricObservationMessage) GetFeature() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in metrics.proto.
 func (x *MetricObservationMessage) GetValue() float64 {
 	if x != nil {
 		return x.Value
@@ -319,11 +408,19 @@ func (x *MetricObservationMessage) GetValue() float64 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in metrics.proto.
 func (x *MetricObservationMessage) GetValueDisabled() float64 {
 	if x != nil && x.ValueDisabled != nil {
 		return *x.ValueDisabled
 	}
 	return 0
+}
+
+func (x *MetricObservationMessage) GetVariantValues() map[string]float64 {
+	if x != nil {
+		return x.VariantValues
+	}
+	return nil
 }
 
 type MetricResult struct {
@@ -384,29 +481,47 @@ const file_metrics_proto_rawDesc = "" +
 	"\bcounters\x18\x05 \x03(\v2\x1d.Metrics.MetricCounterMessageR\bcounters\x12E\n" +
 	"\fobservations\x18\x06 \x03(\v2!.Metrics.MetricObservationMessageR\fobservations\x12'\n" +
 	"\finstanceName\x18\a \x01(\tH\x00R\finstanceName\x88\x01\x01B\x0f\n" +
-	"\r_instanceName\"\xa9\x01\n" +
+	"\r_instanceName\"\x9a\x03\n" +
 	"\x11MetricStatMessage\x12\x16\n" +
-	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x1d\n" +
-	"\afeature\x18\x04 \x01(\tH\x00R\afeature\x88\x01\x01\x12\x14\n" +
-	"\x05value\x18\x05 \x01(\x01R\x05value\x12)\n" +
-	"\rvalueDisabled\x18\x06 \x01(\x01H\x01R\rvalueDisabled\x88\x01\x01B\n" +
+	"\x06metric\x18\x01 \x01(\tR\x06metric\x12&\n" +
+	"\fenabledCount\x18\x02 \x01(\x05B\x02\x18\x01R\fenabledCount\x12(\n" +
+	"\rdisabledCount\x18\x03 \x01(\x05B\x02\x18\x01R\rdisabledCount\x12\x1d\n" +
+	"\afeature\x18\x04 \x01(\tH\x00R\afeature\x88\x01\x01\x12\x18\n" +
+	"\x05value\x18\x05 \x01(\x01B\x02\x18\x01R\x05value\x12-\n" +
+	"\rvalueDisabled\x18\x06 \x01(\x01B\x02\x18\x01H\x01R\rvalueDisabled\x88\x01\x01\x12S\n" +
+	"\rvariantValues\x18\a \x03(\v2-.Metrics.MetricStatMessage.VariantValuesEntryR\rvariantValues\x1a@\n" +
+	"\x12VariantValuesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01B\n" +
 	"\n" +
 	"\b_featureB\x10\n" +
-	"\x0e_valueDisabled\"\xac\x01\n" +
+	"\x0e_valueDisabled\"\xa0\x03\n" +
 	"\x14MetricCounterMessage\x12\x16\n" +
-	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x1d\n" +
-	"\afeature\x18\x04 \x01(\tH\x00R\afeature\x88\x01\x01\x12\x14\n" +
-	"\x05value\x18\x05 \x01(\x01R\x05value\x12)\n" +
-	"\rvalueDisabled\x18\x06 \x01(\x01H\x01R\rvalueDisabled\x88\x01\x01B\n" +
+	"\x06metric\x18\x01 \x01(\tR\x06metric\x12&\n" +
+	"\fenabledCount\x18\x02 \x01(\x05B\x02\x18\x01R\fenabledCount\x12(\n" +
+	"\rdisabledCount\x18\x03 \x01(\x05B\x02\x18\x01R\rdisabledCount\x12\x1d\n" +
+	"\afeature\x18\x04 \x01(\tH\x00R\afeature\x88\x01\x01\x12\x18\n" +
+	"\x05value\x18\x05 \x01(\x01B\x02\x18\x01R\x05value\x12-\n" +
+	"\rvalueDisabled\x18\x06 \x01(\x01B\x02\x18\x01H\x01R\rvalueDisabled\x88\x01\x01\x12V\n" +
+	"\rvariantValues\x18\a \x03(\v20.Metrics.MetricCounterMessage.VariantValuesEntryR\rvariantValues\x1a@\n" +
+	"\x12VariantValuesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01B\n" +
 	"\n" +
 	"\b_featureB\x10\n" +
-	"\x0e_valueDisabled\"\xe0\x01\n" +
+	"\x0e_valueDisabled\"\xd8\x03\n" +
 	"\x18MetricObservationMessage\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x16\n" +
-	"\x06metric\x18\x02 \x01(\tR\x06metric\x12\x1d\n" +
-	"\afeature\x18\x05 \x01(\tH\x00R\afeature\x88\x01\x01\x12\x14\n" +
-	"\x05value\x18\x06 \x01(\x01R\x05value\x12)\n" +
-	"\rvalueDisabled\x18\a \x01(\x01H\x01R\rvalueDisabled\x88\x01\x01B\n" +
+	"\x06metric\x18\x02 \x01(\tR\x06metric\x12&\n" +
+	"\fenabledCount\x18\x03 \x01(\x05B\x02\x18\x01R\fenabledCount\x12(\n" +
+	"\rdisabledCount\x18\x04 \x01(\x05B\x02\x18\x01R\rdisabledCount\x12\x1d\n" +
+	"\afeature\x18\x05 \x01(\tH\x00R\afeature\x88\x01\x01\x12\x18\n" +
+	"\x05value\x18\x06 \x01(\x01B\x02\x18\x01R\x05value\x12-\n" +
+	"\rvalueDisabled\x18\a \x01(\x01B\x02\x18\x01H\x01R\rvalueDisabled\x88\x01\x01\x12Z\n" +
+	"\rvariantValues\x18\b \x03(\v24.Metrics.MetricObservationMessage.VariantValuesEntryR\rvariantValues\x1a@\n" +
+	"\x12VariantValuesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01B\n" +
 	"\n" +
 	"\b_featureB\x10\n" +
 	"\x0e_valueDisabled\"$\n" +
@@ -427,28 +542,34 @@ func file_metrics_proto_rawDescGZIP() []byte {
 	return file_metrics_proto_rawDescData
 }
 
-var file_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_metrics_proto_goTypes = []any{
 	(*MetricStat)(nil),               // 0: Metrics.MetricStat
 	(*MetricStatMessage)(nil),        // 1: Metrics.MetricStatMessage
 	(*MetricCounterMessage)(nil),     // 2: Metrics.MetricCounterMessage
 	(*MetricObservationMessage)(nil), // 3: Metrics.MetricObservationMessage
 	(*MetricResult)(nil),             // 4: Metrics.MetricResult
-	(*timestamppb.Timestamp)(nil),    // 5: google.protobuf.Timestamp
+	nil,                              // 5: Metrics.MetricStatMessage.VariantValuesEntry
+	nil,                              // 6: Metrics.MetricCounterMessage.VariantValuesEntry
+	nil,                              // 7: Metrics.MetricObservationMessage.VariantValuesEntry
+	(*timestamppb.Timestamp)(nil),    // 8: google.protobuf.Timestamp
 }
 var file_metrics_proto_depIdxs = []int32{
-	5, // 0: Metrics.MetricStat.time:type_name -> google.protobuf.Timestamp
+	8, // 0: Metrics.MetricStat.time:type_name -> google.protobuf.Timestamp
 	1, // 1: Metrics.MetricStat.stats:type_name -> Metrics.MetricStatMessage
 	2, // 2: Metrics.MetricStat.counters:type_name -> Metrics.MetricCounterMessage
 	3, // 3: Metrics.MetricStat.observations:type_name -> Metrics.MetricObservationMessage
-	5, // 4: Metrics.MetricObservationMessage.time:type_name -> google.protobuf.Timestamp
-	0, // 5: Metrics.Metrics.SendMetrics:input_type -> Metrics.MetricStat
-	4, // 6: Metrics.Metrics.SendMetrics:output_type -> Metrics.MetricResult
-	6, // [6:7] is the sub-list for method output_type
-	5, // [5:6] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	5, // 4: Metrics.MetricStatMessage.variantValues:type_name -> Metrics.MetricStatMessage.VariantValuesEntry
+	6, // 5: Metrics.MetricCounterMessage.variantValues:type_name -> Metrics.MetricCounterMessage.VariantValuesEntry
+	8, // 6: Metrics.MetricObservationMessage.time:type_name -> google.protobuf.Timestamp
+	7, // 7: Metrics.MetricObservationMessage.variantValues:type_name -> Metrics.MetricObservationMessage.VariantValuesEntry
+	0, // 8: Metrics.Metrics.SendMetrics:input_type -> Metrics.MetricStat
+	4, // 9: Metrics.Metrics.SendMetrics:output_type -> Metrics.MetricResult
+	9, // [9:10] is the sub-list for method output_type
+	8, // [8:9] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_metrics_proto_init() }
@@ -466,7 +587,7 @@ func file_metrics_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_metrics_proto_rawDesc), len(file_metrics_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -99,6 +99,10 @@ jobs:
     needs: [build-and-test, validate]
     if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
+    environment: nuget-publish
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -284,6 +288,16 @@ jobs:
           AZURE_KEY_VAULT_TENANT_ID: ${{ secrets.NUGET_SIGN_TENANT_ID }}
           AZURE_KEY_VAULT_CERTIFICATE: ${{ secrets.NUGET_SIGN_CERTIFICATE }}
 
+      - name: NuGet login (OIDC)
+        if: steps.should_publish.outputs.publish == 'true'
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          # nuget.org matches OIDC to the trust-policy *creator* username,
+          # not the package/org owner (Toggly). Policy "GitHub Toggly" was
+          # created while signed in as opsai.
+          user: opsai
+
       - name: Publish to NuGet
         if: steps.should_publish.outputs.publish == 'true'
         working-directory: ${{ env.SDK_ROOT }}
@@ -298,7 +312,7 @@ jobs:
           echo "Pushing package: $PACKAGE_TO_PUSH"
           # nuget.org accepts the adjacent .snupkg when pushing the .nupkg from the same folder.
           dotnet nuget push "$PACKAGE_TO_PUSH" \
-            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
 
@@ -306,7 +320,7 @@ jobs:
           if [ -f "$SYMBOL_TO_PUSH" ]; then
             echo "Pushing symbols: $SYMBOL_TO_PUSH"
             dotnet nuget push "$SYMBOL_TO_PUSH" \
-              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
               --source https://api.nuget.org/v3/index.json \
               --skip-duplicate
           else
