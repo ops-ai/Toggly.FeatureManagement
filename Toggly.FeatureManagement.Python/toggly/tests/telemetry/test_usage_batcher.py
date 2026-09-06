@@ -5,12 +5,13 @@ from toggly.telemetry import UsageBatcher, hash_identity
 
 class TestHashIdentity:
     def test_fnv1a_utf8_signed_int32_matches_go(self) -> None:
-        assert isinstance(hash_identity("alice"), int)
-        assert hash_identity("alice") == hash_identity("alice")
-        assert hash_identity("alice") != hash_identity("bob")
+        alice = hash_identity("alice")
+        assert isinstance(alice, int)
+        assert alice == hash_identity("alice")
+        assert alice != hash_identity("bob")
 
         # Go hash/fnv New32a on []byte(s), cast to int32
-        assert hash_identity("alice") == -2027809817
+        assert alice == -2027809817
         assert hash_identity("café") == -1473556407
         assert hash_identity("🚀") == 2141686490
 

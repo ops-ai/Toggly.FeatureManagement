@@ -108,6 +108,9 @@ ignore = ["D100", "D104", "UP045"]
 [tool.coverage.run]
 source = ["src/toggly"]
 branch = true
+omit = [
+    "*/telemetry/pb/*",
+]
 
 [tool.coverage.report]
 exclude_lines = [
