@@ -12,6 +12,11 @@ compatibility_date = "2024-01-01"
 TOGGLY_API_BASE_URL = "https://definitions.toggly.io"
 TOGGLY_ENVIRONMENT = "Production"
 ORIGIN_BASE_URL = "https://main.toggly-docs.pages.dev"
+# Metrics/usage gateway (HTTPS JSON). Defaults to https://app.toggly.io/ when unset.
+TOGGLY_METRICS_BASE_URL = "https://app.toggly.io/"
+# Opt-out: set to "false" to disable. Default is enabled when TOGGLY_APP_KEY is set.
+# TOGGLY_USAGE_ENABLED = "true"
+# TOGGLY_METRICS_ENABLED = "true"
 
 # Production: docs.toggly.io
 # Origin is the `main` branch alias of the toggly-docs Pages project. Branch

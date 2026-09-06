@@ -18,6 +18,9 @@
 /** Global the client SDK reads on first render to align with edge state. */
 const SNAPSHOT_GLOBAL = '__TOGGLY_EDGE_FLAGS__';
 
+/** Optional observer invoked once per `[data-feature]` element (usage telemetry). */
+export type FeatureGateObserver = (featureKey: string, enabled: boolean) => void;
+
 /**
  * Build the inline script element that pins `flags` onto the snapshot global.
  *
@@ -51,7 +54,10 @@ export function shouldStripFeatureElement(
  * Create an HTMLRewriter that strips disabled feature sections AND injects
  * the flag snapshot into `<head>`.
  */
-export function createFeatureGateTransformer(flags: Record<string, boolean>) {
+export function createFeatureGateTransformer(
+  flags: Record<string, boolean>,
+  onFeatureGate?: FeatureGateObserver,
+) {
   const snapshot = buildSnapshotScript(flags);
 
   return new HTMLRewriter()
@@ -59,6 +65,13 @@ export function createFeatureGateTransformer(flags: Record<string, boolean>) {
       element(element: Element) {
         const featureKey = element.getAttribute('data-feature');
         const negateAttr = element.getAttribute('data-toggly-negate');
+        if (featureKey && onFeatureGate) {
+          try {
+            onFeatureGate(featureKey, !!flags[featureKey]);
+          } catch {
+            // Telemetry must never break HTML rewriting
+          }
+        }
         if (shouldStripFeatureElement(flags, featureKey, negateAttr)) {
           element.remove();
         }
@@ -80,13 +93,14 @@ export function createFeatureGateTransformer(flags: Record<string, boolean>) {
  */
 export function transformHtmlResponse(
   response: Response,
-  flags: Record<string, boolean>
+  flags: Record<string, boolean>,
+  onFeatureGate?: FeatureGateObserver,
 ): Response {
   if (!response.body) {
     return response;
   }
 
-  const transformer = createFeatureGateTransformer(flags);
+  const transformer = createFeatureGateTransformer(flags, onFeatureGate);
   const transformed = transformer.transform(response);
 
   const headers = new Headers(transformed.headers);

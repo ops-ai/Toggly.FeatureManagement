@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.3.2
+
+2026-09-06
+
+### Fixed
+- Flush the previous isolate `TelemetryRuntime` when `getOrCreateTelemetry`
+  recreates the singleton after a mid-isolate config change, so buffered usage
+  or metrics are not dropped.
+
+## 0.3.1
+
+2026-09-06
+
+### Fixed
+- Flush HTML telemetry via a pull-driven stream wrapper (client-driven
+  backpressure) instead of `ReadableStream.tee()` + eager drain, which could
+  buffer an entire response.
+- Deduplicate `requestCount` per feature/variant within a single HTTP request
+  so repeated section gates no longer inflate unique-request stats.
+- Export business metrics APIs (`measure` / `incrementCounter` / `observe` via
+  `TelemetryRuntime` / `createTelemetryFromEnv`) from the package root.
+
+## 0.3.0
+
+2026-09-06
+
+### Added
+- Batched feature usage and business metrics export over gateway-accepted HTTPS
+  JSON (`api/usage/stats`, `api/metrics`) via `fetch` (Workers have no native
+  gRPC). Soft-fails network errors so flag evaluation is never blocked.
+- In-memory batchers with hard caps on unique identity hashes, feature count,
+  metric keys, and observations; flush scheduled through `ctx.waitUntil`.
+- Wire shape parity: `variantStats` / `variantValues`, UTF-8 FNV-1a signed int32
+  identity hashes, ISO-8601 times on the HTTPS path.
+- Env config: `TOGGLY_METRICS_BASE_URL` (default `https://app.toggly.io/`),
+  `TOGGLY_USAGE_ENABLED`, `TOGGLY_METRICS_ENABLED`.
+- User-Agent `toggly-docusaurus-edge-worker/{VERSION}` on telemetry POSTs.
+- Records check/view when page and section gating evaluates.
+
 ## 0.2.1
 
 2026-07-03

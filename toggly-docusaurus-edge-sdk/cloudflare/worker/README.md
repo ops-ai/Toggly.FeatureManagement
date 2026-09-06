@@ -8,6 +8,7 @@ This Cloudflare Worker enforces feature flag gating at the network edge for your
 -   **Content Scrubbing**: Parses HTML responses and removes elements with `data-feature="flag_key"` attributes if the flag is disabled.
 -   **Hydration-safe Snapshot**: Injects `<script>window.__TOGGLY_EDGE_FLAGS__ = {...}</script>` at the start of `<head>` with the resolved flag map. The companion `@ops-ai/toggly-docusaurus-plugin` reads this synchronously on first client render so the React tree matches the post-strip DOM and React 18 hydration succeeds without a recoverable error / full client re-render.
 -   **Caching**: Caches feature flags and the page manifest at the edge to minimize latency.
+-   **Usage + metrics**: Batches feature check/view (and optional measure/counter/observe) telemetry and posts gateway-accepted HTTPS JSON to `api/usage/stats` and `api/metrics` (Workers cannot use native gRPC). Flushes via `ctx.waitUntil` so responses stay fast; network errors soft-fail and never break flag evaluation.
 
 ## Deployment Guide
 
@@ -29,6 +30,8 @@ You need to set the following environment variables. We recommend using `wrangle
 | `TOGGLY_ENVIRONMENT` | Environment name (e.g. `Production`) | No (use `[vars]`) |
 | `TOGGLY_APP_KEY` | Toggly application key for the docs project | Yes (use `wrangler secret put`) |
 | `ORIGIN_BASE_URL` | URL where the static Docusaurus build is served (e.g. a Pages branch alias like `https://main.<project>.pages.dev`). The worker fetches HTML, the manifest, and assets from this origin. | No (use `[vars]`) |
+| `TOGGLY_METRICS_BASE_URL` | Usage/metrics gateway base URL (defaults to `https://app.toggly.io/`) | No |
+| `TOGGLY_USAGE_ENABLED` / `TOGGLY_METRICS_ENABLED` | Opt-out (`false`) for usage/metrics; default enabled when `TOGGLY_APP_KEY` is set | No |
 | `CF_ACCESS_CLIENT_ID` | Cloudflare Access service-token client ID. **Only required** when `ORIGIN_BASE_URL` is gated by Cloudflare Access. | Yes |
 | `CF_ACCESS_CLIENT_SECRET` | Cloudflare Access service-token client secret. **Only required** when `ORIGIN_BASE_URL` is gated by Cloudflare Access. | Yes |
 
@@ -58,6 +61,7 @@ wrangler secret put CF_ACCESS_CLIENT_SECRET --env production
 TOGGLY_API_BASE_URL = "https://definitions.toggly.io"
 TOGGLY_ENVIRONMENT = "Production"
 ORIGIN_BASE_URL = "https://my-docusaurus-site.pages.dev"
+TOGGLY_METRICS_BASE_URL = "https://app.toggly.io/"
 ```
 
 ### 3. Deployment
@@ -122,6 +126,7 @@ You can test the worker locally using `wrangler dev`.
     TOGGLY_ENVIRONMENT=Production
     TOGGLY_APP_KEY=your_real_or_test_key
     ORIGIN_BASE_URL=http://localhost:3000
+    TOGGLY_METRICS_BASE_URL=https://app.toggly.io/
     ```
 
 2.  Run your Docusaurus site locally on port 3000:
@@ -137,6 +142,33 @@ You can test the worker locally using `wrangler dev`.
     ```
 
 4.  Open `http://localhost:8787/docs/some-page` to see the Worker proxying to your local Docusaurus instance with feature gating applied.
+
+## Telemetry
+
+When usage tracking is enabled, page and section gating records **check** (and **view** when enabled) into an in-memory batch. `requestCount` is deduplicated per feature/variant within a single HTTP request.
+
+Business metrics (`measure` / `incrementCounter` / `observe`) are part of the **package root** public API:
+
+```ts
+import {
+  createTelemetryFromEnv,
+  getOrCreateTelemetry,
+  type Env,
+} from '@ops-ai/toggly-cloudflare-worker';
+
+const telemetry = createTelemetryFromEnv(env);
+telemetry?.measure('docs.render_ms', 12, { feature: 'beta_docs' });
+telemetry?.incrementCounter('docs.page_hits');
+telemetry?.observe('docs.payload_kb', 42);
+```
+
+- Transport: `POST` JSON to `{TOGGLY_METRICS_BASE_URL}api/usage/stats` and `.../api/metrics`
+- User-Agent: `toggly-docusaurus-edge-worker/{version}`
+- Wire fields: `variantStats` / `variantValues`; identity hashes are UTF-8 FNV-1a signed int32; HTTPS times are ISO-8601
+- Caps: unique hashes per feature / app (10k), max features (500), metric keys (500), observations (1000)
+- Flush: `ctx.waitUntil` after each request; for HTML, a pull-driven stream wrapper flushes when the client-consumed body completes (preserves backpressure; no unbounded tee buffer)
+
+Extend `getRequestContext` in `src/index.ts` to include `userId` (or other identity) for unique usage hashing.
 
 ## HTML Scrubbing
 
@@ -154,3 +186,10 @@ The Worker removes the entire `div` from the response stream.
 
 **If `beta_feature` is ON:**
 The HTML is passed through unchanged.
+
+## Verify
+
+```bash
+npm test
+npm run build
+```
