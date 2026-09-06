@@ -7,6 +7,7 @@
  */
 
 import {
+  buildEvaluatedSignedUrl,
   normalizeEntityContext,
   registerContext as registerEntityContext,
   resolveEvaluatedDefinition,
@@ -165,21 +166,17 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   let cache: CachedFlags | null = null;
 
   const getApiUrl = (): string => {
-    const baseUrl = baseURI.replace(/\/$/, ''); // Remove trailing slash
-    
-    // If no appKey is provided, return empty URL (will use flagDefaults)
     if (!appKey) {
       return '';
     }
 
-    let url = `${baseUrl}/${appKey}/evaluated-signed`;
-    
-    // Add identity parameter if provided
-    if (identity) {
-      url += `?u=${identity}`;
-    }
-    
-    return url;
+    return buildEvaluatedSignedUrl(
+      baseURI,
+      appKey,
+      environment,
+      identity ? { identity } : undefined,
+      false,
+    );
   };
 
   const isCacheValid = (): boolean => {

@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 0.3.0
+
+2026-09-06
+
+### Fixed
+- Fetch definitions from `/evaluated-signed/{appKey}/{environment}` via
+  shared `buildEvaluatedSignedUrl`, matching Definitions and the other
+  client SDKs. Identity still goes on `?u=`.
+
 ## 0.2.2
 
 - Normalize public npm metadata for provenance and docs links (no API change).

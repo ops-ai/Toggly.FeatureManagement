@@ -35,7 +35,7 @@ describe('Entity context evaluation', () => {
 
   function createClient() {
     return createTogglyClient({
-      baseURI: 'https://client.toggly.io',
+      baseURI: 'https://definitions.toggly.io',
       environment: 'Production',
       appKey: 'test-app',
       fetch: mockFetch,
