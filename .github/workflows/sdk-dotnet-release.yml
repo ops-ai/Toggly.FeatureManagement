@@ -175,7 +175,8 @@ jobs:
           dotnet build ${{ matrix.project }}/${{ matrix.project }}.csproj \
             -c Release \
             --no-restore \
-            -p:Version=${{ needs.validate.outputs.version }}
+            -p:Version=${{ needs.validate.outputs.version }} \
+            -p:ContinuousIntegrationBuild=true
 
       - name: Pack NuGet package
         if: steps.should_publish.outputs.publish == 'true'

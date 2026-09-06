@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.6.4
+
+2026-09-06
+
+### Changed
+- Portable PDBs are included in each `.nupkg` (in addition to `.snupkg`) so
+  Source Link, deterministic path mapping, and compiler metadata are visible
+  to nuget.info / NuGet Package Explorer without the symbol server.
+
 ## 3.6.3
 
 2026-09-05

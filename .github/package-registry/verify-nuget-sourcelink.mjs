@@ -46,6 +46,8 @@ export function verifyDirectoryBuildSourceLink(options = {}) {
     'PublishRepositoryUrl',
     'IncludeSymbols',
     'SymbolPackageFormat',
+    'DebugType',
+    'AllowedOutputExtensionsInPackageBuildOutputFolder',
   ]) {
     if (!new RegExp(`<${prop}>`, 'i').test(props)) {
       errors.push(`Directory.Build.props missing <${prop}>`);
@@ -63,6 +65,12 @@ export function verifyDirectoryBuildSourceLink(options = {}) {
   }
   if (!/<SymbolPackageFormat>\s*snupkg\s*<\/SymbolPackageFormat>/i.test(props)) {
     errors.push('Directory.Build.props must set SymbolPackageFormat to snupkg');
+  }
+  if (!/<DebugType>\s*portable\s*<\/DebugType>/i.test(props)) {
+    errors.push('Directory.Build.props must set DebugType to portable');
+  }
+  if (!/\.pdb/.test(props) || !/AllowedOutputExtensionsInPackageBuildOutputFolder/.test(props)) {
+    errors.push('Directory.Build.props must include .pdb in AllowedOutputExtensionsInPackageBuildOutputFolder');
   }
 
   if (!/Microsoft\.SourceLink\.GitHub/.test(props)) {
