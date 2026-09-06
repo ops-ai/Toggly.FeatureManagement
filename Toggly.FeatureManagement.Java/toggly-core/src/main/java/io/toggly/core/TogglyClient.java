@@ -13,6 +13,8 @@ import io.toggly.core.model.MetricDefinition;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
+import io.toggly.core.telemetry.MetricsFeatureOptions;
+import io.toggly.core.telemetry.TelemetryRuntime;
 
 import java.util.List;
 import java.util.Map;
@@ -63,6 +65,7 @@ public final class TogglyClient implements AutoCloseable {
     private final SnapshotProvider snapshotProvider;
     private final EvaluationEngine evaluationEngine;
     private final boolean ownsProvider;
+    private final TelemetryRuntime telemetry;
 
     /**
      * Creates a client with the specified configuration.
@@ -70,7 +73,7 @@ public final class TogglyClient implements AutoCloseable {
      * @param config the Toggly configuration
      */
     public TogglyClient(TogglyConfig config) {
-        this(config, null, null);
+        this(config, null, null, null);
     }
 
     /**
@@ -80,7 +83,7 @@ public final class TogglyClient implements AutoCloseable {
      * @param snapshotProvider custom snapshot provider (null for default HTTP provider)
      */
     public TogglyClient(TogglyConfig config, SnapshotProvider snapshotProvider) {
-        this(config, snapshotProvider, null);
+        this(config, snapshotProvider, null, null);
     }
 
     /**
@@ -91,6 +94,22 @@ public final class TogglyClient implements AutoCloseable {
      * @param registry custom evaluator registry (null for default)
      */
     public TogglyClient(TogglyConfig config, SnapshotProvider snapshotProvider, EvaluatorRegistry registry) {
+        this(config, snapshotProvider, registry, null);
+    }
+
+    /**
+     * Creates a client with custom components and optional telemetry runtime (tests).
+     *
+     * @param config the Toggly configuration
+     * @param snapshotProvider custom snapshot provider (null for default HTTP provider)
+     * @param registry custom evaluator registry (null for default)
+     * @param telemetry pre-built telemetry runtime (null to create from config)
+     */
+    public TogglyClient(
+            TogglyConfig config,
+            SnapshotProvider snapshotProvider,
+            EvaluatorRegistry registry,
+            TelemetryRuntime telemetry) {
         if (config == null) {
             throw new TogglyConfigException("Configuration must not be null");
         }
@@ -110,6 +129,23 @@ public final class TogglyClient implements AutoCloseable {
 
         this.evaluationEngine = new EvaluationEngine(registry);
         EntityContextRegistry.registerAtStartup(config);
+
+        if (telemetry != null) {
+            this.telemetry = telemetry;
+        } else {
+            this.telemetry = TelemetryRuntime.builder()
+                    .appKey(config.getAppKey())
+                    .environment(config.getEnvironment())
+                    .metricsBaseUrl(config.getMetricsBaseUrl())
+                    .enableUsageTracking(config.isEnableUsageTracking())
+                    .enableMetrics(config.isEnableMetrics())
+                    .usageFlushInterval(config.getUsageFlushInterval())
+                    .metricsFlushInterval(config.getMetricsFlushInterval())
+                    .instanceName(config.getInstanceName())
+                    .appVersion(config.getAppVersion())
+                    .build();
+        }
+        this.telemetry.start();
     }
 
     /**
@@ -160,12 +196,14 @@ public final class TogglyClient implements AutoCloseable {
 
             EvaluationContext effectiveContext = resolveContext(context);
 
-            return evaluationEngine.evaluateWithDefaults(
+            boolean enabled = evaluationEngine.evaluateWithDefaults(
                     definition,
                     effectiveContext,
                     featureKey,
                     config.getFeatureDefaults(),
                     config.getDefaultFeatureState());
+            recordCheck(featureKey, enabled, effectiveContext);
+            return enabled;
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error evaluating feature: " + featureKey, e);
             return config.getDefaultFeatureState();
@@ -190,19 +228,21 @@ public final class TogglyClient implements AutoCloseable {
      * @return a future that completes with the evaluation result
      */
     public CompletableFuture<Boolean> isEnabledAsync(String featureKey, EvaluationContext context) {
+        EvaluationContext effectiveContext = resolveContext(context);
         return snapshotProvider.getSnapshotAsync()
                 .thenApply(snapshot -> {
                     if (featureKey == null || featureKey.isEmpty()) {
                         return false;
                     }
                     FeatureDefinition definition = snapshot.getFeature(featureKey);
-                    EvaluationContext effectiveContext = resolveContext(context);
-                    return evaluationEngine.evaluateWithDefaults(
+                    boolean enabled = evaluationEngine.evaluateWithDefaults(
                             definition,
                             effectiveContext,
                             featureKey,
                             config.getFeatureDefaults(),
                             config.getDefaultFeatureState());
+                    recordCheck(featureKey, enabled, effectiveContext);
+                    return enabled;
                 })
                 .exceptionally(e -> {
                     LOGGER.log(Level.WARNING, "Async error evaluating feature: " + featureKey, e);
@@ -400,6 +440,174 @@ public final class TogglyClient implements AutoCloseable {
         return snapshotProvider.getSnapshot().getMetrics();
     }
 
+    // ========== Usage + business metrics telemetry ==========
+
+    /**
+     * Records a feature "used" interaction (usage telemetry).
+     *
+     * @param featureKey the feature key
+     */
+    public void recordUsage(String featureKey) {
+        recordUsage(featureKey, null, null);
+    }
+
+    /**
+     * Records a feature "used" interaction with identity.
+     *
+     * @param featureKey the feature key
+     * @param identity optional identity for unique hashing
+     */
+    public void recordUsage(String featureKey, String identity) {
+        recordUsage(featureKey, identity, null);
+    }
+
+    /**
+     * Records a feature "used" interaction with identity and variant.
+     *
+     * @param featureKey the feature key
+     * @param identity optional identity
+     * @param variant variant name (default {@code enabled})
+     */
+    public void recordUsage(String featureKey, String identity, String variant) {
+        if (featureKey == null || featureKey.isEmpty() || telemetry == null) {
+            return;
+        }
+        String resolvedIdentity = identity != null ? identity : resolveIdentity();
+        if (variant != null) {
+            telemetry.recordUsage(featureKey, resolvedIdentity, variant);
+        } else {
+            telemetry.recordUsage(featureKey, resolvedIdentity);
+        }
+    }
+
+    /**
+     * Records a feature "viewed" event (usage telemetry).
+     *
+     * @param featureKey the feature key
+     */
+    public void recordView(String featureKey) {
+        recordView(featureKey, null, null);
+    }
+
+    /**
+     * Records a feature "viewed" event with identity.
+     *
+     * @param featureKey the feature key
+     * @param identity optional identity for unique hashing
+     */
+    public void recordView(String featureKey, String identity) {
+        recordView(featureKey, identity, null);
+    }
+
+    /**
+     * Records a feature "viewed" event with identity and variant.
+     *
+     * @param featureKey the feature key
+     * @param identity optional identity
+     * @param variant variant name (default {@code enabled})
+     */
+    public void recordView(String featureKey, String identity, String variant) {
+        if (featureKey == null || featureKey.isEmpty() || telemetry == null) {
+            return;
+        }
+        String resolvedIdentity = identity != null ? identity : resolveIdentity();
+        if (variant != null) {
+            telemetry.recordView(featureKey, resolvedIdentity, variant);
+        } else {
+            telemetry.recordView(featureKey, resolvedIdentity);
+        }
+    }
+
+    /**
+     * Aggregates a measurement (trip odometer) under {@code variantValues}.
+     *
+     * @param metric the metric name
+     * @param value value to add
+     */
+    public void measure(String metric, double value) {
+        measure(metric, value, null);
+    }
+
+    /**
+     * Aggregates a measurement with optional feature/variant correlation.
+     *
+     * @param metric the metric name
+     * @param value value to add
+     * @param options optional feature/variant
+     */
+    public void measure(String metric, double value, MetricsFeatureOptions options) {
+        if (metric == null || metric.isEmpty() || telemetry == null) {
+            return;
+        }
+        telemetry.measure(metric, value, options);
+    }
+
+    /**
+     * Increments a counter by 1.
+     *
+     * @param metric the metric name
+     */
+    public void incrementCounter(String metric) {
+        incrementCounter(metric, 1.0, null);
+    }
+
+    /**
+     * Increments a counter by {@code value}.
+     *
+     * @param metric the metric name
+     * @param value amount to add
+     */
+    public void incrementCounter(String metric, double value) {
+        incrementCounter(metric, value, null);
+    }
+
+    /**
+     * Increments a counter with optional feature/variant correlation.
+     *
+     * @param metric the metric name
+     * @param value amount to add
+     * @param options optional feature/variant
+     */
+    public void incrementCounter(String metric, double value, MetricsFeatureOptions options) {
+        if (metric == null || metric.isEmpty() || telemetry == null) {
+            return;
+        }
+        telemetry.incrementCounter(metric, value, options);
+    }
+
+    /**
+     * Records a point-in-time observation (gauge).
+     *
+     * @param metric the metric name
+     * @param value observed value
+     */
+    public void observe(String metric, double value) {
+        observe(metric, value, null);
+    }
+
+    /**
+     * Records a point-in-time observation with optional feature/variant correlation.
+     *
+     * @param metric the metric name
+     * @param value observed value
+     * @param options optional feature/variant
+     */
+    public void observe(String metric, double value, MetricsFeatureOptions options) {
+        if (metric == null || metric.isEmpty() || telemetry == null) {
+            return;
+        }
+        telemetry.observe(metric, value, options);
+    }
+
+    /**
+     * Flushes pending usage and metrics immediately.
+     */
+    public void flushTelemetry() {
+        if (telemetry != null) {
+            telemetry.flushAll();
+        }
+    }
+
     // ========== Refresh ==========
 
     /**
@@ -439,12 +647,38 @@ public final class TogglyClient implements AutoCloseable {
 
     @Override
     public void close() {
+        if (telemetry != null) {
+            try {
+                telemetry.close();
+            } catch (Exception e) {
+                LOGGER.log(Level.FINE, "Error closing telemetry", e);
+            }
+        }
         if (ownsProvider) {
             snapshotProvider.close();
         }
     }
 
     // ========== Private Helpers ==========
+
+    private void recordCheck(String featureKey, boolean enabled, EvaluationContext context) {
+        if (telemetry == null || !telemetry.isUsageEnabled()) {
+            return;
+        }
+        String identity = context != null ? context.getIdentity() : null;
+        if (identity == null) {
+            identity = resolveIdentity();
+        }
+        telemetry.recordCheck(featureKey, enabled, identity);
+    }
+
+    private String resolveIdentity() {
+        EvaluationContext held = ContextHolder.getContext();
+        if (held != null && held.getIdentity() != null) {
+            return held.getIdentity();
+        }
+        return config.getDefaultIdentity();
+    }
 
     private EvaluationContext resolveContext(EvaluationContext context) {
         if (context != null) {

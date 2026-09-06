@@ -2,6 +2,7 @@ package io.toggly.spring.boot;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,6 +19,13 @@ import java.util.Map;
  *   default-feature-state: false
  *   feature-defaults:
  *     my-feature: true
+ *   enable-usage-tracking: true
+ *   enable-metrics: true
+ *   metrics-base-url: https://app.toggly.io/
+ *   usage-flush-interval: 1m
+ *   metrics-flush-interval: 1m
+ *   instance-name: api-1
+ *   app-version: 1.0.0
  * </pre>
  */
 @ConfigurationProperties(prefix = "toggly")
@@ -67,6 +75,41 @@ public class TogglyProperties {
      * PUT entity context schemas to the dashboard catalog on client start.
      */
     private boolean registerContextsOnStartup = true;
+
+    /**
+     * Enable feature usage telemetry ({@code Usage.SendStats}).
+     */
+    private boolean enableUsageTracking = true;
+
+    /**
+     * Enable business metrics telemetry ({@code Metrics.SendMetrics}).
+     */
+    private boolean enableMetrics = true;
+
+    /**
+     * Base URL for usage/metrics gRPC (default {@code https://app.toggly.io/}).
+     */
+    private String metricsBaseUrl = "https://app.toggly.io/";
+
+    /**
+     * How often usage stats are flushed (default 1 minute). Bind as {@code 1m}, {@code 60s}, etc.
+     */
+    private Duration usageFlushInterval = Duration.ofMinutes(1);
+
+    /**
+     * How often business metrics are flushed (default 1 minute).
+     */
+    private Duration metricsFlushInterval = Duration.ofMinutes(1);
+
+    /**
+     * Optional instance name reported on usage/metrics payloads.
+     */
+    private String instanceName;
+
+    /**
+     * Optional application version reported on usage payloads.
+     */
+    private String appVersion;
 
     // Getters and Setters
 
@@ -140,5 +183,61 @@ public class TogglyProperties {
 
     public void setRegisterContextsOnStartup(boolean registerContextsOnStartup) {
         this.registerContextsOnStartup = registerContextsOnStartup;
+    }
+
+    public boolean isEnableUsageTracking() {
+        return enableUsageTracking;
+    }
+
+    public void setEnableUsageTracking(boolean enableUsageTracking) {
+        this.enableUsageTracking = enableUsageTracking;
+    }
+
+    public boolean isEnableMetrics() {
+        return enableMetrics;
+    }
+
+    public void setEnableMetrics(boolean enableMetrics) {
+        this.enableMetrics = enableMetrics;
+    }
+
+    public String getMetricsBaseUrl() {
+        return metricsBaseUrl;
+    }
+
+    public void setMetricsBaseUrl(String metricsBaseUrl) {
+        this.metricsBaseUrl = metricsBaseUrl;
+    }
+
+    public Duration getUsageFlushInterval() {
+        return usageFlushInterval;
+    }
+
+    public void setUsageFlushInterval(Duration usageFlushInterval) {
+        this.usageFlushInterval = usageFlushInterval;
+    }
+
+    public Duration getMetricsFlushInterval() {
+        return metricsFlushInterval;
+    }
+
+    public void setMetricsFlushInterval(Duration metricsFlushInterval) {
+        this.metricsFlushInterval = metricsFlushInterval;
+    }
+
+    public String getInstanceName() {
+        return instanceName;
+    }
+
+    public void setInstanceName(String instanceName) {
+        this.instanceName = instanceName;
+    }
+
+    public String getAppVersion() {
+        return appVersion;
+    }
+
+    public void setAppVersion(String appVersion) {
+        this.appVersion = appVersion;
     }
 }

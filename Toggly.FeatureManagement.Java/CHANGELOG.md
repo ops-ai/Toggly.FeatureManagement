@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.4.0
+
+2026-09-06
+
+### Added
+- Usage (`Usage.SendStats`) and business metrics (`Metrics.SendMetrics`) gRPC
+  telemetry in `toggly-core` with ~1 minute batching and flush on `close()`.
+- Public APIs: `recordUsage` / `recordView`, `measure` / `incrementCounter` /
+  `observe`, plus auto `recordCheck` from `isEnabled` when usage tracking is on.
+- Config: `enableMetrics`, `metricsBaseUrl`, flush intervals, `instanceName`,
+  `appVersion`. Spring Boot properties mirror the same knobs.
+- UTF-8 FNV-1a identity hashing and multi-variant `variantStats` /
+  `variantValues` payloads matching Go/Node/.NET.
+
+### Changed
+- `toggly-core` keeps flag evaluation free of required runtime deps; gRPC +
+  protobuf are optional Maven dependencies for sending telemetry.
+- `SdkIdentity` version aligned to `1.4.0`.
+
 ## 1.3.0
 
 2026-09-04

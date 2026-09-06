@@ -25,11 +25,17 @@ public final class TogglyConfig {
     private final String appKey;
     private final String environment;
     private final String baseUrl;
+    private final String metricsBaseUrl;
     private final Duration refreshInterval;
     private final Duration connectTimeout;
     private final Duration readTimeout;
     private final boolean enableAutoRefresh;
     private final boolean enableUsageTracking;
+    private final boolean enableMetrics;
+    private final Duration usageFlushInterval;
+    private final Duration metricsFlushInterval;
+    private final String instanceName;
+    private final String appVersion;
     private final boolean useSignedDefinitions;
     private final boolean debug;
     private final boolean enableLiveUpdates;
@@ -44,11 +50,17 @@ public final class TogglyConfig {
         this.appKey = builder.appKey;
         this.environment = builder.environment;
         this.baseUrl = builder.baseUrl;
+        this.metricsBaseUrl = builder.metricsBaseUrl;
         this.refreshInterval = builder.refreshInterval;
         this.connectTimeout = builder.connectTimeout;
         this.readTimeout = builder.readTimeout;
         this.enableAutoRefresh = builder.enableAutoRefresh;
         this.enableUsageTracking = builder.enableUsageTracking;
+        this.enableMetrics = builder.enableMetrics;
+        this.usageFlushInterval = builder.usageFlushInterval;
+        this.metricsFlushInterval = builder.metricsFlushInterval;
+        this.instanceName = builder.instanceName;
+        this.appVersion = builder.appVersion;
         this.useSignedDefinitions = builder.useSignedDefinitions;
         this.debug = builder.debug;
         this.enableLiveUpdates = builder.enableLiveUpdates;
@@ -103,6 +115,13 @@ public final class TogglyConfig {
         return baseUrl;
     }
 
+    /**
+     * Base URL for usage/metrics gRPC (defaults to {@code https://app.toggly.io/}).
+     */
+    public String getMetricsBaseUrl() {
+        return metricsBaseUrl;
+    }
+
     public Duration getRefreshInterval() {
         return refreshInterval;
     }
@@ -121,6 +140,29 @@ public final class TogglyConfig {
 
     public boolean isEnableUsageTracking() {
         return enableUsageTracking;
+    }
+
+    /**
+     * Whether business metrics ({@code Metrics.SendMetrics}) are enabled.
+     */
+    public boolean isEnableMetrics() {
+        return enableMetrics;
+    }
+
+    public Duration getUsageFlushInterval() {
+        return usageFlushInterval;
+    }
+
+    public Duration getMetricsFlushInterval() {
+        return metricsFlushInterval;
+    }
+
+    public String getInstanceName() {
+        return instanceName;
+    }
+
+    public String getAppVersion() {
+        return appVersion;
     }
 
     public boolean isUseSignedDefinitions() {
@@ -210,11 +252,17 @@ public final class TogglyConfig {
                 .appKey(appKey)
                 .environment(environment)
                 .baseUrl(baseUrl)
+                .metricsBaseUrl(metricsBaseUrl)
                 .refreshInterval(refreshInterval)
                 .connectTimeout(connectTimeout)
                 .readTimeout(readTimeout)
                 .enableAutoRefresh(enableAutoRefresh)
                 .enableUsageTracking(enableUsageTracking)
+                .enableMetrics(enableMetrics)
+                .usageFlushInterval(usageFlushInterval)
+                .metricsFlushInterval(metricsFlushInterval)
+                .instanceName(instanceName)
+                .appVersion(appVersion)
                 .useSignedDefinitions(useSignedDefinitions)
                 .debug(debug)
                 .enableLiveUpdates(enableLiveUpdates)
@@ -233,11 +281,17 @@ public final class TogglyConfig {
         private String appKey = "";
         private String environment = "Production";
         private String baseUrl = "https://definitions.toggly.io";
+        private String metricsBaseUrl = "https://app.toggly.io/";
         private Duration refreshInterval = Duration.ofMinutes(3);
         private Duration connectTimeout = Duration.ofSeconds(10);
         private Duration readTimeout = Duration.ofSeconds(30);
         private boolean enableAutoRefresh = false;
         private boolean enableUsageTracking = true;
+        private boolean enableMetrics = true;
+        private Duration usageFlushInterval = Duration.ofMinutes(1);
+        private Duration metricsFlushInterval = Duration.ofMinutes(1);
+        private String instanceName;
+        private String appVersion;
         private boolean useSignedDefinitions = false;
         private boolean debug = false;
         private boolean enableLiveUpdates = true;
@@ -280,6 +334,17 @@ public final class TogglyConfig {
          */
         public Builder baseUrl(String baseUrl) {
             this.baseUrl = baseUrl != null ? baseUrl : "https://definitions.toggly.io";
+            return this;
+        }
+
+        /**
+         * Sets the metrics/usage gRPC base URL (default {@code https://app.toggly.io/}).
+         *
+         * @param metricsBaseUrl the metrics endpoint base URL
+         * @return this builder
+         */
+        public Builder metricsBaseUrl(String metricsBaseUrl) {
+            this.metricsBaseUrl = metricsBaseUrl != null ? metricsBaseUrl : "https://app.toggly.io/";
             return this;
         }
 
@@ -346,6 +411,53 @@ public final class TogglyConfig {
          */
         public Builder enableUsageTracking(boolean enableUsageTracking) {
             this.enableUsageTracking = enableUsageTracking;
+            return this;
+        }
+
+        /**
+         * Enables or disables business metrics ({@code Metrics.SendMetrics}).
+         *
+         * @param enableMetrics true to enable metrics
+         * @return this builder
+         */
+        public Builder enableMetrics(boolean enableMetrics) {
+            this.enableMetrics = enableMetrics;
+            return this;
+        }
+
+        /**
+         * Sets how often usage stats are flushed (default 1 minute).
+         */
+        public Builder usageFlushInterval(Duration usageFlushInterval) {
+            this.usageFlushInterval = usageFlushInterval != null
+                    ? usageFlushInterval
+                    : Duration.ofMinutes(1);
+            return this;
+        }
+
+        /**
+         * Sets how often business metrics are flushed (default 1 minute).
+         */
+        public Builder metricsFlushInterval(Duration metricsFlushInterval) {
+            this.metricsFlushInterval = metricsFlushInterval != null
+                    ? metricsFlushInterval
+                    : Duration.ofMinutes(1);
+            return this;
+        }
+
+        /**
+         * Optional instance name reported on usage/metrics payloads.
+         */
+        public Builder instanceName(String instanceName) {
+            this.instanceName = instanceName;
+            return this;
+        }
+
+        /**
+         * Optional application version reported on usage payloads.
+         */
+        public Builder appVersion(String appVersion) {
+            this.appVersion = appVersion;
             return this;
         }
 

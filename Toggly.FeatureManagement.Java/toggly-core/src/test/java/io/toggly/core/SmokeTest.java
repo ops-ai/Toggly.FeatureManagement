@@ -29,6 +29,8 @@ class SmokeTest {
                 .baseUrl(DEFINITIONS_BASE_URL)
                 .useSignedDefinitions(false)
                 .enableAutoRefresh(false)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
                 .build();
 
         try (TogglyClient client = new TogglyClient(config)) {
@@ -49,6 +51,8 @@ class SmokeTest {
                 .enableLiveUpdates(true)
                 .enableAutoRefresh(false)
                 .useSignedDefinitions(false)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
                 .build();
 
         try (TogglyClient client = new TogglyClient(config)) {
@@ -93,6 +97,8 @@ class SmokeTest {
                 .baseUrl(DEFINITIONS_BASE_URL)
                 .useSignedDefinitions(true)
                 .enableAutoRefresh(false)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
                 .build();
 
         try (TogglyClient client = new TogglyClient(config)) {

@@ -27,6 +27,8 @@ class TogglyClientTest {
                 .environment("Test")
                 .defaultFeatureState(false)
                 .featureDefault("default-enabled", true)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
                 .build();
 
         snapshotProvider = new InMemorySnapshotProvider();
