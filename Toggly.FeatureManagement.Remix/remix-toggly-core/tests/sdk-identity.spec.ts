@@ -34,9 +34,14 @@ describe('sdk-identity', () => {
       sdkUserAgent(),
     )
 
-    const g = globalThis as typeof globalThis & { window?: unknown; document?: unknown }
+    const g = globalThis as typeof globalThis & {
+      window?: unknown
+      document?: unknown
+      navigator?: { product?: string }
+    }
     const prevWindow = g.window
     const prevDocument = g.document
+    const prevNavigator = g.navigator
     g.window = {}
     g.document = {}
     try {
@@ -49,6 +54,16 @@ describe('sdk-identity', () => {
       else g.window = prevWindow
       if (prevDocument === undefined) delete g.document
       else g.document = prevDocument
+    }
+
+    delete g.window
+    delete g.document
+    g.navigator = { product: 'ReactNative' }
+    try {
+      expect(usesSdkCustomHeaders()).toBe(true)
+    } finally {
+      if (prevNavigator === undefined) delete g.navigator
+      else g.navigator = prevNavigator
     }
   })
 })

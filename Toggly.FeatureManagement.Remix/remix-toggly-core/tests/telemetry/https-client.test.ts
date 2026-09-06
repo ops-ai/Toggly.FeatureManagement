@@ -72,10 +72,32 @@ describe('HttpsTelemetryClient', () => {
       metric: 'depth',
       time: '2026-01-01T00:00:01.000Z',
     })
+    expect(metricsPayloadToHttpJson({
+      appKey: 'app',
+      environment: 'Production',
+      time: toProtobufTimestamp(new Date('2026-01-01T00:00:00.000Z')),
+      metrics: {},
+      observations: undefined as never,
+    }).observations).toEqual([])
 
     expect(await client.sendUsageStats(usagePayload)).toBe(true)
     expect(await client.sendMetrics(metricsPayload)).toBe(false)
     expect(await client.post('api/usage/stats', {})).toBe(false)
     expect(fetchImpl).toHaveBeenCalledTimes(3)
+  })
+
+  it('uses default base URL, user agent, and global fetch when options omitted', async () => {
+    const originalFetch = globalThis.fetch
+    const fetchImpl = jest.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = fetchImpl as unknown as typeof fetch
+    try {
+      const client = new HttpsTelemetryClient()
+      expect(client.getBaseUrl()).toBe(DEFAULT_METRICS_BASE_URL)
+      expect(client.getUserAgent()).toMatch(/^toggly-remix\//)
+      expect(await client.post('/api/usage/stats', {})).toBe(true)
+      expect(fetchImpl).toHaveBeenCalled()
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })

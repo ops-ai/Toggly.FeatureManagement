@@ -1,4 +1,4 @@
-import { UsageBatcher } from '../../src/telemetry/usage-batcher'
+import { UsageBatcher, type FeatureStatPayload } from '../../src/telemetry/usage-batcher'
 import { hashIdentity } from '../../src/telemetry/hash'
 
 describe('UsageBatcher', () => {
@@ -99,5 +99,173 @@ describe('UsageBatcher', () => {
     const payload = batcher.buildAndReset()!.payload
     expect(payload.stats).toHaveLength(1)
     expect(payload.stats[0].feature).toBe('FeatureA')
+  })
+
+  it('records usage and view without identity and keeps request/used/viewed-only variants', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.recordUsage('FeatureA')
+    batcher.recordView('FeatureA')
+    batcher.recordCheck('FeatureB', true, undefined, 'only-request', true)
+    batcher.recordUsage('FeatureC', undefined, 'only-used')
+    batcher.recordView('FeatureD', undefined, 'only-viewed')
+
+    const payload = batcher.buildAndReset()!.payload
+    expect(payload.stats.find((s) => s.feature === 'FeatureA')!.variantStats.enabled.usedCount).toBe(
+      1,
+    )
+    expect(payload.stats.find((s) => s.feature === 'FeatureA')!.variantStats.enabled.viewedCount).toBe(
+      1,
+    )
+    expect(
+      payload.stats.find((s) => s.feature === 'FeatureB')!.variantStats['only-request'].requestCount,
+    ).toBe(1)
+    expect(payload.stats.find((s) => s.feature === 'FeatureC')!.variantStats['only-used'].usedCount).toBe(
+      1,
+    )
+    expect(
+      payload.stats.find((s) => s.feature === 'FeatureD')!.variantStats['only-viewed'].viewedCount,
+    ).toBe(1)
+  })
+
+  it('caps unique hashes per feature and at application scope', () => {
+    const batcher = new UsageBatcher({
+      appKey: 'app',
+      environment: 'Production',
+      maxUniqueHashesPerFeature: 1,
+      maxApplicationUniqueHashes: 1,
+    })
+    batcher.recordCheck('FeatureA', true, 'user-1')
+    batcher.recordCheck('FeatureA', true, 'user-2')
+    batcher.recordUsage('FeatureA', 'user-3')
+    batcher.recordView('FeatureA', 'user-4')
+    const payload = batcher.buildAndReset()!.payload
+    expect(payload.uniqueUserHashes).toHaveLength(1)
+    expect(payload.stats[0].uniqueContextIdentifierEnabledCount).toBe(1)
+    // Per-set caps: used/viewed sets still accept their first hash even when appUnique is full.
+    expect(payload.stats[0].uniqueUsersUsedCount).toBe(1)
+    expect(payload.stats[0].uniqueViewedUserHashes).toHaveLength(1)
+  })
+
+  it('skips recordUsage/recordView when the feature cap is already hit', () => {
+    const batcher = new UsageBatcher({
+      appKey: 'app',
+      environment: 'Production',
+      maxFeatures: 1,
+    })
+    batcher.recordCheck('FeatureA', true)
+    batcher.recordUsage('FeatureB', 'user-1')
+    batcher.recordView('FeatureC', 'user-2')
+    expect(batcher.hitFeatureCap()).toBe(true)
+    expect(batcher.featureCount()).toBe(1)
+    const payload = batcher.buildAndReset()!.payload
+    expect(payload.stats).toHaveLength(1)
+    expect(payload.stats[0].feature).toBe('FeatureA')
+  })
+
+  it('restoreFromBundle tolerates sparse payloads, empty feature keys, and feature caps', () => {
+    const capped = new UsageBatcher({
+      appKey: 'app',
+      environment: 'Production',
+      maxFeatures: 1,
+    })
+    capped.recordCheck('Keep', true, 'seed')
+
+    capped.restoreFromBundle({
+      payload: {
+        appKey: 'app',
+        environment: 'Production',
+        time: { seconds: 1, nanos: 0 },
+        stats: [
+          {
+            feature: '',
+            uniqueContextIdentifierEnabledCount: 0,
+            uniqueContextIdentifierDisabledCount: 0,
+            uniqueUsersUsedCount: 0,
+            uniqueUserHashes: [],
+            uniqueViewedUserHashes: [],
+            variantStats: {},
+          },
+          {
+            feature: 'Dropped',
+            uniqueContextIdentifierEnabledCount: 0,
+            uniqueContextIdentifierDisabledCount: 0,
+            uniqueUsersUsedCount: 0,
+            uniqueUserHashes: [9],
+            uniqueViewedUserHashes: [10],
+            variantStats: { enabled: { checkCount: 1, requestCount: 0, usedCount: 0, viewedCount: 0 } },
+          },
+          {
+            feature: 'Keep',
+            uniqueContextIdentifierEnabledCount: 0,
+            uniqueContextIdentifierDisabledCount: 0,
+            uniqueUsersUsedCount: 0,
+            uniqueUserHashes: [11],
+            uniqueViewedUserHashes: [12],
+            variantStats: {
+              enabled: {
+                checkCount: undefined as unknown as number,
+                requestCount: undefined as unknown as number,
+                usedCount: undefined as unknown as number,
+                viewedCount: undefined as unknown as number,
+              },
+            },
+          },
+        ],
+        totalUniqueUsers: 0,
+        // exercise ?? fallbacks
+        uniqueUserHashes: undefined as unknown as number[],
+      },
+      uniqueUsersEnabled: { Dropped: [1], Keep: [2] },
+      uniqueUsersDisabled: undefined as unknown as Record<string, number[]>,
+      uniqueUsersUsed: { Keep: [3] },
+    })
+
+    const restored = capped.buildAndReset()!.payload
+    expect(restored.stats.map((s) => s.feature)).toEqual(['Keep'])
+    expect(restored.stats[0].uniqueUserHashes).toContain(11)
+    expect(restored.stats[0].uniqueViewedUserHashes).toContain(12)
+
+    const emptyish = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    emptyish.restoreFromBundle({
+      payload: {
+        appKey: 'app',
+        environment: 'Production',
+        time: { seconds: 1, nanos: 0 },
+        stats: undefined as unknown as FeatureStatPayload['stats'],
+        totalUniqueUsers: 0,
+        uniqueUserHashes: [42],
+      },
+      uniqueUsersEnabled: {},
+      uniqueUsersDisabled: {},
+      uniqueUsersUsed: {},
+    })
+    // App unique hashes alone still flush.
+    expect(emptyish.buildAndReset()!.payload.uniqueUserHashes).toContain(42)
+
+    const sparseVariants = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    sparseVariants.restoreFromBundle({
+      payload: {
+        appKey: 'app',
+        environment: 'Production',
+        time: { seconds: 1, nanos: 0 },
+        stats: [
+          {
+            feature: 'Sparse',
+            uniqueContextIdentifierEnabledCount: 0,
+            uniqueContextIdentifierDisabledCount: 0,
+            uniqueUsersUsedCount: 0,
+            uniqueUserHashes: undefined as unknown as number[],
+            uniqueViewedUserHashes: undefined as unknown as number[],
+            variantStats: undefined as unknown as Record<string, never>,
+          },
+        ],
+        totalUniqueUsers: 0,
+        uniqueUserHashes: [],
+      },
+      uniqueUsersEnabled: {},
+      uniqueUsersDisabled: {},
+      uniqueUsersUsed: {},
+    })
+    expect(sparseVariants.featureCount()).toBe(1)
   })
 })

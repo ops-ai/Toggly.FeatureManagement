@@ -64,4 +64,41 @@ describe('MetricsBatcher', () => {
     expect(payload.stats).toHaveLength(1)
     expect(payload.observations).toHaveLength(1)
   })
+
+  it('restoreFromPayload tolerates missing collections and empty variant maps', () => {
+    const batcher = new MetricsBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.restoreFromPayload({
+      appKey: 'app',
+      environment: 'Production',
+      time: { seconds: 1, nanos: 0 },
+      stats: undefined,
+      counters: undefined,
+      observations: undefined,
+    } as never)
+    expect(batcher.buildAndReset()).toBeNull()
+
+    batcher.restoreFromPayload({
+      appKey: 'app',
+      environment: 'Production',
+      time: { seconds: 1, nanos: 0 },
+      stats: [{ metric: 'm', variantValues: undefined as never }],
+      counters: [{ metric: 'c', variantValues: undefined as never }],
+      observations: [
+        {
+          metric: 'o',
+          value: 1,
+          time: { seconds: 1, nanos: 0 },
+          variantValues: undefined as never,
+        },
+      ],
+    })
+    // Undefined variant maps contribute nothing.
+    expect(batcher.buildAndReset()).toBeNull()
+
+    // Feature-less metric keys (empty feature segment after separator).
+    batcher.incrementCounter('clicks', 1, { feature: '' })
+    const payload = batcher.buildAndReset()!
+    expect(payload.counters[0].metric).toBe('clicks')
+    expect(payload.counters[0].feature).toBeUndefined()
+  })
 })

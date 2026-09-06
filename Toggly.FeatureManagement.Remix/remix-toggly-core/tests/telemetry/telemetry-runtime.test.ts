@@ -308,6 +308,48 @@ describe('TelemetryRuntime', () => {
     await runtime.flush()
     await runtime.close()
   })
+
+  it('no-ops start/close after closed and covers metrics-only timer path', async () => {
+    const sendMetrics = jest.fn().mockResolvedValue({ count: 1 })
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: false,
+      enableMetrics: true,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 1000,
+      usageClient: null,
+      metricsClient: { sendMetrics, close: jest.fn() },
+      attachProcessHandlers: false,
+    })
+    runtime.start()
+    runtime.measure('revenue', 1)
+    await jest.advanceTimersByTimeAsync(1000)
+    expect(sendMetrics).toHaveBeenCalled()
+    await runtime.close()
+    await runtime.close()
+    runtime.start()
+    expect(runtime.usageEnabled).toBe(false)
+    expect(runtime.metricsEnabled).toBe(false)
+  })
+
+  it('defaults transport to grpc with process handlers when not overridden', () => {
+    const onSpy = jest.spyOn(process, 'on')
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats: jest.fn(), close: jest.fn() },
+      metricsClient: null,
+    })
+    runtime.start()
+    expect(onSpy).toHaveBeenCalledWith('beforeExit', expect.any(Function))
+    void runtime.close()
+    onSpy.mockRestore()
+  })
 })
 
 describe('HttpsTelemetryClient', () => {

@@ -5,6 +5,7 @@ import {
   createGrpcClients,
   resolveProtoRoot,
   resolveUserAgent,
+  DEFAULT_METRICS_BASE_URL,
 } from '../../src/telemetry/grpc-clients'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -17,6 +18,8 @@ describe('grpc-clients helpers', () => {
     expect(grpcTarget('https://localhost:5001')).toBe('localhost:5001')
     expect(grpcTarget('app.toggly.io')).toBe('app.toggly.io:443')
     expect(grpcTarget('not a url :')).toMatch(/:/)
+    // Invalid absolute URL → catch path without an explicit port in the host.
+    expect(grpcTarget('http://[')).toBe('[:443')
   })
 
   it('resolveUserAgent uses override or sdk default', () => {
@@ -55,6 +58,18 @@ describe('grpc-clients helpers', () => {
     }
   })
 
+  it('resolveProtoRoot falls back when no usage.proto exists nearby', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'toggly-noproto-'))
+    try {
+      const moduleUrl = pathToFileURL(path.join(tmp, 'orphan', 'mod.js')).href
+      const resolved = resolveProtoRoot(moduleUrl)
+      expect(path.basename(resolved)).toBe('proto')
+      expect(fs.existsSync(path.join(resolved, 'usage.proto'))).toBe(false)
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
   it('loads package definitions when optional gRPC deps are present', async () => {
     if (!isGrpcAvailable()) {
       expect(createGrpcClients('https://app.toggly.io/')).toBeNull()
@@ -62,12 +77,40 @@ describe('grpc-clients helpers', () => {
     }
     const clients = createGrpcClients('https://app.toggly.io/', 'ua-test')
     expect(clients).not.toBeNull()
-    // Exercise stub wrappers (network will fail; still covers callback paths).
+    // Exercise stub wrappers (network will fail; still covers reject callback paths).
     await expect(
       clients!.usage.sendStats({ appKey: 'app', environment: 'Production', stats: [] }),
     ).rejects.toBeDefined()
     await expect(
       clients!.metrics.sendMetrics({ appKey: 'app', environment: 'Production', metrics: {} }),
+    ).rejects.toBeDefined()
+    clients!.usage.close()
+    clients!.metrics.close()
+  })
+
+  it('createGrpcClients uses default metrics base URL', () => {
+    if (!isGrpcAvailable()) {
+      expect(createGrpcClients()).toBeNull()
+      return
+    }
+    const clients = createGrpcClients()
+    expect(clients).not.toBeNull()
+    expect(DEFAULT_METRICS_BASE_URL).toContain('toggly.io')
+    clients!.usage.close()
+    clients!.metrics.close()
+  })
+
+  it('sendStats/sendMetrics accept optional metadata on the reject path', async () => {
+    if (!isGrpcAvailable()) {
+      return
+    }
+    const clients = createGrpcClients('https://app.toggly.io/', 'ua-meta')
+    expect(clients).not.toBeNull()
+    await expect(
+      clients!.usage.sendStats({ appKey: 'app' }, { 'x-test': '1' }),
+    ).rejects.toBeDefined()
+    await expect(
+      clients!.metrics.sendMetrics({ appKey: 'app' }, { 'x-test': '1' }),
     ).rejects.toBeDefined()
     clients!.usage.close()
     clients!.metrics.close()
