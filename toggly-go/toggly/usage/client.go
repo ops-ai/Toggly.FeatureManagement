@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/autoflush"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage/usagepb"
 )
 
@@ -20,8 +21,7 @@ type Client struct {
 	api       usagepb.UsageClient
 	batcher   *Batcher
 	userAgent string
-
-	stop chan struct{}
+	flush     *autoflush.Controller
 }
 
 // Dial creates a gRPC usage client.
@@ -41,17 +41,15 @@ func Dial(baseURL, appKey, env, instance, appVersion, userAgent string) (*Client
 		api:       usagepb.NewUsageClient(conn),
 		batcher:   NewBatcher(appKey, env, instance, appVersion),
 		userAgent: userAgent,
-		stop:      make(chan struct{}),
+		flush:     autoflush.New(),
 	}, nil
 }
 
-// Close flushes pending stats (best-effort, ~15s timeout) then closes the connection.
+// Close stops auto-flush, waits for any in-flight ticker flush, then flushes
+// pending stats (best-effort, ~15s timeout) and closes the connection.
 func (c *Client) Close() error {
-	select {
-	case <-c.stop:
-		// already closed
-	default:
-		close(c.stop)
+	if c.flush != nil {
+		c.flush.StopAndWait()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -84,23 +82,10 @@ func (c *Client) Flush(ctx context.Context) error {
 
 // StartAutoFlush flushes periodically.
 func (c *Client) StartAutoFlush(interval time.Duration) {
-	if interval <= 0 {
-		interval = time.Minute
+	if c.flush == nil {
+		c.flush = autoflush.New()
 	}
-	go func() {
-		t := time.NewTicker(interval)
-		defer t.Stop()
-		for {
-			select {
-			case <-c.stop:
-				return
-			case <-t.C:
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				_ = c.Flush(ctx)
-				cancel()
-			}
-		}
-	}()
+	c.flush.Start(interval, c.Flush)
 }
 
 func grpcTarget(baseURL string) (string, error) {
