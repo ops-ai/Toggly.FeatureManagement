@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -22,6 +23,7 @@ type Client struct {
 	userAgent string
 
 	stop chan struct{}
+	wg   sync.WaitGroup
 }
 
 // Dial creates a gRPC metrics client.
@@ -45,13 +47,15 @@ func Dial(baseURL, appKey, env, instance, userAgent string) (*Client, error) {
 	}, nil
 }
 
-// Close flushes pending metrics (best-effort, ~15s timeout) then closes the connection.
+// Close stops auto-flush, waits for any in-flight ticker flush, then flushes
+// pending metrics (best-effort, ~15s timeout) and closes the connection.
 func (c *Client) Close() error {
 	select {
 	case <-c.stop:
 	default:
 		close(c.stop)
 	}
+	c.wg.Wait()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	_ = c.Flush(ctx)
@@ -84,7 +88,9 @@ func (c *Client) StartAutoFlush(interval time.Duration) {
 	if interval <= 0 {
 		interval = time.Minute
 	}
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for {
