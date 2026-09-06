@@ -163,3 +163,43 @@ describe('wrapReadableWithCompletion', () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('getOrCreateTelemetry config change', () => {
+  beforeEach(() => {
+    resetTelemetrySingleton();
+  });
+
+  it('flushes the previous isolate runtime when config key changes', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
+    const first = getOrCreateTelemetry({
+      appKey: 'app-a',
+      environment: 'Production',
+      metricsBaseUrl: 'https://app.toggly.io/',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(first).not.toBeNull();
+    first!.recordCheck('feat', true);
+
+    const second = getOrCreateTelemetry({
+      appKey: 'app-b',
+      environment: 'Production',
+      metricsBaseUrl: 'https://app.toggly.io/',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(second).not.toBeNull();
+    expect(second).not.toBe(first);
+
+    // Fire-and-forget flush of the previous runtime — wait a tick for it.
+    await vi.waitFor(() => {
+      expect(fetchImpl).toHaveBeenCalled();
+    });
+    const usageCalls = fetchImpl.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && String(c[0]).includes('api/usage/stats'),
+    );
+    expect(usageCalls.length).toBeGreaterThanOrEqual(1);
+  });
+});

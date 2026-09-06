@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2
+
+2026-09-06
+
+### Fixed
+- Flush the previous isolate `TelemetryRuntime` when `getOrCreateTelemetry`
+  recreates the singleton after a mid-isolate config change, so buffered usage
+  or metrics are not dropped.
+
 ## 0.3.1
 
 2026-09-06

@@ -257,11 +257,17 @@ export function getOrCreateTelemetry(config: TelemetryConfig): TelemetryRuntime 
   ].join('|');
 
   if (!isolateRuntime || isolateKey !== key) {
+    const previous = isolateRuntime;
     isolateRuntime = new TelemetryRuntime({
       ...config,
       processStartTime: isolateStart,
     });
     isolateKey = key;
+    // Best-effort flush of the prior isolate buffer when config changes mid-isolate.
+    // Soft-fail lives inside flush(); fire-and-forget keeps this sync for callers.
+    if (previous) {
+      void previous.flush();
+    }
   }
   return isolateRuntime;
 }
