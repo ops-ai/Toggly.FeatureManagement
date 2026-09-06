@@ -14,7 +14,9 @@
   when usage tracking is enabled.
 - Optional `telemetry` extra (`grpcio` + `protobuf`) so core evaluate stays
   zero-dependency; install with `pip install toggly[telemetry]`
-  (`grpcio>=1.80` on Python ≥3.9; last 3.8-compatible line on Python 3.8).
+  (`grpcio>=1.80` on Python ≥3.9; `grpcio>=1.62,<1.71` on Python 3.8).
+  Generated stub floor is `1.62.0` so both install lines can import the
+  native path.
 - Config: `enable_metrics` (default on), `metrics_base_url`, flush intervals,
   `instance_name`, `app_version`.
 
