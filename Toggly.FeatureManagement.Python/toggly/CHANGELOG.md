@@ -12,8 +12,9 @@
 - Public APIs: `record_usage`, `record_view`, `measure`, `increment_counter`,
   `observe`, `flush_telemetry`; automatic check recording from `is_enabled`
   when usage tracking is enabled.
-- Optional `telemetry` extra (`grpcio>=1.80.0` + `protobuf`) so core evaluate
-  stays zero-dependency; install with `pip install toggly[telemetry]`.
+- Optional `telemetry` extra (`grpcio` + `protobuf`) so core evaluate stays
+  zero-dependency; install with `pip install toggly[telemetry]`
+  (`grpcio>=1.80` on Python ≥3.9; last 3.8-compatible line on Python 3.8).
 - Config: `enable_metrics` (default on), `metrics_base_url`, flush intervals,
   `instance_name`, `app_version`.
 

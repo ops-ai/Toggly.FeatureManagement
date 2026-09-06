@@ -222,8 +222,12 @@ class TestNativeGrpcPath:
         assert stub.calls[0]["request"].SerializeToString()
 
     def test_uppercase_ua_rejected_by_grpcio_regression(self) -> None:
-        with pytest.raises(ValueError, match="metadata was invalid"):
+        # grpcio may raise ValueError (client validate) or RpcError INTERNAL
+        # "Invalid metadata" depending on version/platform.
+        with pytest.raises((ValueError, grpc.RpcError)) as exc_info:
             _invoke_with_metadata((("UA", resolve_user_agent()),))
+        err = str(exc_info.value).lower()
+        assert "metadata" in err or "illegal header" in err or "invalid" in err
 
     def test_create_grpc_clients_default_metadata_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured: dict = {}

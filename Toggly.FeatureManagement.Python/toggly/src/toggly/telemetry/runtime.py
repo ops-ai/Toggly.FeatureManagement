@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 import logging
 import os
 import signal
 import threading
 from datetime import datetime, timezone
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from toggly.telemetry.grpc_clients import (
     DEFAULT_METRICS_BASE_URL,
@@ -39,18 +40,19 @@ class TelemetryRuntime:
         *,
         app_key: str,
         environment: str,
-        metrics_base_url: Optional[str] = None,
-        enable_usage_tracking: Optional[bool] = None,
-        enable_metrics: Optional[bool] = None,
-        usage_flush_interval: Optional[float] = None,
-        metrics_flush_interval: Optional[float] = None,
-        instance_name: Optional[str] = None,
-        app_version: Optional[str] = None,
+        metrics_base_url: str | None = None,
+        enable_usage_tracking: bool | None = None,
+        enable_metrics: bool | None = None,
+        usage_flush_interval: float | None = None,
+        metrics_flush_interval: float | None = None,
+        instance_name: str | None = None,
+        app_version: str | None = None,
         usage_client: Any = None,
         metrics_client: Any = None,
         usage_client_provided: bool = False,
         metrics_client_provided: bool = False,
     ) -> None:
+        """Create a telemetry runtime for one app/environment pair."""
         has_app_key = bool(app_key)
         telemetry_env_disabled = os.environ.get("TOGGLY_DISABLE_TELEMETRY") == "1"
         default_on = has_app_key and not telemetry_env_disabled
@@ -83,11 +85,11 @@ class TelemetryRuntime:
         self._usage_client_provided = usage_client_provided
         self._metrics_client_provided = metrics_client_provided
 
-        self._usage_batcher: Optional[UsageBatcher] = None
-        self._metrics_batcher: Optional[MetricsBatcher] = None
-        self._clients: Optional[GrpcClients] = None
-        self._usage_timer: Optional[threading.Timer] = None
-        self._metrics_timer: Optional[threading.Timer] = None
+        self._usage_batcher: UsageBatcher | None = None
+        self._metrics_batcher: MetricsBatcher | None = None
+        self._clients: GrpcClients | None = None
+        self._usage_timer: threading.Timer | None = None
+        self._metrics_timer: threading.Timer | None = None
         self._sending_usage = False
         self._sending_metrics = False
         self._closed = False
@@ -98,10 +100,12 @@ class TelemetryRuntime:
 
     @property
     def usage_enabled(self) -> bool:
+        """True when usage tracking is active and the runtime is open."""
         return self._enable_usage and not self._closed
 
     @property
     def metrics_enabled(self) -> bool:
+        """True when metrics tracking is active and the runtime is open."""
         return self._enable_metrics and not self._closed
 
     def start(self) -> None:
@@ -213,100 +217,112 @@ class TelemetryRuntime:
                 pass
 
     def _atexit_flush(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:
-            pass
 
     def _handle_process_signal(self, sig: signal.Signals) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:
-            pass
 
     def _detach_exit_handlers(self) -> None:
         for sig, previous in self._signal_handlers:
-            try:
+            with contextlib.suppress(ValueError, OSError):
                 signal.signal(sig, previous)
-            except (ValueError, OSError):
-                pass
         self._signal_handlers.clear()
 
     def record_check(
         self,
         feature: str,
         enabled: bool,
-        identity: Optional[str] = None,
-        variant: Optional[str] = None,
+        identity: str | None = None,
+        variant: str | None = None,
         unique_request: bool = False,
     ) -> None:
-        if self._usage_batcher is not None:
-            self._usage_batcher.record_check(
+        """Record a feature evaluation into the usage batcher."""
+        with self._lock:
+            batcher = self._usage_batcher
+        if batcher is not None:
+            batcher.record_check(
                 feature, enabled, identity, variant, unique_request
             )
 
     def record_usage(
         self,
         feature: str,
-        identity: Optional[str] = None,
+        identity: str | None = None,
         variant: str = "enabled",
     ) -> None:
-        if self._usage_batcher is not None:
-            self._usage_batcher.record_usage(feature, identity, variant)
+        """Record a feature used/interaction event."""
+        with self._lock:
+            batcher = self._usage_batcher
+        if batcher is not None:
+            batcher.record_usage(feature, identity, variant)
 
     def record_view(
         self,
         feature: str,
-        identity: Optional[str] = None,
+        identity: str | None = None,
         variant: str = "enabled",
     ) -> None:
-        if self._usage_batcher is not None:
-            self._usage_batcher.record_view(feature, identity, variant)
+        """Record a feature viewed/rendered event."""
+        with self._lock:
+            batcher = self._usage_batcher
+        if batcher is not None:
+            batcher.record_view(feature, identity, variant)
 
     def measure(
         self,
         metric: str,
         value: float,
-        options: Optional[Mapping[str, Any] | MetricsFeatureOptions] = None,
+        options: Mapping[str, Any] | MetricsFeatureOptions | None = None,
     ) -> None:
-        if self._metrics_batcher is None:
+        """Aggregate a business measurement (sum over the flush window)."""
+        with self._lock:
+            batcher = self._metrics_batcher
+        if batcher is None:
             return
         opts = (
             options
             if isinstance(options, MetricsFeatureOptions)
             else options_from_mapping(options)
         )
-        self._metrics_batcher.measure(metric, value, opts)
+        batcher.measure(metric, value, opts)
 
     def increment_counter(
         self,
         metric: str,
         value: float = 1.0,
-        options: Optional[Mapping[str, Any] | MetricsFeatureOptions] = None,
+        options: Mapping[str, Any] | MetricsFeatureOptions | None = None,
     ) -> None:
-        if self._metrics_batcher is None:
+        """Increment a business counter."""
+        with self._lock:
+            batcher = self._metrics_batcher
+        if batcher is None:
             return
         opts = (
             options
             if isinstance(options, MetricsFeatureOptions)
             else options_from_mapping(options)
         )
-        self._metrics_batcher.increment_counter(metric, value, opts)
+        batcher.increment_counter(metric, value, opts)
 
     def observe(
         self,
         metric: str,
         value: float,
-        options: Optional[Mapping[str, Any] | MetricsFeatureOptions] = None,
+        options: Mapping[str, Any] | MetricsFeatureOptions | None = None,
     ) -> None:
-        if self._metrics_batcher is None:
+        """Record a point-in-time observation (gauge)."""
+        with self._lock:
+            batcher = self._metrics_batcher
+        if batcher is None:
             return
         opts = (
             options
             if isinstance(options, MetricsFeatureOptions)
             else options_from_mapping(options)
         )
-        self._metrics_batcher.observe(metric, value, opts)
+        batcher.observe(metric, value, opts)
 
     def _ensure_native_clients(self) -> None:
         """Lazily dial native gRPC clients when optional deps are present."""
@@ -330,7 +346,7 @@ class TelemetryRuntime:
             if self._usage_batcher.is_empty():
                 return
             self._ensure_native_clients()
-            client: Optional[UsageGrpcClient] = None
+            client: UsageGrpcClient | None = None
             if self._clients is not None:
                 client = self._clients.usage
             if client is None or not hasattr(client, "send_stats"):
@@ -357,7 +373,7 @@ class TelemetryRuntime:
             if self._metrics_batcher.is_empty():
                 return
             self._ensure_native_clients()
-            client: Optional[MetricsGrpcClient] = None
+            client: MetricsGrpcClient | None = None
             if self._clients is not None:
                 client = self._clients.metrics
             if client is None or not hasattr(client, "send_metrics"):
@@ -377,6 +393,7 @@ class TelemetryRuntime:
                 self._sending_metrics = False
 
     def flush_all(self) -> None:
+        """Flush usage and metrics batches once."""
         self.flush_usage()
         self.flush_metrics()
 
@@ -406,7 +423,5 @@ class TelemetryRuntime:
                 for side in (clients.usage, clients.metrics):
                     if side is None:
                         continue
-                    try:
+                    with contextlib.suppress(Exception):
                         side.close()
-                    except Exception:
-                        pass

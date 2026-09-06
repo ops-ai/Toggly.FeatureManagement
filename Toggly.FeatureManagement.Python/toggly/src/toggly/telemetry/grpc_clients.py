@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Mapping, Optional, Protocol
+from typing import Any, Callable, Mapping, Optional, Protocol
 from urllib.parse import urlparse
 
 from toggly.version import __version__
@@ -30,7 +30,7 @@ def hash_identity(identity: str) -> int:
     return h - 0x100000000 if h > 0x7FFFFFFF else h
 
 
-def to_protobuf_timestamp(dt: Optional[datetime] = None) -> Dict[str, int]:
+def to_protobuf_timestamp(dt: datetime | None = None) -> dict[str, int]:
     """Return ``{seconds, nanos}`` for a protobuf Timestamp."""
     if dt is None:
         dt = datetime.now(timezone.utc)
@@ -62,7 +62,7 @@ def grpc_target(base_url: str) -> str:
     return host
 
 
-def resolve_user_agent(override: Optional[str] = None) -> str:
+def resolve_user_agent(override: str | None = None) -> str:
     """Return gRPC user-agent metadata value (``ua`` key; matches .NET/Go UA)."""
     return override or f"toggly-python/{__version__}"
 
@@ -73,8 +73,12 @@ def is_grpc_available() -> bool:
         import grpc  # noqa: F401
         from google.protobuf import timestamp_pb2  # noqa: F401
 
-        from toggly.telemetry.pb import metrics_pb2, usage_pb2  # noqa: F401
-        from toggly.telemetry.pb import metrics_pb2_grpc, usage_pb2_grpc  # noqa: F401
+        from toggly.telemetry.pb import (  # noqa: F401  # noqa: F401
+            metrics_pb2,
+            metrics_pb2_grpc,
+            usage_pb2,
+            usage_pb2_grpc,
+        )
 
         return True
     except Exception:
@@ -87,7 +91,7 @@ class UsageGrpcClient(Protocol):
     def send_stats(
         self,
         request: Mapping[str, Any],
-        metadata: Optional[Mapping[str, str]] = None,
+        metadata: Mapping[str, str] | None = None,
     ) -> Any:
         """Send a FeatureStat payload."""
 
@@ -101,7 +105,7 @@ class MetricsGrpcClient(Protocol):
     def send_metrics(
         self,
         request: Mapping[str, Any],
-        metadata: Optional[Mapping[str, str]] = None,
+        metadata: Mapping[str, str] | None = None,
     ) -> Any:
         """Send a MetricStat payload."""
 
@@ -130,7 +134,8 @@ def feature_stat_from_payload(payload: Mapping[str, Any]) -> Any:
     """Convert a batcher dict payload into a Usage.FeatureStat message."""
     from toggly.telemetry.pb import usage_pb2
 
-    msg = usage_pb2.FeatureStat()
+    # Generated pb2 modules are dynamically typed for mypy.
+    msg = usage_pb2.FeatureStat()  # type: ignore[attr-defined]
     msg.appKey = str(payload.get("appKey", ""))
     msg.environment = str(payload.get("environment", ""))
     time_ts = payload.get("time")
@@ -170,7 +175,7 @@ def feature_stat_from_payload(payload: Mapping[str, Any]) -> Any:
             for name, vs in variant_stats.items():
                 if not isinstance(vs, Mapping):
                     continue
-                entry = usage_pb2.VariantStats(
+                entry = usage_pb2.VariantStats(  # type: ignore[attr-defined]
                     checkCount=int(vs.get("checkCount", 0)),
                     requestCount=int(vs.get("requestCount", 0)),
                     usedCount=int(vs.get("usedCount", 0)),
@@ -184,7 +189,7 @@ def metric_stat_from_payload(payload: Mapping[str, Any]) -> Any:
     """Convert a batcher dict payload into a Metrics.MetricStat message."""
     from toggly.telemetry.pb import metrics_pb2
 
-    msg = metrics_pb2.MetricStat()
+    msg = metrics_pb2.MetricStat()  # type: ignore[attr-defined]
     msg.appKey = str(payload.get("appKey", ""))
     msg.environment = str(payload.get("environment", ""))
     time_ts = payload.get("time")
@@ -267,7 +272,7 @@ class _NativeUsageClient:
     def send_stats(
         self,
         request: Mapping[str, Any],
-        metadata: Optional[Mapping[str, str]] = None,
+        metadata: Mapping[str, str] | None = None,
     ) -> Any:
         meta = {**self._default_metadata, **(metadata or {})}
         msg = feature_stat_from_payload(request)
@@ -297,7 +302,7 @@ class _NativeMetricsClient:
     def send_metrics(
         self,
         request: Mapping[str, Any],
-        metadata: Optional[Mapping[str, str]] = None,
+        metadata: Mapping[str, str] | None = None,
     ) -> Any:
         meta = {**self._default_metadata, **(metadata or {})}
         msg = metric_stat_from_payload(request)
@@ -313,10 +318,10 @@ class _NativeMetricsClient:
 
 def create_grpc_clients(
     metrics_base_url: str,
-    user_agent: Optional[str] = None,
+    user_agent: str | None = None,
     *,
     timeout: float = 10.0,
-) -> Optional[GrpcClients]:
+) -> GrpcClients | None:
     """Dial usage + metrics stubs. Returns ``None`` when gRPC deps are missing."""
     if not is_grpc_available():
         return None
