@@ -291,7 +291,8 @@ impl UsageBatcher {
                 dest.used_count = dest.used_count.saturating_add(vs.used_count);
                 dest.viewed_count = dest.viewed_count.saturating_add(vs.viewed_count);
             }
-            agg.unique_users_enabled.extend(snap_agg.unique_users_enabled);
+            agg.unique_users_enabled
+                .extend(snap_agg.unique_users_enabled);
             agg.unique_users_disabled
                 .extend(snap_agg.unique_users_disabled);
             agg.unique_users_used.extend(snap_agg.unique_users_used);

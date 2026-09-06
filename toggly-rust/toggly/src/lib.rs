@@ -104,8 +104,8 @@ pub mod definitions;
 pub mod entity_context;
 pub mod eval;
 pub mod provider;
-pub mod telemetry;
 mod sdk_identity;
+pub mod telemetry;
 
 pub use client::TogglyClient;
 pub use config::{OnErrorCallback, TogglyConfig, TogglyConfigBuilder};

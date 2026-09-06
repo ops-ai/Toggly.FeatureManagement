@@ -55,9 +55,7 @@ impl TelemetryRuntimeConfig {
         Self {
             app_key: app_key.to_string(),
             environment: environment.to_string(),
-            metrics_base_url: normalize_url(
-                metrics_base_url.unwrap_or(DEFAULT_METRICS_BASE_URL),
-            ),
+            metrics_base_url: normalize_url(metrics_base_url.unwrap_or(DEFAULT_METRICS_BASE_URL)),
             enable_usage_tracking,
             enable_metrics,
             usage_flush_interval: usage_flush_interval
@@ -88,6 +86,25 @@ fn telemetry_env_disabled() -> bool {
 
 fn resolve_enabled(explicit: Option<bool>, default_on: bool) -> bool {
     explicit.unwrap_or(default_on)
+}
+
+/// Clears a flush-in-flight flag on drop (including task abort / cancel).
+struct SendingGuard<'a> {
+    flag: &'a AtomicBool,
+}
+
+impl<'a> SendingGuard<'a> {
+    fn try_acquire(flag: &'a AtomicBool) -> Option<Self> {
+        flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .ok()
+            .map(|_| Self { flag })
+    }
+}
+
+impl Drop for SendingGuard<'_> {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::SeqCst);
+    }
 }
 
 /// True when recording/export is allowed.
@@ -140,8 +157,7 @@ impl TelemetryRuntime {
         let mut enable_metrics = resolve_enabled(config.enable_metrics, default_on);
 
         let warn_feature_off = !allowed
-            && (config.enable_usage_tracking == Some(true)
-                || config.enable_metrics == Some(true));
+            && (config.enable_usage_tracking == Some(true) || config.enable_metrics == Some(true));
 
         if !allowed {
             enable_usage = false;
@@ -333,9 +349,16 @@ impl TelemetryRuntime {
         }
         let _ = self.inner.cancel_tx.send(true);
         let tasks: Vec<_> = std::mem::take(&mut *self.inner.tasks.lock());
-        for task in tasks {
+        for task in &tasks {
             task.abort();
         }
+        // Await abort so SendingGuard Drop runs before the final flush.
+        for task in tasks {
+            let _ = task.await;
+        }
+        // Belt-and-suspenders: aborted flushes must not leave locks stuck.
+        self.inner.sending_usage.store(false, Ordering::SeqCst);
+        self.inner.sending_metrics.store(false, Ordering::SeqCst);
         self.inner.flush_usage().await;
         self.inner.flush_metrics().await;
         *self.inner.usage_batcher.lock() = None;
@@ -383,13 +406,9 @@ impl Inner {
     }
 
     async fn flush_usage(&self) {
-        if self
-            .sending_usage
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
+        let Some(_sending) = SendingGuard::try_acquire(&self.sending_usage) else {
             return;
-        }
+        };
 
         let empty = {
             let guard = self.usage_batcher.lock();
@@ -399,7 +418,6 @@ impl Inner {
             }
         };
         if empty {
-            self.sending_usage.store(false, Ordering::SeqCst);
             return;
         }
 
@@ -407,7 +425,6 @@ impl Inner {
         let sender = self.senders.lock().usage.clone();
         let Some(sender) = sender else {
             debug!("Usage flush skipped: no gRPC client");
-            self.sending_usage.store(false, Ordering::SeqCst);
             return;
         };
 
@@ -419,7 +436,6 @@ impl Inner {
             }
         };
         let Some((payload, snapshot)) = drained else {
-            self.sending_usage.store(false, Ordering::SeqCst);
             return;
         };
 
@@ -429,18 +445,12 @@ impl Inner {
                 batcher.restore_snapshot(snapshot);
             }
         }
-
-        self.sending_usage.store(false, Ordering::SeqCst);
     }
 
     async fn flush_metrics(&self) {
-        if self
-            .sending_metrics
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
+        let Some(_sending) = SendingGuard::try_acquire(&self.sending_metrics) else {
             return;
-        }
+        };
 
         let empty = {
             let guard = self.metrics_batcher.lock();
@@ -450,7 +460,6 @@ impl Inner {
             }
         };
         if empty {
-            self.sending_metrics.store(false, Ordering::SeqCst);
             return;
         }
 
@@ -458,7 +467,6 @@ impl Inner {
         let sender = self.senders.lock().metrics.clone();
         let Some(sender) = sender else {
             debug!("Metrics flush skipped: no gRPC client");
-            self.sending_metrics.store(false, Ordering::SeqCst);
             return;
         };
 
@@ -470,7 +478,6 @@ impl Inner {
             }
         };
         let Some((payload, snapshot)) = drained else {
-            self.sending_metrics.store(false, Ordering::SeqCst);
             return;
         };
 
@@ -480,8 +487,6 @@ impl Inner {
                 batcher.restore_snapshot(snapshot);
             }
         }
-
-        self.sending_metrics.store(false, Ordering::SeqCst);
     }
 }
 
@@ -522,6 +527,78 @@ mod tests {
             *self.calls.lock().unwrap() += 1;
             Err("boom".into())
         }
+    }
+
+    #[tokio::test]
+    async fn close_flushes_after_aborting_in_flight_send() {
+        /// First send parks forever (simulating in-flight gRPC); later sends succeed.
+        struct ControllableUsage {
+            attempts: StdMutex<usize>,
+            completed: StdMutex<usize>,
+            started: Arc<tokio::sync::Notify>,
+        }
+
+        #[async_trait]
+        impl UsageSender for ControllableUsage {
+            async fn send_stats(&self, _payload: &FeatureStatPayload) -> Result<(), String> {
+                let attempt = {
+                    let mut n = self.attempts.lock().unwrap();
+                    *n += 1;
+                    *n
+                };
+                if attempt == 1 {
+                    self.started.notify_waiters();
+                    std::future::pending::<()>().await;
+                }
+                *self.completed.lock().unwrap() += 1;
+                Ok(())
+            }
+        }
+
+        let started = Arc::new(tokio::sync::Notify::new());
+        let sender = Arc::new(ControllableUsage {
+            attempts: StdMutex::new(0),
+            completed: StdMutex::new(0),
+            started: started.clone(),
+        });
+
+        let mut config = TelemetryRuntimeConfig::from_client_config(
+            "app",
+            "Production",
+            None,
+            Some(true),
+            Some(false),
+            Some(Duration::from_millis(20)),
+            Some(Duration::from_secs(0)),
+            None,
+            None,
+        );
+        config.senders = TelemetrySenders {
+            usage: Some(sender.clone()),
+            metrics: None,
+        };
+        config.senders_provided = true;
+
+        let runtime = TelemetryRuntime::start(config);
+        runtime.record_check("FeatureA", true, Some("user-1"), None, false);
+
+        tokio::time::timeout(Duration::from_secs(2), started.notified())
+            .await
+            .expect("background flush should start and park");
+
+        // Buffered after the in-flight drain — must still flush on close.
+        runtime.record_check("FeatureB", true, Some("user-2"), None, false);
+        runtime.close().await;
+
+        assert_eq!(
+            *sender.completed.lock().unwrap(),
+            1,
+            "close must reset sending_usage and complete a final flush"
+        );
+        assert!(
+            *sender.attempts.lock().unwrap() >= 2,
+            "background send aborted, then final flush retried"
+        );
     }
 
     #[tokio::test]

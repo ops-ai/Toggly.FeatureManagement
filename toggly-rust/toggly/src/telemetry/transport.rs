@@ -60,7 +60,10 @@ mod native {
 
     impl NativeGrpcSenders {
         /// Dial TLS gRPC clients for Usage + Metrics.
-        pub async fn dial(metrics_base_url: &str, user_agent: Option<&str>) -> Result<Self, String> {
+        pub async fn dial(
+            metrics_base_url: &str,
+            user_agent: Option<&str>,
+        ) -> Result<Self, String> {
             let target = grpc_target(metrics_base_url);
             let endpoint = format!("https://{target}");
             let channel = Channel::from_shared(endpoint)
@@ -122,8 +125,8 @@ mod native {
         metadata: &mut tonic::metadata::MetadataMap,
         user_agent: &str,
     ) -> Result<(), String> {
-        let value = MetadataValue::try_from(user_agent)
-            .map_err(|e| format!("invalid UA metadata: {e}"))?;
+        let value =
+            MetadataValue::try_from(user_agent).map_err(|e| format!("invalid UA metadata: {e}"))?;
         // HTTP/2 metadata is case-insensitive; .NET/Go send "UA".
         metadata.insert("ua", value);
         Ok(())

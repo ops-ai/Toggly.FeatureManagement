@@ -148,8 +148,7 @@ impl MetricsBatcher {
     /// Returns `(payload, snapshot)` for restore-on-failure.
     pub fn build_and_reset(&self) -> Option<(MetricStatPayload, MetricsSnapshot)> {
         let mut guard = self.inner.lock();
-        if guard.measures.is_empty() && guard.counters.is_empty() && guard.observations.is_empty()
-        {
+        if guard.measures.is_empty() && guard.counters.is_empty() && guard.observations.is_empty() {
             return None;
         }
 
@@ -213,11 +212,7 @@ fn normalize_options(options: Option<&MetricsFeatureOptions>) -> (Option<String>
                 .filter(|s| !s.is_empty())
                 .unwrap_or("enabled")
                 .to_string();
-            let feature = opts
-                .feature
-                .as_ref()
-                .filter(|s| !s.is_empty())
-                .cloned();
+            let feature = opts.feature.as_ref().filter(|s| !s.is_empty()).cloned();
             (feature, variant)
         }
         None => (None, "enabled".to_string()),
@@ -232,9 +227,7 @@ fn add_to_map(
 ) {
     let (feature, variant) = normalize_options(options);
     let feature_key = feature.unwrap_or_default();
-    let entry = store
-        .entry((metric.to_string(), feature_key))
-        .or_default();
+    let entry = store.entry((metric.to_string(), feature_key)).or_default();
     *entry.entry(variant).or_insert(0.0) += value;
 }
 
@@ -243,10 +236,8 @@ fn drain_map(
 ) -> Vec<MetricValueMessage> {
     let mut out = Vec::new();
     for ((metric, feature), variants) in store.drain() {
-        let variant_values: HashMap<String, f64> = variants
-            .into_iter()
-            .filter(|(_, v)| *v != 0.0)
-            .collect();
+        let variant_values: HashMap<String, f64> =
+            variants.into_iter().filter(|(_, v)| *v != 0.0).collect();
         if variant_values.is_empty() {
             continue;
         }
@@ -269,8 +260,13 @@ fn drain_observations(pending: &mut Vec<PendingObservation>) -> Vec<MetricObserv
 
     for obs in pending.drain(..) {
         let feature_key = obs.feature.clone().unwrap_or_default();
-        let group_key = format!("{}\0{}\0{}", obs.time.timestamp_millis(), obs.metric, feature_key);
-            if let Some(&idx) = groups.get(&group_key) {
+        let group_key = format!(
+            "{}\0{}\0{}",
+            obs.time.timestamp_millis(),
+            obs.metric,
+            feature_key
+        );
+        if let Some(&idx) = groups.get(&group_key) {
             let group: &mut MetricObservationPayload = &mut observation_messages[idx];
             if group.variant_values.contains_key(&obs.variant) {
                 // Same variant already present — start a new group (matches Ruby).

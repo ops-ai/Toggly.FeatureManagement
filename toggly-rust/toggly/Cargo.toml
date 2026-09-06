@@ -27,6 +27,7 @@ telemetry = [
     "dep:prost-types",
     "dep:tower",
     "dep:tonic-build",
+    "dep:protoc-bin-vendored",
 ]
 
 [dependencies]
@@ -70,6 +71,8 @@ url = "2.5"
 
 [build-dependencies]
 tonic-build = { version = "0.12", optional = true }
+# Bundled protoc so CI / crates.io consumers do not need a system install.
+protoc-bin-vendored = { version = "3", optional = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
