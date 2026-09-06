@@ -5,11 +5,11 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Mapping, Tuple
 
 from toggly.telemetry.grpc_clients import to_protobuf_timestamp
 
-MetricKey = tuple[str, str]  # (metric, feature or "")
+MetricKey = Tuple[str, str]  # (metric, feature or "")
 
 
 @dataclass
