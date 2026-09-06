@@ -69,4 +69,21 @@ describe('UsageBatcher', () => {
     expect(hashIdentity('café')).toBe(-1473556407)
     expect(hashIdentity('🚀')).toBe(2141686490)
   })
+
+  it('restoreFromBundle rehydrates variant and unique hashes after soft-fail', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.recordCheck('FeatureA', true, 'user-1', undefined, true)
+    batcher.recordView('FeatureA', 'user-2')
+    const bundle = batcher.buildAndReset()
+    expect(bundle).not.toBeNull()
+    expect(batcher.buildAndReset()).toBeNull()
+
+    batcher.restoreFromBundle(bundle!)
+    const again = batcher.buildAndReset()!.payload
+    expect(again.stats[0].variantStats.enabled.checkCount).toBe(1)
+    expect(again.stats[0].variantStats.enabled.viewedCount).toBe(1)
+    expect(again.uniqueUserHashes).toEqual(
+      expect.arrayContaining([hashIdentity('user-1'), hashIdentity('user-2')]),
+    )
+  })
 })

@@ -33,4 +33,19 @@ describe('MetricsBatcher', () => {
     expect(payload!.observations[0].variantValues.enabled).toBe(3)
     expect(batcher.buildAndReset()).toBeNull()
   })
+
+  it('restoreFromPayload rehydrates measures, counters, and observations', () => {
+    const batcher = new MetricsBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.measure('revenue', 10, { feature: 'Checkout', variant: 'enabled' })
+    batcher.incrementCounter('clicks', 2)
+    batcher.observe('depth', 3, { feature: 'Checkout', variant: 'enabled' })
+    const payload = batcher.buildAndReset()
+    expect(payload).not.toBeNull()
+
+    batcher.restoreFromPayload(payload!)
+    const again = batcher.buildAndReset()!
+    expect(again.stats[0].variantValues.enabled).toBe(10)
+    expect(again.counters[0].variantValues.enabled).toBe(2)
+    expect(again.observations[0].variantValues.enabled).toBe(3)
+  })
 })

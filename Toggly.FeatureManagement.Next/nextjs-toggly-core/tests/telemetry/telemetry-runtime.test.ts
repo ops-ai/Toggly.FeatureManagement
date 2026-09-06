@@ -144,6 +144,64 @@ describe('TelemetryRuntime', () => {
     expect(sendStats).not.toHaveBeenCalled()
     vi.unstubAllEnvs()
   })
+
+  it('restores usage and metrics batches when HTTPS send soft-fails', async () => {
+    const sendStats = vi.fn().mockResolvedValue({ ok: false })
+    const sendMetrics = vi.fn().mockResolvedValue({ ok: false })
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: true,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: { sendMetrics, close: vi.fn() },
+      attachProcessHandlers: false,
+      restoreOnSendFailure: true,
+      transport: 'https',
+    })
+    runtime.start()
+    runtime.recordCheck('FeatureA', true, 'user-1')
+    runtime.recordView('FeatureA', 'user-1')
+    runtime.measure('revenue', 3)
+    runtime.shouldFlushForCaps()
+
+    await runtime.flush()
+    expect(sendStats).toHaveBeenCalledTimes(1)
+    expect(sendMetrics).toHaveBeenCalledTimes(1)
+
+    // Soft-fail restored the batches — next flush sends again.
+    await runtime.flush()
+    expect(sendStats).toHaveBeenCalledTimes(2)
+    expect(sendMetrics).toHaveBeenCalledTimes(2)
+    await runtime.close()
+  })
+
+  it('restores batches when senders throw and restoreOnSendFailure is set', async () => {
+    const sendStats = vi.fn().mockRejectedValue(new Error('boom'))
+    const sendMetrics = vi.fn().mockRejectedValue(new Error('boom'))
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: true,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: { sendMetrics, close: vi.fn() },
+      attachProcessHandlers: false,
+      restoreOnSendFailure: true,
+    })
+    runtime.start()
+    runtime.recordCheck('FeatureA', true)
+    runtime.incrementCounter('clicks')
+    await runtime.flush()
+    await runtime.flush()
+    expect(sendStats).toHaveBeenCalledTimes(2)
+    expect(sendMetrics).toHaveBeenCalledTimes(2)
+    await runtime.close()
+  })
 })
 
 describe('HttpsTelemetryClient', () => {
