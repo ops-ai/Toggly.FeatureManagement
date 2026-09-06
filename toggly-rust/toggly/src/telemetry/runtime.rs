@@ -602,6 +602,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn soft_fail_restores_metrics_on_send_error() {
+        struct FailingMetrics {
+            calls: StdMutex<usize>,
+        }
+
+        #[async_trait]
+        impl crate::telemetry::transport::MetricsSender for FailingMetrics {
+            async fn send_metrics(
+                &self,
+                _payload: &crate::telemetry::metrics_batcher::MetricStatPayload,
+            ) -> Result<(), String> {
+                *self.calls.lock().unwrap() += 1;
+                Err("boom".into())
+            }
+        }
+
+        let failing = Arc::new(FailingMetrics {
+            calls: StdMutex::new(0),
+        });
+        let mut config = TelemetryRuntimeConfig::from_client_config(
+            "app",
+            "Production",
+            None,
+            Some(false),
+            Some(true),
+            Some(Duration::from_secs(0)),
+            Some(Duration::from_secs(0)),
+            None,
+            None,
+        );
+        config.senders = TelemetrySenders {
+            usage: None,
+            metrics: Some(failing.clone()),
+        };
+        config.senders_provided = true;
+
+        let runtime = TelemetryRuntime::start(config);
+        assert!(runtime.metrics_enabled());
+        runtime.measure("latency", 1.0, None);
+        runtime.increment_counter("clicks", 1.0, None);
+        runtime.observe("gauge", 2.0, None);
+        runtime.flush_all().await;
+        assert_eq!(*failing.calls.lock().unwrap(), 1);
+        runtime.flush_all().await;
+        assert_eq!(*failing.calls.lock().unwrap(), 2);
+        runtime.close().await;
+    }
+
+    #[tokio::test]
     async fn soft_fail_restores_usage_on_send_error() {
         let failing = Arc::new(FailingUsage {
             calls: StdMutex::new(0),

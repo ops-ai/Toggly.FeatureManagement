@@ -91,4 +91,29 @@ mod tests {
         assert_eq!(grpc_target("https://app.toggly.io/"), "app.toggly.io:443");
         assert_eq!(grpc_target("app.toggly.io"), "app.toggly.io:443");
     }
+
+    #[test]
+    fn grpc_target_preserves_explicit_port() {
+        assert_eq!(
+            grpc_target("https://metrics.example.com:8443/"),
+            "metrics.example.com:8443"
+        );
+    }
+
+    #[test]
+    fn timestamp_helpers_round_trip_millis() {
+        let (secs, nanos) = to_protobuf_timestamp_millis(1_700_000_000_123);
+        assert_eq!(secs, 1_700_000_000);
+        assert_eq!(nanos, 123_000_000);
+        let (now_s, now_n) = now_protobuf_timestamp();
+        assert!(now_s > 0);
+        assert!((0..1_000_000_000).contains(&now_n));
+    }
+
+    #[test]
+    fn resolve_user_agent_override_and_default() {
+        assert_eq!(resolve_user_agent(Some("custom-ua")), "custom-ua");
+        let default_ua = resolve_user_agent(None);
+        assert!(default_ua.starts_with("toggly-rust/"));
+    }
 }

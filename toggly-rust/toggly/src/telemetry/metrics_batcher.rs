@@ -346,4 +346,59 @@ mod tests {
         let (again, _) = batcher.build_and_reset().unwrap();
         assert_eq!(again.stats[0].variant_values.get("enabled"), Some(&3.0));
     }
+
+    #[test]
+    fn observations_spill_duplicate_variants_into_new_group() {
+        let t = Utc::now();
+        let mut pending = vec![
+            PendingObservation {
+                time: t,
+                metric: "gauge".into(),
+                feature: Some("FeatureA".into()),
+                variant: "control".into(),
+                value: 1.0,
+            },
+            PendingObservation {
+                time: t,
+                metric: "gauge".into(),
+                feature: Some("FeatureA".into()),
+                variant: "control".into(),
+                value: 2.0,
+            },
+            PendingObservation {
+                time: t,
+                metric: "gauge".into(),
+                feature: Some("FeatureA".into()),
+                variant: "treatment".into(),
+                value: 3.0,
+            },
+        ];
+        let out = drain_observations(&mut pending);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].variant_values.get("control"), Some(&1.0));
+        // Active group after spillover receives the new variant (Ruby parity).
+        assert_eq!(out[1].variant_values.get("control"), Some(&2.0));
+        assert_eq!(out[1].variant_values.get("treatment"), Some(&3.0));
+    }
+
+    #[test]
+    fn observe_emits_observation_payload() {
+        let batcher = MetricsBatcher::new("app", "Production", None);
+        batcher.observe(
+            "gauge",
+            9.5,
+            Some(&MetricsFeatureOptions::new("FeatureA", Some("v1"))),
+        );
+        let (payload, _) = batcher.build_and_reset().expect("payload");
+        assert_eq!(payload.observations.len(), 1);
+        assert_eq!(payload.observations[0].metric, "gauge");
+        assert_eq!(payload.observations[0].variant_values.get("v1"), Some(&9.5));
+    }
+
+    #[test]
+    fn empty_batcher_build_returns_none() {
+        let batcher = MetricsBatcher::new("app", "Production", None);
+        assert!(batcher.is_empty());
+        assert!(batcher.build_and_reset().is_none());
+    }
 }
