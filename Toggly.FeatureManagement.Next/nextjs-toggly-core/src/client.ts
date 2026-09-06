@@ -52,6 +52,8 @@ import {
   type EvalContext,
   type FeatureDefinitionModel,
 } from '@ops-ai/toggly-eval'
+import { TelemetryRuntime } from './telemetry/index.js'
+import { isTelemetryEnvDisabled } from './telemetry/https-client.js'
 
 /**
  * Create a new Toggly client instance
@@ -62,6 +64,7 @@ export function createTogglyClient(
   const hookExecutor = new HookExecutor()
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let destroyed = false
+  let telemetry: TelemetryRuntime | null = null
 
   // WebSocket live updates
   let liveSocket: LiveSocket | null = null
@@ -285,6 +288,26 @@ export function createTogglyClient(
     return applyLocalGate(remote, featureKey, localGates, localGateIndex)
   }
 
+  /**
+   * Evaluate a feature and record a usage check once (when enabled).
+   * Shared by isFeatureOn and evaluateFeatureGate so gates inherit recording
+   * without double-counting on the gate path beyond one check per key.
+   */
+  function evaluateAndRecordCheck(
+    featureKey: string,
+    entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
+    overrides?: EvalContextArg,
+  ): boolean {
+    const result = getEffectiveFlag(featureKey, entityContext, overrides)
+    if (telemetry?.usageEnabled) {
+      const o: EvalContextOverrides =
+        typeof overrides === 'string' ? { identity: overrides } : overrides ?? {}
+      const identity = o.identity ?? config.identity
+      telemetry.recordCheck(featureKey, result, identity)
+    }
+    return result
+  }
+
   function evaluateGateEffective(
     featureKeys: string[],
     requirement: FeatureRequirement = 'all',
@@ -296,18 +319,49 @@ export function createTogglyClient(
       return !negate
     }
 
+    // Record once per key (same as node-core), then combine.
+    const checks = featureKeys.map((key) =>
+      evaluateAndRecordCheck(key, entityContext, overrides),
+    )
+
     let result: boolean
     if (requirement === 'any') {
-      result = featureKeys.some((key) =>
-        getEffectiveFlag(key, entityContext, overrides),
-      )
+      result = checks.some(Boolean)
     } else {
-      result = featureKeys.every((key) =>
-        getEffectiveFlag(key, entityContext, overrides),
-      )
+      result = checks.every(Boolean)
     }
 
     return negate ? !result : result
+  }
+
+  function startTelemetry(): void {
+    if (!config.appKey || isTelemetryEnvDisabled()) {
+      return
+    }
+    if (!config.enableUsageTracking && !config.enableMetrics) {
+      return
+    }
+    if (telemetry) {
+      void telemetry.close()
+      telemetry = null
+    }
+    telemetry = new TelemetryRuntime({
+      appKey: config.appKey,
+      environment: config.environment ?? DEFAULT_CONFIG.environment,
+      metricsBaseUrl: config.metricsBaseUrl,
+      enableUsageTracking: config.enableUsageTracking,
+      enableMetrics: config.enableMetrics,
+      usageFlushInterval: config.usageFlushInterval,
+      metricsFlushInterval: config.metricsFlushInterval,
+      instanceName: config.instanceName,
+      appVersion: config.appVersion,
+      transport: config.telemetryTransport ?? 'grpc',
+      attachProcessHandlers: config.telemetryAttachProcessHandlers,
+      usageClient: config.usageClient,
+      metricsClient: config.metricsClient,
+      fetchImpl: config.telemetryFetch,
+    })
+    telemetry.start()
   }
 
   function buildFetchHeaders(revision: string | null): Record<string, string> {
@@ -666,6 +720,9 @@ export function createTogglyClient(
         // Start WebSocket for live updates (browser + Node server)
         startWebSocket()
 
+        // Optional usage/metrics telemetry (opt-in via config; server/edge enable)
+        startTelemetry()
+
         return state.features
       } catch (error) {
         state.error = error as Error
@@ -726,7 +783,7 @@ export function createTogglyClient(
         config.featureDefaults?.[featureKey]
       )
 
-      const result = getEffectiveFlag(featureKey, entityContext, overrides)
+      const result = evaluateAndRecordCheck(featureKey, entityContext, overrides)
 
       // Execute after hooks (fire-and-forget)
       hookExecutor.executeAfterEvaluation(featureKey, dataMap, result).catch(() => {
@@ -779,6 +836,7 @@ export function createTogglyClient(
         dataMaps.push({ key, dataMap })
       }
 
+      // evaluateGateEffective records usage once per key
       const result = evaluateGateEffective(
         featureKeys,
         requirement,
@@ -982,11 +1040,51 @@ export function createTogglyClient(
       }
     },
 
+    recordUsage(featureKey: string, identity?: string, variant?: string): void {
+      telemetry?.recordUsage(featureKey, identity ?? config.identity, variant)
+    },
+
+    recordView(featureKey: string, identity?: string, variant?: string): void {
+      telemetry?.recordView(featureKey, identity ?? config.identity, variant)
+    },
+
+    measure(
+      metricKey: string,
+      value: number,
+      options?: { feature?: string; variant?: string },
+    ): void {
+      telemetry?.measure(metricKey, value, options)
+    },
+
+    incrementCounter(
+      metricKey: string,
+      value = 1,
+      options?: { feature?: string; variant?: string },
+    ): void {
+      telemetry?.incrementCounter(metricKey, value, options)
+    },
+
+    observe(
+      metricKey: string,
+      value: number,
+      options?: { feature?: string; variant?: string },
+    ): void {
+      telemetry?.observe(metricKey, value, options)
+    },
+
+    async flushTelemetry(): Promise<void> {
+      await telemetry?.flushAll()
+    },
+
     destroy(): void {
       destroyed = true
       stopWebSocket()
       stopRefreshInterval()
       hookExecutor.clearHooks()
+      if (telemetry) {
+        void telemetry.close()
+        telemetry = null
+      }
     },
   }
 

@@ -83,7 +83,7 @@ describe('entity context on server helpers', () => {
   async function initEntityClient() {
     mockFetch.mockResolvedValueOnce(defsResponse([entityGated, alwaysOn]))
     await initServerToggly({
-      appKey: 'test-key',
+      enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
       identity: 'bob',
       enableLiveUpdates: false,
     })

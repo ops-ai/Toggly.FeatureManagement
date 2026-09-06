@@ -8,6 +8,15 @@ Core feature flag functionality for Next.js
 npm install @ops-ai/nextjs-toggly-core
 ```
 
+Optional gRPC transport (Node/server only):
+
+```bash
+npm install @grpc/grpc-js @grpc/proto-loader
+```
+
+Import gRPC helpers from `@ops-ai/nextjs-toggly-core/telemetry/grpc` — do not
+import that subpath from Edge bundles.
+
 ## Documentation
 
 - [docs.toggly.io](https://docs.toggly.io)

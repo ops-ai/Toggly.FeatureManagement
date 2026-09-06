@@ -1,3 +1,18 @@
+## 1.9.0
+
+2026-09-06
+
+### Added
+- Usage + business metrics telemetry scaffold (batchers, HTTPS client, optional
+  gRPC via `@ops-ai/nextjs-toggly-core/telemetry/grpc`) with multi-variant
+  `variantStats` / `variantValues`, identity hashing, and flush on close
+  [OPS-921].
+- Config opt-in: `enableUsageTracking`, `enableMetrics`, `metricsBaseUrl`,
+  flush intervals, and `TOGGLY_DISABLE_TELEMETRY=1` kill switch.
+- Public APIs on the core client: `recordUsage`, `recordView`, `measure`,
+  `incrementCounter`, `observe`, `flushTelemetry`; auto `recordCheck` on
+  feature evaluations when usage tracking is enabled.
+
 ## 1.8.2
 
 2026-09-04

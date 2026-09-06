@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.0
+
+2026-09-06
+
+### Added
+- HTTPS usage + business metrics telemetry (`api/usage/stats`, `api/metrics`)
+  with batching, multi-variant wire fields, soft-fail restore, and
+  `flushTelemetry` / `scheduleFlush` / `close` [OPS-921].
+- Feature checks auto-record when usage tracking is enabled (default with
+  `appKey`; opt out via config or `TOGGLY_DISABLE_TELEMETRY=1`). No Node gRPC
+  sockets on the Edge runtime.
+
 ## 1.3.0
 
 2026-09-04

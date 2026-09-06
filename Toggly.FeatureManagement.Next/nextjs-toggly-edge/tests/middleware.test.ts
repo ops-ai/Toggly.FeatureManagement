@@ -67,7 +67,13 @@ describe('edge middleware identity safety [OPS-831]', () => {
       createMockResponse([targeting('vip-only', 'alice')]),
     )
 
-    const config = { appKey: 'test-key', identity: 'shared-default', cache: false }
+    const config = {
+      appKey: 'test-key',
+      identity: 'shared-default',
+      cache: false,
+      enableUsageTracking: false,
+      enableMetrics: false,
+    }
     await initEdgeToggly(config)
     const sharedBefore = getEdgeToggly()!.identity
 
@@ -88,7 +94,12 @@ describe('edge middleware identity safety [OPS-831]', () => {
       createMockResponse([targeting('vip-only', 'alice')]),
     )
 
-    const config = { appKey: 'test-key', identity: 'shared-default' }
+    const config = {
+      appKey: 'test-key',
+      identity: 'shared-default',
+      enableUsageTracking: false,
+      enableMetrics: false,
+    }
 
     await expect(
       isFeatureEnabledForRequest(makeRequest('/x', 'alice'), 'vip-only', config),
@@ -104,7 +115,11 @@ describe('edge middleware identity safety [OPS-831]', () => {
       createMockResponse([targeting('vip-only', 'alice')]),
     )
 
-    const config = { appKey: 'test-key' }
+    const config = {
+      appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
+    }
     const features = await getFeaturesForRequest(
       makeRequest('/x', 'alice'),
       config,

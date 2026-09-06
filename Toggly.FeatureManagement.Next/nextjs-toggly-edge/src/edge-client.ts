@@ -9,6 +9,8 @@ import {
   DEFAULT_CONFIG,
   API_ENDPOINTS,
   fromHttpRequest,
+  isTelemetryEnvDisabled,
+  TelemetryRuntime,
   type EvalContextArg,
   type EvalContextOverrides,
   type FeatureDefinitions,
@@ -33,10 +35,23 @@ type EntityContextArg =
   | null
   | undefined
 
+function resolveEdgeTelemetryFlags(config: TogglyEdgeConfig): {
+  enableUsageTracking: boolean
+  enableMetrics: boolean
+} {
+  const hasAppKey = Boolean(config.appKey)
+  const disabled = isTelemetryEnvDisabled()
+  return {
+    enableUsageTracking: config.enableUsageTracking ?? (hasAppKey && !disabled),
+    enableMetrics: config.enableMetrics ?? (hasAppKey && !disabled),
+  }
+}
+
 /**
  * Edge-compatible Toggly client.
  * Fetches identity-agnostic definitions-signed payloads and evaluates per call
  * with overrides (never mutates shared identity for targeting).
+ * Telemetry uses HTTPS JSON (`api/usage/stats`, `api/metrics`) — no Node gRPC.
  */
 export class TogglyEdgeClient {
   private config: TogglyEdgeConfig
@@ -47,6 +62,7 @@ export class TogglyEdgeClient {
     lastFetch: null,
     error: null,
   }
+  private telemetry: TelemetryRuntime | null = null
 
   constructor(config: TogglyEdgeConfig) {
     this.config = {
@@ -62,6 +78,33 @@ export class TogglyEdgeClient {
     if (!this.config.identity) {
       this.config.identity = generateUUID()
     }
+
+    this.startTelemetry()
+  }
+
+  private startTelemetry(): void {
+    const flags = resolveEdgeTelemetryFlags(this.config)
+    if (!this.config.appKey || (!flags.enableUsageTracking && !flags.enableMetrics)) {
+      return
+    }
+    this.telemetry = new TelemetryRuntime({
+      appKey: this.config.appKey,
+      environment: this.config.environment ?? DEFAULT_CONFIG.environment,
+      metricsBaseUrl: this.config.metricsBaseUrl,
+      enableUsageTracking: flags.enableUsageTracking,
+      enableMetrics: flags.enableMetrics,
+      usageFlushInterval: this.config.usageFlushInterval ?? 0,
+      metricsFlushInterval: this.config.metricsFlushInterval ?? 0,
+      instanceName: this.config.instanceName ?? 'nextjs-edge',
+      appVersion: this.config.appVersion,
+      transport: 'https',
+      attachProcessHandlers: false,
+      restoreOnSendFailure: true,
+      fetchImpl: this.config.telemetryFetch,
+      usageClient: this.config.usageClient,
+      metricsClient: this.config.metricsClient,
+    })
+    this.telemetry.start()
   }
 
   getState(): EdgeClientState {
@@ -136,6 +179,20 @@ export class TogglyEdgeClient {
     return this.config.featureDefaults?.[featureKey] ?? false
   }
 
+  private evaluateAndRecordCheck(
+    featureKey: string,
+    overrides?: EvalContextArg,
+    entityContext?: EntityContextArg,
+    kind?: string,
+  ): boolean {
+    const result = this.evaluateFlag(featureKey, overrides, entityContext, kind)
+    if (this.telemetry?.usageEnabled) {
+      const ctx = this.buildEvalContext(overrides, entityContext, kind)
+      this.telemetry.recordCheck(featureKey, result, ctx.identity, undefined, true)
+    }
+    return result
+  }
+
   private evaluateGateKeys(
     featureKeys: string[],
     requirement: FeatureRequirement,
@@ -145,12 +202,29 @@ export class TogglyEdgeClient {
     kind?: string,
   ): boolean {
     if (this.definitions.size === 0) {
-      return evaluateGateFallback(
+      const fallback = evaluateGateFallback(
         this.state.features,
         featureKeys,
         requirement,
         negate,
       )
+      if (this.telemetry?.usageEnabled) {
+        for (const key of featureKeys) {
+          const enabled = this.state.features[key] === true
+          const ctx = this.buildEvalContext(overrides, entityContext, kind)
+          this.telemetry.recordCheck(key, enabled, ctx.identity, undefined, true)
+        }
+      }
+      return fallback
+    }
+
+    // Record once per key (eval for telemetry), then gate against definitions.
+    if (this.telemetry?.usageEnabled) {
+      for (const key of featureKeys) {
+        const enabled = this.evaluateFlag(key, overrides, entityContext, kind)
+        const ctx = this.buildEvalContext(overrides, entityContext, kind)
+        this.telemetry.recordCheck(key, enabled, ctx.identity, undefined, true)
+      }
     }
     return evaluateLocalFeatureGate(
       this.definitions,
@@ -262,7 +336,7 @@ export class TogglyEdgeClient {
     if (!this.state.initialized) {
       await this.init()
     }
-    return this.evaluateFlag(featureKey, overrides, context, kind)
+    return this.evaluateAndRecordCheck(featureKey, overrides, context, kind)
   }
 
   async isFeatureOff(
@@ -316,7 +390,7 @@ export class TogglyEdgeClient {
     context?: EntityContextArg,
     kind?: string,
   ): boolean {
-    return this.evaluateFlag(featureKey, overrides, context, kind)
+    return this.evaluateAndRecordCheck(featureKey, overrides, context, kind)
   }
 
   evaluateFeatureGateSync(
@@ -336,6 +410,57 @@ export class TogglyEdgeClient {
       context,
       kind,
     )
+  }
+
+  recordUsage(featureKey: string, identity?: string, variant?: string): void {
+    this.telemetry?.recordUsage(featureKey, identity ?? this.config.identity, variant)
+  }
+
+  recordView(featureKey: string, identity?: string, variant?: string): void {
+    this.telemetry?.recordView(featureKey, identity ?? this.config.identity, variant)
+  }
+
+  measure(
+    metricKey: string,
+    value: number,
+    options?: { feature?: string; variant?: string },
+  ): void {
+    this.telemetry?.measure(metricKey, value, options)
+  }
+
+  incrementCounter(
+    metricKey: string,
+    value = 1,
+    options?: { feature?: string; variant?: string },
+  ): void {
+    this.telemetry?.incrementCounter(metricKey, value, options)
+  }
+
+  observe(
+    metricKey: string,
+    value: number,
+    options?: { feature?: string; variant?: string },
+  ): void {
+    this.telemetry?.observe(metricKey, value, options)
+  }
+
+  async flushTelemetry(): Promise<void> {
+    await this.telemetry?.flushAll()
+  }
+
+  /**
+   * Schedule a best-effort flush (e.g. `waitUntil` on Cloudflare / Vercel).
+   */
+  scheduleFlush(waitUntil: (promise: Promise<unknown>) => void): void {
+    if (!this.telemetry) return
+    waitUntil(this.telemetry.flushAll())
+  }
+
+  async close(): Promise<void> {
+    if (this.telemetry) {
+      await this.telemetry.close()
+      this.telemetry = null
+    }
   }
 
   /** Exposed for tests — raw cached definitions. */
@@ -393,6 +518,9 @@ let globalEdgeClient: TogglyEdgeClient | null = null
 export async function initEdgeToggly(
   config: TogglyEdgeConfig,
 ): Promise<TogglyEdgeClient> {
+  if (globalEdgeClient) {
+    await globalEdgeClient.close()
+  }
   globalEdgeClient = new TogglyEdgeClient(config)
   await globalEdgeClient.init()
   return globalEdgeClient
@@ -402,6 +530,20 @@ export function getEdgeToggly(): TogglyEdgeClient | null {
   return globalEdgeClient
 }
 
+export async function flushEdgeTelemetry(): Promise<void> {
+  await globalEdgeClient?.flushTelemetry()
+}
+
+export async function closeEdgeToggly(): Promise<void> {
+  if (globalEdgeClient) {
+    await globalEdgeClient.close()
+    globalEdgeClient = null
+  }
+}
+
 export function resetEdgeToggly(): void {
+  if (globalEdgeClient) {
+    void globalEdgeClient.close()
+  }
   globalEdgeClient = null
 }

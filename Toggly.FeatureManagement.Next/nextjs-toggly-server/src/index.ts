@@ -9,9 +9,16 @@ export {
   isServerFeatureOff,
   getServerFeatures,
   resetServerToggly,
+  closeServerToggly,
   setServerStorage,
   getServerStorage,
   createMemoryStorage,
+  recordServerUsage,
+  recordServerView,
+  measureServerMetric,
+  incrementServerCounter,
+  observeServerMetric,
+  flushServerTelemetry,
 } from './server-client'
 
 // Ambient EvalContext (request-scoped)

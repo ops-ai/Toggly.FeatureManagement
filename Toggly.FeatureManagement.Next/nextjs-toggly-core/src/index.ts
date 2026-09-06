@@ -18,6 +18,39 @@ export {
 // Constants
 export { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
 
+// Telemetry (shared batchers + HTTPS; gRPC via ./telemetry/grpc subpath)
+export {
+  TelemetryRuntime,
+  hashIdentity,
+  toProtobufTimestamp,
+  UsageBatcher,
+  MetricsBatcher,
+  HttpsTelemetryClient,
+  DEFAULT_METRICS_BASE_URL,
+  DEFAULT_TELEMETRY_FLUSH_MS,
+  resolveMetricsBaseUrl,
+  isTelemetryEnvDisabled,
+  usagePayloadToHttpJson,
+  metricsPayloadToHttpJson,
+  MAX_FEATURES_PER_BATCH,
+  MAX_UNIQUE_USER_HASHES_PER_FEATURE,
+  MAX_APPLICATION_UNIQUE_USER_HASHES,
+  MAX_METRIC_KEYS_PER_BATCH,
+  MAX_OBSERVATIONS_PER_BATCH,
+} from './telemetry/public.js'
+export type {
+  TelemetryConfig,
+  TelemetryLogger,
+  TelemetryTransport,
+  UsageSender,
+  MetricsSender,
+  MetricsFeatureOptions,
+  FeatureStatPayload,
+  MetricStatPayload,
+  UsageFlushBundle,
+  VariantStatsAgg,
+} from './telemetry/public.js'
+
 // Entity context helpers, re-exported so wrapper packages share one implementation
 export {
   normalizeEntityContext,
