@@ -4,6 +4,10 @@ Framework-agnostic Toggly client for feature flag evaluation. Flag fetches use
 `${baseURI}/evaluated-signed/${appKey}/${environment}` (default base
 `https://definitions.toggly.io`).
 
+This is a **standalone** client for generic JavaScript and Workers. The
+Docusaurus plugin bundles its own fetch, and the Cloudflare templates in this
+repo call the definitions endpoint directly — neither depends on this package.
+
 ## Install
 
 ```bash
