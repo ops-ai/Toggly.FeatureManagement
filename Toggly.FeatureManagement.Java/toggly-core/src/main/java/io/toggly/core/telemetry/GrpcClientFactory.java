@@ -73,55 +73,74 @@ public final class GrpcClientFactory {
                     .useTransportSecurity()
                     .build();
 
-            Metadata metadata = new Metadata();
-            metadata.put(UA_KEY, ua);
-
-            UsageGrpc.UsageBlockingStub usageStub = UsageGrpc.newBlockingStub(channel)
-                    .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
-            MetricsGrpc.MetricsBlockingStub metricsStub = MetricsGrpc.newBlockingStub(channel)
-                    .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
-
-            UsageGrpcClient usage = new UsageGrpcClient() {
-                @Override
-                public void sendStats(FeatureStatPayload payload) {
-                    usageStub.withDeadlineAfter(5, TimeUnit.SECONDS).sendStats(toProto(payload));
-                }
-
-                @Override
-                public void close() {
-                    // channel shared; closed via GrpcClients
-                }
-            };
-
-            MetricsGrpcClient metrics = new MetricsGrpcClient() {
-                @Override
-                public void sendMetrics(MetricStatPayload payload) {
-                    metricsStub.withDeadlineAfter(5, TimeUnit.SECONDS).sendMetrics(toProto(payload));
-                }
-
-                @Override
-                public void close() {
-                    // channel shared
-                }
-            };
-
-            return new GrpcClients(usage, metrics, () -> {
-                try {
-                    channel.shutdown();
-                    if (!channel.awaitTermination(2, TimeUnit.SECONDS)) {
-                        channel.shutdownNow();
-                    }
-                } catch (InterruptedException e) {
-                    channel.shutdownNow();
-                    Thread.currentThread().interrupt();
-                } catch (Exception e) {
-                    LOGGER.log(Level.FINE, "Error closing gRPC channel", e);
-                }
-            });
+            return createWithChannel(channel, ua, true);
         } catch (LinkageError e) {
             LOGGER.log(Level.WARNING, "gRPC classes present but failed to initialize", e);
             return null;
         }
+    }
+
+    /**
+     * Builds usage/metrics clients on an existing channel (used by production create and
+     * in-process contract tests). Attaches {@code UA} metadata on both stubs.
+     *
+     * @param channel managed channel (caller owns lifecycle when {@code shutdownChannel} is false)
+     * @param userAgent value for the {@code UA} metadata key
+     * @param shutdownChannel whether {@link GrpcClients#close()} should shut down the channel
+     */
+    static GrpcClients createWithChannel(
+            ManagedChannel channel, String userAgent, boolean shutdownChannel) {
+        String ua = userAgent != null && !userAgent.isEmpty() ? userAgent : SdkIdentity.userAgent();
+
+        Metadata metadata = new Metadata();
+        metadata.put(UA_KEY, ua);
+
+        UsageGrpc.UsageBlockingStub usageStub = UsageGrpc.newBlockingStub(channel)
+                .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
+        MetricsGrpc.MetricsBlockingStub metricsStub = MetricsGrpc.newBlockingStub(channel)
+                .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
+
+        UsageGrpcClient usage = new UsageGrpcClient() {
+            @Override
+            public void sendStats(FeatureStatPayload payload) {
+                usageStub.withDeadlineAfter(5, TimeUnit.SECONDS).sendStats(toProto(payload));
+            }
+
+            @Override
+            public void close() {
+                // channel shared; closed via GrpcClients
+            }
+        };
+
+        MetricsGrpcClient metrics = new MetricsGrpcClient() {
+            @Override
+            public void sendMetrics(MetricStatPayload payload) {
+                metricsStub.withDeadlineAfter(5, TimeUnit.SECONDS).sendMetrics(toProto(payload));
+            }
+
+            @Override
+            public void close() {
+                // channel shared
+            }
+        };
+
+        Runnable onClose = shutdownChannel
+                ? () -> {
+                    try {
+                        channel.shutdown();
+                        if (!channel.awaitTermination(2, TimeUnit.SECONDS)) {
+                            channel.shutdownNow();
+                        }
+                    } catch (InterruptedException e) {
+                        channel.shutdownNow();
+                        Thread.currentThread().interrupt();
+                    } catch (Exception e) {
+                        LOGGER.log(Level.FINE, "Error closing gRPC channel", e);
+                    }
+                }
+                : null;
+
+        return new GrpcClients(usage, metrics, onClose);
     }
 
     /**

@@ -28,6 +28,13 @@ public class TogglyAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public TogglyConfig togglyConfig(TogglyProperties properties) {
+        return buildConfig(properties);
+    }
+
+    /**
+     * Maps {@link TogglyProperties} onto core {@link TogglyConfig} (shared with tests).
+     */
+    static TogglyConfig buildConfig(TogglyProperties properties) {
         TogglyConfig.Builder builder = TogglyConfig.builder()
                 .appKey(properties.getAppKey())
                 .environment(properties.getEnvironment())
@@ -37,6 +44,10 @@ public class TogglyAutoConfiguration {
                 .defaultFeatureState(properties.isDefaultFeatureState())
                 .enableUsageTracking(properties.isEnableUsageTracking())
                 .enableMetrics(properties.isEnableMetrics())
+                .usageFlushInterval(properties.getUsageFlushInterval())
+                .metricsFlushInterval(properties.getMetricsFlushInterval())
+                .instanceName(properties.getInstanceName())
+                .appVersion(properties.getAppVersion())
                 .registerContextsOnStartup(properties.isRegisterContextsOnStartup());
 
         if (properties.getDefaultIdentity() != null) {

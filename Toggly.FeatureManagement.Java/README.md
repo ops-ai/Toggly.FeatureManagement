@@ -170,6 +170,10 @@ client.flushTelemetry(); // optional; also flushes on close()
 | `enableUsageTracking` | `true` | Feature checks / used / viewed via `Usage.SendStats` |
 | `enableMetrics` | `true` | `measure` / `incrementCounter` / `observe` via `Metrics.SendMetrics` |
 | `metricsBaseUrl` | `https://app.toggly.io/` | gRPC endpoint (not the definitions CDN) |
+| `usageFlushInterval` | `1m` | Usage batch flush interval (`toggly.usage-flush-interval`) |
+| `metricsFlushInterval` | `1m` | Metrics batch flush interval (`toggly.metrics-flush-interval`) |
+| `instanceName` | _(none)_ | Optional instance id on usage/metrics payloads |
+| `appVersion` | _(none)_ | Optional app version on usage payloads |
 
 Without the optional gRPC dependencies, flag evaluation still works; a warning is logged when telemetry is enabled but transport is missing.
 
