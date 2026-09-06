@@ -5,6 +5,9 @@
 2026-09-05
 
 ### Changed
+- Dapper and MongoDB storage packages now target the same framework matrix as
+  the rest of the .NET SDK family (`netstandard2.1` through `net9.0`), plus
+  `net10.0`. EntityFramework stays `net6.0+` because EF Core requires it.
 - Deterministic builds, centralized SourceLink (`Microsoft.SourceLink.GitHub`
   8.0.0), and snupkg symbol packages now apply to all eleven NuGet packages
   (including Hangfire and EntityFramework) via `Directory.Build.props`.
