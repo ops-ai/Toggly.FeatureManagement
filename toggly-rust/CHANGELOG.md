@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.0
+
+2026-09-06
+
+### Added
+- Optional Cargo feature `telemetry` (tonic/prost) for batched
+  `Usage.SendStats` and `Metrics.SendMetrics` gRPC export to Toggly.
+- In-process usage/metrics batchers with ~1 minute flush, flush on
+  `close` / `flush_telemetry`, multi-variant `variantStats` /
+  `variantValues`, FNV-1a UTF-8 signed int32 identity hashes, and `UA`
+  metadata (`toggly-rust/{version}`).
+- Config opt-in: `enable_usage_tracking`, `enable_metrics`,
+  `metrics_base_url`, flush intervals; auto `record_check` from
+  `is_enabled` when usage tracking is on.
+- Soft-fail send errors (eval unaffected); restore unique maps/counters
+  into batchers after a failed send.
+
+### Changed
+- Workspace package version bumped to 0.5.0; path dependency pins updated.
+- Existing Cargo feature `metrics` remains local Prometheus only — distinct
+  from Toggly gRPC telemetry.
+
 ## 0.4.0
 
 2026-09-04

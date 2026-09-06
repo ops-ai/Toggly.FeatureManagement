@@ -104,6 +104,7 @@ pub mod definitions;
 pub mod entity_context;
 pub mod eval;
 pub mod provider;
+pub mod telemetry;
 mod sdk_identity;
 
 pub use client::TogglyClient;
@@ -116,6 +117,10 @@ pub use entity_context::{
     EntityContextPropertySchema, EntityContextSchemaRegistration,
 };
 pub use error::Error;
+pub use telemetry::{
+    hash_identity, MetricsFeatureOptions, TelemetryRuntime, TelemetryRuntimeConfig,
+    TelemetrySenders,
+};
 
 /// Requirement type for feature gates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

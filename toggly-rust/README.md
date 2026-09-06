@@ -21,6 +21,7 @@ High-performance Rust SDK for [Toggly](https://toggly.io) feature flags and expe
 - **In-memory caching**: Built-in caching with configurable TTL
 - **WebAssembly support**: Works in browser environments
 - **Entity ContextProperty filters**: Evaluate `{kind, key, attributes}` against `ContextProperty` filters (fail closed)
+- **Optional Toggly telemetry**: Cargo feature `telemetry` for batched `Usage.SendStats` / `Metrics.SendMetrics` (distinct from the Prometheus `metrics` feature)
 
 ## Crates
 
@@ -38,7 +39,10 @@ Add the core crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-toggly = "0.1"
+toggly = "0.5"
+
+# Optional: Toggly usage + business metrics gRPC export
+# toggly = { version = "0.5", features = ["telemetry"] }
 ```
 
 For framework integrations:

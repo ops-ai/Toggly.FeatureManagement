@@ -62,6 +62,23 @@ pub struct TogglyConfig {
 
     /// Skip startup PUT to sdk/{appKey}/contexts. Default false (registration on).
     pub disable_entity_context_registration: bool,
+
+    /// Enable feature usage tracking (Usage.SendStats). `None` = on when app key
+    /// is set and `TOGGLY_DISABLE_TELEMETRY` is not `1`.
+    pub enable_usage_tracking: Option<bool>,
+
+    /// Enable business metrics export (Metrics.SendMetrics). Distinct from the
+    /// optional Prometheus Cargo feature. `None` uses the same default as usage.
+    pub enable_metrics: Option<bool>,
+
+    /// gRPC base URL for usage/metrics (default `https://app.toggly.io/`).
+    pub metrics_base_url: Option<String>,
+
+    /// Usage flush interval (default 60s).
+    pub usage_flush_interval: Option<Duration>,
+
+    /// Metrics flush interval (default 60s).
+    pub metrics_flush_interval: Option<Duration>,
 }
 
 impl Default for TogglyConfig {
@@ -84,6 +101,11 @@ impl Default for TogglyConfig {
             allowed_key_ids: None,
             on_error: None,
             disable_entity_context_registration: false,
+            enable_usage_tracking: None,
+            enable_metrics: None,
+            metrics_base_url: None,
+            usage_flush_interval: None,
+            metrics_flush_interval: None,
         }
     }
 }
@@ -110,6 +132,11 @@ impl fmt::Debug for TogglyConfig {
             .field("cache_max_entries", &self.cache_max_entries)
             .field("allowed_key_ids", &self.allowed_key_ids)
             .field("on_error", &self.on_error.as_ref().map(|_| "<callback>"))
+            .field("enable_usage_tracking", &self.enable_usage_tracking)
+            .field("enable_metrics", &self.enable_metrics)
+            .field("metrics_base_url", &self.metrics_base_url)
+            .field("usage_flush_interval", &self.usage_flush_interval)
+            .field("metrics_flush_interval", &self.metrics_flush_interval)
             .finish()
     }
 }
@@ -271,6 +298,38 @@ impl TogglyConfigBuilder {
     /// Skip startup PUT of entity context schemas.
     pub fn disable_entity_context_registration(mut self, disabled: bool) -> Self {
         self.config.disable_entity_context_registration = disabled;
+        self
+    }
+
+    /// Enable or disable feature usage tracking (Usage.SendStats).
+    pub fn enable_usage_tracking(mut self, enabled: bool) -> Self {
+        self.config.enable_usage_tracking = Some(enabled);
+        self
+    }
+
+    /// Enable or disable business metrics export (Metrics.SendMetrics).
+    ///
+    /// This is independent of the optional Prometheus Cargo feature (`metrics`).
+    pub fn enable_metrics(mut self, enabled: bool) -> Self {
+        self.config.enable_metrics = Some(enabled);
+        self
+    }
+
+    /// Set the gRPC base URL for usage/metrics (default `https://app.toggly.io/`).
+    pub fn metrics_base_url(mut self, url: impl Into<String>) -> Self {
+        self.config.metrics_base_url = Some(url.into());
+        self
+    }
+
+    /// Set the usage flush interval.
+    pub fn usage_flush_interval(mut self, interval: Duration) -> Self {
+        self.config.usage_flush_interval = Some(interval);
+        self
+    }
+
+    /// Set the metrics flush interval.
+    pub fn metrics_flush_interval(mut self, interval: Duration) -> Self {
+        self.config.metrics_flush_interval = Some(interval);
         self
     }
 
