@@ -403,7 +403,11 @@ jobs:
       - name: Pack
         working-directory: Toggly.FeatureManagement.NET
         run: |
-          dotnet pack Toggly.FeatureManagement.sln -c Release --output ./nupkgs
+          # GeneratePackageOnBuild=true races across multi-TFM projects and
+          # produces NU5026 (dll to be packed was not found). Build first with
+          # packaging off, then pack from the built outputs.
+          dotnet build Toggly.FeatureManagement.sln -c Release -p:GeneratePackageOnBuild=false
+          dotnet pack Toggly.FeatureManagement.sln -c Release --no-build --output ./nupkgs
           ls -la ./nupkgs
 
       - name: Upload NuGet packages
