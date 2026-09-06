@@ -30,6 +30,14 @@ export type {
 
 export { fromHttpRequest } from '@ops-ai/remix-toggly-core';
 
+export type {
+  UsageSender,
+  MetricsSender,
+  MetricsFeatureOptions,
+  TelemetryConfig,
+  TelemetryTransport,
+} from '@ops-ai/remix-toggly-core';
+
 // Ambient EvalContext store
 export {
   getAmbientEvalOverrides,

@@ -13,6 +13,24 @@ npm install @ops-ai/remix-toggly-core
 - [docs.toggly.io](https://docs.toggly.io)
 - SDK catalog: [root README](../../README.md)
 
+## Telemetry
+
+Core exports usage/metrics batchers and an HTTPS client. Optional native gRPC
+lives on a separate subpath so edge-safe consumers never import Node gRPC:
+
+```ts
+import {
+  TelemetryRuntime,
+  resolveTelemetryEnableFlag,
+} from '@ops-ai/remix-toggly-core'
+import { createGrpcClients } from '@ops-ai/remix-toggly-core/telemetry/grpc'
+```
+
+Set `TOGGLY_DISABLE_TELEMETRY=1` to force telemetry off. Prefer
+`@ops-ai/remix-toggly-server` for automatic wiring on Node.
+
+Browser `@ops-ai/remix-toggly-client` does not send Usage/Metrics telemetry.
+
 ## Entity context
 
 `isFeatureEnabled` / gate helpers accept optional entity context. User identity (`IdentityContext`) is separate from page-entity context. Register mappers with `registerContext` locally — this client does not PUT entity schemas.

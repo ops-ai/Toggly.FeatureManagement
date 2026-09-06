@@ -52,6 +52,8 @@ describe('TogglyServerClient', () => {
   const defaultConfig: TogglyConfig = {
     appKey: 'test-app-key',
     environment: 'test',
+    enableUsageTracking: false,
+    enableMetrics: false,
   };
 
   beforeEach(() => {
@@ -1186,7 +1188,11 @@ describe('TogglyServerClient', () => {
 
 describe('createServerClient', () => {
   it('should create a TogglyServerClient instance', () => {
-    const client = createServerClient({ appKey: 'test-key' });
+    const client = createServerClient({
+      appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
+    });
     expect(client).toBeInstanceOf(TogglyServerClient);
   });
 });

@@ -30,6 +30,8 @@ describe('createTogglyLoader', () => {
   const defaultOptions: TogglyLoaderOptions = {
     appKey: 'test-app-key',
     environment: 'test',
+    enableUsageTracking: false,
+    enableMetrics: false,
   };
 
   const createMockRequest = (options?: {
@@ -565,6 +567,8 @@ describe('getFeatureFlags', () => {
   const defaultOptions: TogglyLoaderOptions = {
     appKey: 'test-app-key',
     environment: 'test',
+    enableUsageTracking: false,
+    enableMetrics: false,
   };
 
   beforeEach(() => {
@@ -595,6 +599,8 @@ describe('isFeatureEnabled', () => {
   const defaultOptions: TogglyLoaderOptions = {
     appKey: 'test-app-key',
     environment: 'test',
+    enableUsageTracking: false,
+    enableMetrics: false,
   };
 
   beforeEach(() => {

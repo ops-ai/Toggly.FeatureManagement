@@ -1,6 +1,20 @@
 # Changelog
 
 
+## 1.7.0
+
+2026-09-06
+
+### Added
+- Usage + business metrics telemetry scaffold (batchers, HTTPS client, optional
+  gRPC via `@ops-ai/remix-toggly-core/telemetry/grpc`) with multi-variant
+  `variantStats` / `variantValues` and identity hashing [OPS-923].
+- Config: `enableUsageTracking`, `enableMetrics`, `metricsBaseUrl`,
+  flush intervals, `telemetryTransport` (`grpc` | `https`), and
+  `TOGGLY_DISABLE_TELEMETRY=1` kill switch (authoritative over explicit true).
+- Drain-until-idle flush so batches recorded during an in-flight send are not
+  stranded on close.
+
 ## 1.6.0
 
 2026-09-03

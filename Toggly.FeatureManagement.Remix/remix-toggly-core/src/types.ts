@@ -68,6 +68,51 @@ export interface TogglyConfig {
   groups?: string[];
   /** Custom claims for targeting */
   claims?: Record<string, string>;
+  /**
+   * Base URL for usage/metrics transport (default: https://app.toggly.io/).
+   * Separate from `baseUrl`, which is for definitions/JWKS.
+   */
+  metricsBaseUrl?: string;
+  /**
+   * Enable feature usage tracking (Usage.SendStats / api/usage/stats).
+   * Defaults to false in core; remix-toggly-server enables when appKey is set.
+   */
+  enableUsageTracking?: boolean;
+  /**
+   * Enable business metrics (Metrics.SendMetrics / api/metrics).
+   * Defaults to false in core; remix-toggly-server enables when appKey is set.
+   */
+  enableMetrics?: boolean;
+  /** Usage flush interval in ms (default: 60000). 0 disables the timer. */
+  usageFlushInterval?: number;
+  /** Metrics flush interval in ms (default: 60000). 0 disables the timer. */
+  metricsFlushInterval?: number;
+  /** Hostname/instance name reported with usage/metrics payloads. */
+  instanceName?: string;
+  /** Application version reported with usage payloads. */
+  appVersion?: string;
+  /**
+   * Telemetry transport when clients are not injected.
+   * Server should use `grpc` with injected clients; edge adapters use `https`.
+   */
+  telemetryTransport?: 'grpc' | 'https';
+  /**
+   * Attach Node process signal handlers for best-effort flush (default: true for grpc).
+   * Edge adapters must set false.
+   */
+  telemetryAttachProcessHandlers?: boolean;
+  /**
+   * Injected usage sender (gRPC stub or test double).
+   * @internal
+   */
+  usageClient?: import('./telemetry/index').UsageSender | null;
+  /**
+   * Injected metrics sender (gRPC stub or test double).
+   * @internal
+   */
+  metricsClient?: import('./telemetry/index').MetricsSender | null;
+  /** Optional fetch override for HTTPS telemetry (edge/tests). */
+  telemetryFetch?: typeof fetch;
 }
 
 /**
