@@ -58,11 +58,34 @@ module Toggly
     # @return [Logger, nil] Logger instance
     attr_accessor :logger
 
+    # @return [Boolean] Enable feature usage tracking (Usage.SendStats)
+    attr_accessor :enable_usage_tracking
+
+    # @return [Boolean] Enable business metrics (Metrics.SendMetrics)
+    attr_accessor :enable_metrics
+
+    # @return [String] Base URL for usage/metrics gRPC (default app.toggly.io)
+    attr_accessor :metrics_base_url
+
+    # @return [Numeric] Usage flush interval in seconds
+    attr_accessor :usage_flush_interval
+
+    # @return [Numeric] Metrics flush interval in seconds
+    attr_accessor :metrics_flush_interval
+
+    # Injectable usage transport (tests / custom senders). Must respond to +send_stats+.
+    attr_accessor :usage_client
+
+    # Injectable metrics transport (tests / custom senders). Must respond to +send_metrics+.
+    attr_accessor :metrics_client
+
     # Default values
     DEFAULT_BASE_URL = "https://definitions.toggly.io/"
     DEFAULT_REFRESH_INTERVAL = 300 # 5 minutes
     DEFAULT_HTTP_TIMEOUT = 10 # seconds
     DEFAULT_ENVIRONMENT = "Production"
+    DEFAULT_METRICS_BASE_URL = "https://app.toggly.io/"
+    DEFAULT_TELEMETRY_FLUSH_SECONDS = 60.0
 
     def initialize(**options)
       @app_key = options[:app_key]
@@ -82,6 +105,16 @@ module Toggly
       @use_signed_definitions = options[:use_signed_definitions] || false
       @allowed_key_ids = options[:allowed_key_ids] || []
       @logger = options[:logger]
+
+      telemetry_default = options.key?(:app_key) && !options[:app_key].to_s.empty? &&
+                          ENV["TOGGLY_DISABLE_TELEMETRY"] != "1"
+      @enable_usage_tracking = options.fetch(:enable_usage_tracking, telemetry_default)
+      @enable_metrics = options.fetch(:enable_metrics, telemetry_default)
+      @metrics_base_url = normalize_url(options[:metrics_base_url] || DEFAULT_METRICS_BASE_URL)
+      @usage_flush_interval = options.fetch(:usage_flush_interval, DEFAULT_TELEMETRY_FLUSH_SECONDS)
+      @metrics_flush_interval = options.fetch(:metrics_flush_interval, DEFAULT_TELEMETRY_FLUSH_SECONDS)
+      @usage_client = options[:usage_client]
+      @metrics_client = options[:metrics_client]
     end
 
     # Get the definitions endpoint URL
@@ -126,7 +159,12 @@ module Toggly
         enable_live_updates: @enable_live_updates,
         app_version: @app_version,
         instance_name: @instance_name,
-        use_signed_definitions: @use_signed_definitions
+        use_signed_definitions: @use_signed_definitions,
+        enable_usage_tracking: @enable_usage_tracking,
+        enable_metrics: @enable_metrics,
+        metrics_base_url: @metrics_base_url,
+        usage_flush_interval: @usage_flush_interval,
+        metrics_flush_interval: @metrics_flush_interval
       }
     end
 

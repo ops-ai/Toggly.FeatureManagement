@@ -9,6 +9,9 @@ SimpleCov.start do
   minimum_coverage line: 80, branch: 45 unless ENV["DISABLE_SIMPLECOV"]
 end
 
+# Keep existing suites free of background telemetry threads / at_exit flushes.
+ENV["TOGGLY_DISABLE_TELEMETRY"] = "1" unless ENV.key?("TOGGLY_ENABLE_TELEMETRY_IN_SPECS")
+
 require "toggly"
 require "webmock/rspec"
 

@@ -50,10 +50,12 @@ module Toggly
       )
 
       @refresh_thread = nil
+      @telemetry = nil
 
       initialize_definitions
       Toggly.register_entity_contexts_at_startup(@config) unless @config.disable_entity_context_registration
       start_background_refresh unless @config.disable_background_refresh
+      start_telemetry
     end
 
     # Check if a feature is enabled
@@ -68,15 +70,22 @@ module Toggly
       definition = @mutex.synchronize { @definitions[key] }
 
       # Check defaults if not found
-      if definition.nil?
-        return default unless default.nil?
-        return @config.defaults[key] if @config.defaults.key?(key)
-        return @config.enable_undefined_in_dev if development?
+      result = if definition.nil?
+                 if !default.nil?
+                   default
+                 elsif @config.defaults.key?(key)
+                   @config.defaults[key]
+                 elsif development?
+                   @config.enable_undefined_in_dev
+                 else
+                   false
+                 end
+               else
+                 @engine.evaluate(definition, context)
+               end
 
-        return false
-      end
-
-      @engine.evaluate(definition, context)
+      record_check(key, result, context)
+      result
     end
 
     # Check if a feature is disabled
@@ -149,12 +158,74 @@ module Toggly
       false
     end
 
+    # Record a feature used/interaction event
+    #
+    # @param feature_key [String, Symbol]
+    # @param identity [String, nil]
+    # @param variant [String]
+    def record_usage(feature_key, identity: nil, variant: "enabled")
+      return unless @telemetry&.usage_enabled?
+
+      @telemetry.record_usage(feature_key.to_s, identity, variant: variant)
+    end
+
+    # Record a feature viewed/rendered event
+    #
+    # @param feature_key [String, Symbol]
+    # @param identity [String, nil]
+    # @param variant [String]
+    def record_view(feature_key, identity: nil, variant: "enabled")
+      return unless @telemetry&.usage_enabled?
+
+      @telemetry.record_view(feature_key.to_s, identity, variant: variant)
+    end
+
+    # Aggregate a business measurement (sum over the flush window)
+    #
+    # @param metric [String]
+    # @param value [Numeric]
+    # @param options [Hash, Telemetry::MetricsFeatureOptions, nil]
+    def measure(metric, value, options = nil, **kwargs)
+      return unless @telemetry&.metrics_enabled?
+
+      @telemetry.measure(metric, value, options || (kwargs.empty? ? nil : kwargs))
+    end
+
+    # Increment a business counter
+    #
+    # @param metric [String]
+    # @param value [Numeric]
+    # @param options [Hash, Telemetry::MetricsFeatureOptions, nil]
+    def increment_counter(metric, value = 1.0, options = nil, **kwargs)
+      return unless @telemetry&.metrics_enabled?
+
+      @telemetry.increment_counter(metric, value, options || (kwargs.empty? ? nil : kwargs))
+    end
+
+    # Record a point-in-time business observation
+    #
+    # @param metric [String]
+    # @param value [Numeric]
+    # @param options [Hash, Telemetry::MetricsFeatureOptions, nil]
+    def observe(metric, value, options = nil, **kwargs)
+      return unless @telemetry&.metrics_enabled?
+
+      @telemetry.observe(metric, value, options || (kwargs.empty? ? nil : kwargs))
+    end
+
+    # Flush pending usage and metrics batches
+    def flush_telemetry
+      @telemetry&.flush_all
+    end
+
     # Close the client and stop background refresh
     def close
       @closed = true
       @provider.stop_websocket
       @refresh_thread&.kill
       @refresh_thread = nil
+      @telemetry&.close
+      @telemetry = nil
     end
 
     # Check if client is closed
@@ -267,6 +338,39 @@ module Toggly
     def development?
       env = ENV["RACK_ENV"] || ENV["RAILS_ENV"] || ENV["APP_ENV"] || "development"
       env.downcase == "development"
+    end
+
+    def start_telemetry
+      return if @config.app_key.nil? || @config.app_key.empty?
+      return if ENV["TOGGLY_DISABLE_TELEMETRY"] == "1"
+      return unless @config.enable_usage_tracking || @config.enable_metrics
+
+      usage_provided = !@config.usage_client.nil?
+      metrics_provided = !@config.metrics_client.nil?
+      @telemetry = Telemetry::Runtime.new(
+        app_key: @config.app_key,
+        environment: @config.environment,
+        metrics_base_url: @config.metrics_base_url,
+        enable_usage_tracking: @config.enable_usage_tracking,
+        enable_metrics: @config.enable_metrics,
+        usage_flush_interval: @config.usage_flush_interval,
+        metrics_flush_interval: @config.metrics_flush_interval,
+        instance_name: @config.instance_name,
+        app_version: @config.app_version,
+        usage_client: @config.usage_client,
+        metrics_client: @config.metrics_client,
+        usage_client_provided: usage_provided,
+        metrics_client_provided: metrics_provided,
+        logger: @config.logger
+      )
+      @telemetry.start
+    end
+
+    def record_check(feature_key, enabled, context)
+      return unless @telemetry&.usage_enabled?
+
+      identity = context&.identity
+      @telemetry.record_check(feature_key, enabled, identity)
     end
 
     def log_info(message)

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "toggly/version"
+require_relative "toggly/telemetry"
 require_relative "toggly/config"
 require_relative "toggly/request_context"
 require_relative "toggly/http_request_mapper"
