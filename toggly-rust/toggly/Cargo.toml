@@ -57,7 +57,7 @@ chrono = { version = "0.4", features = ["serde"] }
 # Hash functions for percentage rollouts + signed definitions verify
 sha2 = "0.10"
 sha1 = "0.10"
-base64 = "0.21"
+base64 = "0.23"
 p256 = { version = "0.13", features = ["ecdsa"] }
 ecdsa = { version = "0.16", features = ["verifying", "arithmetic"] }
 rand = "0.8"
