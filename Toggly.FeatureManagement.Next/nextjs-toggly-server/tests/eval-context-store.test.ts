@@ -139,7 +139,7 @@ describe('ambient EvalContext store', () => {
     )
 
     await initServerToggly({
-      appKey: 'test-key',
+      enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
       identity: 'bob',
       enableLiveUpdates: false,
     })
@@ -167,7 +167,7 @@ describe('ambient EvalContext store', () => {
     mockFetch.mockResolvedValueOnce(defsResponse([targetingAlice, claimsFlag]))
 
     await initServerToggly({
-      appKey: 'test-key',
+      enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
       enableLiveUpdates: false,
     })
 
@@ -198,7 +198,7 @@ describe('ambient EvalContext store', () => {
     mockFetch.mockResolvedValueOnce(defsResponse([targetingAlice]))
 
     await initServerToggly({
-      appKey: 'test-key',
+      enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
       enableLiveUpdates: false,
     })
 
@@ -231,7 +231,7 @@ describe('ambient EvalContext store', () => {
     mockFetch.mockResolvedValueOnce(defsResponse([targetingAlice]))
 
     await initServerToggly({
-      appKey: 'test-key',
+      enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
       enableLiveUpdates: false,
     })
 
@@ -247,7 +247,7 @@ describe('ambient EvalContext store', () => {
     mockFetch.mockResolvedValueOnce(defsResponse([claimsFlag]))
 
     await initServerToggly({
-      appKey: 'test-key',
+      enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
       enableLiveUpdates: false,
     })
 
@@ -272,7 +272,7 @@ describe('ambient EvalContext store', () => {
     mockFetch.mockResolvedValueOnce(defsResponse([targetingAlice]))
 
     await initServerToggly({
-      appKey: 'test-key',
+      enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
       identity: 'shared-user',
       enableLiveUpdates: false,
     })

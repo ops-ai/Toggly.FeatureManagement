@@ -10,5 +10,5 @@ export default defineConfig({
   splitting: false,
   treeshake: true,
   outDir: 'dist',
-  external: ['next', 'react', 'react-dom'],
+  external: ['next', 'react', 'react-dom', '@grpc/grpc-js', '@grpc/proto-loader'],
 })

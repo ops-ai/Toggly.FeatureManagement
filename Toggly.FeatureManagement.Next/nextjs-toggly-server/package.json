@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nextjs-toggly-server",
-  "version": "1.5.0",
+  "version": "1.6.1",
   "description": "Server-side feature flags for Next.js - Server Components, Server Actions, and Route Handlers",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -57,10 +57,16 @@
     "@ops-ai/nextjs-toggly-core": "workspace:^",
     "ws": "^8.18.0"
   },
+  "optionalDependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@grpc/proto-loader": "^0.7.13"
+  },
   "peerDependencies": {
     "next": ">=14.0.0"
   },
   "devDependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@grpc/proto-loader": "^0.7.13",
     "@types/node": "^22.13.1",
     "@types/react": "^18.3.18",
     "@types/ws": "^8.5.14",

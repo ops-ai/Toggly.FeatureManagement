@@ -1,7 +1,10 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: {
+    index: 'src/index.ts',
+    'telemetry/grpc': 'src/telemetry/grpc-clients.ts',
+  },
   format: ['cjs', 'esm'],
   dts: true,
   clean: true,
@@ -10,4 +13,5 @@ export default defineConfig({
   splitting: false,
   treeshake: true,
   outDir: 'dist',
+  external: ['@grpc/grpc-js', '@grpc/proto-loader'],
 })

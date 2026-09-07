@@ -59,7 +59,9 @@ describe('TogglyEdgeClient', () => {
 
   describe('initialization', () => {
     it('should create a client with default config', () => {
-      const client = new TogglyEdgeClient({ appKey: 'test-key' })
+      const client = new TogglyEdgeClient({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false })
       expect(client.identity).toBeDefined()
     })
 
@@ -68,6 +70,8 @@ describe('TogglyEdgeClient', () => {
 
       const client = new TogglyEdgeClient({
         appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
         featureDefaults: { 'feature-a': true },
       })
 
@@ -81,6 +85,8 @@ describe('TogglyEdgeClient', () => {
 
       const client = new TogglyEdgeClient({
         appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
         identity: 'user-123',
         groups: ['beta'],
         claims: { plan: 'pro' },
@@ -116,7 +122,9 @@ describe('TogglyEdgeClient', () => {
       }
       mockFetch.mockResolvedValueOnce(createMockResponse([entityFlag]))
 
-      const client = new TogglyEdgeClient({ appKey: 'test-key', cache: false })
+      const client = new TogglyEdgeClient({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false, cache: false })
       await client.init()
 
       expect(client.isFeatureOnSync('EntityGated')).toBe(false)
@@ -146,6 +154,8 @@ describe('TogglyEdgeClient', () => {
 
       const client = new TogglyEdgeClient({
         appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
         verifySignatures: true,
         featureDefaults: { 'feature-a': false },
       })
@@ -162,7 +172,9 @@ describe('TogglyEdgeClient', () => {
         createMockResponse([alwaysOn('feature-a')]),
       )
 
-      const client = new TogglyEdgeClient({ appKey: 'test-key' })
+      const client = new TogglyEdgeClient({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false })
       const result = await client.isFeatureOn('feature-a')
 
       expect(result).toBe(true)
@@ -173,7 +185,9 @@ describe('TogglyEdgeClient', () => {
         createMockResponse([{ featureKey: 'feature-a', filters: [] }]),
       )
 
-      const client = new TogglyEdgeClient({ appKey: 'test-key' })
+      const client = new TogglyEdgeClient({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false })
       const result = await client.isFeatureOff('feature-a')
 
       expect(result).toBe(true)
@@ -184,7 +198,9 @@ describe('TogglyEdgeClient', () => {
         createMockResponse([alwaysOn('feature-a'), alwaysOn('feature-b')]),
       )
 
-      const client = new TogglyEdgeClient({ appKey: 'test-key' })
+      const client = new TogglyEdgeClient({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false })
       const result = await client.evaluateFeatureGate(
         ['feature-a', 'feature-b'],
         'all',
@@ -201,7 +217,9 @@ describe('TogglyEdgeClient', () => {
         ]),
       )
 
-      const client = new TogglyEdgeClient({ appKey: 'test-key' })
+      const client = new TogglyEdgeClient({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false })
       const result = await client.evaluateFeatureGate(
         ['feature-a', 'feature-b'],
         'any',
@@ -215,7 +233,9 @@ describe('TogglyEdgeClient', () => {
         createMockResponse([alwaysOn('feature-a')]),
       )
 
-      const client = new TogglyEdgeClient({ appKey: 'test-key' })
+      const client = new TogglyEdgeClient({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false })
       const result = await client.evaluateFeatureGate(
         ['feature-a'],
         'all',
@@ -232,6 +252,8 @@ describe('TogglyEdgeClient', () => {
 
       const client = new TogglyEdgeClient({
         appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
         identity: 'shared',
         cache: false,
       })
@@ -257,6 +279,8 @@ describe('TogglyEdgeClient', () => {
 
       const client = new TogglyEdgeClient({
         appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
         cache: true,
         cacheTtl: 60,
       })
@@ -276,7 +300,9 @@ describe('TogglyEdgeClient', () => {
           createMockResponse([alwaysOn('feature-a')]),
         )
 
-      const client = new TogglyEdgeClient({ appKey: 'test-key' })
+      const client = new TogglyEdgeClient({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false })
 
       await client.init()
       expect(client.isFeatureOnSync('feature-a')).toBe(false)
@@ -292,6 +318,8 @@ describe('TogglyEdgeClient', () => {
 
       const client = new TogglyEdgeClient({
         appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
         cache: true,
         cacheTtl: 60,
       })
@@ -313,6 +341,8 @@ describe('TogglyEdgeClient', () => {
 
       const client = new TogglyEdgeClient({
         appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
         featureDefaults: { 'feature-a': true },
       })
 
@@ -331,7 +361,9 @@ describe('createEdgeClient', () => {
   })
 
   it('should create an edge client', () => {
-    const client = createEdgeClient({ appKey: 'test-key' })
+    const client = createEdgeClient({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false })
     expect(client).toBeInstanceOf(TogglyEdgeClient)
   })
 })
@@ -350,7 +382,9 @@ describe('Global edge client', () => {
   it('should initialize global client', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse([]))
 
-    const client = await initEdgeToggly({ appKey: 'test-key' })
+    const client = await initEdgeToggly({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false })
 
     expect(client).toBeInstanceOf(TogglyEdgeClient)
     expect(getEdgeToggly()).toBe(client)
@@ -363,7 +397,9 @@ describe('Global edge client', () => {
   it('should reset global client', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse([]))
 
-    await initEdgeToggly({ appKey: 'test-key' })
+    await initEdgeToggly({ appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false })
     expect(getEdgeToggly()).not.toBeNull()
 
     resetEdgeToggly()

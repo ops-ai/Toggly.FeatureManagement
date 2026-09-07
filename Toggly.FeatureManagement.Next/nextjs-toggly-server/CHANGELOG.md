@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.6.1
+
+2026-09-06
+
+### Fixed
+- Honor `TOGGLY_DISABLE_TELEMETRY=1` even when
+  `enableUsageTracking` / `enableMetrics` are explicitly true [OPS-921].
+
+## 1.6.0
+
+2026-09-06
+
+### Added
+- Usage + business metrics gRPC telemetry (optional `@grpc/grpc-js` /
+  `@grpc/proto-loader`) with batching, UA metadata, multi-variant wire fields,
+  and flush on close [OPS-921].
+- Helpers: `recordServerUsage`, `recordServerView`, `measureServerMetric`,
+  `incrementServerCounter`, `observeServerMetric`, `flushServerTelemetry`,
+  `closeServerToggly`. Feature checks auto-record when usage tracking is on
+  (default with `appKey`; disable via config or `TOGGLY_DISABLE_TELEMETRY=1`).
+
 ## 1.5.0
 
 2026-09-04

@@ -79,6 +79,51 @@ export interface TogglyConfig {
   localGates?: LocalGate[]
   /** Optional SDK error callback for reporting fetch/evaluation failures. */
   onError?: (message: string, error?: unknown) => void
+  /**
+   * Base URL for usage/metrics transport (default: https://app.toggly.io/).
+   * Separate from `baseUri`, which is for definitions/JWKS.
+   */
+  metricsBaseUrl?: string
+  /**
+   * Enable feature usage tracking (Usage.SendStats / api/usage/stats).
+   * Defaults to false in core; server/edge packages enable when appKey is set.
+   */
+  enableUsageTracking?: boolean
+  /**
+   * Enable business metrics (Metrics.SendMetrics / api/metrics).
+   * Defaults to false in core; server/edge packages enable when appKey is set.
+   */
+  enableMetrics?: boolean
+  /** Usage flush interval in ms (default: 60000). 0 disables the timer. */
+  usageFlushInterval?: number
+  /** Metrics flush interval in ms (default: 60000). 0 disables the timer. */
+  metricsFlushInterval?: number
+  /** Hostname/instance name reported with usage/metrics payloads. */
+  instanceName?: string
+  /** Application version reported with usage payloads. */
+  appVersion?: string
+  /**
+   * Telemetry transport when clients are not injected.
+   * Server should use `grpc` with injected clients; edge uses `https`.
+   */
+  telemetryTransport?: 'grpc' | 'https'
+  /**
+   * Attach Node process signal handlers for best-effort flush (default: true for grpc).
+   * Edge must set false.
+   */
+  telemetryAttachProcessHandlers?: boolean
+  /**
+   * Injected usage sender (gRPC stub or test double).
+   * @internal
+   */
+  usageClient?: import('./telemetry/index.js').UsageSender | null
+  /**
+   * Injected metrics sender (gRPC stub or test double).
+   * @internal
+   */
+  metricsClient?: import('./telemetry/index.js').MetricsSender | null
+  /** Optional fetch override for HTTPS telemetry (edge/tests). */
+  telemetryFetch?: typeof fetch
 }
 
 /**
@@ -301,6 +346,36 @@ export interface TogglyClient {
   /** Subscribe to feature refreshes */
   subscribeFeaturesRefresh(listener: () => void): () => void
 
-  /** Destroy the client and cleanup */
+  /** Record a feature "used" interaction (usage telemetry). */
+  recordUsage(featureKey: string, identity?: string, variant?: string): void
+
+  /** Record a feature "viewed" event (usage telemetry). */
+  recordView(featureKey: string, identity?: string, variant?: string): void
+
+  /** Aggregate a measure metric (trip odometer). */
+  measure(
+    metricKey: string,
+    value: number,
+    options?: { feature?: string; variant?: string },
+  ): void
+
+  /** Increment a counter metric. */
+  incrementCounter(
+    metricKey: string,
+    value?: number,
+    options?: { feature?: string; variant?: string },
+  ): void
+
+  /** Record a point-in-time observation (gauge). */
+  observe(
+    metricKey: string,
+    value: number,
+    options?: { feature?: string; variant?: string },
+  ): void
+
+  /** Flush pending usage + metrics batches. */
+  flushTelemetry(): Promise<void>
+
+  /** Destroy the client and cleanup (best-effort telemetry flush). */
   destroy(): void
 }

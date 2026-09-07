@@ -72,7 +72,7 @@ describe('Server Client', () => {
       mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
       const client = await initServerToggly({
-        appKey: 'test-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
         enableLiveUpdates: false,
       })
 
@@ -89,7 +89,7 @@ describe('Server Client', () => {
       mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
       const client = await initServerToggly({
-        appKey: 'test-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
         evaluationMode: 'remote',
         enableLiveUpdates: false,
       })
@@ -103,7 +103,7 @@ describe('Server Client', () => {
       mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
       await initServerToggly({
-        appKey: 'test-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
         cache: true,
         cacheTtl: 60000,
         enableLiveUpdates: false,
@@ -127,7 +127,7 @@ describe('Server Client', () => {
       mockFetch.mockRejectedValueOnce(new Error('network down'))
 
       await initServerToggly({
-        appKey: 'test-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
         cache: true,
         cacheKeyPrefix: 'toggly:',
         enableLiveUpdates: false,
@@ -145,7 +145,7 @@ describe('Server Client', () => {
       mockFetch.mockResolvedValueOnce(defsResponse([]))
 
       await initServerToggly({
-        appKey: 'test-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
         cache: true,
         cacheKeyPrefix: 'toggly:',
         enableLiveUpdates: false,
@@ -170,7 +170,7 @@ describe('Server Client', () => {
     it('pins the client on globalThis across re-reads', async () => {
       mockFetch.mockResolvedValueOnce(defsResponse([]))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({ enableUsageTracking: false, enableMetrics: false, appKey: 'test-key', enableLiveUpdates: false })
       const first = getServerToggly()
       const fromGlobal = (
         globalThis as typeof globalThis & {
@@ -187,12 +187,12 @@ describe('Server Client', () => {
         .mockResolvedValueOnce(defsResponse([]))
         .mockResolvedValueOnce(defsResponse([]))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({ enableUsageTracking: false, enableMetrics: false, appKey: 'test-key', enableLiveUpdates: false })
       const first = getServerToggly()
       expect(first).not.toBeNull()
       const destroySpy = vi.spyOn(first!, 'destroy')
 
-      await initServerToggly({ appKey: 'test-key-2', enableLiveUpdates: false })
+      await initServerToggly({ enableUsageTracking: false, enableMetrics: false, appKey: 'test-key-2', enableLiveUpdates: false })
       const second = getServerToggly()
 
       expect(destroySpy).toHaveBeenCalledTimes(1)
@@ -204,11 +204,11 @@ describe('Server Client', () => {
       mockFetch.mockResolvedValue(defsResponse([alwaysOn]))
 
       const first = initServerToggly({
-        appKey: 'test-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
         enableLiveUpdates: false,
       })
       const second = initServerToggly({
-        appKey: 'other-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'other-key',
         enableLiveUpdates: false,
       })
       const waiting = waitForServerToggly()
@@ -238,7 +238,7 @@ describe('Server Client', () => {
       })
 
       const initPromise = initServerToggly({
-        appKey: 'test-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
         enableLiveUpdates: false,
       })
 
@@ -276,7 +276,7 @@ describe('Server Client', () => {
     it('should return client after initialization', async () => {
       mockFetch.mockResolvedValueOnce(defsResponse([]))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({ enableUsageTracking: false, enableMetrics: false, appKey: 'test-key', enableLiveUpdates: false })
 
       const client = getServerToggly()
       expect(client).not.toBeNull()
@@ -293,7 +293,7 @@ describe('Server Client', () => {
     it('should return client after initialization', async () => {
       mockFetch.mockResolvedValueOnce(defsResponse([]))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({ enableUsageTracking: false, enableMetrics: false, appKey: 'test-key', enableLiveUpdates: false })
 
       const client = useServerToggly()
       expect(client).toBeDefined()
@@ -304,7 +304,7 @@ describe('Server Client', () => {
     it('should return feature state', async () => {
       mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({ enableUsageTracking: false, enableMetrics: false, appKey: 'test-key', enableLiveUpdates: false })
 
       const result = await isServerFeatureOn('feature-a')
       expect(result).toBe(true)
@@ -314,7 +314,7 @@ describe('Server Client', () => {
       mockFetch.mockResolvedValueOnce(defsResponse([targetingAlice]))
 
       await initServerToggly({
-        appKey: 'test-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
         identity: 'bob',
         enableLiveUpdates: false,
       })
@@ -341,7 +341,7 @@ describe('Server Client', () => {
       mockFetch.mockResolvedValueOnce(defsResponse([countryFlag]))
 
       await initServerToggly({
-        appKey: 'test-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
         identity: 'user-1',
         enableLiveUpdates: false,
       })
@@ -386,7 +386,7 @@ describe('Server Client', () => {
     it('should return inverted feature state', async () => {
       mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({ enableUsageTracking: false, enableMetrics: false, appKey: 'test-key', enableLiveUpdates: false })
 
       const result = await isServerFeatureOff('feature-a')
       expect(result).toBe(false)
@@ -402,7 +402,7 @@ describe('Server Client', () => {
     it('should return evaluated boolean snapshot', async () => {
       mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn, alwaysOff]))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({ enableUsageTracking: false, enableMetrics: false, appKey: 'test-key', enableLiveUpdates: false })
 
       const features = getServerFeatures()
       expect(features).toEqual({
@@ -416,7 +416,7 @@ describe('Server Client', () => {
     it('should reset the server client', async () => {
       mockFetch.mockResolvedValueOnce(defsResponse([]))
 
-      await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+      await initServerToggly({ enableUsageTracking: false, enableMetrics: false, appKey: 'test-key', enableLiveUpdates: false })
       expect(getServerToggly()).not.toBeNull()
 
       resetServerToggly()
@@ -435,7 +435,7 @@ describe('Server Client', () => {
         .mockResolvedValueOnce(defsResponse([alwaysOn]))
 
       await initServerToggly({
-        appKey: 'test-key',
+        enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
         cache: true,
         enableLiveUpdates: false,
       })

@@ -80,7 +80,7 @@ describe('cached feature helpers', () => {
   it('evaluates entity context through the cache wrapper', async () => {
     mockFetch.mockResolvedValueOnce(defsResponse([entityGated, alwaysOn]))
     await initServerToggly({
-      appKey: 'test-key',
+      enableUsageTracking: false, enableMetrics: false, appKey: 'test-key',
       enableLiveUpdates: false,
     })
 
