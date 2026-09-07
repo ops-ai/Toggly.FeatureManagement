@@ -90,6 +90,16 @@ namespace Toggly.FeatureManagement
         /// Uses hashes instead of full user IDs to reduce memory and network usage (~80% reduction).
         /// </summary>
         private readonly ConcurrentHashSet<int> _applicationUniqueUserHashesSinceLastSend = new ConcurrentHashSet<int>();
+
+        /// <summary>
+        /// Pending definition-refresh cache hits since last successful SendStats (batch delta).
+        /// </summary>
+        private int _definitionCacheHits;
+
+        /// <summary>
+        /// Pending definition-refresh cache misses since last successful SendStats (batch delta).
+        /// </summary>
+        private int _definitionCacheMisses;
         
         /// <summary>
         /// Maximum number of unique user hashes to track per feature before forcing an early send.
@@ -273,10 +283,15 @@ namespace Toggly.FeatureManagement
             Dictionary<string, List<int>>? uniqueUserHashesToSend = null;
             Dictionary<string, List<int>>? uniqueViewedUserHashesToSend = null;
             List<int>? applicationUniqueUserHashesToSend = null;
+            int definitionCacheHitsToSend = 0;
+            int definitionCacheMissesToSend = 0;
 
             try
             {
-                if (_stats.IsEmpty && _uniqueUserHashesSinceLastSend.IsEmpty && _uniqueViewedUserHashesSinceLastSend.IsEmpty && _applicationUniqueUserHashesSinceLastSend.IsEmpty)
+                var pendingCacheHits = Volatile.Read(ref _definitionCacheHits);
+                var pendingCacheMisses = Volatile.Read(ref _definitionCacheMisses);
+                if (_stats.IsEmpty && _uniqueUserHashesSinceLastSend.IsEmpty && _uniqueViewedUserHashesSinceLastSend.IsEmpty && _applicationUniqueUserHashesSinceLastSend.IsEmpty
+                    && pendingCacheHits == 0 && pendingCacheMisses == 0)
                 {
                     if (!suppressLogging) TryLog(LogLevel.Trace, "Send stats - nothing to send");
                     return;
@@ -285,6 +300,8 @@ namespace Toggly.FeatureManagement
                 // Clone stats and uniqueUsage maps
                 stats = new Dictionary<(string FeatureKey, byte Type), int>(_stats);
                 _stats.Clear();
+                definitionCacheHitsToSend = Interlocked.Exchange(ref _definitionCacheHits, 0);
+                definitionCacheMissesToSend = Interlocked.Exchange(ref _definitionCacheMisses, 0);
                 uniqueUsageEnabledMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageEnabledMap);
                 _uniqueUsageEnabledMap.Clear();
                 uniqueUsageDisabledMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageDisabledMap);
@@ -336,6 +353,10 @@ namespace Toggly.FeatureManagement
                 };
                 if (processStartTime.HasValue)
                     dataPacket.ProcessStartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(processStartTime.Value);
+                if (definitionCacheHitsToSend > 0)
+                    dataPacket.DefinitionCacheHits = definitionCacheHitsToSend;
+                if (definitionCacheMissesToSend > 0)
+                    dataPacket.DefinitionCacheMisses = definitionCacheMissesToSend;
 
                 // Get all feature keys (from stats, unique user hashes, and unique viewed user hashes)
                 var featureKeysFromStats = stats.Keys.Select(t => t.FeatureKey).Distinct().ToList();
@@ -496,6 +517,11 @@ namespace Toggly.FeatureManagement
                     }
                 }
 
+                if (definitionCacheHitsToSend > 0)
+                    Interlocked.Add(ref _definitionCacheHits, definitionCacheHitsToSend);
+                if (definitionCacheMissesToSend > 0)
+                    Interlocked.Add(ref _definitionCacheMisses, definitionCacheMissesToSend);
+
                 _lastError = ex.Message;
                 _lastErrorTime = DateTime.UtcNow;
             }
@@ -503,6 +529,18 @@ namespace Toggly.FeatureManagement
             {
                 _sendStatsSemaphore.Release();
             }
+        }
+
+        /// <inheritdoc/>
+        public void RecordDefinitionCacheHit()
+        {
+            Interlocked.Increment(ref _definitionCacheHits);
+        }
+
+        /// <inheritdoc/>
+        public void RecordDefinitionCacheMiss()
+        {
+            Interlocked.Increment(ref _definitionCacheMisses);
         }
 
         /// <inheritdoc/>

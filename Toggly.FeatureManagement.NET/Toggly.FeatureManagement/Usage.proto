@@ -22,6 +22,8 @@ message FeatureStat {
 	optional google.protobuf.Timestamp processStartTime = 7;
 	optional string appVersion = 8;
 	repeated int32 uniqueUserHashes = 9; // Application-level unique user ID hashes (all users, regardless of feature usage)
+	optional int32 definitionCacheHits = 10; // SDK-reported definition-refresh cache hits (batch delta)
+	optional int32 definitionCacheMisses = 11; // SDK-reported definition-refresh cache misses (batch delta)
 }
 
 message StatMessage {

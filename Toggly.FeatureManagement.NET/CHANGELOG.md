@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.5
+
+2026-09-06
+
+### Added
+- Definition-refresh cache hits and misses (`definitionCacheHits` /
+  `definitionCacheMisses`) on usage `SendStats`, counted once per refresh
+  outcome (304, skipped poll, durable snapshot, keep-last-on-error = hit;
+  new revision from HTTP/WebSocket = miss). Not counted per `IsEnabled`.
+
 ## 3.6.4
 
 2026-09-06

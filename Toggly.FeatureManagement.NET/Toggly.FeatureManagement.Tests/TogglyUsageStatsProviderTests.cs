@@ -2444,5 +2444,118 @@ public class TogglyUsageStatsProviderTests : IDisposable
         capturedRequest.InstanceName.Should().Be("test-instance");
     }
 
+    [Fact]
+    public async Task SendStats_WithDefinitionCacheHits_IncludesFieldsOnPayload()
+    {
+        var capturedRequest = new FeatureStat();
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 0 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }))
+            .Callback<FeatureStat, Metadata, DateTime?, CancellationToken>((req, _, _, _) => capturedRequest = req);
+
+        _provider = CreateProvider();
+        _provider.RecordDefinitionCacheHit();
+        _provider.RecordDefinitionCacheHit();
+        _provider.RecordDefinitionCacheMiss();
+
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        var task = (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        await task;
+
+        capturedRequest.DefinitionCacheHits.Should().Be(2);
+        capturedRequest.DefinitionCacheMisses.Should().Be(1);
+        _usageClientMock.Verify(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendStats_AfterSuccessfulSend_ResetsDefinitionCacheCounters()
+    {
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 0 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+        _provider.RecordDefinitionCacheHit();
+
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        await (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+
+        // Second send with nothing pending should not call gRPC
+        await (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+
+        _usageClientMock.Verify(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendStats_WhenGrpcThrows_RestoresDefinitionCacheCounters()
+    {
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Throws(new RpcException(new Status(StatusCode.Unavailable, "down")));
+
+        _provider = CreateProvider();
+        _provider.RecordDefinitionCacheHit();
+        _provider.RecordDefinitionCacheMiss();
+
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+
+        await (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+
+        var capturedRequest = new FeatureStat();
+        _usageClientMock.Reset();
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 0 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }))
+            .Callback<FeatureStat, Metadata, DateTime?, CancellationToken>((req, _, _, _) => capturedRequest = req);
+
+        await (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+
+        capturedRequest.DefinitionCacheHits.Should().Be(1);
+        capturedRequest.DefinitionCacheMisses.Should().Be(1);
+    }
+
     #endregion
 }
