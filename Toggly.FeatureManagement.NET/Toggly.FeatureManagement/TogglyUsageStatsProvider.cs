@@ -143,7 +143,8 @@ namespace Toggly.FeatureManagement
             applicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
 
             var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
-            userAgent = $"Toggly.FeatureManagement/{version}";
+            // Must match platform SdkUserAgentParser (`toggly-{sdk}/{version}`) and HTTP defs UA.
+            userAgent = $"toggly-dotnet/{version}";
         }
 
         private void OnApplicationStopping()

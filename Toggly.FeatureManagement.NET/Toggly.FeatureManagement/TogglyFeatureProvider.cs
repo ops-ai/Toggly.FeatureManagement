@@ -308,6 +308,8 @@ namespace Toggly.FeatureManagement
                 ApplyNewDefinitions(featuresToApply);
                 // Startup from durable snapshot before first network — count as a cache hit.
                 RecordDefinitionCacheHit();
+                // Snapshot is enough to serve definitions; do not wait for the first network apply.
+                _loaded = true;
             }
             catch (Exception ex)
             {
@@ -422,17 +424,16 @@ namespace Toggly.FeatureManagement
             HttpClient? httpClient = null;
             try
             {
-                // Ensure initial load happens only once (singleton, but multiple threads could call this)
+                // Ensure initial snapshot load happens only once. Do not mark _loaded until
+                // snapshot apply or the first network apply completes — otherwise callers that
+                // only wait on _loaded can observe empty defs / missing ETag mid-refresh.
                 if (!_loaded)
                 {
                     await _loadSemaphore.WaitAsync().ConfigureAwait(false);
                     try
                     {
                         if (!_loaded)
-                        {
                             await LoadSnapshot().ConfigureAwait(false);
-                            _loaded = true;
-                        }
                     }
                     finally
                     {

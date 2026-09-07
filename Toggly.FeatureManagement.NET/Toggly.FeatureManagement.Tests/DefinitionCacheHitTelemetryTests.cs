@@ -6,6 +6,7 @@ using Moq;
 using Moq.Protected;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Text.Json;
 using Toggly.FeatureManagement.Data;
 using Xunit;
@@ -52,8 +53,37 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
 
     public void Dispose()
     {
+        DrainInFlightRefresh(_provider);
         _provider?.Dispose();
+        _provider = null;
         TogglyFeatureProvider.WebSocketClientFactoryOverride = null;
+    }
+
+    /// <summary>
+    /// Wait for any in-flight <c>RefreshFeatures</c> to finish before disposing the
+    /// provider (and its refresh semaphore), so later collection tests are not affected
+    /// by orphaned HTTP callbacks.
+    /// </summary>
+    private static void DrainInFlightRefresh(TogglyFeatureProvider? provider)
+    {
+        if (provider == null)
+            return;
+
+        try
+        {
+            var field = typeof(TogglyFeatureProvider).GetField(
+                "_refreshSemaphore",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field?.GetValue(provider) is not SemaphoreSlim semaphore)
+                return;
+
+            if (semaphore.Wait(TimeSpan.FromSeconds(5)))
+                semaphore.Release();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already disposed — nothing to drain.
+        }
     }
 
     private static IOptions<TogglySettings> CreateSettings() =>
@@ -100,6 +130,13 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
         condition().Should().BeTrue($"condition was not met within {timeout}");
     }
 
+    private static async Task WaitUntilLoadedAsync(TogglyFeatureProvider provider)
+    {
+        await WaitForConditionAsync(
+            () => provider.GetDebugInfo().Loaded,
+            TimeSpan.FromSeconds(5));
+    }
+
     [Fact]
     public async Task RefreshFeatures_WhenNotModified_RecordsDefinitionCacheHit()
     {
@@ -128,13 +165,14 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
             _httpClientFactoryMock.Object,
             _serviceProviderMock.Object);
 
+        await WaitUntilLoadedAsync(_provider);
         await WaitForConditionAsync(
             () => _usageStatsMock.Invocations.Any(i => i.Method.Name == nameof(IFeatureUsageStatsProvider.RecordDefinitionCacheMiss)),
             TimeSpan.FromSeconds(5));
 
         // Force a second refresh that receives 304
         var refresh = typeof(TogglyFeatureProvider)
-            .GetMethod("RefreshFeatures", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            .GetMethod("RefreshFeatures", BindingFlags.NonPublic | BindingFlags.Instance);
         var task = (Task)refresh!.Invoke(_provider, new object?[] { null })!;
         await task;
 
@@ -163,6 +201,7 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
             _httpClientFactoryMock.Object,
             _serviceProviderMock.Object);
 
+        await WaitUntilLoadedAsync(_provider);
         await WaitForConditionAsync(
             () => _usageStatsMock.Invocations.Any(i => i.Method.Name == nameof(IFeatureUsageStatsProvider.RecordDefinitionCacheMiss)),
             TimeSpan.FromSeconds(5));
@@ -173,7 +212,24 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
     [Fact]
     public async Task TimerCallback_WhenPollSkipped_RecordsDefinitionCacheHit()
     {
-        SetupHttpClient(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
+        // Seed a first successful apply so _loaded is true; subsequent timer skip is a hit.
+        var callCount = 0;
+        var json = SerializeDefinitions("seed");
+        SetupHttpClient(_ =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(json)
+                };
+                response.Headers.ETag = new EntityTagHeaderValue("\"seed\"");
+                return response;
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotModified);
+        });
 
         _provider = new TogglyFeatureProvider(
             CreateSettings(),
@@ -182,7 +238,8 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
             _httpClientFactoryMock.Object,
             _serviceProviderMock.Object);
 
-        await Task.Delay(300);
+        await WaitUntilLoadedAsync(_provider);
+        DrainInFlightRefresh(_provider);
 
         _usageStatsMock.Invocations.Clear();
         _provider.SetWebSocketConnectedForTests(true);
@@ -225,6 +282,7 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
             _httpClientFactoryMock.Object,
             _serviceProviderMock.Object);
 
+        await WaitUntilLoadedAsync(_provider);
         await WaitForConditionAsync(
             () => _usageStatsMock.Invocations.Count(i => i.Method.Name == nameof(IFeatureUsageStatsProvider.RecordDefinitionCacheHit)) >= 2,
             TimeSpan.FromSeconds(5));
@@ -256,14 +314,17 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
             _httpClientFactoryMock.Object,
             _serviceProviderMock.Object);
 
+        await WaitUntilLoadedAsync(_provider);
         await WaitForConditionAsync(
             () => _usageStatsMock.Invocations.Any(i => i.Method.Name == nameof(IFeatureUsageStatsProvider.RecordDefinitionCacheMiss)),
             TimeSpan.FromSeconds(5));
 
+        // Drain the constructor-triggered refresh before clearing invocations / forcing another.
+        DrainInFlightRefresh(_provider);
         _usageStatsMock.Invocations.Clear();
 
         var refresh = typeof(TogglyFeatureProvider)
-            .GetMethod("RefreshFeatures", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            .GetMethod("RefreshFeatures", BindingFlags.NonPublic | BindingFlags.Instance);
         var task = (Task)refresh!.Invoke(_provider, new object?[] { null })!;
         await task;
 

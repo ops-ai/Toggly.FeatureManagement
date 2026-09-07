@@ -400,7 +400,7 @@ public class TogglyUsageStatsProviderTests : IDisposable
         debugInfo.AppKey.Should().Be("***pp-key");
         debugInfo.Environment.Should().Be("Test");
         debugInfo.BaseUrl.Should().Be("https://test.toggly.io/");
-        debugInfo.UserAgent.Should().StartWith("Toggly.FeatureManagement/");
+        debugInfo.UserAgent.Should().StartWith("toggly-dotnet/");
     }
 
     [Fact]
@@ -1754,7 +1754,7 @@ public class TogglyUsageStatsProviderTests : IDisposable
         var debugInfo = _provider.GetDebugInfo();
 
         // Assert
-        debugInfo.UserAgent.Should().StartWith("Toggly.FeatureManagement/");
+        debugInfo.UserAgent.Should().StartWith("toggly-dotnet/");
         // Version may be empty in test context, just verify format starts correctly
         debugInfo.UserAgent.Should().NotBeNullOrWhiteSpace();
     }

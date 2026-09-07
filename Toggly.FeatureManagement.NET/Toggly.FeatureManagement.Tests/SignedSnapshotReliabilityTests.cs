@@ -515,6 +515,11 @@ public class SignedSnapshotReliabilityTests : IDisposable
             _httpClientFactoryMock.Object,
             _serviceProviderMock.Object);
 
+        // Wait for snapshot save (network apply), not only _loaded after empty LoadSnapshot.
+        var start = DateTime.UtcNow;
+        while (saved == null && DateTime.UtcNow - start < TimeSpan.FromSeconds(5))
+            await Task.Delay(50);
+
         await _provider.GetFeatureDefinitionAsync("flag-b");
 
         saved.Should().NotBeNull();
@@ -568,6 +573,11 @@ public class SignedSnapshotReliabilityTests : IDisposable
             _loggerFactoryMock.Object,
             _httpClientFactoryMock.Object,
             _serviceProviderMock.Object);
+
+        // Wait for snapshot save (network apply), not only _loaded after empty LoadSnapshot.
+        var start = DateTime.UtcNow;
+        while (saved == null && DateTime.UtcNow - start < TimeSpan.FromSeconds(5))
+            await Task.Delay(50);
 
         await _provider.GetFeatureDefinitionAsync("flag-c");
 
