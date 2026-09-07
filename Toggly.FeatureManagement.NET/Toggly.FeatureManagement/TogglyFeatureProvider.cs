@@ -120,6 +120,9 @@ namespace Toggly.FeatureManagement
         private IMetricsService? _metricsService = null;
         private readonly object _metricsServiceLock = new object();
 
+        private IFeatureUsageStatsProvider? _usageStatsProvider = null;
+        private readonly object _usageStatsProviderLock = new object();
+
         /// <summary>Newtonsoft settings aligned with Toggly Web definitions signing (camelCase, dictionary keys unchanged).</summary>
         private static readonly JsonSerializerSettings SignedDefinitionsSerializerSettings = new JsonSerializerSettings
         {
@@ -211,7 +214,10 @@ namespace Toggly.FeatureManagement
                     // Only successful 200/304 (and WS apply) update _lastFallbackRefresh.
                     if (_webSocketConnected &&
                         DateTime.UtcNow - _lastFallbackRefresh < FallbackRefreshInterval)
+                    {
+                        RecordDefinitionCacheHit();
                         return;
+                    }
 
                     await RefreshFeatures(_refreshInterval.Ticks).ConfigureAwait(false);
                 }
@@ -300,6 +306,10 @@ namespace Toggly.FeatureManagement
                     Interlocked.Exchange(ref _lastDefinitionsTimestamp, snapshot.Timestamp.Value);
 
                 ApplyNewDefinitions(featuresToApply);
+                // Startup from durable snapshot before first network — count as a cache hit.
+                RecordDefinitionCacheHit();
+                // Snapshot is enough to serve definitions; do not wait for the first network apply.
+                _loaded = true;
             }
             catch (Exception ex)
             {
@@ -414,30 +424,7 @@ namespace Toggly.FeatureManagement
             HttpClient? httpClient = null;
             try
             {
-                // Ensure initial load happens only once (singleton, but multiple threads could call this)
-                if (!_loaded)
-                {
-                    await _loadSemaphore.WaitAsync().ConfigureAwait(false);
-                    try
-                    {
-                        if (!_loaded)
-                        {
-                            await LoadSnapshot().ConfigureAwait(false);
-                            _loaded = true;
-                        }
-                    }
-                    finally
-                    {
-                        try
-                        {
-                            _loadSemaphore.Release();
-                        }
-                        catch (ObjectDisposedException)
-                        {
-                            // Semaphore was disposed during execution, ignore
-                        }
-                    }
-                }
+                await EnsureInitialSnapshotLoadedAsync().ConfigureAwait(false);
 
                 // Thread-safe lazy initialization of metrics service
                 if (_metricsService == null)
@@ -448,6 +435,7 @@ namespace Toggly.FeatureManagement
                     }
                 }
 
+                // Usage stats resolved lazily via EnsureUsageStatsProvider / RecordDefinitionCache*
                 httpClient = _clientFactory.CreateClient("toggly");
 #if NETCOREAPP3_1_OR_GREATER
                 httpClient.DefaultRequestVersion = HttpVersion.Version20;
@@ -473,6 +461,8 @@ namespace Toggly.FeatureManagement
             }
             catch (HttpRequestException ex)
             {
+                // Network error while keeping last good defs — still serving cache.
+                RecordDefinitionCacheHit();
                 ReportError(
                     $"HTTP error refreshing feature definitions from {httpClient?.BaseAddress} for AppKey={SanitizedAppKey}, Environment={_environment}. " +
                     "Verify your Toggly configuration: ensure the AppKey is a valid Backend-type key and the Environment name matches exactly",
@@ -480,6 +470,7 @@ namespace Toggly.FeatureManagement
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
+                RecordDefinitionCacheHit();
                 ReportError(
                     $"Timeout refreshing feature definitions from {httpClient?.BaseAddress} for AppKey={SanitizedAppKey}, Environment={_environment}. " +
                     "The definitions service may be temporarily unavailable",
@@ -487,6 +478,7 @@ namespace Toggly.FeatureManagement
             }
             catch (Exception ex)
             {
+                RecordDefinitionCacheHit();
                 ReportError(
                     $"Unexpected error refreshing feature definitions for AppKey={SanitizedAppKey}, Environment={_environment}",
                     ex);
@@ -510,6 +502,35 @@ namespace Toggly.FeatureManagement
         }
 
         /// <summary>
+        /// Ensure initial snapshot load happens only once. Do not mark <c>_loaded</c> until
+        /// snapshot apply or the first network apply completes — otherwise callers that
+        /// only wait on <c>_loaded</c> can observe empty defs / missing ETag mid-refresh.
+        /// </summary>
+        private async Task EnsureInitialSnapshotLoadedAsync()
+        {
+            if (_loaded)
+                return;
+
+            await _loadSemaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (!_loaded)
+                    await LoadSnapshot().ConfigureAwait(false);
+            }
+            finally
+            {
+                try
+                {
+                    _loadSemaphore.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Semaphore was disposed during execution, ignore
+                }
+            }
+        }
+
+        /// <summary>
         /// Fetches definitions and applies them when changed.
         /// Returns true when WebSocket should be ensured (HTTP 304 or successful apply).
         /// </summary>
@@ -521,6 +542,7 @@ namespace Toggly.FeatureManagement
                 var newDefinitionsRequest = await httpClient.GetAsync(requestPath).ConfigureAwait(false);
                 if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
                 {
+                    RecordDefinitionCacheHit();
                     _lastDefinitionsCheck = DateTime.UtcNow;
                     _lastFallbackRefresh = DateTime.UtcNow;
                     return true;
@@ -529,6 +551,7 @@ namespace Toggly.FeatureManagement
                 if (!newDefinitionsRequest.IsSuccessStatusCode)
                 {
                     await HandleDefinitionsRequestError(newDefinitionsRequest, requestPath).ConfigureAwait(false);
+                    RecordDefinitionCacheHit();
                     return false;
                 }
 
@@ -538,24 +561,28 @@ namespace Toggly.FeatureManagement
                 if (signedDefinitionsResponse == null)
                 {
                     _logger.LogWarning("Received empty response from toggly");
+                    RecordDefinitionCacheHit();
                     return false;
                 }
 
                 if (signedDefinitionsResponse.Defs == null)
                 {
                     ReportError("Signed definitions response missing defs", level: LogLevel.Warning);
+                    RecordDefinitionCacheHit();
                     return false;
                 }
 
                 if (string.IsNullOrEmpty(signedDefinitionsResponse.Signature))
                 {
                     ReportError("Signed definitions response missing signature", level: LogLevel.Warning);
+                    RecordDefinitionCacheHit();
                     return false;
                 }
 
                 if (string.IsNullOrEmpty(signedDefinitionsResponse.Kid))
                 {
                     ReportError("Signed definitions response missing kid", level: LogLevel.Warning);
+                    RecordDefinitionCacheHit();
                     return false;
                 }
 
@@ -566,6 +593,7 @@ namespace Toggly.FeatureManagement
                     ReportError(
                         $"Received definitions with older timestamp. Current: {currentTimestamp}, Received: {signedDefinitionsResponse.Timestamp}",
                         level: LogLevel.Warning);
+                    RecordDefinitionCacheHit();
                     return false;
                 }
 
@@ -576,6 +604,7 @@ namespace Toggly.FeatureManagement
                     if (!jsonDoc.RootElement.TryGetProperty("defs", out var dataElement))
                     {
                         ReportError("Signed definitions response missing defs property");
+                        RecordDefinitionCacheHit();
                         return false;
                     }
 
@@ -595,19 +624,30 @@ namespace Toggly.FeatureManagement
                 if (ecdsa == null)
                 {
                     ReportError("No ES256 key found in JWKS");
+                    RecordDefinitionCacheHit();
                     return false;
                 }
 
                 if (!ecdsa.VerifyHash(hash, signature))
                 {
                     ReportError("Invalid signature");
+                    RecordDefinitionCacheHit();
                     return false;
+                }
+
+                var revision = ReadDefinitionsRevision(newDefinitionsRequest);
+                if (RevisionsMatch(revision))
+                {
+                    // HTTP 200 whose revision matches existing (CDN replay) — cache hit.
+                    RecordDefinitionCacheHit();
+                    _lastDefinitionsCheck = DateTime.UtcNow;
+                    _lastFallbackRefresh = DateTime.UtcNow;
+                    return true;
                 }
 
                 // Prefer verified raw defs for evaluation and persistence (same bytes that were signed).
                 var newDefinitions = System.Text.Json.JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
                     rawData, SystemJsonCaseInsensitive) ?? signedDefinitionsResponse.Defs;
-                var revision = ReadDefinitionsRevision(newDefinitionsRequest);
                 StoreDefinitionsRevision(revision);
                 Interlocked.Exchange(ref _lastDefinitionsTimestamp, signedDefinitionsResponse.Timestamp);
 
@@ -625,6 +665,7 @@ namespace Toggly.FeatureManagement
                     }).ConfigureAwait(false);
 
                 ApplyNewDefinitions(newDefinitions);
+                RecordDefinitionCacheMiss();
                 _loaded = true;
                 _lastRefresh = DateTime.UtcNow;
                 _lastDefinitionsCheck = DateTime.UtcNow;
@@ -637,6 +678,7 @@ namespace Toggly.FeatureManagement
                 var newDefinitionsRequest = await httpClient.GetAsync(requestPath).ConfigureAwait(false);
                 if (newDefinitionsRequest.StatusCode == HttpStatusCode.NotModified)
                 {
+                    RecordDefinitionCacheHit();
                     _lastDefinitionsCheck = DateTime.UtcNow;
                     _lastFallbackRefresh = DateTime.UtcNow;
                     return true;
@@ -645,6 +687,7 @@ namespace Toggly.FeatureManagement
                 if (!newDefinitionsRequest.IsSuccessStatusCode)
                 {
                     await HandleDefinitionsRequestError(newDefinitionsRequest, requestPath).ConfigureAwait(false);
+                    RecordDefinitionCacheHit();
                     return false;
                 }
 
@@ -652,10 +695,19 @@ namespace Toggly.FeatureManagement
                 if (newDefinitions == null)
                 {
                     _logger.LogWarning("Received empty response from toggly");
+                    RecordDefinitionCacheHit();
                     return false;
                 }
 
                 var revision = ReadDefinitionsRevision(newDefinitionsRequest);
+                if (RevisionsMatch(revision))
+                {
+                    RecordDefinitionCacheHit();
+                    _lastDefinitionsCheck = DateTime.UtcNow;
+                    _lastFallbackRefresh = DateTime.UtcNow;
+                    return true;
+                }
+
                 StoreDefinitionsRevision(revision);
                 if (_snapshotProvider != null)
                     await _snapshotProvider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
@@ -665,12 +717,58 @@ namespace Toggly.FeatureManagement
                     }).ConfigureAwait(false);
 
                 ApplyNewDefinitions(newDefinitions);
+                RecordDefinitionCacheMiss();
                 _loaded = true;
                 _lastRefresh = DateTime.UtcNow;
                 _lastDefinitionsCheck = DateTime.UtcNow;
                 _lastFallbackRefresh = DateTime.UtcNow;
                 return true;
             }
+        }
+
+        private bool RevisionsMatch(string? revision)
+        {
+            if (string.IsNullOrWhiteSpace(revision) || _lastETag == null)
+                return false;
+
+            return string.Equals(revision.Trim().Trim('"'), _lastETag.Tag.Trim('"'), StringComparison.Ordinal);
+        }
+
+        private void RecordDefinitionCacheHit()
+        {
+            try
+            {
+                EnsureUsageStatsProvider()?.RecordDefinitionCacheHit();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to record definition cache hit");
+            }
+        }
+
+        private void RecordDefinitionCacheMiss()
+        {
+            try
+            {
+                EnsureUsageStatsProvider()?.RecordDefinitionCacheMiss();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to record definition cache miss");
+            }
+        }
+
+        private IFeatureUsageStatsProvider? EnsureUsageStatsProvider()
+        {
+            if (_usageStatsProvider != null)
+                return _usageStatsProvider;
+
+            lock (_usageStatsProviderLock)
+            {
+                _usageStatsProvider ??= _serviceProvider.GetService(typeof(IFeatureUsageStatsProvider)) as IFeatureUsageStatsProvider;
+            }
+
+            return _usageStatsProvider;
         }
 
         /// <summary>
@@ -770,6 +868,7 @@ namespace Toggly.FeatureManagement
                             if (definitions != null)
                             {
                                 ApplyNewDefinitions(definitions);
+                                RecordDefinitionCacheMiss();
                                 _loaded = true;
                                 _lastRefresh = DateTime.UtcNow;
                                 _lastDefinitionsCheck = DateTime.UtcNow;

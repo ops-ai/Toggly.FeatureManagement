@@ -53,5 +53,17 @@ namespace Toggly.FeatureManagement
         /// <param name="context">A custom context for unique user tracking</param>
         /// <returns></returns>
         Task RecordViewAsync<TContext>(string featureKey, TContext context);
+
+        /// <summary>
+        /// Record a definition-refresh cache hit (served local definitions without applying a new revision).
+        /// Counted once per refresh attempt outcome — not per <c>IsEnabled</c> evaluation.
+        /// </summary>
+        void RecordDefinitionCacheHit();
+
+        /// <summary>
+        /// Record a definition-refresh cache miss (applied a new revision from HTTP or WebSocket).
+        /// Counted once per refresh attempt outcome — not per <c>IsEnabled</c> evaluation.
+        /// </summary>
+        void RecordDefinitionCacheMiss();
     }
 }

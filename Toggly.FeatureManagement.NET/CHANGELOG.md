@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.6.5
+
+2026-09-06
+
+### Added
+- Definition-refresh cache hits and misses (`definitionCacheHits` /
+  `definitionCacheMisses`) on usage `SendStats`, counted once per refresh
+  outcome (304, skipped poll, durable snapshot, keep-last-on-error = hit;
+  new revision from HTTP/WebSocket = miss). Not counted per `IsEnabled`.
+
+### Changed
+- Usage gRPC `UA` metadata now sends `toggly-dotnet/{version}` (same shape as
+  HTTP definitions requests and platform `SdkUserAgentParser`), instead of
+  `Toggly.FeatureManagement/{version}`.
+- `_loaded` is set only after a successful snapshot apply or first network
+  definitions apply, so callers waiting on load no longer observe empty defs
+  mid-refresh.
+
 ## 3.6.4
 
 2026-09-06
