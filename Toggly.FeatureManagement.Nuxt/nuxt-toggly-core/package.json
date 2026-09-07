@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly-core",
-  "version": "1.9.2",
+  "version": "1.10.0",
   "description": "Core feature flag utilities for Nuxt",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -11,10 +11,18 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
+    },
+    "./telemetry/grpc": {
+      "types": "./dist/telemetry/grpc.d.ts",
+      "import": "./dist/telemetry/grpc.mjs",
+      "require": "./dist/telemetry/grpc.cjs"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "proto",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "unbuild",
@@ -50,7 +58,13 @@
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
   },
+  "optionalDependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@grpc/proto-loader": "^0.7.13"
+  },
   "devDependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@grpc/proto-loader": "^0.7.13",
     "@types/node": "^22.13.1",
     "@types/ws": "^8.5.14",
     "@vitest/coverage-v8": "^3.0.4",

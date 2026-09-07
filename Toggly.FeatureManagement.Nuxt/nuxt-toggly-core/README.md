@@ -8,6 +8,17 @@ Core feature flag utilities for Nuxt
 npm install @ops-ai/nuxt-toggly-core
 ```
 
+Optional gRPC transport (Node/Nitro server only):
+
+```bash
+npm install @grpc/grpc-js @grpc/proto-loader
+```
+
+Import gRPC helpers from `@ops-ai/nuxt-toggly-core/telemetry/grpc` — do not
+import that subpath from browser or Nitro edge bundles. Browser
+`@ops-ai/nuxt-toggly-client` does not send usage/metrics; use the server
+package for telemetry.
+
 ## Live updates
 
 WebSocket live updates are enabled when `enableLiveUpdates` is unset or true

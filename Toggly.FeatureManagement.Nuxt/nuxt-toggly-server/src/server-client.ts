@@ -1,11 +1,14 @@
 import {
   createTogglyClient,
   snapshotEvaluatedBooleans,
+  resolveTelemetryEnableFlag,
+  isEdgeRuntime,
   type FeatureDefinitionModel,
   type FeatureDefinitions,
   type TogglyClient,
   type TogglyConfig,
 } from '@ops-ai/nuxt-toggly-core'
+import { createGrpcClients, isGrpcAvailable } from '@ops-ai/nuxt-toggly-core/telemetry/grpc'
 import WebSocket from 'ws'
 import {
   resolveFeatureCheckArgs,
@@ -20,6 +23,9 @@ import type { TogglyServerConfig, TogglyStorage } from './types'
  * Live updates use WebSocket (via `ws`) so long-lived Node processes do not
  * poll definitions.toggly.io on every request. refreshInterval stays 0;
  * reconnect + WS push keep flags fresh. Edge runtimes skip WS in core.
+ *
+ * Usage + metrics telemetry defaults on when appKey is set (gRPC optional deps
+ * on Node; HTTPS for Nitro edge / Workers-like targets).
  */
 const DEFAULT_SERVER_CONFIG = {
   cache: true,
@@ -28,6 +34,73 @@ const DEFAULT_SERVER_CONFIG = {
   refreshInterval: 0,
   enableLiveUpdates: true,
   webSocketImpl: WebSocket as unknown as TogglyConfig['webSocketImpl'],
+  telemetryTransport: 'grpc' as const,
+  telemetryAttachProcessHandlers: true,
+}
+
+function resolveServerTelemetryTransport(
+  config: TogglyServerConfig,
+): 'grpc' | 'https' {
+  if (config.telemetryTransport) {
+    return config.telemetryTransport
+  }
+  // Nitro edge / Workers-like: gateway HTTPS JSON (no Node gRPC).
+  if (isEdgeRuntime()) {
+    return 'https'
+  }
+  return DEFAULT_SERVER_CONFIG.telemetryTransport
+}
+
+function resolveServerTelemetryFlags(
+  config: TogglyServerConfig,
+): Pick<TogglyServerConfig, 'enableUsageTracking' | 'enableMetrics'> {
+  const hasAppKey = Boolean(config.appKey)
+  // TOGGLY_DISABLE_TELEMETRY=1 is authoritative over explicit true.
+  return {
+    enableUsageTracking: resolveTelemetryEnableFlag(
+      config.enableUsageTracking,
+      hasAppKey,
+    ),
+    enableMetrics: resolveTelemetryEnableFlag(config.enableMetrics, hasAppKey),
+  }
+}
+
+function resolveGrpcClients(config: TogglyServerConfig): {
+  usageClient?: TogglyConfig['usageClient']
+  metricsClient?: TogglyConfig['metricsClient']
+} {
+  if (config.usageClient !== undefined || config.metricsClient !== undefined) {
+    return {
+      usageClient: config.usageClient,
+      metricsClient: config.metricsClient,
+    }
+  }
+
+  const transport = resolveServerTelemetryTransport(config)
+  if (transport === 'https') {
+    // TelemetryRuntime builds soft-fail HTTPS clients.
+    return {}
+  }
+
+  const flags = resolveServerTelemetryFlags(config)
+  if (!flags.enableUsageTracking && !flags.enableMetrics) {
+    return {}
+  }
+
+  if (!isGrpcAvailable()) {
+    console.warn(
+      '[Toggly] Usage/metrics enabled but @grpc/grpc-js and @grpc/proto-loader are not installed. ' +
+        'Install them to send telemetry: npm install @grpc/grpc-js @grpc/proto-loader',
+    )
+    return { usageClient: null, metricsClient: null }
+  }
+
+  const clients = createGrpcClients(config.metricsBaseUrl)
+  if (!clients) {
+    console.warn('[Toggly] Failed to create gRPC clients; telemetry transport disabled')
+    return { usageClient: null, metricsClient: null }
+  }
+  return { usageClient: clients.usage, metricsClient: clients.metrics }
 }
 
 /**
@@ -163,13 +236,24 @@ export function createMemoryStorage(): MemoryStorage {
 export async function initServerToggly(
   config: TogglyServerConfig
 ): Promise<TogglyClient> {
+  const telemetryFlags = resolveServerTelemetryFlags(config)
+  const telemetryTransport = resolveServerTelemetryTransport(config)
+  const grpcClients = resolveGrpcClients(config)
   const mergedConfig: TogglyServerConfig = {
     ...DEFAULT_SERVER_CONFIG,
     ...config,
+    ...telemetryFlags,
+    ...grpcClients,
     // Prefer caller overrides; otherwise keep server live-update defaults
     refreshInterval: config.refreshInterval ?? DEFAULT_SERVER_CONFIG.refreshInterval,
     enableLiveUpdates: config.enableLiveUpdates ?? DEFAULT_SERVER_CONFIG.enableLiveUpdates,
     webSocketImpl: config.webSocketImpl ?? DEFAULT_SERVER_CONFIG.webSocketImpl,
+    telemetryTransport,
+    telemetryAttachProcessHandlers:
+      config.telemetryAttachProcessHandlers ??
+      (telemetryTransport === 'https'
+        ? false
+        : DEFAULT_SERVER_CONFIG.telemetryAttachProcessHandlers),
     // Server always uses definitions-signed + local evaluation (OPS-825).
     evaluationMode: 'local',
   }
@@ -265,7 +349,7 @@ export async function isServerFeatureOff(
 }
 
 /**
- * Reset server client (useful for testing)
+ * Reset server client (useful for testing). Flushes telemetry best-effort.
  */
 export function resetServerToggly(): void {
   if (serverClient) {
@@ -276,4 +360,70 @@ export function resetServerToggly(): void {
   if (serverStorage instanceof MemoryStorage) {
     serverStorage.clear()
   }
+}
+
+/**
+ * Record a feature "used" interaction on the server client.
+ */
+export function recordServerUsage(
+  featureKey: string,
+  identity?: string,
+  variant?: string,
+): void {
+  serverClient?.recordUsage(featureKey, identity, variant)
+}
+
+/**
+ * Record a feature "viewed" event on the server client.
+ */
+export function recordServerView(
+  featureKey: string,
+  identity?: string,
+  variant?: string,
+): void {
+  serverClient?.recordView(featureKey, identity, variant)
+}
+
+/** Aggregate a measure metric. */
+export function measureServerMetric(
+  metricKey: string,
+  value: number,
+  options?: { feature?: string; variant?: string },
+): void {
+  serverClient?.measure(metricKey, value, options)
+}
+
+/** Increment a counter metric. */
+export function incrementServerCounter(
+  metricKey: string,
+  value = 1,
+  options?: { feature?: string; variant?: string },
+): void {
+  serverClient?.incrementCounter(metricKey, value, options)
+}
+
+/** Record a point-in-time observation. */
+export function observeServerMetric(
+  metricKey: string,
+  value: number,
+  options?: { feature?: string; variant?: string },
+): void {
+  serverClient?.observe(metricKey, value, options)
+}
+
+/** Flush pending usage + metrics batches. */
+export async function flushServerTelemetry(): Promise<void> {
+  await serverClient?.flushTelemetry()
+}
+
+/**
+ * Close the server client and flush telemetry (best-effort).
+ */
+export async function closeServerToggly(): Promise<void> {
+  if (serverClient) {
+    await serverClient.flushTelemetry()
+    serverClient.destroy()
+    serverClient = null
+  }
+  serverConfig = null
 }

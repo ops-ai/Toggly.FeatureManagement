@@ -10,7 +10,9 @@ export default defineConfig({
       reporter: ['text', 'lcov', 'json'],
       reportsDirectory: './coverage',
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.d.ts', 'src/**/index.ts', 'src/types.ts'],
+      // Match Next: only exclude the package root barrel, not nested barrels
+      // like src/telemetry/index.ts (TelemetryRuntime must count for Sonar).
+      exclude: ['src/**/*.d.ts', 'src/index.ts', 'src/types.ts'],
       thresholds: {
         lines: 90,
         functions: 90,
