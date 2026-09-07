@@ -57,7 +57,7 @@ rocket = "0.5"
 mockito = "1.2"
 tokio-test = "0.4"
 wiremock = "0.5"
-tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 
 # Workspace crates — keep path pins in sync with workspace.package.version
