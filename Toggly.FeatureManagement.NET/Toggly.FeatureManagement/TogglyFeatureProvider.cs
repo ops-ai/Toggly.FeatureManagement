@@ -424,29 +424,7 @@ namespace Toggly.FeatureManagement
             HttpClient? httpClient = null;
             try
             {
-                // Ensure initial snapshot load happens only once. Do not mark _loaded until
-                // snapshot apply or the first network apply completes — otherwise callers that
-                // only wait on _loaded can observe empty defs / missing ETag mid-refresh.
-                if (!_loaded)
-                {
-                    await _loadSemaphore.WaitAsync().ConfigureAwait(false);
-                    try
-                    {
-                        if (!_loaded)
-                            await LoadSnapshot().ConfigureAwait(false);
-                    }
-                    finally
-                    {
-                        try
-                        {
-                            _loadSemaphore.Release();
-                        }
-                        catch (ObjectDisposedException)
-                        {
-                            // Semaphore was disposed during execution, ignore
-                        }
-                    }
-                }
+                await EnsureInitialSnapshotLoadedAsync().ConfigureAwait(false);
 
                 // Thread-safe lazy initialization of metrics service
                 if (_metricsService == null)
@@ -457,15 +435,7 @@ namespace Toggly.FeatureManagement
                     }
                 }
 
-                // Thread-safe lazy initialization of usage stats (definition cache hit/miss)
-                if (_usageStatsProvider == null)
-                {
-                    lock (_usageStatsProviderLock)
-                    {
-                        _usageStatsProvider ??= _serviceProvider.GetService(typeof(IFeatureUsageStatsProvider)) as IFeatureUsageStatsProvider;
-                    }
-                }
-
+                // Usage stats resolved lazily via EnsureUsageStatsProvider / RecordDefinitionCache*
                 httpClient = _clientFactory.CreateClient("toggly");
 #if NETCOREAPP3_1_OR_GREATER
                 httpClient.DefaultRequestVersion = HttpVersion.Version20;
@@ -529,6 +499,35 @@ namespace Toggly.FeatureManagement
             // for the full connect timeout (up to 10s).
             if (shouldEnsureWebSocket)
                 await EnsureWebSocketConnectedAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Ensure initial snapshot load happens only once. Do not mark <c>_loaded</c> until
+        /// snapshot apply or the first network apply completes — otherwise callers that
+        /// only wait on <c>_loaded</c> can observe empty defs / missing ETag mid-refresh.
+        /// </summary>
+        private async Task EnsureInitialSnapshotLoadedAsync()
+        {
+            if (_loaded)
+                return;
+
+            await _loadSemaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (!_loaded)
+                    await LoadSnapshot().ConfigureAwait(false);
+            }
+            finally
+            {
+                try
+                {
+                    _loadSemaphore.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Semaphore was disposed during execution, ignore
+                }
+            }
         }
 
         /// <summary>

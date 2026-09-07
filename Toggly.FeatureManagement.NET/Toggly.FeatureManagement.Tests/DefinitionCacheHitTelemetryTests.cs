@@ -57,6 +57,7 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
         _provider?.Dispose();
         _provider = null;
         TogglyFeatureProvider.WebSocketClientFactoryOverride = null;
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>
@@ -331,5 +332,44 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
         _usageStatsMock.Verify(x => x.RecordDefinitionCacheHit(), Times.Once);
         _usageStatsMock.Verify(x => x.RecordDefinitionCacheMiss(), Times.Never);
         callCount.Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public async Task RefreshFeatures_WhenHttpFails_RecordsDefinitionCacheHit()
+    {
+        SetupHttpClient(_ => throw new HttpRequestException("network down"));
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await WaitForConditionAsync(
+            () => _usageStatsMock.Invocations.Any(i => i.Method.Name == nameof(IFeatureUsageStatsProvider.RecordDefinitionCacheHit)),
+            TimeSpan.FromSeconds(5));
+
+        _usageStatsMock.Verify(x => x.RecordDefinitionCacheHit(), Times.AtLeastOnce);
+        _usageStatsMock.Verify(x => x.RecordDefinitionCacheMiss(), Times.Never);
+    }
+
+    [Fact]
+    public void RecordDefinitionCacheHit_WhenUsageStatsThrows_DoesNotPropagate()
+    {
+        _usageStatsMock.Setup(x => x.RecordDefinitionCacheHit()).Throws(new InvalidOperationException("boom"));
+        SetupHttpClient(_ => new HttpResponseMessage(HttpStatusCode.NotModified));
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        var recordHit = typeof(TogglyFeatureProvider)
+            .GetMethod("RecordDefinitionCacheHit", BindingFlags.NonPublic | BindingFlags.Instance);
+        var act = () => recordHit!.Invoke(_provider, null);
+        act.Should().NotThrow();
     }
 }
