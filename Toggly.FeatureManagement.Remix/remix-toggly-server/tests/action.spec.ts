@@ -30,6 +30,8 @@ describe('createFeatureGatedAction', () => {
   const defaultOptions: FeatureGatedActionOptions = {
     appKey: 'test-app-key',
     environment: 'test',
+    enableUsageTracking: false,
+    enableMetrics: false,
   };
 
   const createMockActionArgs = (options?: {
@@ -372,6 +374,8 @@ describe('createTogglyAction', () => {
   const defaultOptions = {
     appKey: 'test-app-key',
     environment: 'test',
+    enableUsageTracking: false,
+    enableMetrics: false,
   };
 
   beforeEach(() => {
@@ -587,6 +591,8 @@ describe('requireFeature', () => {
   const defaultOptions = {
     appKey: 'test-app-key',
     environment: 'test',
+    enableUsageTracking: false,
+    enableMetrics: false,
   };
 
   beforeEach(() => {

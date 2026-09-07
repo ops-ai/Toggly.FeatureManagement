@@ -20,6 +20,12 @@ import {
   createLogger,
   normalizeEntityContext,
   registerContext as registerEntityContext,
+  TelemetryRuntime,
+  resolveTelemetryEnableFlag,
+  isTelemetryEnvDisabled,
+  type MetricsFeatureOptions,
+  type UsageSender,
+  type MetricsSender,
 } from '@ops-ai/remix-toggly-core';
 import type {
   TogglyEntityContext,
@@ -53,6 +59,57 @@ import {
   getAmbientEvalOverrides,
   mergeIdentityContext,
 } from './eval-context-store';
+import { createGrpcClients, isGrpcAvailable } from '@ops-ai/remix-toggly-core/telemetry/grpc';
+
+function resolveServerTelemetryFlags(
+  config: TogglyConfig,
+): Pick<TogglyConfig, 'enableUsageTracking' | 'enableMetrics'> {
+  const hasAppKey = Boolean(config.appKey);
+  return {
+    enableUsageTracking: resolveTelemetryEnableFlag(
+      config.enableUsageTracking,
+      hasAppKey,
+    ),
+    enableMetrics: resolveTelemetryEnableFlag(config.enableMetrics, hasAppKey),
+  };
+}
+
+function resolveGrpcClients(config: TogglyConfig): {
+  usageClient?: UsageSender | null;
+  metricsClient?: MetricsSender | null;
+} {
+  if (config.usageClient !== undefined || config.metricsClient !== undefined) {
+    return {
+      usageClient: config.usageClient,
+      metricsClient: config.metricsClient,
+    };
+  }
+
+  const flags = resolveServerTelemetryFlags(config);
+  if (!flags.enableUsageTracking && !flags.enableMetrics) {
+    return {};
+  }
+
+  const transport = config.telemetryTransport ?? 'grpc';
+  if (transport !== 'grpc') {
+    return {};
+  }
+
+  if (!isGrpcAvailable()) {
+    console.warn(
+      '[Toggly] Usage/metrics enabled but @grpc/grpc-js and @grpc/proto-loader are not installed. ' +
+        'Install them to send telemetry: npm install @grpc/grpc-js @grpc/proto-loader',
+    );
+    return { usageClient: null, metricsClient: null };
+  }
+
+  const clients = createGrpcClients(config.metricsBaseUrl);
+  if (!clients) {
+    console.warn('[Toggly] Failed to create gRPC clients; telemetry transport disabled');
+    return { usageClient: null, metricsClient: null };
+  }
+  return { usageClient: clients.usage, metricsClient: clients.metrics };
+}
 
 /**
  * Server-side Toggly client for fetching and evaluating feature flags
@@ -83,10 +140,22 @@ export class TogglyServerClient {
   private localGates: LocalGate[] = [];
   private localGateIndex: FlagGateIndex = new Map();
   private readonly localGatesListeners = new Set<() => void>();
+  private telemetry: TelemetryRuntime | null = null;
 
   constructor(config: TogglyConfig) {
     // Server always uses definitions-signed + local evaluation (OPS-825).
-    this.config = mergeConfig({ ...config, evaluationMode: 'local' });
+    const telemetryFlags = resolveServerTelemetryFlags(config);
+    const grpcClients = resolveGrpcClients({ ...config, ...telemetryFlags });
+    this.config = mergeConfig({
+      ...config,
+      ...telemetryFlags,
+      ...grpcClients,
+      evaluationMode: 'local',
+      telemetryTransport: config.telemetryTransport ?? 'grpc',
+      telemetryAttachProcessHandlers:
+        config.telemetryAttachProcessHandlers ??
+        (config.telemetryTransport ?? 'grpc') === 'grpc',
+    });
     this.logger = createLogger(this.config.debug ?? false);
 
     if (this.config.localGates) {
@@ -98,6 +167,50 @@ export class TogglyServerClient {
         'No appKey provided and no featureDefaults set. All features will be disabled.'
       );
     }
+
+    this.startTelemetry();
+  }
+
+  private startTelemetry(): void {
+    if (!this.config.appKey || isTelemetryEnvDisabled()) {
+      return;
+    }
+    if (!this.config.enableUsageTracking && !this.config.enableMetrics) {
+      return;
+    }
+    if (this.telemetry) {
+      void this.telemetry.close();
+      this.telemetry = null;
+    }
+    this.telemetry = new TelemetryRuntime({
+      appKey: this.config.appKey,
+      environment: this.config.environment ?? 'Production',
+      metricsBaseUrl: this.config.metricsBaseUrl,
+      enableUsageTracking: this.config.enableUsageTracking,
+      enableMetrics: this.config.enableMetrics,
+      usageFlushInterval: this.config.usageFlushInterval,
+      metricsFlushInterval: this.config.metricsFlushInterval,
+      instanceName: this.config.instanceName,
+      appVersion: this.config.appVersion,
+      transport: this.config.telemetryTransport ?? 'grpc',
+      attachProcessHandlers: this.config.telemetryAttachProcessHandlers,
+      usageClient: this.config.usageClient,
+      metricsClient: this.config.metricsClient,
+      fetchImpl: this.config.telemetryFetch,
+    });
+    this.telemetry.start();
+  }
+
+  private recordCheckForKey(
+    featureKey: string,
+    enabled: boolean,
+    identityOverride?: IdentityContext,
+  ): void {
+    if (!this.telemetry?.usageEnabled) {
+      return;
+    }
+    const identity = identityOverride?.identity ?? this.identity;
+    this.telemetry.recordCheck(featureKey, enabled, identity);
   }
 
   /**
@@ -289,15 +402,23 @@ export class TogglyServerClient {
       return !negate;
     }
 
+    // Record once per key (Next/Node parity), then combine.
+    const checks = featureKeys.map((key) => {
+      const enabled = this.getEffectiveFlag(
+        key,
+        defaultValue,
+        entityContext,
+        identityOverride,
+      );
+      this.recordCheckForKey(key, enabled, identityOverride);
+      return enabled;
+    });
+
     let result: boolean;
     if (requirement === 'any') {
-      result = featureKeys.some((key) =>
-        this.getEffectiveFlag(key, defaultValue, entityContext, identityOverride),
-      );
+      result = checks.some(Boolean);
     } else {
-      result = featureKeys.every((key) =>
-        this.getEffectiveFlag(key, defaultValue, entityContext, identityOverride),
-      );
+      result = checks.every(Boolean);
     }
 
     return negate ? !result : result;
@@ -445,6 +566,7 @@ export class TogglyServerClient {
     const hookData = await this.executeBeforeEvaluation(featureKey, defaultValue);
 
     const result = this.getEffectiveFlag(featureKey, defaultValue, entityContext, context);
+    this.recordCheckForKey(featureKey, result, context);
 
     // Execute afterEvaluation hooks
     await this.executeAfterEvaluation(featureKey, hookData, result);
@@ -640,7 +762,49 @@ export class TogglyServerClient {
       clearInterval(this.refreshTimer);
       this.refreshTimer = null;
     }
+    if (this.telemetry) {
+      void this.telemetry.close();
+      this.telemetry = null;
+    }
     this.logger.debug('TogglyServerClient closed');
+  }
+
+  /** Record a feature "used" interaction (usage telemetry). */
+  recordUsage(featureKey: string, identity?: string, variant?: string): void {
+    this.telemetry?.recordUsage(featureKey, identity ?? this.identity, variant);
+  }
+
+  /** Record a feature "viewed" event (usage telemetry). */
+  recordView(featureKey: string, identity?: string, variant?: string): void {
+    this.telemetry?.recordView(featureKey, identity ?? this.identity, variant);
+  }
+
+  measure(
+    metricKey: string,
+    value: number,
+    options?: MetricsFeatureOptions,
+  ): void {
+    this.telemetry?.measure(metricKey, value, options);
+  }
+
+  incrementCounter(
+    metricKey: string,
+    value = 1,
+    options?: MetricsFeatureOptions,
+  ): void {
+    this.telemetry?.incrementCounter(metricKey, value, options);
+  }
+
+  observe(
+    metricKey: string,
+    value: number,
+    options?: MetricsFeatureOptions,
+  ): void {
+    this.telemetry?.observe(metricKey, value, options);
+  }
+
+  async flushTelemetry(): Promise<void> {
+    await this.telemetry?.flushAll();
   }
 
   // Hook execution methods

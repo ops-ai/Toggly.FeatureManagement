@@ -60,7 +60,7 @@ async function createClient() {
     headers: { get: () => null },
   });
 
-  const client = new TogglyServerClient({ appKey: 'test-app-key', environment: 'test' });
+  const client = new TogglyServerClient({ appKey: 'test-app-key', environment: 'test', enableUsageTracking: false, enableMetrics: false });
   await client.init();
   return client;
 }

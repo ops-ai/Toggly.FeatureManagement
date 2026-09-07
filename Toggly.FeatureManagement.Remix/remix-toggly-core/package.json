@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/remix-toggly-core",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Core types and utilities for Toggly Remix SDK - shared between server and client packages",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -11,10 +11,18 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
+    },
+    "./telemetry/grpc": {
+      "types": "./dist/telemetry/grpc.d.ts",
+      "import": "./dist/esm/telemetry/grpc.js",
+      "require": "./dist/cjs/telemetry/grpc.js"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "proto",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "rollup -c",
@@ -49,11 +57,18 @@
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1"
   },
+  "optionalDependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@grpc/proto-loader": "^0.7.13"
+  },
   "devDependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@grpc/proto-loader": "^0.7.13",
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
     "@rollup/plugin-typescript": "^11.0.0",
     "@types/jest": "^29.0.0",
+    "@types/node": "^22.13.1",
     "jest": "^29.0.0",
     "rollup": "^4.59.0",
     "rollup-plugin-dts": "^6.0.0",

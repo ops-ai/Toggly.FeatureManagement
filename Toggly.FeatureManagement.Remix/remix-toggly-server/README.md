@@ -8,10 +8,37 @@ Server-side utilities for Toggly Remix SDK - loaders, actions, and server utilit
 npm install @ops-ai/remix-toggly-server
 ```
 
+For gRPC usage/metrics transport (recommended on Node), also install the optional peers:
+
+```bash
+npm install @grpc/grpc-js @grpc/proto-loader
+```
+
 ## Documentation
 
 - [docs.toggly.io](https://docs.toggly.io)
 - SDK catalog: [root README](../../README.md)
+
+## Usage + business metrics
+
+When `appKey` is set, the server client enables usage and metrics telemetry by
+default (gRPC when optional deps are installed). Disable with
+`enableUsageTracking: false` / `enableMetrics: false`, or set
+`TOGGLY_DISABLE_TELEMETRY=1` (authoritative).
+
+```ts
+const client = createServerClient({ appKey: '…', environment: 'Production' })
+await client.init()
+await client.isEnabled('NewCheckout') // auto recordCheck when usage enabled
+client.recordUsage('NewCheckout')
+client.measure('checkout_revenue', 42, { feature: 'NewCheckout' })
+await client.flushTelemetry()
+```
+
+Edge / serverless adapters without gRPC can set
+`telemetryTransport: 'https'` and `telemetryAttachProcessHandlers: false`.
+
+Browser `@ops-ai/remix-toggly-client` does not send this telemetry.
 
 ## Entity context
 

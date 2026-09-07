@@ -1,3 +1,16 @@
+## 1.9.0
+
+2026-09-06
+
+### Added
+- Usage + business metrics gRPC telemetry (optional `@grpc/grpc-js` /
+  `@grpc/proto-loader`) with HTTPS transport for edge adapters [OPS-923].
+- Auto `recordCheck` on `isEnabled` / `evaluateGate` when usage tracking is on.
+- Public APIs: `recordUsage`, `recordView`, `measure`, `incrementCounter`,
+  `observe`, `flushTelemetry`.
+- Defaults on when `appKey` is set; `TOGGLY_DISABLE_TELEMETRY=1` wins over
+  explicit `enableUsageTracking` / `enableMetrics` true.
+
 ## 1.8.1
 
 2026-09-04
