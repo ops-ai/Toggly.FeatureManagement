@@ -70,7 +70,7 @@ futures-util = { workspace = true }
 url = "2.5"
 
 [build-dependencies]
-tonic-build = { version = "0.12", optional = true }
+tonic-build = { version = "0.14", optional = true }
 # Bundled protoc so CI / crates.io consumers do not need a system install.
 protoc-bin-vendored = { version = "3", optional = true }
 
