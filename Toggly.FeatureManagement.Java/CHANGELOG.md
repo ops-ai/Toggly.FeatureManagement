@@ -17,6 +17,8 @@
   feature filters round-trip correctly from the durable cache.
 - Redis feature map parsing only walks top-level keys so nested `"parameters": {}`
   objects are not treated as phantom features.
+- WebSocket `flags-updated` / forced refresh no longer shares scheduled-poll
+  skip suppression; notifies always HTTP-refresh so a new revision counts as a miss.
 
 ### Changed
 - Package version and `SdkIdentity.SDK_VERSION` aligned to `1.5.0`

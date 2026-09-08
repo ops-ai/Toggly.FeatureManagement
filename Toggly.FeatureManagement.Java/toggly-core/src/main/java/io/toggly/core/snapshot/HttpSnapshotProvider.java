@@ -277,6 +277,11 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         }
     }
 
+    /**
+     * Scheduled timer path: when the WebSocket is live, skip HTTP polls inside the
+     * fallback window (count as a cache hit). Does <strong>not</strong> apply to
+     * WebSocket-triggered notifies — those must force a refresh.
+     */
     private void refreshSilently() {
         try {
             if (wsConnected) {
@@ -293,6 +298,20 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             refresh();
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Background refresh failed", e);
+        }
+    }
+
+    /**
+     * WebSocket notify path ({@code flags-updated} / {@code update} /
+     * {@code signing-key-updated}): always attempt HTTP refresh so a new revision
+     * can be applied and counted as a miss. Poll-skip suppression must not apply.
+     */
+    private void refreshFromWebSocketNotify() {
+        try {
+            lastFallbackRefresh = System.currentTimeMillis();
+            refresh();
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "WebSocket-triggered refresh failed", e);
         }
     }
 
@@ -954,13 +973,13 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                 LOGGER.log(Level.INFO, "WebSocket signing-key-updated, clearing JWKS and refreshing");
                 clearJwks();
                 lastEtag.set(null);
-                refreshSilently();
+                refreshFromWebSocketNotify();
                 return;
             }
 
             if ("flags-updated".equalsIgnoreCase(type) || "update".equalsIgnoreCase(type)) {
                 LOGGER.log(Level.INFO, "WebSocket received update notification, refreshing definitions");
-                refreshSilently();
+                refreshFromWebSocketNotify();
             }
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error handling WebSocket message", e);

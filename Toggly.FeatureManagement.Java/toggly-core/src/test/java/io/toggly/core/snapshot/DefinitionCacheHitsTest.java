@@ -185,6 +185,48 @@ class DefinitionCacheHitsTest {
     }
 
     @Test
+    void flagsUpdatedForcesHttpRefreshAndRecordsMissOnNewRevision() throws Exception {
+        List<FeatureStatPayload> sent = new ArrayList<>();
+        TelemetryRuntime runtime = runtime(sent);
+        HttpSnapshotProvider provider = provider(runtime);
+
+        statusCode.set(200);
+        etag.set("\"rev-1\"");
+        body.set("[{\"feature_key\":\"feature-a\",\"filters\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}]");
+        provider.refresh();
+        runtime.flushUsage();
+        sent.clear();
+        int requestsAfterSeed = requestCount.get();
+
+        // Live WS within fallback window — scheduled poll would skip, but notify must not.
+        Field wsField = HttpSnapshotProvider.class.getDeclaredField("wsConnected");
+        wsField.setAccessible(true);
+        wsField.setBoolean(provider, true);
+        Field lastFallback = HttpSnapshotProvider.class.getDeclaredField("lastFallbackRefresh");
+        lastFallback.setAccessible(true);
+        lastFallback.setLong(provider, System.currentTimeMillis());
+
+        etag.set("\"rev-2\"");
+        body.set("[{\"feature_key\":\"feature-b\",\"filters\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}]");
+
+        Method handleWs = HttpSnapshotProvider.class.getDeclaredMethod(
+                "handleWebSocketMessage", String.class);
+        handleWs.setAccessible(true);
+        handleWs.invoke(provider, "{\"type\":\"flags-updated\"}");
+
+        assertThat(requestCount.get()).isGreaterThan(requestsAfterSeed);
+        assertThat(provider.getSnapshot().getFeature("feature-b")).isNotNull();
+
+        runtime.flushUsage();
+        assertThat(sent).hasSize(1);
+        assertThat(sent.get(0).getDefinitionCacheMisses()).isEqualTo(1);
+        assertThat(sent.get(0).getDefinitionCacheHits()).isNull();
+
+        provider.close();
+        runtime.close();
+    }
+
+    @Test
     void doesNotCountConcurrentInFlightRefreshSkips() throws Exception {
         firstRequestStarted = new CountDownLatch(1);
         holdFirstRequest = new CountDownLatch(1);
