@@ -397,16 +397,13 @@ func (p *definitionsProvider) verifySnapshotRawDefs(ctx context.Context, rawDefs
 
 func (p *definitionsProvider) refreshUnsigned(ctx context.Context) (refreshCacheOutcome, error) {
 	url := fmt.Sprintf("%sdefinitions/%s/%s", p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return refreshCacheHit, err
-	}
-	SetSDKHeaders(req)
 	p.mu.RLock()
 	etag := p.etag
 	p.mu.RUnlock()
-	if etag != "" {
-		req.Header.Set("If-None-Match", etag)
+
+	req, err := newRefreshGET(ctx, url, etag)
+	if err != nil {
+		return refreshCacheHit, err
 	}
 
 	resp, err := p.hc.Do(req)
@@ -415,35 +412,18 @@ func (p *definitionsProvider) refreshUnsigned(ctx context.Context) (refreshCache
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode == http.StatusNotModified {
-		return refreshCacheHit, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return refreshCacheHit, fmt.Errorf("definitions refresh failed: %s: %s", resp.Status, string(b))
+	newETag, body, outcome, stop, err := evaluateRefreshHTTP(resp, etag, "definitions refresh")
+	if stop {
+		return outcome, err
 	}
 
-	newETag := resp.Header.Get("ETag")
-	// HTTP 200 whose etag matches existing (CDN replay) — cache hit.
-	if etagsMatch(etag, newETag) {
-		return refreshCacheHit, nil
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return refreshCacheHit, err
-	}
-	defs, err := definitions.DecodeUnsignedDefinitions(b)
+	defs, err := definitions.DecodeUnsignedDefinitions(body)
 	if err != nil {
 		return refreshCacheHit, err
 	}
 
 	p.applyDefinitions(defs)
-	if newETag != "" {
-		p.mu.Lock()
-		p.etag = newETag
-		p.mu.Unlock()
-	}
+	p.storeUnsignedETag(newETag)
 
 	if p.snap != nil {
 		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{Defs: defs})
@@ -457,17 +437,14 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) (ref
 		reqURL += "?userId=" + url.QueryEscape(id)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return refreshCacheHit, err
-	}
-	SetSDKHeaders(req)
 	p.mu.RLock()
 	etag := p.variantEtag
 	currentTS := p.variantLastTS
 	p.mu.RUnlock()
-	if etag != "" {
-		req.Header.Set("If-None-Match", etag)
+
+	req, err := newRefreshGET(ctx, reqURL, etag)
+	if err != nil {
+		return refreshCacheHit, err
 	}
 
 	resp, err := p.hc.Do(req)
@@ -476,22 +453,9 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) (ref
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode == http.StatusNotModified {
-		return refreshCacheHit, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return refreshCacheHit, fmt.Errorf("evaluated-variants-signed refresh failed: %s: %s", resp.Status, string(b))
-	}
-
-	newETag := resp.Header.Get("ETag")
-	if etagsMatch(etag, newETag) {
-		return refreshCacheHit, nil
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return refreshCacheHit, err
+	newETag, body, outcome, stop, err := evaluateRefreshHTTP(resp, etag, "evaluated-variants-signed refresh")
+	if stop {
+		return outcome, err
 	}
 
 	env, err := definitions.DecodeSignedDefinitions(body)
@@ -499,8 +463,7 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) (ref
 		return refreshCacheHit, err
 	}
 
-	// Same or older revision (CDN replay / no new revision) is a hit.
-	if currentTS > 0 && env.Timestamp <= currentTS {
+	if isCachedRevision(currentTS, env.Timestamp) {
 		return refreshCacheHit, nil
 	}
 
@@ -530,16 +493,7 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) (ref
 	}
 	p.mu.RUnlock()
 
-	if newETag != "" {
-		p.mu.Lock()
-		p.variantEtag = newETag
-		p.variantLastTS = env.Timestamp
-		p.mu.Unlock()
-	} else {
-		p.mu.Lock()
-		p.variantLastTS = env.Timestamp
-		p.mu.Unlock()
-	}
+	p.storeVariantRevisionMeta(newETag, env.Timestamp)
 
 	if p.snap != nil {
 		p.mu.RLock()
@@ -564,17 +518,14 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) (ref
 
 func (p *definitionsProvider) refreshSigned(ctx context.Context) (refreshCacheOutcome, error) {
 	url := fmt.Sprintf("%sdefinitions-signed/%s/%s", p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return refreshCacheHit, err
-	}
-	SetSDKHeaders(req)
 	p.mu.RLock()
 	etag := p.etag
 	currentTS := p.lastTS
 	p.mu.RUnlock()
-	if etag != "" {
-		req.Header.Set("If-None-Match", etag)
+
+	req, err := newRefreshGET(ctx, url, etag)
+	if err != nil {
+		return refreshCacheHit, err
 	}
 
 	resp, err := p.hc.Do(req)
@@ -583,29 +534,16 @@ func (p *definitionsProvider) refreshSigned(ctx context.Context) (refreshCacheOu
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode == http.StatusNotModified {
-		return refreshCacheHit, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return refreshCacheHit, fmt.Errorf("signed definitions refresh failed: %s: %s", resp.Status, string(b))
+	newETag, body, outcome, stop, err := evaluateRefreshHTTP(resp, etag, "signed definitions refresh")
+	if stop {
+		return outcome, err
 	}
 
-	newETag := resp.Header.Get("ETag")
-	if etagsMatch(etag, newETag) {
-		return refreshCacheHit, nil
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return refreshCacheHit, err
-	}
 	env, err := definitions.DecodeSignedDefinitions(body)
 	if err != nil {
 		return refreshCacheHit, err
 	}
-	// Same or older revision (CDN replay / no new revision) is a hit.
-	if currentTS > 0 && env.Timestamp <= currentTS {
+	if isCachedRevision(currentTS, env.Timestamp) {
 		return refreshCacheHit, nil
 	}
 
@@ -622,17 +560,7 @@ func (p *definitionsProvider) refreshSigned(ctx context.Context) (refreshCacheOu
 		return refreshCacheHit, err
 	}
 	p.applyDefinitions(defs)
-
-	if newETag != "" {
-		p.mu.Lock()
-		p.etag = newETag
-		p.lastTS = env.Timestamp
-		p.mu.Unlock()
-	} else {
-		p.mu.Lock()
-		p.lastTS = env.Timestamp
-		p.mu.Unlock()
-	}
+	p.storeSignedRevisionMeta(newETag, env.Timestamp)
 
 	if p.snap != nil {
 		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{
@@ -645,6 +573,72 @@ func (p *definitionsProvider) refreshSigned(ctx context.Context) (refreshCacheOu
 		})
 	}
 	return refreshCacheMiss, nil
+}
+
+func newRefreshGET(ctx context.Context, reqURL, etag string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	SetSDKHeaders(req)
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
+	return req, nil
+}
+
+// evaluateRefreshHTTP shares 304 / non-OK / matching-etag / body-read handling
+// across unsigned, signed, and evaluated-variants refresh paths. When stop is
+// true, callers must return (outcome, err) immediately.
+func evaluateRefreshHTTP(resp *http.Response, existingETag, failLabel string) (newETag string, body []byte, outcome refreshCacheOutcome, stop bool, err error) {
+	if resp.StatusCode == http.StatusNotModified {
+		return "", nil, refreshCacheHit, true, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return "", nil, refreshCacheHit, true, fmt.Errorf("%s failed: %s: %s", failLabel, resp.Status, string(b))
+	}
+	newETag = resp.Header.Get("ETag")
+	// HTTP 200 whose etag matches existing (CDN replay) — cache hit.
+	if etagsMatch(existingETag, newETag) {
+		return newETag, nil, refreshCacheHit, true, nil
+	}
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return newETag, nil, refreshCacheHit, true, err
+	}
+	return newETag, body, 0, false, nil
+}
+
+func isCachedRevision(currentTS, incomingTS int64) bool {
+	return currentTS > 0 && incomingTS <= currentTS
+}
+
+func (p *definitionsProvider) storeUnsignedETag(newETag string) {
+	if newETag == "" {
+		return
+	}
+	p.mu.Lock()
+	p.etag = newETag
+	p.mu.Unlock()
+}
+
+func (p *definitionsProvider) storeSignedRevisionMeta(newETag string, ts int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if newETag != "" {
+		p.etag = newETag
+	}
+	p.lastTS = ts
+}
+
+func (p *definitionsProvider) storeVariantRevisionMeta(newETag string, ts int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if newETag != "" {
+		p.variantEtag = newETag
+	}
+	p.variantLastTS = ts
 }
 
 func etagsMatch(left, right string) bool {

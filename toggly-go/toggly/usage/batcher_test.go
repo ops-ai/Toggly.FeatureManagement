@@ -164,3 +164,13 @@ func TestBatcher_RestoreMergesInFlightRecords(t *testing.T) {
 		t.Fatalf("unique users = %d, want 2", msg.TotalUniqueUsers)
 	}
 }
+
+func TestBatcher_RestoreNilIsNoop(t *testing.T) {
+	b := NewBatcher("app", "Production", "", "")
+	b.RecordDefinitionCacheHit()
+	b.restore(nil)
+	msg := b.buildAndReset()
+	if msg.GetDefinitionCacheHits() != 1 {
+		t.Fatalf("hits = %d after nil restore", msg.GetDefinitionCacheHits())
+	}
+}

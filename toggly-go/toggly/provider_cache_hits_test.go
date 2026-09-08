@@ -2,8 +2,18 @@ package toggly
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -357,4 +367,521 @@ func TestProvider_EvaluatedVariantsEqualTimestamp_IsHit(t *testing.T) {
 	if hits != 1 || misses != 0 {
 		t.Fatalf("equal variant TS: hits=%d misses=%d, want hit", hits, misses)
 	}
+}
+
+func TestProvider_Signed_304IsHit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := signedProvider(t, srv, rec)
+	p.mu.Lock()
+	p.etag = `"1"`
+	p.mu.Unlock()
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("signed 304: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Signed_MatchingETagIsHit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `W/"abc"`)
+		_, _ = w.Write([]byte(`{"defs":[],"signature":"x","timestamp":99,"kid":"k"}`))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := signedProvider(t, srv, rec)
+	p.mu.Lock()
+	p.etag = `"abc"`
+	p.mu.Unlock()
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("signed etag match: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Signed_HTTPErrorIsHit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := signedProvider(t, srv, rec)
+	err := p.refresh(context.Background(), 2*time.Second, false)
+	if err == nil {
+		t.Fatal("expected HTTP error")
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("signed HTTP error: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Signed_DecodeErrorIsHit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"new"`)
+		_, _ = w.Write([]byte(`not-json`))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := signedProvider(t, srv, rec)
+	err := p.refresh(context.Background(), 2*time.Second, false)
+	if err == nil {
+		t.Fatal("expected decode error")
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("signed decode error: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Signed_JWKSFetchErrorIsHit(t *testing.T) {
+	const ts int64 = 1_700_000_100
+	body := `{"defs":[{"featureKey":"f1","filters":[{"name":"AlwaysOn","parameters":{}}],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}],"signature":"dGVzdA==","timestamp":1700000100,"kid":"k1"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "jwks") {
+			http.Error(w, "nope", http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("ETag", `"new"`)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := signedProvider(t, srv, rec)
+	p.mu.Lock()
+	p.lastTS = ts - 10
+	p.mu.Unlock()
+
+	err := p.refresh(context.Background(), 2*time.Second, false)
+	if err == nil {
+		t.Fatal("expected JWKS error")
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("signed JWKS error: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Signed_VerifyErrorIsHit(t *testing.T) {
+	const ts int64 = 1_700_000_100
+	body := `{"defs":[{"featureKey":"f1","filters":[{"name":"AlwaysOn","parameters":{}}],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}],"signature":"AAAA","timestamp":1700000100,"kid":"missing"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"new"`)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := signedProvider(t, srv, rec)
+	seedEmptyJWKS(p)
+	p.mu.Lock()
+	p.lastTS = ts - 10
+	p.mu.Unlock()
+
+	err := p.refresh(context.Background(), 2*time.Second, false)
+	if err == nil {
+		t.Fatal("expected verify error")
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("signed verify error: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Signed_NewRevisionIsMiss(t *testing.T) {
+	priv, jwk, kid := mustTestKey(t)
+	rawDefs := []byte(`[{"featureKey":"f1","filters":[{"name":"AlwaysOn","parameters":{}}],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}]`)
+	const ts int64 = 1_700_000_200
+	sig := mustSignDefs(t, priv, rawDefs, ts)
+	env, err := json.Marshal(map[string]any{
+		"defs":      json.RawMessage(rawDefs),
+		"signature": sig,
+		"timestamp": ts,
+		"kid":       kid,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// No ETag → covers storeSignedRevisionMeta else-path for empty etag.
+		_, _ = w.Write(env)
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	snap := &memorySnap{}
+	p := signedProvider(t, srv, rec)
+	p.snap = snap
+	seedJWKS(p, &definitions.JWKSet{Keys: []definitions.JWK{jwk}})
+	p.mu.Lock()
+	p.lastTS = ts - 50
+	p.mu.Unlock()
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	hits, misses := rec.snapshot()
+	if hits != 0 || misses != 1 {
+		t.Fatalf("signed miss: hits=%d misses=%d", hits, misses)
+	}
+	if _, ok := p.get("f1"); !ok {
+		t.Fatal("expected f1 applied")
+	}
+	if snap.defs.Timestamp != ts {
+		t.Fatalf("snapshot ts = %d, want %d", snap.defs.Timestamp, ts)
+	}
+}
+
+func TestProvider_Signed_NewRevisionWithETagIsMiss(t *testing.T) {
+	priv, jwk, kid := mustTestKey(t)
+	rawDefs := []byte(`[{"featureKey":"f2","filters":[{"name":"AlwaysOn","parameters":{}}],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}]`)
+	const ts int64 = 1_700_000_250
+	sig := mustSignDefs(t, priv, rawDefs, ts)
+	env, err := json.Marshal(map[string]any{
+		"defs":      json.RawMessage(rawDefs),
+		"signature": sig,
+		"timestamp": ts,
+		"kid":       kid,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"rev-2"`)
+		_, _ = w.Write(env)
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := signedProvider(t, srv, rec)
+	seedJWKS(p, &definitions.JWKSet{Keys: []definitions.JWK{jwk}})
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	hits, misses := rec.snapshot()
+	if hits != 0 || misses != 1 {
+		t.Fatalf("signed etag miss: hits=%d misses=%d", hits, misses)
+	}
+	p.mu.RLock()
+	gotETag, gotTS := p.etag, p.lastTS
+	p.mu.RUnlock()
+	if gotETag != `"rev-2"` || gotTS != ts {
+		t.Fatalf("meta etag=%q ts=%d", gotETag, gotTS)
+	}
+}
+
+func TestProvider_Unsigned_MissWithoutETag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[{"featureKey":"f1","filters":[{"name":"AlwaysOn","parameters":{}}],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}]`))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := newDefinitionsProvider(Config{
+		AppKey:          "app",
+		Environment:     "env",
+		DefinitionsURL:  srv.URL + "/",
+		HTTPTimeout:     2 * time.Second,
+		RefreshInterval: time.Hour,
+	}, nil)
+	p.hc = srv.Client()
+	p.setDefinitionCacheRecorder(rec)
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	hits, misses := rec.snapshot()
+	if hits != 0 || misses != 1 {
+		t.Fatalf("unsigned no-etag miss: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Unsigned_MatchingETagIsHit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"same"`)
+		_, _ = w.Write([]byte(`[{"featureKey":"f1","filters":[{"name":"AlwaysOn","parameters":{}}],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}]`))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := newDefinitionsProvider(Config{
+		AppKey:          "app",
+		Environment:     "env",
+		DefinitionsURL:  srv.URL + "/",
+		HTTPTimeout:     2 * time.Second,
+		RefreshInterval: time.Hour,
+	}, nil)
+	p.hc = srv.Client()
+	p.setDefinitionCacheRecorder(rec)
+	p.mu.Lock()
+	p.etag = `"same"`
+	p.mu.Unlock()
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("unsigned etag match: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Unsigned_HTTPErrorIsHit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := newDefinitionsProvider(Config{
+		AppKey:          "app",
+		Environment:     "env",
+		DefinitionsURL:  srv.URL + "/",
+		HTTPTimeout:     2 * time.Second,
+		RefreshInterval: time.Hour,
+	}, nil)
+	p.hc = srv.Client()
+	p.setDefinitionCacheRecorder(rec)
+
+	err := p.refresh(context.Background(), 2*time.Second, false)
+	if err == nil {
+		t.Fatal("expected HTTP error")
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("unsigned HTTP error: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Variants_MatchingETagIsHit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"v1"`)
+		_, _ = w.Write([]byte(`{"defs":{"f1":{"enabled":true,"variant":"A","configurationValue":null}},"signature":"","timestamp":99,"kid":""}`))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := variantsProvider(t, srv, rec)
+	p.mu.Lock()
+	p.variantEtag = `"v1"`
+	p.mu.Unlock()
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("variants etag match: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Variants_HTTPErrorIsHit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "fail", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := variantsProvider(t, srv, rec)
+	err := p.refresh(context.Background(), 2*time.Second, false)
+	if err == nil {
+		t.Fatal("expected HTTP error")
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("variants HTTP error: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Variants_NewRevisionIsMiss(t *testing.T) {
+	body := `{"defs":{"f1":{"enabled":true,"variant":"A","configurationValue":null}},"signature":"","timestamp":1700000300,"kid":""}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Empty etag covers storeVariantRevisionMeta without etag.
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	snap := &memorySnap{}
+	p := variantsProvider(t, srv, rec)
+	p.snap = snap
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	hits, misses := rec.snapshot()
+	if hits != 0 || misses != 1 {
+		t.Fatalf("variants miss: hits=%d misses=%d", hits, misses)
+	}
+	if p.getVariant("f1") == nil {
+		t.Fatal("expected variant applied")
+	}
+	if snap.defs.VariantTimestamp != 1_700_000_300 {
+		t.Fatalf("variant snapshot ts = %d", snap.defs.VariantTimestamp)
+	}
+}
+
+func TestProvider_Variants_DecodeErrorIsHit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"x"`)
+		_, _ = w.Write([]byte(`{bad`))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := variantsProvider(t, srv, rec)
+	err := p.refresh(context.Background(), 2*time.Second, false)
+	if err == nil {
+		t.Fatal("expected decode error")
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("variants decode error: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Variants_SignedVerifyErrorIsHit(t *testing.T) {
+	body := `{"defs":{"f1":{"enabled":true,"variant":"A","configurationValue":null}},"signature":"AAAA","timestamp":1700000400,"kid":"missing"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"v2"`)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := newDefinitionsProvider(Config{
+		AppKey:               "app",
+		Environment:          "env",
+		DefinitionsURL:       srv.URL + "/",
+		HTTPTimeout:          2 * time.Second,
+		RefreshInterval:      time.Hour,
+		EnableVariants:       true,
+		UseSignedDefinitions: true,
+	}, nil)
+	p.hc = srv.Client()
+	p.setDefinitionCacheRecorder(rec)
+	seedEmptyJWKS(p)
+
+	err := p.refresh(context.Background(), 2*time.Second, false)
+	if err == nil {
+		t.Fatal("expected verify error")
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("variants signed verify: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestNormalizeETag_WeakTag(t *testing.T) {
+	if !etagsMatch(`W/"1"`, `"1"`) {
+		t.Fatal("weak etag should match strong")
+	}
+	if normalizeETag(` w/"xyz" `) != "xyz" {
+		t.Fatalf("normalize weak = %q", normalizeETag(` w/"xyz" `))
+	}
+}
+
+func signedProvider(t *testing.T, srv *httptest.Server, rec *countingCacheRecorder) *definitionsProvider {
+	t.Helper()
+	p := newDefinitionsProvider(Config{
+		AppKey:               "app",
+		Environment:          "env",
+		DefinitionsURL:       srv.URL + "/",
+		HTTPTimeout:          2 * time.Second,
+		RefreshInterval:      time.Hour,
+		UseSignedDefinitions: true,
+	}, nil)
+	p.hc = srv.Client()
+	p.setDefinitionCacheRecorder(rec)
+	return p
+}
+
+func variantsProvider(t *testing.T, srv *httptest.Server, rec *countingCacheRecorder) *definitionsProvider {
+	t.Helper()
+	p := newDefinitionsProvider(Config{
+		AppKey:          "app",
+		Environment:     "env",
+		DefinitionsURL:  srv.URL + "/",
+		HTTPTimeout:     2 * time.Second,
+		RefreshInterval: time.Hour,
+		EnableVariants:  true,
+	}, nil)
+	p.hc = srv.Client()
+	p.setDefinitionCacheRecorder(rec)
+	return p
+}
+
+func seedEmptyJWKS(p *definitionsProvider) {
+	seedJWKS(p, &definitions.JWKSet{Keys: nil})
+}
+
+func seedJWKS(p *definitionsProvider, set *definitions.JWKSet) {
+	p.jwksMu.Lock()
+	p.jwks = set
+	p.jwksExpiry = time.Now().Add(time.Hour)
+	p.jwksMu.Unlock()
+}
+
+func mustTestKey(t *testing.T) (*ecdsa.PrivateKey, definitions.JWK, string) {
+	t.Helper()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	xBytes := pad32Cache(priv.X.Bytes())
+	yBytes := pad32Cache(priv.Y.Bytes())
+	kid := computeKidCache(xBytes, yBytes)
+	jwk := definitions.JWK{
+		Kty: "EC", Use: "sig", Alg: "ES256", Crv: "P-256",
+		X: base64.RawURLEncoding.EncodeToString(xBytes),
+		Y: base64.RawURLEncoding.EncodeToString(yBytes),
+		Kid: kid,
+	}
+	return priv, jwk, kid
+}
+
+func mustSignDefs(t *testing.T, priv *ecdsa.PrivateKey, defs []byte, ts int64) string {
+	t.Helper()
+	payload := string(defs) + "|" + strconv.FormatInt(ts, 10)
+	first := sha256.Sum256([]byte(payload))
+	second := sha256.Sum256(first[:])
+	r, s, err := ecdsa.Sign(rand.Reader, priv, second[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig := append(pad32Cache(r.Bytes()), pad32Cache(s.Bytes())...)
+	return base64.StdEncoding.EncodeToString(sig)
+}
+
+func pad32Cache(b []byte) []byte {
+	if len(b) >= 32 {
+		return b
+	}
+	out := make([]byte, 32)
+	copy(out[32-len(b):], b)
+	return out
+}
+
+func computeKidCache(xBytes, yBytes []byte) string {
+	h := sha1.Sum(append(append([]byte{}, xBytes...), yBytes...))
+	return strings.ToUpper(hex.EncodeToString(h[:])) + "ES256"
 }
