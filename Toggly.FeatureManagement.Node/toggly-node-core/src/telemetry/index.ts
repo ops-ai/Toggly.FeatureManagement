@@ -240,6 +240,14 @@ export class TelemetryRuntime {
     this.usageBatcher?.recordView(feature, identity, variant)
   }
 
+  recordDefinitionCacheHit(): void {
+    this.usageBatcher?.recordDefinitionCacheHit()
+  }
+
+  recordDefinitionCacheMiss(): void {
+    this.usageBatcher?.recordDefinitionCacheMiss()
+  }
+
   measure(metric: string, value: number, options?: MetricsFeatureOptions): void {
     this.metricsBatcher?.measure(metric, value, options)
   }

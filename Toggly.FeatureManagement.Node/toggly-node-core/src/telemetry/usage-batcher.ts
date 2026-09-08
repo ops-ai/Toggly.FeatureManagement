@@ -43,6 +43,10 @@ export interface FeatureStatPayload {
   instanceName?: string
   appVersion?: string
   processStartTime?: { seconds: number; nanos: number }
+  /** Definition-refresh cache hits since last successful flush (optional proto field). */
+  definitionCacheHits?: number
+  /** Definition-refresh cache misses since last successful flush (optional proto field). */
+  definitionCacheMisses?: number
 }
 
 function emptyVariant(): VariantStatsAgg {
@@ -73,6 +77,8 @@ export class UsageBatcher {
   private readonly processStartTime: Date
   private perFeature = new Map<string, FeatureUsageAgg>()
   private appUnique = new Set<number>()
+  private definitionCacheHits = 0
+  private definitionCacheMisses = 0
 
   constructor(options: UsageBatcherOptions) {
     this.appKey = options.appKey
@@ -80,6 +86,16 @@ export class UsageBatcher {
     this.instanceName = options.instanceName
     this.appVersion = options.appVersion
     this.processStartTime = options.processStartTime ?? new Date()
+  }
+
+  /** Count a definition-refresh outcome served from local/cache (not a new revision). */
+  recordDefinitionCacheHit(): void {
+    this.definitionCacheHits += 1
+  }
+
+  /** Count a definition-refresh that applied a new revision from the network. */
+  recordDefinitionCacheMiss(): void {
+    this.definitionCacheMisses += 1
   }
 
   private get(feature: string): FeatureUsageAgg {
@@ -163,7 +179,12 @@ export class UsageBatcher {
   }
 
   isEmpty(): boolean {
-    return this.perFeature.size === 0 && this.appUnique.size === 0
+    return (
+      this.perFeature.size === 0 &&
+      this.appUnique.size === 0 &&
+      this.definitionCacheHits === 0 &&
+      this.definitionCacheMisses === 0
+    )
   }
 
   buildAndReset(): FeatureStatPayload | null {
@@ -186,6 +207,12 @@ export class UsageBatcher {
     }
     if (this.appVersion) {
       payload.appVersion = this.appVersion
+    }
+    if (this.definitionCacheHits > 0) {
+      payload.definitionCacheHits = this.definitionCacheHits
+    }
+    if (this.definitionCacheMisses > 0) {
+      payload.definitionCacheMisses = this.definitionCacheMisses
     }
 
     for (const [feature, agg] of this.perFeature) {
@@ -214,6 +241,8 @@ export class UsageBatcher {
 
     this.perFeature = new Map()
     this.appUnique = new Set()
+    this.definitionCacheHits = 0
+    this.definitionCacheMisses = 0
     return payload
   }
 }

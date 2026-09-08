@@ -87,4 +87,27 @@ describe('UsageBatcher', () => {
       (utf16Style >>> 0) > 0x7fffffff ? (utf16Style >>> 0) - 0x100000000 : utf16Style >>> 0
     expect(hashIdentity('café')).not.toBe(utf16Signed)
   })
+
+  it('includes definition cache hits/misses on flush and resets them', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+
+    batcher.recordDefinitionCacheHit()
+    batcher.recordDefinitionCacheHit()
+    batcher.recordDefinitionCacheMiss()
+
+    const payload = batcher.buildAndReset()
+    expect(payload).not.toBeNull()
+    expect(payload!.definitionCacheHits).toBe(2)
+    expect(payload!.definitionCacheMisses).toBe(1)
+    expect(payload!.stats).toEqual([])
+
+    expect(batcher.buildAndReset()).toBeNull()
+  })
+
+  it('does not omit cache-only batches when feature stats are empty', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.recordDefinitionCacheHit()
+    expect(batcher.isEmpty()).toBe(false)
+    expect(batcher.buildAndReset()?.definitionCacheHits).toBe(1)
+  })
 })

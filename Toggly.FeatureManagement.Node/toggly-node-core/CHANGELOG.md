@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0
+
+2026-09-07
+
+### Added
+- Report `definitionCacheHits` / `definitionCacheMisses` on usage `SendStats`
+  for definition-refresh outcomes (304, skipped poll, snapshot, network keep-
+  last-good → hit; new revision HTTP/WS apply → miss) [OPS-985].
+
 ## 0.8.3
 
 2026-09-05
