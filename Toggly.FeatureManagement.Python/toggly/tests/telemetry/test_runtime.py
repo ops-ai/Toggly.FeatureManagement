@@ -166,3 +166,153 @@ class TestTelemetryRuntime:
         runtime.flush_metrics()
         assert len(metrics.calls) == 1
         runtime.close()
+
+    def test_restores_full_usage_batch_when_send_stats_fails_then_succeeds(self) -> None:
+        class FlakyUsageClient:
+            def __init__(self) -> None:
+                self.calls: List[Dict[str, Any]] = []
+                self._fail_once = True
+
+            def send_stats(
+                self,
+                request: Dict[str, Any],
+                metadata: Optional[Dict[str, str]] = None,
+            ) -> Dict[str, Any]:
+                self.calls.append(request)
+                if self._fail_once:
+                    self._fail_once = False
+                    raise RuntimeError("transient send failure")
+                return {"featureCount": 1}
+
+            def close(self) -> None:
+                pass
+
+        usage = FlakyUsageClient()
+        runtime = TelemetryRuntime(
+            app_key="app",
+            environment="Production",
+            enable_usage_tracking=True,
+            enable_metrics=False,
+            usage_flush_interval=0,
+            metrics_flush_interval=0,
+            usage_client=usage,
+            metrics_client=None,
+            usage_client_provided=True,
+            metrics_client_provided=True,
+        )
+        runtime.start()
+        runtime.record_check("FeatureA", True, "user-1")
+        runtime.record_definition_cache_hit()
+        runtime.record_definition_cache_miss()
+
+        runtime.flush_usage()
+        assert len(usage.calls) == 1
+
+        runtime.flush_usage()
+        assert len(usage.calls) == 2
+        payload = usage.calls[1]
+        assert payload["definitionCacheHits"] == 1
+        assert payload["definitionCacheMisses"] == 1
+        assert payload["stats"][0]["feature"] == "FeatureA"
+        assert payload["stats"][0]["variantStats"]["enabled"]["checkCount"] == 1
+        runtime.close()
+
+    def test_merges_in_flight_records_when_restoring_failed_usage_flush(self) -> None:
+        class GateUsageClient:
+            def __init__(self) -> None:
+                self.calls: List[Dict[str, Any]] = []
+                self._first = True
+                self.on_first: Any = None
+
+            def send_stats(
+                self,
+                request: Dict[str, Any],
+                metadata: Optional[Dict[str, str]] = None,
+            ) -> Dict[str, Any]:
+                self.calls.append(request)
+                if self._first:
+                    self._first = False
+                    if self.on_first is not None:
+                        self.on_first()
+                    raise RuntimeError("send failed")
+                return {"featureCount": 1}
+
+            def close(self) -> None:
+                pass
+
+        usage = GateUsageClient()
+        runtime = TelemetryRuntime(
+            app_key="app",
+            environment="Production",
+            enable_usage_tracking=True,
+            enable_metrics=False,
+            usage_flush_interval=0,
+            metrics_flush_interval=0,
+            usage_client=usage,
+            metrics_client=None,
+            usage_client_provided=True,
+            metrics_client_provided=True,
+        )
+        runtime.start()
+        runtime.record_check("FeatureA", True, "user-1")
+        runtime.record_definition_cache_hit()
+
+        def during_send() -> None:
+            runtime.record_check("FeatureB", False, "user-2")
+            runtime.record_definition_cache_hit()
+
+        usage.on_first = during_send
+        runtime.flush_usage()
+        runtime.flush_usage()
+
+        assert len(usage.calls) == 2
+        payload = usage.calls[1]
+        assert payload["definitionCacheHits"] == 2
+        by_feature = {
+            s["feature"]: s["variantStats"] for s in payload["stats"]
+        }
+        assert by_feature["FeatureA"]["enabled"]["checkCount"] == 1
+        assert by_feature["FeatureB"]["disabled"]["checkCount"] == 1
+        runtime.close()
+
+    def test_close_during_failed_send_does_not_throw(self) -> None:
+        held: Dict[str, Any] = {}
+
+        class ClearOnSendClient:
+            def send_stats(
+                self,
+                request: Dict[str, Any],
+                metadata: Optional[Dict[str, str]] = None,
+            ) -> Dict[str, Any]:
+                held["batcher"] = runtime._usage_batcher
+                runtime._usage_batcher = None
+                raise RuntimeError("send failed after close")
+
+            def close(self) -> None:
+                pass
+
+        usage = ClearOnSendClient()
+        runtime = TelemetryRuntime(
+            app_key="app",
+            environment="Production",
+            enable_usage_tracking=True,
+            enable_metrics=False,
+            usage_flush_interval=0,
+            metrics_flush_interval=0,
+            usage_client=usage,
+            metrics_client=None,
+            usage_client_provided=True,
+            metrics_client_provided=True,
+        )
+        runtime.start()
+        runtime.record_check("FeatureA", True, "user-1")
+        runtime.record_definition_cache_hit()
+
+        runtime.flush_usage()  # must not raise
+
+        batcher = held["batcher"]
+        restored = batcher.build_and_reset()
+        assert restored is not None
+        assert restored["definitionCacheHits"] == 1
+        assert restored["stats"][0]["variantStats"]["enabled"]["checkCount"] == 1
+        runtime.close()

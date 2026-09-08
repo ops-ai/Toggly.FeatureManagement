@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0
+
+2026-09-07
+
+### Added
+- Report `definitionCacheHits` / `definitionCacheMisses` on usage `SendStats`
+  for definition-refresh outcomes (304, skipped poll, durable snapshot, network
+  keep-last-good → hit; new revision applied → miss), matching Node/.NET.
+- In-flight refresh guard so concurrent skips are not counted.
+- On `SendStats` failure, restore the full usage batch (feature stats, unique
+  hashes, and cache counters), merging with any in-flight records.
+
 ## 0.5.0
 
 2026-09-06

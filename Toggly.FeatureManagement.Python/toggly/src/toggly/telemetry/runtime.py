@@ -270,6 +270,20 @@ class TelemetryRuntime:
         if batcher is not None:
             batcher.record_view(feature, identity, variant)
 
+    def record_definition_cache_hit(self) -> None:
+        """Record a definition-refresh cache hit into the usage batcher."""
+        with self._lock:
+            batcher = self._usage_batcher
+        if batcher is not None:
+            batcher.record_definition_cache_hit()
+
+    def record_definition_cache_miss(self) -> None:
+        """Record a definition-refresh cache miss into the usage batcher."""
+        with self._lock:
+            batcher = self._usage_batcher
+        if batcher is not None:
+            batcher.record_definition_cache_miss()
+
     def measure(
         self,
         metric: str,
@@ -352,15 +366,25 @@ class TelemetryRuntime:
             if client is None or not hasattr(client, "send_stats"):
                 logger.debug("Usage flush skipped: no gRPC client")
                 return
-            payload = self._usage_batcher.build_and_reset()
-            if payload is None:
+            # Hold a local reference: close() may null `_usage_batcher` during send.
+            batcher = self._usage_batcher
+            drained = batcher.export_and_reset()
+            if drained is None:
                 return
+            payload, snapshot = drained
             self._sending_usage = True
 
         try:
             client.send_stats(payload)
         except Exception as exc:
             logger.error("Failed to send usage stats: %s", exc)
+            try:
+                batcher.restore(snapshot)
+            except Exception as restore_exc:
+                logger.error(
+                    "Failed to restore usage batch after send failure: %s",
+                    restore_exc,
+                )
         finally:
             with self._lock:
                 self._sending_usage = False
