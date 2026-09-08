@@ -852,8 +852,8 @@ func mustTestKey(t *testing.T) (*ecdsa.PrivateKey, definitions.JWK, string) {
 	kid := computeKidCache(xBytes, yBytes)
 	jwk := definitions.JWK{
 		Kty: "EC", Use: "sig", Alg: "ES256", Crv: "P-256",
-		X: base64.RawURLEncoding.EncodeToString(xBytes),
-		Y: base64.RawURLEncoding.EncodeToString(yBytes),
+		X:   base64.RawURLEncoding.EncodeToString(xBytes),
+		Y:   base64.RawURLEncoding.EncodeToString(yBytes),
 		Kid: kid,
 	}
 	return priv, jwk, kid
