@@ -347,12 +347,9 @@ impl DefinitionsProvider {
                     _ => false,
                 };
 
-                if let Some(incoming) = msg.get("etag").and_then(|v| v.as_str()) {
-                    if !force_jwks {
-                        *etag.write() = Some(incoming.to_string());
-                    }
-                }
-
+                // Keep the loaded ETag until refresh successfully applies a new
+                // revision. Preloading the WS-announced ETag into If-None-Match
+                // can yield 304 / SameRevision and count a hit without applying.
                 if should_refresh {
                     debug!(msg_type, force_jwks, "WebSocket: refreshing definitions");
                     // WS-forced refresh must not be suppressed by scheduled poll skip.
@@ -601,6 +598,29 @@ impl DefinitionsProvider {
     #[cfg(test)]
     pub fn set_last_timestamp_for_test(&self, ts: i64) {
         *self.last_timestamp.write() = Some(ts);
+    }
+
+    /// Test helper: drive the WebSocket message path (JSON or plain text).
+    #[cfg(test)]
+    pub async fn handle_ws_message_for_test(&self, text: &str) {
+        Self::handle_ws_message(
+            text,
+            &self.http_client,
+            &self.config,
+            &self.definitions,
+            &self.last_fetch,
+            &self.etag,
+            &self.last_modified,
+            &self.last_timestamp,
+            &self.last_error,
+            &self.last_error_time,
+            &self.jwks,
+            &self.refresh_in_flight,
+            &self.pending_ws_refresh,
+            &self.definitions_loaded,
+            &self.cache_recorder,
+        )
+        .await;
     }
 
     fn record_error(
@@ -1001,7 +1021,7 @@ mod tests {
     use async_trait::async_trait;
     use parking_lot::Mutex as PlMutex;
     use std::sync::Mutex as StdMutex;
-    use wiremock::matchers::{method, path_regex};
+    use wiremock::matchers::{header, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct CountingRecorder {
@@ -1383,6 +1403,61 @@ mod tests {
 
         provider.refresh(true, false).await.unwrap();
         assert_eq!(rec.snapshot(), (1, 1));
+    }
+
+    #[tokio::test]
+    async fn ws_flags_updated_applies_new_revision_as_miss() {
+        // Regression: do not preload the WS-announced ETag before fetch/apply.
+        // If If-None-Match used the new ETag, the server would 304 and we would
+        // record a hit without applying the new definitions.
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"rev-1\"")
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .and(header("if-none-match", "\"rev-2\""))
+            .respond_with(ResponseTemplate::new(304).insert_header("etag", "\"rev-2\""))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .and(header("if-none-match", "\"rev-1\""))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"rev-2\"")
+                    .set_body_json(feature_json("feat-b")),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let rec = Arc::new(CountingRecorder::new());
+        provider.set_definition_cache_recorder(rec.clone());
+
+        provider.refresh(false, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (0, 1));
+        assert_eq!(provider.etag().as_deref(), Some("\"rev-1\""));
+        assert!(provider.contains("feat-a"));
+
+        let msg = r#"{"type":"flags-updated","etag":"\"rev-2\""}"#;
+        provider.handle_ws_message_for_test(msg).await;
+
+        assert_eq!(
+            rec.snapshot(),
+            (0, 2),
+            "WS-forced apply of a new revision must count as miss, not hit via premature 304"
+        );
+        assert_eq!(provider.etag().as_deref(), Some("\"rev-2\""));
+        assert!(provider.contains("feat-b"));
+        assert!(!provider.contains("feat-a"));
     }
 
     #[tokio::test]
