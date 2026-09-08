@@ -172,6 +172,31 @@ RSpec.describe "Definition cache hit telemetry" do
     client.close
   end
 
+  it "counts network error after empty HTTP 200 revision as a hit" do
+    stub_definitions_api(app_key: app_key, environment: environment, features: [], etag: '"empty"')
+    client = build_client
+    # Empty revision applied is still a new revision → miss
+    expect(cache_counts(client)).to eq([0, 1])
+    expect(client.feature_keys).to be_empty
+
+    stub_definitions_api(app_key: app_key, environment: environment, features: [], status: 500)
+    client.refresh
+    expect(cache_counts(client)).to eq([1, 0])
+    client.close
+  end
+
+  it "counts network error after empty durable snapshot as a hit" do
+    memory = Toggly::SnapshotProviders::Memory.new
+    memory.save({})
+
+    stub_definitions_api(app_key: app_key, environment: environment, features: [], status: 500)
+    client = build_client(snapshot_provider: memory)
+    # Snapshot load hit + network error serving empty last-good → hit
+    expect(cache_counts(client)).to eq([2, 0])
+    expect(client.feature_keys).to be_empty
+    client.close
+  end
+
   it "does not count initial network failure with empty cache as a hit" do
     stub_definitions_api(app_key: app_key, environment: environment, features: [], status: 500)
     client = build_client

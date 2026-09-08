@@ -15,6 +15,7 @@ module Toggly
 
         @mutex.synchronize do
           @definitions = data[:definitions]
+          @definitions_loaded = true
         end
 
         log_debug("Loaded #{@definitions.size} features from snapshot")

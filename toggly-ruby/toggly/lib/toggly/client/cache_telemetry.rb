@@ -26,8 +26,10 @@ module Toggly
         @telemetry.record_definition_cache_miss
       end
 
+      # True when a revision has been successfully loaded, including an empty
+      # feature set (valid last-good cache for error-path hits).
       def definitions_cached?
-        @mutex.synchronize { !@definitions.empty? }
+        @mutex.synchronize { @definitions_loaded }
       end
     end
   end

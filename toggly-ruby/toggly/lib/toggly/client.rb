@@ -44,6 +44,8 @@ module Toggly
       @config.validate!
 
       @definitions = {}
+      # True once a revision (including empty) or durable snapshot was applied.
+      @definitions_loaded = false
       @mutex = Mutex.new
       @ready = false
       @closed = false
@@ -165,6 +167,7 @@ module Toggly
         if result.definitions
           @mutex.synchronize do
             @definitions = result.definitions
+            @definitions_loaded = true
             @ready = true
           end
 
@@ -176,7 +179,7 @@ module Toggly
         end
       rescue StandardError => e
         log_error("Failed to refresh definitions: #{e.message}")
-        # Network error / timeout keeping last good defs — hit only when cache exists.
+        # Network error / timeout keeping last-good revision (incl. empty) — hit.
         record_definition_cache_hit if definitions_cached?
         false
       ensure
