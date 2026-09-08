@@ -10,6 +10,12 @@
 - Full usage-batch restore (feature stats + hashes + cache counters) when
   `sendStats` fails, including close-safe batcher capture across in-flight send.
 
+### Fixed
+- Unsigned Redis durable loads now route through `applyCachedSnapshot` so
+  startup-from-cache records a definition-cache hit (same as the signed path).
+- Redis snapshot deserialization uses balanced-brace object extraction so nested
+  feature filters round-trip correctly from the durable cache.
+
 ### Changed
 - Package version and `SdkIdentity.SDK_VERSION` aligned to `1.5.0`
   (`User-Agent` / UA: `toggly-java/1.5.0`).

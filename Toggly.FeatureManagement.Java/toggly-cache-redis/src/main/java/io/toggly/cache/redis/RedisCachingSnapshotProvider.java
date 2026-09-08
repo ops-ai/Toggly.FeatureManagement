@@ -5,7 +5,9 @@ import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.model.FeatureRequirement;
 import io.toggly.core.model.MetricDefinition;
 import io.toggly.core.snapshot.FeatureSnapshot;
+import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
+import io.toggly.core.telemetry.DefinitionCacheRecorder;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
@@ -17,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -52,6 +55,8 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     private final RedisCacheConfig config;
     private final JedisPool pool;
     private final String cacheKey;
+    private volatile DefinitionCacheRecorder definitionCacheRecorder;
+    private final AtomicBoolean durableStartupCounted = new AtomicBoolean(false);
 
     /**
      * Creates a Redis caching provider with default configuration.
@@ -179,6 +184,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     @Override
     public void clear() {
         invalidate();
+        durableStartupCounted.set(false);
     }
 
     @Override
@@ -187,7 +193,8 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     @Override
-    public void setDefinitionCacheRecorder(io.toggly.core.telemetry.DefinitionCacheRecorder recorder) {
+    public void setDefinitionCacheRecorder(DefinitionCacheRecorder recorder) {
+        this.definitionCacheRecorder = recorder;
         delegate.setDefinitionCacheRecorder(recorder);
     }
 
@@ -325,13 +332,9 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
             Map<String, FeatureDefinition> features = new HashMap<>();
             Map<String, MetricDefinition> metrics = new HashMap<>();
 
-            // Parse features
-            Pattern featuresPattern = Pattern.compile(
-                    "\"features\"\\s*:\\s*\\{([^}]*(?:\\{[^}]*\\}[^}]*)*)\\}",
-                    Pattern.DOTALL);
-            Matcher featuresMatcher = featuresPattern.matcher(json);
-            if (featuresMatcher.find()) {
-                parseFeatures(featuresMatcher.group(1), features);
+            String featuresJson = extractObjectByKey(json, "features");
+            if (featuresJson != null) {
+                parseFeatures(featuresJson, features);
             }
 
             // Parse timestamp
@@ -348,12 +351,17 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                     features, metrics, timestamp, etag,
                     signature, keyId, signedTimestamp, signedDefsJson);
 
-            if (snapshot.hasSignatureMetadata()
-                    && delegate instanceof io.toggly.core.snapshot.HttpSnapshotProvider) {
-                io.toggly.core.snapshot.HttpSnapshotProvider http =
-                        (io.toggly.core.snapshot.HttpSnapshotProvider) delegate;
+            // Route durable Redis loads (signed and unsigned) through Http apply so
+            // startup-from-cache records exactly one definition-cache hit.
+            if (delegate instanceof HttpSnapshotProvider) {
+                HttpSnapshotProvider http = (HttpSnapshotProvider) delegate;
                 if (!http.applyCachedSnapshot(snapshot)) {
                     return null;
+                }
+            } else if (durableStartupCounted.compareAndSet(false, true)) {
+                DefinitionCacheRecorder recorder = definitionCacheRecorder;
+                if (recorder != null) {
+                    recorder.recordDefinitionCacheHit();
                 }
             }
 
@@ -362,6 +370,26 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
             LOGGER.log(Level.WARNING, "Error deserializing snapshot from Redis", e);
             return null;
         }
+    }
+
+    /**
+     * Extracts the raw object body (without surrounding braces) for a top-level JSON key.
+     */
+    private String extractObjectByKey(String json, String key) {
+        String search = "\"" + key + "\"";
+        int idx = json.indexOf(search);
+        if (idx < 0) {
+            return null;
+        }
+        idx = json.indexOf('{', idx + search.length());
+        if (idx < 0) {
+            return null;
+        }
+        int end = findMatchingBrace(json, idx);
+        if (end <= idx) {
+            return null;
+        }
+        return json.substring(idx + 1, end);
     }
 
     private Long extractLongValue(String json, String key) {
