@@ -423,21 +423,52 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     private void parseFeatures(String json, Map<String, FeatureDefinition> features) {
-        // Simple parsing - match feature objects
-        Pattern keyPattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\\{");
-        Matcher keyMatcher = keyPattern.matcher(json);
-
-        while (keyMatcher.find()) {
-            String key = keyMatcher.group(1);
-            int start = keyMatcher.end() - 1;
-            int end = findMatchingBrace(json, start);
-            if (end > start) {
-                String featureJson = json.substring(start, end + 1);
-                FeatureDefinition def = parseFeatureDefinition(featureJson, key);
-                if (def != null) {
-                    features.put(key, def);
-                }
+        // Only top-level "featureKey":{...} entries — nested filter "parameters":{} must not
+        // become phantom features.
+        int i = 0;
+        while (i < json.length()) {
+            while (i < json.length()
+                    && (Character.isWhitespace(json.charAt(i)) || json.charAt(i) == ',')) {
+                i++;
             }
+            if (i >= json.length()) {
+                break;
+            }
+            if (json.charAt(i) != '"') {
+                i++;
+                continue;
+            }
+            int keyStart = i + 1;
+            int keyEnd = json.indexOf('"', keyStart);
+            if (keyEnd < 0) {
+                break;
+            }
+            String key = json.substring(keyStart, keyEnd);
+            i = keyEnd + 1;
+            while (i < json.length() && Character.isWhitespace(json.charAt(i))) {
+                i++;
+            }
+            if (i >= json.length() || json.charAt(i) != ':') {
+                continue;
+            }
+            i++;
+            while (i < json.length() && Character.isWhitespace(json.charAt(i))) {
+                i++;
+            }
+            if (i >= json.length() || json.charAt(i) != '{') {
+                continue;
+            }
+            int start = i;
+            int end = findMatchingBrace(json, start);
+            if (end <= start) {
+                break;
+            }
+            String featureJson = json.substring(start, end + 1);
+            FeatureDefinition def = parseFeatureDefinition(featureJson, key);
+            if (def != null) {
+                features.put(key, def);
+            }
+            i = end + 1;
         }
     }
 

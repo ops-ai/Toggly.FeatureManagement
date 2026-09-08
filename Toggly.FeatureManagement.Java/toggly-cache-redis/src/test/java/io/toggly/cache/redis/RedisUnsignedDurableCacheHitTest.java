@@ -140,7 +140,11 @@ class RedisUnsignedDurableCacheHitTest {
 
         // Wrapper getSnapshot path serving unsigned Redis JSON — not a direct applyCachedSnapshot call.
         when(jedis.get(anyString())).thenReturn(durableJson);
-        assertThat(redis.getSnapshot().getFeature("feature-a")).isNotNull();
+        var loaded = redis.getSnapshot();
+        assertThat(loaded.getFeature("feature-a")).isNotNull();
+        // Nested filter "parameters":{} must not become a phantom feature key.
+        assertThat(loaded.getFeatures().keySet()).containsExactly("feature-a");
+        assertThat(loaded.getFeatures().keySet()).doesNotContain("parameters", "filters", "name");
 
         runtime.flushUsage();
         assertThat(sent).hasSize(1);
@@ -149,7 +153,7 @@ class RedisUnsignedDurableCacheHitTest {
 
         // Subsequent durable reads must not double-count.
         sent.clear();
-        assertThat(redis.getSnapshot().getFeature("feature-a")).isNotNull();
+        assertThat(redis.getSnapshot().getFeatures().keySet()).containsExactly("feature-a");
         runtime.flushUsage();
         assertThat(sent).isEmpty();
     }

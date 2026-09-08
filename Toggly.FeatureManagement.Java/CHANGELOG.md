@@ -15,6 +15,8 @@
   startup-from-cache records a definition-cache hit (same as the signed path).
 - Redis snapshot deserialization uses balanced-brace object extraction so nested
   feature filters round-trip correctly from the durable cache.
+- Redis feature map parsing only walks top-level keys so nested `"parameters": {}`
+  objects are not treated as phantom features.
 
 ### Changed
 - Package version and `SdkIdentity.SDK_VERSION` aligned to `1.5.0`
