@@ -269,15 +269,16 @@ export class TelemetryRuntime {
       return
     }
 
-    const payload = this.usageBatcher.buildAndReset()
-    if (!payload) return
+    const drained = this.usageBatcher.exportAndReset()
+    if (!drained) return
 
     this.sendingUsage = true
     try {
-      await client.sendStats(payload as unknown as Record<string, unknown>)
+      await client.sendStats(drained.payload as unknown as Record<string, unknown>)
     } catch (error) {
       this.logger.error('Failed to send usage stats:', error)
-      // Re-aggregate lost on failure is acceptable for best-effort telemetry
+      // Merge the failed batch back so the next flush can retry (align .NET SendStats).
+      this.usageBatcher.restore(drained.snapshot)
     } finally {
       this.sendingUsage = false
     }

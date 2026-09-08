@@ -49,6 +49,17 @@ export interface FeatureStatPayload {
   definitionCacheMisses?: number
 }
 
+/**
+ * Full in-memory batch captured at drain time for failed-send restore
+ * (mirrors .NET SendStats clone + AddOrUpdate merge).
+ */
+export interface UsageBatchSnapshot {
+  perFeature: Map<string, FeatureUsageAgg>
+  appUnique: Set<number>
+  definitionCacheHits: number
+  definitionCacheMisses: number
+}
+
 function emptyVariant(): VariantStatsAgg {
   return { checkCount: 0, requestCount: 0, usedCount: 0, viewedCount: 0 }
 }
@@ -62,6 +73,40 @@ function emptyFeature(): FeatureUsageAgg {
     uniqueUsersViewed: new Set(),
     uniqueUserHashes: new Set(),
     uniqueViewedUserHashes: new Set(),
+  }
+}
+
+function cloneFeatureAgg(agg: FeatureUsageAgg): FeatureUsageAgg {
+  const variantStats = new Map<string, VariantStatsAgg>()
+  for (const [name, stats] of agg.variantStats) {
+    variantStats.set(name, { ...stats })
+  }
+  return {
+    variantStats,
+    uniqueUsersEnabled: new Set(agg.uniqueUsersEnabled),
+    uniqueUsersDisabled: new Set(agg.uniqueUsersDisabled),
+    uniqueUsersUsed: new Set(agg.uniqueUsersUsed),
+    uniqueUsersViewed: new Set(agg.uniqueUsersViewed),
+    uniqueUserHashes: new Set(agg.uniqueUserHashes),
+    uniqueViewedUserHashes: new Set(agg.uniqueViewedUserHashes),
+  }
+}
+
+function cloneSnapshot(
+  perFeature: Map<string, FeatureUsageAgg>,
+  appUnique: Set<number>,
+  definitionCacheHits: number,
+  definitionCacheMisses: number,
+): UsageBatchSnapshot {
+  const cloned = new Map<string, FeatureUsageAgg>()
+  for (const [feature, agg] of perFeature) {
+    cloned.set(feature, cloneFeatureAgg(agg))
+  }
+  return {
+    perFeature: cloned,
+    appUnique: new Set(appUnique),
+    definitionCacheHits,
+    definitionCacheMisses,
   }
 }
 
@@ -187,10 +232,21 @@ export class UsageBatcher {
     )
   }
 
-  buildAndReset(): FeatureStatPayload | null {
+  /**
+   * Build the SendStats payload and clear pending state, returning a snapshot
+   * for failed-send restore (merge into any concurrent records).
+   */
+  exportAndReset(): { payload: FeatureStatPayload; snapshot: UsageBatchSnapshot } | null {
     if (this.isEmpty()) {
       return null
     }
+
+    const snapshot = cloneSnapshot(
+      this.perFeature,
+      this.appUnique,
+      this.definitionCacheHits,
+      this.definitionCacheMisses,
+    )
 
     const payload: FeatureStatPayload = {
       appKey: this.appKey,
@@ -243,6 +299,86 @@ export class UsageBatcher {
     this.appUnique = new Set()
     this.definitionCacheHits = 0
     this.definitionCacheMisses = 0
-    return payload
+    return { payload, snapshot }
+  }
+
+  buildAndReset(): FeatureStatPayload | null {
+    return this.exportAndReset()?.payload ?? null
+  }
+
+  /**
+   * Merge a drained snapshot back into pending state after sendStats failure.
+   * Additive (like .NET AddOrUpdate) so counters recorded while the send was
+   * in flight are preserved.
+   */
+  restore(snapshot: UsageBatchSnapshot): void {
+    this.definitionCacheHits += snapshot.definitionCacheHits
+    this.definitionCacheMisses += snapshot.definitionCacheMisses
+
+    for (const hash of snapshot.appUnique) {
+      this.appUnique.add(hash)
+    }
+
+    for (const [feature, snapAgg] of snapshot.perFeature) {
+      const agg = this.get(feature)
+      for (const [name, snapStats] of snapAgg.variantStats) {
+        const stats = this.getVariant(agg, name)
+        stats.checkCount += snapStats.checkCount
+        stats.requestCount += snapStats.requestCount
+        stats.usedCount += snapStats.usedCount
+        stats.viewedCount += snapStats.viewedCount
+      }
+      for (const hash of snapAgg.uniqueUsersEnabled) {
+        agg.uniqueUsersEnabled.add(hash)
+      }
+      for (const hash of snapAgg.uniqueUsersDisabled) {
+        agg.uniqueUsersDisabled.add(hash)
+      }
+      for (const hash of snapAgg.uniqueUsersUsed) {
+        agg.uniqueUsersUsed.add(hash)
+      }
+      for (const hash of snapAgg.uniqueUsersViewed) {
+        agg.uniqueUsersViewed.add(hash)
+      }
+      for (const hash of snapAgg.uniqueUserHashes) {
+        agg.uniqueUserHashes.add(hash)
+      }
+      for (const hash of snapAgg.uniqueViewedUserHashes) {
+        agg.uniqueViewedUserHashes.add(hash)
+      }
+    }
+  }
+
+  /**
+   * Re-ingest a built FeatureStatPayload after a failed send (wire-shaped merge).
+   * Prefer {@link restore} with a {@link UsageBatchSnapshot} when available —
+   * payload restore cannot recover unique enabled/disabled hash sets (counts only).
+   */
+  restorePayload(payload: FeatureStatPayload): void {
+    this.definitionCacheHits += payload.definitionCacheHits ?? 0
+    this.definitionCacheMisses += payload.definitionCacheMisses ?? 0
+
+    for (const hash of payload.uniqueUserHashes) {
+      this.appUnique.add(hash)
+    }
+
+    for (const stat of payload.stats) {
+      const agg = this.get(stat.feature)
+      for (const [name, snapStats] of Object.entries(stat.variantStats)) {
+        const stats = this.getVariant(agg, name)
+        stats.checkCount += snapStats.checkCount
+        stats.requestCount += snapStats.requestCount
+        stats.usedCount += snapStats.usedCount
+        stats.viewedCount += snapStats.viewedCount
+      }
+      for (const hash of stat.uniqueUserHashes) {
+        agg.uniqueUserHashes.add(hash)
+        this.appUnique.add(hash)
+      }
+      for (const hash of stat.uniqueViewedUserHashes) {
+        agg.uniqueViewedUserHashes.add(hash)
+        this.appUnique.add(hash)
+      }
+    }
   }
 }

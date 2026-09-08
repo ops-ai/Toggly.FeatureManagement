@@ -110,4 +110,41 @@ describe('UsageBatcher', () => {
     expect(batcher.isEmpty()).toBe(false)
     expect(batcher.buildAndReset()?.definitionCacheHits).toBe(1)
   })
+
+  it('restore merges a drained snapshot into pending counters', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.recordCheck('FeatureA', true, 'user-1')
+    batcher.recordDefinitionCacheHit()
+    batcher.recordDefinitionCacheMiss()
+
+    const drained = batcher.exportAndReset()
+    expect(drained).not.toBeNull()
+
+    // Concurrent activity while the failed send would be in flight.
+    batcher.recordCheck('FeatureA', true, 'user-2')
+    batcher.recordDefinitionCacheHit()
+
+    batcher.restore(drained!.snapshot)
+
+    const payload = batcher.buildAndReset()
+    expect(payload!.definitionCacheHits).toBe(2)
+    expect(payload!.definitionCacheMisses).toBe(1)
+    expect(payload!.stats[0].variantStats.enabled.checkCount).toBe(2)
+    expect(payload!.stats[0].uniqueContextIdentifierEnabledCount).toBe(2)
+  })
+
+  it('restorePayload merges wire payload fields into pending state', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.recordCheck('FeatureA', true, 'user-1')
+    batcher.recordDefinitionCacheMiss()
+    const payload = batcher.buildAndReset()!
+
+    batcher.recordDefinitionCacheHit()
+    batcher.restorePayload(payload)
+
+    const retried = batcher.buildAndReset()
+    expect(retried!.definitionCacheHits).toBe(1)
+    expect(retried!.definitionCacheMisses).toBe(1)
+    expect(retried!.stats[0].variantStats.enabled.checkCount).toBe(1)
+  })
 })

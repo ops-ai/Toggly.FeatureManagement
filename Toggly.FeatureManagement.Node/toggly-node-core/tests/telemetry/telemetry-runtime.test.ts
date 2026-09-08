@@ -157,6 +157,107 @@ describe('TelemetryRuntime', () => {
     await runtime.close()
   })
 
+  it('restores the full usage batch when sendStats fails then succeeds', async () => {
+    const sendStats = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('transient send failure'))
+      .mockResolvedValueOnce({ featureCount: 1 })
+
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: null,
+    })
+    runtime.start()
+
+    runtime.recordCheck('FeatureA', true, 'user-1')
+    runtime.recordDefinitionCacheHit()
+    runtime.recordDefinitionCacheMiss()
+
+    await runtime.flushUsage()
+    expect(sendStats).toHaveBeenCalledTimes(1)
+
+    await runtime.flushUsage()
+    expect(sendStats).toHaveBeenCalledTimes(2)
+
+    const payload = sendStats.mock.calls[1][0] as {
+      definitionCacheHits?: number
+      definitionCacheMisses?: number
+      stats: Array<{
+        feature: string
+        variantStats: { enabled: { checkCount: number } }
+      }>
+    }
+    expect(payload.definitionCacheHits).toBe(1)
+    expect(payload.definitionCacheMisses).toBe(1)
+    expect(payload.stats[0].feature).toBe('FeatureA')
+    expect(payload.stats[0].variantStats.enabled.checkCount).toBe(1)
+
+    await runtime.close()
+  })
+
+  it('merges in-flight records when restoring a failed usage flush', async () => {
+    let rejectSend!: (error: Error) => void
+    const sendStats = vi.fn().mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectSend = reject
+        }),
+    )
+    sendStats.mockResolvedValueOnce({ featureCount: 1 })
+
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: null,
+    })
+    runtime.start()
+
+    runtime.recordCheck('FeatureA', true, 'user-1')
+    runtime.recordDefinitionCacheHit()
+
+    const flushPromise = runtime.flushUsage()
+    await vi.waitFor(() => {
+      expect(sendStats).toHaveBeenCalledTimes(1)
+    })
+
+    // Recorded while the first send is still in flight.
+    runtime.recordCheck('FeatureB', false, 'user-2')
+    runtime.recordDefinitionCacheHit()
+
+    rejectSend(new Error('send failed'))
+    await flushPromise
+
+    await runtime.flushUsage()
+    expect(sendStats).toHaveBeenCalledTimes(2)
+
+    const payload = sendStats.mock.calls[1][0] as {
+      definitionCacheHits?: number
+      stats: Array<{
+        feature: string
+        variantStats: Record<string, { checkCount: number }>
+      }>
+    }
+    expect(payload.definitionCacheHits).toBe(2)
+    const byFeature = Object.fromEntries(
+      payload.stats.map((s) => [s.feature, s.variantStats]),
+    )
+    expect(byFeature.FeatureA.enabled.checkCount).toBe(1)
+    expect(byFeature.FeatureB.disabled.checkCount).toBe(1)
+
+    await runtime.close()
+  })
+
   it('SIGTERM flush re-emits signal so the process can exit', async () => {
     vi.useRealTimers()
     const sendStats = vi.fn().mockResolvedValue({ featureCount: 1 })

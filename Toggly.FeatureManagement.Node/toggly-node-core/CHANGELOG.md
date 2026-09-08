@@ -9,6 +9,10 @@
   for definition-refresh outcomes (304, skipped poll, snapshot, network keep-
   last-good → hit; new revision HTTP/WS apply → miss) [OPS-985].
 
+### Changed
+- On `SendStats` failure, restore the full usage batch (feature stats, unique
+  hashes, definition cache counters) so the next flush can retry [OPS-985].
+
 ## 0.8.3
 
 2026-09-05
