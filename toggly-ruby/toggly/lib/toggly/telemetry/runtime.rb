@@ -116,6 +116,16 @@ module Toggly
         batcher&.record_view(feature, identity, variant: variant)
       end
 
+      def record_definition_cache_hit
+        batcher = @mutex.synchronize { @usage_batcher }
+        batcher&.record_definition_cache_hit
+      end
+
+      def record_definition_cache_miss
+        batcher = @mutex.synchronize { @usage_batcher }
+        batcher&.record_definition_cache_miss
+      end
+
       def measure(metric, value, options = nil)
         batcher = @mutex.synchronize { @metrics_batcher }
         batcher&.measure(metric, value, options)
@@ -133,6 +143,8 @@ module Toggly
 
       def flush_usage
         client = nil
+        batcher = nil
+        snapshot = nil
         payload = nil
         @mutex.synchronize do
           return if @usage_batcher.nil? || @sending_usage
@@ -142,9 +154,13 @@ module Toggly
           client = @clients&.usage
           return if client.nil? || !client.respond_to?(:send_stats)
 
-          payload = @usage_batcher.build_and_reset
-          return if payload.nil?
+          # Hold a local reference: close() may null @usage_batcher during send.
+          batcher = @usage_batcher
+          drained = batcher.export_and_reset
+          return if drained.nil?
 
+          payload = drained.payload
+          snapshot = drained.snapshot
           @sending_usage = true
         end
 
@@ -152,6 +168,11 @@ module Toggly
           client.send_stats(payload)
         rescue StandardError => e
           log_error("Failed to send usage stats: #{e.message}")
+          begin
+            batcher&.restore(snapshot)
+          rescue StandardError => restore_error
+            log_error("Failed to restore usage batch after send failure: #{restore_error.message}")
+          end
         ensure
           @mutex.synchronize { @sending_usage = false }
         end

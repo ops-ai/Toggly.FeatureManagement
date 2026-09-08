@@ -91,6 +91,45 @@ RSpec.describe Toggly::Telemetry::UsageBatcher do
     expect(payload[:stats][0][:variantStats]["control"][:checkCount]).to eq(1)
     expect(payload[:stats][0][:variantStats]).not_to have_key("enabled")
   end
+
+  it "includes definition cache counters on flush and supports cache-only batches" do
+    batcher = described_class.new("app", "Production")
+    batcher.record_definition_cache_hit
+    batcher.record_definition_cache_hit
+    batcher.record_definition_cache_miss
+
+    expect(batcher.empty?).to be false
+    payload = batcher.build_and_reset
+    expect(payload[:definitionCacheHits]).to eq(2)
+    expect(payload[:definitionCacheMisses]).to eq(1)
+    expect(payload[:stats]).to eq([])
+    expect(batcher.empty?).to be true
+    expect(batcher.build_and_reset).to be_nil
+  end
+
+  it "restores the full batch after failed send, merging in-flight records" do
+    batcher = described_class.new("app", "Production")
+    batcher.record_check("FeatureA", true, "alice")
+    batcher.record_definition_cache_hit
+
+    drained = batcher.export_and_reset
+    expect(drained).not_to be_nil
+    expect(drained.payload[:definitionCacheHits]).to eq(1)
+
+    batcher.record_definition_cache_miss
+    batcher.record_check("FeatureA", false, "bob")
+    batcher.restore(drained.snapshot)
+
+    payload = batcher.build_and_reset
+    expect(payload[:definitionCacheHits]).to eq(1)
+    expect(payload[:definitionCacheMisses]).to eq(1)
+    expect(payload[:stats][0][:variantStats]["enabled"][:checkCount]).to eq(1)
+    expect(payload[:stats][0][:variantStats]["disabled"][:checkCount]).to eq(1)
+    expect(payload[:uniqueUserHashes]).to contain_exactly(
+      Toggly::Telemetry.hash_identity("alice"),
+      Toggly::Telemetry.hash_identity("bob")
+    )
+  end
 end
 
 RSpec.describe Toggly::Telemetry::MetricsBatcher do

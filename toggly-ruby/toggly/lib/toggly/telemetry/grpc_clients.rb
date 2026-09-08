@@ -210,6 +210,8 @@ module Toggly
           msg.appVersion = payload[:appVersion].to_s if payload[:appVersion]
           process_start = GrpcClients.build_timestamp(payload[:processStartTime])
           msg.processStartTime = process_start if process_start
+          msg.definitionCacheHits = payload[:definitionCacheHits].to_i if payload[:definitionCacheHits]
+          msg.definitionCacheMisses = payload[:definitionCacheMisses].to_i if payload[:definitionCacheMisses]
         end
         private_class_method :apply_feature_stat_metadata
 

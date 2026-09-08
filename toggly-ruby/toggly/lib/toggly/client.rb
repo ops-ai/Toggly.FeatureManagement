@@ -46,16 +46,19 @@ module Toggly
       @provider = DefinitionsProvider.new(
         config: @config,
         logger: @config.logger,
-        on_definitions_updated: -> { refresh }
+        on_definitions_updated: -> { refresh(force: true, from_websocket: true) }
       )
 
       @refresh_thread = nil
+      @refresh_in_flight = false
+      @pending_ws_refresh = false
       @telemetry = nil
 
+      # Start telemetry before the first refresh so cache outcomes can be recorded.
+      start_telemetry
       initialize_definitions
       Toggly.register_entity_contexts_at_startup(@config) unless @config.disable_entity_context_registration
       start_background_refresh unless @config.disable_background_refresh
-      start_telemetry
     end
 
     # Check if a feature is enabled
@@ -135,27 +138,52 @@ module Toggly
     # Manually refresh definitions
     #
     # @param force [Boolean] Force refresh even if not modified
+    # @param from_websocket [Boolean] True when triggered by a live WS notify
     # @return [Boolean] Whether definitions were updated
-    def refresh(force: false)
+    def refresh(force: false, from_websocket: false)
       return false if @config.offline_mode?
 
-      new_definitions = @provider.fetch(force: force)
-
-      if new_definitions
-        @mutex.synchronize do
-          @definitions = new_definitions
-          @ready = true
+      # Concurrent refresh skipped (in flight) — do not count.
+      @mutex.synchronize do
+        if @refresh_in_flight
+          @pending_ws_refresh = true if from_websocket
+          return false
         end
-
-        save_snapshot
-        log_info("Definitions refreshed (#{new_definitions.size} features)")
-        true
-      else
-        false
+        @refresh_in_flight = true
       end
-    rescue StandardError => e
-      log_error("Failed to refresh definitions: #{e.message}")
-      false
+
+      begin
+        result = @provider.fetch(force: force)
+        record_refresh_cache_outcome(result.cache_outcome)
+
+        if result.definitions
+          @mutex.synchronize do
+            @definitions = result.definitions
+            @ready = true
+          end
+
+          save_snapshot
+          log_info("Definitions refreshed (#{result.definitions.size} features)")
+          true
+        else
+          false
+        end
+      rescue StandardError => e
+        log_error("Failed to refresh definitions: #{e.message}")
+        # Network error / timeout keeping last good defs — hit.
+        record_definition_cache_hit
+        false
+      ensure
+        drain_pending = false
+        @mutex.synchronize do
+          @refresh_in_flight = false
+          if @pending_ws_refresh
+            @pending_ws_refresh = false
+            drain_pending = true
+          end
+        end
+        refresh(force: true, from_websocket: true) if drain_pending
+      end
     end
 
     # Record a feature used/interaction event
@@ -291,8 +319,11 @@ module Toggly
           break if @closed
 
           # When WebSocket is connected, skip HTTP refresh unless
-          # the fallback interval has elapsed
-          next if @provider.should_skip_refresh?
+          # the fallback interval has elapsed. Skipped poll = cache hit.
+          if @provider.should_skip_refresh?
+            record_definition_cache_hit
+            next
+          end
 
           refresh
         end
@@ -371,6 +402,26 @@ module Toggly
 
       identity = context&.identity
       @telemetry.record_check(feature_key, enabled, identity)
+    end
+
+    def record_refresh_cache_outcome(outcome)
+      if outcome == :miss
+        record_definition_cache_miss
+      else
+        record_definition_cache_hit
+      end
+    end
+
+    def record_definition_cache_hit
+      return unless @telemetry&.usage_enabled?
+
+      @telemetry.record_definition_cache_hit
+    end
+
+    def record_definition_cache_miss
+      return unless @telemetry&.usage_enabled?
+
+      @telemetry.record_definition_cache_miss
     end
 
     def log_info(message)

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-08
+
+### Added
+
+- Definition-refresh cache hit/miss counters on `Usage.SendStats`
+  (`definitionCacheHits` / `definitionCacheMisses`), counted once per refresh
+  attempt (poll skip, HTTP 304, matching ETag, network error keeping cache =
+  hit; new revision applied = miss). Concurrent in-flight skips are not counted.
+- Soft-fail restore of the full usage batch (feature stats + hashes + cache
+  counters) when `SendStats` fails; cache-only batches still flush.
+
 ## [0.4.0] - 2026-09-06
 
 ### Added

@@ -31,6 +31,7 @@ require_relative "toggly/evaluation_engine"
 require_relative "toggly/snapshot_providers/base"
 require_relative "toggly/snapshot_providers/memory"
 require_relative "toggly/snapshot_providers/file"
+require_relative "toggly/definition_cache"
 require_relative "toggly/definitions_provider"
 require_relative "toggly/client"
 

@@ -51,6 +51,23 @@ RSpec.describe "Native gRPC conversion path" do
       expect(msg.stats[0].variantStats["enabled"].checkCount).to eq(2)
       expect(msg.stats[0].variantStats["enabled"].requestCount).to eq(1)
     end
+
+    it "maps definitionCacheHits and definitionCacheMisses" do
+      payload = {
+        appKey: "app",
+        environment: "Production",
+        time: { seconds: 1_700_000_000, nanos: 0 },
+        totalUniqueUsers: 0,
+        uniqueUserHashes: [],
+        definitionCacheHits: 3,
+        definitionCacheMisses: 1,
+        stats: []
+      }
+
+      msg = Toggly::Telemetry::GrpcClients.feature_stat_from_payload(payload)
+      expect(msg.definitionCacheHits).to eq(3)
+      expect(msg.definitionCacheMisses).to eq(1)
+    end
   end
 
   describe "metric_stat_from_payload" do

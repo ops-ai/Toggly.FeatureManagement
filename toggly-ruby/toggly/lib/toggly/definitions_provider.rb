@@ -14,6 +14,9 @@ end
 module Toggly
   # Provider for fetching feature definitions from Toggly API.
   class DefinitionsProvider
+    # Result of one HTTP definitions fetch with cache telemetry outcome.
+    FetchResult = Struct.new(:definitions, :cache_outcome, keyword_init: true)
+
     # Fallback HTTP refresh interval when WebSocket is connected (20 minutes)
     FALLBACK_REFRESH_INTERVAL = 20 * 60
 
@@ -44,11 +47,11 @@ module Toggly
     # Fetch definitions from the API
     #
     # @param force [Boolean] Force fetch even if cached
-    # @return [Hash, nil] Hash of definitions, or nil if not modified
+    # @return [FetchResult] definitions (Hash or nil) plus :hit / :miss outcome
     # @raise [NetworkError] On network failures
     # @raise [DefinitionsError] On API errors
     def fetch(force: false)
-      return nil if @config.offline_mode?
+      return FetchResult.new(definitions: nil, cache_outcome: :hit) if @config.offline_mode?
 
       uri = URI.parse(@config.definitions_endpoint)
       http = build_http(uri)
@@ -60,6 +63,8 @@ module Toggly
       raise NetworkError, "Request timeout: #{e.message}"
     rescue SocketError, Errno::ECONNREFUSED => e
       raise NetworkError, "Connection failed: #{e.message}"
+    rescue NetworkError, DefinitionsError
+      raise
     rescue StandardError => e
       raise NetworkError, "Request failed: #{e.message}"
     end
@@ -166,21 +171,36 @@ module Toggly
     end
 
     def handle_response(response)
-      case response.code.to_i
-      when 200
-        parse_definitions(response)
-      when 304
-        # Not modified
+      status = response.code.to_i
+      response_etag = response["ETag"]
+      kind = DefinitionCache.classify_http(status, @etag, response_etag)
+
+      case kind
+      when :not_modified
         log_debug("Definitions not modified")
-        nil
+        FetchResult.new(definitions: nil, cache_outcome: :hit)
+      when :same_revision
+        log_debug("Definitions ETag matches existing revision")
+        @etag = response_etag if response_etag && !response_etag.empty?
+        @last_modified = response["Last-Modified"] if response["Last-Modified"]
+        FetchResult.new(definitions: nil, cache_outcome: :hit)
+      when :new_content
+        FetchResult.new(definitions: parse_definitions(response), cache_outcome: :miss)
+      when :error_status
+        handle_error_status(status, response)
+      end
+    end
+
+    def handle_error_status(status, response)
+      case status
       when 401, 403
-        raise DefinitionsError, "Authentication failed: #{response.code}"
+        raise DefinitionsError, "Authentication failed: #{status}"
       when 404
         raise DefinitionsError, "Definitions not found (check app_key and environment)"
       else
         raise NetworkError.new(
-          "API error: #{response.code}",
-          status_code: response.code.to_i,
+          "API error: #{status}",
+          status_code: status,
           response_body: response.body
         )
       end
