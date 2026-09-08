@@ -291,4 +291,92 @@ describe('definition cache hit telemetry', () => {
     expect(payload.definitionCacheMisses).toBe(1)
     expect(payload.definitionCacheHits).toBe(1)
   })
+
+  it('records exactly one miss when cache persistence throws after a new revision', async () => {
+    const { DefinitionsCache: DefinitionsCacheClass } = await import('../../src/cache')
+    const persistSpy = vi
+      .spyOn(DefinitionsCacheClass.prototype, 'setDefinitionModels')
+      .mockRejectedValue(new Error('persist failed'))
+
+    try {
+      mockFetch
+        .mockResolvedValueOnce(okResponse([def('seed')], 'rev-0'))
+        .mockResolvedValueOnce(okResponse([def('feature-a')], 'rev-1'))
+
+      const sendStats = vi.fn().mockResolvedValue({ featureCount: 0 })
+
+      const client = createTogglyClient({
+        appKey: 'test-app',
+        enableStreaming: false,
+        refreshInterval: 0,
+        enableUsageTracking: true,
+        enableMetrics: false,
+        usageFlushInterval: 0,
+        metricsFlushInterval: 0,
+        usageClient: { sendStats, close: vi.fn() },
+        metricsClient: { sendMetrics: vi.fn(), close: vi.fn() },
+      })
+
+      await client.init()
+      await client.flushTelemetry()
+      sendStats.mockClear()
+
+      await client.refresh()
+      await client.flushTelemetry()
+
+      const payload = sendStats.mock.calls[0][0] as {
+        definitionCacheHits?: number
+        definitionCacheMisses?: number
+      }
+      expect(payload.definitionCacheMisses).toBe(1)
+      expect(payload.definitionCacheHits).toBeUndefined()
+      expect(await client.isFeatureOn('feature-a')).toBe(true)
+    } finally {
+      persistSpy.mockRestore()
+    }
+  })
+
+  it('records exactly one miss when afterRefresh throws after a new revision', async () => {
+    const { HookExecutor } = await import('../../src/hooks')
+    const afterRefreshSpy = vi
+      .spyOn(HookExecutor.prototype, 'executeAfterRefresh')
+      .mockRejectedValue(new Error('afterRefresh failed'))
+
+    try {
+      mockFetch
+        .mockResolvedValueOnce(okResponse([def('seed')], 'rev-0'))
+        .mockResolvedValueOnce(okResponse([def('feature-a')], 'rev-1'))
+
+      const sendStats = vi.fn().mockResolvedValue({ featureCount: 0 })
+
+      const client = createTogglyClient({
+        appKey: 'test-app',
+        enableStreaming: false,
+        refreshInterval: 0,
+        enableUsageTracking: true,
+        enableMetrics: false,
+        usageFlushInterval: 0,
+        metricsFlushInterval: 0,
+        usageClient: { sendStats, close: vi.fn() },
+        metricsClient: { sendMetrics: vi.fn(), close: vi.fn() },
+      })
+
+      await client.init()
+      await client.flushTelemetry()
+      sendStats.mockClear()
+
+      await client.refresh()
+      await client.flushTelemetry()
+
+      const payload = sendStats.mock.calls[0][0] as {
+        definitionCacheHits?: number
+        definitionCacheMisses?: number
+      }
+      expect(payload.definitionCacheMisses).toBe(1)
+      expect(payload.definitionCacheHits).toBeUndefined()
+      expect(await client.isFeatureOn('feature-a')).toBe(true)
+    } finally {
+      afterRefreshSpy.mockRestore()
+    }
+  })
 })

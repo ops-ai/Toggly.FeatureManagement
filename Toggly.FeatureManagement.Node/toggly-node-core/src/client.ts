@@ -502,6 +502,8 @@ export function createTogglyClient(
 
     refreshInFlight = true
     state.loading = true
+    // Exactly one hit/miss per attempt: record after apply, skip catch if already counted.
+    let outcomeRecorded = false
 
     try {
       const { defs, outcome } = await fetchDefinitions()
@@ -512,6 +514,7 @@ export function createTogglyClient(
       } else {
         recordDefinitionCacheHit()
       }
+      outcomeRecorded = true
 
       state.lastRefresh = Date.now()
       state.error = null
@@ -542,8 +545,10 @@ export function createTogglyClient(
       // Preserve last-known-good in-memory definitions first.
       if (state.definitions.size > 0 || Object.keys(state.features).length > 0) {
         logger.debug('Preserving last-known-good in-memory features')
-        // Network error / timeout while still serving cache.
-        recordDefinitionCacheHit()
+        // Network/apply failure while still serving cache — count hit only if not yet recorded.
+        if (!outcomeRecorded) {
+          recordDefinitionCacheHit()
+        }
         return state.features
       }
 
@@ -552,14 +557,17 @@ export function createTogglyClient(
         const cachedDefs = await cache.getDefinitionModels(CACHE_KEYS.DEFINITIONS)
         if (cachedDefs) {
           logger.debug('Using cached definitions (last-known-good)')
-          recordDefinitionCacheHit()
+          if (!outcomeRecorded) {
+            recordDefinitionCacheHit()
+          }
           return applyDefinitions(indexDefinitions(cachedDefs))
         }
       }
 
       // Fall back to defaults only when no last-known-good flags exist.
-      // Still count as hit — we keep serving without a new revision apply.
-      recordDefinitionCacheHit()
+      if (!outcomeRecorded) {
+        recordDefinitionCacheHit()
+      }
       state.definitions = new Map()
       state.features = config.featureDefaults ?? {}
       return state.features
