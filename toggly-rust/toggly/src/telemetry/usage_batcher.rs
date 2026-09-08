@@ -100,6 +100,10 @@ pub struct FeatureStatPayload {
     pub app_version: Option<String>,
     /// Process start time (`seconds`, `nanos`).
     pub process_start_time: (i64, i32),
+    /// Definition-refresh cache hits (batch delta); omitted on wire when 0.
+    pub definition_cache_hits: Option<i32>,
+    /// Definition-refresh cache misses (batch delta); omitted on wire when 0.
+    pub definition_cache_misses: Option<i32>,
 }
 
 /// In-memory snapshot of usage aggregates taken before a send attempt.
@@ -107,6 +111,8 @@ pub struct FeatureStatPayload {
 pub struct UsageSnapshot {
     per_feature: HashMap<String, FeatureUsageAgg>,
     app_unique: HashSet<i32>,
+    definition_cache_hits: i32,
+    definition_cache_misses: i32,
 }
 
 /// Accumulate feature usage and build FeatureStat payloads.
@@ -125,6 +131,8 @@ pub struct UsageBatcher {
 struct UsageInner {
     per_feature: HashMap<String, FeatureUsageAgg>,
     app_unique: HashSet<i32>,
+    definition_cache_hits: i32,
+    definition_cache_misses: i32,
 }
 
 impl UsageBatcher {
@@ -214,24 +222,46 @@ impl UsageBatcher {
         }
     }
 
-    /// True when no usage samples are buffered.
+    /// Count a definition-refresh served from local cache / unchanged revision.
+    pub fn record_definition_cache_hit(&self) {
+        let mut guard = self.inner.lock();
+        guard.definition_cache_hits = guard.definition_cache_hits.saturating_add(1);
+    }
+
+    /// Count a definition-refresh that applied a new revision.
+    pub fn record_definition_cache_miss(&self) {
+        let mut guard = self.inner.lock();
+        guard.definition_cache_misses = guard.definition_cache_misses.saturating_add(1);
+    }
+
+    /// True when no usage samples or cache counters are buffered.
     pub fn is_empty(&self) -> bool {
         let guard = self.inner.lock();
-        guard.per_feature.is_empty() && guard.app_unique.is_empty()
+        guard.per_feature.is_empty()
+            && guard.app_unique.is_empty()
+            && guard.definition_cache_hits == 0
+            && guard.definition_cache_misses == 0
     }
 
     /// Build a FeatureStat-shaped payload and clear aggregates.
     ///
     /// Returns `(payload, snapshot)` so callers can restore unique maps on send failure.
+    /// Cache-only batches (hits/misses with no feature stats) still produce a payload.
     pub fn build_and_reset(&self) -> Option<(FeatureStatPayload, UsageSnapshot)> {
         let mut guard = self.inner.lock();
-        if guard.per_feature.is_empty() && guard.app_unique.is_empty() {
+        if guard.per_feature.is_empty()
+            && guard.app_unique.is_empty()
+            && guard.definition_cache_hits == 0
+            && guard.definition_cache_misses == 0
+        {
             return None;
         }
 
         let snapshot = UsageSnapshot {
             per_feature: guard.per_feature.clone(),
             app_unique: guard.app_unique.clone(),
+            definition_cache_hits: guard.definition_cache_hits,
+            definition_cache_misses: guard.definition_cache_misses,
         };
 
         let mut stats_out = Vec::with_capacity(guard.per_feature.len());
@@ -257,6 +287,18 @@ impl UsageBatcher {
         let total_unique_users = unique_user_hashes.len() as i32;
         let process_start_time =
             to_protobuf_timestamp_millis(self.process_start_time.timestamp_millis());
+        let definition_cache_hits = if guard.definition_cache_hits > 0 {
+            Some(guard.definition_cache_hits)
+        } else {
+            None
+        };
+        let definition_cache_misses = if guard.definition_cache_misses > 0 {
+            Some(guard.definition_cache_misses)
+        } else {
+            None
+        };
+        guard.definition_cache_hits = 0;
+        guard.definition_cache_misses = 0;
 
         Some((
             FeatureStatPayload {
@@ -269,6 +311,8 @@ impl UsageBatcher {
                 instance_name: self.instance_name.clone(),
                 app_version: self.app_version.clone(),
                 process_start_time,
+                definition_cache_hits,
+                definition_cache_misses,
             },
             snapshot,
         ))
@@ -279,6 +323,12 @@ impl UsageBatcher {
     /// Matches the .NET lesson: restore unique maps (and counters) so they are not lost.
     pub fn restore_snapshot(&self, snapshot: UsageSnapshot) {
         let mut guard = self.inner.lock();
+        guard.definition_cache_hits = guard
+            .definition_cache_hits
+            .saturating_add(snapshot.definition_cache_hits);
+        guard.definition_cache_misses = guard
+            .definition_cache_misses
+            .saturating_add(snapshot.definition_cache_misses);
         for hash in snapshot.app_unique {
             guard.app_unique.insert(hash);
         }
@@ -390,5 +440,34 @@ mod tests {
         let enabled = payload.stats[0].variant_stats.get("enabled").unwrap();
         assert_eq!(enabled.check_count, 2);
         assert_eq!(enabled.request_count, 1);
+    }
+
+    #[test]
+    fn definition_cache_counters_on_flush_and_restore() {
+        let batcher = UsageBatcher::new("app", "Production", None, None, None);
+        batcher.record_definition_cache_hit();
+        batcher.record_definition_cache_hit();
+        batcher.record_definition_cache_miss();
+
+        let (payload, snapshot) = batcher.build_and_reset().expect("cache-only payload");
+        assert_eq!(payload.definition_cache_hits, Some(2));
+        assert_eq!(payload.definition_cache_misses, Some(1));
+        assert!(payload.stats.is_empty());
+        assert!(batcher.is_empty());
+
+        batcher.restore_snapshot(snapshot);
+        batcher.record_definition_cache_miss();
+        let (again, _) = batcher.build_and_reset().expect("restored");
+        assert_eq!(again.definition_cache_hits, Some(2));
+        assert_eq!(again.definition_cache_misses, Some(2));
+    }
+
+    #[test]
+    fn cache_only_batch_is_not_empty() {
+        let batcher = UsageBatcher::new("app", "Production", None, None, None);
+        assert!(batcher.is_empty());
+        batcher.record_definition_cache_hit();
+        assert!(!batcher.is_empty());
+        assert!(batcher.build_and_reset().is_some());
     }
 }

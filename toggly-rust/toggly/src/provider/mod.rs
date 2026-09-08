@@ -2,6 +2,10 @@
 
 use crate::config::TogglyConfig;
 use crate::crypto::verify_signed_definitions;
+use crate::definition_cache::{
+    cached_signed_timestamp, classify_http, DefinitionCacheRecorder, HttpCacheKind,
+    RefreshCacheOutcome,
+};
 use crate::definitions::{FeatureDefinition, JwkSet, SignedDefinitionsResponse};
 use crate::sdk_identity::{append_sdk_query, sdk_user_agent};
 use chrono::{DateTime, Utc};
@@ -36,6 +40,7 @@ pub struct DefinitionsProvider {
     definitions: Arc<DashMap<String, FeatureDefinition>>,
     last_fetch: Arc<RwLock<Option<Instant>>>,
     etag: Arc<RwLock<Option<String>>>,
+    last_modified: Arc<RwLock<Option<String>>>,
     last_timestamp: Arc<RwLock<Option<i64>>>,
     last_error: Arc<RwLock<Option<String>>>,
     last_error_time: Arc<RwLock<Option<DateTime<Utc>>>>,
@@ -43,6 +48,10 @@ pub struct DefinitionsProvider {
     shutdown_tx: Option<watch::Sender<bool>>,
     ws_connected: Arc<AtomicBool>,
     last_fallback_refresh: Arc<RwLock<Instant>>,
+    refresh_in_flight: Arc<AtomicBool>,
+    pending_ws_refresh: Arc<AtomicBool>,
+    definitions_loaded: Arc<AtomicBool>,
+    cache_recorder: Arc<RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>>,
 }
 
 impl DefinitionsProvider {
@@ -59,6 +68,7 @@ impl DefinitionsProvider {
             definitions: Arc::new(DashMap::new()),
             last_fetch: Arc::new(RwLock::new(None)),
             etag: Arc::new(RwLock::new(None)),
+            last_modified: Arc::new(RwLock::new(None)),
             last_timestamp: Arc::new(RwLock::new(None)),
             last_error: Arc::new(RwLock::new(None)),
             last_error_time: Arc::new(RwLock::new(None)),
@@ -66,12 +76,21 @@ impl DefinitionsProvider {
             shutdown_tx: None,
             ws_connected: Arc::new(AtomicBool::new(false)),
             last_fallback_refresh: Arc::new(RwLock::new(Instant::now())),
+            refresh_in_flight: Arc::new(AtomicBool::new(false)),
+            pending_ws_refresh: Arc::new(AtomicBool::new(false)),
+            definitions_loaded: Arc::new(AtomicBool::new(false)),
+            cache_recorder: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Attach a usage recorder for definition-refresh cache hit/miss counts.
+    pub fn set_definition_cache_recorder(&self, recorder: Arc<dyn DefinitionCacheRecorder>) {
+        *self.cache_recorder.write() = Some(recorder);
     }
 
     /// Initialize the provider by fetching definitions.
     pub async fn initialize(&mut self) -> crate::Result<()> {
-        self.fetch_definitions().await?;
+        self.refresh(false, false).await?;
 
         if !self.config.disable_background_refresh {
             self.start_background_refresh();
@@ -104,6 +123,7 @@ impl DefinitionsProvider {
         let definitions = Arc::clone(&self.definitions);
         let last_fetch = Arc::clone(&self.last_fetch);
         let etag = Arc::clone(&self.etag);
+        let last_modified = Arc::clone(&self.last_modified);
         let last_timestamp = Arc::clone(&self.last_timestamp);
         let last_error = Arc::clone(&self.last_error);
         let last_error_time = Arc::clone(&self.last_error_time);
@@ -113,11 +133,16 @@ impl DefinitionsProvider {
         let refresh_interval = config.refresh_interval;
         let ws_connected = Arc::clone(&self.ws_connected);
         let last_fallback_refresh = Arc::clone(&self.last_fallback_refresh);
+        let refresh_in_flight = Arc::clone(&self.refresh_in_flight);
+        let pending_ws_refresh = Arc::clone(&self.pending_ws_refresh);
+        let definitions_loaded = Arc::clone(&self.definitions_loaded);
+        let cache_recorder = Arc::clone(&self.cache_recorder);
 
         if config.enable_live_updates {
             let ws_definitions = Arc::clone(&definitions);
             let ws_last_fetch = Arc::clone(&last_fetch);
             let ws_etag = Arc::clone(&etag);
+            let ws_last_modified = Arc::clone(&last_modified);
             let ws_last_timestamp = Arc::clone(&last_timestamp);
             let ws_last_error = Arc::clone(&last_error);
             let ws_last_error_time = Arc::clone(&last_error_time);
@@ -126,6 +151,10 @@ impl DefinitionsProvider {
             let ws_http_client = http_client.clone();
             let ws_connected_flag = Arc::clone(&ws_connected);
             let ws_last_fallback = Arc::clone(&last_fallback_refresh);
+            let ws_refresh_in_flight = Arc::clone(&refresh_in_flight);
+            let ws_pending = Arc::clone(&pending_ws_refresh);
+            let ws_loaded = Arc::clone(&definitions_loaded);
+            let ws_recorder = Arc::clone(&cache_recorder);
             let mut ws_shutdown_rx = shutdown_rx.clone();
 
             tokio::spawn(async move {
@@ -161,10 +190,15 @@ impl DefinitionsProvider {
                                                         &ws_definitions,
                                                         &ws_last_fetch,
                                                         &ws_etag,
+                                                        &ws_last_modified,
                                                         &ws_last_timestamp,
                                                         &ws_last_error,
                                                         &ws_last_error_time,
                                                         &ws_jwks,
+                                                        &ws_refresh_in_flight,
+                                                        &ws_pending,
+                                                        &ws_loaded,
+                                                        &ws_recorder,
                                                     ).await;
                                                 }
                                             }
@@ -223,22 +257,30 @@ impl DefinitionsProvider {
                             if elapsed < Duration::from_secs(WS_FALLBACK_REFRESH_SECS) {
                                 debug!("WebSocket connected, skipping poll (fallback in {}s)",
                                     WS_FALLBACK_REFRESH_SECS - elapsed.as_secs());
+                                // Skipped poll (live WS / in-memory still valid) = cache hit.
+                                Self::record_hit(&cache_recorder);
                                 continue;
                             }
                             *last_fallback_refresh.write() = Instant::now();
                             debug!("WebSocket connected, performing fallback refresh");
                         }
 
-                        if let Err(e) = Self::fetch_definitions_impl(
+                        if let Err(e) = Self::refresh_impl(
                             &http_client,
                             &config,
                             &definitions,
                             &last_fetch,
                             &etag,
+                            &last_modified,
                             &last_timestamp,
                             &last_error,
                             &last_error_time,
                             &jwks,
+                            &refresh_in_flight,
+                            &pending_ws_refresh,
+                            &definitions_loaded,
+                            &cache_recorder,
+                            false,
                             false,
                         ).await {
                             warn!(error = %e, "Failed to refresh definitions");
@@ -264,10 +306,15 @@ impl DefinitionsProvider {
         definitions: &DashMap<String, FeatureDefinition>,
         last_fetch: &RwLock<Option<Instant>>,
         etag: &RwLock<Option<String>>,
+        last_modified: &RwLock<Option<String>>,
         last_timestamp: &RwLock<Option<i64>>,
         last_error: &RwLock<Option<String>>,
         last_error_time: &RwLock<Option<DateTime<Utc>>>,
         jwks: &RwLock<Option<JwksCache>>,
+        refresh_in_flight: &AtomicBool,
+        pending_ws_refresh: &AtomicBool,
+        definitions_loaded: &AtomicBool,
+        cache_recorder: &RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>,
     ) {
         if let Ok(msg) = serde_json::from_str::<serde_json::Value>(text) {
             if let Some(msg_type) = msg.get("type").and_then(|t| t.as_str()) {
@@ -308,16 +355,23 @@ impl DefinitionsProvider {
 
                 if should_refresh {
                     debug!(msg_type, force_jwks, "WebSocket: refreshing definitions");
-                    if let Err(e) = Self::fetch_definitions_impl(
+                    // WS-forced refresh must not be suppressed by scheduled poll skip.
+                    if let Err(e) = Self::refresh_impl(
                         http_client,
                         config,
                         definitions,
                         last_fetch,
                         etag,
+                        last_modified,
                         last_timestamp,
                         last_error,
                         last_error_time,
                         jwks,
+                        refresh_in_flight,
+                        pending_ws_refresh,
+                        definitions_loaded,
+                        cache_recorder,
+                        true,
                         force_jwks,
                     )
                     .await
@@ -332,16 +386,22 @@ impl DefinitionsProvider {
         let trimmed = text.trim();
         if trimmed == "update" || trimmed == "flags-updated" {
             debug!("WebSocket: plain text update signal, refreshing");
-            if let Err(e) = Self::fetch_definitions_impl(
+            if let Err(e) = Self::refresh_impl(
                 http_client,
                 config,
                 definitions,
                 last_fetch,
                 etag,
+                last_modified,
                 last_timestamp,
                 last_error,
                 last_error_time,
                 jwks,
+                refresh_in_flight,
+                pending_ws_refresh,
+                definitions_loaded,
+                cache_recorder,
+                true,
                 false,
             )
             .await
@@ -351,29 +411,144 @@ impl DefinitionsProvider {
         }
     }
 
-    /// Fetch definitions from the API.
+    /// Fetch definitions from the API (counts one cache hit/miss outcome).
     pub async fn fetch_definitions(&self) -> crate::Result<()> {
-        Self::fetch_definitions_impl(
+        self.refresh(false, false).await
+    }
+
+    /// Refresh definitions once. Concurrent in-flight skips do not count.
+    ///
+    /// `from_websocket` forces a network attempt even when scheduled polls would skip.
+    pub async fn refresh(
+        &self,
+        from_websocket: bool,
+        force_jwks_refresh: bool,
+    ) -> crate::Result<()> {
+        Self::refresh_impl(
             &self.http_client,
             &self.config,
             &self.definitions,
             &self.last_fetch,
             &self.etag,
+            &self.last_modified,
             &self.last_timestamp,
             &self.last_error,
             &self.last_error_time,
             &self.jwks,
-            false,
+            &self.refresh_in_flight,
+            &self.pending_ws_refresh,
+            &self.definitions_loaded,
+            &self.cache_recorder,
+            from_websocket,
+            force_jwks_refresh,
         )
         .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn refresh_impl(
+        http_client: &reqwest::Client,
+        config: &TogglyConfig,
+        definitions: &DashMap<String, FeatureDefinition>,
+        last_fetch: &RwLock<Option<Instant>>,
+        etag: &RwLock<Option<String>>,
+        last_modified: &RwLock<Option<String>>,
+        last_timestamp: &RwLock<Option<i64>>,
+        last_error: &RwLock<Option<String>>,
+        last_error_time: &RwLock<Option<DateTime<Utc>>>,
+        jwks: &RwLock<Option<JwksCache>>,
+        refresh_in_flight: &AtomicBool,
+        pending_ws_refresh: &AtomicBool,
+        definitions_loaded: &AtomicBool,
+        cache_recorder: &RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>,
+        from_websocket: bool,
+        force_jwks_refresh: bool,
+    ) -> crate::Result<()> {
+        // Concurrent refresh skipped (in flight) — do not count.
+        if refresh_in_flight
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            if from_websocket {
+                pending_ws_refresh.store(true, Ordering::SeqCst);
+            }
+            return Ok(());
+        }
+
+        let result = Self::fetch_definitions_impl(
+            http_client,
+            config,
+            definitions,
+            last_fetch,
+            etag,
+            last_modified,
+            last_timestamp,
+            last_error,
+            last_error_time,
+            jwks,
+            definitions_loaded,
+            force_jwks_refresh,
+        )
+        .await;
+
+        match &result {
+            Ok(RefreshCacheOutcome::Hit) => Self::record_hit(cache_recorder),
+            Ok(RefreshCacheOutcome::Miss) => Self::record_miss(cache_recorder),
+            Err(_) => {
+                // Network error / timeout keeping last-good revision (incl. empty) — hit.
+                if definitions_loaded.load(Ordering::SeqCst) {
+                    Self::record_hit(cache_recorder);
+                }
+            }
+        }
+
+        refresh_in_flight.store(false, Ordering::SeqCst);
+        if pending_ws_refresh.swap(false, Ordering::SeqCst) {
+            // Drain WS notifies that arrived while in flight (no count on the skip).
+            let _ = Box::pin(Self::refresh_impl(
+                http_client,
+                config,
+                definitions,
+                last_fetch,
+                etag,
+                last_modified,
+                last_timestamp,
+                last_error,
+                last_error_time,
+                jwks,
+                refresh_in_flight,
+                pending_ws_refresh,
+                definitions_loaded,
+                cache_recorder,
+                true,
+                false,
+            ))
+            .await;
+        }
+
+        result.map(|_| ())
+    }
+
+    fn record_hit(cache_recorder: &RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>) {
+        if let Some(r) = cache_recorder.read().as_ref() {
+            r.record_definition_cache_hit();
+        }
+    }
+
+    fn record_miss(cache_recorder: &RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>) {
+        if let Some(r) = cache_recorder.read().as_ref() {
+            r.record_definition_cache_miss();
+        }
     }
 
     /// Clear in-memory definitions, ETag/revision, and cached JWKS.
     pub fn clear(&self) {
         self.definitions.clear();
         *self.etag.write() = None;
+        *self.last_modified.write() = None;
         *self.last_timestamp.write() = None;
         *self.jwks.write() = None;
+        self.definitions_loaded.store(false, Ordering::SeqCst);
         debug!("Cleared in-memory definitions and JWKS cache");
     }
 
@@ -392,6 +567,42 @@ impl DefinitionsProvider {
         self.etag.read().clone()
     }
 
+    /// True when a revision has been successfully loaded (including empty `{}`).
+    pub fn definitions_loaded(&self) -> bool {
+        self.definitions_loaded.load(Ordering::SeqCst)
+    }
+
+    /// Test helper: mark WebSocket connected with a recent fallback timestamp.
+    #[cfg(test)]
+    pub fn set_ws_connected_for_test(&self, connected: bool) {
+        self.ws_connected.store(connected, Ordering::SeqCst);
+        if connected {
+            *self.last_fallback_refresh.write() = Instant::now();
+        }
+    }
+
+    /// Test helper: whether a scheduled poll would skip while WS is live.
+    #[cfg(test)]
+    pub fn should_skip_refresh_for_test(&self) -> bool {
+        if !self.ws_connected.load(Ordering::SeqCst) {
+            return false;
+        }
+        self.last_fallback_refresh.read().elapsed()
+            < Duration::from_secs(WS_FALLBACK_REFRESH_SECS)
+    }
+
+    /// Test helper: force the in-flight guard (concurrent skip).
+    #[cfg(test)]
+    pub fn set_refresh_in_flight_for_test(&self, in_flight: bool) {
+        self.refresh_in_flight.store(in_flight, Ordering::SeqCst);
+    }
+
+    /// Test helper: set signed timestamp without applying defs.
+    #[cfg(test)]
+    pub fn set_last_timestamp_for_test(&self, ts: i64) {
+        *self.last_timestamp.write() = Some(ts);
+    }
+
     fn record_error(
         config: &TogglyConfig,
         last_error: &RwLock<Option<String>>,
@@ -408,7 +619,34 @@ impl DefinitionsProvider {
         *etag.write() = None;
     }
 
-    /// Internal implementation of fetch_definitions.
+    fn store_revision_headers(
+        etag: &RwLock<Option<String>>,
+        last_modified: &RwLock<Option<String>>,
+        response_etag: Option<String>,
+        response_lm: Option<String>,
+    ) {
+        if let Some(rev) = response_etag.filter(|s| !s.is_empty()) {
+            *etag.write() = Some(rev);
+        }
+        if let Some(lm) = response_lm.filter(|s| !s.is_empty()) {
+            *last_modified.write() = Some(lm);
+        }
+    }
+
+    fn apply_definitions(
+        definitions: &DashMap<String, FeatureDefinition>,
+        parsed: Vec<FeatureDefinition>,
+        definitions_loaded: &AtomicBool,
+    ) {
+        definitions.clear();
+        for definition in parsed {
+            definitions.insert(definition.feature_key.clone(), definition);
+        }
+        definitions_loaded.store(true, Ordering::SeqCst);
+        info!(count = definitions.len(), "Loaded feature definitions");
+    }
+
+    /// Internal implementation of fetch_definitions (one outcome, no double-count).
     #[allow(clippy::too_many_arguments)]
     async fn fetch_definitions_impl(
         http_client: &reqwest::Client,
@@ -416,12 +654,14 @@ impl DefinitionsProvider {
         definitions: &DashMap<String, FeatureDefinition>,
         last_fetch: &RwLock<Option<Instant>>,
         etag: &RwLock<Option<String>>,
+        last_modified: &RwLock<Option<String>>,
         last_timestamp: &RwLock<Option<i64>>,
         last_error: &RwLock<Option<String>>,
         last_error_time: &RwLock<Option<DateTime<Utc>>>,
         jwks: &RwLock<Option<JwksCache>>,
+        definitions_loaded: &AtomicBool,
         force_jwks_refresh: bool,
-    ) -> crate::Result<()> {
+    ) -> crate::Result<RefreshCacheOutcome> {
         if force_jwks_refresh {
             Self::clear_jwks(jwks, etag);
         }
@@ -429,10 +669,15 @@ impl DefinitionsProvider {
         let url = config.definitions_endpoint();
         debug!(url = %url, "Fetching definitions");
 
-        let mut request = http_client.get(&url);
+        let existing_etag = etag.read().clone();
+        let existing_lm = last_modified.read().clone();
 
-        if let Some(ref e) = *etag.read() {
+        let mut request = http_client.get(&url);
+        if let Some(ref e) = existing_etag {
             request = request.header("If-None-Match", e.clone());
+        }
+        if let Some(ref lm) = existing_lm {
+            request = request.header("If-Modified-Since", lm.clone());
         }
 
         let response = match request.send().await {
@@ -444,27 +689,49 @@ impl DefinitionsProvider {
             }
         };
 
-        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
-            debug!("Definitions not modified (304)");
-            *last_fetch.write() = Some(Instant::now());
-            return Ok(());
-        }
-
-        if !response.status().is_success() {
-            let err = crate::Error::Provider(format!(
-                "Failed to fetch definitions: {}",
-                response.status()
-            ));
-            Self::record_error(config, last_error, last_error_time, &err);
-            return Err(err);
-        }
-
-        let revision = response
+        let status = response.status().as_u16();
+        let response_etag = response
             .headers()
             .get(DEFINITIONS_REVISION_HEADER)
             .or_else(|| response.headers().get("etag"))
             .and_then(|v| v.to_str().ok())
-            .map(|s| s.trim_matches('"').to_string());
+            .map(|s| s.to_string());
+        let response_lm = response
+            .headers()
+            .get(reqwest::header::LAST_MODIFIED)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        let kind = classify_http(
+            status,
+            existing_etag.as_deref(),
+            response_etag.as_deref(),
+            existing_lm.as_deref(),
+            response_lm.as_deref(),
+        );
+
+        match kind {
+            HttpCacheKind::NotModified => {
+                debug!("Definitions not modified (304)");
+                *last_fetch.write() = Some(Instant::now());
+                return Ok(RefreshCacheOutcome::Hit);
+            }
+            HttpCacheKind::SameRevision => {
+                debug!("Definitions revision matches existing (ETag or Last-Modified)");
+                Self::store_revision_headers(etag, last_modified, response_etag, response_lm);
+                *last_fetch.write() = Some(Instant::now());
+                return Ok(RefreshCacheOutcome::Hit);
+            }
+            HttpCacheKind::ErrorStatus => {
+                let err = crate::Error::Provider(format!(
+                    "Failed to fetch definitions: {}",
+                    response.status()
+                ));
+                Self::record_error(config, last_error, last_error_time, &err);
+                return Err(err);
+            }
+            HttpCacheKind::NewContent => {}
+        }
 
         let body_bytes = match response.bytes().await {
             Ok(b) => b,
@@ -479,12 +746,19 @@ impl DefinitionsProvider {
             let current_ts = *last_timestamp.read();
             match Self::parse_and_verify_signed(http_client, config, &body_bytes, jwks).await {
                 Ok((defs, ts)) => {
-                    if let Some(prev) = current_ts {
-                        if ts < prev {
-                            debug!(prev, ts, "Ignoring signed definitions with older timestamp");
-                            *last_fetch.write() = Some(Instant::now());
-                            return Ok(());
-                        }
+                    if cached_signed_timestamp(current_ts, ts) {
+                        debug!(
+                            ?current_ts,
+                            ts, "Ignoring signed definitions with equal or older timestamp"
+                        );
+                        Self::store_revision_headers(
+                            etag,
+                            last_modified,
+                            response_etag,
+                            response_lm,
+                        );
+                        *last_fetch.write() = Some(Instant::now());
+                        return Ok(RefreshCacheOutcome::Hit);
                     }
                     *last_timestamp.write() = Some(ts);
                     defs
@@ -496,6 +770,7 @@ impl DefinitionsProvider {
                 }
             }
         } else {
+            // Unsigned path: still treat equal signed timestamp in JSON as hit when present.
             let body: serde_json::Value = match serde_json::from_slice(&body_bytes) {
                 Ok(v) => v,
                 Err(e) => {
@@ -504,6 +779,18 @@ impl DefinitionsProvider {
                     return Err(err);
                 }
             };
+            if let Some(ts) = body.get("timestamp").and_then(|v| v.as_i64()) {
+                let current_ts = *last_timestamp.read();
+                if cached_signed_timestamp(current_ts, ts) {
+                    debug!(
+                        ?current_ts,
+                        ts, "Ignoring definitions with equal or older signed timestamp"
+                    );
+                    Self::store_revision_headers(etag, last_modified, response_etag, response_lm);
+                    *last_fetch.write() = Some(Instant::now());
+                    return Ok(RefreshCacheOutcome::Hit);
+                }
+            }
             match Self::parse_definitions_payload(body) {
                 Ok(defs) => defs,
                 Err(e) => {
@@ -513,20 +800,13 @@ impl DefinitionsProvider {
             }
         };
 
-        if let Some(rev) = revision {
-            *etag.write() = Some(rev);
-        }
-
-        definitions.clear();
-        for definition in parsed_definitions {
-            definitions.insert(definition.feature_key.clone(), definition);
-        }
-        info!(count = definitions.len(), "Loaded feature definitions");
+        Self::store_revision_headers(etag, last_modified, response_etag, response_lm);
+        Self::apply_definitions(definitions, parsed_definitions, definitions_loaded);
 
         *last_fetch.write() = Some(Instant::now());
         *last_error.write() = None;
         *last_error_time.write() = None;
-        Ok(())
+        Ok(RefreshCacheOutcome::Miss)
     }
 
     async fn parse_and_verify_signed(
@@ -612,6 +892,16 @@ impl DefinitionsProvider {
                     ))
                 })?;
                 return Ok(vec![definition]);
+            }
+
+            // Signed envelope already unwrapped; map of featureKey → def, or empty object.
+            if obj.contains_key("defs") || obj.contains_key("features") {
+                let features = obj
+                    .get("defs")
+                    .or_else(|| obj.get("features"))
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                return Self::parse_definitions_payload(features);
             }
 
             let mut definitions = Vec::with_capacity(obj.len());
@@ -704,6 +994,65 @@ impl std::fmt::Debug for DefinitionsProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::definition_cache::DefinitionCacheRecorder;
+    use crate::telemetry::{
+        FeatureStatPayload, TelemetryRuntime, TelemetryRuntimeConfig, TelemetrySenders, UsageSender,
+    };
+    use async_trait::async_trait;
+    use parking_lot::Mutex as PlMutex;
+    use std::sync::Mutex as StdMutex;
+    use wiremock::matchers::{method, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    struct CountingRecorder {
+        hits: PlMutex<i32>,
+        misses: PlMutex<i32>,
+    }
+
+    impl CountingRecorder {
+        fn new() -> Self {
+            Self {
+                hits: PlMutex::new(0),
+                misses: PlMutex::new(0),
+            }
+        }
+
+        fn snapshot(&self) -> (i32, i32) {
+            (*self.hits.lock(), *self.misses.lock())
+        }
+    }
+
+    impl DefinitionCacheRecorder for CountingRecorder {
+        fn record_definition_cache_hit(&self) {
+            *self.hits.lock() += 1;
+        }
+
+        fn record_definition_cache_miss(&self) {
+            *self.misses.lock() += 1;
+        }
+    }
+
+    fn feature_json(key: &str) -> serde_json::Value {
+        serde_json::json!([{
+            "featureKey": key,
+            "filters": [{"name": "AlwaysOn", "parameters": {}}],
+            "metrics": [],
+            "securedFeature": false,
+            "clientSdkEnabled": true,
+            "requirementType": "Any"
+        }])
+    }
+
+    async fn provider_against(server: &MockServer) -> DefinitionsProvider {
+        let config = TogglyConfig::builder()
+            .app_key("app")
+            .environment("Production")
+            .definitions_url(format!("{}/", server.uri()))
+            .disable_background_refresh(true)
+            .enable_live_updates(false)
+            .build();
+        DefinitionsProvider::new(config).unwrap()
+    }
 
     #[test]
     fn test_provider_new() {
@@ -738,6 +1087,7 @@ mod tests {
             },
         );
         *provider.etag.write() = Some("rev1".into());
+        provider.definitions_loaded.store(true, Ordering::SeqCst);
         *provider.jwks.write() = Some(JwksCache {
             set: JwkSet { keys: vec![] },
             expiry: Instant::now() + Duration::from_secs(60),
@@ -747,6 +1097,7 @@ mod tests {
 
         assert!(provider.is_empty());
         assert!(provider.etag().is_none());
+        assert!(!provider.definitions_loaded());
         assert!(provider.jwks.read().is_none());
     }
 
@@ -801,5 +1152,293 @@ mod tests {
                 env!("CARGO_PKG_VERSION")
             )
         );
+    }
+
+    #[tokio::test]
+    async fn refresh_304_is_hit_and_new_200_is_miss() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"1\"")
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(ResponseTemplate::new(304).insert_header("etag", "\"1\""))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"2\"")
+                    .set_body_json(feature_json("feat-b")),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let rec = Arc::new(CountingRecorder::new());
+        provider.set_definition_cache_recorder(rec.clone());
+
+        provider.refresh(false, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (0, 1));
+
+        provider.refresh(false, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (1, 1));
+
+        provider.refresh(true, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (1, 2));
+        assert!(provider.contains("feat-b"));
+    }
+
+    #[tokio::test]
+    async fn equal_etag_is_hit() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"abc\"")
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "W/\"abc\"")
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let rec = Arc::new(CountingRecorder::new());
+        provider.set_definition_cache_recorder(rec.clone());
+        provider.refresh(false, false).await.unwrap();
+        provider.refresh(true, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (1, 1));
+    }
+
+    #[tokio::test]
+    async fn equal_last_modified_is_hit() {
+        let lm = "Mon, 01 Jan 2024 00:00:00 GMT";
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"1\"")
+                    .insert_header("last-modified", lm)
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"different\"")
+                    .insert_header("last-modified", lm)
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let rec = Arc::new(CountingRecorder::new());
+        provider.set_definition_cache_recorder(rec.clone());
+        provider.refresh(false, false).await.unwrap();
+        provider.refresh(true, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (1, 1));
+    }
+
+    #[tokio::test]
+    async fn equal_signed_timestamp_is_hit() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"replay\"")
+                    .set_body_json(serde_json::json!({
+                        "defs": feature_json("feat-a"),
+                        "signature": "unused",
+                        "timestamp": 1_700_000_000_i64,
+                        "kid": "k1"
+                    })),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let rec = Arc::new(CountingRecorder::new());
+        provider.set_definition_cache_recorder(rec.clone());
+        *provider.etag.write() = Some("\"prior\"".into());
+        provider.set_last_timestamp_for_test(1_700_000_000);
+        provider.refresh(true, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (1, 0));
+    }
+
+    #[tokio::test]
+    async fn network_error_keeps_cache_as_hit_including_empty_revision() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"empty\"")
+                    .set_body_json(serde_json::json!([])),
+            )
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let rec = Arc::new(CountingRecorder::new());
+        provider.set_definition_cache_recorder(rec.clone());
+        provider.refresh(false, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (0, 1));
+        assert!(provider.definitions_loaded());
+        assert!(provider.is_empty());
+
+        let _ = provider.refresh(false, false).await;
+        assert_eq!(rec.snapshot(), (1, 1));
+    }
+
+    #[tokio::test]
+    async fn initial_network_failure_without_cache_does_not_count() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let rec = Arc::new(CountingRecorder::new());
+        provider.set_definition_cache_recorder(rec.clone());
+        let _ = provider.refresh(false, false).await;
+        assert_eq!(rec.snapshot(), (0, 0));
+    }
+
+    #[tokio::test]
+    async fn concurrent_inflight_skip_does_not_count() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"1\"")
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let rec = Arc::new(CountingRecorder::new());
+        provider.set_definition_cache_recorder(rec.clone());
+        provider.set_refresh_in_flight_for_test(true);
+        provider.refresh(true, false).await.unwrap();
+        provider.refresh(false, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (0, 0));
+        provider.set_refresh_in_flight_for_test(false);
+    }
+
+    #[tokio::test]
+    async fn skipped_poll_helper_and_ws_force_miss() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"ws-1\"")
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let rec = Arc::new(CountingRecorder::new());
+        provider.set_definition_cache_recorder(rec.clone());
+        provider.set_ws_connected_for_test(true);
+        assert!(provider.should_skip_refresh_for_test());
+        DefinitionsProvider::record_hit(&provider.cache_recorder);
+        assert_eq!(rec.snapshot(), (1, 0));
+
+        provider.refresh(true, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (1, 1));
+    }
+
+    #[tokio::test]
+    async fn usage_batcher_flushes_cache_only_and_restores_on_fail() {
+        struct ControllableUsage {
+            payloads: StdMutex<Vec<FeatureStatPayload>>,
+            fail_next: StdMutex<bool>,
+        }
+
+        #[async_trait]
+        impl UsageSender for ControllableUsage {
+            async fn send_stats(&self, payload: &FeatureStatPayload) -> Result<(), String> {
+                let mut fail = self.fail_next.lock().unwrap();
+                if *fail {
+                    *fail = false;
+                    return Err("boom".into());
+                }
+                self.payloads.lock().unwrap().push(payload.clone());
+                Ok(())
+            }
+        }
+
+        let sender = Arc::new(ControllableUsage {
+            payloads: StdMutex::new(Vec::new()),
+            fail_next: StdMutex::new(false),
+        });
+        let mut config = TelemetryRuntimeConfig::from_client_config(
+            "app",
+            "Production",
+            None,
+            Some(true),
+            Some(false),
+            Some(Duration::from_secs(0)),
+            Some(Duration::from_secs(0)),
+            None,
+            None,
+        );
+        config.senders = TelemetrySenders {
+            usage: Some(sender.clone()),
+            metrics: None,
+        };
+        config.senders_provided = true;
+        let runtime = TelemetryRuntime::start(config);
+
+        runtime.record_definition_cache_hit();
+        *sender.fail_next.lock().unwrap() = true;
+        runtime.flush_all().await;
+        assert!(sender.payloads.lock().unwrap().is_empty());
+
+        runtime.record_definition_cache_miss();
+        runtime.flush_all().await;
+        let payloads = sender.payloads.lock().unwrap();
+        assert_eq!(payloads.len(), 1);
+        assert_eq!(payloads[0].definition_cache_hits, Some(1));
+        assert_eq!(payloads[0].definition_cache_misses, Some(1));
+        assert!(payloads[0].stats.is_empty());
+        runtime.close().await;
     }
 }

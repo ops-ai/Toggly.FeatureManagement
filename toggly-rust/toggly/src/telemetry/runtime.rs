@@ -305,6 +305,26 @@ impl TelemetryRuntime {
         }
     }
 
+    /// Count a definition-refresh served from local cache / unchanged revision.
+    pub fn record_definition_cache_hit(&self) {
+        if !self.usage_enabled() {
+            return;
+        }
+        if let Some(batcher) = self.inner.usage_batcher.lock().as_ref() {
+            batcher.record_definition_cache_hit();
+        }
+    }
+
+    /// Count a definition-refresh that applied a new revision.
+    pub fn record_definition_cache_miss(&self) {
+        if !self.usage_enabled() {
+            return;
+        }
+        if let Some(batcher) = self.inner.usage_batcher.lock().as_ref() {
+            batcher.record_definition_cache_miss();
+        }
+    }
+
     /// Aggregate a business measurement.
     pub fn measure(&self, metric: &str, value: f64, options: Option<&MetricsFeatureOptions>) {
         if let Some(batcher) = self.inner.metrics_batcher.lock().as_ref() {
@@ -506,6 +526,16 @@ impl Drop for TelemetryRuntime {
                 }
             });
         }
+    }
+}
+
+impl crate::definition_cache::DefinitionCacheRecorder for TelemetryRuntime {
+    fn record_definition_cache_hit(&self) {
+        TelemetryRuntime::record_definition_cache_hit(self);
+    }
+
+    fn record_definition_cache_miss(&self) {
+        TelemetryRuntime::record_definition_cache_miss(self);
     }
 }
 

@@ -43,7 +43,7 @@ pub struct TogglyClient {
     provider: Arc<tokio::sync::RwLock<DefinitionsProvider>>,
     engine: Engine,
     cache: Cache<bool>,
-    telemetry: Option<TelemetryRuntime>,
+    telemetry: Option<Arc<TelemetryRuntime>>,
 }
 
 impl TogglyClient {
@@ -65,7 +65,6 @@ impl TogglyClient {
         config.validate()?;
 
         let mut provider = DefinitionsProvider::new(config.clone())?;
-        provider.initialize().await?;
 
         let cache = Cache::new(config.cache_ttl, config.cache_max_entries);
         crate::entity_context::register_entity_contexts_at_startup(&config).await;
@@ -85,14 +84,16 @@ impl TogglyClient {
             runtime_config.senders = senders;
             runtime_config.senders_provided = true;
         }
-        let telemetry = Some(TelemetryRuntime::start(runtime_config));
+        let telemetry = Arc::new(TelemetryRuntime::start(runtime_config));
+        provider.set_definition_cache_recorder(telemetry.clone());
+        provider.initialize().await?;
 
         Ok(Self {
             config,
             provider: Arc::new(tokio::sync::RwLock::new(provider)),
             engine: Engine::with_defaults(),
             cache,
-            telemetry,
+            telemetry: Some(telemetry),
         })
     }
 
@@ -221,9 +222,17 @@ impl TogglyClient {
 
     /// Force a refresh of feature definitions.
     pub async fn refresh(&self) -> crate::Result<()> {
-        self.provider.read().await.fetch_definitions().await?;
+        self.provider.read().await.refresh(false, false).await?;
         self.cache.clear();
         info!("Feature definitions refreshed");
+        Ok(())
+    }
+
+    /// Force a refresh, optionally marking the attempt as WebSocket-driven.
+    pub async fn refresh_from_websocket(&self) -> crate::Result<()> {
+        self.provider.read().await.refresh(true, false).await?;
+        self.cache.clear();
+        info!("Feature definitions refreshed (websocket)");
         Ok(())
     }
 
