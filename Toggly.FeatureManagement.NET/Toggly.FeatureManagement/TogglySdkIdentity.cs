@@ -20,10 +20,11 @@ namespace Toggly.FeatureManagement
         /// <summary>Full User-Agent: <c>toggly-dotnet/{Version}</c>.</summary>
         public static string UserAgent { get; } = $"toggly-{SdkId}/{Version}";
 
-        private static string ResolveVersion()
-        {
-            var assembly = typeof(TogglySdkIdentity).Assembly;
+        private static string ResolveVersion() => ResolveVersion(typeof(TogglySdkIdentity).Assembly);
 
+        /// <summary>Resolves a package version from assembly attributes (testable).</summary>
+        internal static string ResolveVersion(Assembly assembly)
+        {
             var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
             if (TryNormalize(informational, out var fromInfo))
                 return fromInfo;
@@ -44,7 +45,8 @@ namespace Toggly.FeatureManagement
             return "unknown";
         }
 
-        private static bool TryNormalize(string? raw, out string version)
+        /// <summary>Normalizes raw version attribute text (testable).</summary>
+        internal static bool TryNormalize(string? raw, out string version)
         {
             version = "";
             if (string.IsNullOrWhiteSpace(raw))
