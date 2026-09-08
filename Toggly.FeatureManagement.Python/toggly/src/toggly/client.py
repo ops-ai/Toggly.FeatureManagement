@@ -21,6 +21,15 @@ except ImportError:
 from toggly.config import TogglyConfig
 from toggly.context import EvaluationContext
 from toggly.crypto import verify_signed_definitions
+from toggly.definition_cache import (
+    HttpCacheKind,
+    cached_flags_response,
+    extract_raw_defs_json,
+    if_none_match_headers,
+    parse_definitions_payload,
+    parse_signed_timestamp,
+    probe_http_cache,
+)
 from toggly.entity_context import register_entity_contexts_at_startup
 from toggly.enums import FeatureRequirement, LoadStatus
 from toggly.evaluator import EvaluationEngine, EvaluatorRegistry
@@ -39,7 +48,6 @@ from toggly.models import (
     DebugInfo,
     EvaluatedVariantDef,
     FeatureDefinition,
-    FeatureFilter,
     FeatureState,
     JsonWebKey,
     JsonWebKeySet,
@@ -225,8 +233,24 @@ class TogglyClient(TelemetryClientMixin):
             self._start_websocket()
             if response.status != LoadStatus.ERROR:
                 return response
+            # ERROR: keep serving cache/defaults; background already started once.
+            if self._config.enable_variants:
+                if cached_variants:
+                    return TogglyInitResponse(
+                        status=LoadStatus.CACHED,
+                        flags=dict(self._flags),
+                    )
+            elif cached:
+                return TogglyInitResponse(
+                    status=LoadStatus.CACHED,
+                    flags=dict(self._flags),
+                )
+            return TogglyInitResponse(
+                status=LoadStatus.DEFAULTS,
+                flags=dict(self._flags),
+            )
 
-        # Fall back to cached or defaults
+        # No app key — fall back to cached or defaults
         self._is_initialized = True
         self._start_background_refresh()
         self._start_websocket()
@@ -275,22 +299,17 @@ class TogglyClient(TelemetryClientMixin):
         outcome_recorded = False
         try:
             if self._config.enable_variants:
-                response, outcome, pending_snapshot = self._fetch_variants()
+                response, outcome, pending_variants = self._fetch_variants()
+                self._record_refresh_cache_outcome(outcome)
+                outcome_recorded = True
+                if pending_variants is not None:
+                    self._snapshot_provider.save_variants(pending_variants)
             else:
-                response, outcome, pending_snapshot = self._fetch_definitions()
-
-            if outcome == "miss":
-                self._record_definition_cache_miss()
-            else:
-                self._record_definition_cache_hit()
-            outcome_recorded = True
-
-            if pending_snapshot is not None:
-                if self._config.enable_variants:
-                    self._snapshot_provider.save_variants(pending_snapshot)
-                else:
-                    self._snapshot_provider.save_definitions(pending_snapshot)
-
+                response, outcome, pending_defs = self._fetch_definitions()
+                self._record_refresh_cache_outcome(outcome)
+                outcome_recorded = True
+                if pending_defs is not None:
+                    self._snapshot_provider.save_definitions(pending_defs)
             return response
         except TogglyNetworkError as e:
             self._report_error(f"Failed to refresh definitions: {e}", e)
@@ -315,19 +334,6 @@ class TogglyClient(TelemetryClientMixin):
         finally:
             with self._lock:
                 self._refresh_in_flight = False
-
-    @staticmethod
-    def _normalize_revision(revision: str | None) -> str | None:
-        """Normalize an ETag/revision for comparison."""
-        if not revision:
-            return None
-        return revision.strip().strip('"')
-
-    def _revisions_match(self, left: str | None, right: str | None) -> bool:
-        """Return True when both revisions are present and equal."""
-        a = self._normalize_revision(left)
-        b = self._normalize_revision(right)
-        return a is not None and b is not None and a == b
 
     def is_enabled(
         self,
@@ -624,44 +630,25 @@ class TogglyClient(TelemetryClientMixin):
         )
 
         previous_etag = self._etag
-        headers: dict[str, str] = {}
-        if previous_etag:
-            headers["If-None-Match"] = previous_etag
+        headers = if_none_match_headers(previous_etag)
 
         response = self._http.get(url, headers=headers)
 
-        if response.status_code == 304:
-            # Not modified — served from local definitions.
+        probe = probe_http_cache(response.status_code, previous_etag, response.headers)
+        if probe.kind is HttpCacheKind.NOT_MODIFIED:
             self._last_refresh = datetime.now(timezone.utc)
-            return (
-                TogglyInitResponse(
-                    status=LoadStatus.CACHED,
-                    flags=dict(self._flags),
-                ),
-                "hit",
-                None,
-            )
-
-        if response.status_code != 200:
+            return cached_flags_response(self._flags), "hit", None
+        if probe.kind is HttpCacheKind.ERROR_STATUS:
             raise TogglyNetworkError(
-                f"Failed to fetch definitions: HTTP {response.status_code}",
-                status_code=response.status_code,
+                f"Failed to fetch definitions: HTTP {probe.status_code}",
+                status_code=probe.status_code,
             )
-
-        response_etag = response.headers.get("ETag")
-        # HTTP 200 whose revision matches existing (CDN replay) — cache hit.
-        if self._revisions_match(previous_etag, response_etag):
+        if probe.kind is HttpCacheKind.SAME_REVISION:
             self._last_refresh = datetime.now(timezone.utc)
-            if response_etag:
-                self._etag = response_etag
-            return (
-                TogglyInitResponse(
-                    status=LoadStatus.CACHED,
-                    flags=dict(self._flags),
-                ),
-                "hit",
-                None,
-            )
+            if probe.response_etag:
+                self._etag = probe.response_etag
+            return cached_flags_response(self._flags), "hit", None
+        response_etag = probe.response_etag
 
         raw_body = response.text()
         try:
@@ -677,7 +664,7 @@ class TogglyClient(TelemetryClientMixin):
         if self._config.use_signed_definitions:
             if not isinstance(data, dict):
                 raise TogglySignatureError("Signed response must be an object")
-            signed_defs_json = self._extract_raw_defs_json(raw_body)
+            signed_defs_json = extract_raw_defs_json(raw_body)
             if signed_defs_json is None:
                 raise TogglySignatureError("Signed response missing defs")
             raw_sig = data.get("signature")
@@ -685,12 +672,7 @@ class TogglyClient(TelemetryClientMixin):
             raw_kid = data.get("kid")
             kid = raw_kid if isinstance(raw_kid, str) else None
             ts = data.get("timestamp")
-            if isinstance(ts, bool):
-                signed_ts = None
-            elif isinstance(ts, (int, float)):
-                signed_ts = int(ts)
-            else:
-                signed_ts = None
+            signed_ts = parse_signed_timestamp(ts)
             if not signature:
                 raise TogglySignatureError("Signed response missing signature")
             if not kid:
@@ -699,14 +681,7 @@ class TogglyClient(TelemetryClientMixin):
                 raise TogglySignatureError("Signed response missing timestamp")
             if signed_ts < self._last_signed_timestamp and self._last_signed_timestamp > 0:
                 self._last_refresh = datetime.now(timezone.utc)
-                return (
-                    TogglyInitResponse(
-                        status=LoadStatus.CACHED,
-                        flags=dict(self._flags),
-                    ),
-                    "hit",
-                    None,
-                )
+                return cached_flags_response(self._flags), "hit", None
 
             jwks = self._load_or_fetch_jwks()
             verify_signed_definitions(
@@ -717,10 +692,10 @@ class TogglyClient(TelemetryClientMixin):
                 jwks,
                 self._config.allowed_key_ids,
             )
-            definitions = self._parse_definitions(json.loads(signed_defs_json))
+            definitions = parse_definitions_payload(json.loads(signed_defs_json))
             self._last_signed_timestamp = signed_ts
         else:
-            definitions = self._parse_definitions(data)
+            definitions = parse_definitions_payload(data)
 
         # Update state (new revision applied — miss).
         with self._lock:
@@ -753,44 +728,7 @@ class TogglyClient(TelemetryClientMixin):
 
     def _extract_raw_defs_json(self, body: str) -> str | None:
         """Extract the exact JSON value of the ``defs`` property from a response body."""
-        marker = '"defs"'
-        idx = body.find(marker)
-        if idx < 0:
-            return None
-        idx = body.find(":", idx + len(marker))
-        if idx < 0:
-            return None
-        idx += 1
-        while idx < len(body) and body[idx].isspace():
-            idx += 1
-        if idx >= len(body):
-            return None
-        start_char = body[idx]
-        if start_char not in "[{":
-            return None
-        open_c, close_c = ("[", "]") if start_char == "[" else ("{", "}")
-        depth = 0
-        in_string = False
-        escape = False
-        for i in range(idx, len(body)):
-            c = body[i]
-            if in_string:
-                if escape:
-                    escape = False
-                elif c == "\\":
-                    escape = True
-                elif c == '"':
-                    in_string = False
-                continue
-            if c == '"':
-                in_string = True
-            elif c == open_c:
-                depth += 1
-            elif c == close_c:
-                depth -= 1
-                if depth == 0:
-                    return body[idx : i + 1]
-        return None
+        return extract_raw_defs_json(body)
 
     def _load_or_fetch_jwks(self) -> JsonWebKeySet:
         """Load JWKS from memory/cache or fetch from the server."""
@@ -857,42 +795,25 @@ class TogglyClient(TelemetryClientMixin):
         )
 
         previous_etag = self._etag
-        headers: dict[str, str] = {}
-        if previous_etag:
-            headers["If-None-Match"] = previous_etag
+        headers = if_none_match_headers(previous_etag)
 
         response = self._http.get(url, headers=headers)
 
-        if response.status_code == 304:
+        probe = probe_http_cache(response.status_code, previous_etag, response.headers)
+        if probe.kind is HttpCacheKind.NOT_MODIFIED:
             self._last_refresh = datetime.now(timezone.utc)
-            return (
-                TogglyInitResponse(
-                    status=LoadStatus.CACHED,
-                    flags=dict(self._flags),
-                ),
-                "hit",
-                None,
-            )
-
-        if response.status_code != 200:
+            return cached_flags_response(self._flags), "hit", None
+        if probe.kind is HttpCacheKind.ERROR_STATUS:
             raise TogglyNetworkError(
-                f"Failed to fetch evaluated variants: HTTP {response.status_code}",
-                status_code=response.status_code,
+                f"Failed to fetch evaluated variants: HTTP {probe.status_code}",
+                status_code=probe.status_code,
             )
-
-        response_etag = response.headers.get("ETag")
-        if self._revisions_match(previous_etag, response_etag):
+        if probe.kind is HttpCacheKind.SAME_REVISION:
             self._last_refresh = datetime.now(timezone.utc)
-            if response_etag:
-                self._etag = response_etag
-            return (
-                TogglyInitResponse(
-                    status=LoadStatus.CACHED,
-                    flags=dict(self._flags),
-                ),
-                "hit",
-                None,
-            )
+            if probe.response_etag:
+                self._etag = probe.response_etag
+            return cached_flags_response(self._flags), "hit", None
+        response_etag = probe.response_etag
 
         try:
             data = response.json()
@@ -957,57 +878,8 @@ class TogglyClient(TelemetryClientMixin):
         return defs, signature, timestamp, kid
 
     def _parse_definitions(self, data: Any) -> list[FeatureDefinition]:
-        """Parse definitions from API response.
-
-        Args:
-            data: JSON data from API.
-
-        Returns:
-            List of parsed feature definitions.
-
-        """
-        definitions = []
-
-        # Handle array, signed envelope, and object responses
-        items: list[Any]
-        if isinstance(data, list):
-            items = data
-        elif isinstance(data, dict):
-            items = data.get("defs") or data.get("features") or data.get("definitions") or []
-        else:
-            items = []
-
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-
-            feature_key = item.get("featureKey") or item.get("feature_key")
-            if not feature_key:
-                continue
-
-            filters = []
-            for f in item.get("filters", []):
-                if isinstance(f, dict) and f.get("name"):
-                    filters.append(
-                        FeatureFilter(
-                            name=f["name"],
-                            parameters=f.get("parameters", {}),
-                        )
-                    )
-
-            definitions.append(
-                FeatureDefinition(
-                    feature_key=feature_key,
-                    filters=filters,
-                    requirement_type=item.get("requirementType", "Any"),
-                    context_kind=item.get("contextKind"),
-                    context_requirement_type=item.get("contextRequirementType"),
-                    secured_feature=item.get("securedFeature", False),
-                    metrics=item.get("metrics"),
-                )
-            )
-
-        return definitions
+        """Parse definitions from API response."""
+        return parse_definitions_payload(data)
 
     def _load_from_cache(self) -> DefinitionsSnapshot | None:
         """Load definitions from cache.
@@ -1144,6 +1016,8 @@ class TogglyClient(TelemetryClientMixin):
             return
         if not self._config.app_key:
             return
+        if self._refresh_thread is not None and self._refresh_thread.is_alive():
+            return
 
         def refresh_loop() -> None:
             while not self._stop_refresh.wait(self._config.refresh_interval):
@@ -1161,6 +1035,8 @@ class TogglyClient(TelemetryClientMixin):
         if not self._config.enable_live_updates:
             return
         if not self._config.app_key:
+            return
+        if self._ws_thread is not None and self._ws_thread.is_alive():
             return
 
         if not HAS_WEBSOCKET:

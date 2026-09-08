@@ -110,6 +110,13 @@ class TelemetryClientMixin:
             return
         self._telemetry.record_definition_cache_miss()
 
+    def _record_refresh_cache_outcome(self, outcome: str) -> None:
+        """Record one hit or miss for a completed refresh attempt."""
+        if outcome == "miss":
+            self._record_definition_cache_miss()
+        else:
+            self._record_definition_cache_hit()
+
     def _start_telemetry(self) -> None:
         """Create and start a :class:`TelemetryRuntime` from client config."""
         if not self._config.app_key:
