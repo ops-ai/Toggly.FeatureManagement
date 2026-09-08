@@ -601,7 +601,7 @@ class TogglyClient(TelemetryClientMixin):
     def _fetch_definitions(
         self,
     ) -> tuple[TogglyInitResponse, str, DefinitionsSnapshot | None]:
-        """Fetch definitions from the server.
+        r"""Fetch definitions from the server.
 
         Returns:
             ``(response, outcome, pending_snapshot)`` where outcome is

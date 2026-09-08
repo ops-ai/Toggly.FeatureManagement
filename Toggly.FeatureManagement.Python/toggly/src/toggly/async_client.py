@@ -526,7 +526,7 @@ class AsyncTogglyClient(TelemetryClientMixin):
     async def _fetch_definitions(
         self,
     ) -> tuple[TogglyInitResponse, str, DefinitionsSnapshot | None]:
-        """Fetch definitions from the server using asyncio.
+        r"""Fetch definitions from the server using asyncio.
 
         Returns:
             ``(response, outcome, pending_snapshot)`` where outcome is
