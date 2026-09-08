@@ -72,6 +72,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private volatile boolean wsConnected = false;
     private volatile long lastFallbackRefresh = 0;
     private final AtomicBoolean refreshInFlight = new AtomicBoolean(false);
+    private final AtomicBoolean pendingWebSocketRefresh = new AtomicBoolean(false);
     private volatile DefinitionCacheRecorder definitionCacheRecorder;
 
     /**
@@ -146,9 +147,22 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
     @Override
     public FeatureSnapshot refresh() {
+        return refreshInternal(false);
+    }
+
+    /**
+     * @param fromWebSocket when true, losing the in-flight CAS queues a follow-up forced
+     *     refresh instead of dropping the notify; the skipped attempt itself is not counted.
+     */
+    private FeatureSnapshot refreshInternal(boolean fromWebSocket) {
         // Concurrent refresh skipped (in flight) — do not count.
         if (!refreshInFlight.compareAndSet(false, true)) {
-            LOGGER.log(Level.FINE, "Refresh already in progress, skipping");
+            if (fromWebSocket) {
+                pendingWebSocketRefresh.set(true);
+                LOGGER.log(Level.FINE, "Refresh in progress; queued WebSocket-forced refresh");
+            } else {
+                LOGGER.log(Level.FINE, "Refresh already in progress, skipping");
+            }
             return currentSnapshot.get();
         }
         // Exactly one hit/miss per attempt: record after apply, skip catch if already counted.
@@ -185,6 +199,10 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             }
         } finally {
             refreshInFlight.set(false);
+            if (pendingWebSocketRefresh.getAndSet(false)) {
+                // Drain WS notifies that arrived while we were in flight (no count on the skip).
+                refreshFromWebSocketNotify();
+            }
         }
         // Last-known-good: keep serving the previous snapshot on transient failures
         return currentSnapshot.get();
@@ -309,7 +327,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private void refreshFromWebSocketNotify() {
         try {
             lastFallbackRefresh = System.currentTimeMillis();
-            refresh();
+            refreshInternal(true);
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "WebSocket-triggered refresh failed", e);
         }

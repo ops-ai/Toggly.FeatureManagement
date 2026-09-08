@@ -38,8 +38,8 @@ class DefinitionCacheHitsTest {
     private final AtomicReference<String> body = new AtomicReference<>(
             "[{\"feature_key\":\"feature-a\",\"filters\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}]");
     private final AtomicInteger requestCount = new AtomicInteger();
-    private CountDownLatch holdFirstRequest;
-    private CountDownLatch firstRequestStarted;
+    private CountDownLatch holdRequest;
+    private CountDownLatch requestStarted;
 
     @BeforeEach
     void startServer() throws IOException {
@@ -48,8 +48,8 @@ class DefinitionCacheHitsTest {
         server.start();
         baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
         requestCount.set(0);
-        holdFirstRequest = null;
-        firstRequestStarted = null;
+        holdRequest = null;
+        requestStarted = null;
         statusCode.set(200);
         etag.set("\"rev-1\"");
         body.set("[{\"feature_key\":\"feature-a\",\"filters\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}]");
@@ -63,21 +63,25 @@ class DefinitionCacheHitsTest {
     }
 
     private void handle(HttpExchange exchange) throws IOException {
-        int n = requestCount.incrementAndGet();
-        if (n == 1 && firstRequestStarted != null) {
-            firstRequestStarted.countDown();
-        }
-        if (n == 1 && holdFirstRequest != null) {
+        requestCount.incrementAndGet();
+        // Snapshot response before any hold so in-flight polls keep the revision they started with.
+        int code = statusCode.get();
+        String tag = etag.get();
+        byte[] bytes = body.get().getBytes(StandardCharsets.UTF_8);
+
+        CountDownLatch hold = holdRequest;
+        if (hold != null && hold.getCount() > 0) {
+            CountDownLatch started = requestStarted;
+            if (started != null) {
+                started.countDown();
+            }
             try {
-                holdFirstRequest.await(5, TimeUnit.SECONDS);
+                hold.await(5, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
 
-        int code = statusCode.get();
-        String tag = etag.get();
-        byte[] bytes = body.get().getBytes(StandardCharsets.UTF_8);
         if (tag != null) {
             exchange.getResponseHeaders().add("ETag", tag);
         }
@@ -228,8 +232,8 @@ class DefinitionCacheHitsTest {
 
     @Test
     void doesNotCountConcurrentInFlightRefreshSkips() throws Exception {
-        firstRequestStarted = new CountDownLatch(1);
-        holdFirstRequest = new CountDownLatch(1);
+        requestStarted = new CountDownLatch(1);
+        holdRequest = new CountDownLatch(1);
 
         List<FeatureStatPayload> sent = new ArrayList<>();
         TelemetryRuntime runtime = runtime(sent);
@@ -237,18 +241,66 @@ class DefinitionCacheHitsTest {
 
         Thread t = new Thread(provider::refresh);
         t.start();
-        assertThat(firstRequestStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(requestStarted.await(5, TimeUnit.SECONDS)).isTrue();
 
         // Concurrent refresh while first is in flight — must not count.
         provider.refresh();
 
-        holdFirstRequest.countDown();
+        holdRequest.countDown();
         t.join(5000);
 
         runtime.flushUsage();
         assertThat(sent).hasSize(1);
         assertThat(sent.get(0).getDefinitionCacheMisses()).isEqualTo(1);
         assertThat(sent.get(0).getDefinitionCacheHits()).isNull();
+
+        provider.close();
+        runtime.close();
+    }
+
+    @Test
+    void pendingWebSocketRefreshRunsAfterInFlightPoll() throws Exception {
+        List<FeatureStatPayload> sent = new ArrayList<>();
+        TelemetryRuntime runtime = runtime(sent);
+        HttpSnapshotProvider provider = provider(runtime);
+
+        statusCode.set(200);
+        etag.set("\"rev-1\"");
+        body.set("[{\"feature_key\":\"feature-a\",\"filters\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}]");
+        provider.refresh();
+        runtime.flushUsage();
+        sent.clear();
+
+        requestStarted = new CountDownLatch(1);
+        holdRequest = new CountDownLatch(1);
+        // Keep returning rev-1 until the held poll is released.
+        etag.set("\"rev-1\"");
+
+        Thread poll = new Thread(provider::refresh);
+        poll.start();
+        assertThat(requestStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+        etag.set("\"rev-2\"");
+        body.set("[{\"feature_key\":\"feature-b\",\"filters\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}]");
+
+        Method handleWs = HttpSnapshotProvider.class.getDeclaredMethod(
+                "handleWebSocketMessage", String.class);
+        handleWs.setAccessible(true);
+        // Loses CAS → queues pending; skipped attempt itself is not counted.
+        handleWs.invoke(provider, "{\"type\":\"flags-updated\"}");
+
+        holdRequest.countDown();
+        poll.join(5000);
+
+        // Pending forced refresh should apply rev-2 after the in-flight poll finishes.
+        assertThat(provider.getSnapshot().getFeature("feature-b")).isNotNull();
+
+        runtime.flushUsage();
+        assertThat(sent).hasSize(1);
+        // In-flight poll was same etag as seed → hit; queued WS notify itself not counted;
+        // follow-up forced refresh applied rev-2 → miss.
+        assertThat(sent.get(0).getDefinitionCacheHits()).isEqualTo(1);
+        assertThat(sent.get(0).getDefinitionCacheMisses()).isEqualTo(1);
 
         provider.close();
         runtime.close();

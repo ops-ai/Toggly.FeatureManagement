@@ -19,6 +19,10 @@
   objects are not treated as phantom features.
 - WebSocket `flags-updated` / forced refresh no longer shares scheduled-poll
   skip suppression; notifies always HTTP-refresh so a new revision counts as a miss.
+- WebSocket notifies that arrive during an in-flight refresh are queued and
+  flushed once afterward (skipped attempt not counted).
+- Redis `findMatchingBrace` ignores braces inside JSON string literals, matching
+  `HttpSnapshotProvider`.
 
 ### Changed
 - Package version and `SdkIdentity.SDK_VERSION` aligned to `1.5.0`

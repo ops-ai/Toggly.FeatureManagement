@@ -474,11 +474,20 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
     private int findMatchingBrace(String json, int start) {
         int count = 0;
+        boolean inString = false;
         for (int i = start; i < json.length(); i++) {
-            if (json.charAt(i) == '{') count++;
-            else if (json.charAt(i) == '}') {
-                count--;
-                if (count == 0) return i;
+            char c = json.charAt(i);
+            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
+                inString = !inString;
+            } else if (!inString) {
+                if (c == '{') {
+                    count++;
+                } else if (c == '}') {
+                    count--;
+                    if (count == 0) {
+                        return i;
+                    }
+                }
             }
         }
         return -1;
@@ -545,10 +554,16 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         if (name == null) return null;
 
         Map<String, Object> parameters = new HashMap<>();
-        Pattern paramsPattern = Pattern.compile("\"parameters\"\\s*:\\s*\\{([^}]*)\\}");
-        Matcher paramsMatcher = paramsPattern.matcher(json);
-        if (paramsMatcher.find()) {
-            parseParameters(paramsMatcher.group(1), parameters);
+        String search = "\"parameters\"";
+        int idx = json.indexOf(search);
+        if (idx >= 0) {
+            int braceStart = json.indexOf('{', idx + search.length());
+            if (braceStart >= 0) {
+                int braceEnd = findMatchingBrace(json, braceStart);
+                if (braceEnd > braceStart) {
+                    parseParameters(json.substring(braceStart + 1, braceEnd), parameters);
+                }
+            }
         }
 
         return FeatureFilter.of(name, parameters);
