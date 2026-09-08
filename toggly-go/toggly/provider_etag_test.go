@@ -44,10 +44,10 @@ func TestDefinitionsProvider_RefreshUnsigned_UsesETag(t *testing.T) {
 	p := newDefinitionsProvider(cfg, nil)
 	p.hc = srv.Client()
 
-	if err := p.refreshUnsigned(context.Background()); err != nil {
+	if _, err := p.refreshUnsigned(context.Background()); err != nil {
 		t.Fatalf("refresh 1: %v", err)
 	}
-	if err := p.refreshUnsigned(context.Background()); err != nil {
+	if _, err := p.refreshUnsigned(context.Background()); err != nil {
 		t.Fatalf("refresh 2: %v", err)
 	}
 

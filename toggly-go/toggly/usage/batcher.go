@@ -20,9 +20,11 @@ type Batcher struct {
 	appVersion   string
 	processStart time.Time
 
-	mu         sync.Mutex
-	perFeature map[string]*featureAgg
-	appUnique  map[int32]struct{}
+	mu                    sync.Mutex
+	perFeature            map[string]*featureAgg
+	appUnique             map[int32]struct{}
+	definitionCacheHits   int32
+	definitionCacheMisses int32
 }
 
 type featureAgg struct {
@@ -39,6 +41,21 @@ type featureAgg struct {
 	uniqueViewedHashes map[int32]struct{}
 }
 
+// BatchSnapshot is a restoreable copy of drained batcher state (feature stats,
+// app-unique hashes, and definition-cache counters).
+type BatchSnapshot struct {
+	perFeature            map[string]*featureAgg
+	appUnique             map[int32]struct{}
+	definitionCacheHits   int32
+	definitionCacheMisses int32
+}
+
+// DrainedBatch is the wire payload plus a snapshot for failed-send restore.
+type DrainedBatch struct {
+	Payload  *usagepb.FeatureStat
+	Snapshot *BatchSnapshot
+}
+
 func NewBatcher(appKey, environment, instance, appVersion string) *Batcher {
 	return &Batcher{
 		appKey:       appKey,
@@ -49,6 +66,22 @@ func NewBatcher(appKey, environment, instance, appVersion string) *Batcher {
 		perFeature:   map[string]*featureAgg{},
 		appUnique:    map[int32]struct{}{},
 	}
+}
+
+// RecordDefinitionCacheHit counts a definition-refresh outcome served from
+// local/cache (not a new revision).
+func (b *Batcher) RecordDefinitionCacheHit() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.definitionCacheHits++
+}
+
+// RecordDefinitionCacheMiss counts a definition-refresh that applied a new
+// revision from the network.
+func (b *Batcher) RecordDefinitionCacheMiss() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.definitionCacheMisses++
 }
 
 func (b *Batcher) RecordCheck(feature string, enabled bool, identity string) {
@@ -101,19 +134,64 @@ func (b *Batcher) RecordView(feature string, identity string) {
 	}
 }
 
-func (b *Batcher) Flush(ctx context.Context, client usagepb.UsageClient) error {
-	msg := b.buildAndReset()
-	if len(msg.Stats) == 0 && len(msg.UniqueUserHashes) == 0 {
-		return nil
-	}
-	_, err := client.SendStats(ctx, msg)
-	return err
+func (b *Batcher) isEmptyUnlocked() bool {
+	return len(b.perFeature) == 0 &&
+		len(b.appUnique) == 0 &&
+		b.definitionCacheHits == 0 &&
+		b.definitionCacheMisses == 0
 }
 
-func (b *Batcher) buildAndReset() *usagepb.FeatureStat {
+// Flush exports pending stats, sends them, and restores the full batch on
+// SendStats failure (merging with any records accumulated during the in-flight send).
+func (b *Batcher) Flush(ctx context.Context, client usagepb.UsageClient) error {
+	drained := b.exportAndReset()
+	if drained == nil {
+		return nil
+	}
+	_, err := client.SendStats(ctx, drained.Payload)
+	if err != nil {
+		b.restore(drained.Snapshot)
+		return err
+	}
+	return nil
+}
+
+// exportAndReset builds the SendStats payload and clears pending state,
+// returning a snapshot for failed-send restore.
+func (b *Batcher) exportAndReset() *DrainedBatch {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	if b.isEmptyUnlocked() {
+		return nil
+	}
+
+	snapshot := cloneSnapshot(b.perFeature, b.appUnique, b.definitionCacheHits, b.definitionCacheMisses)
+	msg := b.buildPayloadUnlocked()
+
+	b.perFeature = map[string]*featureAgg{}
+	b.appUnique = map[int32]struct{}{}
+	b.definitionCacheHits = 0
+	b.definitionCacheMisses = 0
+
+	return &DrainedBatch{Payload: msg, Snapshot: snapshot}
+}
+
+// buildAndReset is retained for tests; prefer exportAndReset for flush+restore.
+func (b *Batcher) buildAndReset() *usagepb.FeatureStat {
+	drained := b.exportAndReset()
+	if drained == nil {
+		return &usagepb.FeatureStat{
+			AppKey:      b.appKey,
+			Environment: b.environment,
+			Time:        timestamppb.New(time.Now().UTC()),
+			Stats:       []*usagepb.StatMessage{},
+		}
+	}
+	return drained.Payload
+}
+
+func (b *Batcher) buildPayloadUnlocked() *usagepb.FeatureStat {
 	now := time.Now().UTC()
 
 	out := &usagepb.FeatureStat{
@@ -131,6 +209,15 @@ func (b *Batcher) buildAndReset() *usagepb.FeatureStat {
 		out.AppVersion = &b.appVersion
 	}
 	out.ProcessStartTime = timestamppb.New(b.processStart)
+
+	if b.definitionCacheHits > 0 {
+		hits := b.definitionCacheHits
+		out.DefinitionCacheHits = &hits
+	}
+	if b.definitionCacheMisses > 0 {
+		misses := b.definitionCacheMisses
+		out.DefinitionCacheMisses = &misses
+	}
 
 	for feature, agg := range b.perFeature {
 		// Do not populate deprecated StatMessage scalars (enabledCount,
@@ -161,10 +248,85 @@ func (b *Batcher) buildAndReset() *usagepb.FeatureStat {
 		out.Stats = append(out.Stats, msg)
 	}
 
-	// reset
-	b.perFeature = map[string]*featureAgg{}
-	b.appUnique = map[int32]struct{}{}
+	return out
+}
 
+// restore merges a drained snapshot back into pending state after send failure.
+// Additive so counters recorded while the send was in flight are preserved.
+func (b *Batcher) restore(snapshot *BatchSnapshot) {
+	if snapshot == nil {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.definitionCacheHits += snapshot.definitionCacheHits
+	b.definitionCacheMisses += snapshot.definitionCacheMisses
+
+	for h := range snapshot.appUnique {
+		b.appUnique[h] = struct{}{}
+	}
+
+	for feature, snapAgg := range snapshot.perFeature {
+		agg := b.get(feature)
+		agg.enabledCount += snapAgg.enabledCount
+		agg.disabledCount += snapAgg.disabledCount
+		agg.usedCount += snapAgg.usedCount
+		agg.viewedCount += snapAgg.viewedCount
+		for h := range snapAgg.uniqueUsersEnabled {
+			agg.uniqueUsersEnabled[h] = struct{}{}
+		}
+		for h := range snapAgg.uniqueUsersDisabled {
+			agg.uniqueUsersDisabled[h] = struct{}{}
+		}
+		for h := range snapAgg.uniqueUsersUsed {
+			agg.uniqueUsersUsed[h] = struct{}{}
+		}
+		for h := range snapAgg.uniqueUsedHashes {
+			agg.uniqueUsedHashes[h] = struct{}{}
+		}
+		for h := range snapAgg.uniqueViewedHashes {
+			agg.uniqueViewedHashes[h] = struct{}{}
+		}
+	}
+}
+
+func cloneSnapshot(perFeature map[string]*featureAgg, appUnique map[int32]struct{}, hits, misses int32) *BatchSnapshot {
+	cloned := make(map[string]*featureAgg, len(perFeature))
+	for feature, agg := range perFeature {
+		cloned[feature] = cloneFeatureAgg(agg)
+	}
+	app := make(map[int32]struct{}, len(appUnique))
+	for h := range appUnique {
+		app[h] = struct{}{}
+	}
+	return &BatchSnapshot{
+		perFeature:            cloned,
+		appUnique:             app,
+		definitionCacheHits:   hits,
+		definitionCacheMisses: misses,
+	}
+}
+
+func cloneFeatureAgg(agg *featureAgg) *featureAgg {
+	return &featureAgg{
+		enabledCount:        agg.enabledCount,
+		disabledCount:       agg.disabledCount,
+		usedCount:           agg.usedCount,
+		viewedCount:         agg.viewedCount,
+		uniqueUsersEnabled:  cloneIntSet(agg.uniqueUsersEnabled),
+		uniqueUsersDisabled: cloneIntSet(agg.uniqueUsersDisabled),
+		uniqueUsersUsed:     cloneIntSet(agg.uniqueUsersUsed),
+		uniqueUsedHashes:    cloneIntSet(agg.uniqueUsedHashes),
+		uniqueViewedHashes:  cloneIntSet(agg.uniqueViewedHashes),
+	}
+}
+
+func cloneIntSet(m map[int32]struct{}) map[int32]struct{} {
+	out := make(map[int32]struct{}, len(m))
+	for k := range m {
+		out[k] = struct{}{}
+	}
 	return out
 }
 

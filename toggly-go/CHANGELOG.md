@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.0
+
+2026-09-08
+
+### Added
+- Definition-refresh cache hits and misses (`definitionCacheHits` /
+  `definitionCacheMisses`) on `Usage.SendStats` [OPS-989].
+- In-flight refresh guard; concurrent skip does not count. Scheduled poll
+  skip (live WS) counts as a hit; WebSocket-forced refresh is not suppressed
+  by poll skip and counts a miss when a new revision applies.
+
+### Changed
+- Usage batcher restores the full batch (feature stats, hashes, cache
+  counters) on `SendStats` failure, merging with in-flight records.
+- Cache-only usage batches still flush when only cache counters are pending.
+- User-Agent is `toggly-go/0.6.0`.
+
 ## 0.5.0
 
 2026-09-05

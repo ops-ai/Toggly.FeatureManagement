@@ -95,3 +95,82 @@ func TestBatcher_UsedWhenDisabled_DoesNotCountUsed(t *testing.T) {
 		t.Fatalf("expected unique used tracking even when disabled: %+v", st)
 	}
 }
+
+func TestBatcher_DefinitionCacheHitsOnFlush(t *testing.T) {
+	b := NewBatcher("app", "Production", "", "")
+	b.RecordDefinitionCacheHit()
+	b.RecordDefinitionCacheHit()
+	b.RecordDefinitionCacheMiss()
+
+	msg := b.buildAndReset()
+	if msg.GetDefinitionCacheHits() != 2 {
+		t.Fatalf("hits = %d, want 2", msg.GetDefinitionCacheHits())
+	}
+	if msg.GetDefinitionCacheMisses() != 1 {
+		t.Fatalf("misses = %d, want 1", msg.GetDefinitionCacheMisses())
+	}
+	if len(msg.Stats) != 0 {
+		t.Fatalf("expected cache-only payload with no feature stats, got %d", len(msg.Stats))
+	}
+
+	empty := b.buildAndReset()
+	if empty.DefinitionCacheHits != nil || empty.DefinitionCacheMisses != nil {
+		t.Fatalf("expected cache counters cleared after reset: %+v", empty)
+	}
+}
+
+func TestBatcher_CacheOnlyExportAndReset(t *testing.T) {
+	b := NewBatcher("app", "Production", "", "")
+	b.RecordDefinitionCacheHit()
+	drained := b.exportAndReset()
+	if drained == nil {
+		t.Fatal("cache-only batch must export")
+	}
+	if drained.Payload.GetDefinitionCacheHits() != 1 {
+		t.Fatalf("hits = %d", drained.Payload.GetDefinitionCacheHits())
+	}
+	if b.exportAndReset() != nil {
+		t.Fatal("expected empty after export")
+	}
+}
+
+func TestBatcher_RestoreMergesInFlightRecords(t *testing.T) {
+	b := NewBatcher("app", "Production", "", "")
+	b.RecordCheck("FeatA", true, "u1")
+	b.RecordDefinitionCacheHit()
+	drained := b.exportAndReset()
+	if drained == nil {
+		t.Fatal("expected drained batch")
+	}
+
+	// Records accumulated while send is in flight
+	b.RecordCheck("FeatA", true, "u2")
+	b.RecordDefinitionCacheMiss()
+
+	b.restore(drained.Snapshot)
+
+	msg := b.buildAndReset()
+	if msg.GetDefinitionCacheHits() != 1 || msg.GetDefinitionCacheMisses() != 1 {
+		t.Fatalf("cache counters after restore: hits=%d misses=%d", msg.GetDefinitionCacheHits(), msg.GetDefinitionCacheMisses())
+	}
+	if len(msg.Stats) != 1 {
+		t.Fatalf("stats len = %d", len(msg.Stats))
+	}
+	en := msg.Stats[0].VariantStats["enabled"]
+	if en == nil || en.CheckCount != 2 {
+		t.Fatalf("expected merged check counts: %+v", en)
+	}
+	if msg.TotalUniqueUsers != 2 {
+		t.Fatalf("unique users = %d, want 2", msg.TotalUniqueUsers)
+	}
+}
+
+func TestBatcher_RestoreNilIsNoop(t *testing.T) {
+	b := NewBatcher("app", "Production", "", "")
+	b.RecordDefinitionCacheHit()
+	b.restore(nil)
+	msg := b.buildAndReset()
+	if msg.GetDefinitionCacheHits() != 1 {
+		t.Fatalf("hits = %d after nil restore", msg.GetDefinitionCacheHits())
+	}
+}

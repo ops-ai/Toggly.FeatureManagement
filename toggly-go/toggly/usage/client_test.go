@@ -48,7 +48,7 @@ func TestClient_Flush_AttachesUAMetadata(t *testing.T) {
 	c := &Client{
 		api:       api,
 		batcher:   NewBatcher("app", "Production", "", ""),
-		userAgent: "toggly-go/0.5.0",
+		userAgent: "toggly-go/0.6.0",
 		flush:     autoflush.New(),
 	}
 	c.RecordCheck("F", true, "u1")
@@ -59,7 +59,7 @@ func TestClient_Flush_AttachesUAMetadata(t *testing.T) {
 		t.Fatalf("calls = %d", api.calls)
 	}
 	vals := api.lastMD.Get("UA")
-	if len(vals) != 1 || vals[0] != "toggly-go/0.5.0" {
+	if len(vals) != 1 || vals[0] != "toggly-go/0.6.0" {
 		t.Fatalf("UA metadata = %v", vals)
 	}
 }

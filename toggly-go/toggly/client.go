@@ -57,6 +57,7 @@ func NewClient(cfg Config) (*Client, error) {
 			c.usage = u
 		}
 		c.usage.StartAutoFlush(cfg.UsageFlushInterval)
+		p.setDefinitionCacheRecorder(c.usage)
 	}
 
 	if cfg.EnableMetrics {
