@@ -146,6 +146,7 @@ public final class TogglyClient implements AutoCloseable {
                     .build();
         }
         this.telemetry.start();
+        this.snapshotProvider.setDefinitionCacheRecorder(this.telemetry);
     }
 
     /**

@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.5.0
+
+2026-09-07
+
+### Added
+- Definition-refresh cache hit/miss counters on `Usage.SendStats`
+  (`definitionCacheHits` / `definitionCacheMisses`) from `HttpSnapshotProvider`.
+- Full usage-batch restore (feature stats + hashes + cache counters) when
+  `sendStats` fails, including close-safe batcher capture across in-flight send.
+
+### Fixed
+- Unsigned Redis durable loads now route through `applyCachedSnapshot` so
+  startup-from-cache records a definition-cache hit (same as the signed path).
+- Redis snapshot deserialization uses balanced-brace object extraction so nested
+  feature filters round-trip correctly from the durable cache.
+- Redis feature map parsing only walks top-level keys so nested `"parameters": {}`
+  objects are not treated as phantom features.
+- WebSocket `flags-updated` / forced refresh no longer shares scheduled-poll
+  skip suppression; notifies always HTTP-refresh so a new revision counts as a miss.
+- WebSocket notifies that arrive during an in-flight refresh are queued and
+  flushed once afterward (skipped attempt not counted).
+- Redis `findMatchingBrace` ignores braces inside JSON string literals, matching
+  `HttpSnapshotProvider`.
+
+### Changed
+- Package version and `SdkIdentity.SDK_VERSION` aligned to `1.5.0`
+  (`User-Agent` / UA: `toggly-java/1.5.0`).
+
 ## 1.4.0
 
 2026-09-06

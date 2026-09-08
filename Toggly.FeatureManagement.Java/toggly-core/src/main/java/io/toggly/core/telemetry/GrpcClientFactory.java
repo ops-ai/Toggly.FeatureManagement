@@ -182,6 +182,12 @@ public final class GrpcClientFactory {
         if (payload.getProcessStartTime() != null) {
             builder.setProcessStartTime(toTimestamp(payload.getProcessStartTime()));
         }
+        if (payload.getDefinitionCacheHits() != null) {
+            builder.setDefinitionCacheHits(payload.getDefinitionCacheHits());
+        }
+        if (payload.getDefinitionCacheMisses() != null) {
+            builder.setDefinitionCacheMisses(payload.getDefinitionCacheMisses());
+        }
 
         for (FeatureStatPayload.StatMessage stat : payload.getStats()) {
             StatMessage.Builder sm = StatMessage.newBuilder()

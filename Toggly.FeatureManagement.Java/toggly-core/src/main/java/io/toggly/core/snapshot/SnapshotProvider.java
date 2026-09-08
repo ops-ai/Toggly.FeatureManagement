@@ -83,4 +83,14 @@ public interface SnapshotProvider {
     default void close() {
         // Default no-op
     }
+
+    /**
+     * Attaches definition-refresh cache hit/miss recording. Caching wrappers should forward
+     * to their HTTP delegate so instrumentation stays in one place.
+     *
+     * @param recorder hit/miss recorder, or null to clear
+     */
+    default void setDefinitionCacheRecorder(io.toggly.core.telemetry.DefinitionCacheRecorder recorder) {
+        // Default no-op
+    }
 }

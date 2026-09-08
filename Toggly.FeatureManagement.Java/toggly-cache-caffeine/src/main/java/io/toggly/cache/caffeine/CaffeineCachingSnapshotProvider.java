@@ -142,6 +142,11 @@ public class CaffeineCachingSnapshotProvider implements SnapshotProvider {
     }
 
     @Override
+    public void setDefinitionCacheRecorder(io.toggly.core.telemetry.DefinitionCacheRecorder recorder) {
+        delegate.setDefinitionCacheRecorder(recorder);
+    }
+
+    @Override
     public void close() {
         cache.invalidateAll();
         cache.cleanUp();

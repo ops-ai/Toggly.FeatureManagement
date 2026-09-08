@@ -5,7 +5,9 @@ import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.model.FeatureRequirement;
 import io.toggly.core.model.MetricDefinition;
 import io.toggly.core.snapshot.FeatureSnapshot;
+import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
+import io.toggly.core.telemetry.DefinitionCacheRecorder;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
@@ -17,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -52,6 +55,8 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     private final RedisCacheConfig config;
     private final JedisPool pool;
     private final String cacheKey;
+    private volatile DefinitionCacheRecorder definitionCacheRecorder;
+    private final AtomicBoolean durableStartupCounted = new AtomicBoolean(false);
 
     /**
      * Creates a Redis caching provider with default configuration.
@@ -179,11 +184,18 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     @Override
     public void clear() {
         invalidate();
+        durableStartupCounted.set(false);
     }
 
     @Override
     public void clearJwks() {
         delegate.clearJwks();
+    }
+
+    @Override
+    public void setDefinitionCacheRecorder(DefinitionCacheRecorder recorder) {
+        this.definitionCacheRecorder = recorder;
+        delegate.setDefinitionCacheRecorder(recorder);
     }
 
     @Override
@@ -320,13 +332,9 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
             Map<String, FeatureDefinition> features = new HashMap<>();
             Map<String, MetricDefinition> metrics = new HashMap<>();
 
-            // Parse features
-            Pattern featuresPattern = Pattern.compile(
-                    "\"features\"\\s*:\\s*\\{([^}]*(?:\\{[^}]*\\}[^}]*)*)\\}",
-                    Pattern.DOTALL);
-            Matcher featuresMatcher = featuresPattern.matcher(json);
-            if (featuresMatcher.find()) {
-                parseFeatures(featuresMatcher.group(1), features);
+            String featuresJson = extractObjectByKey(json, "features");
+            if (featuresJson != null) {
+                parseFeatures(featuresJson, features);
             }
 
             // Parse timestamp
@@ -343,12 +351,17 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                     features, metrics, timestamp, etag,
                     signature, keyId, signedTimestamp, signedDefsJson);
 
-            if (snapshot.hasSignatureMetadata()
-                    && delegate instanceof io.toggly.core.snapshot.HttpSnapshotProvider) {
-                io.toggly.core.snapshot.HttpSnapshotProvider http =
-                        (io.toggly.core.snapshot.HttpSnapshotProvider) delegate;
+            // Route durable Redis loads (signed and unsigned) through Http apply so
+            // startup-from-cache records exactly one definition-cache hit.
+            if (delegate instanceof HttpSnapshotProvider) {
+                HttpSnapshotProvider http = (HttpSnapshotProvider) delegate;
                 if (!http.applyCachedSnapshot(snapshot)) {
                     return null;
+                }
+            } else if (durableStartupCounted.compareAndSet(false, true)) {
+                DefinitionCacheRecorder recorder = definitionCacheRecorder;
+                if (recorder != null) {
+                    recorder.recordDefinitionCacheHit();
                 }
             }
 
@@ -357,6 +370,26 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
             LOGGER.log(Level.WARNING, "Error deserializing snapshot from Redis", e);
             return null;
         }
+    }
+
+    /**
+     * Extracts the raw object body (without surrounding braces) for a top-level JSON key.
+     */
+    private String extractObjectByKey(String json, String key) {
+        String search = "\"" + key + "\"";
+        int idx = json.indexOf(search);
+        if (idx < 0) {
+            return null;
+        }
+        idx = json.indexOf('{', idx + search.length());
+        if (idx < 0) {
+            return null;
+        }
+        int end = findMatchingBrace(json, idx);
+        if (end <= idx) {
+            return null;
+        }
+        return json.substring(idx + 1, end);
     }
 
     private Long extractLongValue(String json, String key) {
@@ -390,31 +423,71 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     private void parseFeatures(String json, Map<String, FeatureDefinition> features) {
-        // Simple parsing - match feature objects
-        Pattern keyPattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\\{");
-        Matcher keyMatcher = keyPattern.matcher(json);
-
-        while (keyMatcher.find()) {
-            String key = keyMatcher.group(1);
-            int start = keyMatcher.end() - 1;
-            int end = findMatchingBrace(json, start);
-            if (end > start) {
-                String featureJson = json.substring(start, end + 1);
-                FeatureDefinition def = parseFeatureDefinition(featureJson, key);
-                if (def != null) {
-                    features.put(key, def);
-                }
+        // Only top-level "featureKey":{...} entries — nested filter "parameters":{} must not
+        // become phantom features.
+        int i = 0;
+        while (i < json.length()) {
+            while (i < json.length()
+                    && (Character.isWhitespace(json.charAt(i)) || json.charAt(i) == ',')) {
+                i++;
             }
+            if (i >= json.length()) {
+                break;
+            }
+            if (json.charAt(i) != '"') {
+                i++;
+                continue;
+            }
+            int keyStart = i + 1;
+            int keyEnd = json.indexOf('"', keyStart);
+            if (keyEnd < 0) {
+                break;
+            }
+            String key = json.substring(keyStart, keyEnd);
+            i = keyEnd + 1;
+            while (i < json.length() && Character.isWhitespace(json.charAt(i))) {
+                i++;
+            }
+            if (i >= json.length() || json.charAt(i) != ':') {
+                continue;
+            }
+            i++;
+            while (i < json.length() && Character.isWhitespace(json.charAt(i))) {
+                i++;
+            }
+            if (i >= json.length() || json.charAt(i) != '{') {
+                continue;
+            }
+            int start = i;
+            int end = findMatchingBrace(json, start);
+            if (end <= start) {
+                break;
+            }
+            String featureJson = json.substring(start, end + 1);
+            FeatureDefinition def = parseFeatureDefinition(featureJson, key);
+            if (def != null) {
+                features.put(key, def);
+            }
+            i = end + 1;
         }
     }
 
     private int findMatchingBrace(String json, int start) {
         int count = 0;
+        boolean inString = false;
         for (int i = start; i < json.length(); i++) {
-            if (json.charAt(i) == '{') count++;
-            else if (json.charAt(i) == '}') {
-                count--;
-                if (count == 0) return i;
+            char c = json.charAt(i);
+            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
+                inString = !inString;
+            } else if (!inString) {
+                if (c == '{') {
+                    count++;
+                } else if (c == '}') {
+                    count--;
+                    if (count == 0) {
+                        return i;
+                    }
+                }
             }
         }
         return -1;
@@ -481,10 +554,16 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         if (name == null) return null;
 
         Map<String, Object> parameters = new HashMap<>();
-        Pattern paramsPattern = Pattern.compile("\"parameters\"\\s*:\\s*\\{([^}]*)\\}");
-        Matcher paramsMatcher = paramsPattern.matcher(json);
-        if (paramsMatcher.find()) {
-            parseParameters(paramsMatcher.group(1), parameters);
+        String search = "\"parameters\"";
+        int idx = json.indexOf(search);
+        if (idx >= 0) {
+            int braceStart = json.indexOf('{', idx + search.length());
+            if (braceStart >= 0) {
+                int braceEnd = findMatchingBrace(json, braceStart);
+                if (braceEnd > braceStart) {
+                    parseParameters(json.substring(braceStart + 1, braceEnd), parameters);
+                }
+            }
         }
 
         return FeatureFilter.of(name, parameters);
