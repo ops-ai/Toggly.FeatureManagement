@@ -132,6 +132,23 @@ class TestNativeGrpcPath:
         assert msg.stats[0].feature == "FeatureA"
         assert msg.stats[0].variantStats["enabled"].checkCount == 2
 
+    def test_feature_stat_includes_definition_cache_fields(self) -> None:
+        payload = {
+            "appKey": "app",
+            "environment": "Production",
+            "time": {"seconds": 1_700_000_000, "nanos": 0},
+            "totalUniqueUsers": 0,
+            "uniqueUserHashes": [],
+            "stats": [],
+            "definitionCacheHits": 3,
+            "definitionCacheMisses": 1,
+        }
+        msg = feature_stat_from_payload(payload)
+        assert msg.definitionCacheHits == 3
+        assert msg.definitionCacheMisses == 1
+        raw = msg.SerializeToString()
+        assert isinstance(raw, bytes) and len(raw) > 0
+
     def test_metric_stat_native_protobuf_serialization(self) -> None:
         payload = {
             "appKey": "app",

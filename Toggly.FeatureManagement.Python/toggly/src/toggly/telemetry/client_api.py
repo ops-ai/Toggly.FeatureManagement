@@ -98,6 +98,18 @@ class TelemetryClientMixin:
             return
         self._telemetry.record_check(feature_key, enabled, identity)
 
+    def _record_definition_cache_hit(self) -> None:
+        """Record a definition-refresh cache hit when usage tracking is on."""
+        if self._telemetry is None or not self._telemetry.usage_enabled:
+            return
+        self._telemetry.record_definition_cache_hit()
+
+    def _record_definition_cache_miss(self) -> None:
+        """Record a definition-refresh cache miss when usage tracking is on."""
+        if self._telemetry is None or not self._telemetry.usage_enabled:
+            return
+        self._telemetry.record_definition_cache_miss()
+
     def _start_telemetry(self) -> None:
         """Create and start a :class:`TelemetryRuntime` from client config."""
         if not self._config.app_key:

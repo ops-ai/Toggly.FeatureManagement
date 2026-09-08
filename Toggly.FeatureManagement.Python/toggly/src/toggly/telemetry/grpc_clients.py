@@ -153,6 +153,12 @@ def feature_stat_from_payload(payload: Mapping[str, Any]) -> Any:
     process_start = payload.get("processStartTime")
     if isinstance(process_start, Mapping):
         msg.processStartTime.CopyFrom(_timestamp_message(process_start))
+    cache_hits = payload.get("definitionCacheHits")
+    if cache_hits is not None:
+        msg.definitionCacheHits = int(cache_hits)
+    cache_misses = payload.get("definitionCacheMisses")
+    if cache_misses is not None:
+        msg.definitionCacheMisses = int(cache_misses)
 
     for stat in payload.get("stats") or []:
         if not isinstance(stat, Mapping):

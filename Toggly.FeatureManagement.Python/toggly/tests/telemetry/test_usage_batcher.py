@@ -92,3 +92,46 @@ class TestUsageBatcher:
         assert payload is not None
         assert payload["stats"][0]["variantStats"]["control"]["checkCount"] == 1
         assert "enabled" not in payload["stats"][0]["variantStats"]
+
+    def test_definition_cache_fields_on_flush(self) -> None:
+        batcher = UsageBatcher("app", "Production")
+        batcher.record_definition_cache_hit()
+        batcher.record_definition_cache_hit()
+        batcher.record_definition_cache_miss()
+
+        assert not batcher.is_empty()
+        payload = batcher.build_and_reset()
+        assert payload is not None
+        assert payload["definitionCacheHits"] == 2
+        assert payload["definitionCacheMisses"] == 1
+        assert payload["stats"] == []
+        assert batcher.is_empty()
+        assert batcher.build_and_reset() is None
+
+    def test_cache_only_batch_is_not_empty(self) -> None:
+        batcher = UsageBatcher("app", "Production")
+        batcher.record_definition_cache_hit()
+        assert not batcher.is_empty()
+        assert batcher.build_and_reset()["definitionCacheHits"] == 1
+
+    def test_restore_merges_drained_snapshot(self) -> None:
+        batcher = UsageBatcher("app", "Production")
+        batcher.record_check("FeatureA", True, "user-1")
+        batcher.record_definition_cache_hit()
+        batcher.record_definition_cache_miss()
+
+        drained = batcher.export_and_reset()
+        assert drained is not None
+        payload, snapshot = drained
+
+        batcher.record_check("FeatureB", False, "user-2")
+        batcher.record_definition_cache_hit()
+        batcher.restore(snapshot)
+
+        retried = batcher.build_and_reset()
+        assert retried is not None
+        assert retried["definitionCacheHits"] == 2
+        assert retried["definitionCacheMisses"] == 1
+        features = {s["feature"] for s in retried["stats"]}
+        assert features == {"FeatureA", "FeatureB"}
+        assert payload["definitionCacheHits"] == 1

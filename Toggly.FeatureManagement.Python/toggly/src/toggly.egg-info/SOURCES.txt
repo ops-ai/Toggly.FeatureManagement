@@ -23,6 +23,7 @@ src/toggly.egg-info/dependency_links.txt
 src/toggly.egg-info/requires.txt
 src/toggly.egg-info/top_level.txt
 src/toggly/telemetry/__init__.py
+src/toggly/telemetry/client_api.py
 src/toggly/telemetry/grpc_clients.py
 src/toggly/telemetry/metrics_batcher.py
 src/toggly/telemetry/runtime.py
