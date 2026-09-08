@@ -253,7 +253,7 @@ func (m *memorySnap) LoadJWKS(ctx context.Context) (*snapshot.JWKSnap, error) { 
 func (m *memorySnap) SaveJWKS(ctx context.Context, j snapshot.JWKSnap) error  { return nil }
 
 func TestProvider_SnapshotBeforeNetwork_CountsHit(t *testing.T) {
-	// Snapshot load counts as a hit; subsequent 304 counts as another hit.
+	// Snapshot + network in one refresh() must emit exactly one outcome (304 → hit).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotModified)
 	}))
@@ -283,13 +283,78 @@ func TestProvider_SnapshotBeforeNetwork_CountsHit(t *testing.T) {
 		t.Fatal(err)
 	}
 	hits, misses := rec.snapshot()
-	if hits < 1 {
-		t.Fatalf("expected snapshot hit, got hits=%d misses=%d", hits, misses)
-	}
-	if misses != 0 {
-		t.Fatalf("unexpected misses=%d", misses)
+	if hits != 1 || misses != 0 {
+		t.Fatalf("hits=%d misses=%d, want exactly 1 hit / 0 misses for one refresh()", hits, misses)
 	}
 	if _, ok := p.get("f1"); !ok {
 		t.Fatal("expected snapshot defs loaded")
+	}
+}
+
+func TestProvider_SignedEqualTimestamp_IsHit(t *testing.T) {
+	const ts int64 = 1_700_000_000
+	body := `{"defs":[{"featureKey":"f1","filters":[{"name":"AlwaysOn","parameters":{}}],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}],"signature":"unused","timestamp":1700000000,"kid":"k1"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"replay"`)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := newDefinitionsProvider(Config{
+		AppKey:               "app",
+		Environment:          "env",
+		DefinitionsURL:       srv.URL + "/",
+		HTTPTimeout:          2 * time.Second,
+		RefreshInterval:      time.Hour,
+		UseSignedDefinitions: true,
+	}, nil)
+	p.hc = srv.Client()
+	p.setDefinitionCacheRecorder(rec)
+	p.mu.Lock()
+	p.lastTS = ts
+	p.etag = `"prior"`
+	p.mu.Unlock()
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("equal signed TS: hits=%d misses=%d, want hit", hits, misses)
+	}
+}
+
+func TestProvider_EvaluatedVariantsEqualTimestamp_IsHit(t *testing.T) {
+	const ts int64 = 1_700_000_000
+	body := `{"defs":{"f1":{"enabled":true,"variant":"A","configurationValue":null}},"signature":"unused","timestamp":1700000000,"kid":"k1"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"replay"`)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := newDefinitionsProvider(Config{
+		AppKey:          "app",
+		Environment:     "env",
+		DefinitionsURL:  srv.URL + "/",
+		HTTPTimeout:     2 * time.Second,
+		RefreshInterval: time.Hour,
+		EnableVariants:  true,
+	}, nil)
+	p.hc = srv.Client()
+	p.setDefinitionCacheRecorder(rec)
+	p.mu.Lock()
+	p.variantLastTS = ts
+	p.variantEtag = `"prior"`
+	p.mu.Unlock()
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	hits, misses := rec.snapshot()
+	if hits != 1 || misses != 0 {
+		t.Fatalf("equal variant TS: hits=%d misses=%d, want hit", hits, misses)
 	}
 }

@@ -267,15 +267,14 @@ func (p *definitionsProvider) refresh(ctx context.Context, timeout time.Duration
 		}
 	}()
 
-	// load snapshot once on first refresh attempt
+	// Load durable snapshot once before the first network attempt. Do not
+	// record a cache outcome here — one refresh() invocation emits exactly
+	// one hit/miss from the network (or error) path below.
 	p.mu.RLock()
 	loaded := len(p.defsByKey) > 0
 	p.mu.RUnlock()
 	if !loaded {
-		if applied, _ := p.loadSnapshot(ctx); applied {
-			// Startup served from durable snapshot before first network — hit.
-			p.recordDefinitionCacheHit()
-		}
+		_, _ = p.loadSnapshot(ctx)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -500,7 +499,8 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) (ref
 		return refreshCacheHit, err
 	}
 
-	if env.Timestamp < currentTS && currentTS > 0 {
+	// Same or older revision (CDN replay / no new revision) is a hit.
+	if currentTS > 0 && env.Timestamp <= currentTS {
 		return refreshCacheHit, nil
 	}
 
@@ -604,7 +604,8 @@ func (p *definitionsProvider) refreshSigned(ctx context.Context) (refreshCacheOu
 	if err != nil {
 		return refreshCacheHit, err
 	}
-	if env.Timestamp < currentTS {
+	// Same or older revision (CDN replay / no new revision) is a hit.
+	if currentTS > 0 && env.Timestamp <= currentTS {
 		return refreshCacheHit, nil
 	}
 
