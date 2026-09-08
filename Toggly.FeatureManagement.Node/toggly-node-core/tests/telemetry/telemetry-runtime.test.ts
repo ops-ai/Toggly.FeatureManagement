@@ -258,6 +258,62 @@ describe('TelemetryRuntime', () => {
     await runtime.close()
   })
 
+  it('does not throw when usageBatcher is cleared during a failed in-flight send', async () => {
+    let rejectSend!: (error: Error) => void
+    const sendStats = vi.fn().mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectSend = reject
+        }),
+    )
+
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: null,
+    })
+    runtime.start()
+
+    runtime.recordCheck('FeatureA', true, 'user-1')
+    runtime.recordDefinitionCacheHit()
+
+    type RuntimeInternals = {
+      usageBatcher: {
+        buildAndReset: () => {
+          definitionCacheHits?: number
+          stats: Array<{ variantStats: { enabled: { checkCount: number } } }>
+        } | null
+      } | null
+    }
+    const internals = runtime as unknown as RuntimeInternals
+
+    const flushPromise = runtime.flushUsage()
+    await vi.waitFor(() => {
+      expect(sendStats).toHaveBeenCalledTimes(1)
+    })
+
+    // Simulate close() clearing the field while sendStats is still in flight.
+    const heldBatcher = internals.usageBatcher
+    expect(heldBatcher).not.toBeNull()
+    internals.usageBatcher = null
+
+    rejectSend(new Error('send failed after close'))
+    await expect(flushPromise).resolves.toBeUndefined()
+
+    // Restore used the captured batcher instance even though the field was nulled.
+    const restored = heldBatcher!.buildAndReset()
+    expect(restored).not.toBeNull()
+    expect(restored!.definitionCacheHits).toBe(1)
+    expect(restored!.stats[0].variantStats.enabled.checkCount).toBe(1)
+
+    await runtime.close()
+  })
+
   it('SIGTERM flush re-emits signal so the process can exit', async () => {
     vi.useRealTimers()
     const sendStats = vi.fn().mockResolvedValue({ featureCount: 1 })

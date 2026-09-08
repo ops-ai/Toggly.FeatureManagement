@@ -269,7 +269,9 @@ export class TelemetryRuntime {
       return
     }
 
-    const drained = this.usageBatcher.exportAndReset()
+    // Hold a local reference: close() may null `this.usageBatcher` while send is in flight.
+    const batcher = this.usageBatcher
+    const drained = batcher.exportAndReset()
     if (!drained) return
 
     this.sendingUsage = true
@@ -277,8 +279,12 @@ export class TelemetryRuntime {
       await client.sendStats(drained.payload as unknown as Record<string, unknown>)
     } catch (error) {
       this.logger.error('Failed to send usage stats:', error)
-      // Merge the failed batch back so the next flush can retry (align .NET SendStats).
-      this.usageBatcher.restore(drained.snapshot)
+      // Merge via the captured batcher so restore survives close() clearing the field.
+      try {
+        batcher.restore(drained.snapshot)
+      } catch (restoreError) {
+        this.logger.error('Failed to restore usage batch after send failure:', restoreError)
+      }
     } finally {
       this.sendingUsage = false
     }
