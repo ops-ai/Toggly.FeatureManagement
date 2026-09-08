@@ -18,7 +18,7 @@ import java.util.logging.Logger;
  * the classpath, batching still works for tests via injected clients; otherwise a warning is
  * logged and sends are skipped.</p>
  */
-public final class TelemetryRuntime implements AutoCloseable {
+public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRecorder {
 
     public static final Duration DEFAULT_FLUSH_INTERVAL = Duration.ofMinutes(1);
 
@@ -209,6 +209,20 @@ public final class TelemetryRuntime implements AutoCloseable {
         }
     }
 
+    @Override
+    public void recordDefinitionCacheHit() {
+        if (usageBatcher != null) {
+            usageBatcher.recordDefinitionCacheHit();
+        }
+    }
+
+    @Override
+    public void recordDefinitionCacheMiss() {
+        if (usageBatcher != null) {
+            usageBatcher.recordDefinitionCacheMiss();
+        }
+    }
+
     public void measure(String metric, double value, MetricsFeatureOptions options) {
         if (metricsBatcher != null) {
             metricsBatcher.measure(metric, value, options);
@@ -228,7 +242,9 @@ public final class TelemetryRuntime implements AutoCloseable {
     }
 
     public void flushUsage() {
-        if (usageBatcher == null || !sendingUsage.compareAndSet(false, true)) {
+        // Hold a local reference: close() may null usageBatcher while send is in flight.
+        UsageBatcher batcher = usageBatcher;
+        if (batcher == null || !sendingUsage.compareAndSet(false, true)) {
             return;
         }
         try {
@@ -237,13 +253,20 @@ public final class TelemetryRuntime implements AutoCloseable {
                 LOGGER.fine("Usage flush skipped: no gRPC client");
                 return;
             }
-            FeatureStatPayload payload = usageBatcher.buildAndReset();
-            if (payload == null) {
+            UsageBatcher.DrainedUsage drained = batcher.exportAndReset();
+            if (drained == null) {
                 return;
             }
-            client.sendStats(payload);
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Failed to send usage stats", e);
+            try {
+                client.sendStats(drained.payload);
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Failed to send usage stats", e);
+                try {
+                    batcher.restore(drained.snapshot);
+                } catch (Exception restoreError) {
+                    LOGGER.log(Level.SEVERE, "Failed to restore usage batch after send failure", restoreError);
+                }
+            }
         } finally {
             sendingUsage.set(false);
         }

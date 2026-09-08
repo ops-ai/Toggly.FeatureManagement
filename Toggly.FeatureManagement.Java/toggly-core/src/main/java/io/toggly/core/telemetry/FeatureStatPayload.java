@@ -21,6 +21,8 @@ public final class FeatureStatPayload {
     private final String instanceName;
     private final String appVersion;
     private final Instant processStartTime;
+    private final Integer definitionCacheHits;
+    private final Integer definitionCacheMisses;
 
     public FeatureStatPayload(
             String appKey,
@@ -32,6 +34,32 @@ public final class FeatureStatPayload {
             String instanceName,
             String appVersion,
             Instant processStartTime) {
+        this(
+                appKey,
+                environment,
+                time,
+                stats,
+                totalUniqueUsers,
+                uniqueUserHashes,
+                instanceName,
+                appVersion,
+                processStartTime,
+                null,
+                null);
+    }
+
+    public FeatureStatPayload(
+            String appKey,
+            String environment,
+            Instant time,
+            List<StatMessage> stats,
+            int totalUniqueUsers,
+            List<Integer> uniqueUserHashes,
+            String instanceName,
+            String appVersion,
+            Instant processStartTime,
+            Integer definitionCacheHits,
+            Integer definitionCacheMisses) {
         this.appKey = Objects.requireNonNull(appKey, "appKey");
         this.environment = Objects.requireNonNull(environment, "environment");
         this.time = Objects.requireNonNull(time, "time");
@@ -41,6 +69,8 @@ public final class FeatureStatPayload {
         this.instanceName = instanceName;
         this.appVersion = appVersion;
         this.processStartTime = processStartTime;
+        this.definitionCacheHits = definitionCacheHits;
+        this.definitionCacheMisses = definitionCacheMisses;
     }
 
     public String getAppKey() {
@@ -77,6 +107,16 @@ public final class FeatureStatPayload {
 
     public Instant getProcessStartTime() {
         return processStartTime;
+    }
+
+    /** Batch delta of definition-refresh cache hits, or null when unset / zero. */
+    public Integer getDefinitionCacheHits() {
+        return definitionCacheHits;
+    }
+
+    /** Batch delta of definition-refresh cache misses, or null when unset / zero. */
+    public Integer getDefinitionCacheMisses() {
+        return definitionCacheMisses;
     }
 
     public static final class StatMessage {

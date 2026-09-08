@@ -187,6 +187,11 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     @Override
+    public void setDefinitionCacheRecorder(io.toggly.core.telemetry.DefinitionCacheRecorder recorder) {
+        delegate.setDefinitionCacheRecorder(recorder);
+    }
+
+    @Override
     public void close() {
         if (pool != null && !pool.isClosed()) {
             pool.close();

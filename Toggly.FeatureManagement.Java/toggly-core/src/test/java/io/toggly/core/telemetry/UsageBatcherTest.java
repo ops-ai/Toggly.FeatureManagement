@@ -59,4 +59,43 @@ class UsageBatcherTest {
         assertThat(payload.getStats().get(0).getVariantStats().get("disabled").getCheckCount()).isEqualTo(1);
         assertThat(payload.getStats().get(0).getVariantStats().get("disabled").getRequestCount()).isEqualTo(1);
     }
+
+    @Test
+    void includesDefinitionCacheFieldsOnFlushAndTreatsCacheOnlyAsNonEmpty() {
+        UsageBatcher batcher = new UsageBatcher("app", "Production", null, null);
+
+        batcher.recordDefinitionCacheHit();
+        batcher.recordDefinitionCacheHit();
+        batcher.recordDefinitionCacheMiss();
+
+        assertThat(batcher.isEmpty()).isFalse();
+        FeatureStatPayload payload = batcher.buildAndReset();
+        assertThat(payload).isNotNull();
+        assertThat(payload.getDefinitionCacheHits()).isEqualTo(2);
+        assertThat(payload.getDefinitionCacheMisses()).isEqualTo(1);
+        assertThat(payload.getStats()).isEmpty();
+        assertThat(batcher.isEmpty()).isTrue();
+        assertThat(batcher.buildAndReset()).isNull();
+    }
+
+    @Test
+    void restoresFullBatchMergingInFlightRecords() {
+        UsageBatcher batcher = new UsageBatcher("app", "Production", null, null);
+        batcher.recordCheck("FeatureA", true, "user-1");
+        batcher.recordDefinitionCacheHit();
+        batcher.recordDefinitionCacheMiss();
+
+        UsageBatcher.DrainedUsage drained = batcher.exportAndReset();
+        assertThat(drained).isNotNull();
+
+        batcher.recordCheck("FeatureB", false, "user-2");
+        batcher.recordDefinitionCacheHit();
+        batcher.restore(drained.snapshot);
+
+        FeatureStatPayload payload = batcher.buildAndReset();
+        assertThat(payload.getDefinitionCacheHits()).isEqualTo(2);
+        assertThat(payload.getDefinitionCacheMisses()).isEqualTo(1);
+        assertThat(payload.getStats()).extracting(FeatureStatPayload.StatMessage::getFeature)
+                .containsExactlyInAnyOrder("FeatureA", "FeatureB");
+    }
 }

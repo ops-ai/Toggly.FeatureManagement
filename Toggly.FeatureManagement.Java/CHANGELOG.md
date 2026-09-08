@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.0
+
+2026-09-07
+
+### Added
+- Definition-refresh cache hit/miss counters on `Usage.SendStats`
+  (`definitionCacheHits` / `definitionCacheMisses`) from `HttpSnapshotProvider`.
+- Full usage-batch restore (feature stats + hashes + cache counters) when
+  `sendStats` fails, including close-safe batcher capture across in-flight send.
+
+### Changed
+- Package version and `SdkIdentity.SDK_VERSION` aligned to `1.5.0`
+  (`User-Agent` / UA: `toggly-java/1.5.0`).
+
 ## 1.4.0
 
 2026-09-06

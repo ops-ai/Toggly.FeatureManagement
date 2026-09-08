@@ -120,11 +120,29 @@ class GrpcContractTest {
         assertThat(usageProto.getEnvironment()).isEqualTo("Production");
         assertThat(usageProto.getInstanceName()).isEqualTo("host-1");
         assertThat(usageProto.getAppVersion()).isEqualTo("1.4.0");
+        assertThat(usageProto.hasDefinitionCacheHits()).isFalse();
+        assertThat(usageProto.hasDefinitionCacheMisses()).isFalse();
         assertThat(usageProto.getStatsCount()).isEqualTo(1);
         assertThat(usageProto.getStats(0).getVariantStatsMap().get("enabled").getCheckCount()).isEqualTo(2);
         assertThat(usageProto.getStats(0).getVariantStatsMap().get("enabled").getUsedCount()).isEqualTo(1);
         assertThat(usageProto.getStats(0).getVariantStatsMap().get("disabled").getCheckCount()).isEqualTo(1);
         assertThat(usageProto.getUniqueUserHashesList()).hasSize(2);
+
+        FeatureStatPayload withCache = new FeatureStatPayload(
+                "app-key",
+                "Production",
+                now,
+                List.of(),
+                0,
+                List.of(),
+                null,
+                null,
+                null,
+                4,
+                2);
+        FeatureStat cacheProto = GrpcClientFactory.toProto(withCache);
+        assertThat(cacheProto.getDefinitionCacheHits()).isEqualTo(4);
+        assertThat(cacheProto.getDefinitionCacheMisses()).isEqualTo(2);
 
         MetricStatPayload metricsPayload = new MetricStatPayload(
                 "app-key",

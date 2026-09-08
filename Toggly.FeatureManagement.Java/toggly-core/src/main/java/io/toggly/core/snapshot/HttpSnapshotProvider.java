@@ -11,6 +11,7 @@ import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.model.FeatureRequirement;
 import io.toggly.core.model.MetricDefinition;
+import io.toggly.core.telemetry.DefinitionCacheRecorder;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -27,11 +28,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
@@ -68,6 +71,8 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private java.net.http.WebSocket webSocket;
     private volatile boolean wsConnected = false;
     private volatile long lastFallbackRefresh = 0;
+    private final AtomicBoolean refreshInFlight = new AtomicBoolean(false);
+    private volatile DefinitionCacheRecorder definitionCacheRecorder;
 
     /**
      * Creates an HTTP snapshot provider.
@@ -135,24 +140,51 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     }
 
     @Override
+    public void setDefinitionCacheRecorder(DefinitionCacheRecorder recorder) {
+        this.definitionCacheRecorder = recorder;
+    }
+
+    @Override
     public FeatureSnapshot refresh() {
+        // Concurrent refresh skipped (in flight) — do not count.
+        if (!refreshInFlight.compareAndSet(false, true)) {
+            LOGGER.log(Level.FINE, "Refresh already in progress, skipping");
+            return currentSnapshot.get();
+        }
+        // Exactly one hit/miss per attempt: record after apply, skip catch if already counted.
+        boolean outcomeRecorded = false;
         try {
-            FeatureSnapshot newSnapshot = fetchDefinitions();
-            if (newSnapshot != null) {
-                applySnapshot(newSnapshot);
-
-                if (config.isEnableLiveUpdates() && !wsConnected && webSocket == null) {
-                    startWebSocket();
+            FetchResult result = fetchDefinitions();
+            if (result.outcome == CacheOutcome.MISS) {
+                applySnapshot(result.snapshot);
+                recordDefinitionCacheMiss();
+            } else {
+                if (result.snapshot != null && result.applySnapshot) {
+                    applySnapshot(result.snapshot);
                 }
-
-                return newSnapshot;
+                recordDefinitionCacheHit();
             }
+            outcomeRecorded = true;
+
+            if (config.isEnableLiveUpdates() && !wsConnected && webSocket == null) {
+                startWebSocket();
+            }
+
+            return currentSnapshot.get();
         } catch (TogglySignatureException e) {
             reportError("Invalid signature", e);
             LOGGER.log(Level.WARNING, "Signature verification failed", e);
+            if (!outcomeRecorded) {
+                recordDefinitionCacheHit();
+            }
         } catch (Exception e) {
             reportError("Failed to refresh definitions", e);
             LOGGER.log(Level.WARNING, "Failed to refresh definitions", e);
+            if (!outcomeRecorded) {
+                recordDefinitionCacheHit();
+            }
+        } finally {
+            refreshInFlight.set(false);
         }
         // Last-known-good: keep serving the previous snapshot on transient failures
         return currentSnapshot.get();
@@ -190,7 +222,12 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                             config.getAllowedKeyIds());
                 }
             }
+            boolean startupFromDurable = currentSnapshot.get().isEmpty();
             applySnapshot(snapshot);
+            // Startup served from durable snapshot before first network — count once.
+            if (startupFromDurable) {
+                recordDefinitionCacheHit();
+            }
             return true;
         } catch (Exception e) {
             reportError("Failed to apply cached snapshot", e);
@@ -246,6 +283,8 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                 long elapsed = System.currentTimeMillis() - lastFallbackRefresh;
                 if (elapsed < FALLBACK_REFRESH_INTERVAL) {
                     LOGGER.log(Level.FINE, "Skipping scheduled refresh — WebSocket is connected");
+                    // Skipped poll (live WS / in-memory still valid) counts as a cache hit.
+                    recordDefinitionCacheHit();
                     return;
                 }
                 LOGGER.log(Level.FINE, "Fallback refresh interval elapsed, refreshing via HTTP");
@@ -257,7 +296,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         }
     }
 
-    private FeatureSnapshot fetchDefinitions() {
+    private FetchResult fetchDefinitions() {
         HttpURLConnection connection = null;
         try {
             URL url = new URL(definitionsUrl);
@@ -268,15 +307,15 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("User-Agent", SdkIdentity.userAgent());
 
-            String etag = lastEtag.get();
-            if (etag != null) {
-                connection.setRequestProperty("If-None-Match", etag);
+            String previousEtag = lastEtag.get();
+            if (previousEtag != null) {
+                connection.setRequestProperty("If-None-Match", previousEtag);
             }
 
             int responseCode = connection.getResponseCode();
 
             if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                return currentSnapshot.get();
+                return FetchResult.hit(currentSnapshot.get(), false);
             }
 
             if (responseCode != HttpURLConnection.HTTP_OK) {
@@ -286,12 +325,28 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             }
 
             String newEtag = connection.getHeaderField("ETag");
+
+            // HTTP 200 whose revision/etag matches existing (CDN replay) — cache hit.
+            if (etagsMatch(previousEtag, newEtag)) {
+                if (newEtag != null) {
+                    lastEtag.set(newEtag);
+                }
+                return FetchResult.hit(currentSnapshot.get(), false);
+            }
+
             if (newEtag != null) {
                 lastEtag.set(newEtag);
             }
 
             String responseBody = readResponse(connection.getInputStream());
-            return parseDefinitions(responseBody, newEtag);
+            FeatureSnapshot parsed = parseDefinitions(responseBody, newEtag);
+
+            // Older signed timestamp keeps last-known-good — treat as hit.
+            if (parsed == currentSnapshot.get()) {
+                return FetchResult.hit(parsed, false);
+            }
+
+            return FetchResult.miss(parsed);
 
         } catch (TogglyNetworkException | TogglySignatureException e) {
             throw e;
@@ -301,6 +356,63 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             if (connection != null) {
                 connection.disconnect();
             }
+        }
+    }
+
+    private static boolean etagsMatch(String left, String right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        return normalizeEtag(left).equals(normalizeEtag(right));
+    }
+
+    private static String normalizeEtag(String etag) {
+        String trimmed = etag.trim();
+        if (trimmed.startsWith("W/")) {
+            trimmed = trimmed.substring(2).trim();
+        }
+        if (trimmed.length() >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        return trimmed;
+    }
+
+    private void recordDefinitionCacheHit() {
+        DefinitionCacheRecorder recorder = definitionCacheRecorder;
+        if (recorder != null) {
+            recorder.recordDefinitionCacheHit();
+        }
+    }
+
+    private void recordDefinitionCacheMiss() {
+        DefinitionCacheRecorder recorder = definitionCacheRecorder;
+        if (recorder != null) {
+            recorder.recordDefinitionCacheMiss();
+        }
+    }
+
+    private enum CacheOutcome {
+        HIT,
+        MISS
+    }
+
+    private static final class FetchResult {
+        final FeatureSnapshot snapshot;
+        final CacheOutcome outcome;
+        final boolean applySnapshot;
+
+        private FetchResult(FeatureSnapshot snapshot, CacheOutcome outcome, boolean applySnapshot) {
+            this.snapshot = snapshot;
+            this.outcome = outcome;
+            this.applySnapshot = applySnapshot;
+        }
+
+        static FetchResult hit(FeatureSnapshot snapshot, boolean applySnapshot) {
+            return new FetchResult(snapshot, CacheOutcome.HIT, applySnapshot);
+        }
+
+        static FetchResult miss(FeatureSnapshot snapshot) {
+            return new FetchResult(Objects.requireNonNull(snapshot), CacheOutcome.MISS, true);
         }
     }
 
