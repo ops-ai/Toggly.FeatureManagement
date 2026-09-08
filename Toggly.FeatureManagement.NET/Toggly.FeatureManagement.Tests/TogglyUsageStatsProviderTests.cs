@@ -1753,10 +1753,11 @@ public class TogglyUsageStatsProviderTests : IDisposable
         // Act
         var debugInfo = _provider.GetDebugInfo();
 
-        // Assert
+        // Assert — package Version must be embedded (OPS-1045); never `toggly-dotnet/` alone
         debugInfo.UserAgent.Should().StartWith("toggly-dotnet/");
-        // Version may be empty in test context, just verify format starts correctly
-        debugInfo.UserAgent.Should().NotBeNullOrWhiteSpace();
+        debugInfo.UserAgent.Should().MatchRegex(@"^toggly-dotnet/\S+$");
+        debugInfo.UserAgent.Should().NotEndWith("/");
+        debugInfo.UserAgent.Should().Be(TogglySdkIdentity.UserAgent);
     }
 
     [Fact]

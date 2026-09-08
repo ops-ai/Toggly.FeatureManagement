@@ -1,0 +1,29 @@
+<Project>
+  <!--
+    GenerateAssemblyInfo is false across .NET packages (hand-written AssemblyInfo.cs
+    for InternalsVisibleTo). Still embed $(Version) so runtime UA can read it.
+  -->
+  <Target Name="GenerateTogglyVersionAttributes"
+          BeforeTargets="BeforeCompile"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(Version)' != '' And '$(GenerateAssemblyInfo)' == 'false'">
+    <PropertyGroup>
+      <_TogglyVerFile>$(IntermediateOutputPath)TogglyVersionAttributes.g.cs</_TogglyVerFile>
+      <_TogglyAsmVer Condition="'$(AssemblyVersion)' != ''">$(AssemblyVersion)</_TogglyAsmVer>
+      <_TogglyAsmVer Condition="'$(AssemblyVersion)' == ''">$(Version).0</_TogglyAsmVer>
+      <_TogglyFileVer Condition="'$(FileVersion)' != ''">$(FileVersion)</_TogglyFileVer>
+      <_TogglyFileVer Condition="'$(FileVersion)' == ''">$(Version).0</_TogglyFileVer>
+      <_TogglyInfoVer Condition="'$(InformationalVersion)' != ''">$(InformationalVersion)</_TogglyInfoVer>
+      <_TogglyInfoVer Condition="'$(InformationalVersion)' == ''">$(Version)</_TogglyInfoVer>
+      <_TogglyVerContent>[assembly: System.Reflection.AssemblyVersion("$(_TogglyAsmVer)")]%0A[assembly: System.Reflection.AssemblyFileVersion("$(_TogglyFileVer)")]%0A[assembly: System.Reflection.AssemblyInformationalVersion("$(_TogglyInfoVer)")]%0A</_TogglyVerContent>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" Condition="!Exists('$(IntermediateOutputPath)')" />
+    <WriteLinesToFile
+      File="$(_TogglyVerFile)"
+      Lines="$(_TogglyVerContent)"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(_TogglyVerFile)" />
+    </ItemGroup>
+  </Target>
+</Project>

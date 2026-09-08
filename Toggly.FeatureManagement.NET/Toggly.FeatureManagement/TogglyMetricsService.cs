@@ -79,8 +79,8 @@ namespace Toggly.FeatureManagement
             _timer = new Timer(TimerCallback, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
             applicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
 
-            var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
-            userAgent = $"Toggly.FeatureManagement/{version}";
+            // Same shape as usage + definitions for platform SdkUserAgentParser.
+            userAgent = TogglySdkIdentity.UserAgent;
         }
 
         private void OnApplicationStopping()
