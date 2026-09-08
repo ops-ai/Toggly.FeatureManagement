@@ -17,6 +17,15 @@ module Toggly
             viewedCount: viewed_count
           }
         end
+
+        def clone
+          VariantStatsAgg.new(
+            check_count: check_count,
+            request_count: request_count,
+            used_count: used_count,
+            viewed_count: viewed_count
+          )
+        end
       end
 
       FeatureUsageAgg = Struct.new(
@@ -38,7 +47,30 @@ module Toggly
         )
           super
         end
+
+        def clone
+          FeatureUsageAgg.new(
+            variant_stats: variant_stats.transform_values(&:clone),
+            unique_users_enabled: unique_users_enabled.dup,
+            unique_users_disabled: unique_users_disabled.dup,
+            unique_users_used: unique_users_used.dup,
+            unique_user_hashes: unique_user_hashes.dup,
+            unique_viewed_user_hashes: unique_viewed_user_hashes.dup
+          )
+        end
       end
+
+      # Restoreable copy of drained batcher state.
+      BatchSnapshot = Struct.new(
+        :per_feature,
+        :app_unique,
+        :definition_cache_hits,
+        :definition_cache_misses,
+        keyword_init: true
+      )
+
+      # Wire payload plus snapshot for failed-send restore.
+      DrainedBatch = Struct.new(:payload, :snapshot, keyword_init: true)
 
       def initialize(app_key, environment, instance_name: nil, app_version: nil, process_start_time: nil)
         @app_key = app_key
@@ -48,7 +80,17 @@ module Toggly
         @process_start_time = process_start_time || Time.now.utc
         @per_feature = {}
         @app_unique = Set.new
+        @definition_cache_hits = 0
+        @definition_cache_misses = 0
         @mutex = Mutex.new
+      end
+
+      def record_definition_cache_hit
+        @mutex.synchronize { @definition_cache_hits += 1 }
+      end
+
+      def record_definition_cache_miss
+        @mutex.synchronize { @definition_cache_misses += 1 }
       end
 
       def record_check(feature, enabled, identity = nil, variant: nil, unique_request: false)
@@ -97,36 +139,97 @@ module Toggly
       end
 
       def empty?
-        @mutex.synchronize { @per_feature.empty? && @app_unique.empty? }
+        @mutex.synchronize { empty_unlocked? }
+      end
+
+      # Build the SendStats payload, clear pending state, and return a restore snapshot.
+      #
+      # @return [DrainedBatch, nil]
+      def export_and_reset
+        @mutex.synchronize do
+          return nil if empty_unlocked?
+
+          snapshot = clone_snapshot_unlocked
+          payload = build_payload_unlocked
+          clear_unlocked
+          DrainedBatch.new(payload: payload, snapshot: snapshot)
+        end
       end
 
       def build_and_reset
-        @mutex.synchronize do
-          return nil if @per_feature.empty? && @app_unique.empty?
+        drained = export_and_reset
+        drained&.payload
+      end
 
-          payload = base_payload
-          payload[:stats] = drain_feature_stats
-          @per_feature = {}
-          @app_unique = Set.new
-          payload
+      # Merge a drained snapshot after send_stats failure (additive).
+      #
+      # @param snapshot [BatchSnapshot, nil]
+      def restore(snapshot)
+        return if snapshot.nil?
+
+        @mutex.synchronize do
+          @definition_cache_hits += snapshot.definition_cache_hits
+          @definition_cache_misses += snapshot.definition_cache_misses
+          @app_unique.merge(snapshot.app_unique)
+
+          snapshot.per_feature.each do |feature, snap_agg|
+            agg = get_feature(feature)
+            snap_agg.variant_stats.each do |name, snap_stats|
+              stats = get_variant(agg, name)
+              stats.check_count += snap_stats.check_count
+              stats.request_count += snap_stats.request_count
+              stats.used_count += snap_stats.used_count
+              stats.viewed_count += snap_stats.viewed_count
+            end
+            agg.unique_users_enabled.merge(snap_agg.unique_users_enabled)
+            agg.unique_users_disabled.merge(snap_agg.unique_users_disabled)
+            agg.unique_users_used.merge(snap_agg.unique_users_used)
+            agg.unique_user_hashes.merge(snap_agg.unique_user_hashes)
+            agg.unique_viewed_user_hashes.merge(snap_agg.unique_viewed_user_hashes)
+          end
         end
       end
 
       private
 
-      def base_payload
+      def empty_unlocked?
+        @per_feature.empty? &&
+          @app_unique.empty? &&
+          @definition_cache_hits.zero? &&
+          @definition_cache_misses.zero?
+      end
+
+      def clone_snapshot_unlocked
+        BatchSnapshot.new(
+          per_feature: @per_feature.transform_values(&:clone),
+          app_unique: @app_unique.dup,
+          definition_cache_hits: @definition_cache_hits,
+          definition_cache_misses: @definition_cache_misses
+        )
+      end
+
+      def build_payload_unlocked
         payload = {
           appKey: @app_key,
           environment: @environment,
           time: GrpcClients.to_protobuf_timestamp,
-          stats: [],
+          stats: drain_feature_stats,
           totalUniqueUsers: @app_unique.size,
           uniqueUserHashes: @app_unique.to_a,
           processStartTime: GrpcClients.to_protobuf_timestamp(@process_start_time)
         }
         payload[:instanceName] = @instance_name if @instance_name
         payload[:appVersion] = @app_version if @app_version
+        payload[:definitionCacheHits] = @definition_cache_hits if @definition_cache_hits.positive?
+        payload[:definitionCacheMisses] = @definition_cache_misses if @definition_cache_misses.positive?
         payload
+      end
+
+      def clear_unlocked
+        @per_feature = {}
+        @app_unique = Set.new
+        @definition_cache_hits = 0
+        @definition_cache_misses = 0
       end
 
       def drain_feature_stats

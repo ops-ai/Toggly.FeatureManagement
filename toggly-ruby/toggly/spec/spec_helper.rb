@@ -48,19 +48,21 @@ module TestHelpers
     { "features" => features }.to_json
   end
 
-  def stub_definitions_api(app_key:, environment:, features:, status: 200)
+  def stub_definitions_api(app_key:, environment:, features:, status: 200, etag: nil, headers: {})
     url = "https://definitions.toggly.io/definitions/#{app_key}/#{environment}"
+    response_headers = { "Content-Type" => "application/json" }.merge(headers)
+    response_headers["ETag"] = etag if etag
 
     if status == 200
       stub_request(:get, url)
         .to_return(
           status: 200,
           body: build_definitions_response(features),
-          headers: { "Content-Type" => "application/json" }
+          headers: response_headers
         )
     else
       stub_request(:get, url)
-        .to_return(status: status, body: "")
+        .to_return(status: status, body: "", headers: response_headers)
     end
   end
 end

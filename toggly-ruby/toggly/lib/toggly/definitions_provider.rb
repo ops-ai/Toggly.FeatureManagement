@@ -14,6 +14,9 @@ end
 module Toggly
   # Provider for fetching feature definitions from Toggly API.
   class DefinitionsProvider
+    # Result of one HTTP definitions fetch with cache telemetry outcome.
+    FetchResult = Struct.new(:definitions, :cache_outcome, keyword_init: true)
+
     # Fallback HTTP refresh interval when WebSocket is connected (20 minutes)
     FALLBACK_REFRESH_INTERVAL = 20 * 60
 
@@ -32,6 +35,7 @@ module Toggly
       @on_definitions_updated = on_definitions_updated
       @etag = nil
       @last_modified = nil
+      @last_ts = 0
 
       # WebSocket state
       @ws = nil
@@ -44,11 +48,11 @@ module Toggly
     # Fetch definitions from the API
     #
     # @param force [Boolean] Force fetch even if cached
-    # @return [Hash, nil] Hash of definitions, or nil if not modified
+    # @return [FetchResult] definitions (Hash or nil) plus :hit / :miss outcome
     # @raise [NetworkError] On network failures
     # @raise [DefinitionsError] On API errors
     def fetch(force: false)
-      return nil if @config.offline_mode?
+      return FetchResult.new(definitions: nil, cache_outcome: :hit) if @config.offline_mode?
 
       uri = URI.parse(@config.definitions_endpoint)
       http = build_http(uri)
@@ -60,6 +64,8 @@ module Toggly
       raise NetworkError, "Request timeout: #{e.message}"
     rescue SocketError, Errno::ECONNREFUSED => e
       raise NetworkError, "Connection failed: #{e.message}"
+    rescue NetworkError, DefinitionsError
+      raise
     rescue StandardError => e
       raise NetworkError, "Request failed: #{e.message}"
     end
@@ -68,6 +74,7 @@ module Toggly
     def reset_cache
       @etag = nil
       @last_modified = nil
+      @last_ts = 0
     end
 
     # Check whether the periodic refresh should be skipped because the
@@ -166,32 +173,81 @@ module Toggly
     end
 
     def handle_response(response)
-      case response.code.to_i
-      when 200
-        parse_definitions(response)
-      when 304
-        # Not modified
+      status = response.code.to_i
+      response_etag = response["ETag"]
+      response_lm = response["Last-Modified"]
+      kind = DefinitionCache.classify_http(
+        status,
+        @etag,
+        response_etag,
+        existing_last_modified: @last_modified,
+        response_last_modified: response_lm
+      )
+
+      case kind
+      when :not_modified
         log_debug("Definitions not modified")
-        nil
+        FetchResult.new(definitions: nil, cache_outcome: :hit)
+      when :same_revision
+        log_debug("Definitions revision matches existing (ETag or Last-Modified)")
+        store_revision_headers(response_etag, response_lm)
+        FetchResult.new(definitions: nil, cache_outcome: :hit)
+      when :new_content
+        handle_new_content(response, response_etag, response_lm)
+      when :error_status
+        handle_error_status(status, response)
+      end
+    end
+
+    def handle_new_content(response, response_etag, response_lm)
+      data = JSON.parse(response.body)
+      signed_ts = extract_signed_timestamp(data)
+      if DefinitionCache.cached_signed_timestamp?(@last_ts, signed_ts)
+        log_debug("Definitions signed timestamp is not newer than cached revision")
+        store_revision_headers(response_etag, response_lm)
+        return FetchResult.new(definitions: nil, cache_outcome: :hit)
+      end
+
+      definitions = parse_features(data)
+      store_revision_headers(response_etag, response_lm)
+      @last_ts = signed_ts if signed_ts&.positive?
+      FetchResult.new(definitions: definitions, cache_outcome: :miss)
+    rescue JSON::ParserError => e
+      raise DefinitionsError, "Failed to parse definitions: #{e.message}"
+    end
+
+    def handle_error_status(status, response)
+      case status
       when 401, 403
-        raise DefinitionsError, "Authentication failed: #{response.code}"
+        raise DefinitionsError, "Authentication failed: #{status}"
       when 404
         raise DefinitionsError, "Definitions not found (check app_key and environment)"
       else
         raise NetworkError.new(
-          "API error: #{response.code}",
-          status_code: response.code.to_i,
+          "API error: #{status}",
+          status_code: status,
           response_body: response.body
         )
       end
     end
 
-    def parse_definitions(response)
-      # Cache headers for conditional requests
-      @etag = response["ETag"]
-      @last_modified = response["Last-Modified"]
+    def store_revision_headers(etag, last_modified)
+      @etag = etag if etag && !etag.empty?
+      @last_modified = last_modified if last_modified && !last_modified.empty?
+    end
 
-      data = JSON.parse(response.body)
+    def extract_signed_timestamp(data)
+      return nil unless data.is_a?(Hash)
+
+      raw = data["timestamp"]
+      return nil if raw.nil?
+
+      Integer(raw)
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def parse_features(data)
       features = if data.is_a?(Hash)
                    data["defs"] || data["features"] || data
                  else
@@ -209,8 +265,6 @@ module Toggly
       else
         raise DefinitionsError, "Invalid definitions format"
       end
-    rescue JSON::ParserError => e
-      raise DefinitionsError, "Failed to parse definitions: #{e.message}"
     end
 
     def build_websocket_url

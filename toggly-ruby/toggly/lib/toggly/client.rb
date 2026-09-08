@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "client/cache_telemetry"
+require_relative "client/snapshot_support"
+
 module Toggly
   # Main client for interacting with Toggly feature flags.
   #
@@ -21,6 +24,9 @@ module Toggly
   #   )
   #   client = Toggly::Client.new(config)
   class Client
+    include CacheTelemetry
+    include SnapshotSupport
+
     # @return [Config] Client configuration
     attr_reader :config
 
@@ -38,6 +44,8 @@ module Toggly
       @config.validate!
 
       @definitions = {}
+      # True once a revision (including empty) or durable snapshot was applied.
+      @definitions_loaded = false
       @mutex = Mutex.new
       @ready = false
       @closed = false
@@ -46,16 +54,19 @@ module Toggly
       @provider = DefinitionsProvider.new(
         config: @config,
         logger: @config.logger,
-        on_definitions_updated: -> { refresh }
+        on_definitions_updated: -> { refresh(force: true, from_websocket: true) }
       )
 
       @refresh_thread = nil
+      @refresh_in_flight = false
+      @pending_ws_refresh = false
       @telemetry = nil
 
+      # Start telemetry before the first refresh so cache outcomes can be recorded.
+      start_telemetry
       initialize_definitions
       Toggly.register_entity_contexts_at_startup(@config) unless @config.disable_entity_context_registration
       start_background_refresh unless @config.disable_background_refresh
-      start_telemetry
     end
 
     # Check if a feature is enabled
@@ -135,27 +146,53 @@ module Toggly
     # Manually refresh definitions
     #
     # @param force [Boolean] Force refresh even if not modified
+    # @param from_websocket [Boolean] True when triggered by a live WS notify
     # @return [Boolean] Whether definitions were updated
-    def refresh(force: false)
+    def refresh(force: false, from_websocket: false)
       return false if @config.offline_mode?
 
-      new_definitions = @provider.fetch(force: force)
-
-      if new_definitions
-        @mutex.synchronize do
-          @definitions = new_definitions
-          @ready = true
+      # Concurrent refresh skipped (in flight) — do not count.
+      @mutex.synchronize do
+        if @refresh_in_flight
+          @pending_ws_refresh = true if from_websocket
+          return false
         end
-
-        save_snapshot
-        log_info("Definitions refreshed (#{new_definitions.size} features)")
-        true
-      else
-        false
+        @refresh_in_flight = true
       end
-    rescue StandardError => e
-      log_error("Failed to refresh definitions: #{e.message}")
-      false
+
+      begin
+        result = @provider.fetch(force: force)
+        record_refresh_cache_outcome(result.cache_outcome)
+
+        if result.definitions
+          @mutex.synchronize do
+            @definitions = result.definitions
+            @definitions_loaded = true
+            @ready = true
+          end
+
+          save_snapshot
+          log_info("Definitions refreshed (#{result.definitions.size} features)")
+          true
+        else
+          false
+        end
+      rescue StandardError => e
+        log_error("Failed to refresh definitions: #{e.message}")
+        # Network error / timeout keeping last-good revision (incl. empty) — hit.
+        record_definition_cache_hit if definitions_cached?
+        false
+      ensure
+        drain_pending = false
+        @mutex.synchronize do
+          @refresh_in_flight = false
+          if @pending_ws_refresh
+            @pending_ws_refresh = false
+            drain_pending = true
+          end
+        end
+        refresh(force: true, from_websocket: true) if drain_pending
+      end
     end
 
     # Record a feature used/interaction event
@@ -254,8 +291,10 @@ module Toggly
     private
 
     def initialize_definitions
-      # Try to load from snapshot first
-      load_snapshot if @config.snapshot_provider
+      # Startup served from durable snapshot before first network — cache hit.
+      # Distinct from the subsequent refresh() network outcome (no double-count
+      # inside one refresh invocation; snapshot load is its own attempt).
+      record_definition_cache_hit if load_snapshot
 
       # Initialize with defaults if in offline mode
       if @config.offline_mode?
@@ -291,8 +330,11 @@ module Toggly
           break if @closed
 
           # When WebSocket is connected, skip HTTP refresh unless
-          # the fallback interval has elapsed
-          next if @provider.should_skip_refresh?
+          # the fallback interval has elapsed. Skipped poll = cache hit.
+          if @provider.should_skip_refresh?
+            record_definition_cache_hit
+            next
+          end
 
           refresh
         end
@@ -309,30 +351,6 @@ module Toggly
       return if @config.offline_mode?
 
       @provider.start_websocket
-    end
-
-    def load_snapshot
-      return unless @config.snapshot_provider
-
-      data = @config.snapshot_provider.load
-      return unless data
-
-      @mutex.synchronize do
-        @definitions = data[:definitions]
-      end
-
-      log_debug("Loaded #{@definitions.size} features from snapshot")
-    rescue StandardError => e
-      log_warn("Failed to load snapshot: #{e.message}")
-    end
-
-    def save_snapshot
-      return unless @config.snapshot_provider
-
-      @config.snapshot_provider.save(@definitions)
-      log_debug("Saved snapshot with #{@definitions.size} features")
-    rescue StandardError => e
-      log_warn("Failed to save snapshot: #{e.message}")
     end
 
     def development?

@@ -1,9 +1,13 @@
 # frozen_string_literal: true
 
+require_relative "runtime_flush"
+
 module Toggly
   module Telemetry
     # Owns usage + metrics batchers, flush timers, and process-exit handlers.
     class Runtime
+      include RuntimeFlush
+
       TIMER_JOIN_TIMEOUT_SECONDS = 2.0
 
       # rubocop:disable Metrics/ParameterLists -- mirrors other SDK telemetry config surfaces
@@ -116,6 +120,16 @@ module Toggly
         batcher&.record_view(feature, identity, variant: variant)
       end
 
+      def record_definition_cache_hit
+        batcher = @mutex.synchronize { @usage_batcher }
+        batcher&.record_definition_cache_hit
+      end
+
+      def record_definition_cache_miss
+        batcher = @mutex.synchronize { @usage_batcher }
+        batcher&.record_definition_cache_miss
+      end
+
       def measure(metric, value, options = nil)
         batcher = @mutex.synchronize { @metrics_batcher }
         batcher&.measure(metric, value, options)
@@ -129,63 +143,6 @@ module Toggly
       def observe(metric, value, options = nil)
         batcher = @mutex.synchronize { @metrics_batcher }
         batcher&.observe(metric, value, options)
-      end
-
-      def flush_usage
-        client = nil
-        payload = nil
-        @mutex.synchronize do
-          return if @usage_batcher.nil? || @sending_usage
-          return if @usage_batcher.empty?
-
-          ensure_native_clients
-          client = @clients&.usage
-          return if client.nil? || !client.respond_to?(:send_stats)
-
-          payload = @usage_batcher.build_and_reset
-          return if payload.nil?
-
-          @sending_usage = true
-        end
-
-        begin
-          client.send_stats(payload)
-        rescue StandardError => e
-          log_error("Failed to send usage stats: #{e.message}")
-        ensure
-          @mutex.synchronize { @sending_usage = false }
-        end
-      end
-
-      def flush_metrics
-        client = nil
-        payload = nil
-        @mutex.synchronize do
-          return if @metrics_batcher.nil? || @sending_metrics
-          return if @metrics_batcher.empty?
-
-          ensure_native_clients
-          client = @clients&.metrics
-          return if client.nil? || !client.respond_to?(:send_metrics)
-
-          payload = @metrics_batcher.build_and_reset
-          return if payload.nil?
-
-          @sending_metrics = true
-        end
-
-        begin
-          client.send_metrics(payload)
-        rescue StandardError => e
-          log_error("Failed to send metrics: #{e.message}")
-        ensure
-          @mutex.synchronize { @sending_metrics = false }
-        end
-      end
-
-      def flush_all
-        flush_usage
-        flush_metrics
       end
 
       def close
@@ -233,17 +190,6 @@ module Toggly
           "Usage/metrics enabled but the optional grpc gem is not installed. " \
           "Install `grpc` (and google-protobuf) to send telemetry."
         )
-      end
-
-      def ensure_native_clients
-        return if @clients
-        return if @usage_client_provided || @metrics_client_provided
-        return unless GrpcClients.grpc_available?
-
-        @clients = GrpcClients.create(@metrics_base_url)
-        return if @clients
-
-        log_warn("Failed to create Toggly gRPC clients; telemetry send disabled")
       end
 
       def schedule_usage_flush
