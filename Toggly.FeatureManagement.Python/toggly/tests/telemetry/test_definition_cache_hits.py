@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from toggly import AsyncTogglyClient, TogglyClient, TogglyConfig
+from toggly.enums import LoadStatus
 from toggly.models import FeatureDefinition, FeatureFilter
 from toggly.providers import DefinitionsSnapshot, MemorySnapshotProvider
 
@@ -301,6 +302,38 @@ class TestDefinitionCacheHits:
         finally:
             client.close()
 
+    def test_stale_signed_timestamp_is_hit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        config, usage = _telemetry_config(use_signed_definitions=True)
+        client = TogglyClient(config)
+        client._last_signed_timestamp = 100
+
+        body = (
+            '{"defs":[{"featureKey":"feature-a","filters":[{"name":"AlwaysOn","parameters":{}}]}],'
+            '"signature":"sig","kid":"k1","timestamp":50}'
+        )
+        stale = MagicMock()
+        stale.status_code = 200
+        stale.headers = {"ETag": '"rev-stale"'}
+        stale.text.return_value = body
+
+        # Seed in-memory flags so stale hit has something to serve.
+        client._flags = {"feature-a": True}
+        client._etag = '"rev-0"'
+
+        try:
+            with pytest.MonkeyPatch.context() as mp:
+                mp.setattr(client._http, "get", lambda *_a, **_k: stale)
+                result = client.refresh()
+            assert result.status == LoadStatus.CACHED
+            client.flush_telemetry()
+            payload = usage.calls[0]
+            assert payload["definitionCacheHits"] == 1
+        finally:
+            client.close()
+
     def test_init_network_error_starts_background_refresh_once(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -465,3 +498,250 @@ class TestAsyncDefinitionCacheHits:
             assert not client._refresh_task.done()
         finally:
             await client.close()
+
+    @pytest.mark.asyncio
+    async def test_async_startup_snapshot_and_http_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        provider = MemorySnapshotProvider()
+        provider.save_definitions(
+            DefinitionsSnapshot(
+                definitions=[
+                    FeatureDefinition(
+                        feature_key="cached-feature",
+                        filters=[FeatureFilter(name="AlwaysOn", parameters={})],
+                    )
+                ],
+                etag='"rev-cached"',
+            )
+        )
+        config, usage = _telemetry_config(snapshot_provider=provider)
+        client = AsyncTogglyClient(config)
+
+        error = MagicMock()
+        error.status_code = 500
+        error.headers = {}
+
+        try:
+            with pytest.MonkeyPatch.context() as mp:
+                from toggly.http import HttpClient
+
+                mp.setattr(HttpClient, "get", lambda *_a, **_k: error)
+                await client.init()
+            client.flush_telemetry()
+            payload = usage.calls[0]
+            # Snapshot load hit + network error keeping last-good hit.
+            assert payload["definitionCacheHits"] >= 2
+            assert await client.is_enabled("cached-feature") is True
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_async_http_error_status_after_success(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        config, usage = _telemetry_config()
+        client = AsyncTogglyClient(config)
+        error = MagicMock()
+        error.status_code = 502
+        error.headers = {}
+        responses: List[Any] = [_ok_defs(etag='"rev-1"'), error]
+
+        def fake_get(*_a: Any, **_k: Any) -> MagicMock:
+            return responses.pop(0)
+
+        try:
+            with pytest.MonkeyPatch.context() as mp:
+                from toggly.http import HttpClient
+
+                mp.setattr(HttpClient, "get", fake_get)
+                await client.init()
+                await client.refresh()
+            client.flush_telemetry()
+            payload = usage.calls[0]
+            assert payload["definitionCacheMisses"] == 1
+            assert payload["definitionCacheHits"] == 1
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_async_invalid_json_is_error_hit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        config, usage = _telemetry_config()
+        client = AsyncTogglyClient(config)
+        bad = MagicMock()
+        bad.status_code = 200
+        bad.headers = {"ETag": '"rev-bad"'}
+        bad.text.return_value = "{not-json"
+        responses: List[Any] = [_ok_defs(etag='"rev-1"'), bad]
+
+        def fake_get(*_a: Any, **_k: Any) -> MagicMock:
+            return responses.pop(0)
+
+        try:
+            with pytest.MonkeyPatch.context() as mp:
+                from toggly.http import HttpClient
+
+                mp.setattr(HttpClient, "get", fake_get)
+                await client.init()
+                await client.refresh()
+            client.flush_telemetry()
+            payload = usage.calls[0]
+            assert payload["definitionCacheMisses"] == 1
+            assert payload["definitionCacheHits"] == 1
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_async_concurrent_refresh_skip_does_not_count(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        config, usage = _telemetry_config()
+        client = AsyncTogglyClient(config)
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        def blocking_get(*_a: Any, **_k: Any) -> MagicMock:
+            entered.set()
+            # Block the executor thread until release is set from the loop.
+            deadline = time.time() + 2.0
+            while not release.is_set() and time.time() < deadline:
+                time.sleep(0.01)
+            return _ok_defs(etag='"rev-1"')
+
+        try:
+            with pytest.MonkeyPatch.context() as mp:
+                from toggly.http import HttpClient
+
+                mp.setattr(HttpClient, "get", blocking_get)
+                task = asyncio.create_task(client.init())
+                await asyncio.wait_for(entered.wait(), timeout=2.0)
+                skipped = await client.refresh()
+                assert skipped.flags == client.feature_flags
+                release.set()
+                await task
+
+            client.flush_telemetry()
+            payload = usage.calls[0]
+            assert payload["definitionCacheMisses"] == 1
+            assert "definitionCacheHits" not in payload
+        finally:
+            release.set()
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_async_variants_miss_then_304(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        config, usage = _telemetry_config(enable_variants=True)
+
+        def _ok_variants(etag: str = '"v1"') -> MagicMock:
+            response = MagicMock()
+            response.status_code = 200
+            response.headers = {"ETag": etag}
+            response.json.return_value = {
+                "defs": {"feature-a": {"enabled": True, "variant": "A"}},
+                "signature": "sig",
+                "kid": "k1",
+                "timestamp": 1,
+            }
+            return response
+
+        client = AsyncTogglyClient(config)
+        responses = [_ok_variants('"v1"'), _not_modified('"v1"')]
+
+        def fake_get(*_a: Any, **_k: Any) -> MagicMock:
+            return responses.pop(0)
+
+        try:
+            with pytest.MonkeyPatch.context() as mp:
+                from toggly.http import HttpClient
+
+                mp.setattr(HttpClient, "get", fake_get)
+                await client.init()
+                await client.refresh()
+            client.flush_telemetry()
+            payload = usage.calls[0]
+            assert payload["definitionCacheMisses"] == 1
+            assert payload["definitionCacheHits"] == 1
+            assert await client.is_enabled("feature-a") is True
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_async_signature_error_keeps_last_good_hit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        config, usage = _telemetry_config(use_signed_definitions=True)
+        client = AsyncTogglyClient(config)
+
+        ok_body = (
+            '{"defs":[{"featureKey":"feature-a","filters":[{"name":"AlwaysOn","parameters":{}}]}],'
+            '"signature":"sig","kid":"k1","timestamp":10}'
+        )
+        ok = MagicMock()
+        ok.status_code = 200
+        ok.headers = {"ETag": '"rev-1"'}
+        ok.text.return_value = ok_body
+
+        responses: List[Any] = [ok, ok]
+
+        def fake_get(*_a: Any, **_k: Any) -> MagicMock:
+            return responses.pop(0)
+
+        async def fake_jwks() -> Any:
+            return MagicMock()
+
+        try:
+            with pytest.MonkeyPatch.context() as mp:
+                from toggly.http import HttpClient
+                from toggly.exceptions import TogglySignatureError
+
+                mp.setattr(HttpClient, "get", fake_get)
+                mp.setattr(client, "_load_or_fetch_jwks", fake_jwks)
+                calls = {"n": 0}
+
+                def fake_verify(*_a: Any, **_k: Any) -> None:
+                    calls["n"] += 1
+                    if calls["n"] > 1:
+                        raise TogglySignatureError("bad sig")
+
+                mp.setattr(
+                    "toggly.definition_cache.verify_signed_definitions",
+                    fake_verify,
+                )
+                await client.init()
+                # Force a new etag so we don't take same-revision hit
+                client._etag = '"rev-0"'
+                await client.refresh()
+            client.flush_telemetry()
+            payload = usage.calls[0]
+            assert payload["definitionCacheMisses"] == 1
+            assert payload["definitionCacheHits"] == 1
+        finally:
+            await client.close()
+
+
+class TestRuntimeDefinitionCacheRecording:
+    def test_record_hit_miss_without_batcher_is_noop(self) -> None:
+        from toggly.telemetry.runtime import TelemetryRuntime
+
+        runtime = TelemetryRuntime(
+            app_key="app",
+            environment="Production",
+            metrics_base_url="https://example.test",
+            enable_usage_tracking=False,
+            enable_metrics=False,
+            usage_flush_interval=0,
+            metrics_flush_interval=0,
+        )
+        # No usage batcher — both paths should no-op without error.
+        runtime.record_definition_cache_hit()
+        runtime.record_definition_cache_miss()

@@ -22,13 +22,13 @@ from toggly.config import TogglyConfig
 from toggly.context import EvaluationContext
 from toggly.crypto import verify_signed_definitions
 from toggly.definition_cache import (
-    HttpCacheKind,
-    cached_flags_response,
+    DefinitionRefreshMixin,
+    DefinitionsMissPlan,
+    VariantsMissPlan,
     extract_raw_defs_json,
     if_none_match_headers,
     parse_definitions_payload,
-    parse_signed_timestamp,
-    probe_http_cache,
+    parse_evaluated_variants_payload,
 )
 from toggly.entity_context import register_entity_contexts_at_startup
 from toggly.enums import FeatureRequirement, LoadStatus
@@ -67,7 +67,7 @@ from toggly.version import __version__
 logger = logging.getLogger("toggly")
 
 
-class TogglyClient(TelemetryClientMixin):
+class TogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
     """Main client for Toggly feature flag management.
 
     Provides synchronous API for evaluating feature flags.
@@ -628,103 +628,16 @@ class TogglyClient(TelemetryClientMixin):
             use_signed=self._config.use_signed_definitions,
             identity=self._identity,
         )
-
-        previous_etag = self._etag
-        headers = if_none_match_headers(previous_etag)
-
-        response = self._http.get(url, headers=headers)
-
-        probe = probe_http_cache(response.status_code, previous_etag, response.headers)
-        if probe.kind is HttpCacheKind.NOT_MODIFIED:
-            self._last_refresh = datetime.now(timezone.utc)
-            return cached_flags_response(self._flags), "hit", None
-        if probe.kind is HttpCacheKind.ERROR_STATUS:
-            raise TogglyNetworkError(
-                f"Failed to fetch definitions: HTTP {probe.status_code}",
-                status_code=probe.status_code,
-            )
-        if probe.kind is HttpCacheKind.SAME_REVISION:
-            self._last_refresh = datetime.now(timezone.utc)
-            if probe.response_etag:
-                self._etag = probe.response_etag
-            return cached_flags_response(self._flags), "hit", None
-        response_etag = probe.response_etag
-
-        raw_body = response.text()
-        try:
-            data = json.loads(raw_body)
-        except Exception as e:
-            raise TogglyNetworkError(f"Invalid JSON response: {e}", cause=e) from e
-
-        signature: str | None = None
-        kid: str | None = None
-        signed_ts: int | None = None
-        signed_defs_json: str | None = None
-
-        if self._config.use_signed_definitions:
-            if not isinstance(data, dict):
-                raise TogglySignatureError("Signed response must be an object")
-            signed_defs_json = extract_raw_defs_json(raw_body)
-            if signed_defs_json is None:
-                raise TogglySignatureError("Signed response missing defs")
-            raw_sig = data.get("signature")
-            signature = raw_sig if isinstance(raw_sig, str) else None
-            raw_kid = data.get("kid")
-            kid = raw_kid if isinstance(raw_kid, str) else None
-            ts = data.get("timestamp")
-            signed_ts = parse_signed_timestamp(ts)
-            if not signature:
-                raise TogglySignatureError("Signed response missing signature")
-            if not kid:
-                raise TogglySignatureError("Signed response missing kid")
-            if signed_ts is None:
-                raise TogglySignatureError("Signed response missing timestamp")
-            if signed_ts < self._last_signed_timestamp and self._last_signed_timestamp > 0:
-                self._last_refresh = datetime.now(timezone.utc)
-                return cached_flags_response(self._flags), "hit", None
-
-            jwks = self._load_or_fetch_jwks()
-            verify_signed_definitions(
-                signed_defs_json,
-                signed_ts,
-                signature,
-                kid,
-                jwks,
-                self._config.allowed_key_ids,
-            )
-            definitions = parse_definitions_payload(json.loads(signed_defs_json))
-            self._last_signed_timestamp = signed_ts
-        else:
-            definitions = parse_definitions_payload(data)
-
-        # Update state (new revision applied — miss).
-        with self._lock:
-            old_flags = dict(self._flags)
-            self._variant_defs = {}
-            self._definitions = {d.feature_key: d for d in definitions}
-            self._update_flags()
-            self._last_refresh = datetime.now(timezone.utc)
-            self._etag = response_etag
-
-            # Notify handlers of changes
-            self._notify_changes(old_flags)
-
-        init_response = TogglyInitResponse(
-            status=LoadStatus.FETCHED,
-            flags=dict(self._flags),
-            definitions=definitions,
-            etag=self._etag,
-            timestamp=datetime.now(timezone.utc),
+        response = self._http.get(
+            url, headers=if_none_match_headers(self._etag)
         )
-        snapshot = DefinitionsSnapshot(
-            definitions=definitions,
-            etag=self._etag,
-            timestamp=signed_ts if signed_ts is not None else int(time.time()),
-            signature=signature,
-            key_id=kid,
-            signed_defs_json=signed_defs_json,
+        planned = self._plan_definitions_http_response(
+            response, load_jwks=self._load_or_fetch_jwks
         )
-        return init_response, "miss", snapshot
+        if isinstance(planned, DefinitionsMissPlan):
+            with self._lock:
+                return self._commit_definitions_miss_plan(planned)
+        return planned
 
     def _extract_raw_defs_json(self, body: str) -> str | None:
         """Extract the exact JSON value of the ``defs`` property from a response body."""
@@ -793,89 +706,20 @@ class TogglyClient(TelemetryClientMixin):
             self._config.environment,
             identity=self._identity,
         )
-
-        previous_etag = self._etag
-        headers = if_none_match_headers(previous_etag)
-
-        response = self._http.get(url, headers=headers)
-
-        probe = probe_http_cache(response.status_code, previous_etag, response.headers)
-        if probe.kind is HttpCacheKind.NOT_MODIFIED:
-            self._last_refresh = datetime.now(timezone.utc)
-            return cached_flags_response(self._flags), "hit", None
-        if probe.kind is HttpCacheKind.ERROR_STATUS:
-            raise TogglyNetworkError(
-                f"Failed to fetch evaluated variants: HTTP {probe.status_code}",
-                status_code=probe.status_code,
-            )
-        if probe.kind is HttpCacheKind.SAME_REVISION:
-            self._last_refresh = datetime.now(timezone.utc)
-            if probe.response_etag:
-                self._etag = probe.response_etag
-            return cached_flags_response(self._flags), "hit", None
-        response_etag = probe.response_etag
-
-        try:
-            data = response.json()
-        except Exception as e:
-            raise TogglyNetworkError(f"Invalid JSON response: {e}", cause=e) from e
-
-        defs, signature, timestamp, kid = self._parse_variants_payload(data)
-
-        with self._lock:
-            old_flags = dict(self._flags)
-            self._variant_defs = defs
-            self._definitions = {}
-            self._flags = dict(self._config.feature_defaults)
-            for key, vd in defs.items():
-                self._flags[key] = vd.enabled
-            self._last_refresh = datetime.now(timezone.utc)
-            self._etag = response_etag
-            self._notify_changes(old_flags)
-
-        snapshot = VariantsSnapshot(
-            defs=defs,
-            signature=signature,
-            key_id=kid,
-            timestamp=timestamp,
-            etag=self._etag,
+        response = self._http.get(
+            url, headers=if_none_match_headers(self._etag)
         )
-        return (
-            TogglyInitResponse(
-                status=LoadStatus.FETCHED,
-                flags=dict(self._flags),
-                etag=self._etag,
-                timestamp=datetime.now(timezone.utc),
-            ),
-            "miss",
-            snapshot,
-        )
+        planned = self._plan_variants_http_response(response)
+        if isinstance(planned, VariantsMissPlan):
+            with self._lock:
+                return self._commit_variants_miss_plan(planned)
+        return planned
 
     def _parse_variants_payload(
         self, data: Any
     ) -> tuple[dict[str, EvaluatedVariantDef], str | None, int | None, str | None]:
         """Parse evaluated-variants-signed JSON body."""
-        if not isinstance(data, dict):
-            return {}, None, None, None
-        raw_defs = data.get("defs")
-        if not isinstance(raw_defs, dict):
-            raw_defs = {}
-        defs: dict[str, EvaluatedVariantDef] = {}
-        for key, value in raw_defs.items():
-            if isinstance(value, dict):
-                defs[key] = EvaluatedVariantDef.from_dict(value)
-        raw_sig = data.get("signature")
-        signature = raw_sig if isinstance(raw_sig, str) else None
-        ts = data.get("timestamp")
-        if isinstance(ts, int):
-            timestamp = ts
-        elif isinstance(ts, float):
-            timestamp = int(ts)
-        else:
-            timestamp = None
-        raw_kid = data.get("kid")
-        kid = raw_kid if isinstance(raw_kid, str) else None
-        return defs, signature, timestamp, kid
+        return parse_evaluated_variants_payload(data)
 
     def _parse_definitions(self, data: Any) -> list[FeatureDefinition]:
         """Parse definitions from API response."""
