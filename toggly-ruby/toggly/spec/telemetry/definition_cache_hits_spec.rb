@@ -95,6 +95,71 @@ RSpec.describe "Definition cache hit telemetry" do
     client.close
   end
 
+  it "counts equal Last-Modified as a hit" do
+    lm = "Mon, 01 Jan 2024 00:00:00 GMT"
+    stub_definitions_api(
+      app_key: app_key,
+      environment: environment,
+      features: features_v1,
+      etag: '"1"',
+      headers: { "Last-Modified" => lm }
+    )
+    client = build_client
+    flush_and_clear(client)
+
+    stub_definitions_api(
+      app_key: app_key,
+      environment: environment,
+      features: features_v1,
+      etag: '"different"',
+      headers: { "Last-Modified" => lm }
+    )
+    client.refresh(force: true)
+    expect(cache_counts(client)).to eq([1, 0])
+    client.close
+  end
+
+  it "counts equal or older signed timestamp as a hit" do
+    stub_definitions_api(app_key: app_key, environment: environment, features: features_v1, etag: '"1"')
+    client = build_client
+    flush_and_clear(client)
+
+    provider = client.instance_variable_get(:@provider)
+    provider.instance_variable_set(:@last_ts, 1_700_000_000)
+
+    body = {
+      "defs" => features_v1,
+      "signature" => "unused",
+      "timestamp" => 1_700_000_000,
+      "kid" => "k1"
+    }.to_json
+    stub_request(:get, "https://definitions.toggly.io/definitions/#{app_key}/#{environment}")
+      .to_return(
+        status: 200,
+        body: body,
+        headers: { "Content-Type" => "application/json", "ETag" => '"replay"' }
+      )
+    client.refresh(force: true)
+    expect(cache_counts(client)).to eq([1, 0])
+    client.close
+  end
+
+  it "counts startup durable snapshot before network as a hit" do
+    memory = Toggly::SnapshotProviders::Memory.new
+    memory.save(
+      {
+        "feat-snap" => Toggly::FeatureDefinition.new(feature_key: "feat-snap", enabled: true)
+      }
+    )
+
+    stub_definitions_api(app_key: app_key, environment: environment, features: features_v1, status: 304, etag: '"snap"')
+    client = build_client(snapshot_provider: memory)
+    # Snapshot load hit + 304 refresh hit (two attempts; no double-count in one refresh).
+    expect(cache_counts(client)).to eq([2, 0])
+    expect(client.feature_keys).to include("feat-snap")
+    client.close
+  end
+
   it "counts network errors that keep last good defs as a hit" do
     stub_definitions_api(app_key: app_key, environment: environment, features: features_v1, etag: '"1"')
     client = build_client
@@ -104,6 +169,14 @@ RSpec.describe "Definition cache hit telemetry" do
     client.refresh
     expect(client.feature_keys).to include("feat-a")
     expect(cache_counts(client)).to eq([1, 0])
+    client.close
+  end
+
+  it "does not count initial network failure with empty cache as a hit" do
+    stub_definitions_api(app_key: app_key, environment: environment, features: [], status: 500)
+    client = build_client
+    expect(client.feature_keys).to be_empty
+    expect(cache_counts(client)).to eq([0, 0])
     client.close
   end
 
@@ -196,10 +269,29 @@ RSpec.describe Toggly::DefinitionCache do
     expect(described_class.etags_match?(nil, '"1"')).to be false
   end
 
+  it "matches Last-Modified and signed revision timestamps" do
+    lm = "Mon, 01 Jan 2024 00:00:00 GMT"
+    expect(described_class.last_modified_match?(lm, lm)).to be true
+    expect(described_class.last_modified_match?(lm, nil)).to be false
+    expect(described_class.cached_signed_timestamp?(100, 100)).to be true
+    expect(described_class.cached_signed_timestamp?(100, 50)).to be true
+    expect(described_class.cached_signed_timestamp?(100, 101)).to be false
+    expect(described_class.cached_signed_timestamp?(0, 50)).to be false
+    expect(described_class.cached_signed_timestamp?(100, nil)).to be false
+  end
+
   it "classifies HTTP responses for cache outcomes" do
     expect(described_class.classify_http(304, '"1"', nil)).to eq(:not_modified)
     expect(described_class.classify_http(200, '"1"', '"1"')).to eq(:same_revision)
     expect(described_class.classify_http(200, '"1"', '"2"')).to eq(:new_content)
     expect(described_class.classify_http(500, '"1"', nil)).to eq(:error_status)
+    lm = "Mon, 01 Jan 2024 00:00:00 GMT"
+    expect(
+      described_class.classify_http(
+        200, '"1"', '"2"',
+        existing_last_modified: lm,
+        response_last_modified: lm
+      )
+    ).to eq(:same_revision)
   end
 end

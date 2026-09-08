@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "client/cache_telemetry"
+require_relative "client/snapshot_support"
+
 module Toggly
   # Main client for interacting with Toggly feature flags.
   #
@@ -21,6 +24,9 @@ module Toggly
   #   )
   #   client = Toggly::Client.new(config)
   class Client
+    include CacheTelemetry
+    include SnapshotSupport
+
     # @return [Config] Client configuration
     attr_reader :config
 
@@ -170,8 +176,8 @@ module Toggly
         end
       rescue StandardError => e
         log_error("Failed to refresh definitions: #{e.message}")
-        # Network error / timeout keeping last good defs — hit.
-        record_definition_cache_hit
+        # Network error / timeout keeping last good defs — hit only when cache exists.
+        record_definition_cache_hit if definitions_cached?
         false
       ensure
         drain_pending = false
@@ -282,8 +288,10 @@ module Toggly
     private
 
     def initialize_definitions
-      # Try to load from snapshot first
-      load_snapshot if @config.snapshot_provider
+      # Startup served from durable snapshot before first network — cache hit.
+      # Distinct from the subsequent refresh() network outcome (no double-count
+      # inside one refresh invocation; snapshot load is its own attempt).
+      record_definition_cache_hit if load_snapshot
 
       # Initialize with defaults if in offline mode
       if @config.offline_mode?
@@ -342,30 +350,6 @@ module Toggly
       @provider.start_websocket
     end
 
-    def load_snapshot
-      return unless @config.snapshot_provider
-
-      data = @config.snapshot_provider.load
-      return unless data
-
-      @mutex.synchronize do
-        @definitions = data[:definitions]
-      end
-
-      log_debug("Loaded #{@definitions.size} features from snapshot")
-    rescue StandardError => e
-      log_warn("Failed to load snapshot: #{e.message}")
-    end
-
-    def save_snapshot
-      return unless @config.snapshot_provider
-
-      @config.snapshot_provider.save(@definitions)
-      log_debug("Saved snapshot with #{@definitions.size} features")
-    rescue StandardError => e
-      log_warn("Failed to save snapshot: #{e.message}")
-    end
-
     def development?
       env = ENV["RACK_ENV"] || ENV["RAILS_ENV"] || ENV["APP_ENV"] || "development"
       env.downcase == "development"
@@ -402,26 +386,6 @@ module Toggly
 
       identity = context&.identity
       @telemetry.record_check(feature_key, enabled, identity)
-    end
-
-    def record_refresh_cache_outcome(outcome)
-      if outcome == :miss
-        record_definition_cache_miss
-      else
-        record_definition_cache_hit
-      end
-    end
-
-    def record_definition_cache_hit
-      return unless @telemetry&.usage_enabled?
-
-      @telemetry.record_definition_cache_hit
-    end
-
-    def record_definition_cache_miss
-      return unless @telemetry&.usage_enabled?
-
-      @telemetry.record_definition_cache_miss
     end
 
     def log_info(message)

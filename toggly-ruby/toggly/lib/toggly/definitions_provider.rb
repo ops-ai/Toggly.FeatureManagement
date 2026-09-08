@@ -35,6 +35,7 @@ module Toggly
       @on_definitions_updated = on_definitions_updated
       @etag = nil
       @last_modified = nil
+      @last_ts = 0
 
       # WebSocket state
       @ws = nil
@@ -73,6 +74,7 @@ module Toggly
     def reset_cache
       @etag = nil
       @last_modified = nil
+      @last_ts = 0
     end
 
     # Check whether the periodic refresh should be skipped because the
@@ -173,22 +175,45 @@ module Toggly
     def handle_response(response)
       status = response.code.to_i
       response_etag = response["ETag"]
-      kind = DefinitionCache.classify_http(status, @etag, response_etag)
+      response_lm = response["Last-Modified"]
+      kind = DefinitionCache.classify_http(
+        status,
+        @etag,
+        response_etag,
+        existing_last_modified: @last_modified,
+        response_last_modified: response_lm
+      )
 
       case kind
       when :not_modified
         log_debug("Definitions not modified")
         FetchResult.new(definitions: nil, cache_outcome: :hit)
       when :same_revision
-        log_debug("Definitions ETag matches existing revision")
-        @etag = response_etag if response_etag && !response_etag.empty?
-        @last_modified = response["Last-Modified"] if response["Last-Modified"]
+        log_debug("Definitions revision matches existing (ETag or Last-Modified)")
+        store_revision_headers(response_etag, response_lm)
         FetchResult.new(definitions: nil, cache_outcome: :hit)
       when :new_content
-        FetchResult.new(definitions: parse_definitions(response), cache_outcome: :miss)
+        handle_new_content(response, response_etag, response_lm)
       when :error_status
         handle_error_status(status, response)
       end
+    end
+
+    def handle_new_content(response, response_etag, response_lm)
+      data = JSON.parse(response.body)
+      signed_ts = extract_signed_timestamp(data)
+      if DefinitionCache.cached_signed_timestamp?(@last_ts, signed_ts)
+        log_debug("Definitions signed timestamp is not newer than cached revision")
+        store_revision_headers(response_etag, response_lm)
+        return FetchResult.new(definitions: nil, cache_outcome: :hit)
+      end
+
+      definitions = parse_features(data)
+      store_revision_headers(response_etag, response_lm)
+      @last_ts = signed_ts if signed_ts&.positive?
+      FetchResult.new(definitions: definitions, cache_outcome: :miss)
+    rescue JSON::ParserError => e
+      raise DefinitionsError, "Failed to parse definitions: #{e.message}"
     end
 
     def handle_error_status(status, response)
@@ -206,12 +231,23 @@ module Toggly
       end
     end
 
-    def parse_definitions(response)
-      # Cache headers for conditional requests
-      @etag = response["ETag"]
-      @last_modified = response["Last-Modified"]
+    def store_revision_headers(etag, last_modified)
+      @etag = etag if etag && !etag.empty?
+      @last_modified = last_modified if last_modified && !last_modified.empty?
+    end
 
-      data = JSON.parse(response.body)
+    def extract_signed_timestamp(data)
+      return nil unless data.is_a?(Hash)
+
+      raw = data["timestamp"]
+      return nil if raw.nil?
+
+      Integer(raw)
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def parse_features(data)
       features = if data.is_a?(Hash)
                    data["defs"] || data["features"] || data
                  else
@@ -229,8 +265,6 @@ module Toggly
       else
         raise DefinitionsError, "Invalid definitions format"
       end
-    rescue JSON::ParserError => e
-      raise DefinitionsError, "Failed to parse definitions: #{e.message}"
     end
 
     def build_websocket_url
