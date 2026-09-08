@@ -23,18 +23,20 @@ const (
 )
 
 type FeatureStat struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	AppKey           string                 `protobuf:"bytes,1,opt,name=appKey,proto3" json:"appKey,omitempty"`
-	Environment      string                 `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
-	Time             *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=time,proto3" json:"time,omitempty"`
-	Stats            []*StatMessage         `protobuf:"bytes,4,rep,name=stats,proto3" json:"stats,omitempty"`
-	TotalUniqueUsers int32                  `protobuf:"varint,5,opt,name=totalUniqueUsers,proto3" json:"totalUniqueUsers,omitempty"`
-	InstanceName     *string                `protobuf:"bytes,6,opt,name=instanceName,proto3,oneof" json:"instanceName,omitempty"`
-	ProcessStartTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=processStartTime,proto3,oneof" json:"processStartTime,omitempty"`
-	AppVersion       *string                `protobuf:"bytes,8,opt,name=appVersion,proto3,oneof" json:"appVersion,omitempty"`
-	UniqueUserHashes []int32                `protobuf:"varint,9,rep,packed,name=uniqueUserHashes,proto3" json:"uniqueUserHashes,omitempty"` // Application-level unique user ID hashes
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	AppKey                string                 `protobuf:"bytes,1,opt,name=appKey,proto3" json:"appKey,omitempty"`
+	Environment           string                 `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
+	Time                  *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=time,proto3" json:"time,omitempty"`
+	Stats                 []*StatMessage         `protobuf:"bytes,4,rep,name=stats,proto3" json:"stats,omitempty"`
+	TotalUniqueUsers      int32                  `protobuf:"varint,5,opt,name=totalUniqueUsers,proto3" json:"totalUniqueUsers,omitempty"`
+	InstanceName          *string                `protobuf:"bytes,6,opt,name=instanceName,proto3,oneof" json:"instanceName,omitempty"`
+	ProcessStartTime      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=processStartTime,proto3,oneof" json:"processStartTime,omitempty"`
+	AppVersion            *string                `protobuf:"bytes,8,opt,name=appVersion,proto3,oneof" json:"appVersion,omitempty"`
+	UniqueUserHashes      []int32                `protobuf:"varint,9,rep,packed,name=uniqueUserHashes,proto3" json:"uniqueUserHashes,omitempty"`           // Application-level unique user ID hashes
+	DefinitionCacheHits   *int32                 `protobuf:"varint,10,opt,name=definitionCacheHits,proto3,oneof" json:"definitionCacheHits,omitempty"`     // SDK-reported definition-refresh cache hits (batch delta)
+	DefinitionCacheMisses *int32                 `protobuf:"varint,11,opt,name=definitionCacheMisses,proto3,oneof" json:"definitionCacheMisses,omitempty"` // SDK-reported definition-refresh cache misses (batch delta)
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *FeatureStat) Reset() {
@@ -128,6 +130,20 @@ func (x *FeatureStat) GetUniqueUserHashes() []int32 {
 		return x.UniqueUserHashes
 	}
 	return nil
+}
+
+func (x *FeatureStat) GetDefinitionCacheHits() int32 {
+	if x != nil && x.DefinitionCacheHits != nil {
+		return *x.DefinitionCacheHits
+	}
+	return 0
+}
+
+func (x *FeatureStat) GetDefinitionCacheMisses() int32 {
+	if x != nil && x.DefinitionCacheMisses != nil {
+		return *x.DefinitionCacheMisses
+	}
+	return 0
 }
 
 type StatMessage struct {
@@ -390,7 +406,7 @@ var File_usage_proto protoreflect.FileDescriptor
 
 const file_usage_proto_rawDesc = "" +
 	"\n" +
-	"\vusage.proto\x12\x05Usage\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc9\x03\n" +
+	"\vusage.proto\x12\x05Usage\x1a\x1fgoogle/protobuf/timestamp.proto\"\xed\x04\n" +
 	"\vFeatureStat\x12\x16\n" +
 	"\x06appKey\x18\x01 \x01(\tR\x06appKey\x12 \n" +
 	"\venvironment\x18\x02 \x01(\tR\venvironment\x12.\n" +
@@ -402,10 +418,15 @@ const file_usage_proto_rawDesc = "" +
 	"\n" +
 	"appVersion\x18\b \x01(\tH\x02R\n" +
 	"appVersion\x88\x01\x01\x12*\n" +
-	"\x10uniqueUserHashes\x18\t \x03(\x05R\x10uniqueUserHashesB\x0f\n" +
+	"\x10uniqueUserHashes\x18\t \x03(\x05R\x10uniqueUserHashes\x125\n" +
+	"\x13definitionCacheHits\x18\n" +
+	" \x01(\x05H\x03R\x13definitionCacheHits\x88\x01\x01\x129\n" +
+	"\x15definitionCacheMisses\x18\v \x01(\x05H\x04R\x15definitionCacheMisses\x88\x01\x01B\x0f\n" +
 	"\r_instanceNameB\x13\n" +
 	"\x11_processStartTimeB\r\n" +
-	"\v_appVersion\"\xff\x05\n" +
+	"\v_appVersionB\x16\n" +
+	"\x14_definitionCacheHitsB\x18\n" +
+	"\x16_definitionCacheMisses\"\xff\x05\n" +
 	"\vStatMessage\x12\x18\n" +
 	"\afeature\x18\x01 \x01(\tR\afeature\x12&\n" +
 	"\fenabledCount\x18\x02 \x01(\x05B\x02\x18\x01R\fenabledCount\x12(\n" +

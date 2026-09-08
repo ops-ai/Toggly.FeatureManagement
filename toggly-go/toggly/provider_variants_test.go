@@ -50,10 +50,10 @@ func TestDefinitionsProvider_RefreshEvaluatedVariants_UsesETagAndUserId(t *testi
 	p := newDefinitionsProvider(cfg, nil)
 	p.hc = srv.Client()
 
-	if err := p.refreshEvaluatedVariants(context.Background()); err != nil {
+	if _, err := p.refreshEvaluatedVariants(context.Background()); err != nil {
 		t.Fatalf("refresh 1: %v", err)
 	}
-	if err := p.refreshEvaluatedVariants(context.Background()); err != nil {
+	if _, err := p.refreshEvaluatedVariants(context.Background()); err != nil {
 		t.Fatalf("refresh 2: %v", err)
 	}
 
@@ -120,10 +120,10 @@ func TestClient_SetVariantIdentity_ClearsVariantETag(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	c.provider.hc = srv.Client()
-	if err := c.provider.refreshEvaluatedVariants(context.Background()); err != nil {
+	if _, err := c.provider.refreshEvaluatedVariants(context.Background()); err != nil {
 		t.Fatalf("refresh 1: %v", err)
 	}
-	if err := c.provider.refreshEvaluatedVariants(context.Background()); err != nil {
+	if _, err := c.provider.refreshEvaluatedVariants(context.Background()); err != nil {
 		t.Fatalf("refresh 2: %v", err)
 	}
 	if atomic.LoadInt32(&calls) != 2 {
@@ -131,7 +131,7 @@ func TestClient_SetVariantIdentity_ClearsVariantETag(t *testing.T) {
 	}
 
 	c.SetVariantIdentity("other")
-	if err := c.provider.refreshEvaluatedVariants(context.Background()); err != nil {
+	if _, err := c.provider.refreshEvaluatedVariants(context.Background()); err != nil {
 		t.Fatalf("refresh 3: %v", err)
 	}
 	if atomic.LoadInt32(&calls) != 3 {

@@ -7,13 +7,29 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/crypto"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/live"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/snapshot"
+)
+
+// definitionCacheRecorder accumulates definition-refresh cache hit/miss counts
+// on the usage pipeline. Optional — nil when usage is disabled.
+type definitionCacheRecorder interface {
+	RecordDefinitionCacheHit()
+	RecordDefinitionCacheMiss()
+}
+
+type refreshCacheOutcome int
+
+const (
+	refreshCacheMiss refreshCacheOutcome = iota // applied a new revision
+	refreshCacheHit                             // served from local/cache
 )
 
 type definitionsProvider struct {
@@ -47,6 +63,11 @@ type definitionsProvider struct {
 	lastFallback     time.Time
 	fallbackInterval time.Duration
 
+	refreshInFlight  atomic.Bool
+	pendingWSRefresh atomic.Bool
+
+	cacheRecorder definitionCacheRecorder
+
 	stop chan struct{}
 	wg   sync.WaitGroup
 }
@@ -66,6 +87,22 @@ func newDefinitionsProvider(cfg Config, snap snapshot.Provider) *definitionsProv
 	}
 }
 
+func (p *definitionsProvider) setDefinitionCacheRecorder(r definitionCacheRecorder) {
+	p.cacheRecorder = r
+}
+
+func (p *definitionsProvider) recordDefinitionCacheHit() {
+	if r := p.cacheRecorder; r != nil {
+		r.RecordDefinitionCacheHit()
+	}
+}
+
+func (p *definitionsProvider) recordDefinitionCacheMiss() {
+	if r := p.cacheRecorder; r != nil {
+		r.RecordDefinitionCacheMiss()
+	}
+}
+
 func (p *definitionsProvider) start() {
 	p.wg.Add(1)
 	go func() {
@@ -74,7 +111,7 @@ func (p *definitionsProvider) start() {
 		defer ticker.Stop()
 
 		// initial refresh best-effort
-		_ = p.refresh(context.Background(), p.cfg.HTTPTimeout)
+		_ = p.refresh(context.Background(), p.cfg.HTTPTimeout, false)
 		// best-effort live updates
 		if p.cfg.EnableLiveUpdates {
 			p.startLiveUpdates()
@@ -86,9 +123,11 @@ func (p *definitionsProvider) start() {
 				return
 			case <-ticker.C:
 				if p.shouldSkipRefresh() {
+					// Skipped poll (live WS / in-memory still valid) = cache hit.
+					p.recordDefinitionCacheHit()
 					continue
 				}
-				_ = p.refresh(context.Background(), p.cfg.HTTPTimeout)
+				_ = p.refresh(context.Background(), p.cfg.HTTPTimeout, false)
 			}
 		}
 	}()
@@ -139,7 +178,8 @@ func (p *definitionsProvider) startLiveUpdates() {
 		if forceJWKSRefresh {
 			p.clearJWKS()
 		}
-		_ = p.refresh(context.Background(), 10*time.Second)
+		// WS-forced refresh must not be suppressed by scheduled poll skip.
+		_ = p.refresh(context.Background(), 10*time.Second, true)
 	})
 	if err != nil {
 		return
@@ -211,26 +251,47 @@ func (p *definitionsProvider) getVariant(featureKey string) *VariantResult {
 	return &VariantResult{Name: e.Variant, ConfigurationValue: e.ConfigurationValue}
 }
 
-func (p *definitionsProvider) refresh(ctx context.Context, timeout time.Duration) error {
+func (p *definitionsProvider) refresh(ctx context.Context, timeout time.Duration, fromWebSocket bool) error {
+	// Concurrent refresh skipped (in flight) — do not count.
+	if !p.refreshInFlight.CompareAndSwap(false, true) {
+		if fromWebSocket {
+			p.pendingWSRefresh.Store(true)
+		}
+		return nil
+	}
+	defer func() {
+		p.refreshInFlight.Store(false)
+		if p.pendingWSRefresh.Swap(false) {
+			// Drain WS notifies that arrived while in flight (no count on the skip).
+			_ = p.refresh(context.Background(), 10*time.Second, true)
+		}
+	}()
+
 	// load snapshot once on first refresh attempt
 	p.mu.RLock()
 	loaded := len(p.defsByKey) > 0
 	p.mu.RUnlock()
 	if !loaded {
-		_ = p.loadSnapshot(ctx)
+		if applied, _ := p.loadSnapshot(ctx); applied {
+			// Startup served from durable snapshot before first network — hit.
+			p.recordDefinitionCacheHit()
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	var err error
+	var (
+		outcome refreshCacheOutcome
+		err     error
+	)
 	switch {
 	case p.cfg.EnableVariants:
-		err = p.refreshEvaluatedVariants(ctx)
+		outcome, err = p.refreshEvaluatedVariants(ctx)
 	case p.cfg.UseSignedDefinitions:
-		err = p.refreshSigned(ctx)
+		outcome, err = p.refreshSigned(ctx)
 	default:
-		err = p.refreshUnsigned(ctx)
+		outcome, err = p.refreshUnsigned(ctx)
 	}
 
 	if err != nil {
@@ -239,7 +300,15 @@ func (p *definitionsProvider) refresh(ctx context.Context, timeout time.Duration
 		p.lastErr = err.Error()
 		p.lastErrTime = &now
 		p.mu.Unlock()
+		// Network error / timeout keeping last good defs — hit.
+		p.recordDefinitionCacheHit()
 		return err
+	}
+
+	if outcome == refreshCacheMiss {
+		p.recordDefinitionCacheMiss()
+	} else {
+		p.recordDefinitionCacheHit()
 	}
 
 	now := time.Now().UTC()
@@ -249,20 +318,22 @@ func (p *definitionsProvider) refresh(ctx context.Context, timeout time.Duration
 	return nil
 }
 
-func (p *definitionsProvider) loadSnapshot(ctx context.Context) error {
+// loadSnapshot loads durable defs. Returns true when it applied a snapshot into
+// a previously empty in-memory store (startup durable path).
+func (p *definitionsProvider) loadSnapshot(ctx context.Context) (bool, error) {
 	if p.snap == nil {
-		return nil
+		return false, nil
 	}
 
 	snapDefs, err := p.snap.LoadDefinitions(ctx)
 	if err != nil || snapDefs == nil {
-		return err
+		return false, err
 	}
 
 	if p.cfg.EnableVariants && len(snapDefs.VariantDefs) > 0 {
 		if p.cfg.UseSignedDefinitions {
 			if err := p.verifySnapshotRawDefs(ctx, snapDefs.VariantRawDefs, snapDefs.VariantSignature, snapDefs.VariantKid, snapDefs.VariantTimestamp); err != nil {
-				return err
+				return false, err
 			}
 		}
 		p.applyVariantDefinitions(snapDefs.VariantDefs)
@@ -274,13 +345,13 @@ func (p *definitionsProvider) loadSnapshot(ctx context.Context) error {
 			p.variantEtag = snapDefs.ETag
 		}
 		p.mu.Unlock()
-		return nil
+		return true, nil
 	}
 
 	if len(snapDefs.Defs) > 0 {
 		if p.cfg.UseSignedDefinitions {
 			if err := p.verifySnapshotRawDefs(ctx, snapDefs.RawDefs, snapDefs.Signature, snapDefs.Kid, snapDefs.Timestamp); err != nil {
-				return err
+				return false, err
 			}
 		}
 		p.applyDefinitions(snapDefs.Defs)
@@ -292,8 +363,9 @@ func (p *definitionsProvider) loadSnapshot(ctx context.Context) error {
 			p.etag = snapDefs.ETag
 		}
 		p.mu.Unlock()
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 // verifySnapshotRawDefs verifies a snapshot using the exact signed defs JSON.
@@ -324,11 +396,11 @@ func (p *definitionsProvider) verifySnapshotRawDefs(ctx context.Context, rawDefs
 	return nil
 }
 
-func (p *definitionsProvider) refreshUnsigned(ctx context.Context) error {
+func (p *definitionsProvider) refreshUnsigned(ctx context.Context) (refreshCacheOutcome, error) {
 	url := fmt.Sprintf("%sdefinitions/%s/%s", p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	SetSDKHeaders(req)
 	p.mu.RLock()
@@ -340,29 +412,35 @@ func (p *definitionsProvider) refreshUnsigned(ctx context.Context) error {
 
 	resp, err := p.hc.Do(req)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotModified {
-		return nil
+		return refreshCacheHit, nil
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("definitions refresh failed: %s: %s", resp.Status, string(b))
+		return refreshCacheHit, fmt.Errorf("definitions refresh failed: %s: %s", resp.Status, string(b))
+	}
+
+	newETag := resp.Header.Get("ETag")
+	// HTTP 200 whose etag matches existing (CDN replay) — cache hit.
+	if etagsMatch(etag, newETag) {
+		return refreshCacheHit, nil
 	}
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	defs, err := definitions.DecodeUnsignedDefinitions(b)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 
 	p.applyDefinitions(defs)
-	if newETag := resp.Header.Get("ETag"); newETag != "" {
+	if newETag != "" {
 		p.mu.Lock()
 		p.etag = newETag
 		p.mu.Unlock()
@@ -371,10 +449,10 @@ func (p *definitionsProvider) refreshUnsigned(ctx context.Context) error {
 	if p.snap != nil {
 		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{Defs: defs})
 	}
-	return nil
+	return refreshCacheMiss, nil
 }
 
-func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) error {
+func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) (refreshCacheOutcome, error) {
 	reqURL := fmt.Sprintf("%sevaluated-variants-signed/%s/%s", p.cfg.DefinitionsURL, url.PathEscape(p.cfg.AppKey), url.PathEscape(p.cfg.Environment))
 	if id := p.getVariantIdentity(); id != "" {
 		reqURL += "?userId=" + url.QueryEscape(id)
@@ -382,7 +460,7 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) erro
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	SetSDKHeaders(req)
 	p.mu.RLock()
@@ -395,45 +473,50 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) erro
 
 	resp, err := p.hc.Do(req)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotModified {
-		return nil
+		return refreshCacheHit, nil
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("evaluated-variants-signed refresh failed: %s: %s", resp.Status, string(b))
+		return refreshCacheHit, fmt.Errorf("evaluated-variants-signed refresh failed: %s: %s", resp.Status, string(b))
+	}
+
+	newETag := resp.Header.Get("ETag")
+	if etagsMatch(etag, newETag) {
+		return refreshCacheHit, nil
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 
 	env, err := definitions.DecodeSignedDefinitions(body)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 
 	if env.Timestamp < currentTS && currentTS > 0 {
-		return nil
+		return refreshCacheHit, nil
 	}
 
 	if p.cfg.UseSignedDefinitions && env.Signature != "" && env.Kid != "" {
 		jwks, err := p.loadOrFetchJWKS(ctx)
 		if err != nil {
-			return err
+			return refreshCacheHit, err
 		}
 		if err := crypto.VerifySignedDefinitions(env, jwks, p.cfg.AllowedKeyIDs); err != nil {
-			return err
+			return refreshCacheHit, err
 		}
 	}
 
 	variantMap, err := definitions.DecodeEvaluatedVariantDefsMap(env.Defs)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 
 	p.applyVariantDefinitions(variantMap)
@@ -447,7 +530,7 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) erro
 	}
 	p.mu.RUnlock()
 
-	if newETag := resp.Header.Get("ETag"); newETag != "" {
+	if newETag != "" {
 		p.mu.Lock()
 		p.variantEtag = newETag
 		p.variantLastTS = env.Timestamp
@@ -476,14 +559,14 @@ func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) erro
 			VariantRawDefs:   env.Defs,
 		})
 	}
-	return nil
+	return refreshCacheMiss, nil
 }
 
-func (p *definitionsProvider) refreshSigned(ctx context.Context) error {
+func (p *definitionsProvider) refreshSigned(ctx context.Context) (refreshCacheOutcome, error) {
 	url := fmt.Sprintf("%sdefinitions-signed/%s/%s", p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	SetSDKHeaders(req)
 	p.mu.RLock()
@@ -496,45 +579,49 @@ func (p *definitionsProvider) refreshSigned(ctx context.Context) error {
 
 	resp, err := p.hc.Do(req)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotModified {
-		return nil
+		return refreshCacheHit, nil
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("signed definitions refresh failed: %s: %s", resp.Status, string(b))
+		return refreshCacheHit, fmt.Errorf("signed definitions refresh failed: %s: %s", resp.Status, string(b))
+	}
+
+	newETag := resp.Header.Get("ETag")
+	if etagsMatch(etag, newETag) {
+		return refreshCacheHit, nil
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	env, err := definitions.DecodeSignedDefinitions(body)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	if env.Timestamp < currentTS {
-		return nil
+		return refreshCacheHit, nil
 	}
 
 	jwks, err := p.loadOrFetchJWKS(ctx)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	if err := crypto.VerifySignedDefinitions(env, jwks, p.cfg.AllowedKeyIDs); err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 
 	defs, err := definitions.DecodeSignedDefsPayload(env.Defs)
 	if err != nil {
-		return err
+		return refreshCacheHit, err
 	}
 	p.applyDefinitions(defs)
 
-	newETag := resp.Header.Get("ETag")
 	if newETag != "" {
 		p.mu.Lock()
 		p.etag = newETag
@@ -556,7 +643,25 @@ func (p *definitionsProvider) refreshSigned(ctx context.Context) error {
 			ETag:      newETag,
 		})
 	}
-	return nil
+	return refreshCacheMiss, nil
+}
+
+func etagsMatch(left, right string) bool {
+	if left == "" || right == "" {
+		return false
+	}
+	return normalizeETag(left) == normalizeETag(right)
+}
+
+func normalizeETag(etag string) string {
+	trimmed := strings.TrimSpace(etag)
+	if len(trimmed) >= 2 && (trimmed[0] == 'W' || trimmed[0] == 'w') && trimmed[1] == '/' {
+		trimmed = strings.TrimSpace(trimmed[2:])
+	}
+	if len(trimmed) >= 2 && trimmed[0] == '"' && trimmed[len(trimmed)-1] == '"' {
+		return trimmed[1 : len(trimmed)-1]
+	}
+	return trimmed
 }
 
 func (p *definitionsProvider) loadOrFetchJWKS(ctx context.Context) (*definitions.JWKSet, error) {

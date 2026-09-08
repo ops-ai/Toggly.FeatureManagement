@@ -72,12 +72,36 @@ func (c *Client) RecordView(feature string, identity string) {
 	c.batcher.RecordView(feature, identity)
 }
 
+// RecordDefinitionCacheHit counts a definition-refresh served from local cache.
+func (c *Client) RecordDefinitionCacheHit() {
+	if c == nil || c.batcher == nil {
+		return
+	}
+	c.batcher.RecordDefinitionCacheHit()
+}
+
+// RecordDefinitionCacheMiss counts a definition-refresh that applied a new revision.
+func (c *Client) RecordDefinitionCacheMiss() {
+	if c == nil || c.batcher == nil {
+		return
+	}
+	c.batcher.RecordDefinitionCacheMiss()
+}
+
 // Flush sends accumulated stats with UA metadata.
+// On SendStats failure the full batch (feature stats + hashes + cache counters)
+// is restored and merged with any records accumulated during the in-flight send.
 func (c *Client) Flush(ctx context.Context) error {
+	// Hold a local reference so Close cannot drop restore after export.
+	batcher := c.batcher
+	api := c.api
+	if batcher == nil || api == nil {
+		return nil
+	}
 	if c.userAgent != "" {
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("UA", c.userAgent))
 	}
-	return c.batcher.Flush(ctx, c.api)
+	return batcher.Flush(ctx, api)
 }
 
 // StartAutoFlush flushes periodically.
