@@ -87,4 +87,64 @@ describe('UsageBatcher', () => {
       (utf16Style >>> 0) > 0x7fffffff ? (utf16Style >>> 0) - 0x100000000 : utf16Style >>> 0
     expect(hashIdentity('café')).not.toBe(utf16Signed)
   })
+
+  it('includes definition cache hits/misses on flush and resets them', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+
+    batcher.recordDefinitionCacheHit()
+    batcher.recordDefinitionCacheHit()
+    batcher.recordDefinitionCacheMiss()
+
+    const payload = batcher.buildAndReset()
+    expect(payload).not.toBeNull()
+    expect(payload!.definitionCacheHits).toBe(2)
+    expect(payload!.definitionCacheMisses).toBe(1)
+    expect(payload!.stats).toEqual([])
+
+    expect(batcher.buildAndReset()).toBeNull()
+  })
+
+  it('does not omit cache-only batches when feature stats are empty', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.recordDefinitionCacheHit()
+    expect(batcher.isEmpty()).toBe(false)
+    expect(batcher.buildAndReset()?.definitionCacheHits).toBe(1)
+  })
+
+  it('restore merges a drained snapshot into pending counters', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.recordCheck('FeatureA', true, 'user-1')
+    batcher.recordDefinitionCacheHit()
+    batcher.recordDefinitionCacheMiss()
+
+    const drained = batcher.exportAndReset()
+    expect(drained).not.toBeNull()
+
+    // Concurrent activity while the failed send would be in flight.
+    batcher.recordCheck('FeatureA', true, 'user-2')
+    batcher.recordDefinitionCacheHit()
+
+    batcher.restore(drained!.snapshot)
+
+    const payload = batcher.buildAndReset()
+    expect(payload!.definitionCacheHits).toBe(2)
+    expect(payload!.definitionCacheMisses).toBe(1)
+    expect(payload!.stats[0].variantStats.enabled.checkCount).toBe(2)
+    expect(payload!.stats[0].uniqueContextIdentifierEnabledCount).toBe(2)
+  })
+
+  it('restorePayload merges wire payload fields into pending state', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.recordCheck('FeatureA', true, 'user-1')
+    batcher.recordDefinitionCacheMiss()
+    const payload = batcher.buildAndReset()!
+
+    batcher.recordDefinitionCacheHit()
+    batcher.restorePayload(payload)
+
+    const retried = batcher.buildAndReset()
+    expect(retried!.definitionCacheHits).toBe(1)
+    expect(retried!.definitionCacheMisses).toBe(1)
+    expect(retried!.stats[0].variantStats.enabled.checkCount).toBe(1)
+  })
 })

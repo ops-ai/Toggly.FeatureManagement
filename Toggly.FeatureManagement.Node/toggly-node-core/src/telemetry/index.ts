@@ -240,6 +240,14 @@ export class TelemetryRuntime {
     this.usageBatcher?.recordView(feature, identity, variant)
   }
 
+  recordDefinitionCacheHit(): void {
+    this.usageBatcher?.recordDefinitionCacheHit()
+  }
+
+  recordDefinitionCacheMiss(): void {
+    this.usageBatcher?.recordDefinitionCacheMiss()
+  }
+
   measure(metric: string, value: number, options?: MetricsFeatureOptions): void {
     this.metricsBatcher?.measure(metric, value, options)
   }
@@ -261,15 +269,22 @@ export class TelemetryRuntime {
       return
     }
 
-    const payload = this.usageBatcher.buildAndReset()
-    if (!payload) return
+    // Hold a local reference: close() may null `this.usageBatcher` while send is in flight.
+    const batcher = this.usageBatcher
+    const drained = batcher.exportAndReset()
+    if (!drained) return
 
     this.sendingUsage = true
     try {
-      await client.sendStats(payload as unknown as Record<string, unknown>)
+      await client.sendStats(drained.payload as unknown as Record<string, unknown>)
     } catch (error) {
       this.logger.error('Failed to send usage stats:', error)
-      // Re-aggregate lost on failure is acceptable for best-effort telemetry
+      // Merge via the captured batcher so restore survives close() clearing the field.
+      try {
+        batcher.restore(drained.snapshot)
+      } catch (restoreError) {
+        this.logger.error('Failed to restore usage batch after send failure:', restoreError)
+      }
     } finally {
       this.sendingUsage = false
     }
