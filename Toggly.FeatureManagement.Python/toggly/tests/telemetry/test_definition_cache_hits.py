@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
@@ -106,14 +107,9 @@ class TestDefinitionCacheHits:
             usage.calls.clear()
 
             client._ws_connected = True
-            client._last_fallback_refresh = 10**12  # far future → within window
-            # Invoke the skip path used by the background refresh loop.
-            if (
-                client._ws_connected
-                and (0 - client._last_fallback_refresh)
-                < client._FALLBACK_REFRESH_INTERVAL
-            ):
-                client._record_definition_cache_hit()
+            client._last_fallback_refresh = time.time()
+            # Production background-refresh tick path (not a duplicated condition).
+            client._background_refresh_tick()
 
             client.flush_telemetry()
             assert usage.calls
@@ -155,6 +151,65 @@ class TestDefinitionCacheHits:
             assert "definitionCacheHits" not in payload
         finally:
             release.set()
+            client.close()
+
+    def test_threaded_concurrent_refresh_exactly_one_network(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression: atomic in-flight guard — only one concurrent network refresh."""
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        config, usage = _telemetry_config()
+        client = TogglyClient(config)
+
+        # Seed definitions so concurrent refresh races are not init-only.
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(client._http, "get", lambda *_a, **_k: _ok_defs(etag='"rev-0"'))
+            client.init()
+        client.flush_telemetry()
+        usage.calls.clear()
+
+        workers = 8
+        entered = 0
+        entered_lock = threading.Lock()
+        first_entered = threading.Event()
+        hold = threading.Event()
+        barrier = threading.Barrier(workers)
+
+        def gated_get(*_a: Any, **_k: Any) -> MagicMock:
+            nonlocal entered
+            with entered_lock:
+                entered += 1
+                count = entered
+            if count == 1:
+                first_entered.set()
+            assert hold.wait(timeout=3.0)
+            return _ok_defs(feature="feature-b", etag='"rev-1"')
+
+        def worker() -> None:
+            barrier.wait(timeout=2.0)
+            client.refresh()
+
+        try:
+            with pytest.MonkeyPatch.context() as mp:
+                mp.setattr(client._http, "get", gated_get)
+                threads = [threading.Thread(target=worker) for _ in range(workers)]
+                for t in threads:
+                    t.start()
+                assert first_entered.wait(timeout=2.0)
+                # Stampede completed: skipped paths must not open another GET.
+                time.sleep(0.05)
+                assert entered == 1
+                hold.set()
+                for t in threads:
+                    t.join(timeout=2.0)
+
+            client.flush_telemetry()
+            assert entered == 1
+            payload = usage.calls[0]
+            assert payload["definitionCacheMisses"] == 1
+            assert "definitionCacheHits" not in payload
+        finally:
+            hold.set()
             client.close()
 
     def test_startup_snapshot_before_network_is_hit(

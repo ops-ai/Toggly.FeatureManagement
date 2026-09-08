@@ -208,14 +208,15 @@ class AsyncTogglyClient(TelemetryClientMixin):
             )
 
         # Concurrent refresh skipped (in flight) — do not count.
-        if self._refresh_in_flight:
-            logger.debug("Refresh already in progress, skipping")
-            return TogglyInitResponse(
-                status=LoadStatus.CACHED,
-                flags=dict(self._flags),
-            )
+        async with self._lock:
+            if self._refresh_in_flight:
+                logger.debug("Refresh already in progress, skipping")
+                return TogglyInitResponse(
+                    status=LoadStatus.CACHED,
+                    flags=dict(self._flags),
+                )
+            self._refresh_in_flight = True
 
-        self._refresh_in_flight = True
         outcome_recorded = False
         try:
             if self._config.enable_variants:
@@ -257,7 +258,8 @@ class AsyncTogglyClient(TelemetryClientMixin):
                 error=str(e),
             )
         finally:
-            self._refresh_in_flight = False
+            async with self._lock:
+                self._refresh_in_flight = False
 
     @staticmethod
     def _normalize_revision(revision: str | None) -> str | None:

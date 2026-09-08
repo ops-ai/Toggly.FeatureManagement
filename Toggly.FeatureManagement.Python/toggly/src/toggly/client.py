@@ -262,14 +262,15 @@ class TogglyClient(TelemetryClientMixin):
             )
 
         # Concurrent refresh skipped (in flight) — do not count.
-        if self._refresh_in_flight:
-            logger.debug("Refresh already in progress, skipping")
-            return TogglyInitResponse(
-                status=LoadStatus.CACHED,
-                flags=dict(self._flags),
-            )
+        with self._lock:
+            if self._refresh_in_flight:
+                logger.debug("Refresh already in progress, skipping")
+                return TogglyInitResponse(
+                    status=LoadStatus.CACHED,
+                    flags=dict(self._flags),
+                )
+            self._refresh_in_flight = True
 
-        self._refresh_in_flight = True
         # Exactly one hit/miss per attempt: record after apply, before post-apply work.
         outcome_recorded = False
         try:
@@ -312,7 +313,8 @@ class TogglyClient(TelemetryClientMixin):
                 error=str(e),
             )
         finally:
-            self._refresh_in_flight = False
+            with self._lock:
+                self._refresh_in_flight = False
 
     @staticmethod
     def _normalize_revision(revision: str | None) -> str | None:
@@ -1112,6 +1114,28 @@ class TogglyClient(TelemetryClientMixin):
                     except Exception as e:
                         logger.warning(f"State change handler error: {e}")
 
+    def _background_refresh_tick(self) -> None:
+        """One background-refresh cycle (WS skip or refresh).
+
+        Extracted so tests can exercise the production skip path without
+        waiting on the timer thread.
+        """
+        if (
+            self._ws_connected
+            and (time.time() - self._last_fallback_refresh)
+            < self._FALLBACK_REFRESH_INTERVAL
+        ):
+            logger.debug("Skipping background refresh: WebSocket connected")
+            # Skipped poll (live WS / in-memory still valid) counts as a hit.
+            self._record_definition_cache_hit()
+            return
+        try:
+            self.refresh()
+            if self._ws_connected:
+                self._last_fallback_refresh = time.time()
+        except Exception as e:
+            logger.warning(f"Background refresh failed: {e}")
+
     def _start_background_refresh(self) -> None:
         """Start background refresh thread."""
         if self._config.disable_background_refresh:
@@ -1123,24 +1147,7 @@ class TogglyClient(TelemetryClientMixin):
 
         def refresh_loop() -> None:
             while not self._stop_refresh.wait(self._config.refresh_interval):
-                # When WebSocket is connected and fallback interval hasn't elapsed, skip
-                if (
-                    self._ws_connected
-                    and (time.time() - self._last_fallback_refresh)
-                    < self._FALLBACK_REFRESH_INTERVAL
-                ):
-                    logger.debug(
-                        "Skipping background refresh: WebSocket connected"
-                    )
-                    # Skipped poll (live WS / in-memory still valid) counts as a hit.
-                    self._record_definition_cache_hit()
-                    continue
-                try:
-                    self.refresh()
-                    if self._ws_connected:
-                        self._last_fallback_refresh = time.time()
-                except Exception as e:
-                    logger.warning(f"Background refresh failed: {e}")
+                self._background_refresh_tick()
 
         self._refresh_thread = threading.Thread(
             target=refresh_loop,
