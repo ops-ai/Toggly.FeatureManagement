@@ -142,9 +142,8 @@ namespace Toggly.FeatureManagement
             _longTimer = new Timer(LongTimerCallback, null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
             applicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
 
-            var version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version}";
             // Must match platform SdkUserAgentParser (`toggly-{sdk}/{version}`) and HTTP defs UA.
-            userAgent = $"toggly-dotnet/{version}";
+            userAgent = TogglySdkIdentity.UserAgent;
         }
 
         private void OnApplicationStopping()

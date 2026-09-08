@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.6.6
+
+2026-09-07
+
+### Fixed
+- Embed MSBuild `$(Version)` into assembly informational/file/version
+  attributes so runtime User-Agent is never empty. 3.6.5 emitted
+  `toggly-dotnet/` (and metrics `Toggly.FeatureManagement/`) because
+  `GenerateAssemblyInfo` was false and `AssemblyInfo.cs` had no version.
+
+### Changed
+- Usage, metrics, and definitions User-Agents all use
+  `toggly-dotnet/{semver}` via shared `TogglySdkIdentity` (platform
+  `SdkUserAgentParser` shape).
+
 ## 3.6.5
 
 2026-09-06

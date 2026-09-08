@@ -123,7 +123,7 @@ public class TogglyMetricsServiceTests : IDisposable
         debugInfo.AppKey.Should().Be("***pp-key");
         debugInfo.Environment.Should().Be("staging");
         debugInfo.BaseUrl.Should().Be("https://custom.toggly.io/");
-        debugInfo.UserAgent.Should().Contain("Toggly.FeatureManagement");
+        debugInfo.UserAgent.Should().Contain("toggly-dotnet");
     }
 
     [Fact]
@@ -1059,7 +1059,8 @@ public class TogglyMetricsServiceTests : IDisposable
         var debugInfo = _service.GetDebugInfo();
 
         // Assert
-        debugInfo.UserAgent.Should().StartWith("Toggly.FeatureManagement/");
+        debugInfo.UserAgent.Should().StartWith("toggly-dotnet/");
+        debugInfo.UserAgent.Should().MatchRegex(@"^toggly-dotnet/\S+$");
     }
 
     #endregion

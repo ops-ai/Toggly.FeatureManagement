@@ -180,7 +180,7 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyFeatureProvider>();
 
-            Version = $"{Assembly.GetAssembly(typeof(TogglyFeatureProvider))?.GetCustomAttribute<AssemblyVersionAttribute>()?.Version}";
+            Version = TogglySdkIdentity.Version;
 
             var definitionsUrl = togglySettings.Value.DefinitionsBaseUrl ?? "https://definitions.toggly.io/";
             var definitionsPath = _useSignedDefinitions ? "definitions-signed" : "definitions";
