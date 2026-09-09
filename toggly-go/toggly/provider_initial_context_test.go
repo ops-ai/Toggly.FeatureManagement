@@ -28,14 +28,18 @@ func TestVariantInitialContext(t *testing.T) {
 		if q.Has("claim.") || q.Has("claim.empty") {
 			t.Errorf("empty claim sent: %v", q)
 		}
-		fmt.Fprint(w, `{"defs":{"f":{"enabled":true,"variant":"initial"}},"timestamp":100}`)
+		_, _ = fmt.Fprint(w, `{"defs":{"f":{"enabled":true,"variant":"initial"}},"timestamp":100}`)
 	}))
 	defer srv.Close()
 	c, err := NewClient(Config{AppKey: "app", Environment: "env", DefinitionsURL: srv.URL + "/", DisableBackgroundRefresh: true, EnableVariants: true, VariantIdentity: "user&123", VariantGroups: groups, VariantClaims: claims})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.Close()
+	defer func() {
+		if err := c.Close(); err != nil {
+			t.Errorf("close client: %v", err)
+		}
+	}()
 	groups[0] = "mutated"
 	claims["plan&name"] = "mutated"
 	if err := c.provider.refresh(context.Background(), time.Second, false); err != nil {
@@ -55,7 +59,7 @@ func TestVariantSnapshotContextAndIdentityChange(t *testing.T) {
 			t.Errorf("foreign context validator: %s", r.Header.Get("If-None-Match"))
 		}
 		w.Header().Set("ETag", `"same"`)
-		fmt.Fprintf(w, `{"defs":{"f":{"enabled":true,"variant":%q}},"timestamp":100}`, r.URL.Query().Get("userId")+r.URL.Query().Get("g"))
+		_, _ = fmt.Fprintf(w, `{"defs":{"f":{"enabled":true,"variant":%q}},"timestamp":100}`, r.URL.Query().Get("userId")+r.URL.Query().Get("g"))
 	}))
 	defer srv.Close()
 	cfg := Config{AppKey: "app", Environment: "env", DefinitionsURL: srv.URL + "/", EnableVariants: true, VariantIdentity: "one", VariantGroups: []string{"a"}}
@@ -100,7 +104,7 @@ func TestVariantBackgroundStartupCopiesBeforeStorage(t *testing.T) {
 	requests := make(chan string, 2)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests <- r.URL.RawQuery
-		fmt.Fprint(w, `{"defs":{},"timestamp":100}`)
+		_, _ = fmt.Fprint(w, `{"defs":{},"timestamp":100}`)
 	}))
 	defer srv.Close()
 	groups, claims := []string{"beta"}, map[string]string{"plan": "pro"}
@@ -206,7 +210,7 @@ func TestVariantInFlightIdentityChangeDiscardsResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		close(entered)
 		<-release
-		fmt.Fprint(w, `{"defs":{"f":{"enabled":true,"variant":"old"}},"timestamp":100}`)
+		_, _ = fmt.Fprint(w, `{"defs":{"f":{"enabled":true,"variant":"old"}},"timestamp":100}`)
 	}))
 	defer srv.Close()
 	p := newDefinitionsProvider(Config{AppKey: "app", DefinitionsURL: srv.URL + "/", EnableVariants: true, VariantIdentity: "a"}, nil)
