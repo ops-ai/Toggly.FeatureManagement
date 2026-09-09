@@ -16,6 +16,8 @@ public actor TogglyService {
     private var definitions: EvaluatedDefinitions?
     private var features: FeatureFlags?
     private var featuresLoading = false
+    private var contextGeneration = 0
+    private var completedFetch: (generation: Int, response: TogglyInitResponse)?
     private var identity: String?
     private var refreshTask: Task<Void, Never>?
     private var lastChecked: Date?
@@ -85,6 +87,11 @@ public actor TogglyService {
     /// - Returns: The initialization response.
     @discardableResult
     public func initialize() async -> TogglyInitResponse {
+        contextGeneration += 1
+        features = nil
+        definitions = nil
+        eTag = nil
+        let initialGeneration = contextGeneration
         // Handle identity
         if let configIdentity = config.identity {
             identity = configIdentity
@@ -95,7 +102,7 @@ public actor TogglyService {
                 storedId = UUID().uuidString
                 await storage.set(TogglyStorageKeys.deviceId, value: storedId!)
             }
-            identity = storedId
+            if contextGeneration == initialGeneration { identity = storedId }
         }
 
         // Start refresh timer
@@ -129,7 +136,9 @@ public actor TogglyService {
 
         // Skip refresh if offline
         if networkState?.isConnected == false {
+            let generation = contextGeneration
             let cached = await loadCachedDefinitions()
+            guard generation == contextGeneration else { return await refresh() }
             applySnapshot(cached.definitions, flags: cached.flags)
             return TogglyInitResponse(status: .cached, flags: cached.flags)
         }
@@ -223,6 +232,8 @@ public actor TogglyService {
     /// - Returns: The refresh response after identity change.
     @discardableResult
     public func setIdentity(_ identity: String?) async -> TogglyInitResponse {
+        contextGeneration += 1
+        let resolvingGeneration = contextGeneration
         let previousIdentity = self.identity
 
         if let newIdentity = identity {
@@ -234,6 +245,7 @@ public actor TogglyService {
                 deviceId = UUID().uuidString
                 await storage.set(TogglyStorageKeys.deviceId, value: deviceId!)
             }
+            guard resolvingGeneration == contextGeneration else { return await refresh() }
             self.identity = deviceId
         }
 
@@ -255,16 +267,17 @@ public actor TogglyService {
 
     /// Clear cached feature flags.
     public func clearCache() async {
+        contextGeneration += 1
         features = nil
         definitions = nil
         eTag = nil
 
         let cacheKey = featureCacheKey
+        let revisionKey = revisionCacheKey
+        let legacyKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? "")
         await storage.delete(cacheKey)
-        if groups.isEmpty && claims.isEmpty {
-            await storage.delete(TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? ""))
-        }
-        await storage.delete(revisionCacheKey)
+        if groups.isEmpty && claims.isEmpty { await storage.delete(legacyKey) }
+        await storage.delete(revisionKey)
     }
 
     // MARK: - Events
@@ -358,28 +371,53 @@ public actor TogglyService {
     // MARK: - Private Methods
 
     private func fetchFeatureFlags() async -> TogglyInitResponse {
-        // Prevent duplicate fetches
-        if featuresLoading {
-            await waitForFeaturesLoaded()
-            return TogglyInitResponse(status: .fetched, flags: features ?? [:])
+        while true {
+            if featuresLoading {
+                await waitForFeaturesLoaded()
+                if let completedFetch, completedFetch.generation == contextGeneration {
+                    return completedFetch.response
+                }
+                continue
+            }
+            let snapshot = RequestContext(generation: contextGeneration, identity: identity ?? "",
+                context: contextIdentity, cacheKey: featureCacheKey, revisionKey: revisionCacheKey,
+                url: buildApiUrl(), etag: eTag)
+            featuresLoading = true
+            let response = await fetchFeatureFlags(for: snapshot)
+            featuresLoading = false
+            // A waiter for a changed context must fetch that context, not reuse the older response.
+            guard snapshot.generation == contextGeneration else { continue }
+            completedFetch = (snapshot.generation, response)
+            return response
         }
+    }
 
-        featuresLoading = true
-        defer { featuresLoading = false }
+    private struct RequestContext {
+        let generation: Int
+        let identity: String
+        let context: String
+        let cacheKey: String
+        let revisionKey: String
+        let url: URL
+        let etag: String?
+    }
 
+    private func fetchFeatureFlags(for snapshot: RequestContext) async -> TogglyInitResponse {
+        let obsolete = TogglyInitResponse(status: .defaults, flags: config.featureDefaults)
         do {
-            let url = buildApiUrl()
-            var request = URLRequest(url: url)
+            guard snapshot.generation == contextGeneration else { return obsolete }
+            var request = URLRequest(url: snapshot.url)
             request.httpMethod = "GET"
             request.timeoutInterval = config.requestTimeout
             request.setValue(SdkIdentity.userAgent, forHTTPHeaderField: "User-Agent")
 
-            if config.useSignedDefinitions, let etag = eTag {
+            if config.useSignedDefinitions, let etag = snapshot.etag {
                 request.setValue(etag, forHTTPHeaderField: "If-None-Match")
             }
 
             let (data, response) = try await URLSession.shared.data(for: request)
 
+            guard snapshot.generation == contextGeneration else { return obsolete }
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw TogglyError.invalidResponse
             }
@@ -387,6 +425,7 @@ public actor TogglyService {
             if httpResponse.statusCode == 304 {
                 lastChecked = Date()
                 let cached = await loadCachedDefinitions()
+                guard snapshot.generation == contextGeneration else { return obsolete }
                 applySnapshot(cached.definitions, flags: cached.flags)
                 return TogglyInitResponse(status: .cached, flags: cached.flags)
             }
@@ -396,25 +435,29 @@ public actor TogglyService {
             }
 
             let parsed = try await parseFeatureFlagsResponse(data)
+            guard snapshot.generation == contextGeneration else { return obsolete }
             let flags = parsed.flags
             let previousFlags = features
-            applySnapshot(parsed.definitions, flags: flags)
 
             await cacheFeatureFlags(
                 flags,
                 defsRaw: parsed.defsRaw,
                 timestamp: parsed.timestamp,
                 signature: parsed.signature,
-                keyId: parsed.keyId
+                keyId: parsed.keyId,
+                context: snapshot
             )
+            guard snapshot.generation == contextGeneration else { return obsolete }
 
             // Store ETag
             if let newEtag = httpResponse.value(forHTTPHeaderField: "ETag") {
+                await storage.set(snapshot.revisionKey, value: newEtag)
+                guard snapshot.generation == contextGeneration else { return obsolete }
                 eTag = newEtag
-                await storage.set(revisionCacheKey, value: newEtag)
             }
 
             lastChecked = Date()
+            applySnapshot(parsed.definitions, flags: flags)
             lastSynced = Date()
             lastError = nil
 
@@ -428,11 +471,13 @@ public actor TogglyService {
 
             return TogglyInitResponse(status: .fetched, flags: flags)
         } catch {
+            guard snapshot.generation == contextGeneration else { return obsolete }
             lastError = error.localizedDescription
             emitEvent(.error(ErrorEvent(error: lastError ?? "Unknown error")))
 
             // Fall back to cache or defaults
             let cached = await loadCachedDefinitions()
+            guard snapshot.generation == contextGeneration else { return obsolete }
             applySnapshot(cached.definitions, flags: cached.flags)
 
             return TogglyInitResponse(status: .defaults, flags: cached.flags, error: lastError)
@@ -607,18 +652,21 @@ public actor TogglyService {
             return CachedDefinitions(definitions: fromBooleanDefaults(features), flags: features)
         }
 
+        let expectedIdentity = identity
+        let expectedContext = contextIdentity
+        let legacyKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? "")
         var cacheKey = featureCacheKey
         var stored = await storage.get(cacheKey)
         // Only context-free configurations can reuse identity-only entries from older SDKs.
         if stored == nil && groups.isEmpty && claims.isEmpty {
-            cacheKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? "")
+            cacheKey = legacyKey
             stored = await storage.get(cacheKey)
         }
         guard let cached = stored,
               let data = cached.data(using: .utf8),
               let cacheData = try? JSONDecoder().decode(TogglyFeatureFlagsCache.self, from: data),
-              cacheData.identity == identity,
-              cacheData.evaluationContext == contextIdentity || (cacheData.evaluationContext == nil && groups.isEmpty && claims.isEmpty) else {
+              cacheData.identity == expectedIdentity,
+              cacheData.evaluationContext == expectedContext || (cacheData.evaluationContext == nil && groups.isEmpty && claims.isEmpty) else {
             return CachedDefinitions(
                 definitions: fromBooleanDefaults(config.featureDefaults),
                 flags: config.featureDefaults
@@ -695,7 +743,8 @@ public actor TogglyService {
         defsRaw: String? = nil,
         timestamp: Int64? = nil,
         signature: String? = nil,
-        keyId: String? = nil
+        keyId: String? = nil,
+        context: RequestContext
     ) async {
         let flagsString: String
         if let defsRaw {
@@ -708,14 +757,14 @@ public actor TogglyService {
             flagsString = encoded
         }
 
-        let cacheKey = featureCacheKey
+        let cacheKey = context.cacheKey
         let cacheData = TogglyFeatureFlagsCache(
-            identity: identity ?? "",
+            identity: context.identity,
             flags: flagsString,
             timestamp: timestamp,
             signature: signature,
             keyId: keyId,
-            evaluationContext: contextIdentity
+            evaluationContext: context.context
         )
 
         if let data = try? JSONEncoder().encode(cacheData),
@@ -759,7 +808,12 @@ public actor TogglyService {
             return
         }
 
+        let generation = contextGeneration
         let cached = await loadCachedDefinitions()
+        guard generation == contextGeneration else {
+            await ensureFeaturesLoaded()
+            return
+        }
         applySnapshot(cached.definitions, flags: cached.flags)
     }
 

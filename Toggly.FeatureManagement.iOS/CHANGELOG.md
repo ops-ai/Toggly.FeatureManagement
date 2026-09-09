@@ -11,6 +11,7 @@ All notable changes to the Toggly iOS SDK are documented in this file.
 
 ### Fixed
 - Encode identity, repeated groups, and claims safely, including literal plus signs.
+- Reject responses superseded by identity changes, including changes during signature verification or storage; refresh the new context without reusing obsolete flags or validators.
 - Bind evaluated caches and revision storage to the complete normalized context using structured serialization and SHA-256. Legacy identity-only caches are reused only without groups or claims.
 
 ## 1.3.0
