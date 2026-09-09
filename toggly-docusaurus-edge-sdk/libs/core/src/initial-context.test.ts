@@ -29,6 +29,15 @@ describe('initial evaluation context', () => {
     expect(new URL(fetch.mock.calls[0][0]).search).toBe('');
   });
 
+  it('defers malformed URL errors until a request is made', async () => {
+    const fetch = vi.fn();
+    let client!: ReturnType<typeof createTogglyClient>;
+    expect(() => { client = createTogglyClient({ appKey: 'app', baseURI: 'invalid', fetch }); }).not.toThrow();
+    await expect(client.getFlags()).rejects.toThrow();
+    await expect(client.refreshFlags()).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('caps claims deterministically and keeps startup context on refresh', async () => {
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
     const claims = Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`type${String(i).padStart(2, '0')}`, 'value']));

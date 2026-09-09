@@ -1,3 +1,4 @@
+import { captureRequestUrl } from './capture-request-url.js';
 import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
 
 /**
@@ -112,21 +113,13 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     isDebug = false,
     connectTimeout = 5 * 1000, // 5 seconds
     fetch: fetchImpl,
-    identity,
-    groups,
-    claims,
     verifySignatures = false,
     allowedKeyIds,
     maxSignatureAgeSeconds,
   } = config;
 
-  // A client owns one immutable targeting snapshot and its own evaluated cache.
-  // Copy before any asynchronous work so caller mutations cannot change refreshes.
-  const evaluationContext = {
-    identity,
-    groups: groups ? [...groups] : undefined,
-    claims: claims ? { ...claims } : undefined,
-  };
+  // Serialize once so caller mutations cannot change this client's targeting or refreshes.
+  const getApiUrl = captureRequestUrl(() => appKey ? buildEvaluatedSignedUrl(baseURI, appKey, environment, config, false) : '');
 
   // Resolve fetch implementation: use provided, then globalThis.fetch, then throw
   let resolvedFetch: typeof fetch;
@@ -149,13 +142,6 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
 
   let cache: CachedFlags | null = null;
 
-  const getApiUrl = (): string => {
-    if (!appKey) {
-      return '';
-    }
-
-    return buildEvaluatedSignedUrl(baseURI, appKey, environment, evaluationContext, false);
-  };
 
   const isCacheValid = (): boolean => {
     if (!cache) return false;
