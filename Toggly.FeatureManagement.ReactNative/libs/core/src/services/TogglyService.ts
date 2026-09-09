@@ -519,6 +519,10 @@ export class TogglyService {
         // Not modified, use cached
         this.lastChecked = new Date();
         const cachedFlags = await this.getCachedFeatureFlags();
+        // A conditional hit can refresh the validator for this cached context.
+        if (revision) {
+          await this.cacheDefinitionsRevision(responseRevision);
+        }
         this.features = cachedFlags;
         this.emitEffectiveFlagsChanged(cachedFlags);
         return {
