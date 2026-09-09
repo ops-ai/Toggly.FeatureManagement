@@ -2,6 +2,17 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.4.0
+
+2026-09-08
+
+### Added
+- Initial `groups` and string `claims` on `TogglyConfig`, applied before the first evaluated request. Claims omit empty names/values and retain the first 20 sorted types.
+
+### Fixed
+- Encode identity, repeated groups, and claims safely, including literal plus signs.
+- Bind evaluated caches and revision storage to the complete normalized context using structured serialization and SHA-256. Legacy identity-only caches are reused only without groups or claims.
+
 ## 1.3.0
 
 2026-09-02

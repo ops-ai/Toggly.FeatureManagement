@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Core Toggly service for feature flag management.
 /// Thread-safe actor that handles feature flag evaluation, caching, and lifecycle management.
@@ -7,6 +8,8 @@ public actor TogglyService {
 
     private let config: TogglyConfig
     private let storage: TogglyStorage
+    private let groups: [String]
+    private let claims: [URLQueryItem]
 
     // MARK: - State
 
@@ -68,6 +71,10 @@ public actor TogglyService {
     /// Creates a new Toggly service with the given configuration.
     /// - Parameter config: The configuration for the service.
     public init(config: TogglyConfig = TogglyConfig()) {
+        self.groups = config.groups.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        self.claims = config.claims.keys.filter { !$0.isEmpty && !(config.claims[$0] ?? "").isEmpty }
+            .sorted().prefix(20).map { URLQueryItem(name: "claim." + $0, value: config.claims[$0]) }
+        self.identity = config.identity
         self.config = config
         self.storage = config.storage ?? MemoryStorage()
     }
@@ -252,10 +259,12 @@ public actor TogglyService {
         definitions = nil
         eTag = nil
 
-        let hashedIdentity = hashIdentity(identity ?? "")
-        let cacheKey = TogglyStorageKeys.featureFlagsCache + hashedIdentity
+        let cacheKey = featureCacheKey
         await storage.delete(cacheKey)
-        await storage.delete(TogglyStorageKeys.etag)
+        if groups.isEmpty && claims.isEmpty {
+            await storage.delete(TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? ""))
+        }
+        await storage.delete(revisionCacheKey)
     }
 
     // MARK: - Events
@@ -402,7 +411,7 @@ public actor TogglyService {
             // Store ETag
             if let newEtag = httpResponse.value(forHTTPHeaderField: "ETag") {
                 eTag = newEtag
-                await storage.set(TogglyStorageKeys.etag, value: newEtag)
+                await storage.set(revisionCacheKey, value: newEtag)
             }
 
             lastChecked = Date()
@@ -431,14 +440,30 @@ public actor TogglyService {
     }
 
     private func buildApiUrl() -> URL {
-        var urlString = "\(config.baseURI)/evaluated-signed/\(config.appKey ?? "")/\(config.environment)"
-
-        if let identity = identity {
-            urlString += "?u=\(identity.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? identity)"
-        }
-
-        return URL(string: urlString)!
+        var components = URLComponents(string: "\(config.baseURI)/evaluated-signed/\(config.appKey ?? "")/\(config.environment)")!
+        var items: [URLQueryItem] = []
+        if let identity { items.append(URLQueryItem(name: "u", value: identity)) }
+        items += groups.map { URLQueryItem(name: "g", value: $0) }
+        items += claims
+        components.queryItems = items.isEmpty ? nil : items
+        // URLSearchParams on the Worker interprets literal '+' as a space.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        return components.url!
     }
+
+    /// Structured serialization prevents delimiter collisions; SHA-256 keeps storage keys bounded.
+    private var contextIdentity: String {
+        let parts = [[config.baseURI, config.appKey ?? "", config.environment, identity ?? ""],
+                     groups, claims.flatMap { [$0.name, $0.value ?? ""] }]
+        return String(data: try! JSONEncoder().encode(parts), encoding: .utf8)!
+    }
+
+    private var contextHash: String {
+        SHA256.hash(data: Data(contextIdentity.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private var featureCacheKey: String { TogglyStorageKeys.featureFlagsCache + "v2:" + contextHash }
+    private var revisionCacheKey: String { TogglyStorageKeys.etag + "v2:" + contextHash }
 
     /// Parse definitions response. When `verifySignatures` is enabled, verify ES256
     /// against the exact raw defs JSON (Security digest-level double-hash).
@@ -582,13 +607,18 @@ public actor TogglyService {
             return CachedDefinitions(definitions: fromBooleanDefaults(features), flags: features)
         }
 
-        let hashedIdentity = hashIdentity(identity ?? "")
-        let cacheKey = TogglyStorageKeys.featureFlagsCache + hashedIdentity
-
-        guard let cached = await storage.get(cacheKey),
+        var cacheKey = featureCacheKey
+        var stored = await storage.get(cacheKey)
+        // Only context-free configurations can reuse identity-only entries from older SDKs.
+        if stored == nil && groups.isEmpty && claims.isEmpty {
+            cacheKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? "")
+            stored = await storage.get(cacheKey)
+        }
+        guard let cached = stored,
               let data = cached.data(using: .utf8),
               let cacheData = try? JSONDecoder().decode(TogglyFeatureFlagsCache.self, from: data),
-              cacheData.identity == identity else {
+              cacheData.identity == identity,
+              cacheData.evaluationContext == contextIdentity || (cacheData.evaluationContext == nil && groups.isEmpty && claims.isEmpty) else {
             return CachedDefinitions(
                 definitions: fromBooleanDefaults(config.featureDefaults),
                 flags: config.featureDefaults
@@ -678,14 +708,14 @@ public actor TogglyService {
             flagsString = encoded
         }
 
-        let hashedIdentity = hashIdentity(identity ?? "")
-        let cacheKey = TogglyStorageKeys.featureFlagsCache + hashedIdentity
+        let cacheKey = featureCacheKey
         let cacheData = TogglyFeatureFlagsCache(
             identity: identity ?? "",
             flags: flagsString,
             timestamp: timestamp,
             signature: signature,
-            keyId: keyId
+            keyId: keyId,
+            evaluationContext: contextIdentity
         )
 
         if let data = try? JSONEncoder().encode(cacheData),

@@ -18,6 +18,23 @@ Official iOS SDK for [Toggly](https://toggly.io) - Feature Flags & A/B Testing P
 - Real-time updates
 - Type-safe API
 
+## Initial targeting context (requires iOS SDK 1.4.0)
+
+These configuration fields require the upcoming **1.4.0** release; they are not available in earlier published versions.
+Pass known targeting values when creating the service so its first evaluated request already uses the correct user context, without a follow-up identity refresh.
+
+```swift
+let service = TogglyService(config: TogglyConfig(
+    appKey: "YOUR_APP_KEY",              // Your application in the Toggly dashboard.
+    identity: "user-123",                // A stable identifier for the signed-in user.
+    groups: ["beta", "subscribers"],     // Memberships used by targeting rules.
+    claims: ["plan": "pro", "region": "us"] // String attributes used by targeting rules.
+))
+await service.initialize()              // Sends the complete context on the first request.
+```
+
+Groups are trimmed and blanks omitted; claims with empty names or values are omitted, then types are sorted and limited to 20. Values are copied by Swift value semantics. Empty or omitted groups/claims mean no memberships/attributes. Omitting identity retains stored/generated device identity behavior; an explicit empty identity remains empty. The server splits commas in group values, so use separate group entries rather than a comma inside a group name. These remote targeting attributes are separate from local entity-gate `context` values.
+
 ## Requirements
 
 - iOS 14.0+ / macOS 11.0+ / tvOS 14.0+ / watchOS 7.0+
