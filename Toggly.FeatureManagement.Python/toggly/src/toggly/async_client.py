@@ -16,7 +16,6 @@ from toggly.definition_cache import (
     DefinitionRefreshMixin,
     DefinitionsMissPlan,
     HttpCacheKind,
-    VariantsMissPlan,
     extract_raw_defs_json,
     if_none_match_headers,
     parse_definitions_payload,
@@ -103,10 +102,7 @@ class AsyncTogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
         self._definitions: dict[str, FeatureDefinition] = {}
         self._variant_defs: dict[str, EvaluatedVariantDef] = {}
         self._flags: dict[str, bool] = dict(config.feature_defaults)
-        self._identity = config.identity
-        self._variant_groups = list(config.variant_groups)
-        self._variant_claims = dict(config.variant_claims)
-        self._variant_generation = 0
+        self._initialize_variant_context()
         self._is_initialized = False
         self._last_refresh: datetime | None = None
         self._last_error: str | None = None
@@ -438,13 +434,7 @@ class AsyncTogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
 
         """
         async with self._lock:
-            old_identity = self._identity
-            self._identity = identity
-            if self._config.enable_variants and old_identity != identity:
-                self._variant_generation += 1
-                self._etag = None
-                self._variant_defs = {}
-                self._flags = dict(self._config.feature_defaults)
+            old_identity = self._set_variant_identity_unlocked(identity)
 
         # Notify handlers of identity change
         for handler in self._config.state_change_handlers:
@@ -678,16 +668,9 @@ class AsyncTogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
                 None, partial(http.get, url, headers=headers)
             )
             async with self._lock:
-                if generation != self._variant_generation:
-                    continue
-                planned = self._plan_variants_http_response(response)
-                if isinstance(planned, VariantsMissPlan):
-                    result, outcome, snapshot = self._commit_variants_miss_plan(planned)
-                    if generation != self._variant_generation:
-                        continue
-                    snapshot.context_key = self._variant_context_key()
-                    return result, outcome, snapshot
-                return planned
+                completed = self._complete_variants_response_unlocked(response, generation)
+                if completed is not None:
+                    return completed
 
     def _parse_variants_payload(
         self, data: Any
@@ -749,16 +732,6 @@ class AsyncTogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
             self._etag = snapshot.etag
             if snapshot.timestamp is not None:
                 self._last_signed_timestamp = snapshot.timestamp
-
-    def _variant_context_key(self) -> str:
-        """Fingerprint the complete variants request without exposing targeting in cache keys."""
-        import hashlib
-
-        url = build_evaluated_variants_url(
-            self._config.base_url, self._config.app_key or "", self._config.environment,
-            self._identity, self._variant_groups, self._variant_claims,
-        )
-        return hashlib.sha256(url.encode("utf-8")).hexdigest()
 
     async def _load_variants_from_cache(self) -> VariantsSnapshot | None:
         """Load evaluated variants from cache."""
