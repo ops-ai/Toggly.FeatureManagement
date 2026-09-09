@@ -136,7 +136,7 @@ export function TogglyProvider({
     serverContext?.flags ?? mergedConfig?.featureDefaults ?? {}
   );
   const [identity, setIdentity] = useState<string | undefined>(
-    serverContext?.identity ?? mergedConfig?.identity
+    serverContext ? serverContext.identity : mergedConfig?.identity
   );
   const [isReady, setIsReady] = useState(!!serverContext);
   const [hooks, setHooks] = useState<TogglyHook[]>([]);

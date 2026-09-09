@@ -75,7 +75,7 @@ describe('TogglyProvider', () => {
       expect([...new URL(mockFetch.mock.calls[0][0]).searchParams.keys()]).toEqual([]);
     });
 
-    it.each(['server-user', ''])('retains hydrated identity %p and flags ahead of configured identity', async identity => {
+    it.each(['server-user', '', 'config-user'])('retains hydrated identity %p and flags ahead of configured identity', async identity => {
       const config = { appKey: 'test-key', identity: 'config-user' };
       const serverContext = { identity, flags: { hydrated: true }, fetchedAt: Date.now() };
       let context!: TogglyContextValue;
@@ -90,16 +90,20 @@ describe('TogglyProvider', () => {
       expect(new URL(mockFetch.mock.calls[0][0]).searchParams.get('u')).toBe(identity || null);
     });
 
-    it('uses configured identity when hydration omits identity', async () => {
+    it('preserves anonymous hydrated flags when configuration names a user', async () => {
       const config = { appKey: 'test-key', identity: 'config-user' };
       let context!: TogglyContextValue;
       render(<TogglyProvider config={config} serverContext={{ flags: { hydrated: true }, fetchedAt: Date.now() }}>
         <TestConsumer onContext={value => { context = value; }} />
       </TogglyProvider>);
-      expect(context.identity).toBe('config-user');
+      expect(context.identity).toBeUndefined();
+      expect(context.flags).toEqual({ hydrated: true });
+      expect(context.isReady).toBe(true);
       expect(mockFetch).not.toHaveBeenCalled();
       await act(async () => { await context.refresh(); });
-      expect(new URL(mockFetch.mock.calls[0][0]).searchParams.get('u')).toBe('config-user');
+      expect(new URL(mockFetch.mock.calls[0][0]).searchParams.has('u')).toBe(false);
+      expect(context.identity).toBeUndefined();
+      expect(context.flags).toEqual({ targeted: true });
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 

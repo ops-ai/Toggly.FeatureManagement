@@ -34,9 +34,11 @@ Replace `YourApp` with your application component. Set identity, groups, and
 claims from the current browser user's known context. This avoids an anonymous
 initial request followed by a second request from `identify()`.
 
-When `serverContext` is supplied, its identity takes precedence and its flags
-hydrate the provider without an initial browser fetch. If the server context
-omits identity, the configured identity is used. `refresh()` retains the active
+When `serverContext` is supplied, its identity and flags hydrate the provider
+without an initial browser fetch. A missing or empty server identity remains
+anonymous, even if configuration names a user; the snapshot is never relabeled
+as that user. Configured identity seeds startup only when `serverContext` is
+absent. `refresh()` retains the active
 identity; `reset()` clears identity and fetches anonymously (configured groups
 and claims remain). Omitted identity preserves anonymous startup; an empty
 identity remains empty and is not sent in the URL. Server evaluation should
