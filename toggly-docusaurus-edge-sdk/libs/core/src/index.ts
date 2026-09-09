@@ -43,6 +43,10 @@ export interface TogglyConfig {
   fetch?: typeof fetch;
   /** User identity for targeting (optional) */
   identity?: string;
+  /** Group memberships used by targeting rules; copied when the client is created. */
+  groups?: string[];
+  /** Rule attributes (up to 20 string claims); copied when the client is created. */
+  claims?: Record<string, string>;
   /** When true, verify ES256 signed envelopes via JWKS before applying flags. */
   verifySignatures?: boolean;
   /** Optional allow-list of JWKS kid values when verifySignatures is enabled. */
@@ -139,10 +143,20 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     connectTimeout = 5 * 1000, // 5 seconds
     fetch: fetchImpl,
     identity,
+    groups,
+    claims,
     verifySignatures = false,
     allowedKeyIds,
     maxSignatureAgeSeconds,
   } = config;
+
+  // A client owns one immutable targeting snapshot and its own evaluated cache.
+  // Copy before any asynchronous work so caller mutations cannot change refreshes.
+  const evaluationContext = {
+    identity,
+    groups: groups ? [...groups] : undefined,
+    claims: claims ? { ...claims } : undefined,
+  };
 
   // Resolve fetch implementation: use provided, then globalThis.fetch, then throw
   let resolvedFetch: typeof fetch;
@@ -174,7 +188,7 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
       baseURI,
       appKey,
       environment,
-      identity ? { identity } : undefined,
+      evaluationContext,
       false,
     );
   };

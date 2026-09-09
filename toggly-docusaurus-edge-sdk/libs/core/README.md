@@ -1,5 +1,29 @@
 # @ops-ai/toggly-client-core
 
+## Initial targeting context
+
+Requires **0.4.0 (release pending)**. This API is not yet available in the published 0.3.0 package.
+
+```ts
+import { createTogglyClient } from '@ops-ai/toggly-client-core';
+
+const client = createTogglyClient({
+  appKey: 'your-app-key',
+  environment: 'Production',
+  identity: 'user-123', // Stable user identifier.
+  groups: ['beta'], // Memberships used by targeting rules.
+  claims: { plan: 'pro' }, // String attributes used by targeting rules.
+});
+const flags = await client.getFlags();
+```
+
+All targeting values reach the first request, avoiding an intermediate anonymous fetch.
+The client copies groups and claims at creation; create a new client for another
+context. Each client owns its evaluated cache. An omitted identity remains anonymous;
+empty groups or claims add no memberships or attributes. Up to 20 nonempty claims
+are sent in deterministic key order; group whitespace is trimmed.
+
+
 Framework-agnostic Toggly client for feature flag evaluation. Flag fetches use
 `${baseURI}/evaluated-signed/${appKey}/${environment}` (default base
 `https://definitions.toggly.io`).

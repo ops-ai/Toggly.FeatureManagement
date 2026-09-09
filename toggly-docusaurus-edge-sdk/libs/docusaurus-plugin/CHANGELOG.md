@@ -1,3 +1,15 @@
+## 0.9.0
+
+2026-09-08
+
+### Added
+- Initial `groups` and string `claims` targeting options, copied before the first request and retained for refreshes.
+
+### Fixed
+- Serialize complete startup context with the shared encoded query builder, including repeated groups and the deterministic 20-claim limit.
+- Forward public plugin targeting defaults into generated browser configuration.
+- Encode special characters in browser client identities correctly.
+
 ## 0.8.1
 
 2026-09-06

@@ -303,3 +303,20 @@ async function runPluginExtraction(
 // pluginModule is imported only to keep typescript happy when we ref it; ensures the
 // resolveContentRoots/discoverContentRootsFromConfig public re-exports stay live.
 void pluginModule;
+
+
+describe('initial browser configuration', () => {
+  it('snapshots and forwards targeting into generated browser config', async () => {
+    const { default: pluginFactory } = await import('./index');
+    const groups = ['beta'];
+    const claims = { plan: 'pro' };
+    const plugin = pluginFactory(makeContext(tmpDir), { identity: 'user&123', groups, claims });
+    groups.push('late'); claims.plan = 'late';
+    const content = await plugin.loadContent!() as { config: Record<string, unknown> };
+    expect(content.config).toMatchObject({ identity: 'user&123', groups: ['beta'], claims: { plan: 'pro' } });
+    await plugin.contentLoaded!({ content, actions: {} } as never);
+    const tags = plugin.injectHtmlTags!({} as never) as { headTags: Array<{ innerHTML: string }> };
+    expect(tags.headTags[0].innerHTML).toContain('"groups":["beta"]');
+    expect(tags.headTags[0].innerHTML).toContain('"claims":{"plan":"pro"}');
+  });
+});
