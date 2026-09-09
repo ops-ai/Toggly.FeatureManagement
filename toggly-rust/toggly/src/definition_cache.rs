@@ -59,10 +59,7 @@ pub fn last_modified_match(left: Option<&str>, right: Option<&str>) -> bool {
 
 /// Match Go/Ruby: `current_ts > 0 && incoming_ts <= current_ts` → cached hit.
 pub fn cached_signed_timestamp(current_ts: Option<i64>, incoming_ts: i64) -> bool {
-    match current_ts {
-        Some(current) if current > 0 && incoming_ts <= current => true,
-        _ => false,
-    }
+    matches!(current_ts, Some(current) if current > 0 && incoming_ts <= current)
 }
 
 /// Classify an HTTP definitions response for cache telemetry.

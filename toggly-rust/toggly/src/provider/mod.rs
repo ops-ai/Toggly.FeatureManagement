@@ -584,8 +584,7 @@ impl DefinitionsProvider {
         if !self.ws_connected.load(Ordering::SeqCst) {
             return false;
         }
-        self.last_fallback_refresh.read().elapsed()
-            < Duration::from_secs(WS_FALLBACK_REFRESH_SECS)
+        self.last_fallback_refresh.read().elapsed() < Duration::from_secs(WS_FALLBACK_REFRESH_SECS)
     }
 
     /// Test helper: force the in-flight guard (concurrent skip).
@@ -1509,11 +1508,13 @@ mod tests {
 
         runtime.record_definition_cache_miss();
         runtime.flush_all().await;
-        let payloads = sender.payloads.lock().unwrap();
-        assert_eq!(payloads.len(), 1);
-        assert_eq!(payloads[0].definition_cache_hits, Some(1));
-        assert_eq!(payloads[0].definition_cache_misses, Some(1));
-        assert!(payloads[0].stats.is_empty());
+        {
+            let payloads = sender.payloads.lock().unwrap();
+            assert_eq!(payloads.len(), 1);
+            assert_eq!(payloads[0].definition_cache_hits, Some(1));
+            assert_eq!(payloads[0].definition_cache_misses, Some(1));
+            assert!(payloads[0].stats.is_empty());
+        }
         runtime.close().await;
     }
 }

@@ -113,9 +113,7 @@ pub use config::{OnErrorCallback, TogglyConfig, TogglyConfigBuilder};
 pub use context::{
     EvalContext, EvalContextBuilder, HttpRequestMapper, RequestContext, TogglyEntityContext,
 };
-pub use definition_cache::{
-    DefinitionCacheRecorder, HttpCacheKind, RefreshCacheOutcome,
-};
+pub use definition_cache::{DefinitionCacheRecorder, HttpCacheKind, RefreshCacheOutcome};
 pub use entity_context::{
     map_entity, register_context, register_context_schema, EntityContextMapper,
     EntityContextPropertySchema, EntityContextSchemaRegistration,
