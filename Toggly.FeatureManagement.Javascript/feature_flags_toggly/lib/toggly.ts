@@ -45,7 +45,7 @@ import {
 
 const canUseStorage = (() => {
   try {
-    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+    return typeof window !== 'undefined' && window.localStorage !== undefined;
   } catch {
     return false;
   }
@@ -201,7 +201,7 @@ export class Toggly {
     const claims = normalizeEvaluationClaims(context.claims) ?? {};
     return `v2:${encodeURIComponent(JSON.stringify([
       context.identity ?? '',
-      [...(context.groups ?? [])].sort(),
+      [...(context.groups ?? [])].sort((a, b) => a.localeCompare(b)),
       Object.entries(claims).sort(([a], [b]) => a.localeCompare(b)),
     ]))}`;
   }

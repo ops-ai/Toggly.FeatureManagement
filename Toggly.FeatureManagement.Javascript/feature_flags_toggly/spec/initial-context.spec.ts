@@ -80,6 +80,14 @@ describe('initial evaluation context', () => {
     expect(await Toggly.init({ ...defaults, ...context })).toEqual({ Matching: true });
   });
 
+  it('reuses flags and revision for reordered group memberships', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, headers: new Headers({ ETag: 'group-revision' }), json: async () => ({ Matching: true }) });
+    await Toggly.init({ ...defaults, ...context, groups: ['beta', 'Alpha', 'équipe'] });
+    fetchMock.mockRejectedValue(new Error('offline'));
+    expect(await Toggly.init({ ...defaults, ...context, groups: ['équipe', 'Alpha', 'beta'] })).toEqual({ Matching: true });
+    expect(fetchMock.mock.calls[1][1].headers['If-None-Match']).toBe('group-revision');
+  });
+
   it('does not reuse another context revision on initialization', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, headers: new Headers({ ETag: 'old-revision' }), json: async () => ({ Old: true }) });
     await Toggly.init({ ...defaults, ...context, groups: ['old'] });
