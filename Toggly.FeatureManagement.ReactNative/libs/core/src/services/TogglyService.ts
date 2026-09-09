@@ -623,7 +623,16 @@ export class TogglyService {
     // JSON boundaries avoid collisions such as groups ["a,b"] and ["a", "b"].
     // Include the endpoint scope because storage can be shared by SDK instances.
     const url = new URL(this.buildApiUrl());
-    return JSON.stringify([url.origin, url.pathname, [...url.searchParams.entries()].sort()]);
+    const entries = [...url.searchParams.entries()].sort(([leftKey, leftValue], [rightKey, rightValue]) => {
+      if (leftKey !== rightKey) {
+        return leftKey < rightKey ? -1 : 1;
+      }
+      if (leftValue === rightValue) {
+        return 0;
+      }
+      return leftValue < rightValue ? -1 : 1;
+    });
+    return JSON.stringify([url.origin, url.pathname, entries]);
   }
 
   private async buildFeatureFlagsCacheKey(): Promise<string> {

@@ -82,6 +82,23 @@ describe('startup evaluation context', () => {
     expect((fetch as jest.Mock).mock.calls[2][1].headers['If-None-Match']).toBeUndefined();
   });
 
+  it('orders cache tuples by ordinal key then value and reuses reordered context', async () => {
+    const storage = new MemoryStorage();
+    const config = { appKey: 'app', identity: 'user', storage, refreshInterval: 0 };
+    service = new TogglyService({ ...config, groups: ['z', 'A'], claims: { 'a!': 'first', a: 'last' } });
+    await service.init();
+    const record = JSON.parse((await storage.get('@toggly:etag'))!);
+    expect(JSON.parse(record.context)[2]).toEqual([
+      ['claim.a', 'last'], ['claim.a!', 'first'], ['g', 'A'], ['g', 'z'], ['u', 'user'],
+    ]);
+    service.dispose();
+    (fetch as jest.Mock).mockRejectedValue(new Error('offline'));
+    service = new TogglyService({ ...config, groups: ['A', 'z'], claims: { a: 'last', 'a!': 'first' } });
+    const response = await service.init();
+    expect((fetch as jest.Mock).mock.calls[1][1].headers['If-None-Match']).toBe('revision-1');
+    expect(response.flags).toEqual({ enabled: true });
+  });
+
   it.each([undefined, ''])('preserves device fallback for identity %s with empty collections', async identity => {
     const storage = new MemoryStorage();
     await storage.set('@toggly:deviceId', 'device');
