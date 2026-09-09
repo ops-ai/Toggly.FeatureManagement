@@ -715,7 +715,7 @@ func TestProvider_Variants_HTTPErrorIsHit(t *testing.T) {
 func TestProvider_Variants_NewRevisionIsMiss(t *testing.T) {
 	body := `{"defs":{"f1":{"enabled":true,"variant":"A","configurationValue":null}},"signature":"","timestamp":1700000300,"kid":""}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Empty etag covers storeVariantRevisionMeta without etag.
+		// Empty etag still stores the new variant timestamp.
 		_, _ = w.Write([]byte(body))
 	}))
 	defer srv.Close()

@@ -22,6 +22,9 @@ type DefinitionsSnapshot struct {
 	// ETag is the definitions revision for conditional fetches.
 	ETag string `json:"etag,omitempty"`
 
+	// VariantContext binds payload and validators to the full normalized request context.
+	VariantContext string `json:"variantContext,omitempty"`
+
 	// VariantDefs is set when definitions came from evaluated-variants-signed.
 	// Omitempty keeps JSON backward compatible with older snapshots.
 	VariantDefs      map[string]definitions.EvaluatedVariantDef `json:"variantDefs,omitempty"`

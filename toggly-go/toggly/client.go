@@ -81,8 +81,9 @@ func NewClient(cfg Config) (*Client, error) {
 }
 
 // SetVariantIdentity updates the userId query parameter for evaluated-variants-signed
-// refreshes when Config.EnableVariants is true. Changing identity clears the variant ETag
-// so the next refresh fetches fresh data.
+// refreshes when Config.EnableVariants is true. Changing identity clears the cached
+// payload and revision so the next refresh fetches fresh data. Do not call this for
+// individual HTTP requests on a shared client; use one variants client per context.
 func (c *Client) SetVariantIdentity(identity string) {
 	if c == nil || c.provider == nil {
 		return
