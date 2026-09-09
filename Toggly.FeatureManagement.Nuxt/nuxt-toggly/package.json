@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nuxt-toggly",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Feature flags for Nuxt 3 - composables, components, directives, and server utilities",
   "type": "module",
   "main": "./dist/module.cjs",
@@ -23,7 +23,9 @@
     "dev:build": "nuxi build playground",
     "dev:prepare": "nuxt-module-build build --stub && nuxi prepare playground",
     "lint": "eslint .",
-    "typecheck": "nuxi typecheck playground"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "nuxt",
@@ -49,8 +51,8 @@
   "homepage": "https://docs.toggly.io/sdks/nuxt",
   "dependencies": {
     "@nuxt/kit": "^3.16.0",
-    "@ops-ai/nuxt-toggly-core": "workspace:^",
     "@ops-ai/nuxt-toggly-client": "workspace:^",
+    "@ops-ai/nuxt-toggly-core": "workspace:^",
     "@ops-ai/nuxt-toggly-server": "workspace:^"
   },
   "peerDependencies": {
@@ -58,6 +60,7 @@
   },
   "devDependencies": {
     "@nuxt/module-builder": "^0.8.4",
+    "@nuxt/nitro-server": "3.21.1",
     "@nuxt/schema": "^3.16.0",
     "@types/node": "^22.13.1",
     "@vitest/coverage-v8": "^3.0.4",

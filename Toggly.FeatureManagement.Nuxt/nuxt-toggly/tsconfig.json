@@ -17,7 +17,7 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "dist",
-    "types": ["node"]
+    "types": ["node", "@nuxt/nitro-server"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests", "playground"]

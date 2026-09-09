@@ -17,6 +17,9 @@ export default defineNitroPlugin(async () => {
       environment: config.environment,
       baseUri: config.baseUri,
       identity: config.identity,
+      // Seed targeting before initialization so the first evaluation uses it.
+      groups: config.groups ? [...config.groups] : config.groups,
+      claims: config.claims ? { ...config.claims } : config.claims,
       featureDefaults: config.featureDefaults,
       refreshInterval: 0, // Disable HTTP polling; live updates use WebSocket
       enableLiveUpdates: config.enableLiveUpdates,

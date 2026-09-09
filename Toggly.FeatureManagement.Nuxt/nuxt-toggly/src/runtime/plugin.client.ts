@@ -18,6 +18,9 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     environment: config.environment,
     baseUri: config.baseUri,
     identity: config.identity,
+    // Seed targeting before initialization so the first evaluation uses it.
+    groups: config.groups ? [...config.groups] : config.groups,
+    claims: config.claims ? { ...config.claims } : config.claims,
     featureDefaults: config.featureDefaults,
     showFeatureDuringEvaluation: config.showFeatureDuringEvaluation,
     refreshInterval: config.refreshInterval,

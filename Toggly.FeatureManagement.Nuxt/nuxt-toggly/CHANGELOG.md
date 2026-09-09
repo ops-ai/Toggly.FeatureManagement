@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2 — 2026-09-08
+
+### Fixed
+- Forward and snapshot configured groups and claims before client and server initialization. The first client evaluation now includes the complete configured context without a second fetch.
+
 ## 1.1.1
 
 2026-09-02
