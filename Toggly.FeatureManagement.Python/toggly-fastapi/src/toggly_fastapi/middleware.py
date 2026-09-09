@@ -37,6 +37,9 @@ def configure_toggly(
     refresh_interval: float = 180.0,
     use_signed_definitions: bool = False,
     enable_variants: bool = False,
+    identity: str | None = None,
+    variant_groups: list[str] | None = None,
+    variant_claims: dict[str, str] | None = None,
     connect_timeout: float = 10.0,
     request_timeout: float = 30.0,
     enable_usage_tracking: bool = True,
@@ -56,6 +59,9 @@ def configure_toggly(
         refresh_interval: Interval in seconds for background refresh.
         use_signed_definitions: Whether to use signed definitions.
         enable_variants: Whether to fetch evaluated variants from the variants endpoint.
+        identity: Application-wide identity for this client.
+        variant_groups: Application-wide remote variants targeting groups.
+        variant_claims: Application-wide remote variants string claims.
         connect_timeout: Connection timeout in seconds.
         request_timeout: Request timeout in seconds.
         enable_usage_tracking: Whether to track feature usage.
@@ -96,6 +102,9 @@ def configure_toggly(
         refresh_interval=refresh_interval,
         use_signed_definitions=use_signed_definitions,
         enable_variants=enable_variants,
+        identity=identity,
+        variant_groups=variant_groups or [],
+        variant_claims=variant_claims or {},
         connect_timeout=connect_timeout,
         request_timeout=request_timeout,
         enable_usage_tracking=enable_usage_tracking,

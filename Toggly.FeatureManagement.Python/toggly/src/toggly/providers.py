@@ -114,6 +114,9 @@ class VariantsSnapshot:
     etag: str | None = None
     """ETag for conditional GET."""
 
+    context_key: str | None = None
+    """Complete request context fingerprint; absent legacy snapshots are not reusable."""
+
     def to_dict(self) -> dict[str, Any]:
         """Convert snapshot to a dictionary for serialization."""
         return {
@@ -122,6 +125,7 @@ class VariantsSnapshot:
             "key_id": self.key_id,
             "timestamp": self.timestamp,
             "etag": self.etag,
+            "context_key": self.context_key,
         }
 
     @classmethod
@@ -139,6 +143,7 @@ class VariantsSnapshot:
             key_id=data.get("key_id") or data.get("kid"),
             timestamp=data.get("timestamp"),
             etag=data.get("etag"),
+            context_key=data.get("context_key"),
         )
 
 

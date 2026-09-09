@@ -330,3 +330,24 @@ MIT
 ## Find Out More
 
 Visit [Toggly.io](https://toggly.io) for more information and to create your free account.
+
+## Initial context for remote variants
+
+Requires **toggly 0.7.0** (release pending; these APIs are not in the currently published packages).
+
+```python
+from toggly import TogglyClient, TogglyConfig
+
+client = TogglyClient(TogglyConfig(
+    app_key="your-app-key",
+    enable_variants=True,
+    identity="user-123",              # Stable identifier for this variants client.
+    variant_groups=["beta"],           # Membership used by targeting rules.
+    variant_claims={"plan": "pro"},    # String attributes used by targeting rules.
+))
+client.init()  # The first variants request already contains this complete context.
+```
+
+Startup context avoids an initial variants fetch with incomplete targeting followed by a second fetch. Use one variants client per fixed application-wide context; never change a shared server client's identity for each incoming request. These defaults do not replace request-local `EvaluationContext` for ordinary local boolean evaluation. Enabling remote variants retains the SDK's existing client-wide evaluated-flag behavior.
+
+Groups are trimmed and sent as repeated parameters. Claims must be string-to-string mappings: empty names/values are omitted, whitespace is preserved, and the first 20 claim names in sorted order are sent. Omitted or empty collections send no targeting parameters. Caller collections are copied. Variants caches and conditional validators match the complete context; legacy unscoped variants caches require a fresh fetch. Global definition caches retain their existing behavior.

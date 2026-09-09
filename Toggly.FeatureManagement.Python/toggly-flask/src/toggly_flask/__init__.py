@@ -22,7 +22,7 @@ from toggly_flask.extension import (
     get_toggly,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 __all__ = [
     "FeatureFlagBlueprint",
     "FeatureFlagChecker",

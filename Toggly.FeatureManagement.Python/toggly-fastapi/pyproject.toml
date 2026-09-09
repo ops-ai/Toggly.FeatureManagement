@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toggly-fastapi"
-version = "0.2.0"
+version = "0.3.0"
 description = "FastAPI integration for Toggly feature flag management"
 readme = "README.md"
 license = {text = "MIT"}
@@ -39,7 +39,7 @@ classifiers = [
 ]
 requires-python = ">=3.9"
 dependencies = [
-    "toggly>=0.1.0",
+    "toggly>=0.7.0",
     "fastapi>=0.100"
 ]
 

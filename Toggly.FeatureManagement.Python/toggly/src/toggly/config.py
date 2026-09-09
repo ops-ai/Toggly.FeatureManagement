@@ -111,8 +111,17 @@ class TogglyConfig:
     register_contexts_on_startup: bool = True
     """PUT entity context schemas to sdk/{appKey}/contexts on start (default True)."""
 
+    variant_groups: list[str] = field(default_factory=list)
+    """Application-wide groups for remote variants, not request-local booleans."""
+
+    variant_claims: dict[str, str] = field(default_factory=dict)
+    """Application-wide string claims for remote variants (at most 20 on the wire)."""
+
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
+        # Own the collections before client initialization or background work.
+        self.variant_groups = list(self.variant_groups)
+        self.variant_claims = dict(self.variant_claims)
         # Ensure base_url doesn't have trailing slash
         self.base_url = self.base_url.rstrip("/")
         self.metrics_base_url = self.metrics_base_url.rstrip("/")
@@ -212,6 +221,8 @@ class TogglyConfig:
             base_url=changes.get("base_url", self.base_url),
             definitions_url=changes.get("definitions_url", self.definitions_url),
             identity=changes.get("identity", self.identity),
+            variant_groups=changes.get("variant_groups", self.variant_groups),
+            variant_claims=changes.get("variant_claims", self.variant_claims),
             feature_defaults=changes.get("feature_defaults", self.feature_defaults.copy()),
             refresh_interval=changes.get("refresh_interval", self.refresh_interval),
             use_signed_definitions=changes.get(
