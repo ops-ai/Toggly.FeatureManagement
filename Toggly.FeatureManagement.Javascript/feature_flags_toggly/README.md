@@ -9,6 +9,32 @@ Can be used *WITH* or *WITHOUT* [Toggly.io](https://toggly.io).
   <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
 </p>
 
+## Initialize with a known user
+
+Requires **1.8.0 or later** (the new API is not available in earlier published versions).
+
+```javascript
+// Run after your application knows the signed-in user, before checking flags.
+await Toggly.init({
+  appKey: 'your-public-app-key',
+  environment: 'Production',
+  identity: 'user-123',           // Stable user identifier, not a display name.
+  groups: ['beta', 'team-a'],     // Memberships used by targeting rules.
+  claims: { plan: 'pro' },       // String attributes used by targeting rules.
+});
+
+// The first definitions request already contains this targeting context.
+const showNewDashboard = Toggly.isFeatureOn('NewDashboard');
+```
+
+Passing context during initialization avoids an intermediate request followed
+by a refreshing `setContext` call. Omitted fields reuse persisted context;
+omitting identity also generates an identifier when none exists. Explicit
+`identity: ''`, `groups: []`, and `claims: {}` clear their respective fields.
+Supplied collections are copied. Context remains usable in memory when
+localStorage is unavailable. Use `setContext` for later user/context changes.
+
+
 ## What is a Feature Flag
 
 A feature flag (or toggle) in software development provides an alternative to maintaining multiple feature branches in source code. A condition within the code enables or disables a feature during runtime.

@@ -1,8 +1,15 @@
 {
   "compilerOptions": {
     "target": "es5",
-    "lib": ["es2016", "DOM"],
+    "lib": [
+      "es2016",
+      "DOM"
+    ],
     "rootDir": "./",
     "sourceMap": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

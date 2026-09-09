@@ -271,10 +271,11 @@ describe('Toggly WebSocket', () => {
     it('caches etag from sync message without refresh when unchanged', async () => {
       const { StorageKeys } = require('../lib/models');
       localStorage.setItem(
-        StorageKeys.definitionsRevisionCacheKey('test-key', 'Test'),
+        StorageKeys.definitionsRevisionCacheKey('test-key', 'Test', 'v2:evaluated:u:mock-uuid-ws'),
         'abc123',
       );
 
+      localStorage.setItem(StorageKeys.flagsCacheKey('test-key', 'Test', 'u:mock-uuid-ws'), JSON.stringify({ FlagOn: true }));
       await initWithWs();
       const before = mockFetch.mock.calls.length;
 
@@ -303,7 +304,7 @@ describe('Toggly WebSocket', () => {
 
     it('does not cache WS etag before HTTP confirms', async () => {
       const { StorageKeys } = require('../lib/models');
-      const revisionKey = StorageKeys.definitionsRevisionCacheKey('test-key', 'Test');
+      const revisionKey = StorageKeys.definitionsRevisionCacheKey('test-key', 'Test', 'v2:evaluated:u:mock-uuid-ws');
       localStorage.setItem(revisionKey, 'old-rev');
 
       await initWithWs();

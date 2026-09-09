@@ -1,4 +1,4 @@
-import type { Hook } from '@ops-ai/toggly-hooks-types';
+import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from './local-gate';
 
 export interface TogglyConfig {
@@ -21,6 +21,12 @@ export interface TogglyConfig {
 
   appKey?: string;
   environment?: string;
+  /** Initial user identity. Omit to reuse storage or generate an ID; empty clears it. */
+  identity?: TogglyEvaluationContext['identity'];
+  /** Initial targeting memberships. Omit to reuse storage; [] clears them. */
+  groups?: TogglyEvaluationContext['groups'];
+  /** Initial rule attributes. Omit to reuse storage; {} clears them. */
+  claims?: TogglyEvaluationContext['claims'];
   flagDefaults?: { [key: string]: boolean };
   
   /** Hooks to extend SDK behavior at key lifecycle points */

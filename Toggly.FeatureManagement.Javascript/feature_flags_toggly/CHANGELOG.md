@@ -1,3 +1,20 @@
+## 1.8.0
+
+2026-09-08
+
+### Added
+- Accept initial `identity`, `groups`, and string-valued `claims` in `Toggly.init`
+  so the first evaluated request already targets the known user.
+
+### Fixed
+- Emit the declaration entry advertised by the npm manifest, including typed
+  `window.Toggly` and an importable `TogglyConfig` type.
+- Preserve omitted persisted context while explicit empty values clear it; keep
+  context in memory when browser storage is missing, blocked, or full.
+- Isolate structured context cache keys and definition revisions to prevent
+  cross-context cache reuse, including values containing delimiter characters.
+  Legacy structured-context caches and revision entries are refreshed safely.
+
 ## 1.7.4
 
 2026-08-30

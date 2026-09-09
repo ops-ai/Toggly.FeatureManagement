@@ -10,6 +10,8 @@ module.exports = {
   collectCoverageFrom: [
     'lib/**/*.ts',
     '!lib/models/index.ts',
+    // Type-only browser declaration entry: no executable code to instrument.
+    '!lib/feature-flags-toggly.bundle.ts',
     '../../toggly-signed-defs/src/**/*.ts',
     '!../../toggly-signed-defs/src/**/*.test.ts',
   ],

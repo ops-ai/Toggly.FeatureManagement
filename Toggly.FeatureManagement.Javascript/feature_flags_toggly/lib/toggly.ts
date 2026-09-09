@@ -5,6 +5,7 @@ import type { Hook, TogglyEvaluationContext, EvaluatedDefinitions, TogglyEntityC
 import {
   appendEvaluationContext,
   evaluationContextCacheKey,
+  normalizeEvaluationClaims,
   isCacheLruEnabled,
   parseCacheLruIndex,
   removeCacheLruKeys,
@@ -42,10 +43,18 @@ import {
   type JwkSet,
 } from './signed-defs-verify';
 
-const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+const canUseStorage = (() => {
+  try {
+    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+  } catch {
+    return false;
+  }
+})();
 
 export class Toggly {
   private static _config: TogglyConfig;
+  private static _contextMemory = new Map<string, string | null>();
+  private static _contextMemoryOnly = new Set<string>();
   private static _refreshInterval: number | undefined;
   private static _hookExecutor = new HookExecutor();
   private static _localGates: LocalGate[] = [];
@@ -62,6 +71,7 @@ export class Toggly {
   static _wsReconnectAttempt: number = 0;
   static _refreshDebounceTimer: any = null;
   static _cachedDefinitionsRevision: string | null = null;
+  private static _cachedRevisionContext: string | null = null;
   static _pendingDefinitionsPin: string | null = null;
   static _lastFallbackRefresh: number = 0;
   static _fallbackRefreshInterval: number = 20 * 60 * 1000;
@@ -70,14 +80,15 @@ export class Toggly {
     return StorageKeys.definitionsRevisionCacheKey(
       Toggly._config?.appKey ?? '',
       Toggly._config?.environment ?? 'Production',
+      `v2:${Toggly._config?.enableVariants ? 'variants' : 'evaluated'}:${Toggly._contextCacheKey}`,
     );
   }
 
   private static get definitionsRevision(): string | null {
-    if (Toggly._cachedDefinitionsRevision) {
+    if (Toggly._cachedDefinitionsRevision && Toggly._cachedRevisionContext === Toggly._revisionCacheKey) {
       return Toggly._cachedDefinitionsRevision;
     }
-    if (!Toggly._persistCache) {
+    if (!Toggly._persistCache || !Toggly._cachedFeatureFlags || (Toggly._config.enableVariants && !Toggly.variantsValue)) {
       return null;
     }
     try {
@@ -92,6 +103,7 @@ export class Toggly {
       return;
     }
     Toggly._cachedDefinitionsRevision = revision;
+    Toggly._cachedRevisionContext = Toggly._revisionCacheKey;
     if (!Toggly._persistCache) {
       return;
     }
@@ -181,7 +193,17 @@ export class Toggly {
   }
 
   private static get _contextCacheKey(): string {
-    return evaluationContextCacheKey(Toggly.evaluationContext);
+    const context = Toggly.evaluationContext;
+    // Preserve safe identity-only caches; structured context needs escaped boundaries.
+    if (!context.groups && !context.claims && !context.identity?.includes('|')) {
+      return evaluationContextCacheKey(context);
+    }
+    const claims = normalizeEvaluationClaims(context.claims) ?? {};
+    return `v2:${encodeURIComponent(JSON.stringify([
+      context.identity ?? '',
+      [...(context.groups ?? [])].sort(),
+      Object.entries(claims).sort(([a], [b]) => a.localeCompare(b)),
+    ]))}`;
   }
 
   private static get _flagsCacheKey(): string {
@@ -246,12 +268,17 @@ export class Toggly {
       Toggly._config.hooks.forEach(hook => Toggly._hookExecutor.addHook(hook));
     }
 
-    if (Toggly._config.localGates) {
-      Toggly.setLocalGates(Toggly._config.localGates);
+    // Seed all targeting fields before any hooks, cache reads or background work.
+    if (config.groups !== undefined) Toggly.groups = config.groups;
+    if (config.claims !== undefined) Toggly.claims = config.claims;
+    if (config.identity !== undefined) {
+      Toggly.identity = config.identity;
+    } else if (!Toggly.identity) {
+      Toggly.identity = uuidv4();
     }
 
-    if (!Toggly.identity) {
-      Toggly.identity = uuidv4();
+    if (Toggly._config.localGates) {
+      Toggly.setLocalGates(Toggly._config.localGates);
     }
 
     Toggly.startRefreshInterval();
@@ -274,16 +301,37 @@ export class Toggly {
     return Toggly._config?.flagDefaults ?? {};
   }
 
+  private static readContextValue(key: string): string | null {
+    if (canUseStorage && !Toggly._contextMemoryOnly.has(key)) {
+      try {
+        const value = localStorage.getItem(key);
+        Toggly._contextMemory.set(key, value);
+        return value;
+      } catch { /* Fall back to the latest context snapshot. */ }
+    }
+    return Toggly._contextMemory.get(key) ?? null;
+  }
+
+  private static writeContextValue(key: string, value: string | null): void {
+    Toggly._contextMemory.set(key, value);
+    if (canUseStorage) {
+      try {
+        if (value === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+        Toggly._contextMemoryOnly.delete(key);
+        return;
+      } catch { /* A failed write must not resurrect the previous stored value. */ }
+    }
+    Toggly._contextMemoryOnly.add(key);
+  }
+
   static get identity(): string {
-    if (!canUseStorage) return '';
-    return localStorage.getItem(StorageKeys.identityKey) ?? '';
+    return Toggly.readContextValue(StorageKeys.identityKey) ?? '';
   }
 
   static set identity(v: string) {
+    Toggly.writeContextValue(StorageKeys.identityKey, v);
     const dataMapPromise = Toggly._hookExecutor.executeBeforeIdentify(v);
-    if (canUseStorage) {
-      localStorage.setItem(StorageKeys.identityKey, v);
-    }
     Promise.resolve(dataMapPromise).then(dataMap =>
       Toggly._hookExecutor.executeAfterIdentify(v, dataMap)
     ).catch(err => console.error('[Toggly] Hook execution error:', err));
@@ -291,45 +339,37 @@ export class Toggly {
 
   static clearIdentity() {
     const currentIdentity = Toggly.identity;
+    Toggly.writeContextValue(StorageKeys.identityKey, null);
     if (currentIdentity) {
       const dataMapPromise = Toggly._hookExecutor.executeBeforeIdentify('');
-      if (canUseStorage) {
-        localStorage.removeItem(StorageKeys.identityKey);
-      }
       Promise.resolve(dataMapPromise).then(dataMap =>
         Toggly._hookExecutor.executeAfterIdentify('', dataMap)
       ).catch(err => console.error('[Toggly] Hook execution error:', err));
-    } else if (canUseStorage) {
-      localStorage.removeItem(StorageKeys.identityKey);
     }
   }
 
   static get groups(): string[] {
-    if (!canUseStorage) return [];
     try {
-      return JSON.parse(localStorage.getItem(StorageKeys.groupsKey) ?? '[]');
+      return JSON.parse(Toggly.readContextValue(StorageKeys.groupsKey) ?? '[]');
     } catch {
       return [];
     }
   }
 
   static set groups(values: string[]) {
-    if (!canUseStorage) return;
-    localStorage.setItem(StorageKeys.groupsKey, JSON.stringify(values ?? []));
+    Toggly.writeContextValue(StorageKeys.groupsKey, JSON.stringify(values ?? []));
   }
 
   static get claims(): Record<string, string> {
-    if (!canUseStorage) return {};
     try {
-      return JSON.parse(localStorage.getItem(StorageKeys.claimsKey) ?? '{}');
+      return JSON.parse(Toggly.readContextValue(StorageKeys.claimsKey) ?? '{}');
     } catch {
       return {};
     }
   }
 
   static set claims(values: Record<string, string>) {
-    if (!canUseStorage) return;
-    localStorage.setItem(StorageKeys.claimsKey, JSON.stringify(values ?? {}));
+    Toggly.writeContextValue(StorageKeys.claimsKey, JSON.stringify(values ?? {}));
   }
 
   static get evaluationContext(): TogglyEvaluationContext {
