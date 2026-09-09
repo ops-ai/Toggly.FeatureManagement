@@ -1,7 +1,6 @@
 import type { CacheLruIndex, Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import {
   appendEvaluationContext,
-  evaluationContextCacheKey,
   isCacheLruEnabled,
   normalizeEntityContext,
   parseCacheLruIndex,
@@ -179,6 +178,8 @@ export class TogglyService {
   private cachedDefinitionsRevision: string | null = null;
   private pendingDefinitionsPin: string | null = null;
   private isInitialized = false;
+  private initialization: Promise<TogglyInitResponse> | null = null;
+  private disposed = false;
   private networkState: NetworkState | null = null;
   private appState: AppStateType = 'active';
   private stateChangeHandlers: Set<FeatureStateChangeHandler> = new Set();
@@ -249,8 +250,14 @@ export class TogglyService {
     }
     try {
       const stored = await this.storage.get(STORAGE_KEYS.ETAG);
-      if (stored) {
-        this.cachedDefinitionsRevision = stored;
+      // Older releases stored a bare revision without its evaluation context.
+      if (stored?.startsWith('{')) {
+        const record = JSON.parse(stored) as { context: string; revision: string };
+        const cached = await this.storage.get(await this.buildFeatureFlagsCacheKey());
+        if (typeof record.revision === 'string' && record.context === this.getContextCacheKey() && cached &&
+            JSON.parse(cached).identity === record.context) {
+          this.cachedDefinitionsRevision = record.revision;
+        }
       }
     } catch (error) {
       this.reportError('Error reading definitions revision cache', error);
@@ -264,7 +271,9 @@ export class TogglyService {
     const normalized = revision.replace(/^"+|"+$/g, '');
     this.cachedDefinitionsRevision = normalized;
     try {
-      await this.storage.set(STORAGE_KEYS.ETAG, normalized);
+      await this.storage.set(STORAGE_KEYS.ETAG, JSON.stringify({
+        context: this.getContextCacheKey(), revision: normalized,
+      }));
     } catch (error) {
       this.reportError('Error writing definitions revision cache', error);
     }
@@ -321,6 +330,10 @@ export class TogglyService {
 
   constructor(config: TogglyConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    // Snapshot startup targeting before native subscriptions or asynchronous storage.
+    this.identity = config.identity || null;
+    this.groups = [...(config.groups ?? [])];
+    this.claims = { ...(config.claims ?? {}) };
     this.storage = config.storage ?? new MemoryStorage();
     this.hookExecutor = new HookExecutor();
     this.eventEmitter = new EventEmitter();
@@ -342,7 +355,7 @@ export class TogglyService {
         this.eventEmitter.emit('networkChanged', state);
 
         // Refresh when coming back online
-        if (wasOffline && state.isConnected) {
+        if (this.isInitialized && !this.disposed && wasOffline && state.isConnected) {
           this.refresh();
         }
       });
@@ -362,7 +375,7 @@ export class TogglyService {
         this.eventEmitter.emit('appStateChanged', state);
 
         // Refresh when coming to foreground
-        if (wasBackground && state === 'active') {
+        if (this.isInitialized && !this.disposed && wasBackground && state === 'active') {
           this.refresh();
         }
       });
@@ -374,6 +387,16 @@ export class TogglyService {
    * @returns Promise resolving to the initialization response
    */
   async init(): Promise<TogglyInitResponse> {
+    if (this.initialization) return this.initialization;
+    this.initialization = this.initialize();
+    try {
+      return await this.initialization;
+    } finally {
+      this.initialization = null;
+    }
+  }
+
+  private async initialize(): Promise<TogglyInitResponse> {
     // Handle identity
     if (this.config.identity) {
       this.identity = this.config.identity;
@@ -387,19 +410,15 @@ export class TogglyService {
       this.identity = storedId;
     }
 
-    this.groups = this.config.groups ? [...this.config.groups] : [];
-    this.claims = this.config.claims ? { ...this.config.claims } : {};
-
-    // Start refresh timer
-    this.startRefreshTimer();
-
     // Load cached definitions revision for conditional HTTP requests
     await this.loadCachedDefinitionsRevision();
 
     // Perform initial refresh
-    const response = await this.refresh();
+    const response = await this.performRefresh();
 
+    if (this.disposed) return response;
     this.isInitialized = true;
+    this.startRefreshTimer();
     this.eventEmitter.emit('initialized', response);
 
     // Start WebSocket live updates after successful initialization
@@ -415,6 +434,16 @@ export class TogglyService {
    * @returns Promise resolving to the refresh response
    */
   async refresh(): Promise<TogglyInitResponse> {
+    // Initialization owns the first request; concurrent callers share its result.
+    if (this.initialization) return this.initialization;
+    if (!this.isInitialized || this.disposed) {
+      return { status: 'cached' as TogglyLoadStatus, flags: this.features ?? this.config.featureDefaults };
+    }
+    return this.performRefresh();
+  }
+
+  private async performRefresh(): Promise<TogglyInitResponse> {
+    if (this.disposed) return { status: 'cached' as TogglyLoadStatus, flags: this.config.featureDefaults };
     // Skip refresh if app is not in foreground
     if (this.appState !== 'active') {
       return {
@@ -485,9 +514,6 @@ export class TogglyService {
       clearTimeout(timeoutId);
 
       const responseRevision = extractDefinitionsRevision(response);
-      if (responseRevision) {
-        await this.cacheDefinitionsRevision(responseRevision);
-      }
 
       if (response.status === 304) {
         // Not modified, use cached
@@ -531,6 +557,7 @@ export class TogglyService {
 
       // Cache the flags
       await this.cacheFeatureFlags(flags);
+      await this.cacheDefinitionsRevision(responseRevision);
 
       this.lastChecked = new Date();
       this.lastSynced = new Date();
@@ -593,7 +620,10 @@ export class TogglyService {
   }
 
   private getContextCacheKey(): string {
-    return evaluationContextCacheKey(this.getEvaluationContext());
+    // JSON boundaries avoid collisions such as groups ["a,b"] and ["a", "b"].
+    // Include the endpoint scope because storage can be shared by SDK instances.
+    const url = new URL(this.buildApiUrl());
+    return JSON.stringify([url.origin, url.pathname, [...url.searchParams.entries()].sort()]);
   }
 
   private async buildFeatureFlagsCacheKey(): Promise<string> {
@@ -1246,6 +1276,7 @@ export class TogglyService {
    * Dispose the service and clean up resources.
    */
   dispose(): void {
+    this.disposed = true;
     this.stopWebSocket();
     this.stopRefreshTimer();
     this.networkUnsubscribe?.();

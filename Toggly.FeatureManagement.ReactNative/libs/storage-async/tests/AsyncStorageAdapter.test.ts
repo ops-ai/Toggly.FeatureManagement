@@ -17,6 +17,8 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
+import { TogglyService } from '@ops-ai/react-native-toggly-core';
+
 import { AsyncStorageAdapter, createAsyncStorageAdapter } from '../src/index';
 
 describe('AsyncStorageAdapter', () => {
@@ -32,6 +34,33 @@ describe('AsyncStorageAdapter', () => {
 
   afterEach(() => {
     (console.error as jest.Mock).mockRestore();
+  });
+
+  it('keeps startup context while the native device identity read is pending', async () => {
+    let release!: (value: string) => void;
+    mockGetItem.mockImplementation((key: string) => key.endsWith('deviceId')
+      ? new Promise(resolve => { release = resolve; }) : Promise.resolve(null));
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, headers: new Map(),
+      json: async () => ({ enabled: true }) });
+    const groups = ['beta'];
+    const claims = { plan: 'pro' };
+    const service = new TogglyService({ appKey: 'app', groups, claims,
+      storage: new AsyncStorageAdapter(), refreshInterval: 0 });
+    try {
+      const init = service.init();
+      const refresh = service.refresh();
+      groups.push('changed'); claims.plan = 'changed';
+      expect(fetch).not.toHaveBeenCalled();
+      release('stored-user');
+      await Promise.all([init, refresh]);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const url = new URL((fetch as jest.Mock).mock.calls[0][0]);
+      expect(url.searchParams.get('u')).toBe('stored-user');
+      expect(url.searchParams.getAll('g')).toEqual(['beta']);
+      expect(url.searchParams.get('claim.plan')).toBe('pro');
+    } finally {
+      service.dispose();
+    }
   });
 
   describe('constructor', () => {

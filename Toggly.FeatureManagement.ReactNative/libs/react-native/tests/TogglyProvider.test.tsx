@@ -50,6 +50,19 @@ describe('TogglyProvider', () => {
     mockInit.mockResolvedValue(undefined);
   });
 
+  it('forwards startup identity, groups and claims before initialization', async () => {
+    const groups = ['beta', 'team a'];
+    const claims = { plan: 'pro' };
+    render(<TogglyProvider appKey="app" identity="user&123" groups={groups} claims={claims}>
+      <div>Context child</div>
+    </TogglyProvider>);
+    await waitFor(() => expect(mockInit).toHaveBeenCalledTimes(1));
+    expect(TogglyService).toHaveBeenCalledWith(expect.objectContaining({
+      identity: 'user&123', groups, claims,
+    }));
+    expect((TogglyService as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(mockInit.mock.invocationCallOrder[0]);
+  });
+
   it('renders loading state by default', async () => {
     // Make init take a long time
     mockInit.mockImplementation(() => new Promise(() => {}));
