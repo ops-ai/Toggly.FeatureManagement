@@ -502,7 +502,7 @@ impl DefinitionsProvider {
         refresh_in_flight.store(false, Ordering::SeqCst);
         if pending_ws_refresh.swap(false, Ordering::SeqCst) {
             // Drain WS notifies that arrived while in flight (no count on the skip).
-            let _ = Box::pin(Self::refresh_impl(
+            let drain = Box::pin(Self::refresh_impl(
                 http_client,
                 config,
                 definitions,
@@ -521,6 +521,11 @@ impl DefinitionsProvider {
                 false,
             ))
             .await;
+            // Prefer a successful concurrent WS update over the original failure so
+            // callers clear stale error state when definitions were actually applied.
+            if drain.is_ok() {
+                return Ok(());
+            }
         }
 
         result.map(|_| ())
