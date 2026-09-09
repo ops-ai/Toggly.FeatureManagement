@@ -9,6 +9,29 @@
 
 Native Android SDK for [Toggly.io](https://toggly.io) feature flags with Kotlin, coroutines, Jetpack Compose, and traditional Views support.
 
+## Initial targeting context (core 1.4.0, pending publication)
+
+These new config fields require `io.toggly:toggly-android-core:1.4.0` once published.
+Provide known targeting context before initialization to avoid an intermediate fetch with incomplete targeting:
+
+```kotlin
+val service = TogglyService(TogglyConfig(
+    appKey = "your-app-key",
+    identity = "user-123", // Stable user identifier; omission uses the stored/generated device ID.
+    groups = listOf("beta", "engineering"), // Memberships used by targeting rules.
+    claims = mapOf("plan" to "pro"), // String attributes used by remote rules.
+))
+service.init() // Call from a coroutine; the first request includes all three fields.
+```
+
+Groups are trimmed and blanks omitted. Claims with empty names or values are omitted;
+remaining names are sorted and limited to 20. Explicit empty collections send no targeting
+values; an explicit empty identity stays empty. The service snapshots collections at
+construction, so later caller mutations do not change targeting. Commas in group names
+are interpreted as group separators by the server. Per-call entity `context` remains
+separate from these remote groups and claims. Compose, Views and storage integrations
+continue to consume the same configuration/service without new APIs.
+
 ## Features
 
 - **Kotlin-first**: Built entirely in Kotlin with idiomatic APIs
