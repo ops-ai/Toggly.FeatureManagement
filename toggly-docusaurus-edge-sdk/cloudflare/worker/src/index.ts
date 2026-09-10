@@ -14,7 +14,7 @@
 import type { Env, RequestContext, WorkerConfig } from './types';
 import { PageGateBehavior } from './types';
 import { getFeatureKeyForPath } from './manifest';
-import { getFlags, isFeatureEnabled } from './flags';
+import { getFlags } from './flags';
 import { transformHtmlResponse } from './html-rewriter';
 import { fetchFromOrigin, probeOriginAccess } from './origin';
 import { RequestScopedUsageRecorder } from './request-usage';
@@ -104,9 +104,20 @@ function isHtmlResponse(response: Response): boolean {
   return contentType.includes('text/html');
 }
 
+type PageGateResult = {
+  /** Non-null when the page is blocked (404/redirect). */
+  response: Response | null;
+  /**
+   * Flags from the single refresh for this request when the page gate ran.
+   * Reused for section gating so we do not double-count definition cache hits.
+   */
+  flags: Record<string, boolean> | null;
+};
+
 /**
- * Handle page-level gating
- * Returns a response (404 or redirect) if the page feature is disabled
+ * Handle page-level gating.
+ * Returns a blocked response when the page feature is disabled; otherwise
+ * returns the flags from that refresh for reuse on section gating.
  */
 async function handlePageLevelGate(
   featureKey: string,
@@ -117,33 +128,37 @@ async function handlePageLevelGate(
   publicOrigin: string,
   usage: RequestScopedUsageRecorder,
   telemetry: TelemetryRuntime | null,
-): Promise<Response | null> {
+): Promise<PageGateResult> {
   const recorder = telemetry?.isUsageEnabled() ? telemetry : null;
-  const isEnabled = await isFeatureEnabled(
-    featureKey,
-    env,
-    context,
-    cache,
-    recorder,
-  );
+  const flags = await getFlags(env, context, cache, recorder);
+  const isEnabled = flags[featureKey] ?? false;
 
   usage.recordGate(featureKey, isEnabled, identityFromContext(context));
 
   if (!isEnabled) {
     if (config.pageGateBehavior === PageGateBehavior.REDIRECT) {
       const redirectUrl = config.redirectUrl || '/upgrade';
-      return Response.redirect(new URL(redirectUrl, publicOrigin).toString(), 302);
+      return {
+        response: Response.redirect(
+          new URL(redirectUrl, publicOrigin).toString(),
+          302,
+        ),
+        flags: null,
+      };
     }
-    return new Response('Not Found', {
-      status: 404,
-      statusText: 'Not Found',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-    });
+    return {
+      response: new Response('Not Found', {
+        status: 404,
+        statusText: 'Not Found',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+      }),
+      flags: null,
+    };
   }
 
-  return null; // Feature is enabled, continue processing
+  return { response: null, flags };
 }
 
 function buildOriginRequestInit(request: Request): RequestInit {
@@ -270,9 +285,10 @@ export default {
 
       // Check for page-level feature gate
       const featureKey = await getFeatureKeyForPath(path, env, cache);
+      let pageFlags: Record<string, boolean> | null = null;
 
       if (featureKey) {
-        const gateResponse = await handlePageLevelGate(
+        const gate = await handlePageLevelGate(
           featureKey,
           env,
           context,
@@ -283,10 +299,11 @@ export default {
           telemetry,
         );
 
-        if (gateResponse) {
+        if (gate.response) {
           flushTelemetry(telemetry, ctx);
-          return gateResponse;
+          return gate.response;
         }
+        pageFlags = gate.flags;
       }
 
       // Fetch from origin (Access-token aware). We rebuild the URL onto the
@@ -305,9 +322,11 @@ export default {
         return response;
       }
 
-      // For HTML responses, apply section-level gating
+      // For HTML responses, apply section-level gating. Reuse page-gate flags
+      // when present so one request does not double-count definition cache hits.
       const recorder = telemetry?.isUsageEnabled() ? telemetry : null;
-      const flags = await getFlags(env, context, cache, recorder);
+      const flags =
+        pageFlags ?? (await getFlags(env, context, cache, recorder));
       const identity = identityFromContext(context);
       const transformed = transformHtmlResponse(
         response,

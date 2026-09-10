@@ -12,6 +12,10 @@
 - Soft-fail restore merges cache counters with in-flight records; cache-only
   batches still flush.
 
+### Fixed
+- Reuse page-gate flags for section HTML gating in the same request so
+  definition cache hits are not double-counted.
+
 ### Notes
 - N/A for this Worker (not instrumented): durable snapshot, WebSocket refresh,
   HTTP 304 / If-None-Match, concurrent in-flight refresh skip, ETag-equal 200.
