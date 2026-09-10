@@ -998,8 +998,12 @@ describe('Toggly Core', () => {
 
       const cacheKeys = Object.keys(localStorage).filter((key) => key.includes('toggly:flags'));
       expect(cacheKeys.some((key) => key.includes('u:user-123'))).toBe(true);
-      expect(cacheKeys.some((key) => key.includes('g:beta'))).toBe(true);
-      expect(cacheKeys.some((key) => key.includes('c:role=admin'))).toBe(true);
+      const structuredKey = cacheKeys.find((key) => key.includes(':v2:'));
+      expect(structuredKey).toBeDefined();
+      const encodedContext = structuredKey!.split(':v2:')[1];
+      expect(JSON.parse(decodeURIComponent(encodedContext))).toEqual([
+        'user-123', ['beta'], [['role', 'admin']],
+      ]);
     });
 
     it('setContext should append context to variants URL when enableVariants is true', async () => {

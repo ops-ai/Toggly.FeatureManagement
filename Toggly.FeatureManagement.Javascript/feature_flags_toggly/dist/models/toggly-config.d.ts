@@ -1,0 +1,48 @@
+import type { Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import type { LocalGate } from './local-gate';
+export interface TogglyConfig {
+    baseURI?: string;
+    verifySignatures?: boolean;
+    /**
+     * When verifySignatures is enabled, only accept signatures from these key IDs.
+     * Omit / empty = any kid present in JWKS is accepted.
+     */
+    allowedKeyIds?: string[];
+    /**
+     * Reject signed envelopes older than this many seconds when verifySignatures is enabled.
+     * Omit / null / <=0 = disabled (back-compat).
+     */
+    maxSignatureAgeSeconds?: number | null;
+    reloadOnFeatureFlagValidation?: boolean;
+    connectTimeout?: number;
+    featureFlagsRefreshInterval?: number;
+    isDebug?: boolean;
+    appKey?: string;
+    environment?: string;
+    /** Initial user identity. Omit to reuse storage or generate an ID; empty clears it. */
+    identity?: TogglyEvaluationContext['identity'];
+    /** Initial targeting memberships. Omit to reuse storage; [] clears them. */
+    groups?: TogglyEvaluationContext['groups'];
+    /** Initial rule attributes. Omit to reuse storage; {} clears them. */
+    claims?: TogglyEvaluationContext['claims'];
+    flagDefaults?: {
+        [key: string]: boolean;
+    };
+    /** Hooks to extend SDK behavior at key lifecycle points */
+    hooks?: Hook[];
+    /** Enable live updates via WebSocket. Defaults to true if not set. */
+    enableLiveUpdates?: boolean;
+    /** Enable localStorage caching of definitions. Default: true. Set false for SSR-only or privacy-sensitive contexts. */
+    persistCache?: boolean;
+    /**
+     * Max identity-scoped cache keys (flags/variants) retained in localStorage.
+     * Omit or null = unlimited. A positive integer enables LRU eviction by last access.
+     */
+    maxCacheKeys?: number | null;
+    /** Enable variant support. When true, fetches from /evaluated-variants-signed instead of /evaluated-signed. Default: false. */
+    enableVariants?: boolean;
+    /** Device-local gates applied as a read-time AND on worker-evaluated booleans */
+    localGates?: LocalGate[];
+    /** Optional SDK error callback for reporting fetch/cache/evaluation failures. */
+    onError?: (message: string, error?: unknown) => void;
+}

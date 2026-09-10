@@ -14,7 +14,8 @@ export const StorageKeys = {
     const suffix = contextKey ? `:${contextKey}` : '';
     return `${CACHE_PREFIX}variants:${appKey}:${environment}${suffix}`;
   },
-  definitionsRevisionCacheKey(appKey: string, environment: string): string {
-    return `${CACHE_PREFIX}revision:${appKey}:${environment}`;
+  definitionsRevisionCacheKey(appKey: string, environment: string, contextKey = ''): string {
+    const suffix = contextKey ? `:${contextKey}` : '';
+    return `${CACHE_PREFIX}revision:${appKey}:${environment}${suffix}`;
   },
 };
