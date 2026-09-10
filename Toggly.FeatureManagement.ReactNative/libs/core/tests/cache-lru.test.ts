@@ -1,4 +1,3 @@
-import { evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
 import { TogglyService } from '../src/services/TogglyService';
 import { MemoryStorage } from '../src/services/MemoryStorage';
 import type { FeatureFlags } from '../src/models';
@@ -22,7 +21,6 @@ async function findFlagsCacheKey(
   storage: MemoryStorage,
   identity: string,
 ): Promise<string | undefined> {
-  const contextKey = evaluationContextCacheKey({ identity });
   for (const key of storage.keys()) {
     if (!key.startsWith(FEATURE_FLAGS_CACHE_PREFIX)) {
       continue;
@@ -32,7 +30,7 @@ async function findFlagsCacheKey(
       continue;
     }
     const parsed = JSON.parse(raw) as { identity?: string };
-    if (parsed.identity === contextKey) {
+    if (parsed.identity && JSON.parse(parsed.identity)[2].some(([key, value]: string[]) => key === 'u' && value === identity)) {
       return key;
     }
   }

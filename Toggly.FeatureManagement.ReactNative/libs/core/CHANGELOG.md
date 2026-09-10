@@ -1,3 +1,10 @@
+## 1.7.4 — 2026-09-08
+
+### Fixed
+- Snapshot initial identity, groups, and claims before native lifecycle callbacks and asynchronous storage; coalesce refreshes during initialization into its first request.
+- Bind persisted evaluated flags and revision validators to an unambiguous full context and endpoint scope, preventing cross-context startup cache reuse.
+- Avoid starting refresh timers or live updates after disposal during initialization.
+
 ## 1.7.3
 
 2026-08-30
