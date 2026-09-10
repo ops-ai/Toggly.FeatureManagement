@@ -149,8 +149,9 @@ Use a Central Portal **user token** (not account password) for
 - **Android:** Gradle + vanniktech → `publishAllPublicationsToMavenCentralRepository`
 - **Java:** `mvn -B -Prelease clean deploy` with
   `central-publishing-maven-plugin` (`server-id: central`) and `maven-gpg-plugin`.
-  The release workflow sets `MAVEN_USERNAME` / `MAVEN_PASSWORD` at job scope and
-  wires them via `actions/setup-java` `server-*-env-var` inputs.
+  The release workflow writes `~/.m2/settings.xml` with the Portal user token
+  (literal values). setup-java's `${env.*}` placeholders are not reliable with
+  this plugin and previously caused HTTP 401 on upload.
 
 Bump the parent `pom.xml` version, child `<parent><version>`, `SdkIdentity.SDK_VERSION`,
 README install snippets, and `CHANGELOG.md` in the same PR before running
