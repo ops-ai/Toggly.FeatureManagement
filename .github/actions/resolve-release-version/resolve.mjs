@@ -45,6 +45,7 @@ function detectManifestType(manifestPath) {
   if (base === 'version.rb') return 'ruby_version';
   if (base === 'gradle.properties') return 'gradle_properties';
   if (base === 'build.gradle.kts') return 'gradle_kts';
+  if (base === 'pom.xml') return 'pom';
   if (base.endsWith('.swift')) return 'swift';
   throw new Error(`Cannot detect manifest type for ${manifestPath}`);
 }
@@ -159,6 +160,13 @@ function readManifestVersion(manifestPath, manifestType) {
       if (!match) throw new Error(`No version in ${manifestPath}`);
       return match[1];
     }
+    case 'pom': {
+      // Project version is the first <version> that is not inside <parent>.
+      const withoutParent = content.replace(/<parent>[\s\S]*?<\/parent>/, '');
+      const match = withoutParent.match(/<version>\s*([^<]+?)\s*<\/version>/i);
+      if (!match) throw new Error(`No project version in ${manifestPath}`);
+      return match[1].trim();
+    }
     case 'swift': {
       const match = content.match(/public let togglyVersion\s*=\s*"([^"]+)"/);
       if (!match) throw new Error(`No togglyVersion in ${manifestPath}`);
@@ -244,6 +252,20 @@ function writeManifestVersion(manifestPath, manifestType, newVersion) {
       content = content.replace(/^\s*version\s*=\s*"[^"]+"/m, `    version = "${newVersion}"`);
       fs.writeFileSync(manifestPath, content);
       break;
+    case 'pom': {
+      const parentBlock = content.match(/<parent>[\s\S]*?<\/parent>/);
+      const placeholder = '___PARENT_BLOCK___';
+      let working = content;
+      if (parentBlock) {
+        working = content.replace(parentBlock[0], placeholder);
+      }
+      working = working.replace(/<version>\s*[^<]+?\s*<\/version>/i, `<version>${newVersion}</version>`);
+      if (parentBlock) {
+        working = working.replace(placeholder, parentBlock[0]);
+      }
+      fs.writeFileSync(manifestPath, working);
+      break;
+    }
     case 'swift':
       content = content.replace(
         /public let togglyVersion\s*=\s*"[^"]+"/,
@@ -270,6 +292,20 @@ async function fetchJson(url) {
     throw new RegistryLookupError(`HTTP ${response.status} for ${url}`);
   }
   return response.json();
+}
+
+async function fetchText(url) {
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(15000),
+    headers: { 'User-Agent': 'toggly-release-resolve/1.0 (ops-ai)' },
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new RegistryLookupError(`HTTP ${response.status} for ${url}`);
+  }
+  return response.text();
 }
 
 async function queryLatestTag(prefix) {
@@ -367,6 +403,32 @@ async function queryRegistryLatest(registry, packageName) {
       }
       const packages = data?.packages?.[packageName] ?? [];
       return packages[0]?.version?.replace(/^v/, '') ?? '';
+    }
+    case 'maven': {
+      // packageName: groupId:artifactId (e.g. io.toggly:toggly-core)
+      const [groupId, artifactId] = packageName.split(':');
+      if (!groupId || !artifactId) {
+        throw new RegistryLookupError(
+          `maven package_name must be groupId:artifactId, got: ${packageName}`,
+        );
+      }
+      const metaPath = `${groupId.replaceAll('.', '/')}/${artifactId}/maven-metadata.xml`;
+      const text = await fetchText(`https://repo1.maven.org/maven2/${metaPath}`);
+      if (!text) {
+        return '';
+      }
+      const latest = text.match(/<latest>\s*([^<]+?)\s*<\/latest>/i)?.[1]?.trim();
+      if (latest) {
+        return latest;
+      }
+      const release = text.match(/<release>\s*([^<]+?)\s*<\/release>/i)?.[1]?.trim();
+      if (release) {
+        return release;
+      }
+      const versions = [...text.matchAll(/<version>\s*([^<]+?)\s*<\/version>/gi)]
+        .map((m) => m[1].trim())
+        .filter((v) => /^\d+\.\d+\.\d+/.test(v));
+      return versions.length ? versions[versions.length - 1] : '';
     }
     default:
       throw new RegistryLookupError(`Unsupported registry: ${registry}`);

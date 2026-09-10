@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.1
+
+2026-09-10
+
+### Changed
+- Normalized published POM metadata for Maven Central (Toggly org,
+  `support@toggly.io`, SCM → `ops-ai/Toggly.FeatureManagement`, issue
+  management, docs URL).
+- Wired Central Publisher Portal deploy (`central-publishing-maven-plugin`)
+  and GPG signing in the `release` profile for `mvn -Prelease deploy`.
+- Package version and `SdkIdentity.SDK_VERSION` aligned to `1.5.1`
+  (`User-Agent` / UA: `toggly-java/1.5.1`).
+
 ## 1.5.0
 
 2026-09-07

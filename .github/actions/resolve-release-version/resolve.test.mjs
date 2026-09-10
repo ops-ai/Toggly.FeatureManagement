@@ -204,4 +204,32 @@ version = "0.1.0"
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// pom.xml project version read + auto_bump write
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-test-'));
+  const manifestPath = path.join(dir, 'pom.xml');
+  fs.writeFileSync(
+    manifestPath,
+    `<?xml version="1.0"?>
+<project>
+  <groupId>io.toggly</groupId>
+  <artifactId>toggly-parent</artifactId>
+  <version>1.5.0</version>
+  <packaging>pom</packaging>
+</project>
+`,
+  );
+  const outputs = runResolve({
+    TMP_DIR: dir,
+    MANIFEST_PATH: manifestPath,
+    REGISTRY: 'none',
+    PACKAGE_NAME: 'io.toggly:toggly-core',
+    RELEASE_MODE: 'auto_bump',
+    BUMP_TYPE: 'patch',
+  });
+  assert.equal(outputs.version, '1.5.1');
+  assert.match(fs.readFileSync(manifestPath, 'utf8'), /<version>1\.5\.1<\/version>/);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 console.log('resolve-release-version tests passed');
