@@ -6,34 +6,47 @@
 
     <groupId>io.toggly</groupId>
     <artifactId>toggly-parent</artifactId>
-    <version>1.5.0</version>
+    <version>1.5.1</version>
     <packaging>pom</packaging>
 
     <name>Toggly Java SDK</name>
     <description>Feature flags and experimentation SDK for Java applications</description>
-    <url>https://toggly.io</url>
+    <url>https://docs.toggly.io/sdks/java</url>
 
     <licenses>
         <license>
             <name>MIT License</name>
             <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
         </license>
     </licenses>
 
+    <organization>
+        <name>Toggly</name>
+        <url>https://toggly.io</url>
+    </organization>
+
     <developers>
         <developer>
-            <name>OpsAI</name>
-            <email>support@ops.ai</email>
-            <organization>OpsAI</organization>
-            <organizationUrl>https://ops.ai</organizationUrl>
+            <id>toggly</id>
+            <name>Toggly</name>
+            <email>support@toggly.io</email>
+            <organization>Toggly</organization>
+            <organizationUrl>https://toggly.io</organizationUrl>
         </developer>
     </developers>
 
     <scm>
-        <connection>scm:git:git://github.com/ops-ai/toggly-java.git</connection>
-        <developerConnection>scm:git:ssh://github.com:ops-ai/toggly-java.git</developerConnection>
-        <url>https://github.com/ops-ai/toggly-java</url>
+        <connection>scm:git:git://github.com/ops-ai/Toggly.FeatureManagement.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/ops-ai/Toggly.FeatureManagement.git</developerConnection>
+        <url>https://github.com/ops-ai/Toggly.FeatureManagement</url>
+        <tag>HEAD</tag>
     </scm>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/ops-ai/Toggly.FeatureManagement/issues</url>
+    </issueManagement>
 
     <modules>
         <module>toggly-core</module>
@@ -77,6 +90,8 @@
         <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
         <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
         <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+        <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
+        <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
         <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
         <spotbugs-maven-plugin.version>4.10.4.0</spotbugs-maven-plugin.version>
         <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
@@ -231,6 +246,10 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-javadoc-plugin</artifactId>
                     <version>${maven-javadoc-plugin.version}</version>
+                    <configuration>
+                        <doclint>none</doclint>
+                        <quiet>true</quiet>
+                    </configuration>
                     <executions>
                         <execution>
                             <id>attach-javadocs</id>
@@ -239,6 +258,39 @@
                             </goals>
                         </execution>
                     </executions>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-gpg-plugin</artifactId>
+                    <version>${maven-gpg-plugin.version}</version>
+                    <executions>
+                        <execution>
+                            <id>sign-artifacts</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>sign</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                    <configuration>
+                        <gpgArguments>
+                            <arg>--pinentry-mode</arg>
+                            <arg>loopback</arg>
+                        </gpgArguments>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>${central-publishing-maven-plugin.version}</version>
+                    <extensions>true</extensions>
+                    <configuration>
+                        <publishingServerId>central</publishingServerId>
+                        <autoPublish>true</autoPublish>
+                        <waitUntil>published</waitUntil>
+                    </configuration>
                 </plugin>
 
                 <plugin>
@@ -312,6 +364,14 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-javadoc-plugin</artifactId>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
                     </plugin>
                 </plugins>
             </build>

@@ -10,7 +10,7 @@ inputs:
     required: false
     default: ''
   registry:
-    description: Registry to compare against (npm, pub, nuget, crates, pypi, rubygems, packagist, none)
+    description: Registry to compare against (npm, pub, nuget, crates, pypi, rubygems, packagist, maven, none)
     required: true
   package_name:
     description: Package name on the registry

@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 public final class SdkIdentity {
 
     public static final String SDK_ID = "java";
-    public static final String SDK_VERSION = "1.5.0";
+    public static final String SDK_VERSION = "1.5.1";
 
     private SdkIdentity() {
     }

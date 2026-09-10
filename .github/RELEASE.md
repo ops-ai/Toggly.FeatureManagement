@@ -134,7 +134,22 @@ skipped. Do not bump unrelated siblings just to satisfy a lockstep check.
 | `sdk-ruby-release.yml` | `lib/toggly/version.rb` | RubyGems |
 | `sdk-go-release.yml` | `toggly-go/VERSION` | git tag (`go-sdk-v*`) |
 | `sdk-php-release.yml` | `composer.json` | Packagist |
+| `sdk-android-release.yml` | `build.gradle.kts` | Maven Central (git tag skip) |
+| `sdk-java-release.yml` | `pom.xml` | Maven Central |
 | `cli-build-release.yml` | `Toggly.CLI/VERSION` | git tag (`cli-v*`) |
+
+### Maven Central (Android / Java)
+
+Secrets (repo-level, shared): `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`,
+`GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, plus `RELEASE_PUSH_TOKEN` for signed tags.
+
+- **Android:** Gradle + vanniktech → `publishAllPublicationsToMavenCentralRepository`
+- **Java:** `mvn -B -Prelease clean deploy` with
+  `central-publishing-maven-plugin` (`server-id: central`) and `maven-gpg-plugin`
+
+Bump the parent `pom.xml` version, child `<parent><version>`, `SdkIdentity.SDK_VERSION`,
+README install snippets, and `CHANGELOG.md` in the same PR before running
+**Java SDK - Release** with `release_mode: publish`.
 
 **PHP monorepo workflow:** `sdk-php-release.yml` requires `Toggly.FeatureManagement.PHP/` in the checkout. If that directory is absent, use the release workflow in the standalone **Toggly.FeatureManagement.PHP** repository instead.
 
