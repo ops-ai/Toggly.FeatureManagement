@@ -52,6 +52,10 @@ export interface FeatureStatPayload {
   instanceName?: string
   appVersion?: string
   processStartTime?: { seconds: number; nanos: number }
+  /** Definition-refresh cache hits since last successful flush (optional proto field). */
+  definitionCacheHits?: number
+  /** Definition-refresh cache misses since last successful flush (optional proto field). */
+  definitionCacheMisses?: number
 }
 
 /**
@@ -96,6 +100,8 @@ export class UsageBatcher {
   private perFeature = new Map<string, FeatureUsageAgg>()
   private appUnique = new Set<number>()
   private droppedFeatures = false
+  private definitionCacheHits = 0
+  private definitionCacheMisses = 0
 
   constructor(options: UsageBatcherOptions) {
     this.appKey = options.appKey
@@ -108,6 +114,16 @@ export class UsageBatcher {
     this.maxApplicationUniqueHashes =
       options.maxApplicationUniqueHashes ?? MAX_APPLICATION_UNIQUE_USER_HASHES
     this.maxFeatures = options.maxFeatures ?? MAX_FEATURES_PER_BATCH
+  }
+
+  /** Count a definition-refresh outcome served from local/cache (not a new revision). */
+  recordDefinitionCacheHit(): void {
+    this.definitionCacheHits += 1
+  }
+
+  /** Count a definition-refresh that applied a new revision from the network. */
+  recordDefinitionCacheMiss(): void {
+    this.definitionCacheMisses += 1
   }
 
   private get(feature: string): FeatureUsageAgg | null {
@@ -203,7 +219,12 @@ export class UsageBatcher {
   }
 
   isEmpty(): boolean {
-    return this.perFeature.size === 0 && this.appUnique.size === 0
+    return (
+      this.perFeature.size === 0 &&
+      this.appUnique.size === 0 &&
+      this.definitionCacheHits === 0 &&
+      this.definitionCacheMisses === 0
+    )
   }
 
   hitFeatureCap(): boolean {
@@ -234,6 +255,12 @@ export class UsageBatcher {
     }
     if (this.appVersion) {
       payload.appVersion = this.appVersion
+    }
+    if (this.definitionCacheHits > 0) {
+      payload.definitionCacheHits = this.definitionCacheHits
+    }
+    if (this.definitionCacheMisses > 0) {
+      payload.definitionCacheMisses = this.definitionCacheMisses
     }
 
     const uniqueUsersEnabled: Record<string, number[]> = {}
@@ -277,6 +304,8 @@ export class UsageBatcher {
     this.perFeature = new Map()
     this.appUnique = new Set()
     this.droppedFeatures = false
+    this.definitionCacheHits = 0
+    this.definitionCacheMisses = 0
     return {
       payload,
       uniqueUsersEnabled,
@@ -287,6 +316,9 @@ export class UsageBatcher {
 
   restoreFromBundle(bundle: UsageFlushBundle): void {
     const { payload } = bundle
+
+    this.definitionCacheHits += payload.definitionCacheHits ?? 0
+    this.definitionCacheMisses += payload.definitionCacheMisses ?? 0
 
     for (const hash of payload.uniqueUserHashes ?? []) {
       this.trackAppUnique(hash)

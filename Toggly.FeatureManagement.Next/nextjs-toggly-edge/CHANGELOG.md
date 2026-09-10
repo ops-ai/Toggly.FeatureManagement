@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0
+
+2026-09-09
+
+### Added
+- Count definition-refresh cache hits/misses (TTL skip, network apply,
+  error+last-good) via core `TelemetryRuntime` on usage flush [OPS-994].
+
 ## 1.4.1
 
 2026-09-06
