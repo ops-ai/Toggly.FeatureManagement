@@ -12,6 +12,11 @@
 ### Changed
 - Sync `SDK_VERSION` with the package version (`1.14.0`); User-Agent
   `toggly-astro/1.14.0`.
+- Request-scoped `createTogglyMiddleware` clients disable process signal
+  handlers by default, skip the periodic flush timer unless configured, and
+  `close()` when the request finishes (avoids listener/timer leaks).
+- Usage `appVersion` is only the configured consuming-app version (never
+  defaulted to `SDK_VERSION`; SDK identity remains User-Agent / headers).
 
 ### Notes
 - Browser `src/client/store.ts` island refresh instrumentation is out of scope.

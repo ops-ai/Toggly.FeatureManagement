@@ -291,6 +291,10 @@ function convertFilePathToRoute(filePath: string, isPages: boolean): string {
 /**
  * Astro middleware to inject Toggly into locals
  * This should be added to src/middleware.ts in the user's project
+ *
+ * Creates a request-scoped server client (process handlers off, no flush timer
+ * by default) and closes it when the request finishes so usage telemetry does
+ * not accumulate Node listeners or intervals across requests.
  */
 export function createTogglyMiddleware(config: TogglyConfig) {
   return async function togglyMiddleware(
@@ -299,15 +303,36 @@ export function createTogglyMiddleware(config: TogglyConfig) {
   ): Promise<Response> {
     // Create or reuse Toggly client
     // In middleware (runtime), we never enable all features - we use actual flags
-    if (!locals.toggly) {
-      const client = createTogglyServerClient(config, false);
+    const ownsClient = !locals.toggly;
+    if (ownsClient) {
+      const client = createTogglyServerClient(
+        {
+          ...config,
+          // Request-scoped: no process signal handlers / no periodic timer unless
+          // the caller opts in. close() flushes remaining usage at end of request.
+          telemetryAttachProcessHandlers:
+            config.telemetryAttachProcessHandlers ?? false,
+          usageFlushInterval: config.usageFlushInterval ?? 0,
+        },
+        false,
+      );
       // Pre-fetch flags before page rendering starts so Feature components
       // have cached flags available immediately
       await client.refreshFlags();
       locals.toggly = client;
     }
 
-    return next();
+    try {
+      return await next();
+    } finally {
+      if (ownsClient) {
+        try {
+          await locals.toggly?.close?.();
+        } catch {
+          // Best-effort teardown; never fail the HTTP response for telemetry.
+        }
+      }
+    }
   };
 }
 

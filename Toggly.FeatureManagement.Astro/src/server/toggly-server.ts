@@ -31,7 +31,7 @@ import {
   type FeatureDefinitionModel,
   type EvalContext,
 } from '@ops-ai/toggly-eval';
-import { buildDefinitionFetchHeaders, SDK_VERSION } from '../sdk-identity.js';
+import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
 import {
   parseEvaluatedResponseBody,
   readResponseBody,
@@ -104,7 +104,8 @@ export class TogglyServer implements TogglyClient {
       enableUsageTracking: true,
       usageFlushInterval: this.config.usageFlushInterval,
       instanceName: this.config.instanceName ?? 'astro-ssr',
-      appVersion: this.config.appVersion ?? SDK_VERSION,
+      // Consuming-app version only; SDK identity is User-Agent / X-Toggly-Sdk-*.
+      appVersion: this.config.appVersion,
       attachProcessHandlers: this.config.telemetryAttachProcessHandlers ?? true,
       restoreOnSendFailure: true,
       fetchImpl: this.config.telemetryFetch,

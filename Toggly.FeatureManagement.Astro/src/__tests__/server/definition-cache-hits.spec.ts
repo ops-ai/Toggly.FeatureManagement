@@ -193,6 +193,27 @@ describe('Astro server definition cache hit telemetry', () => {
     const body = JSON.parse(String((init as RequestInit).body))
     expect(body.definitionCacheMisses).toBe(1)
     expect(body.definitionCacheHits).toBe(1)
+    // appVersion is consuming-app identity only — never defaulted to SDK_VERSION
+    expect(body.appVersion).toBeUndefined()
+    await server.close()
+  })
+
+  it('includes configured appVersion on usage payloads without using SDK_VERSION', async () => {
+    const sendStats = vi.fn().mockResolvedValue({ ok: true })
+    mockFetch.mockResolvedValue(createDefsResponse({ Feature1: true }))
+
+    const server = new TogglyServer({
+      ...telemetryOptions(sendStats),
+      appVersion: 'app-deploy-9',
+    })
+
+    await server.getFlags()
+    await server.flushTelemetry()
+
+    expect(sendStats).toHaveBeenCalled()
+    const payload = sendStats.mock.calls[0]![0] as Record<string, unknown>
+    expect(payload.appVersion).toBe('app-deploy-9')
+    expect(payload.appVersion).not.toBe(SDK_VERSION)
     await server.close()
   })
 

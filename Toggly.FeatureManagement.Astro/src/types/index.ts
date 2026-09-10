@@ -77,11 +77,16 @@ export interface TogglyConfig {
   usageFlushInterval?: number;
   /** Optional instance name included on usage payloads. */
   instanceName?: string;
-  /** Optional app version included on usage payloads. */
+  /**
+   * Optional consuming-application version on usage payloads (heartbeat /
+   * deployment identity). Omit when unset — do not confuse with SDK version
+   * (sent via User-Agent / X-Toggly-Sdk-*).
+   */
   appVersion?: string;
   /**
-   * When true (default), attach process signal flush handlers.
-   * Set false on hosts without Node signal support.
+   * When true (default for long-lived `TogglyServer`), attach process signal
+   * flush handlers. Middleware-created request-scoped clients default this to
+   * false and close at end of request.
    */
   telemetryAttachProcessHandlers?: boolean;
   /** Optional fetch implementation for HTTPS usage flush (tests / edge). */
