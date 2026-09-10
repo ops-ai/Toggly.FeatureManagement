@@ -212,6 +212,24 @@ describe('definition cache hit telemetry', () => {
     client.destroy()
   })
 
+  it('does not record a hit on network failure when only featureDefaults exist', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('network down'))
+
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 0 })
+    const client = createTogglyClient({
+      ...telemetryClientOptions(sendStats),
+      featureDefaults: { 'feature-a': true },
+    })
+
+    await client.init()
+    await client.flushTelemetry()
+
+    // Defaults alone are not last-known-good definitions — no hit/miss.
+    expect(sendStats).not.toHaveBeenCalled()
+    expect(await client.isFeatureOn('feature-a')).toBe(true)
+    client.destroy()
+  })
+
   it('records a hit for HTTP 200 with the same revision (CDN replay)', async () => {
     mockFetch
       .mockResolvedValueOnce(okResponse([def('feature-a')], 'rev-1'))

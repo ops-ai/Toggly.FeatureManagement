@@ -503,9 +503,10 @@ export function createTogglyClient(
         reportError('Error refreshing feature flags', error)
       }
 
+      // Network error keeping last-good definitions only — not featureDefaults alone.
       if (
         !outcomeRecorded &&
-        (state.definitions.size > 0 || Object.keys(state.features).length > 0)
+        (state.definitions.size > 0 || state.lastRefresh != null)
       ) {
         recordDefinitionCacheHit()
       }

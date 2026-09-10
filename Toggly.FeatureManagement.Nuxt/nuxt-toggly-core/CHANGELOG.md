@@ -12,6 +12,9 @@
 - Equal-ETag HTTP 200 still parses and applies the response body (remote
   evaluated flags can change with identity at the same definition revision)
   while classifying the outcome as a cache hit [OPS-995].
+- Network-error recovery records a cache hit only when last-known-good
+  definitions exist (definitions map or prior successful refresh), not when
+  only `featureDefaults` are present [OPS-995].
 
 ## 1.10.0
 
