@@ -131,9 +131,10 @@ jobs:
           echo "list=$LIST" >> $GITHUB_OUTPUT
           echo "Unpublished: ${LIST:-none}"
 
-      # Build the whole workspace before type checking: dependents resolve
-      # @ops-ai/nuxt-toggly-core/telemetry/grpc through package exports → dist,
-      # and a filtered unpublished build would skip core when it is already on npm.
+      # Build the whole workspace before type checking so dependents resolve
+      # @ops-ai/* via package exports → dist (same contract as npm), not tsconfig
+      # path maps to sibling source. A filtered unpublished build would skip
+      # core when it is already on npm and leave exports pointing at missing dist.
       - name: Build all packages
         if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: pnpm build
