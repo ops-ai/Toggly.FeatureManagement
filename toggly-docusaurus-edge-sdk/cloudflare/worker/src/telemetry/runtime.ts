@@ -93,6 +93,26 @@ export class TelemetryRuntime {
     }
   }
 
+  /** Definition-refresh served from memory TTL, Cache API, or last-good. */
+  recordDefinitionCacheHit(): void {
+    if (!this.config.enableUsageTracking) return;
+    try {
+      this.usage.recordDefinitionCacheHit();
+    } catch {
+      // soft-fail
+    }
+  }
+
+  /** Definition-refresh that applied new flags from the network. */
+  recordDefinitionCacheMiss(): void {
+    if (!this.config.enableUsageTracking) return;
+    try {
+      this.usage.recordDefinitionCacheMiss();
+    } catch {
+      // soft-fail
+    }
+  }
+
   measure(metric: string, value: number, options?: MetricsFeatureOptions): void {
     if (!this.config.enableMetrics) return;
     try {

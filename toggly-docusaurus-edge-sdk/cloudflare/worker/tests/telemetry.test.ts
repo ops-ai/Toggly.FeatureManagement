@@ -143,6 +143,46 @@ describe('UsageBatcher', () => {
     expect(restored.payload.stats[0]!.variantStats.disabled!.checkCount).toBe(1);
     expect(restored.payload.stats[0]!.variantStats.enabled!.usedCount).toBe(1);
   });
+
+  it('includes definitionCacheHits/Misses on flush payload', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' });
+    batcher.recordDefinitionCacheHit();
+    batcher.recordDefinitionCacheHit();
+    batcher.recordDefinitionCacheMiss();
+
+    const bundle = batcher.buildAndReset()!;
+    expect(bundle.payload.definitionCacheHits).toBe(2);
+    expect(bundle.payload.definitionCacheMisses).toBe(1);
+    expect(bundle.payload.stats).toEqual([]);
+    expect(batcher.isEmpty()).toBe(true);
+    expect(batcher.buildAndReset()).toBeNull();
+  });
+
+  it('flushes cache-only batches (hits/misses alone are enough)', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' });
+    expect(batcher.isEmpty()).toBe(true);
+    batcher.recordDefinitionCacheHit();
+    expect(batcher.isEmpty()).toBe(false);
+    const bundle = batcher.buildAndReset()!;
+    expect(bundle.payload.definitionCacheHits).toBe(1);
+    expect(bundle.payload.definitionCacheMisses).toBeUndefined();
+  });
+
+  it('restores definition cache counters and merges in-flight after failed send', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' });
+    batcher.recordDefinitionCacheHit();
+    batcher.recordDefinitionCacheMiss();
+    const bundle = batcher.buildAndReset()!;
+    expect(batcher.isEmpty()).toBe(true);
+
+    // In-flight while send fails
+    batcher.recordDefinitionCacheHit();
+    batcher.restoreFromPayload(bundle);
+
+    const again = batcher.buildAndReset()!;
+    expect(again.payload.definitionCacheHits).toBe(2); // restored 1 + in-flight 1
+    expect(again.payload.definitionCacheMisses).toBe(1);
+  });
 });
 
 describe('MetricsBatcher', () => {
@@ -240,6 +280,37 @@ describe('TelemetryRuntime', () => {
       'https://app.toggly.io/api/usage/stats',
       expect.objectContaining({ method: 'POST' })
     );
+  });
+
+  it('flushes cache-only definition hits via runtime and restores on soft-fail', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('down'))
+      .mockResolvedValueOnce({ ok: true });
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      metricsBaseUrl: 'https://app.toggly.io/',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    runtime.recordDefinitionCacheHit();
+    runtime.recordDefinitionCacheMiss();
+    await runtime.flush();
+    expect(runtime.usagePending()).toBe(true);
+
+    // In-flight while restored
+    runtime.recordDefinitionCacheHit();
+    await runtime.flush();
+    expect(runtime.usagePending()).toBe(false);
+
+    const body = JSON.parse(
+      (fetchImpl.mock.calls[1]![1] as RequestInit).body as string
+    ) as { definitionCacheHits: number; definitionCacheMisses: number };
+    expect(body.definitionCacheHits).toBe(2);
+    expect(body.definitionCacheMisses).toBe(1);
   });
 
   it('drains again when records arrive during an in-flight flush', async () => {

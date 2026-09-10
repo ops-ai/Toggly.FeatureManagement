@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.0
+
+2026-09-09
+
+### Added
+- Report definition-refresh cache hits/misses on usage telemetry
+  (`definitionCacheHits` / `definitionCacheMisses` on `POST api/usage/stats`).
+- Count once per `getFlags` attempt: in-memory TTL hit, Cache API hit,
+  network error keeping last-good hit, successful network apply miss.
+- Soft-fail restore merges cache counters with in-flight records; cache-only
+  batches still flush.
+
+### Fixed
+- Reuse page-gate flags for section HTML gating in the same request so
+  definition cache hits are not double-counted.
+
+### Notes
+- N/A for this Worker (not instrumented): durable snapshot, WebSocket refresh,
+  HTTP 304 / If-None-Match, concurrent in-flight refresh skip, ETag-equal 200.
+- User-Agent remains `toggly-docusaurus-edge-worker/{version}`.
+- `cache.put` stays fire-and-forget so write rejections cannot fail the request.
+
 ## 0.3.2
 
 2026-09-06

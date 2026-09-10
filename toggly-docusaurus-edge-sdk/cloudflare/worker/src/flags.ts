@@ -8,6 +8,16 @@
  * regardless of whatever conditional-`exports` map the published core has at
  * any given moment. The actual fetch logic is small enough that a private
  * implementation is the right trade-off for an edge runtime.
+ *
+ * Definition-refresh cache accounting (when a recorder is injected):
+ * - In-memory TTL still valid → hit
+ * - Cache API serve without network → hit
+ * - Network error / timeout keeping last-good (`flagsMemoryCache`) → hit
+ * - Successful network apply / Cache API fill → miss
+ *
+ * N/A for this Worker (not invented): durable snapshot, WebSocket refresh,
+ * HTTP 304 / If-None-Match, concurrent in-flight refresh skip, ETag-equal 200.
+ * Count once per `getFlags` attempt — not per page/section evaluate.
  */
 
 import type { RequestContext, Env } from './types';
@@ -28,9 +38,24 @@ interface TogglyApiPayload {
   [key: string]: unknown;
 }
 
+/**
+ * Optional recorder for definition-refresh cache hit/miss outcomes.
+ * Injected from telemetry so this module stays free of hard telemetry cycles.
+ */
+export interface DefinitionCacheRecorder {
+  recordDefinitionCacheHit(): void;
+  recordDefinitionCacheMiss(): void;
+}
+
 // In-memory last-known-good cache for flags within the isolate.
 let flagsMemoryCache: Flags | null = null;
 let flagsMemoryCacheTimestamp = 0;
+
+/** Reset isolate memory cache (tests). */
+export function resetFlagsMemoryCache(): void {
+  flagsMemoryCache = null;
+  flagsMemoryCacheTimestamp = 0;
+}
 
 /**
  * Generate a cache key for flags based on context.
@@ -86,15 +111,19 @@ function updateFlagsMemoryCache(flags: Flags): void {
 /**
  * Get feature flags for the given context, using `caches.default` to amortise
  * Toggly API calls across requests handled by the same edge isolate.
+ *
+ * Counts one definition-refresh outcome per call when a recorder is provided.
  */
 export async function getFlags(
   env: Env,
   context: RequestContext,
   cache: Cache | null,
+  recorder?: DefinitionCacheRecorder | null,
 ): Promise<Flags> {
   const now = Date.now();
 
   if (flagsMemoryCache && now - flagsMemoryCacheTimestamp < FLAGS_MEMORY_CACHE_TTL_MS) {
+    recorder?.recordDefinitionCacheHit();
     return flagsMemoryCache;
   }
 
@@ -106,6 +135,7 @@ export async function getFlags(
     if (cachedResponse) {
       const flags = (await cachedResponse.json()) as Flags;
       updateFlagsMemoryCache(flags);
+      recorder?.recordDefinitionCacheHit();
       return flags;
     }
   }
@@ -115,10 +145,18 @@ export async function getFlags(
     flags = await fetchFlagsFromTogglyApi(env);
   } catch (error) {
     console.error('[Toggly Docusaurus Edge] Failed to fetch flags:', error);
-    return flagsMemoryCache ?? {};
+    if (flagsMemoryCache) {
+      // Still serving last-known-good from isolate memory.
+      recorder?.recordDefinitionCacheHit();
+      return flagsMemoryCache;
+    }
+    // No last-good retained — do not invent a hit or miss.
+    return {};
   }
 
   updateFlagsMemoryCache(flags);
+  // Successful network apply (fills Cache API when available).
+  recorder?.recordDefinitionCacheMiss();
 
   if (cache && Object.keys(flags).length > 0) {
     const response = new Response(JSON.stringify(flags), {
@@ -127,8 +165,11 @@ export async function getFlags(
         'Cache-Control': `public, max-age=${FLAGS_CACHE_TTL_SECONDS}`,
       },
     });
-    // `cache.put` is fire-and-forget in the Workers runtime.
-    cache.put(cacheRequest, response);
+    // Fire-and-forget: do not await. Soft-fail write errors so a rejected put
+    // cannot fail the request after a successful fetch (OPS-992 Oracle lesson).
+    void cache.put(cacheRequest, response).catch(() => {
+      /* Cache unavailable / quota / transient write errors */
+    });
   }
 
   return flags;
@@ -140,7 +181,8 @@ export async function isFeatureEnabled(
   env: Env,
   context: RequestContext,
   cache: Cache | null,
+  recorder?: DefinitionCacheRecorder | null,
 ): Promise<boolean> {
-  const flags = await getFlags(env, context, cache);
+  const flags = await getFlags(env, context, cache, recorder);
   return flags[flagKey] ?? false;
 }

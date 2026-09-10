@@ -53,6 +53,10 @@ export interface FeatureStatHttpPayload {
   instanceName?: string;
   appVersion?: string;
   processStartTime?: string;
+  /** SDK-reported definition-refresh cache hits (batch delta). Optional; omit when 0. */
+  definitionCacheHits?: number;
+  /** SDK-reported definition-refresh cache misses (batch delta). Optional; omit when 0. */
+  definitionCacheMisses?: number;
 }
 
 /**
@@ -98,6 +102,8 @@ export class UsageBatcher {
   private perFeature = new Map<string, FeatureUsageAgg>();
   private appUnique = new Set<number>();
   private droppedFeatures = false;
+  private definitionCacheHits = 0;
+  private definitionCacheMisses = 0;
 
   constructor(options: UsageBatcherOptions) {
     this.appKey = options.appKey;
@@ -204,8 +210,23 @@ export class UsageBatcher {
     }
   }
 
+  /** Definition-refresh served from local/edge cache (not a new revision). */
+  recordDefinitionCacheHit(): void {
+    this.definitionCacheHits += 1;
+  }
+
+  /** Definition-refresh that applied a new revision from the network. */
+  recordDefinitionCacheMiss(): void {
+    this.definitionCacheMisses += 1;
+  }
+
   isEmpty(): boolean {
-    return this.perFeature.size === 0 && this.appUnique.size === 0;
+    return (
+      this.perFeature.size === 0 &&
+      this.appUnique.size === 0 &&
+      this.definitionCacheHits === 0 &&
+      this.definitionCacheMisses === 0
+    );
   }
 
   /** True when a new feature was dropped due to MAX_FEATURES_PER_BATCH. */
@@ -237,6 +258,12 @@ export class UsageBatcher {
     }
     if (this.appVersion) {
       payload.appVersion = this.appVersion;
+    }
+    if (this.definitionCacheHits > 0) {
+      payload.definitionCacheHits = this.definitionCacheHits;
+    }
+    if (this.definitionCacheMisses > 0) {
+      payload.definitionCacheMisses = this.definitionCacheMisses;
     }
 
     const uniqueUsersEnabled: Record<string, number[]> = {};
@@ -281,6 +308,8 @@ export class UsageBatcher {
     this.perFeature = new Map();
     this.appUnique = new Set();
     this.droppedFeatures = false;
+    this.definitionCacheHits = 0;
+    this.definitionCacheMisses = 0;
     return {
       payload,
       uniqueUsersEnabled,
@@ -291,11 +320,15 @@ export class UsageBatcher {
 
   /**
    * Re-merge a failed send bundle (soft-fail restore).
-   * Union-merges variant counts, wire hash lists, and snapshotted
-   * enabled/disabled/used uniqueness sets (PHP/.NET parity).
+   * Union-merges variant counts, wire hash lists, snapshotted
+   * enabled/disabled/used uniqueness sets (PHP/.NET parity), and
+   * definition cache hit/miss counters (additive with in-flight records).
    */
   restoreFromPayload(bundle: UsageFlushBundle): void {
     const { payload } = bundle;
+
+    this.definitionCacheHits += payload.definitionCacheHits ?? 0;
+    this.definitionCacheMisses += payload.definitionCacheMisses ?? 0;
 
     for (const hash of payload.uniqueUserHashes ?? []) {
       this.trackAppUnique(hash);
