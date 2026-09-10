@@ -114,6 +114,11 @@ jobs:
       - name: Write Maven Central settings.xml
         run: |
           set -euo pipefail
+          # Trim accidental whitespace/CR from pasted Portal tokens.
+          MAVEN_USERNAME="$(printf '%s' "${MAVEN_USERNAME}" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          MAVEN_PASSWORD="$(printf '%s' "${MAVEN_PASSWORD}" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "MAVEN_USERNAME=${MAVEN_USERNAME}" >> "$GITHUB_ENV"
+          echo "MAVEN_PASSWORD=${MAVEN_PASSWORD}" >> "$GITHUB_ENV"
           if [ -z "${MAVEN_USERNAME}" ]; then
             echo "MAVEN_CENTRAL_USERNAME secret is empty" >&2
             exit 1
@@ -123,8 +128,6 @@ jobs:
             exit 1
           fi
           mkdir -p "$HOME/.m2"
-          # central-publishing-maven-plugin does not reliably resolve setup-java's
-          # ${env.VAR} placeholders — write literal credentials (XML-escaped).
           python3 - <<'PY'
           import os
           import pathlib
@@ -134,30 +137,36 @@ jobs:
           password = os.environ["MAVEN_PASSWORD"]
           path = pathlib.Path.home() / ".m2" / "settings.xml"
           path.write_text(
-              f"""<?xml version="1.0" encoding="UTF-8"?>
+              """<?xml version="1.0" encoding="UTF-8"?>
           <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
                     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                     xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
             <servers>
               <server>
                 <id>central</id>
-                <username>{xml.escape(user)}</username>
-                <password>{xml.escape(password)}</password>
+                <username>{user}</username>
+                <password>{password}</password>
               </server>
             </servers>
           </settings>
-          """,
+          """.format(user=xml.escape(user), password=xml.escape(password)),
               encoding="utf-8",
           )
-          print(
-              f"Wrote {path} "
-              f"(username_len={len(user)}, password_len={len(password)})"
-          )
+          print(f"Wrote {path} (username_len={len(user)}, password_len={len(password)})")
           PY
 
-      - name: Publish to Maven Central
+      - name: Probe Central Portal auth
+        run: bash .github/scripts/publish-java-central.sh
+
+      - name: Build signed Central bundle (no upload)
         working-directory: ${{ env.SDK_ROOT }}
-        run: mvn -B -Prelease clean deploy
+        run: mvn -B -Prelease clean deploy -DskipPublishing=true
+
+      - name: Upload bundle to Maven Central
+        env:
+          BUNDLE_PATH: ${{ env.SDK_ROOT }}/target/central-publishing/central-bundle.zip
+          DEPLOYMENT_NAME: toggly-java-${{ needs.validate.outputs.version }}
+        run: bash .github/scripts/publish-java-central.sh
 
   release:
     needs: [publish, validate]
