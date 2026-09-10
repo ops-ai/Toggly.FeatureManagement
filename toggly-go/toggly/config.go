@@ -28,8 +28,16 @@ type Config struct {
 	EnableVariants bool
 
 	// VariantIdentity is sent as the userId query parameter for evaluated-variants-signed.
-	// For per-request identity (e.g. HTTP servers), use Client.SetVariantIdentity.
+	// This context belongs to this client, not to individual server requests.
 	VariantIdentity string
+
+	// VariantGroups supplies targeting memberships for this client's remote variants.
+	// NewClient copies these groups before any background refresh starts.
+	VariantGroups []string
+
+	// VariantClaims supplies string attributes used by variant feature rules.
+	// Empty keys/values are omitted; the first 20 sorted claim types are sent.
+	VariantClaims map[string]string
 
 	AppVersion   string
 	InstanceName string

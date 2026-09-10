@@ -113,3 +113,49 @@ Report vulnerabilities privately via [GitHub Private Vulnerability Reporting](ht
 ## License
 
 [MIT](LICENSE)
+
+
+## Initial targeting for remote variants
+
+`VariantGroups` and `VariantClaims` require **v0.7.0 (release pending)**.
+These fields belong to one client-wide remotely evaluated variants context:
+
+```go
+client, err := toggly.NewClient(toggly.Config{
+    AppKey: "YOUR_APP_KEY",
+    Environment: "Production",
+    EnableVariants: true,
+    // Identity is a stable user identifier used for variant allocation.
+    VariantIdentity: "user-123",
+    // Groups are memberships used by targeting and group allocation rules.
+    VariantGroups: []string{"beta", "subscribers"},
+    // Claims are string attributes used by feature rules, including enabled/disabled defaults.
+    VariantClaims: map[string]string{"plan": "pro"},
+})
+if err != nil {
+    return err
+}
+defer client.Close()
+```
+
+The client copies the supplied groups and claims before its initial background
+refresh, so that first request already has the intended targeting. No identity
+setter or second refresh is needed to seed it. Initialization is asynchronous;
+variant results become available after the first successful refresh.
+
+Blank groups and empty claim names/values are omitted. Claims are sorted by
+name and limited to 20. Omitted and empty collections both send no targeting
+values. Groups use repeated `g` parameters; the backend treats commas inside a
+group value as separators, so avoid commas in group names.
+
+Use one variants client per context. `SetVariantIdentity` changes the shared
+client's identity and clears its prior evaluated payload; it is unsuitable for
+switching users on each HTTP request. Ordinary boolean evaluation with
+`EnableVariants: false` continues to use request-local `toggly.Context` passed
+to `IsEnabled`; these startup fields do not replace that context. In variants
+mode the server supplies the enabled result as well as the assigned variant.
+
+Persisted variant payloads and revisions are accepted only for the same complete
+context, endpoint, app and environment. Legacy variant snapshots without context
+metadata require a fresh fetch. A single snapshot store may be shared safely,
+but using a separate store per variants client avoids cache replacement churn.

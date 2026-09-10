@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0
+
+2026-09-08
+
+### Added
+- `VariantGroups` and `VariantClaims` seed the first remotely evaluated variants request with copied startup targeting context [OPS-1102].
+
+### Fixed
+- Bind variant snapshots and validators to the complete request context; reject legacy unscoped variant snapshots.
+- Clear cached variant payloads and timestamps when identity changes, and discard responses started before that change.
+- Keep evaluated snapshots out of ordinary local-definition caches.
+
+### Changed
+- User-Agent is `toggly-go/0.7.0`.
+
 ## 0.6.0
 
 2026-09-08
