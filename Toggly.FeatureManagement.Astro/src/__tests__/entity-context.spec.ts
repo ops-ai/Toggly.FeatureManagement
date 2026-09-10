@@ -49,7 +49,11 @@ function createMockResponse(body: unknown) {
 
 function createServer() {
   mockFetch.mockResolvedValueOnce(createMockResponse(definitionsPayload));
-  return new TogglyServer({ appKey: 'test-key', environment: 'Production' });
+  return new TogglyServer({
+    appKey: 'test-key',
+    environment: 'Production',
+    enableUsageTracking: false,
+  });
 }
 
 describe('Entity context evaluation', () => {

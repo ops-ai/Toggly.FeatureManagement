@@ -3,6 +3,11 @@
  *
  * Fetches definitions-signed rules and evaluates locally with @ops-ai/toggly-eval.
  * Variant mode still uses evaluated-variants-signed (variant assignment is remote).
+ *
+ * Definition-refresh cache hits/misses are reported on the usage pipeline
+ * (`POST api/usage/stats`). N/A on this server client: WebSocket live updates,
+ * durable snapshot hydrate, HTTP 304 / etag equal-revision (no If-None-Match).
+ * Full Metrics.SendMetrics parity is out of scope for this package slice.
  */
 
 import type {
@@ -31,12 +36,19 @@ import {
   parseEvaluatedResponseBody,
   readResponseBody,
 } from '../signed-response.js';
+import {
+  UsageTelemetryRuntime,
+  resolveTelemetryEnableFlag,
+  type UsageSender,
+} from '../telemetry/index.js';
 
 interface CachedFlags {
   flags: Flags;
   definitions: Map<string, FeatureDefinitionModel>;
   variantDefs: Record<string, EvaluatedVariantDef> | null;
   timestamp: number;
+  /** True when this entry came from a real definitions payload (not flagDefaults-only). */
+  fromNetwork: boolean;
 }
 
 /**
@@ -47,6 +59,13 @@ export class TogglyServer implements TogglyClient {
   private cache: CachedFlags | null = null;
   private fetchPromise: Promise<CachedFlags> | null = null;
   private isBuildTime: boolean = false;
+  private telemetry: UsageTelemetryRuntime | null = null;
+  /**
+   * Once we have counted a TTL skip for a given cache timestamp, further
+   * getFlag/getFlags calls in the same TTL window do not increment again
+   * (one outcome per refresh attempt, not per evaluate).
+   */
+  private ttlHitCountedForTimestamp: number | null = null;
 
   constructor(config: TogglyConfig, isBuildTime: boolean = false) {
     this.config = {
@@ -62,6 +81,64 @@ export class TogglyServer implements TogglyClient {
       ...config,
     };
     this.isBuildTime = isBuildTime;
+    this.startTelemetry();
+  }
+
+  private startTelemetry(): void {
+    if (!this.config.appKey) {
+      return;
+    }
+
+    const enableUsageTracking = resolveTelemetryEnableFlag(
+      this.config.enableUsageTracking,
+      true,
+    );
+    if (!enableUsageTracking) {
+      return;
+    }
+
+    this.telemetry = new UsageTelemetryRuntime({
+      appKey: this.config.appKey,
+      environment: this.config.environment ?? 'Production',
+      metricsBaseUrl: this.config.metricsBaseUrl,
+      enableUsageTracking: true,
+      usageFlushInterval: this.config.usageFlushInterval,
+      instanceName: this.config.instanceName ?? 'astro-ssr',
+      // Consuming-app version only; SDK identity is User-Agent / X-Toggly-Sdk-*.
+      appVersion: this.config.appVersion,
+      attachProcessHandlers: this.config.telemetryAttachProcessHandlers ?? true,
+      restoreOnSendFailure: true,
+      fetchImpl: this.config.telemetryFetch,
+      usageClient: this.config.usageClient as UsageSender | null | undefined,
+    });
+    this.telemetry.start();
+  }
+
+  private recordDefinitionCacheHit(): void {
+    try {
+      this.telemetry?.recordDefinitionCacheHit();
+    } catch {
+      // Telemetry must never break flag refresh.
+    }
+  }
+
+  private recordDefinitionCacheMiss(): void {
+    try {
+      this.telemetry?.recordDefinitionCacheMiss();
+    } catch {
+      // Telemetry must never break flag refresh.
+    }
+  }
+
+  /** Flush pending usage stats (including cache-only batches). */
+  async flushTelemetry(): Promise<void> {
+    await this.telemetry?.flush();
+  }
+
+  /** Flush and tear down usage telemetry. */
+  async close(options?: { timeoutMs?: number }): Promise<void> {
+    await this.telemetry?.close(options);
+    this.telemetry = null;
   }
 
   /**
@@ -108,24 +185,34 @@ export class TogglyServer implements TogglyClient {
     return age < this.config.featureFlagsRefreshInterval!;
   }
 
+  private defaultsOnlyCache(enableVariants: boolean): CachedFlags {
+    return {
+      flags: { ...this.config.flagDefaults! },
+      definitions: new Map(),
+      variantDefs: enableVariants ? {} : null,
+      timestamp: Date.now(),
+      fromNetwork: false,
+    };
+  }
+
   /**
-   * Fetch flags (and optional variant defs) from Toggly API
+   * Fetch flags (and optional variant defs) from Toggly API.
+   * Returns a result plus whether this call applied a new network revision (miss)
+   * or served last-good cache after error (hit). Defaults-only is neither.
    */
-  private async fetchFlags(): Promise<CachedFlags> {
+  private async fetchFlags(): Promise<{
+    cache: CachedFlags;
+    outcome: 'miss' | 'hit' | 'none';
+  }> {
     const url = this.getApiUrl();
     const enableVariants = this.config.enableVariants === true;
 
-    // If no appKey, return flagDefaults
+    // If no appKey, return flagDefaults — not a cache hit.
     if (!url || !this.config.appKey) {
       if (this.config.isDebug) {
         console.log('[Toggly Server] Using flag defaults (no appKey):', this.config.flagDefaults);
       }
-      return {
-        flags: { ...this.config.flagDefaults! },
-        definitions: new Map(),
-        variantDefs: enableVariants ? {} : null,
-        timestamp: Date.now(),
-      };
+      return { cache: this.defaultsOnlyCache(enableVariants), outcome: 'none' };
     }
 
     try {
@@ -197,26 +284,35 @@ export class TogglyServer implements TogglyClient {
       }
 
       return {
-        flags,
-        definitions,
-        variantDefs,
-        timestamp: Date.now(),
+        cache: {
+          flags,
+          definitions,
+          variantDefs,
+          timestamp: Date.now(),
+          fromNetwork: true,
+        },
+        outcome: 'miss',
       };
     } catch (error) {
       if (this.config.isDebug) {
         console.error('[Toggly Server] Error fetching flags:', error);
       }
 
-      // On error, try to use cached flags, otherwise use flagDefaults
-      if (this.cache) {
+      // On error, try to use cached flags from a prior network apply — cache hit.
+      // flagDefaults-only (no prior network cache) is not a hit (Nuxt Seer lesson).
+      if (this.cache?.fromNetwork) {
         if (this.config.isDebug) {
           console.log('[Toggly Server] Using cached flags:', this.cache.flags);
         }
         return {
-          flags: { ...this.cache.flags },
-          definitions: this.cache.definitions,
-          variantDefs: this.cache.variantDefs,
-          timestamp: this.cache.timestamp,
+          cache: {
+            flags: { ...this.cache.flags },
+            definitions: this.cache.definitions,
+            variantDefs: this.cache.variantDefs,
+            timestamp: this.cache.timestamp,
+            fromNetwork: true,
+          },
+          outcome: 'hit',
         };
       }
 
@@ -224,30 +320,36 @@ export class TogglyServer implements TogglyClient {
         console.log('[Toggly Server] Using flag defaults:', this.config.flagDefaults);
       }
 
-      return {
-        flags: { ...this.config.flagDefaults! },
-        definitions: new Map(),
-        variantDefs: enableVariants ? {} : null,
-        timestamp: Date.now(),
-      };
+      return { cache: this.defaultsOnlyCache(enableVariants), outcome: 'none' };
     }
   }
 
   /**
-   * Refresh flags cache
+   * Refresh flags cache.
+   * Counts one definition-refresh hit/miss per performed attempt.
+   * Concurrent in-flight skips do not count.
    */
   async refreshFlags(): Promise<void> {
     if (this.config.isDebug) {
       console.log('[Toggly Server] Refreshing flags...');
     }
 
-    // Prevent multiple concurrent fetches
+    // Prevent multiple concurrent fetches — do not count the waiter.
     if (this.fetchPromise) {
       await this.fetchPromise;
       return;
     }
 
-    this.fetchPromise = this.fetchFlags();
+    this.fetchPromise = this.fetchFlags().then((result) => {
+      if (result.outcome === 'miss') {
+        this.recordDefinitionCacheMiss();
+      } else if (result.outcome === 'hit') {
+        this.recordDefinitionCacheHit();
+        // Same cache generation already recorded; avoid a duplicate TTL hit.
+        this.ttlHitCountedForTimestamp = result.cache.timestamp;
+      }
+      return result.cache;
+    });
 
     try {
       this.cache = await this.fetchPromise;
@@ -258,26 +360,24 @@ export class TogglyServer implements TogglyClient {
 
   private async ensureCache(): Promise<CachedFlags> {
     if (!this.config.appKey) {
-      return {
-        flags: { ...this.config.flagDefaults! },
-        definitions: new Map(),
-        variantDefs: this.config.enableVariants ? {} : null,
-        timestamp: Date.now(),
-      };
+      return this.defaultsOnlyCache(this.config.enableVariants === true);
     }
 
     if (this.isCacheValid() && this.cache) {
+      // TTL still valid / skip network → hit (once per cache generation).
+      if (
+        this.cache.fromNetwork &&
+        this.ttlHitCountedForTimestamp !== this.cache.timestamp
+      ) {
+        this.recordDefinitionCacheHit();
+        this.ttlHitCountedForTimestamp = this.cache.timestamp;
+      }
       return this.cache;
     }
 
     await this.refreshFlags();
     return (
-      this.cache ?? {
-        flags: { ...this.config.flagDefaults! },
-        definitions: new Map(),
-        variantDefs: this.config.enableVariants ? {} : null,
-        timestamp: Date.now(),
-      }
+      this.cache ?? this.defaultsOnlyCache(this.config.enableVariants === true)
     );
   }
 

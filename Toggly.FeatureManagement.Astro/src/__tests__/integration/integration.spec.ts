@@ -709,5 +709,127 @@ x-feature: AboutFeature
       expect(next).toHaveBeenCalled();
       expect(result).toBe(mockResponse);
     });
+
+    it('does not accumulate process listeners across many request-scoped clients', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          JSON.stringify([
+            {
+              featureKey: 'F1',
+              filters: [{ name: 'AlwaysOn', parameters: {} }],
+            },
+          ]),
+        json: async () => [
+          {
+            featureKey: 'F1',
+            filters: [{ name: 'AlwaysOn', parameters: {} }],
+          },
+        ],
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const sendStats = vi.fn().mockResolvedValue({ ok: true });
+      const middleware = createTogglyMiddleware({
+        appKey: 'middleware-key',
+        environment: 'Production',
+        enableUsageTracking: true,
+        usageClient: { sendStats },
+        flagDefaults: { F1: true },
+      });
+
+      const beforeExitBefore = process.listenerCount('beforeExit');
+      const sigtermBefore = process.listenerCount('SIGTERM');
+      const sigintBefore = process.listenerCount('SIGINT');
+
+      try {
+        for (let i = 0; i < 25; i++) {
+          await middleware(
+            { locals: {} },
+            async () => new Response('ok'),
+          );
+        }
+
+        expect(process.listenerCount('beforeExit')).toBe(beforeExitBefore);
+        expect(process.listenerCount('SIGTERM')).toBe(sigtermBefore);
+        expect(process.listenerCount('SIGINT')).toBe(sigintBefore);
+        // Request end should flush+close; no hanging periodic timer required.
+        expect(sendStats).toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('closes the owned client even when next() throws', async () => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      const middleware = createTogglyMiddleware({
+        environment: 'test',
+        flagDefaults: { F1: true },
+      });
+
+      const locals: Record<string, any> = {};
+      const next = vi.fn().mockImplementation(async () => {
+        // Capture the client created for this request and spy close.
+        expect(locals.toggly).toBeDefined();
+        locals.toggly.close = close;
+        throw new Error('handler failed');
+      });
+
+      await expect(middleware({ locals }, next)).rejects.toThrow('handler failed');
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledWith(
+        expect.objectContaining({ timeoutMs: expect.any(Number) }),
+      );
+    });
+
+    it('still completes within a bound when usage flush hangs', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          JSON.stringify([
+            {
+              featureKey: 'F1',
+              filters: [{ name: 'AlwaysOn', parameters: {} }],
+            },
+          ]),
+        json: async () => [
+          {
+            featureKey: 'F1',
+            filters: [{ name: 'AlwaysOn', parameters: {} }],
+          },
+        ],
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const hungSend = vi.fn(() => new Promise(() => {}));
+      const middleware = createTogglyMiddleware({
+        appKey: 'middleware-hang',
+        environment: 'Production',
+        enableUsageTracking: true,
+        usageFlushInterval: 0,
+        usageClient: { sendStats: hungSend },
+        flagDefaults: { F1: true },
+      });
+
+      try {
+        const started = Date.now();
+        const response = await middleware(
+          { locals: {} },
+          async () => new Response('ok'),
+        );
+        const elapsed = Date.now() - started;
+
+        expect(response.status).toBe(200);
+        // REQUEST_SCOPED_CLOSE_TIMEOUT_MS is 2s; leave headroom for CI.
+        expect(elapsed).toBeLessThan(3500);
+        expect(hungSend).toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
   });
 });
