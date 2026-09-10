@@ -203,6 +203,35 @@ describe('TelemetryRuntime', () => {
     await runtime.close()
   })
 
+  it('includes definition cache hits/misses on usage flush', async () => {
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 0 })
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: null,
+      attachProcessHandlers: false,
+    })
+    runtime.start()
+    runtime.recordDefinitionCacheHit()
+    runtime.recordDefinitionCacheMiss()
+    await runtime.flush()
+
+    const payload = sendStats.mock.calls[0][0] as {
+      definitionCacheHits?: number
+      definitionCacheMisses?: number
+      stats: unknown[]
+    }
+    expect(payload.definitionCacheHits).toBe(1)
+    expect(payload.definitionCacheMisses).toBe(1)
+    expect(payload.stats).toEqual([])
+    await runtime.close()
+  })
+
   it('builds HTTPS clients when transport is https and no clients are injected', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true })
     const runtime = new TelemetryRuntime({

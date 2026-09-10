@@ -1,3 +1,13 @@
+## 1.11.0
+
+2026-09-10
+
+### Added
+- Report `definitionCacheHits` / `definitionCacheMisses` on usage `SendStats`
+  (gRPC + HTTPS JSON) for definition-refresh outcomes [OPS-995].
+- Cache-only usage flushes still send; soft-fail restore merges cache counters
+  with in-flight records.
+
 ## 1.10.0
 
 2026-09-06
