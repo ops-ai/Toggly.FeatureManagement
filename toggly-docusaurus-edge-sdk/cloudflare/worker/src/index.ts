@@ -116,8 +116,16 @@ async function handlePageLevelGate(
   config: WorkerConfig,
   publicOrigin: string,
   usage: RequestScopedUsageRecorder,
+  telemetry: TelemetryRuntime | null,
 ): Promise<Response | null> {
-  const isEnabled = await isFeatureEnabled(featureKey, env, context, cache);
+  const recorder = telemetry?.isUsageEnabled() ? telemetry : null;
+  const isEnabled = await isFeatureEnabled(
+    featureKey,
+    env,
+    context,
+    cache,
+    recorder,
+  );
 
   usage.recordGate(featureKey, isEnabled, identityFromContext(context));
 
@@ -272,6 +280,7 @@ export default {
           WORKER_CONFIG,
           publicOrigin,
           usage,
+          telemetry,
         );
 
         if (gateResponse) {
@@ -297,7 +306,8 @@ export default {
       }
 
       // For HTML responses, apply section-level gating
-      const flags = await getFlags(env, context, cache);
+      const recorder = telemetry?.isUsageEnabled() ? telemetry : null;
+      const flags = await getFlags(env, context, cache, recorder);
       const identity = identityFromContext(context);
       const transformed = transformHtmlResponse(
         response,
