@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.7.0
+
+2026-09-10
+
+### Changed
+- Hydrate durable definition cache before the first network refresh so startup
+  cache hits are reported via core usage telemetry [OPS-995].
+
+### Tests
+- Cover hydrate-before-init ordering and startup definition cache hit telemetry
+  on the server package [OPS-995].
+
 ## 1.6.0
 
 2026-09-06

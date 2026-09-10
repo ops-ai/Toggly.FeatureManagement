@@ -1,3 +1,21 @@
+## 1.11.0
+
+2026-09-10
+
+### Added
+- Report `definitionCacheHits` / `definitionCacheMisses` on usage `SendStats`
+  (gRPC + HTTPS JSON) for definition-refresh outcomes [OPS-995].
+- Cache-only usage flushes still send; soft-fail restore merges cache counters
+  with in-flight records.
+
+### Fixed
+- Equal-ETag HTTP 200 still parses and applies the response body (remote
+  evaluated flags can change with identity at the same definition revision)
+  while classifying the outcome as a cache hit [OPS-995].
+- Network-error recovery records a cache hit only when last-known-good
+  definitions exist (definitions map or prior successful refresh), not when
+  only `featureDefaults` are present [OPS-995].
+
 ## 1.10.0
 
 2026-09-06
