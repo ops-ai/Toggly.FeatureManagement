@@ -42,11 +42,14 @@ probe() {
   body="$(tr '\n' ' ' <"$body_file")"
   rm -f "$body_file"
   echo "Auth probe ${scheme}: HTTP ${code} body=${body}"
-  if echo "$body" | grep -qi 'Invalid auth'; then
+  if echo "$body" | grep -Eqi 'Invalid (auth|token)'; then
+    return 1
+  fi
+  if [[ "$code" == "401" || "$code" == "403" ]]; then
     return 1
   fi
   # Valid auth typically returns a non-auth error for a fake deployment id
-  # (404 / deployment not found / similar), not "Invalid auth".
+  # (404 / deployment not found / similar), not "Invalid auth/token".
   return 0
 }
 
@@ -58,16 +61,21 @@ probe UserToken && USERTOKEN_OK=1 || true
 
 if [[ "$BEARER_OK" -ne 1 && "$USERTOKEN_OK" -ne 1 ]]; then
   cat >&2 <<'EOF'
-Central Portal rejected the token (Invalid auth).
+Central Portal rejected the token (Invalid token / Invalid auth).
 
-Confirm GitHub secrets are the two values from
+Confirm GitHub secrets match the two values from
 https://central.sonatype.com/usertoken → Generate User Token:
-  MAVEN_CENTRAL_USERNAME = User Token Username
-  MAVEN_CENTRAL_PASSWORD = User Token Password
+  MAVEN_CENTRAL_USERNAME = User Token Username   (often short)
+  MAVEN_CENTRAL_PASSWORD = User Token Password   (longer)
 
-Do NOT store a pre-encoded Bearer blob, account login password, or
-OSSRH (oss.sonatype.org) token. The account that owns the token must
-be allowed to publish namespace io.toggly.
+Do NOT store:
+  - a pre-encoded Bearer base64 blob
+  - Central/GitHub account login password
+  - an OSSRH (oss.sonatype.org) token
+  - only one of the two token fields
+
+After updating secrets, re-run Java SDK - Release.
+The account that owns the token must be allowed to publish io.toggly.
 EOF
   exit 1
 fi
