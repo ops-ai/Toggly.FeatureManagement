@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -28,6 +29,12 @@ class TogglyService(
 ) {
     private val storage: TogglyStorage = config.storage ?: MemoryStorage()
     private val mutex = Mutex()
+    // Snapshot caller-owned collections before storage reads or background work.
+    private val groups = config.groups.map { it.trim() }.filter { it.isNotEmpty() }
+    private val claims = config.claims.toMap().filter { (key, value) ->
+        key.isNotEmpty() && value.isNotEmpty()
+    }.toSortedMap().entries.take(20).associate { it.key to it.value }
+    private var snapshotContext: String? = null
 
     // State
     private var definitions: EvaluatedDefinitions? = null
@@ -39,6 +46,7 @@ class TogglyService(
     private var lastSynced: Date? = null
     private var lastError: String? = null
     private var eTag: String? = null
+    private var eTagContext: String? = null
     private var isInitialized = false
     private var networkState: NetworkState? = null
     private var appState: AppStateType = AppStateType.ACTIVE
@@ -164,7 +172,7 @@ class TogglyService(
         // Skip refresh if offline
         if (networkState?.isConnected == false) {
             val cached = loadCachedDefinitions()
-            applySnapshot(cached.definitions, cached.flags)
+            applyCachedSnapshot(cached)
             return TogglyInitResponse(status = TogglyLoadStatus.CACHED, flags = cached.flags)
         }
 
@@ -322,10 +330,11 @@ class TogglyService(
         features = null
         definitions = null
         eTag = null
+        eTagContext = null
 
-        val hashedIdentity = hashIdentity(identity ?: "")
-        val cacheKey = TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashedIdentity
+        val cacheKey = contextCacheKey()
         storage.delete(cacheKey)
+        storage.delete(TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashIdentity(identity ?: ""))
         storage.delete(TogglyStorageKeys.ETAG)
     }
 
@@ -432,7 +441,7 @@ class TogglyService(
                 .url(url)
                 .get()
 
-            if (config.useSignedDefinitions && eTag != null) {
+            if (config.useSignedDefinitions && eTag != null && eTagContext == buildApiUrl()) {
                 requestBuilder.header("If-None-Match", eTag!!)
             }
 
@@ -444,7 +453,7 @@ class TogglyService(
                 if (resp.code == 304) {
                     lastChecked = Date()
                     val cached = loadCachedDefinitions()
-                    applySnapshot(cached.definitions, cached.flags)
+                    applyCachedSnapshot(cached)
                     return TogglyInitResponse(status = TogglyLoadStatus.CACHED, flags = cached.flags)
                 }
 
@@ -494,10 +503,9 @@ class TogglyService(
                 )
 
                 // Store ETag
-                resp.header("ETag")?.let { newEtag ->
-                    eTag = newEtag
-                    storage.set(TogglyStorageKeys.ETAG, newEtag)
-                }
+                eTag = resp.header("ETag")
+                eTagContext = buildApiUrl()
+
 
                 lastChecked = Date()
                 lastSynced = Date()
@@ -519,7 +527,7 @@ class TogglyService(
 
             // Fall back to cache or defaults
             val cached = loadCachedDefinitions()
-            applySnapshot(cached.definitions, cached.flags)
+            applyCachedSnapshot(cached)
 
             return TogglyInitResponse(
                 status = TogglyLoadStatus.DEFAULTS,
@@ -532,13 +540,19 @@ class TogglyService(
     }
 
     private fun buildApiUrl(): String {
-        var url = "${config.baseUri}/evaluated-signed/${config.appKey}/${config.environment}"
+        val url = config.baseUri.toHttpUrl().newBuilder()
+            .addPathSegment("evaluated-signed")
+            .addPathSegment(config.appKey ?: "null")
+            .addPathSegment(config.environment)
+        identity?.let { url.addQueryParameter("u", it) }
+        groups.forEach { url.addQueryParameter("g", it) }
+        claims.forEach { (type, value) -> url.addQueryParameter("claim.$type", value) }
+        return url.build().toString()
+    }
 
-        identity?.let { id ->
-            url += "?u=${java.net.URLEncoder.encode(id, "UTF-8")}"
-        }
-
-        return url
+    private fun contextCacheKey(context: String = buildApiUrl()): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(context.toByteArray(Charsets.UTF_8))
+        return TogglyStorageKeys.FEATURE_FLAGS_CACHE + "v2:" + digest.joinToString("") { "%02x".format(it) }
     }
 
     private suspend fun fetchJwks(): String {
@@ -575,11 +589,20 @@ class TogglyService(
 
     private data class CachedDefinitions(
         val definitions: EvaluatedDefinitions,
-        val flags: FeatureFlags
+        val flags: FeatureFlags,
+        val ownerContext: String
     )
+
+    // Call under mutex: accepting a cache and publishing it is atomic with identity changes.
+    private fun applyCachedSnapshot(cached: CachedDefinitions) {
+        if (cached.ownerContext == buildApiUrl()) {
+            applySnapshot(cached.definitions, cached.flags)
+        }
+    }
 
     private fun applySnapshot(defs: EvaluatedDefinitions, flags: FeatureFlags) {
         definitions = defs
+        snapshotContext = buildApiUrl()
         features = flags
         _featureFlags.value = flags
     }
@@ -592,19 +615,30 @@ class TogglyService(
     }
 
     private suspend fun loadCachedDefinitions(): CachedDefinitions {
+        // Capture before any storage or JWKS suspension; never relabel a restored payload.
+        val ownerContext = buildApiUrl()
+        val ownerIdentity = identity
         features?.let { snapshot ->
-            return CachedDefinitions(definitions ?: fromBooleanDefaults(snapshot), snapshot)
+            if (snapshotContext == ownerContext) {
+                return CachedDefinitions(definitions ?: fromBooleanDefaults(snapshot), snapshot, ownerContext)
+            }
         }
 
         try {
-            val hashedIdentity = hashIdentity(identity ?: "")
-            val cacheKey = TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashedIdentity
-            val cached = storage.get(cacheKey)
+            var cacheKey = contextCacheKey(ownerContext)
+            var cached = storage.get(cacheKey)
+            // Legacy identity-only payloads are eligible only for empty targeting.
+            if (cached == null && groups.isEmpty() && claims.isEmpty()) {
+                cacheKey = TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashIdentity(ownerIdentity ?: "")
+                cached = storage.get(cacheKey)
+            }
 
             if (cached != null) {
                 val cacheData = json.decodeFromString<TogglyFeatureFlagsCache>(cached)
-                if (cacheData.identity == identity) {
-                    return trustOrReverifyCachedFlags(cacheData, cacheKey)
+                if (cacheData.identity == ownerIdentity &&
+                    (cacheData.evaluationContext == ownerContext ||
+                        (cacheData.evaluationContext == null && groups.isEmpty() && claims.isEmpty()))) {
+                    return trustOrReverifyCachedFlags(cacheData, cacheKey, ownerContext)
                 }
             }
         } catch (_: Exception) {
@@ -612,7 +646,7 @@ class TogglyService(
         }
 
         val defaults = fromBooleanDefaults(config.featureDefaults)
-        return CachedDefinitions(defaults, config.featureDefaults)
+        return CachedDefinitions(defaults, config.featureDefaults, ownerContext)
     }
 
     /**
@@ -622,18 +656,19 @@ class TogglyService(
      */
     private suspend fun trustOrReverifyCachedFlags(
         cacheData: TogglyFeatureFlagsCache,
-        cacheKey: String
+        cacheKey: String,
+        ownerContext: String
     ): CachedDefinitions {
         val parsed = runCatching {
             parseEvaluatedDefinitions(cacheData.flags)
         }.getOrElse {
             storage.delete(cacheKey)
-            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults)
+            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, ownerContext)
         }
         val flags = toBooleanDefinitions(parsed)
 
         if (!config.verifySignatures) {
-            return CachedDefinitions(parsed, flags)
+            return CachedDefinitions(parsed, flags, ownerContext)
         }
 
         if (cacheData.timestamp == null ||
@@ -641,7 +676,7 @@ class TogglyService(
             cacheData.keyId.isNullOrEmpty()
         ) {
             storage.delete(cacheKey)
-            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults)
+            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, ownerContext)
         }
 
         try {
@@ -651,12 +686,12 @@ class TogglyService(
             )
         } catch (_: Exception) {
             storage.delete(cacheKey)
-            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults)
+            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, ownerContext)
         }
 
         val jwks = resolveJwksForCacheVerify()
         if (jwks == null) {
-            return CachedDefinitions(parsed, flags)
+            return CachedDefinitions(parsed, flags, ownerContext)
         }
 
         return try {
@@ -667,10 +702,10 @@ class TogglyService(
                 kid = cacheData.keyId
             )
             SignedDefsVerify.verify(envelope, jwks)
-            CachedDefinitions(parsed, flags)
+            CachedDefinitions(parsed, flags, ownerContext)
         } catch (_: Exception) {
             storage.delete(cacheKey)
-            CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults)
+            CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, ownerContext)
         }
     }
 
@@ -682,8 +717,7 @@ class TogglyService(
         keyId: String? = null
     ) {
         try {
-            val hashedIdentity = hashIdentity(identity ?: "")
-            val cacheKey = TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashedIdentity
+            val cacheKey = contextCacheKey()
             val flagsString = defsRaw ?: json.encodeToString(
                 kotlinx.serialization.serializer<Map<String, Boolean>>(),
                 flags
@@ -693,7 +727,8 @@ class TogglyService(
                 flags = flagsString,
                 timestamp = timestamp,
                 signature = signature,
-                keyId = keyId
+                keyId = keyId,
+                evaluationContext = buildApiUrl()
             )
             storage.set(cacheKey, json.encodeToString(TogglyFeatureFlagsCache.serializer(), cacheData))
         } catch (_: Exception) {
@@ -710,7 +745,9 @@ class TogglyService(
         }
 
         val cached = loadCachedDefinitions()
-        applySnapshot(cached.definitions, cached.flags)
+        mutex.withLock {
+            applyCachedSnapshot(cached)
+        }
     }
 
     private fun startRefreshTimer() {

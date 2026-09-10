@@ -1,5 +1,16 @@
 # Changelog
 
+## Core 1.4.0
+
+2026-09-08
+
+### Added
+- Initial groups and string claims on `TogglyConfig`, copied before initialization so the first evaluated request includes all known targeting context.
+
+### Fixed
+- Encode repeated groups and claim query parameters safely, normalize empty values and cap claims at 20 sorted types.
+- Bind evaluated caches and conditional requests to the full context, preventing another context from reusing an unchanged definitions revision. Legacy identity-only caches remain eligible only for empty groups and claims.
+
 ## 1.3.0
 
 2026-09-02

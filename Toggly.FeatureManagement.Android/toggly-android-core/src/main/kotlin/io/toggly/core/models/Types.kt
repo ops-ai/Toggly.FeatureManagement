@@ -81,7 +81,11 @@ data class TogglyConfig(
     /** Custom storage implementation */
     val storage: TogglyStorage? = null,
     /** Whether to enable live updates via WebSocket */
-    val enableLiveUpdates: Boolean = true
+    val enableLiveUpdates: Boolean = true,
+    /** Targeting memberships supplied before the first request. */
+    val groups: List<String> = emptyList(),
+    /** String attributes used by remote targeting rules. */
+    val claims: Map<String, String> = emptyMap()
 )
 
 /**
@@ -142,7 +146,8 @@ internal data class TogglyFeatureFlagsCache(
     val flags: String,
     val timestamp: Long? = null,
     val signature: String? = null,
-    val keyId: String? = null
+    val keyId: String? = null,
+    val evaluationContext: String? = null
 )
 
 /**

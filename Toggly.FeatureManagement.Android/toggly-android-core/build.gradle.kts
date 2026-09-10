@@ -6,6 +6,9 @@ plugins {
     alias(libs.plugins.kover)
 }
 
+// Only core changes in this release; wrapper artifacts keep their version.
+version = "1.4.0"
+
 android {
     namespace = "io.toggly.core"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -64,6 +67,7 @@ dependencies {
     implementation(libs.bundles.lifecycle)
 
     // Testing
+    testImplementation("com.squareup.okhttp3:mockwebserver:${libs.versions.okhttp.get()}")
     testImplementation(libs.bundles.testing)
     testImplementation(libs.bundles.testing.android)
     androidTestImplementation(libs.bundles.testing.android)
