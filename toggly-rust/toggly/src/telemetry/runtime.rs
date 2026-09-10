@@ -4,6 +4,7 @@ use super::hash::{DEFAULT_METRICS_BASE_URL, DEFAULT_TELEMETRY_FLUSH_SECS};
 use super::metrics_batcher::{MetricsBatcher, MetricsFeatureOptions};
 use super::transport::TelemetrySenders;
 use super::usage_batcher::UsageBatcher;
+use crate::TogglyConfig;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -41,29 +42,26 @@ pub struct TelemetryRuntimeConfig {
 
 impl TelemetryRuntimeConfig {
     /// Build from client config fields with shared defaults.
-    pub fn from_client_config(
-        app_key: &str,
-        environment: &str,
-        metrics_base_url: Option<&str>,
-        enable_usage_tracking: Option<bool>,
-        enable_metrics: Option<bool>,
-        usage_flush_interval: Option<Duration>,
-        metrics_flush_interval: Option<Duration>,
-        instance_name: Option<&str>,
-        app_version: Option<&str>,
-    ) -> Self {
+    pub fn from_client_config(config: &TogglyConfig) -> Self {
         Self {
-            app_key: app_key.to_string(),
-            environment: environment.to_string(),
-            metrics_base_url: normalize_url(metrics_base_url.unwrap_or(DEFAULT_METRICS_BASE_URL)),
-            enable_usage_tracking,
-            enable_metrics,
-            usage_flush_interval: usage_flush_interval
+            app_key: config.app_key.clone(),
+            environment: config.environment.clone(),
+            metrics_base_url: normalize_url(
+                config
+                    .metrics_base_url
+                    .as_deref()
+                    .unwrap_or(DEFAULT_METRICS_BASE_URL),
+            ),
+            enable_usage_tracking: config.enable_usage_tracking,
+            enable_metrics: config.enable_metrics,
+            usage_flush_interval: config
+                .usage_flush_interval
                 .unwrap_or(Duration::from_secs(DEFAULT_TELEMETRY_FLUSH_SECS)),
-            metrics_flush_interval: metrics_flush_interval
+            metrics_flush_interval: config
+                .metrics_flush_interval
                 .unwrap_or(Duration::from_secs(DEFAULT_TELEMETRY_FLUSH_SECS)),
-            instance_name: instance_name.map(str::to_string),
-            app_version: app_version.map(str::to_string),
+            instance_name: config.instance_name.clone(),
+            app_version: config.app_version.clone(),
             senders: TelemetrySenders::default(),
             senders_provided: false,
         }
@@ -544,8 +542,25 @@ mod tests {
     use super::*;
     use crate::telemetry::transport::UsageSender;
     use crate::telemetry::usage_batcher::FeatureStatPayload;
+    use crate::TogglyConfig;
     use async_trait::async_trait;
     use std::sync::Mutex as StdMutex;
+
+    fn test_runtime_config(
+        enable_usage_tracking: Option<bool>,
+        enable_metrics: Option<bool>,
+        usage_flush_interval: Option<Duration>,
+        metrics_flush_interval: Option<Duration>,
+    ) -> TelemetryRuntimeConfig {
+        TelemetryRuntimeConfig::from_client_config(&TogglyConfig {
+            app_key: "app".into(),
+            enable_usage_tracking,
+            enable_metrics,
+            usage_flush_interval,
+            metrics_flush_interval,
+            ..TogglyConfig::default()
+        })
+    }
 
     struct FailingUsage {
         calls: StdMutex<usize>,
@@ -592,16 +607,11 @@ mod tests {
             started: started.clone(),
         });
 
-        let mut config = TelemetryRuntimeConfig::from_client_config(
-            "app",
-            "Production",
-            None,
+        let mut config = test_runtime_config(
             Some(true),
             Some(false),
             Some(Duration::from_millis(20)),
             Some(Duration::from_secs(0)),
-            None,
-            None,
         );
         config.senders = TelemetrySenders {
             usage: Some(sender.clone()),
@@ -651,16 +661,11 @@ mod tests {
         let failing = Arc::new(FailingMetrics {
             calls: StdMutex::new(0),
         });
-        let mut config = TelemetryRuntimeConfig::from_client_config(
-            "app",
-            "Production",
-            None,
+        let mut config = test_runtime_config(
             Some(false),
             Some(true),
             Some(Duration::from_secs(0)),
             Some(Duration::from_secs(0)),
-            None,
-            None,
         );
         config.senders = TelemetrySenders {
             usage: None,
@@ -685,16 +690,11 @@ mod tests {
         let failing = Arc::new(FailingUsage {
             calls: StdMutex::new(0),
         });
-        let mut config = TelemetryRuntimeConfig::from_client_config(
-            "app",
-            "Production",
-            None,
+        let mut config = test_runtime_config(
             Some(true),
             Some(false),
             Some(Duration::from_secs(0)),
             Some(Duration::from_secs(0)),
-            None,
-            None,
         );
         config.senders = TelemetrySenders {
             usage: Some(failing.clone()),
@@ -719,16 +719,11 @@ mod tests {
         // explicit enable must no-op (no batcher / no identity growth).
         #[cfg(not(feature = "telemetry"))]
         {
-            let config = TelemetryRuntimeConfig::from_client_config(
-                "app",
-                "Production",
-                None,
+            let config = test_runtime_config(
                 Some(true),
                 Some(true),
                 Some(Duration::from_secs(0)),
                 Some(Duration::from_secs(0)),
-                None,
-                None,
             );
             let runtime = TelemetryRuntime::start(config);
             assert!(!runtime.usage_enabled());
@@ -743,16 +738,11 @@ mod tests {
         #[cfg(feature = "telemetry")]
         {
             // With feature on, defaults/explicit enable create batchers.
-            let config = TelemetryRuntimeConfig::from_client_config(
-                "app",
-                "Production",
-                None,
+            let config = test_runtime_config(
                 Some(true),
                 Some(false),
                 Some(Duration::from_secs(0)),
                 Some(Duration::from_secs(0)),
-                None,
-                None,
             );
             let runtime = TelemetryRuntime::start(config);
             assert!(runtime.usage_enabled());

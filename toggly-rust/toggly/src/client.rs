@@ -69,17 +69,7 @@ impl TogglyClient {
         let cache = Cache::new(config.cache_ttl, config.cache_max_entries);
         crate::entity_context::register_entity_contexts_at_startup(&config).await;
 
-        let mut runtime_config = TelemetryRuntimeConfig::from_client_config(
-            &config.app_key,
-            &config.environment,
-            config.metrics_base_url.as_deref(),
-            config.enable_usage_tracking,
-            config.enable_metrics,
-            config.usage_flush_interval,
-            config.metrics_flush_interval,
-            config.instance_name.as_deref(),
-            config.app_version.as_deref(),
-        );
+        let mut runtime_config = TelemetryRuntimeConfig::from_client_config(&config);
         if let Some(senders) = senders {
             runtime_config.senders = senders;
             runtime_config.senders_provided = true;
