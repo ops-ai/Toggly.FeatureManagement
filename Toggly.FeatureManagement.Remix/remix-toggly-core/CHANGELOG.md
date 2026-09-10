@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.9.0
+
+2026-09-10
+
+### Added
+- Report definition-refresh cache hits/misses on usage flush via
+  `definitionCacheHits` / `definitionCacheMisses` (proto fields 10/11)
+  [OPS-997].
+- `UsageBatcher.recordDefinitionCacheHit` /
+  `recordDefinitionCacheMiss` and matching `TelemetryRuntime` methods;
+  cache-only batches still flush; soft-fail restore merges counters.
+
+### Changed
+- Sync `SDK_VERSION` with package version (`1.9.0`); User-Agent remains
+  `toggly-remix/{version}`.
+
 ## 1.8.0
 
 2026-09-08

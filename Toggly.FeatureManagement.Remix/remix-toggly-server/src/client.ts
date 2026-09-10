@@ -125,6 +125,8 @@ export class TogglyServerClient {
   private initialized = false;
   /** Dedupes concurrent cold-start definition fetches. */
   private definitionsLoadPromise: Promise<void> | null = null;
+  /** Single-flight for definition GET so concurrent joiners are not double-counted. */
+  private definitionsFetchInFlight: Promise<FeatureFlags> | null = null;
 
   // WebSocket live updates
   private ws: WebSocket | null = null;
@@ -211,6 +213,44 @@ export class TogglyServerClient {
     }
     const identity = identityOverride?.identity ?? this.identity;
     this.telemetry.recordCheck(featureKey, enabled, identity);
+  }
+
+  /** Soft-fail wrapper — definition refresh must not throw from telemetry. */
+  private noteDefinitionCacheHit(): void {
+    try {
+      this.telemetry?.recordDefinitionCacheHit();
+    } catch {
+      // Telemetry must never break flag refresh.
+    }
+  }
+
+  private noteDefinitionCacheMiss(): void {
+    try {
+      this.telemetry?.recordDefinitionCacheMiss();
+    } catch {
+      // Telemetry must never break flag refresh.
+    }
+  }
+
+  private normalizeDefinitionsRevision(
+    revision: string | null | undefined,
+  ): string | null {
+    if (!revision) {
+      return null;
+    }
+    return revision.replace(/^"+|"+$/g, '');
+  }
+
+  private definitionsRevisionsMatch(
+    previous: string | null | undefined,
+    incoming: string | null | undefined,
+  ): boolean {
+    const a = this.normalizeDefinitionsRevision(previous);
+    const b = this.normalizeDefinitionsRevision(incoming);
+    if (!a || !b) {
+      return false;
+    }
+    return a === b;
   }
 
   /**
@@ -345,10 +385,11 @@ export class TogglyServerClient {
   }
 
   private cacheDefinitionsRevision(revision: string | null | undefined): void {
-    if (!revision) {
+    const normalized = this.normalizeDefinitionsRevision(revision);
+    if (!normalized) {
       return;
     }
-    this.cachedDefinitionsRevision = revision.replace(/^"+|"+$/g, '');
+    this.cachedDefinitionsRevision = normalized;
   }
 
   private scheduleDebouncedRefresh(forceRevisionReset = false): void {
@@ -470,18 +511,35 @@ export class TogglyServerClient {
 
   /**
    * Fetch feature definitions from the API (definitions-signed; no identity query).
+   * Counts one definition-refresh hit/miss per performed attempt; concurrent
+   * in-flight joiners await the same fetch and are not counted.
    */
   async fetchFlags(identity?: string): Promise<FeatureFlags> {
     if (identity !== undefined) {
       this.identity = identity;
     }
 
+    if (this.definitionsFetchInFlight) {
+      return this.definitionsFetchInFlight;
+    }
+
+    this.definitionsFetchInFlight = this.performDefinitionsFetch();
+    try {
+      return await this.definitionsFetchInFlight;
+    } finally {
+      this.definitionsFetchInFlight = null;
+    }
+  }
+
+  private async performDefinitionsFetch(): Promise<FeatureFlags> {
     if (!this.config.appKey) {
       this.logger.debug('No appKey, using featureDefaults.');
       this.definitions = new Map();
       this.flags = this.config.featureDefaults ?? {};
       return this.flags;
     }
+
+    let outcomeRecorded = false;
 
     try {
       const pin = this.pendingDefinitionsPin;
@@ -493,16 +551,24 @@ export class TogglyServerClient {
       );
       this.logger.debug(`Fetching definitions from: ${url}`);
 
-      const revision = pin ? null : this.getDefinitionsRevision();
+      // Pin forces a cache-proof GET; do not treat prior etag as still current.
+      const previousRevision = pin ? null : this.getDefinitionsRevision();
       const headers = buildDefinitionFetchHeaders(
-        revision ? { 'If-None-Match': revision } : {},
+        previousRevision ? { 'If-None-Match': previousRevision } : {},
       );
 
       const response = await fetchWithTimeout(url, { headers }, this.config.timeout);
 
-      this.cacheDefinitionsRevision(extractDefinitionsRevision(response));
+      const responseRevision = this.normalizeDefinitionsRevision(
+        extractDefinitionsRevision(response),
+      );
 
       if (response.status === 304) {
+        if (responseRevision) {
+          this.cacheDefinitionsRevision(responseRevision);
+        }
+        this.noteDefinitionCacheHit();
+        outcomeRecorded = true;
         this.logger.debug('Definitions unchanged (304)');
         return this.flags;
       }
@@ -513,6 +579,8 @@ export class TogglyServerClient {
         );
       }
 
+      // Always parse/apply the body on HTTP 200. Equal revision is still a cache
+      // hit (CDN replay), but the body must still be applied.
       const bodyText = await readResponseBody(response);
       const parsed = await parseEvaluatedResponseBody(bodyText, {
         verifySignatures: this.config.verifySignatures,
@@ -527,7 +595,17 @@ export class TogglyServerClient {
         ...(this.config.featureDefaults ?? {}),
         ...snapshotEvaluatedBooleans(this.definitions, this.buildEvalContext()),
       };
+      if (responseRevision) {
+        this.cacheDefinitionsRevision(responseRevision);
+      }
       this.logger.debug(`Fetched ${this.definitions.size} definitions.`);
+
+      if (this.definitionsRevisionsMatch(previousRevision, responseRevision)) {
+        this.noteDefinitionCacheHit();
+      } else {
+        this.noteDefinitionCacheMiss();
+      }
+      outcomeRecorded = true;
 
       // Execute afterRefresh hooks
       await this.executeAfterRefresh(this.flags);
@@ -536,6 +614,12 @@ export class TogglyServerClient {
     } catch (error) {
       this.logger.warn('Failed to fetch flags, preserving last-known-good flags when available.', error);
       this.config.onError?.('Error fetching feature flags', error);
+
+      // Network error keeping last-good definitions only — not featureDefaults alone.
+      if (!outcomeRecorded && this.definitions.size > 0) {
+        this.noteDefinitionCacheHit();
+      }
+
       if (Object.keys(this.flags).length === 0) {
         this.flags = this.config.featureDefaults ?? {};
       }

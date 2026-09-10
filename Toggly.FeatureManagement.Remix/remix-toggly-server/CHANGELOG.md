@@ -1,3 +1,20 @@
+## 1.10.0
+
+2026-09-10
+
+### Added
+- Instrument definition refresh with library cache hit/miss outcomes on usage
+  telemetry (HTTP 304 / equal-etag / error+last-good → hit; new revision /
+  WS-driven apply → miss) [OPS-997]. Requires `@ops-ai/remix-toggly-core`
+  1.9.0+.
+- Concurrent in-flight definition fetches join without double-counting.
+- N/A today: durable snapshot hydrate; server HTTP poll TTL skip
+  (`refreshTimer` is never started on the Remix server).
+
+### Changed
+- Sync `SDK_VERSION` with package version (`1.10.0`); User-Agent remains
+  `toggly-remix/{version}`.
+
 ## 1.9.0
 
 2026-09-06

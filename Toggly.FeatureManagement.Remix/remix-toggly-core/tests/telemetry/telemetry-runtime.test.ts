@@ -202,6 +202,70 @@ describe('TelemetryRuntime', () => {
     await runtime.close()
   })
 
+  it('includes definition cache hits/misses on usage flush', async () => {
+    const sendStats = jest.fn().mockResolvedValue({ featureCount: 0 })
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: jest.fn() },
+      metricsClient: null,
+      attachProcessHandlers: false,
+    })
+    runtime.start()
+    runtime.recordDefinitionCacheHit()
+    runtime.recordDefinitionCacheMiss()
+    await runtime.flush()
+
+    const payload = sendStats.mock.calls[0][0] as {
+      definitionCacheHits?: number
+      definitionCacheMisses?: number
+      stats: unknown[]
+    }
+    expect(payload.definitionCacheHits).toBe(1)
+    expect(payload.definitionCacheMisses).toBe(1)
+    expect(payload.stats).toEqual([])
+    await runtime.close()
+  })
+
+  it('restores definition cache counters when send fails', async () => {
+    const sendStats = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('send failed'))
+      .mockResolvedValueOnce({ featureCount: 0 })
+
+    const runtime = new TelemetryRuntime({
+      appKey: 'test-app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: jest.fn() },
+      metricsClient: null,
+      attachProcessHandlers: false,
+      restoreOnSendFailure: true,
+    })
+    runtime.start()
+    runtime.recordDefinitionCacheHit()
+    runtime.recordDefinitionCacheMiss()
+    await runtime.flush()
+    runtime.recordDefinitionCacheHit()
+    await runtime.flush()
+
+    expect(sendStats).toHaveBeenCalledTimes(2)
+    const retried = sendStats.mock.calls[1][0] as {
+      definitionCacheHits?: number
+      definitionCacheMisses?: number
+    }
+    expect(retried.definitionCacheHits).toBe(2)
+    expect(retried.definitionCacheMisses).toBe(1)
+    await runtime.close()
+  })
+
   it('builds HTTPS clients when transport is https and no clients are injected', async () => {
     const fetchImpl = jest.fn().mockResolvedValue({ ok: true })
     const runtime = new TelemetryRuntime({
@@ -357,7 +421,7 @@ describe('HttpsTelemetryClient', () => {
     const fetchImpl = jest.fn().mockResolvedValue({ ok: true })
     const client = new HttpsTelemetryClient({
       metricsBaseUrl: 'https://app.toggly.io/',
-      userAgent: 'toggly-remix/1.7.0',
+      userAgent: 'toggly-remix/1.9.0',
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
 
@@ -369,7 +433,7 @@ describe('HttpsTelemetryClient', () => {
 
     await client.sendUsageStats(bundle.payload)
     expect(fetchImpl.mock.calls[0][0]).toBe('https://app.toggly.io/api/usage/stats')
-    expect(fetchImpl.mock.calls[0][1].headers['User-Agent']).toBe('toggly-remix/1.7.0')
+    expect(fetchImpl.mock.calls[0][1].headers['User-Agent']).toBe('toggly-remix/1.9.0')
     const body = JSON.parse(fetchImpl.mock.calls[0][1].body as string)
     expect(typeof body.time).toBe('string')
     expect(body.stats[0].variantStats.enabled.checkCount).toBe(1)
