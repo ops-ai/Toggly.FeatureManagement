@@ -21,6 +21,8 @@
   so a hung usage flush cannot stall the HTTP response indefinitely.
 - HTTPS usage client aborts posts after `DEFAULT_TELEMETRY_FETCH_TIMEOUT_MS`
   (5s) so long-lived servers are protected from stalled telemetry endpoints.
+- Timed-out `close()` leaves flush/cleanup running in the background so soft-fail
+  restore cannot race a nulled usage batcher (Seer).
 
 ### Notes
 - Browser `src/client/store.ts` island refresh instrumentation is out of scope.

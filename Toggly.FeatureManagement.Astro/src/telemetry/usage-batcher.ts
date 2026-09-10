@@ -240,28 +240,8 @@ export class UsageBatcher {
       return null
     }
 
-    const payload: FeatureStatPayload = {
-      appKey: this.appKey,
-      environment: this.environment,
-      time: toProtobufTimestamp(),
-      stats: [],
-      totalUniqueUsers: this.appUnique.size,
-      uniqueUserHashes: [...this.appUnique],
-      processStartTime: toProtobufTimestamp(this.processStartTime),
-    }
-
-    if (this.instanceName) {
-      payload.instanceName = this.instanceName
-    }
-    if (this.appVersion) {
-      payload.appVersion = this.appVersion
-    }
-    if (this.definitionCacheHits > 0) {
-      payload.definitionCacheHits = this.definitionCacheHits
-    }
-    if (this.definitionCacheMisses > 0) {
-      payload.definitionCacheMisses = this.definitionCacheMisses
-    }
+    const payload = this.createBasePayload()
+    this.applyOptionalMetadata(payload)
 
     const uniqueUsersEnabled: Record<string, number[]> = {}
     const uniqueUsersDisabled: Record<string, number[]> = {}
@@ -311,6 +291,33 @@ export class UsageBatcher {
       uniqueUsersEnabled,
       uniqueUsersDisabled,
       uniqueUsersUsed,
+    }
+  }
+
+  private createBasePayload(): FeatureStatPayload {
+    return {
+      appKey: this.appKey,
+      environment: this.environment,
+      time: toProtobufTimestamp(),
+      stats: [],
+      totalUniqueUsers: this.appUnique.size,
+      uniqueUserHashes: [...this.appUnique],
+      processStartTime: toProtobufTimestamp(this.processStartTime),
+    }
+  }
+
+  private applyOptionalMetadata(payload: FeatureStatPayload): void {
+    if (this.instanceName) {
+      payload.instanceName = this.instanceName
+    }
+    if (this.appVersion) {
+      payload.appVersion = this.appVersion
+    }
+    if (this.definitionCacheHits > 0) {
+      payload.definitionCacheHits = this.definitionCacheHits
+    }
+    if (this.definitionCacheMisses > 0) {
+      payload.definitionCacheMisses = this.definitionCacheMisses
     }
   }
 

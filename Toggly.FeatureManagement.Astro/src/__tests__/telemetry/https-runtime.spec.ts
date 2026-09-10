@@ -344,4 +344,37 @@ describe('UsageTelemetryRuntime', () => {
     expect(Date.now() - started).toBeLessThan(500)
     expect(REQUEST_SCOPED_CLOSE_TIMEOUT_MS).toBe(2_000)
   })
+
+  it('keeps soft-fail restore after timed-out close', async () => {
+    let resolveSend!: (value: { ok: boolean }) => void
+    const sendStats = vi.fn(
+      () =>
+        new Promise<{ ok: boolean }>((resolve) => {
+          resolveSend = resolve
+        }),
+    )
+    const runtime = new UsageTelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      usageFlushInterval: 0,
+      attachProcessHandlers: false,
+      restoreOnSendFailure: true,
+      usageClient: { sendStats },
+    })
+    runtime.start()
+    runtime.recordDefinitionCacheHit()
+
+    await runtime.close({ timeoutMs: 30 })
+    expect(sendStats).toHaveBeenCalledTimes(1)
+
+    // Resolving soft-fail after the caller timed out must not throw when
+    // restoring into the still-live batcher (finish() cleans up later).
+    await expect(
+      (async () => {
+        resolveSend({ ok: false })
+        await new Promise((r) => setTimeout(r, 30))
+      })(),
+    ).resolves.toBeUndefined()
+  })
 })

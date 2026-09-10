@@ -158,35 +158,31 @@ export class UsageTelemetryRuntime {
       return
     }
 
-    const flush = () => {
+    const onBeforeExit = (): void => {
       void this.flush()
     }
+    process.on('beforeExit', onBeforeExit)
+    this.signalHandlers.push({ event: 'beforeExit', handler: onBeforeExit })
 
-    process.on('beforeExit', flush)
-    this.signalHandlers.push({ event: 'beforeExit', handler: flush })
+    this.bindTerminationSignal('SIGTERM')
+    this.bindTerminationSignal('SIGINT')
+  }
 
-    for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-      try {
-        const onSignal = () => {
-          void this.handleProcessSignal(signal)
-        }
-        process.on(signal, onSignal)
-        this.signalHandlers.push({ event: signal, handler: onSignal })
-      } catch {
-        // Some runtimes disallow signal handlers
+  private bindTerminationSignal(signal: 'SIGTERM' | 'SIGINT'): void {
+    try {
+      const handler = (): void => {
+        void this.handleProcessSignal(signal)
       }
+      process.on(signal, handler)
+      this.signalHandlers.push({ event: signal, handler })
+    } catch {
+      // Some runtimes disallow signal handlers
     }
   }
 
   private async handleProcessSignal(signal: NodeJS.Signals): Promise<void> {
     try {
-      await Promise.race([
-        this.close(),
-        new Promise<void>((resolve) => {
-          const timer = setTimeout(resolve, UsageTelemetryRuntime.SIGNAL_FLUSH_TIMEOUT_MS)
-          timer.unref?.()
-        }),
-      ])
+      await this.closeWithin(UsageTelemetryRuntime.SIGNAL_FLUSH_TIMEOUT_MS)
     } catch {
       // Best-effort flush; still exit
     } finally {
@@ -195,21 +191,36 @@ export class UsageTelemetryRuntime {
     }
   }
 
+  private closeWithin(timeoutMs: number): Promise<void> {
+    return Promise.race([
+      this.close(),
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, timeoutMs)
+        timer.unref?.()
+      }),
+    ])
+  }
+
   private reemitSignalAndExit(signal: NodeJS.Signals): void {
     try {
       process.kill(process.pid, signal)
     } catch {
-      const code = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 0
-      process.exit(code)
+      process.exit(this.exitCodeForSignal(signal))
     }
+  }
+
+  private exitCodeForSignal(signal: NodeJS.Signals): number {
+    if (signal === 'SIGINT') return 130
+    if (signal === 'SIGTERM') return 143
+    return 0
   }
 
   private detachProcessHandlers(): void {
     if (typeof process === 'undefined' || typeof process.off !== 'function') {
       return
     }
-    for (const { event, handler } of this.signalHandlers) {
-      process.off(event, handler)
+    for (const entry of this.signalHandlers) {
+      process.off(entry.event, entry.handler)
     }
     this.signalHandlers.length = 0
   }
@@ -247,7 +258,8 @@ export class UsageTelemetryRuntime {
   }
 
   private async sendUsageOnce(): Promise<void> {
-    if (!this.usageBatcher) return
+    const batcher = this.usageBatcher
+    if (!batcher) return
 
     const client = this.usageClient
     if (!client?.sendStats) {
@@ -255,7 +267,7 @@ export class UsageTelemetryRuntime {
       return
     }
 
-    const bundle = this.usageBatcher.buildAndReset()
+    const bundle = batcher.buildAndReset()
     if (!bundle) return
 
     try {
@@ -267,12 +279,12 @@ export class UsageTelemetryRuntime {
         'ok' in result &&
         (result as { ok: boolean }).ok === false
       ) {
-        this.usageBatcher.restoreFromBundle(bundle)
+        batcher.restoreFromBundle(bundle)
         this.logger.debug('Usage HTTPS soft-fail; batch restored')
       }
     } catch (error) {
       if (this.restoreOnSendFailure) {
-        this.usageBatcher.restoreFromBundle(bundle)
+        batcher.restoreFromBundle(bundle)
       }
       this.logger.error('Failed to send usage stats:', error)
     }
@@ -282,6 +294,8 @@ export class UsageTelemetryRuntime {
    * Flush remaining usage and tear down. When `timeoutMs` is set, abandon the
    * await after that bound (flush may continue in the background) so callers
    * such as request middleware never stall on a hung telemetry endpoint.
+   * Cleanup (nulling the batcher) waits for flush completion so soft-fail
+   * restore cannot race a timed-out close.
    */
   async close(options?: { timeoutMs?: number }): Promise<void> {
     if (this.closed) return
@@ -294,32 +308,38 @@ export class UsageTelemetryRuntime {
 
     this.detachProcessHandlers()
 
-    try {
-      const flush = this.flush().catch(() => {
-        // Soft-fail: close must not reject for telemetry errors.
-      })
-      const timeoutMs = options?.timeoutMs
-      if (timeoutMs != null && timeoutMs >= 0) {
-        await Promise.race([
-          flush,
-          new Promise<void>((resolve) => {
-            const timer = setTimeout(resolve, timeoutMs)
-            timer.unref?.()
-          }),
-        ])
-      } else {
-        await flush
-      }
-    } finally {
+    const finish = async (): Promise<void> => {
       try {
-        this.usageClient?.close?.()
-      } catch {
-        // ignore
+        await this.flush().catch(() => {
+          // Soft-fail: close must not reject for telemetry errors.
+        })
+      } finally {
+        try {
+          this.usageClient?.close?.()
+        } catch {
+          // ignore
+        }
+        this.usageClient = null
+        this.httpsClient = null
+        this.usageBatcher = null
       }
-      this.usageClient = null
-      this.httpsClient = null
-      this.usageBatcher = null
     }
+
+    const timeoutMs = options?.timeoutMs
+    if (timeoutMs != null && timeoutMs >= 0) {
+      const done = finish()
+      await Promise.race([
+        done,
+        new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, timeoutMs)
+          timer.unref?.()
+        }),
+      ])
+      // Timed-out callers return; finish() keeps running so restore still works.
+      return
+    }
+
+    await finish()
   }
 }
 
