@@ -1,23 +1,12 @@
-// import { defineConfig } from 'vite'
-// import vue from '@vitejs/plugin-vue'
-
-// // https://vitejs.dev/config/
-// export default defineConfig({
-//   plugins: [vue()],
-// })
-
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
-
-const signedDefsSrc = path.resolve(__dirname, '../../toggly-signed-defs/src/index.ts')
 
 export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
       '@/': new URL('./src/', import.meta.url).pathname,
-      '@ops-ai/toggly-signed-defs': signedDefsSrc,
     },
   },
 

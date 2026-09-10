@@ -1,9 +1,12 @@
+import { createRequire } from 'node:module'
 import { defineConfig } from 'vite'
 import { configDefaults } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { resolve } from 'path'
 
-const signedDefsSrc = resolve(__dirname, '../../toggly-signed-defs/src/index.ts')
+// Vitest loads the package ESM build, which still uses require('crypto') on Node.
+// Point tests at the published CJS entry (same npm package, not monorepo source).
+const require = createRequire(import.meta.url)
 
 export default defineConfig({
   plugins: [
@@ -16,7 +19,7 @@ export default defineConfig({
   resolve: {
     conditions: ['browser'],
     alias: {
-      '@ops-ai/toggly-signed-defs': signedDefsSrc,
+      '@ops-ai/toggly-signed-defs': require.resolve('@ops-ai/toggly-signed-defs'),
     },
   },
   test: {
@@ -27,14 +30,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
-      include: ['src/**/*.ts', 'src/**/*.svelte', '../../toggly-signed-defs/src/**/*.ts'],
+      include: ['src/**/*.ts', 'src/**/*.svelte'],
       exclude: [
         'src/**/*.spec.ts',
         'src/__tests__/**',
         'src/**/index.ts',
         'src/**/*.types.ts',
         'src/utils/createToggly.ts',
-        '../../toggly-signed-defs/src/**/*.test.ts',
       ],
       thresholds: {
         statements: 90,

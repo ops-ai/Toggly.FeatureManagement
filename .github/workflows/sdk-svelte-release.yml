@@ -72,13 +72,13 @@ jobs:
         if: steps.release.outputs.action == 'publish'
         run: npm install
 
-      - name: Type check
-        if: steps.release.outputs.action == 'publish'
-        run: npm run typecheck
-
       - name: Build
         if: steps.release.outputs.action == 'publish'
         run: npm run build
+
+      - name: Type check
+        if: steps.release.outputs.action == 'publish'
+        run: npm run typecheck
 
       - name: Run tests
         if: steps.release.outputs.action == 'publish'

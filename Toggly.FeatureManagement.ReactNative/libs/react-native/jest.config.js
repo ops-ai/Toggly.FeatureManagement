@@ -29,9 +29,6 @@ module.exports = {
       statements: 70,
     },
   },
-  moduleNameMapper: {
-    '^@ops-ai/react-native-toggly-core$': '<rootDir>/../core/src/index.ts',
-  },
   coverageProvider: 'v8',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
 };
