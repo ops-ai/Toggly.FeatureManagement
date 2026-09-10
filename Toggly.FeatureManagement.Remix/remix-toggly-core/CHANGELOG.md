@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.0
+
+2026-09-08
+
+### Added
+- Add optional `TogglyConfig.identity` for initial browser evaluation context.
+
+
 
 ## 1.7.0
 

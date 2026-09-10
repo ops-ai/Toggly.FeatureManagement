@@ -31,6 +31,96 @@ function TestConsumer({
 }
 
 describe('TogglyProvider', () => {
+  describe('initial evaluation context', () => {
+    beforeEach(() => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ targeted: true }) });
+    });
+
+    it('sends the complete configured context on one first request and retains it on refresh', async () => {
+      const config = {
+        appKey: 'test-key', identity: 'user&123',
+        groups: ['beta', 'team a'], claims: { plan: 'pro' },
+      };
+      let context!: TogglyContextValue;
+      render(<TogglyProvider config={config} enableRefresh={false}>
+        <TestConsumer onContext={value => { context = value; }} />
+      </TogglyProvider>);
+      await waitFor(() => expect(context.isReady).toBe(true));
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const first = new URL(mockFetch.mock.calls[0][0]);
+      expect(first.searchParams.get('u')).toBe('user&123');
+      expect(first.searchParams.getAll('g')).toEqual(['beta', 'team a']);
+      expect(first.searchParams.get('claim.plan')).toBe('pro');
+      expect(context.identity).toBe('user&123');
+      await act(async () => { await context.refresh(); });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[1][0]).toBe(first.toString());
+      await act(async () => { await context.reset(); });
+      expect(context.identity).toBeUndefined();
+      expect(new URL(mockFetch.mock.calls[2][0]).searchParams.has('u')).toBe(false);
+      await act(async () => { await context.refresh(); });
+      expect(new URL(mockFetch.mock.calls[3][0]).searchParams.has('u')).toBe(false);
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it.each([undefined, ''])('preserves omitted or empty identity %p and empty targeting', async identity => {
+      const config = { appKey: 'test-key', identity, groups: [], claims: {} };
+      let context!: TogglyContextValue;
+      render(<TogglyProvider config={config} enableRefresh={false}>
+        <TestConsumer onContext={value => { context = value; }} />
+      </TogglyProvider>);
+      await waitFor(() => expect(context.isReady).toBe(true));
+      expect(context.identity).toBe(identity);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect([...new URL(mockFetch.mock.calls[0][0]).searchParams.keys()]).toEqual([]);
+    });
+
+    it.each(['server-user', '', 'config-user'])('retains hydrated identity %p and flags ahead of configured identity', async identity => {
+      const config = { appKey: 'test-key', identity: 'config-user' };
+      const serverContext = { identity, flags: { hydrated: true }, fetchedAt: Date.now() };
+      let context!: TogglyContextValue;
+      render(<TogglyProvider config={config} serverContext={serverContext} enableRefresh={false}>
+        <TestConsumer onContext={value => { context = value; }} />
+      </TogglyProvider>);
+      expect(context.identity).toBe(identity);
+      expect(context.flags).toEqual({ hydrated: true });
+      expect(mockFetch).not.toHaveBeenCalled();
+      await act(async () => { await context.refresh(); });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(new URL(mockFetch.mock.calls[0][0]).searchParams.get('u')).toBe(identity || null);
+    });
+
+    it('preserves anonymous hydrated flags when configuration names a user', async () => {
+      const config = { appKey: 'test-key', identity: 'config-user' };
+      let context!: TogglyContextValue;
+      render(<TogglyProvider config={config} serverContext={{ flags: { hydrated: true }, fetchedAt: Date.now() }}>
+        <TestConsumer onContext={value => { context = value; }} />
+      </TogglyProvider>);
+      expect(context.identity).toBeUndefined();
+      expect(context.flags).toEqual({ hydrated: true });
+      expect(context.isReady).toBe(true);
+      expect(mockFetch).not.toHaveBeenCalled();
+      await act(async () => { await context.refresh(); });
+      expect(new URL(mockFetch.mock.calls[0][0]).searchParams.has('u')).toBe(false);
+      expect(context.identity).toBeUndefined();
+      expect(context.flags).toEqual({ targeted: true });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps configured identities isolated between providers', async () => {
+      const first = { appKey: 'test-key', identity: 'first-user' };
+      const second = { appKey: 'test-key', identity: 'second-user' };
+      const contexts: TogglyContextValue[] = [];
+      render(<>
+        <TogglyProvider config={first}><TestConsumer onContext={value => { contexts[0] = value; }} /></TogglyProvider>
+        <TogglyProvider config={second}><TestConsumer onContext={value => { contexts[1] = value; }} /></TogglyProvider>
+      </>);
+      await waitFor(() => expect(contexts.every(context => context.isReady)).toBe(true));
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls.map(call => new URL(call[0]).searchParams.get('u'))).toEqual(['first-user', 'second-user']);
+    });
+  });
+
   describe('initialization', () => {
     it('should render children', () => {
       render(

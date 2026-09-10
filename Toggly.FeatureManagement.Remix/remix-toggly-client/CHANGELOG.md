@@ -1,3 +1,10 @@
+## 1.4.0
+
+2026-09-08
+
+### Added
+- Seed browser identity from configuration before the first evaluated request, preserving hydrated server identity, refresh, and anonymous reset. Require core 1.8.0 for the public configuration type.
+
 ## 1.3.0
 
 2026-09-03

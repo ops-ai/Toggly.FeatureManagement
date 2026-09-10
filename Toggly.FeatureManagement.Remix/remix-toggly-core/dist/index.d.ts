@@ -319,6 +319,8 @@ interface TogglyConfig {
     localGates?: LocalGate[];
     /** Optional SDK error callback for reporting fetch/evaluation failures. */
     onError?: (message: string, error?: unknown) => void;
+    /** Initial browser identity; hydrated server identity takes precedence. */
+    identity?: string;
     /** User groups for targeting */
     groups?: string[];
     /** Custom claims for targeting */
