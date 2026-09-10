@@ -31,10 +31,13 @@ describe('TogglyServer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    // Existing suite focuses on flag fetch/eval; cache-hit telemetry is covered separately.
+    vi.stubEnv('TOGGLY_DISABLE_TELEMETRY', '1');
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   describe('constructor', () => {

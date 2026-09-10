@@ -26,6 +26,23 @@ export {
   allFeaturesEnabled,
 } from './server/utils.js';
 
+// Usage telemetry (HTTPS api/usage/stats; Metrics.SendMetrics deferred)
+export {
+  UsageBatcher,
+  UsageTelemetryRuntime,
+  HttpsTelemetryClient,
+  resolveTelemetryEnableFlag,
+  resolveMetricsBaseUrl,
+  DEFAULT_METRICS_BASE_URL,
+  DEFAULT_TELEMETRY_FLUSH_MS,
+} from './telemetry/index.js';
+export type {
+  UsageSender,
+  UsageTelemetryConfig,
+  FeatureStatPayload,
+  UsageFlushBundle,
+} from './telemetry/index.js';
+
 // Client-side
 export {
   initTogglyClient,

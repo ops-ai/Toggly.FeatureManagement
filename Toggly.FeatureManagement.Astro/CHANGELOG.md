@@ -1,3 +1,24 @@
+## 1.14.0
+
+2026-09-10
+
+### Added
+- Minimal HTTPS usage telemetry on the SSR server client (`POST api/usage/stats`)
+  with `definitionCacheHits` / `definitionCacheMisses` for definition-refresh
+  outcomes (TTL skip, network apply, error+last-good) [OPS-996].
+- Soft-fail restore on usage flush failure; `TOGGLY_DISABLE_TELEMETRY=1` kill
+  switch; cache-only batches flush without feature check stats.
+
+### Changed
+- Sync `SDK_VERSION` with the package version (`1.14.0`); User-Agent
+  `toggly-astro/1.14.0`.
+
+### Notes
+- Browser `src/client/store.ts` island refresh instrumentation is out of scope.
+- Full `Metrics.SendMetrics` parity is deferred (not an OPS-911 clone).
+- Server N/A: WebSocket live updates, durable snapshot hydrate, HTTP 304 /
+  equal-revision etag (no If-None-Match on the SSR client).
+
 ## 1.13.0
 
 2026-09-03

@@ -65,6 +65,35 @@ export interface TogglyConfig {
   localGates?: LocalGate[];
   /** Optional SDK error callback for reporting fetch/cache/evaluation failures. */
   onError?: (message: string, error?: unknown) => void;
+  /**
+   * When true, report usage stats (including definition cache hits/misses) via
+   * HTTPS `POST api/usage/stats`. Defaults to true when `appKey` is set.
+   * `TOGGLY_DISABLE_TELEMETRY=1` always wins over an explicit `true`.
+   */
+  enableUsageTracking?: boolean;
+  /** Gateway base URL for usage flush (default: `https://app.toggly.io/`). */
+  metricsBaseUrl?: string;
+  /** Usage flush interval in ms (default: 60000). Set `0` to disable the timer. */
+  usageFlushInterval?: number;
+  /** Optional instance name included on usage payloads. */
+  instanceName?: string;
+  /** Optional app version included on usage payloads. */
+  appVersion?: string;
+  /**
+   * When true (default), attach process signal flush handlers.
+   * Set false on hosts without Node signal support.
+   */
+  telemetryAttachProcessHandlers?: boolean;
+  /** Optional fetch implementation for HTTPS usage flush (tests / edge). */
+  telemetryFetch?: typeof fetch;
+  /**
+   * Injected usage sender for tests. When unset and usage is enabled, the
+   * server client builds a soft-fail HTTPS client to `api/usage/stats`.
+   */
+  usageClient?: {
+    sendStats(request: Record<string, unknown>): Promise<unknown>;
+    close?(): void;
+  } | null;
 }
 
 /**
