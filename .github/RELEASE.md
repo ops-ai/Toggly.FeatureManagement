@@ -143,9 +143,14 @@ skipped. Do not bump unrelated siblings just to satisfy a lockstep check.
 Secrets (repo-level, shared): `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`,
 `GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, plus `RELEASE_PUSH_TOKEN` for signed tags.
 
+Use a Central Portal **user token** (not account password) for
+`MAVEN_CENTRAL_USERNAME` / `MAVEN_CENTRAL_PASSWORD`.
+
 - **Android:** Gradle + vanniktech → `publishAllPublicationsToMavenCentralRepository`
 - **Java:** `mvn -B -Prelease clean deploy` with
-  `central-publishing-maven-plugin` (`server-id: central`) and `maven-gpg-plugin`
+  `central-publishing-maven-plugin` (`server-id: central`) and `maven-gpg-plugin`.
+  The release workflow sets `MAVEN_USERNAME` / `MAVEN_PASSWORD` at job scope and
+  wires them via `actions/setup-java` `server-*-env-var` inputs.
 
 Bump the parent `pom.xml` version, child `<parent><version>`, `SdkIdentity.SDK_VERSION`,
 README install snippets, and `CHANGELOG.md` in the same PR before running
