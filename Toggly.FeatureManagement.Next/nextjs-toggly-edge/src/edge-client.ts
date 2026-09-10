@@ -238,6 +238,22 @@ export class TogglyEdgeClient {
     )
   }
 
+  private recordDefinitionCacheHit(): void {
+    try {
+      this.telemetry?.recordDefinitionCacheHit()
+    } catch {
+      // Telemetry must never break edge refresh.
+    }
+  }
+
+  private recordDefinitionCacheMiss(): void {
+    try {
+      this.telemetry?.recordDefinitionCacheMiss()
+    } catch {
+      // Telemetry must never break edge refresh.
+    }
+  }
+
   private cacheValid(): boolean {
     if (
       !this.config.cache ||
@@ -253,6 +269,7 @@ export class TogglyEdgeClient {
 
   /**
    * Fetch definitions-signed rules (identity-agnostic) and cache them.
+   * Counts one definition-refresh cache hit/miss per attempt (not per evaluate).
    */
   async fetchDefinitions(): Promise<FeatureDefinitions> {
     if (!this.config.appKey) {
@@ -260,7 +277,9 @@ export class TogglyEdgeClient {
       return { ...this.config.featureDefaults }
     }
 
+    // TTL still valid / skip network → hit
     if (this.cacheValid()) {
+      this.recordDefinitionCacheHit()
       return this.state.features
     }
 
@@ -305,17 +324,24 @@ export class TogglyEdgeClient {
       this.state.lastFetch = Date.now()
       this.state.initialized = true
       this.state.error = null
+      // Successful network apply → miss
+      this.recordDefinitionCacheMiss()
       return this.refreshDefaultSnapshot()
     } catch (error) {
       console.error('[Toggly Edge] Failed to fetch feature definitions:', error)
       this.state.error = error as Error
       this.config.onError?.('Error fetching feature flags', error)
 
-      if (!this.state.initialized || this.definitions.size === 0) {
-        this.definitions = new Map()
-        this.state.features = { ...this.config.featureDefaults }
+      // Network error keeping last-good defs/features → hit
+      if (this.state.initialized && this.definitions.size > 0) {
+        this.recordDefinitionCacheHit()
+        return this.state.features
       }
+
+      this.definitions = new Map()
+      this.state.features = { ...this.config.featureDefaults }
       this.state.initialized = true
+      this.recordDefinitionCacheHit()
 
       return this.state.features
     }

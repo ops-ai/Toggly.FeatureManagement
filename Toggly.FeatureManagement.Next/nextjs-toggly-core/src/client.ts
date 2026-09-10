@@ -65,6 +65,8 @@ export function createTogglyClient(
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let destroyed = false
   let telemetry: TelemetryRuntime | null = null
+  /** True while a refresh is in flight — concurrent callers skip without counting. */
+  let refreshInFlight = false
 
   // WebSocket live updates
   let liveSocket: LiveSocket | null = null
@@ -124,6 +126,41 @@ export function createTogglyClient(
     config.onError?.(message, error)
   }
 
+  function recordDefinitionCacheHit(): void {
+    try {
+      telemetry?.recordDefinitionCacheHit()
+    } catch (error) {
+      console.debug('[Toggly] Failed to record definition cache hit:', error)
+    }
+  }
+
+  function recordDefinitionCacheMiss(): void {
+    try {
+      telemetry?.recordDefinitionCacheMiss()
+    } catch (error) {
+      console.debug('[Toggly] Failed to record definition cache miss:', error)
+    }
+  }
+
+  function normalizeRevision(revision: string | null | undefined): string | null {
+    if (!revision) {
+      return null
+    }
+    return revision.replace(/^"+|"+$/g, '')
+  }
+
+  function revisionsMatch(
+    previous: string | null | undefined,
+    incoming: string | null | undefined,
+  ): boolean {
+    const a = normalizeRevision(previous)
+    const b = normalizeRevision(incoming)
+    if (!a || !b) {
+      return false
+    }
+    return a === b
+  }
+
   function getDefinitionsRevision(): string | null {
     return cachedDefinitionsRevision
   }
@@ -132,7 +169,7 @@ export function createTogglyClient(
     if (!revision) {
       return
     }
-    cachedDefinitionsRevision = revision.replace(/^"+|"+$/g, '')
+    cachedDefinitionsRevision = normalizeRevision(revision)
   }
 
   function scheduleDebouncedRefresh(forceRevisionReset = false): void {
@@ -373,12 +410,16 @@ export function createTogglyClient(
   }
 
   /**
-   * Fetch evaluated-signed definitions (remote / client rail)
+   * Fetch evaluated-signed definitions (remote / client rail).
+   * Returns defs plus whether this attempt applied a new revision (miss) or reused cache (hit).
    */
-  async function fetchRemoteEvaluated(): Promise<FeatureDefinitions> {
+  async function fetchRemoteEvaluated(): Promise<{
+    defs: FeatureDefinitions
+    outcome: 'hit' | 'miss'
+  }> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
-      return { ...config.featureDefaults }
+      return { defs: { ...config.featureDefaults }, outcome: 'hit' }
     }
 
     const fetchUrl = new URL(
@@ -401,8 +442,9 @@ export function createTogglyClient(
     pendingDefinitionsPin = null
     const url = appendDefinitionsRevisionParam(fetchUrl.toString(), pin)
 
-    const revision = pin ? null : getDefinitionsRevision()
-    const headers = buildFetchHeaders(revision)
+    // Pin forces a cache-proof GET; do not treat prior etag as still current.
+    const previousRevision = pin ? null : getDefinitionsRevision()
+    const headers = buildFetchHeaders(previousRevision)
 
     try {
       const response = await fetch(url, {
@@ -410,17 +452,25 @@ export function createTogglyClient(
         headers,
       })
 
-      const responseRevision = extractDefinitionsRevision(response)
-      if (responseRevision) {
-        cacheDefinitionsRevision(responseRevision)
-      }
+      const responseRevision = normalizeRevision(extractDefinitionsRevision(response))
 
       if (response.status === 304) {
-        return { ...state.features }
+        if (responseRevision) {
+          cacheDefinitionsRevision(responseRevision)
+        }
+        return { defs: { ...state.features }, outcome: 'hit' }
       }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      // HTTP 200 whose revision matches existing (CDN replay) — cache hit.
+      if (revisionsMatch(previousRevision, responseRevision)) {
+        if (responseRevision) {
+          cacheDefinitionsRevision(responseRevision)
+        }
+        return { defs: { ...state.features }, outcome: 'hit' }
       }
 
       const bodyText = await readResponseBody(response)
@@ -434,9 +484,13 @@ export function createTogglyClient(
         }),
       })
 
-      return parseRemoteEvaluatedPayload(parsed, {
+      const defs = parseRemoteEvaluatedPayload(parsed, {
         verifySignatures: config.verifySignatures,
       })
+      if (responseRevision) {
+        cacheDefinitionsRevision(responseRevision)
+      }
+      return { defs, outcome: 'miss' }
     } catch (error) {
       console.error('[Toggly] Failed to fetch feature definitions:', error)
       reportError('Error fetching feature flags', error)
@@ -445,12 +499,16 @@ export function createTogglyClient(
   }
 
   /**
-   * Fetch definitions-signed rules (local evaluation rail — no identity query)
+   * Fetch definitions-signed rules (local evaluation rail — no identity query).
+   * Returns defs plus whether this attempt applied a new revision (miss) or reused cache (hit).
    */
-  async function fetchLocalDefinitions(): Promise<Map<string, FeatureDefinitionModel>> {
+  async function fetchLocalDefinitions(): Promise<{
+    defs: Map<string, FeatureDefinitionModel>
+    outcome: 'hit' | 'miss'
+  }> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
-      return new Map()
+      return { defs: new Map(), outcome: 'hit' }
     }
 
     const pin = pendingDefinitionsPin
@@ -461,8 +519,8 @@ export function createTogglyClient(
       config.environment
     )
     const url = appendDefinitionsRevisionParam(baseUrl, pin)
-    const revision = pin ? null : getDefinitionsRevision()
-    const headers = buildFetchHeaders(revision)
+    const previousRevision = pin ? null : getDefinitionsRevision()
+    const headers = buildFetchHeaders(previousRevision)
 
     try {
       const response = await fetch(url, {
@@ -470,17 +528,24 @@ export function createTogglyClient(
         headers,
       })
 
-      const responseRevision = extractDefinitionsRevision(response)
-      if (responseRevision) {
-        cacheDefinitionsRevision(responseRevision)
-      }
+      const responseRevision = normalizeRevision(extractDefinitionsRevision(response))
 
       if (response.status === 304) {
-        return state.definitions
+        if (responseRevision) {
+          cacheDefinitionsRevision(responseRevision)
+        }
+        return { defs: state.definitions, outcome: 'hit' }
       }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      if (revisionsMatch(previousRevision, responseRevision)) {
+        if (responseRevision) {
+          cacheDefinitionsRevision(responseRevision)
+        }
+        return { defs: state.definitions, outcome: 'hit' }
       }
 
       const bodyText = await readResponseBody(response)
@@ -494,7 +559,11 @@ export function createTogglyClient(
         }),
       })
 
-      return parseDefinitionsPayload(parsed)
+      const defs = parseDefinitionsPayload(parsed)
+      if (responseRevision) {
+        cacheDefinitionsRevision(responseRevision)
+      }
+      return { defs, outcome: 'miss' }
     } catch (error) {
       console.error('[Toggly] Failed to fetch feature definitions:', error)
       reportError('Error fetching feature flags', error)
@@ -502,19 +571,73 @@ export function createTogglyClient(
     }
   }
 
-  async function loadFeaturesFromApi(): Promise<FeatureDefinitions> {
+  async function loadFeaturesFromApi(): Promise<'hit' | 'miss'> {
     if (isLocalMode()) {
-      const defs = await fetchLocalDefinitions()
-      return applyLocalDefinitions(defs)
+      const { defs, outcome } = await fetchLocalDefinitions()
+      if (outcome === 'miss') {
+        applyLocalDefinitions(defs)
+      }
+      return outcome
     }
 
-    state.definitions = new Map()
-    const definitions = await fetchRemoteEvaluated()
-    state.features = {
-      ...config.featureDefaults,
-      ...definitions,
+    const { defs, outcome } = await fetchRemoteEvaluated()
+    if (outcome === 'miss') {
+      state.definitions = new Map()
+      state.features = {
+        ...config.featureDefaults,
+        ...defs,
+      }
     }
-    return state.features
+    return outcome
+  }
+
+  /**
+   * Shared definition refresh with single-flight + one hit/miss outcome.
+   * Returns whether this call performed the fetch (false = concurrent skip).
+   */
+  async function refreshFeatures(options?: {
+    reportRefreshError?: boolean
+  }): Promise<{ features: FeatureDefinitions; performed: boolean }> {
+    const reportRefreshError = options?.reportRefreshError ?? true
+
+    // Concurrent refresh skipped (in flight) — do not count.
+    if (refreshInFlight) {
+      return { features: state.features, performed: false }
+    }
+
+    refreshInFlight = true
+    state.loading = true
+    state.error = null
+    let outcomeRecorded = false
+
+    try {
+      const outcome = await loadFeaturesFromApi()
+      if (outcome === 'miss') {
+        recordDefinitionCacheMiss()
+      } else {
+        recordDefinitionCacheHit()
+      }
+      outcomeRecorded = true
+      state.lastRefresh = new Date()
+      return { features: state.features, performed: true }
+    } catch (error) {
+      state.error = error as Error
+      if (reportRefreshError) {
+        reportError('Error refreshing feature flags', error)
+      }
+
+      if (
+        !outcomeRecorded &&
+        (state.definitions.size > 0 || Object.keys(state.features).length > 0)
+      ) {
+        recordDefinitionCacheHit()
+      }
+
+      throw error
+    } finally {
+      state.loading = false
+      refreshInFlight = false
+    }
   }
 
   /**
@@ -527,10 +650,12 @@ export function createTogglyClient(
 
     refreshIntervalId = setInterval(async () => {
       if (!destroyed) {
-        // When WebSocket is connected, only do fallback refreshes at a longer interval
+        // When WebSocket is connected, only do fallback refreshes at a longer interval.
+        // Skipped poll (live WS / in-memory still valid) counts as a cache hit.
         if (wsConnected) {
           const now = Date.now()
           if (now - lastFallbackRefresh < FALLBACK_REFRESH_INTERVAL) {
+            recordDefinitionCacheHit()
             return
           }
           lastFallbackRefresh = now
@@ -706,8 +831,28 @@ export function createTogglyClient(
       state.error = null
 
       try {
-        await loadFeaturesFromApi()
-        state.lastRefresh = new Date()
+        // Start usage/metrics before first refresh so snapshot + refresh outcomes are recorded.
+        startTelemetry()
+
+        // Startup served from durable snapshot (hydrateDefinitions) before network — cache hit.
+        if (state.definitions.size > 0) {
+          recordDefinitionCacheHit()
+        }
+
+        try {
+          await refreshFeatures({ reportRefreshError: false })
+        } catch {
+          // Preserve last-known-good / defaults; refreshFeatures already recorded a hit when applicable.
+          if (
+            state.definitions.size === 0 &&
+            Object.keys(state.features).length === 0
+          ) {
+            state.features = { ...config.featureDefaults }
+          }
+          state.initialized = true
+          return state.features
+        }
+
         state.initialized = true
 
         // Execute afterRefresh hooks
@@ -720,17 +865,19 @@ export function createTogglyClient(
         // Start WebSocket for live updates (browser + Node server)
         startWebSocket()
 
-        // Optional usage/metrics telemetry (opt-in via config; server/edge enable)
-        startTelemetry()
-
         return state.features
       } catch (error) {
         state.error = error as Error
 
-        // Fall back to defaults only when no last-known-good flags exist.
-        if (Object.keys(state.features).length === 0) {
-          state.features = { ...config.featureDefaults }
+        if (
+          state.definitions.size > 0 ||
+          Object.keys(state.features).length > 0
+        ) {
+          state.initialized = true
+          return state.features
         }
+
+        state.features = { ...config.featureDefaults }
         state.initialized = true
 
         return state.features
@@ -744,25 +891,12 @@ export function createTogglyClient(
         throw new Error('[Toggly] Client has been destroyed')
       }
 
-      state.loading = true
-      state.error = null
-
-      try {
-        await loadFeaturesFromApi()
-        state.lastRefresh = new Date()
-
-        // Execute afterRefresh hooks
+      const { features, performed } = await refreshFeatures()
+      if (performed) {
         await hookExecutor.executeAfterRefresh(state.features)
         notifyFeaturesRefresh()
-
-        return state.features
-      } catch (error) {
-        state.error = error as Error
-        reportError('Error refreshing feature flags', error)
-        throw error
-      } finally {
-        state.loading = false
       }
+      return features
     },
 
     async isFeatureOn(
@@ -1000,7 +1134,13 @@ export function createTogglyClient(
       if (destroyed) {
         return state.features
       }
-      return applyLocalDefinitions(indexDefinitions(defs))
+      const features = applyLocalDefinitions(indexDefinitions(defs))
+      // Durable snapshot apply after telemetry is running (e.g. last-known-good
+      // recovery). Startup hydrate-before-init is counted in init() instead.
+      if (state.initialized && defs.length > 0) {
+        recordDefinitionCacheHit()
+      }
+      return features
     },
 
     addHook(hook: Hook): void {

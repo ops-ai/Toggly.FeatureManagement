@@ -283,11 +283,19 @@ async function createAndBindServerClient(
       ? await readCachedDefinitions(serverStorage, mergedConfig)
       : null
 
+    // Startup from durable snapshot before first network (counted in core init).
+    if (cachedDefs && cachedDefs.length > 0) {
+      serverClient.hydrateDefinitions(cachedDefs)
+    }
+
     await serverClient.init()
 
     // Last-known-good: if fetch failed, hydrate from durable definition cache
     if (serverClient.state.error && cachedDefs && cachedDefs.length > 0) {
-      serverClient.hydrateDefinitions(cachedDefs)
+      // Only re-hydrate when network wiped / left empty defs
+      if (serverClient.getDefinitions().size === 0) {
+        serverClient.hydrateDefinitions(cachedDefs)
+      }
     }
 
     // Persist definition models after a successful fetch (or hydrate)

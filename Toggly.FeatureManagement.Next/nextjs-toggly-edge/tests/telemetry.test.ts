@@ -105,3 +105,95 @@ describe('edge telemetry', () => {
     await client.close()
   })
 })
+
+describe('edge definition cache hit telemetry', () => {
+  const mockFetch = vi.fn()
+
+  afterEach(async () => {
+    resetEdgeToggly()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  function alwaysOn(featureKey: string) {
+    return {
+      featureKey,
+      filters: [{ name: 'AlwaysOn', parameters: {} }],
+    }
+  }
+
+  function okResponse(body: unknown) {
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => JSON.stringify(body),
+      json: async () => body,
+    }
+  }
+
+  it('records a miss on network apply and a hit on TTL skip', async () => {
+    vi.stubGlobal('fetch', mockFetch)
+    mockFetch.mockResolvedValue(okResponse([alwaysOn('feature-a')]))
+
+    const sendStats = vi.fn().mockResolvedValue({})
+    const client = createEdgeClient({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: null,
+      cache: true,
+      cacheTtl: 60,
+    })
+
+    await client.init()
+    await client.fetchDefinitions() // TTL still valid → hit
+    await client.flushTelemetry()
+
+    const payload = sendStats.mock.calls[0][0] as {
+      definitionCacheHits?: number
+      definitionCacheMisses?: number
+    }
+    expect(payload.definitionCacheMisses).toBe(1)
+    expect(payload.definitionCacheHits).toBe(1)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await client.close()
+  })
+
+  it('records a hit when network fails and last-good defs are kept', async () => {
+    vi.stubGlobal('fetch', mockFetch)
+    mockFetch
+      .mockResolvedValueOnce(okResponse([alwaysOn('feature-a')]))
+      .mockRejectedValueOnce(new Error('network down'))
+
+    const sendStats = vi.fn().mockResolvedValue({})
+    const client = createEdgeClient({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: null,
+      cache: false,
+    })
+
+    await client.init()
+    await client.fetchDefinitions()
+    await client.flushTelemetry()
+
+    const payload = sendStats.mock.calls[0][0] as {
+      definitionCacheHits?: number
+      definitionCacheMisses?: number
+    }
+    expect(payload.definitionCacheMisses).toBe(1)
+    expect(payload.definitionCacheHits).toBe(1)
+    expect(client.isFeatureOnSync('feature-a')).toBe(true)
+    await client.close()
+  })
+})
