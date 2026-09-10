@@ -8,6 +8,11 @@
 - Cache-only usage flushes still send; soft-fail restore merges cache counters
   with in-flight records.
 
+### Fixed
+- Equal-ETag HTTP 200 still parses and applies the response body (remote
+  evaluated flags can change with identity at the same definition revision)
+  while classifying the outcome as a cache hit [OPS-995].
+
 ## 1.10.0
 
 2026-09-06

@@ -429,14 +429,10 @@ export function createTogglyClient(
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      // HTTP 200 whose revision matches existing (CDN replay) — cache hit.
-      if (revisionsMatch(previousRevision, responseRevision)) {
-        if (responseRevision) {
-          cacheDefinitionsRevision(responseRevision)
-        }
-        return 'hit'
-      }
-
+      // Always parse/apply the body on HTTP 200. Equal revision is still a cache
+      // hit (definition revision unchanged), but remote evaluated payloads can
+      // differ by identity for the same revision — skipping the body would leave
+      // defaults / stale evaluated flags.
       const bodyText = await readResponseBody(response)
       const parsed = await parseEvaluatedResponseBody(bodyText, {
         verifySignatures: config.verifySignatures,
@@ -463,7 +459,8 @@ export function createTogglyClient(
       if (responseRevision) {
         cacheDefinitionsRevision(responseRevision)
       }
-      return 'miss'
+      // Same revision → hit (CDN replay / identity-scoped re-eval); new → miss.
+      return revisionsMatch(previousRevision, responseRevision) ? 'hit' : 'miss'
     } catch (error) {
       console.error('[Toggly] Failed to fetch feature definitions:', error)
       reportError('Error fetching feature flags', error)

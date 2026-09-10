@@ -233,6 +233,58 @@ describe('definition cache hit telemetry', () => {
     client.destroy()
   })
 
+  it('applies remote equal-etag 200 body and records a hit', async () => {
+    // Same definition revision can still carry different evaluated flags when
+    // identity changes (evaluated-signed). Body must be applied; outcome is hit.
+    mockFetch
+      .mockResolvedValueOnce(
+        okResponse(
+          {
+            features: [
+              { featureKey: 'feature-a', enabled: false },
+              { featureKey: 'feature-b', enabled: false },
+            ],
+          },
+          'rev-1',
+        ),
+      )
+      .mockResolvedValueOnce(
+        okResponse(
+          {
+            features: [
+              { featureKey: 'feature-a', enabled: true },
+              { featureKey: 'feature-b', enabled: true },
+            ],
+          },
+          'rev-1',
+        ),
+      )
+
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 0 })
+    const client = createTogglyClient({
+      ...telemetryClientOptions(sendStats),
+      evaluationMode: 'remote',
+      featureDefaults: { 'feature-a': false, 'feature-b': false },
+    })
+
+    await client.init()
+    expect(await client.isFeatureOn('feature-a')).toBe(false)
+    expect(await client.isFeatureOn('feature-b')).toBe(false)
+
+    await client.refresh()
+    expect(await client.isFeatureOn('feature-a')).toBe(true)
+    expect(await client.isFeatureOn('feature-b')).toBe(true)
+
+    await client.flushTelemetry()
+    const payload = sendStats.mock.calls[0][0] as {
+      definitionCacheHits?: number
+      definitionCacheMisses?: number
+    }
+    expect(payload.definitionCacheMisses).toBe(1)
+    expect(payload.definitionCacheHits).toBe(1)
+    client.destroy()
+  })
+
   it('records a miss when WS flags-updated applies a new revision via refresh', async () => {
     vi.useFakeTimers()
     mockFetch
