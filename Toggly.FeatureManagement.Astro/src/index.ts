@@ -35,6 +35,8 @@ export {
   resolveMetricsBaseUrl,
   DEFAULT_METRICS_BASE_URL,
   DEFAULT_TELEMETRY_FLUSH_MS,
+  DEFAULT_TELEMETRY_FETCH_TIMEOUT_MS,
+  REQUEST_SCOPED_CLOSE_TIMEOUT_MS,
 } from './telemetry/index.js';
 export type {
   UsageSender,

@@ -17,6 +17,10 @@
   `close()` when the request finishes (avoids listener/timer leaks).
 - Usage `appVersion` is only the configured consuming-app version (never
   defaulted to `SDK_VERSION`; SDK identity remains User-Agent / headers).
+- Bound request-scoped middleware `close()` wait (`REQUEST_SCOPED_CLOSE_TIMEOUT_MS`)
+  so a hung usage flush cannot stall the HTTP response indefinitely.
+- HTTPS usage client aborts posts after `DEFAULT_TELEMETRY_FETCH_TIMEOUT_MS`
+  (5s) so long-lived servers are protected from stalled telemetry endpoints.
 
 ### Notes
 - Browser `src/client/store.ts` island refresh instrumentation is out of scope.

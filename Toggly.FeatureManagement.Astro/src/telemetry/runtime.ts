@@ -1,11 +1,15 @@
 import {
   DEFAULT_METRICS_BASE_URL,
+  DEFAULT_TELEMETRY_FETCH_TIMEOUT_MS,
   DEFAULT_TELEMETRY_FLUSH_MS,
   HttpsTelemetryClient,
   resolveMetricsBaseUrl,
   resolveTelemetryEnableFlag,
 } from './https-client.js'
 import { UsageBatcher, type UsageFlushBundle } from './usage-batcher.js'
+
+/** Bound wait for request-scoped / signal close so hung flush cannot stall forever. */
+export const REQUEST_SCOPED_CLOSE_TIMEOUT_MS = 2_000
 
 export interface UsageSender {
   sendStats(request: Record<string, unknown>): Promise<unknown>
@@ -34,6 +38,8 @@ export interface UsageTelemetryConfig {
   fetchImpl?: typeof fetch
   /** Injected client for tests. When unset, HTTPS `api/usage/stats` is used. */
   usageClient?: UsageSender | null
+  /** Abort hanging HTTPS usage posts after this many ms (default: 5000). */
+  fetchTimeoutMs?: number
 }
 
 export interface TelemetryLogger {
@@ -68,7 +74,10 @@ export class UsageTelemetryRuntime {
       'appKey' | 'environment' | 'metricsBaseUrl' | 'enableUsageTracking' | 'usageFlushInterval'
     >
   > &
-    Pick<UsageTelemetryConfig, 'instanceName' | 'appVersion' | 'usageClient' | 'fetchImpl'>
+    Pick<
+      UsageTelemetryConfig,
+      'instanceName' | 'appVersion' | 'usageClient' | 'fetchImpl' | 'fetchTimeoutMs'
+    >
 
   constructor(config: UsageTelemetryConfig, logger?: TelemetryLogger) {
     const hasAppKey = Boolean(config.appKey)
@@ -84,6 +93,7 @@ export class UsageTelemetryRuntime {
       appVersion: config.appVersion,
       usageClient: config.usageClient,
       fetchImpl: config.fetchImpl,
+      fetchTimeoutMs: config.fetchTimeoutMs ?? DEFAULT_TELEMETRY_FETCH_TIMEOUT_MS,
     }
     this.logger = logger ?? {
       debug: () => {},
@@ -108,6 +118,7 @@ export class UsageTelemetryRuntime {
       this.httpsClient = new HttpsTelemetryClient({
         metricsBaseUrl: this.config.metricsBaseUrl,
         fetchImpl: this.config.fetchImpl,
+        fetchTimeoutMs: this.config.fetchTimeoutMs,
       })
       this.usageClient = {
         sendStats: async (request) => {
@@ -139,7 +150,8 @@ export class UsageTelemetryRuntime {
     }
   }
 
-  static readonly SIGNAL_FLUSH_TIMEOUT_MS = 2_000
+  static readonly SIGNAL_FLUSH_TIMEOUT_MS = REQUEST_SCOPED_CLOSE_TIMEOUT_MS
+  static readonly REQUEST_SCOPED_CLOSE_TIMEOUT_MS = REQUEST_SCOPED_CLOSE_TIMEOUT_MS
 
   private attachHandlers(): void {
     if (typeof process === 'undefined' || typeof process.on !== 'function') {
@@ -266,7 +278,12 @@ export class UsageTelemetryRuntime {
     }
   }
 
-  async close(): Promise<void> {
+  /**
+   * Flush remaining usage and tear down. When `timeoutMs` is set, abandon the
+   * await after that bound (flush may continue in the background) so callers
+   * such as request middleware never stall on a hung telemetry endpoint.
+   */
+  async close(options?: { timeoutMs?: number }): Promise<void> {
     if (this.closed) return
     this.closed = true
 
@@ -278,7 +295,21 @@ export class UsageTelemetryRuntime {
     this.detachProcessHandlers()
 
     try {
-      await this.flush()
+      const flush = this.flush().catch(() => {
+        // Soft-fail: close must not reject for telemetry errors.
+      })
+      const timeoutMs = options?.timeoutMs
+      if (timeoutMs != null && timeoutMs >= 0) {
+        await Promise.race([
+          flush,
+          new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, timeoutMs)
+            timer.unref?.()
+          }),
+        ])
+      } else {
+        await flush
+      }
     } finally {
       try {
         this.usageClient?.close?.()

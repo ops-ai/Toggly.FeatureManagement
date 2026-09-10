@@ -779,6 +779,57 @@ x-feature: AboutFeature
 
       await expect(middleware({ locals }, next)).rejects.toThrow('handler failed');
       expect(close).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledWith(
+        expect.objectContaining({ timeoutMs: expect.any(Number) }),
+      );
+    });
+
+    it('still completes within a bound when usage flush hangs', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          JSON.stringify([
+            {
+              featureKey: 'F1',
+              filters: [{ name: 'AlwaysOn', parameters: {} }],
+            },
+          ]),
+        json: async () => [
+          {
+            featureKey: 'F1',
+            filters: [{ name: 'AlwaysOn', parameters: {} }],
+          },
+        ],
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const hungSend = vi.fn(() => new Promise(() => {}));
+      const middleware = createTogglyMiddleware({
+        appKey: 'middleware-hang',
+        environment: 'Production',
+        enableUsageTracking: true,
+        usageFlushInterval: 0,
+        usageClient: { sendStats: hungSend },
+        flagDefaults: { F1: true },
+      });
+
+      try {
+        const started = Date.now();
+        const response = await middleware(
+          { locals: {} },
+          async () => new Response('ok'),
+        );
+        const elapsed = Date.now() - started;
+
+        expect(response.status).toBe(200);
+        // REQUEST_SCOPED_CLOSE_TIMEOUT_MS is 2s; leave headroom for CI.
+        expect(elapsed).toBeLessThan(3500);
+        expect(hungSend).toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 });

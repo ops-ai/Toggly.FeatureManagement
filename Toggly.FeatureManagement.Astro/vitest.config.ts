@@ -24,6 +24,7 @@ export default defineConfig({
         'src/**/*.d.ts',
         'src/types/**',
         'src/index.ts',
+        'src/telemetry/index.ts',
         'src/frameworks/react/index.ts',
         'src/frameworks/vue/index.ts',
         'src/frameworks/svelte/index.ts',

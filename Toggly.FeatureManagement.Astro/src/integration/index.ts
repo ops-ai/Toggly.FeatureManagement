@@ -10,6 +10,7 @@ import * as path from 'path';
 import { glob } from 'glob';
 import type { TogglyConfig, PageFeatureMapping } from '../types/index.js';
 import { createTogglyServerClient } from '../server/toggly-server.js';
+import { REQUEST_SCOPED_CLOSE_TIMEOUT_MS } from '../telemetry/runtime.js';
 
 export interface TogglyIntegrationOptions extends TogglyConfig {}
 
@@ -327,7 +328,10 @@ export function createTogglyMiddleware(config: TogglyConfig) {
     } finally {
       if (ownsClient) {
         try {
-          await locals.toggly?.close?.();
+          // Bound wait: hung usage flush must not delay the HTTP response.
+          await locals.toggly?.close?.({
+            timeoutMs: REQUEST_SCOPED_CLOSE_TIMEOUT_MS,
+          });
         } catch {
           // Best-effort teardown; never fail the HTTP response for telemetry.
         }

@@ -136,8 +136,8 @@ export class TogglyServer implements TogglyClient {
   }
 
   /** Flush and tear down usage telemetry. */
-  async close(): Promise<void> {
-    await this.telemetry?.close();
+  async close(options?: { timeoutMs?: number }): Promise<void> {
+    await this.telemetry?.close(options);
     this.telemetry = null;
   }
 

@@ -4,11 +4,15 @@ import type { FeatureStatPayload } from './usage-batcher.js'
 
 export const DEFAULT_METRICS_BASE_URL = 'https://app.toggly.io/'
 export const DEFAULT_TELEMETRY_FLUSH_MS = 60_000
+/** Default AbortSignal timeout for usage HTTPS posts (aligns with connectTimeout). */
+export const DEFAULT_TELEMETRY_FETCH_TIMEOUT_MS = 5_000
 
 export interface HttpsTelemetryClientOptions {
   metricsBaseUrl?: string
   userAgent?: string
   fetchImpl?: typeof fetch
+  /** Abort hanging usage posts after this many ms (default: 5000). */
+  fetchTimeoutMs?: number
 }
 
 function ensureTrailingSlash(baseUrl: string): string {
@@ -35,11 +39,13 @@ export class HttpsTelemetryClient {
   private readonly baseUrl: string
   private readonly userAgent: string
   private readonly fetchImpl: typeof fetch
+  private readonly fetchTimeoutMs: number
 
   constructor(options: HttpsTelemetryClientOptions = {}) {
     this.baseUrl = ensureTrailingSlash(options.metricsBaseUrl ?? DEFAULT_METRICS_BASE_URL)
     this.userAgent = options.userAgent ?? sdkUserAgent()
     this.fetchImpl = options.fetchImpl ?? fetch.bind(globalThis)
+    this.fetchTimeoutMs = options.fetchTimeoutMs ?? DEFAULT_TELEMETRY_FETCH_TIMEOUT_MS
   }
 
   getUserAgent(): string {
@@ -51,9 +57,12 @@ export class HttpsTelemetryClient {
   }
 
   /**
-   * POST JSON. Returns true on 2xx, false on soft-fail (network / non-2xx).
+   * POST JSON. Returns true on 2xx, false on soft-fail (network / non-2xx / timeout).
    */
   async post(path: string, body: unknown): Promise<boolean> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), this.fetchTimeoutMs)
+    timeoutId.unref?.()
     try {
       const url = new URL(path.replace(/^\//, ''), this.baseUrl).toString()
       const response = await this.fetchImpl(url, {
@@ -64,10 +73,13 @@ export class HttpsTelemetryClient {
           'User-Agent': this.userAgent,
         },
         body: JSON.stringify(body),
+        signal: controller.signal,
       })
       return response.ok
     } catch {
       return false
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 

@@ -14,6 +14,7 @@ export {
   HttpsTelemetryClient,
   DEFAULT_METRICS_BASE_URL,
   DEFAULT_TELEMETRY_FLUSH_MS,
+  DEFAULT_TELEMETRY_FETCH_TIMEOUT_MS,
   resolveMetricsBaseUrl,
   resolveTelemetryEnableFlag,
   isTelemetryEnvDisabled,
@@ -23,6 +24,7 @@ export {
 
 export {
   UsageTelemetryRuntime,
+  REQUEST_SCOPED_CLOSE_TIMEOUT_MS,
   type UsageTelemetryConfig,
   type UsageSender,
   type TelemetryLogger,
