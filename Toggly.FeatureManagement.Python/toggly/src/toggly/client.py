@@ -24,7 +24,6 @@ from toggly.crypto import verify_signed_definitions
 from toggly.definition_cache import (
     DefinitionRefreshMixin,
     DefinitionsMissPlan,
-    VariantsMissPlan,
     extract_raw_defs_json,
     if_none_match_headers,
     parse_definitions_payload,
@@ -120,7 +119,7 @@ class TogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
         self._definitions: dict[str, FeatureDefinition] = {}
         self._variant_defs: dict[str, EvaluatedVariantDef] = {}
         self._flags: dict[str, bool] = dict(config.feature_defaults)
-        self._identity = config.identity
+        self._initialize_variant_context()
         self._is_initialized = False
         self._last_refresh: datetime | None = None
         self._last_error: str | None = None
@@ -500,8 +499,8 @@ class TogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
             Response from refresh (if applicable).
 
         """
-        old_identity = self._identity
-        self._identity = identity
+        with self._lock:
+            old_identity = self._set_variant_identity_unlocked(identity)
 
         # Notify handlers of identity change
         for handler in self._config.state_change_handlers:
@@ -700,20 +699,25 @@ class TogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
         if not self._config.app_key:
             raise TogglyConfigError("app_key is required for fetching variants")
 
-        url = build_evaluated_variants_url(
-            self._config.base_url,
-            self._config.app_key,
-            self._config.environment,
-            identity=self._identity,
-        )
-        response = self._http.get(
-            url, headers=if_none_match_headers(self._etag)
-        )
-        planned = self._plan_variants_http_response(response)
-        if isinstance(planned, VariantsMissPlan):
+        while True:
             with self._lock:
-                return self._commit_variants_miss_plan(planned)
-        return planned
+                generation = self._variant_generation
+                url = build_evaluated_variants_url(
+                    self._config.base_url,
+                    self._config.app_key,
+                    self._config.environment,
+                    identity=self._identity,
+                    groups=self._variant_groups,
+                    claims=self._variant_claims,
+                )
+                headers = if_none_match_headers(self._etag)
+            response = self._http.get(
+                url, headers=headers
+            )
+            with self._lock:
+                completed = self._complete_variants_response_unlocked(response, generation)
+                if completed is not None:
+                    return completed
 
     def _parse_variants_payload(
         self, data: Any
@@ -774,7 +778,10 @@ class TogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
     def _load_variants_from_cache(self) -> VariantsSnapshot | None:
         """Load evaluated variants from cache."""
         try:
-            return self._snapshot_provider.load_variants()
+            snapshot = self._snapshot_provider.load_variants()
+            if snapshot is not None and snapshot.context_key == self._variant_context_key():
+                return snapshot
+            return None
         except Exception as e:
             logger.warning(f"Failed to load variants from cache: {e}")
             return None
@@ -782,6 +789,8 @@ class TogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
     def _apply_variants_snapshot(self, snapshot: VariantsSnapshot) -> None:
         """Apply a variants snapshot to in-memory state."""
         with self._lock:
+            if snapshot.context_key != self._variant_context_key():
+                return
             self._variant_defs = dict(snapshot.defs)
             self._definitions = {}
             self._flags = dict(self._config.feature_defaults)

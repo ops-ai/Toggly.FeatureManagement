@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0 - 2026-09-08
+
+### Added
+- Initial application-wide variant groups and string claims, alongside identity.
+
+### Fixed
+- Snapshot startup targeting, encode the full variants query, partition cached results and validators by complete context, and discard responses from superseded identities.
+
+
 ## 0.6.0
 
 2026-09-07

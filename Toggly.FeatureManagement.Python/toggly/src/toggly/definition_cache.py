@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from typing import Any, Literal, Mapping, Optional, Union
 from toggly.crypto import verify_signed_definitions
 from toggly.enums import LoadStatus
 from toggly.exceptions import TogglyNetworkError, TogglySignatureError
+from toggly.http import build_evaluated_variants_url
 from toggly.models import (
     EvaluatedVariantDef,
     FeatureDefinition,
@@ -482,6 +484,53 @@ class DefinitionRefreshMixin:
     _variant_defs: dict[str, EvaluatedVariantDef]
     _definitions: dict[str, FeatureDefinition]
     _config: Any
+
+    _identity: Optional[str]
+    _variant_groups: list[str]
+    _variant_claims: dict[str, str]
+    _variant_generation: int
+
+    def _initialize_variant_context(self) -> None:
+        """Own startup targeting before client storage or transport work begins."""
+        self._identity = self._config.identity
+        self._variant_groups = list(self._config.variant_groups)
+        self._variant_claims = dict(self._config.variant_claims)
+        self._variant_generation = 0
+
+    def _set_variant_identity_unlocked(self, identity: Optional[str]) -> Optional[str]:
+        """Replace identity and invalidate evaluated state while the client lock is held."""
+        old_identity = self._identity
+        self._identity = identity
+        if self._config.enable_variants and old_identity != identity:
+            self._variant_generation += 1
+            self._etag = None
+            self._variant_defs = {}
+            self._flags = dict(self._config.feature_defaults)
+        return old_identity
+
+    def _variant_context_key(self) -> str:
+        """Fingerprint the complete variants request without exposing targeting in cache keys."""
+        url = build_evaluated_variants_url(
+            self._config.base_url, self._config.app_key or "", self._config.environment,
+            self._identity, self._variant_groups, self._variant_claims,
+        )
+        return hashlib.sha256(url.encode("utf-8")).hexdigest()
+
+    def _complete_variants_response_unlocked(
+        self, response: Any, generation: int,
+    ) -> tuple[TogglyInitResponse, CacheOutcome, Optional[VariantsSnapshot]] | None:
+        """Commit an owned response under the client lock, or request a fresh-context retry."""
+        if generation != self._variant_generation:
+            return None
+        planned = self._plan_variants_http_response(response)
+        if isinstance(planned, VariantsMissPlan):
+            result, outcome, snapshot = self._commit_variants_miss_plan(planned)
+            # Synchronous state handlers can change identity during commit.
+            if generation != self._variant_generation:
+                return None
+            snapshot.context_key = self._variant_context_key()
+            return result, outcome, snapshot
+        return planned
 
     def _complete_conditional_get_hit(
         self, early: ConditionalGetHit
