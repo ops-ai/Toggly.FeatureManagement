@@ -182,6 +182,8 @@ mod native {
             process_start_time: Some(timestamp(payload.process_start_time)),
             app_version: payload.app_version.clone(),
             unique_user_hashes: payload.unique_user_hashes.clone(),
+            definition_cache_hits: payload.definition_cache_hits,
+            definition_cache_misses: payload.definition_cache_misses,
         }
     }
 
@@ -287,6 +289,8 @@ mod tests {
             instance_name: Some("host".into()),
             app_version: Some("1.0".into()),
             process_start_time: (1, 2),
+            definition_cache_hits: Some(2),
+            definition_cache_misses: Some(1),
         };
         let msg = feature_stat_from_payload(&payload);
         assert_eq!(msg.app_key, "app");
@@ -294,6 +298,8 @@ mod tests {
         assert_eq!(msg.stats[0].feature, "FeatureA");
         assert_eq!(msg.stats[0].variant_stats["enabled"].check_count, 2);
         assert_eq!(msg.time.as_ref().map(|t| t.seconds), Some(10));
+        assert_eq!(msg.definition_cache_hits, Some(2));
+        assert_eq!(msg.definition_cache_misses, Some(1));
     }
 
     #[test]

@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Toggly <support@toggly.io>"]
 edition = "2021"
 rust-version = "1.88"
@@ -62,5 +62,5 @@ futures-util = "0.3"
 
 # Workspace crates — keep path pins in sync with workspace.package.version
 # so sibling crates resolve against the bumped package (CI / frozen installs).
-toggly = { version = "0.5.0", path = "toggly" }
-toggly-macros = { version = "0.5.0", path = "toggly-macros" }
+toggly = { version = "0.6.0", path = "toggly" }
+toggly-macros = { version = "0.6.0", path = "toggly-macros" }
