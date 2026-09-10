@@ -1488,17 +1488,14 @@ mod tests {
             payloads: StdMutex::new(Vec::new()),
             fail_next: StdMutex::new(false),
         });
-        let mut config = TelemetryRuntimeConfig::from_client_config(
-            "app",
-            "Production",
-            None,
-            Some(true),
-            Some(false),
-            Some(Duration::from_secs(0)),
-            Some(Duration::from_secs(0)),
-            None,
-            None,
-        );
+        let mut config = TelemetryRuntimeConfig::from_client_config(&TogglyConfig {
+            app_key: "app".into(),
+            enable_usage_tracking: Some(true),
+            enable_metrics: Some(false),
+            usage_flush_interval: Some(Duration::from_secs(0)),
+            metrics_flush_interval: Some(Duration::from_secs(0)),
+            ..TogglyConfig::default()
+        });
         config.senders = TelemetrySenders {
             usage: Some(sender.clone()),
             metrics: None,

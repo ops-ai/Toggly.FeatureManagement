@@ -3,6 +3,7 @@
 use super::hash::{now_protobuf_timestamp, to_protobuf_timestamp_millis};
 use chrono::{DateTime, Utc};
 use parking_lot::Mutex;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 /// Optional feature/variant correlation for a metric sample.
@@ -255,7 +256,7 @@ fn drain_map(
 }
 
 fn drain_observations(pending: &mut Vec<PendingObservation>) -> Vec<MetricObservationPayload> {
-    let mut observation_messages = Vec::new();
+    let mut observation_messages: Vec<MetricObservationPayload> = Vec::new();
     let mut groups: HashMap<String, usize> = HashMap::new();
 
     for obs in pending.drain(..) {
@@ -267,11 +268,19 @@ fn drain_observations(pending: &mut Vec<PendingObservation>) -> Vec<MetricObserv
             feature_key
         );
         if let Some(&idx) = groups.get(&group_key) {
-            let group: &mut MetricObservationPayload = &mut observation_messages[idx];
-            if group.variant_values.contains_key(&obs.variant) {
-                // Same variant already present — start a new group (matches Ruby).
+            let conflict = match observation_messages[idx].variant_values.entry(obs.variant) {
+                Entry::Vacant(e) => {
+                    e.insert(obs.value);
+                    None
+                }
+                Entry::Occupied(e) => {
+                    // Same variant already present — start a new group (matches Ruby).
+                    Some(e.key().clone())
+                }
+            };
+            if let Some(variant) = conflict {
                 let mut variant_values = HashMap::new();
-                variant_values.insert(obs.variant.clone(), obs.value);
+                variant_values.insert(variant, obs.value);
                 let new_idx = observation_messages.len();
                 observation_messages.push(MetricObservationPayload {
                     time: to_protobuf_timestamp_millis(obs.time.timestamp_millis()),
@@ -280,8 +289,6 @@ fn drain_observations(pending: &mut Vec<PendingObservation>) -> Vec<MetricObserv
                     variant_values,
                 });
                 groups.insert(group_key, new_idx);
-            } else {
-                group.variant_values.insert(obs.variant, obs.value);
             }
         } else {
             let mut variant_values = HashMap::new();
