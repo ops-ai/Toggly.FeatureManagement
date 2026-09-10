@@ -158,15 +158,9 @@ jobs:
       - name: Probe Central Portal auth
         run: bash .github/scripts/publish-java-central.sh
 
-      - name: Build signed Central bundle (no upload)
+      - name: Publish to Maven Central
         working-directory: ${{ env.SDK_ROOT }}
-        run: mvn -B -Prelease clean deploy -DskipPublishing=true
-
-      - name: Upload bundle to Maven Central
-        env:
-          BUNDLE_PATH: ${{ env.SDK_ROOT }}/target/central-publishing/central-bundle.zip
-          DEPLOYMENT_NAME: toggly-java-${{ needs.validate.outputs.version }}
-        run: bash .github/scripts/publish-java-central.sh
+        run: mvn -B -Prelease clean deploy
 
   release:
     needs: [publish, validate]

@@ -48,8 +48,8 @@ probe() {
   if [[ "$code" == "401" || "$code" == "403" ]]; then
     return 1
   fi
-  # Valid auth typically returns a non-auth error for a fake deployment id
-  # (404 / deployment not found / similar), not "Invalid auth/token".
+  # Fake deployment IDs can return 404/500 after auth succeeds. Treat those
+  # as a passing probe; only auth rejection fails the job.
   return 0
 }
 
