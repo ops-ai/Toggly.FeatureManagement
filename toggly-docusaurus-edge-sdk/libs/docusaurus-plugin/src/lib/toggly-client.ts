@@ -1,3 +1,6 @@
+import { captureRequestUrl } from './capture-request-url.js';
+import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
+
 /**
  * @ops-ai/toggly-client-core - Framework-agnostic Toggly client
  *
@@ -34,6 +37,10 @@ export interface TogglyConfig {
   fetch?: typeof fetch;
   /** User identity for targeting (optional) */
   identity?: string;
+  /** Group memberships used by targeting rules; copied when the client is created. */
+  groups?: string[];
+  /** Rule attributes (up to 20 string claims); copied when the client is created. */
+  claims?: Record<string, string>;
   /** When true, verify ES256 signed envelopes via JWKS before applying flags. */
   verifySignatures?: boolean;
   /** Optional allow-list of JWKS kid values when verifySignatures is enabled. */
@@ -106,11 +113,13 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     isDebug = false,
     connectTimeout = 5 * 1000, // 5 seconds
     fetch: fetchImpl,
-    identity,
     verifySignatures = false,
     allowedKeyIds,
     maxSignatureAgeSeconds,
   } = config;
+
+  // Serialize once so caller mutations cannot change this client's targeting or refreshes.
+  const getApiUrl = captureRequestUrl(() => appKey ? buildEvaluatedSignedUrl(baseURI, appKey, environment, config, false) : '');
 
   // Resolve fetch implementation: use provided, then globalThis.fetch, then throw
   let resolvedFetch: typeof fetch;
@@ -133,26 +142,6 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
 
   let cache: CachedFlags | null = null;
 
-  const getApiUrl = (): string => {
-    const baseUrl = baseURI.replace(/\/$/, ''); // Remove trailing slash
-    
-    // If no appKey is provided, return empty URL (will use flagDefaults)
-    if (!appKey) {
-      return '';
-    }
-
-    // Use the signed-flags endpoint exposed by definitions.toggly.io.
-    // The response is `{ defs: { [flag]: bool }, signature, timestamp, kid }`;
-    // fetchFlags() unwraps `defs` if present.
-    let url = `${baseUrl}/evaluated-signed/${appKey}/${environment}`;
-    
-    // Add identity parameter if provided
-    if (identity) {
-      url += `?u=${identity}`;
-    }
-    
-    return url;
-  };
 
   const isCacheValid = (): boolean => {
     if (!cache) return false;

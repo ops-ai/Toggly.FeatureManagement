@@ -171,3 +171,24 @@ describe('Feature with edge snapshot', () => {
     expect(li).not.toBeNull();
   });
 });
+
+
+describe('initial browser targeting', () => {
+  it('uses generated window context on the first provider request', () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ flagA: true }) });
+    vi.stubGlobal('WebSocket', undefined);
+    (window as any).__TOGGLY_CONFIG__ = { appKey: 'app', identity: 'user&123', groups: ['beta', 'team a'], claims: { plan: 'pro' }, fetch };
+    try {
+      render(<TogglyProvider><Feature flag="flagA">Visible</Feature></TogglyProvider>);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const params = new URL(fetch.mock.calls[0][0]).searchParams;
+      expect(params.get('u')).toBe('user&123');
+      expect(params.getAll('g')).toEqual(['beta', 'team a']);
+      expect(params.get('claim.plan')).toBe('pro');
+    } finally {
+      cleanup();
+      delete (window as any).__TOGGLY_CONFIG__;
+      vi.unstubAllGlobals();
+    }
+  });
+});

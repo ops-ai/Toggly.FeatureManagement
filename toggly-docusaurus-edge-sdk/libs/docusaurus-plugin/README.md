@@ -1,5 +1,34 @@
 # @ops-ai/toggly-docusaurus-plugin
 
+## Initial browser targeting context
+
+Requires **0.9.0 (release pending)**. This API is not yet available in the published 0.8.0 package.
+
+```tsx
+import { TogglyProvider } from '@ops-ai/toggly-docusaurus-plugin/client';
+
+<TogglyProvider config={{
+  appKey: 'your-app-key',
+  identity: 'user-123', // Stable identifier for this browser user.
+  groups: ['beta'], // Memberships used by targeting rules.
+  claims: { plan: 'pro' }, // String attributes used by targeting rules.
+}}>
+  <App />
+</TogglyProvider>
+```
+
+Supply context when the provider is first mounted so the first evaluated request
+already targets that user. The client copies groups and claims; remount with a new
+client/provider for another context. Each client owns its evaluated cache. Up to
+20 nonempty claims are sent in deterministic key order; group whitespace is trimmed.
+
+The same `identity`, `groups`, and `claims` options may be supplied in the
+`@ops-ai/toggly-docusaurus-plugin` entry in `docusaurus.config.js`. Those values
+are **public build-time defaults baked into the browser bundle**, not authenticated
+per-user data or secrets. They do not change static build-time gating or edge
+worker evaluation. Use the provider configuration for browser-user targeting.
+
+
 Docusaurus plugin and React bindings for gating documentation content with Toggly feature flags.
 
 ## Installation

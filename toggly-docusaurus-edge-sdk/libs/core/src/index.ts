@@ -1,3 +1,4 @@
+import { captureRequestUrl } from './capture-request-url.js';
 /**
  * @ops-ai/toggly-client-core - Framework-agnostic Toggly client
  *
@@ -43,6 +44,10 @@ export interface TogglyConfig {
   fetch?: typeof fetch;
   /** User identity for targeting (optional) */
   identity?: string;
+  /** Group memberships used by targeting rules; copied when the client is created. */
+  groups?: string[];
+  /** Rule attributes (up to 20 string claims); copied when the client is created. */
+  claims?: Record<string, string>;
   /** When true, verify ES256 signed envelopes via JWKS before applying flags. */
   verifySignatures?: boolean;
   /** Optional allow-list of JWKS kid values when verifySignatures is enabled. */
@@ -138,11 +143,13 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     isDebug = false,
     connectTimeout = 5 * 1000, // 5 seconds
     fetch: fetchImpl,
-    identity,
     verifySignatures = false,
     allowedKeyIds,
     maxSignatureAgeSeconds,
   } = config;
+
+  // Serialize once so caller mutations cannot change this client's targeting or refreshes.
+  const getApiUrl = captureRequestUrl(() => appKey ? buildEvaluatedSignedUrl(baseURI, appKey, environment, config, false) : '');
 
   // Resolve fetch implementation: use provided, then globalThis.fetch, then throw
   let resolvedFetch: typeof fetch;
@@ -165,19 +172,6 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
 
   let cache: CachedFlags | null = null;
 
-  const getApiUrl = (): string => {
-    if (!appKey) {
-      return '';
-    }
-
-    return buildEvaluatedSignedUrl(
-      baseURI,
-      appKey,
-      environment,
-      identity ? { identity } : undefined,
-      false,
-    );
-  };
 
   const isCacheValid = (): boolean => {
     if (!cache) return false;

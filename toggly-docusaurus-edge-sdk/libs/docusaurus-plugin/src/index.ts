@@ -47,6 +47,10 @@ export interface TogglyPluginOptions {
   connectTimeout?: number;
   /** User identity for targeting (optional) */
   identity?: string;
+  /** Public build-time group defaults for browser targeting, not authenticated user data. */
+  groups?: string[];
+  /** Public build-time claim defaults for browser targeting (up to 20 string claims). */
+  claims?: Record<string, string>;
   /** 
    * Render all Feature component children during static build (SSR).
    * When true, feature-gated content renders during build so:
@@ -119,6 +123,10 @@ export default function togglyPlugin(
     maxSignatureAgeSeconds,
   } = options;
 
+  // Snapshot public browser defaults before Docusaurus runs asynchronous hooks.
+  const groups = options.groups ? [...options.groups] : undefined;
+  const claims = options.claims ? { ...options.claims } : undefined;
+
   // Store page feature mapping for postBuild
   let pageFeatureMapping: PageFeatureMapping = {};
   let buildTimeFlags: Flags = {};
@@ -141,6 +149,8 @@ export default function togglyPlugin(
           isDebug,
           connectTimeout,
           identity,
+          groups,
+          claims,
           renderAllDuringBuild,
           staticGating,
           verifySignatures,

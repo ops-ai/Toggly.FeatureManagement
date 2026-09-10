@@ -1,3 +1,13 @@
+## 0.4.0
+
+2026-09-08
+
+### Added
+- Initial `groups` and string `claims` targeting options, copied before the first request and retained for refreshes.
+
+### Fixed
+- Serialize complete startup context with the shared encoded query builder, including repeated groups and the deterministic 20-claim limit.
+
 # Changelog
 
 
