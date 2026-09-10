@@ -5,4 +5,4 @@ import SwiftUI
 import TogglyCore
 
 /// Toggly SDK version for SwiftUI package
-public let togglySwiftUIVersion = "1.3.0"
+public let togglySwiftUIVersion = "1.4.0"

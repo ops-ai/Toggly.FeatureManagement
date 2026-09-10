@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Core Toggly service for feature flag management.
 /// Thread-safe actor that handles feature flag evaluation, caching, and lifecycle management.
@@ -7,12 +8,16 @@ public actor TogglyService {
 
     private let config: TogglyConfig
     private let storage: TogglyStorage
+    private let groups: [String]
+    private let claims: [URLQueryItem]
 
     // MARK: - State
 
     private var definitions: EvaluatedDefinitions?
     private var features: FeatureFlags?
     private var featuresLoading = false
+    private var contextGeneration = 0
+    private var completedFetch: (generation: Int, response: TogglyInitResponse)?
     private var identity: String?
     private var refreshTask: Task<Void, Never>?
     private var lastChecked: Date?
@@ -68,6 +73,10 @@ public actor TogglyService {
     /// Creates a new Toggly service with the given configuration.
     /// - Parameter config: The configuration for the service.
     public init(config: TogglyConfig = TogglyConfig()) {
+        self.groups = config.groups.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        self.claims = config.claims.keys.filter { !$0.isEmpty && !(config.claims[$0] ?? "").isEmpty }
+            .sorted().prefix(20).map { URLQueryItem(name: "claim." + $0, value: config.claims[$0]) }
+        self.identity = config.identity
         self.config = config
         self.storage = config.storage ?? MemoryStorage()
     }
@@ -78,6 +87,11 @@ public actor TogglyService {
     /// - Returns: The initialization response.
     @discardableResult
     public func initialize() async -> TogglyInitResponse {
+        contextGeneration += 1
+        features = nil
+        definitions = nil
+        eTag = nil
+        let initialGeneration = contextGeneration
         // Handle identity
         if let configIdentity = config.identity {
             identity = configIdentity
@@ -88,7 +102,7 @@ public actor TogglyService {
                 storedId = UUID().uuidString
                 await storage.set(TogglyStorageKeys.deviceId, value: storedId!)
             }
-            identity = storedId
+            if contextGeneration == initialGeneration { identity = storedId }
         }
 
         // Start refresh timer
@@ -122,7 +136,9 @@ public actor TogglyService {
 
         // Skip refresh if offline
         if networkState?.isConnected == false {
+            let generation = contextGeneration
             let cached = await loadCachedDefinitions()
+            guard generation == contextGeneration else { return await refresh() }
             applySnapshot(cached.definitions, flags: cached.flags)
             return TogglyInitResponse(status: .cached, flags: cached.flags)
         }
@@ -216,6 +232,8 @@ public actor TogglyService {
     /// - Returns: The refresh response after identity change.
     @discardableResult
     public func setIdentity(_ identity: String?) async -> TogglyInitResponse {
+        contextGeneration += 1
+        let resolvingGeneration = contextGeneration
         let previousIdentity = self.identity
 
         if let newIdentity = identity {
@@ -227,6 +245,7 @@ public actor TogglyService {
                 deviceId = UUID().uuidString
                 await storage.set(TogglyStorageKeys.deviceId, value: deviceId!)
             }
+            guard resolvingGeneration == contextGeneration else { return await refresh() }
             self.identity = deviceId
         }
 
@@ -248,14 +267,17 @@ public actor TogglyService {
 
     /// Clear cached feature flags.
     public func clearCache() async {
+        contextGeneration += 1
         features = nil
         definitions = nil
         eTag = nil
 
-        let hashedIdentity = hashIdentity(identity ?? "")
-        let cacheKey = TogglyStorageKeys.featureFlagsCache + hashedIdentity
+        let cacheKey = featureCacheKey
+        let revisionKey = revisionCacheKey
+        let legacyKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? "")
         await storage.delete(cacheKey)
-        await storage.delete(TogglyStorageKeys.etag)
+        if groups.isEmpty && claims.isEmpty { await storage.delete(legacyKey) }
+        await storage.delete(revisionKey)
     }
 
     // MARK: - Events
@@ -349,28 +371,53 @@ public actor TogglyService {
     // MARK: - Private Methods
 
     private func fetchFeatureFlags() async -> TogglyInitResponse {
-        // Prevent duplicate fetches
-        if featuresLoading {
-            await waitForFeaturesLoaded()
-            return TogglyInitResponse(status: .fetched, flags: features ?? [:])
+        while true {
+            if featuresLoading {
+                await waitForFeaturesLoaded()
+                if let completedFetch, completedFetch.generation == contextGeneration {
+                    return completedFetch.response
+                }
+                continue
+            }
+            let snapshot = RequestContext(generation: contextGeneration, identity: identity ?? "",
+                context: contextIdentity, cacheKey: featureCacheKey, revisionKey: revisionCacheKey,
+                url: buildApiUrl(), etag: eTag)
+            featuresLoading = true
+            let response = await fetchFeatureFlags(for: snapshot)
+            featuresLoading = false
+            // A waiter for a changed context must fetch that context, not reuse the older response.
+            guard snapshot.generation == contextGeneration else { continue }
+            completedFetch = (snapshot.generation, response)
+            return response
         }
+    }
 
-        featuresLoading = true
-        defer { featuresLoading = false }
+    private struct RequestContext {
+        let generation: Int
+        let identity: String
+        let context: String
+        let cacheKey: String
+        let revisionKey: String
+        let url: URL
+        let etag: String?
+    }
 
+    private func fetchFeatureFlags(for snapshot: RequestContext) async -> TogglyInitResponse {
+        let obsolete = TogglyInitResponse(status: .defaults, flags: config.featureDefaults)
         do {
-            let url = buildApiUrl()
-            var request = URLRequest(url: url)
+            guard snapshot.generation == contextGeneration else { return obsolete }
+            var request = URLRequest(url: snapshot.url)
             request.httpMethod = "GET"
             request.timeoutInterval = config.requestTimeout
             request.setValue(SdkIdentity.userAgent, forHTTPHeaderField: "User-Agent")
 
-            if config.useSignedDefinitions, let etag = eTag {
+            if config.useSignedDefinitions, let etag = snapshot.etag {
                 request.setValue(etag, forHTTPHeaderField: "If-None-Match")
             }
 
             let (data, response) = try await URLSession.shared.data(for: request)
 
+            guard snapshot.generation == contextGeneration else { return obsolete }
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw TogglyError.invalidResponse
             }
@@ -378,6 +425,7 @@ public actor TogglyService {
             if httpResponse.statusCode == 304 {
                 lastChecked = Date()
                 let cached = await loadCachedDefinitions()
+                guard snapshot.generation == contextGeneration else { return obsolete }
                 applySnapshot(cached.definitions, flags: cached.flags)
                 return TogglyInitResponse(status: .cached, flags: cached.flags)
             }
@@ -387,25 +435,29 @@ public actor TogglyService {
             }
 
             let parsed = try await parseFeatureFlagsResponse(data)
+            guard snapshot.generation == contextGeneration else { return obsolete }
             let flags = parsed.flags
             let previousFlags = features
-            applySnapshot(parsed.definitions, flags: flags)
 
             await cacheFeatureFlags(
                 flags,
                 defsRaw: parsed.defsRaw,
                 timestamp: parsed.timestamp,
                 signature: parsed.signature,
-                keyId: parsed.keyId
+                keyId: parsed.keyId,
+                context: snapshot
             )
+            guard snapshot.generation == contextGeneration else { return obsolete }
 
             // Store ETag
             if let newEtag = httpResponse.value(forHTTPHeaderField: "ETag") {
+                await storage.set(snapshot.revisionKey, value: newEtag)
+                guard snapshot.generation == contextGeneration else { return obsolete }
                 eTag = newEtag
-                await storage.set(TogglyStorageKeys.etag, value: newEtag)
             }
 
             lastChecked = Date()
+            applySnapshot(parsed.definitions, flags: flags)
             lastSynced = Date()
             lastError = nil
 
@@ -419,11 +471,13 @@ public actor TogglyService {
 
             return TogglyInitResponse(status: .fetched, flags: flags)
         } catch {
+            guard snapshot.generation == contextGeneration else { return obsolete }
             lastError = error.localizedDescription
             emitEvent(.error(ErrorEvent(error: lastError ?? "Unknown error")))
 
             // Fall back to cache or defaults
             let cached = await loadCachedDefinitions()
+            guard snapshot.generation == contextGeneration else { return obsolete }
             applySnapshot(cached.definitions, flags: cached.flags)
 
             return TogglyInitResponse(status: .defaults, flags: cached.flags, error: lastError)
@@ -431,14 +485,30 @@ public actor TogglyService {
     }
 
     private func buildApiUrl() -> URL {
-        var urlString = "\(config.baseURI)/evaluated-signed/\(config.appKey ?? "")/\(config.environment)"
-
-        if let identity = identity {
-            urlString += "?u=\(identity.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? identity)"
-        }
-
-        return URL(string: urlString)!
+        var components = URLComponents(string: "\(config.baseURI)/evaluated-signed/\(config.appKey ?? "")/\(config.environment)")!
+        var items: [URLQueryItem] = []
+        if let identity { items.append(URLQueryItem(name: "u", value: identity)) }
+        items += groups.map { URLQueryItem(name: "g", value: $0) }
+        items += claims
+        components.queryItems = items.isEmpty ? nil : items
+        // URLSearchParams on the Worker interprets literal '+' as a space.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        return components.url!
     }
+
+    /// Structured serialization prevents delimiter collisions; SHA-256 keeps storage keys bounded.
+    private var contextIdentity: String {
+        let parts = [[config.baseURI, config.appKey ?? "", config.environment, identity ?? ""],
+                     groups, claims.flatMap { [$0.name, $0.value ?? ""] }]
+        return String(data: try! JSONEncoder().encode(parts), encoding: .utf8)!
+    }
+
+    private var contextHash: String {
+        SHA256.hash(data: Data(contextIdentity.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private var featureCacheKey: String { TogglyStorageKeys.featureFlagsCache + "v2:" + contextHash }
+    private var revisionCacheKey: String { TogglyStorageKeys.etag + "v2:" + contextHash }
 
     /// Parse definitions response. When `verifySignatures` is enabled, verify ES256
     /// against the exact raw defs JSON (Security digest-level double-hash).
@@ -582,13 +652,21 @@ public actor TogglyService {
             return CachedDefinitions(definitions: fromBooleanDefaults(features), flags: features)
         }
 
-        let hashedIdentity = hashIdentity(identity ?? "")
-        let cacheKey = TogglyStorageKeys.featureFlagsCache + hashedIdentity
-
-        guard let cached = await storage.get(cacheKey),
+        let expectedIdentity = identity
+        let expectedContext = contextIdentity
+        let legacyKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? "")
+        var cacheKey = featureCacheKey
+        var stored = await storage.get(cacheKey)
+        // Only context-free configurations can reuse identity-only entries from older SDKs.
+        if stored == nil && groups.isEmpty && claims.isEmpty {
+            cacheKey = legacyKey
+            stored = await storage.get(cacheKey)
+        }
+        guard let cached = stored,
               let data = cached.data(using: .utf8),
               let cacheData = try? JSONDecoder().decode(TogglyFeatureFlagsCache.self, from: data),
-              cacheData.identity == identity else {
+              cacheData.identity == expectedIdentity,
+              cacheData.evaluationContext == expectedContext || (cacheData.evaluationContext == nil && groups.isEmpty && claims.isEmpty) else {
             return CachedDefinitions(
                 definitions: fromBooleanDefaults(config.featureDefaults),
                 flags: config.featureDefaults
@@ -665,7 +743,8 @@ public actor TogglyService {
         defsRaw: String? = nil,
         timestamp: Int64? = nil,
         signature: String? = nil,
-        keyId: String? = nil
+        keyId: String? = nil,
+        context: RequestContext
     ) async {
         let flagsString: String
         if let defsRaw {
@@ -678,14 +757,14 @@ public actor TogglyService {
             flagsString = encoded
         }
 
-        let hashedIdentity = hashIdentity(identity ?? "")
-        let cacheKey = TogglyStorageKeys.featureFlagsCache + hashedIdentity
+        let cacheKey = context.cacheKey
         let cacheData = TogglyFeatureFlagsCache(
-            identity: identity ?? "",
+            identity: context.identity,
             flags: flagsString,
             timestamp: timestamp,
             signature: signature,
-            keyId: keyId
+            keyId: keyId,
+            evaluationContext: context.context
         )
 
         if let data = try? JSONEncoder().encode(cacheData),
@@ -729,7 +808,12 @@ public actor TogglyService {
             return
         }
 
+        let generation = contextGeneration
         let cached = await loadCachedDefinitions()
+        guard generation == contextGeneration else {
+            await ensureFeaturesLoaded()
+            return
+        }
         applySnapshot(cached.definitions, flags: cached.flags)
     }
 

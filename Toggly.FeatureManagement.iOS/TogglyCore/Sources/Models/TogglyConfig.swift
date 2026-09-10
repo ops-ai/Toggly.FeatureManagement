@@ -14,6 +14,12 @@ public struct TogglyConfig: Sendable {
     /// User identity for feature targeting.
     public let identity: String?
 
+    /// Initial targeting memberships. Blank groups are omitted from requests.
+    public let groups: [String]
+
+    /// Initial string attributes used by targeting rules (at most 20 nonempty entries).
+    public let claims: [String: String]
+
     /// Default feature flag values when server is unavailable.
     public let featureDefaults: FeatureFlags
 
@@ -60,6 +66,8 @@ public struct TogglyConfig: Sendable {
     ///   - requestTimeout: Request timeout in seconds. Defaults to 30.
     ///   - storage: Custom storage implementation.
     ///   - enableLiveUpdates: Whether to enable WebSocket live updates. Defaults to true.
+    ///   - groups: Initial group memberships, applied before the first request.
+    ///   - claims: Initial rule attributes, applied before the first request.
     ///   - maxSignatureAgeSeconds: Optional max age for signed envelope timestamps.
     public init(
         appKey: String? = nil,
@@ -75,12 +83,16 @@ public struct TogglyConfig: Sendable {
         requestTimeout: TimeInterval = 30,
         storage: TogglyStorage? = nil,
         enableLiveUpdates: Bool = true,
-        maxSignatureAgeSeconds: Int64? = nil
+        maxSignatureAgeSeconds: Int64? = nil,
+        groups: [String] = [],
+        claims: [String: String] = [:]
     ) {
         self.appKey = appKey
         self.environment = environment
         self.baseURI = baseURI
         self.identity = identity
+        self.groups = groups
+        self.claims = claims
         self.featureDefaults = featureDefaults
         self.showFeatureDuringEvaluation = showFeatureDuringEvaluation
         self.refreshInterval = refreshInterval

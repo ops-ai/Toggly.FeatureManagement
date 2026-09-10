@@ -61,18 +61,23 @@ public struct TogglyFeatureFlagsCache: Codable, Sendable {
     /// Key ID (`kid`) from the signed envelope.
     public let keyId: String?
 
+    /// Complete normalized evaluation context for cache validation. Nil denotes a legacy entry.
+    public let evaluationContext: String?
+
     /// Creates a new cache entry.
     public init(
         identity: String,
         flags: String,
         timestamp: Int64? = nil,
         signature: String? = nil,
-        keyId: String? = nil
+        keyId: String? = nil,
+        evaluationContext: String? = nil
     ) {
         self.identity = identity
         self.flags = flags
         self.timestamp = timestamp
         self.signature = signature
         self.keyId = keyId
+        self.evaluationContext = evaluationContext
     }
 }
