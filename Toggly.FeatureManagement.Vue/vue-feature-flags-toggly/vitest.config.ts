@@ -1,16 +1,16 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { defineConfig, configDefaults } from 'vitest/config';
 import vue from '@vitejs/plugin-vue';
 
-const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const signedDefsSrc = path.resolve(rootDir, '../../toggly-signed-defs/src/index.ts');
+// Vitest loads the package ESM build, which still uses require('crypto') on Node.
+// Point tests at the published CJS entry (same npm package, not monorepo source).
+const require = createRequire(import.meta.url);
 
 export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@ops-ai/toggly-signed-defs': signedDefsSrc,
+      '@ops-ai/toggly-signed-defs': require.resolve('@ops-ai/toggly-signed-defs'),
     },
   },
   test: {
@@ -20,7 +20,7 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, 'node_modules', 'dist', 'example', '**/smoke*.test.ts', '**/smoke*.spec.ts'],
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.{ts,vue}', '../../toggly-signed-defs/src/**/*.ts'],
+      include: ['src/**/*.{ts,vue}'],
       exclude: [
         'src/**/*.spec.ts',
         'src/**/*.test.ts',
@@ -28,7 +28,6 @@ export default defineConfig({
         'src/index.ts',
         'src/vite-env.d.ts',
         'src/__tests__/test-helpers.ts',
-        '../../toggly-signed-defs/src/**/*.test.ts',
       ],
       reporter: ['text', 'text-summary', 'lcov'],
       thresholds: {

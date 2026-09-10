@@ -3,17 +3,11 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
   setupFiles: ['./spec/setup-fetch.js'],
-  moduleNameMapper: {
-    // Resolve shared crypto to source so coverage stays accurate after extracting vendors.
-    '^@ops-ai/toggly-signed-defs$': '<rootDir>/../../toggly-signed-defs/src/index.ts',
-  },
   collectCoverageFrom: [
     'lib/**/*.ts',
     '!lib/models/index.ts',
     // Type-only browser declaration entry: no executable code to instrument.
     '!lib/feature-flags-toggly.bundle.ts',
-    '../../toggly-signed-defs/src/**/*.ts',
-    '!../../toggly-signed-defs/src/**/*.test.ts',
   ],
   coverageReporters: ['text', 'text-summary', 'lcov'],
   coverageThreshold: {

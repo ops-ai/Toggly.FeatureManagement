@@ -41,6 +41,12 @@ describe('grpc-clients helpers', () => {
       const distModule = pathToFileURL(path.join(distDir, 'index.js')).href
       expect(resolveProtoRoot(distModule)).toBe(path.resolve(packageProto))
 
+      // Simulated dist/cjs/telemetry/grpc.js → ../../../proto
+      const nestedDistDir = path.join(tmp, 'dist', 'cjs', 'telemetry')
+      fs.mkdirSync(nestedDistDir, { recursive: true })
+      const nestedDistModule = pathToFileURL(path.join(nestedDistDir, 'grpc.js')).href
+      expect(resolveProtoRoot(nestedDistModule)).toBe(path.resolve(packageProto))
+
       // Simulated src/telemetry/grpc-clients.js → ../../proto
       const telemetryDir = path.join(tmp, 'src', 'telemetry')
       fs.mkdirSync(telemetryDir, { recursive: true })

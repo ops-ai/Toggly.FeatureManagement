@@ -1,13 +1,6 @@
-import { resolve } from 'node:path';
-
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      '@ops-ai/toggly-local-gates': resolve(__dirname, '../toggly-local-gates/src/index.ts'),
-    },
-  },
   test: {
     globals: true,
     environment: 'jsdom',
