@@ -5,7 +5,10 @@
     "moduleResolution": "bundler",
     "baseUrl": ".",
     "paths": {
-      "@ops-ai/nuxt-toggly-core": ["../nuxt-toggly-core/src/index.ts"]
+      "@ops-ai/nuxt-toggly-core": ["../nuxt-toggly-core/src/index.ts"],
+      "@ops-ai/nuxt-toggly-core/telemetry/grpc": [
+        "../nuxt-toggly-core/src/telemetry/grpc-clients.ts"
+      ]
     },
     "lib": ["ES2022"],
     "strict": true,
