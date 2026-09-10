@@ -14,6 +14,8 @@ const require = createRequire(import.meta.url)
 export function resolveProtoRoot(moduleUrl: string = import.meta.url): string {
   const moduleDir = path.dirname(fileURLToPath(moduleUrl))
   const candidates = [
+    // Built dist/cjs|esm/telemetry/grpc.js → packageRoot/proto
+    path.resolve(moduleDir, '..', '..', '..', 'proto'),
     // Built dist/telemetry/grpc.js → packageRoot/proto
     path.resolve(moduleDir, '..', '..', 'proto'),
     // Built dist/index.js sibling layouts
