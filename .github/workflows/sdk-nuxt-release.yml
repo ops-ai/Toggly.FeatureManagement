@@ -131,6 +131,14 @@ jobs:
           echo "list=$LIST" >> $GITHUB_OUTPUT
           echo "Unpublished: ${LIST:-none}"
 
+      # Build the whole workspace before type checking so dependents resolve
+      # @ops-ai/* via package exports → dist (same contract as npm), not tsconfig
+      # path maps to sibling source. A filtered unpublished build would skip
+      # core when it is already on npm and leave exports pointing at missing dist.
+      - name: Build all packages
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
+        run: pnpm build
+
       - name: Type check unpublished packages
         if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: |
@@ -141,34 +149,6 @@ jobs:
               continue
             fi
             pnpm --filter "./$pkg" typecheck
-          done
-
-      - name: Build unpublished packages
-        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
-        run: |
-          LIST="${{ steps.packages.outputs.list }}"
-          # Meta module resolves sibling package dist at build time. Always build
-          # workspace deps first when publishing nuxt-toggly, even if those deps
-          # are already on npm and not in the unpublished list.
-          if echo " $LIST " | grep -q ' nuxt-toggly '; then
-            for dep in nuxt-toggly-core nuxt-toggly-server nuxt-toggly-client; do
-              echo "Building workspace dependency $dep for meta package..."
-              pnpm --filter "./$dep" build
-            done
-          fi
-          for pkg in $LIST; do
-            if [ "$pkg" = "nuxt-toggly" ]; then
-              # Already built deps above; build meta last.
-              pnpm --filter "./$pkg" build
-              continue
-            fi
-            # Skip if already built as a meta dependency.
-            if echo " $LIST " | grep -q ' nuxt-toggly ' && \
-               { [ "$pkg" = "nuxt-toggly-core" ] || [ "$pkg" = "nuxt-toggly-server" ] || [ "$pkg" = "nuxt-toggly-client" ]; }; then
-              echo "Already built $pkg as meta dependency"
-              continue
-            fi
-            pnpm --filter "./$pkg" build
           done
 
       - name: Test unpublished packages
