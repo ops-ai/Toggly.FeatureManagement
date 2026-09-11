@@ -180,15 +180,7 @@ jobs:
               for dep_dir in nuxt-toggly-core nuxt-toggly-server nuxt-toggly-client; do
                 DEP=$(node -p "require('${ROOT}/$dep_dir/package.json').name")
                 DEP_VER=$(node -p "require('${ROOT}/$dep_dir/package.json').version")
-                DEP_RETRY=0
-                until npm view "${DEP}@${DEP_VER}" version >/dev/null 2>&1; do
-                  DEP_RETRY=$((DEP_RETRY + 1))
-                  if [ $DEP_RETRY -ge 10 ]; then
-                    echo "Timed out waiting for ${DEP}@${DEP_VER}"
-                    exit 1
-                  fi
-                  sleep 6
-                done
+                bash "${GITHUB_WORKSPACE}/.github/scripts/wait-for-npm-version.sh" "${DEP}@${DEP_VER}"
               done
             fi
 
