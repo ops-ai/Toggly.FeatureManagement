@@ -9,9 +9,9 @@
 
 Native Android SDK for [Toggly.io](https://toggly.io) feature flags with Kotlin, coroutines, Jetpack Compose, and traditional Views support.
 
-## Initial targeting context (core 1.4.0, pending publication)
+## Initial targeting context
 
-These new config fields require `io.toggly:toggly-android-core:1.4.0` once published.
+These config fields require `io.toggly:toggly-android-core:1.4.1`.
 Provide known targeting context before initialization to avoid an intermediate fetch with incomplete targeting:
 
 ```kotlin
@@ -65,15 +65,15 @@ Add the dependencies to your `build.gradle.kts`:
 ```kotlin
 dependencies {
     // Core module (required)
-    implementation("io.toggly:toggly-android-core:1.0.0")
+    implementation("io.toggly:toggly-android-core:1.4.1")
 
     // UI modules (pick what you need)
-    implementation("io.toggly:toggly-compose:1.0.0")  // Jetpack Compose
-    implementation("io.toggly:toggly-views:1.0.0")    // Android Views
+    implementation("io.toggly:toggly-compose:1.4.1")  // Jetpack Compose
+    implementation("io.toggly:toggly-views:1.4.1")    // Android Views
 
     // Storage modules (pick one, or use built-in SharedPreferences)
-    implementation("io.toggly:toggly-room:1.0.0")      // Room database
-    implementation("io.toggly:toggly-datastore:1.0.0") // DataStore
+    implementation("io.toggly:toggly-room:1.4.1")      // Room database
+    implementation("io.toggly:toggly-datastore:1.4.1") // DataStore
 }
 ```
 
