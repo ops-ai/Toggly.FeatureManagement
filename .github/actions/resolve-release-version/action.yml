@@ -24,7 +24,7 @@ inputs:
     required: false
     default: patch
   tag_prefix:
-    description: Optional git tag prefix for skip detection when registry is none (e.g. go-sdk-v)
+    description: Optional git tag prefix for skip detection when registry is none (e.g. toggly-go/v)
     required: false
     default: ''
 

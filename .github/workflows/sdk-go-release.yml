@@ -55,7 +55,7 @@ jobs:
           manifest_path: ${{ env.SDK_ROOT }}/VERSION
           registry: none
           package_name: toggly-go
-          tag_prefix: go-sdk-v
+          tag_prefix: toggly-go/v
           release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
           bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
 
