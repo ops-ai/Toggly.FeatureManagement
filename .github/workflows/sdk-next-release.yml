@@ -169,15 +169,7 @@ jobs:
             if [ "$pkg" != "nextjs-toggly-core" ]; then
               CORE_NAME=$(node -p "require('${ROOT}/nextjs-toggly-core/package.json').name")
               CORE_VER=$(node -p "require('${ROOT}/nextjs-toggly-core/package.json').version")
-              DEP_RETRY=0
-              until npm view "${CORE_NAME}@${CORE_VER}" version >/dev/null 2>&1; do
-                DEP_RETRY=$((DEP_RETRY + 1))
-                if [ $DEP_RETRY -ge 10 ]; then
-                  echo "Timed out waiting for ${CORE_NAME}@${CORE_VER}"
-                  exit 1
-                fi
-                sleep 6
-              done
+              bash "${GITHUB_WORKSPACE}/.github/scripts/wait-for-npm-version.sh" "${CORE_NAME}@${CORE_VER}"
             fi
 
             # Reject unpublishable protocol specs before they hit the registry.
