@@ -1,6 +1,15 @@
 # Changelog
 
-## Core 1.4.0
+## 1.4.1
+
+2026-09-11
+
+### Changed
+- Lockstep every Android module at 1.4.1. The `android-sdk-v1.3.0` publish
+  shipped core as 1.4.0 and wrappers as 1.3.0, so GitHub notes advertised a
+  core coordinate that was never produced.
+
+## 1.4.0
 
 2026-09-08
 

@@ -6,9 +6,6 @@ plugins {
     alias(libs.plugins.kover)
 }
 
-// Only core changes in this release; wrapper artifacts keep their version.
-version = "1.4.0"
-
 android {
     namespace = "io.toggly.core"
     compileSdk = libs.versions.compileSdk.get().toInt()
