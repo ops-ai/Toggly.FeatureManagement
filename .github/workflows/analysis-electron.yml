@@ -1,0 +1,213 @@
+name: Electron SDK - Tests & Analysis
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.FeatureManagement.Electron/**'
+      - '.github/workflows/analysis-electron.yml'
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'Toggly.FeatureManagement.Electron/**'
+      - '.github/workflows/analysis-electron.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test Electron SDK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+          cache-dependency-path: Toggly.FeatureManagement.Electron/package-lock.json
+
+      - name: Install dependencies
+        working-directory: Toggly.FeatureManagement.Electron
+        run: npm ci || npm install
+
+      - name: Build package
+        working-directory: Toggly.FeatureManagement.Electron
+        run: npm run build
+
+      - name: Run TypeScript type check
+        working-directory: Toggly.FeatureManagement.Electron
+        run: npm run typecheck --if-present
+
+      - name: Run tests with coverage
+        working-directory: Toggly.FeatureManagement.Electron
+        run: npm run test:coverage
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-Electron
+          path: |
+            Toggly.FeatureManagement.Electron/coverage/
+            Toggly.FeatureManagement.Electron/coverage/lcov.info
+          retention-days: 7
+          if-no-files-found: ignore
+
+  sonar:
+    name: SonarQube Analysis
+    runs-on: ubuntu-latest
+    needs: [test, dependency-check]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download all coverage reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-*
+          path: coverage-artifacts/
+        continue-on-error: true
+
+      - name: Organize coverage files
+        run: |
+          mkdir -p coverage
+          find coverage-artifacts -name "lcov.info" -type f | while read file; do
+            sed "s|SF:|SF:Toggly.FeatureManagement.Electron/|g" "$file" > "coverage/Electron-lcov.info"
+          done
+          echo "Coverage files:"
+          ls -la coverage/ || echo "No coverage files found"
+        continue-on-error: true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.projectKey=toggly-sdks-electron
+            -Dsonar.organization=ops-ai
+            -Dsonar.projectName="Toggly SDKs - Electron"
+            -Dsonar.sources=Toggly.FeatureManagement.Electron/src
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
+            -Dsonar.coverage.exclusions=**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
+            -Dsonar.tests=Toggly.FeatureManagement.Electron/tests
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
+        continue-on-error: true
+
+      - name: Download Dependency Check report
+        uses: actions/download-artifact@v8
+        with:
+          name: dependency-check-report-electron
+          path: dependency-check-reports/
+        continue-on-error: true
+
+      - name: SonarQube Server Scan
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=toggly-sdks-electron
+            -Dsonar.projectName="Toggly SDKs - Electron"
+            -Dsonar.sources=Toggly.FeatureManagement.Electron/src
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
+            -Dsonar.coverage.exclusions=**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
+            -Dsonar.tests=Toggly.FeatureManagement.Electron/tests
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
+            -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
+        continue-on-error: true
+
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Cache OWASP Dependency Check database
+        uses: actions/cache@v6
+        with:
+          path: /home/runner/OWASP-Dependency-Check/data/
+          key: dependency-check-db-${{ runner.os }}-v6
+          restore-keys: |
+            dependency-check-db-${{ runner.os }}-
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'toggly-sdks-electron'
+          path: 'Toggly.FeatureManagement.Electron'
+          format: 'ALL'
+          args: >-
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+            --enableExperimental
+            --disableAssembly
+            --disableRubygems
+            --disableBundleAudit
+            --disablePyPkg
+            --disablePyDist
+        continue-on-error: true
+
+      - name: Upload Dependency Check report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dependency-check-report-electron
+          path: reports/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+        continue-on-error: true
+
+  summary:
+    name: Analysis Summary
+    runs-on: ubuntu-latest
+    needs: [test, sonar, dependency-check]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: test
+
+      - name: Check test results
+        run: |
+          echo "## Electron SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Analysis workflow completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Packages Analyzed" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/electron-feature-flags-toggly" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-electron" >> $GITHUB_STEP_SUMMARY

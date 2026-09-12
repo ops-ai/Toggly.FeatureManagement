@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Toggly Electron example</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Toggly Electron</h1>
+    <p id="status">Checking flags…</p>
+    <script>
+      const status = document.getElementById('status')
+      const on = window.toggly.isFeatureOn('ExampleFeature')
+      const hidden = window.toggly.isFeatureOn('HiddenFeature')
+      status.textContent = `ExampleFeature=${on}, HiddenFeature=${hidden}`
+      window.toggly.onFlagsUpdated((flags) => {
+        status.textContent = `Updated: ${JSON.stringify(flags)}`
+      })
+    </script>
+  </body>
+</html>

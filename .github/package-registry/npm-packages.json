@@ -25,6 +25,15 @@
       "oidcReady": false
     },
     {
+      "name": "@ops-ai/electron-feature-flags-toggly",
+      "group": "electron",
+      "manifest": "Toggly.FeatureManagement.Electron/package.json",
+      "changelog": "Toggly.FeatureManagement.Electron/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-electron-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/electron",
+      "oidcReady": false
+    },
+    {
       "name": "@ops-ai/feature-flags-toggly",
       "group": "javascript",
       "manifest": "Toggly.FeatureManagement.Javascript/feature_flags_toggly/package.json",
