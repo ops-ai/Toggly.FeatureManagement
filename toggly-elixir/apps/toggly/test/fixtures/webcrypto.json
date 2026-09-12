@@ -1,0 +1,19 @@
+{
+  "body": "{\"defs\":[ {\"featureKey\":\"webcrypto\", \"filters\":[{\"name\":\"AlwaysOn\"}], \"metrics\":[]} ],\"timestamp\":1700000000,\"kid\":\"929138CA5F21C8089DB6F0073EB54245DDA20B56ES256\",\"signature\":\"eyS0521Ouc1Wi9rUGWR7YLzWprMdDrpjot2NHJtsgcDJwhfpLhyZIAMsO0LIPnHAepWLAmxQ32A7yU0CIPNS0g==\"}",
+  "jwks": {
+    "keys": [
+      {
+        "key_ops": [
+          "verify"
+        ],
+        "ext": true,
+        "kty": "EC",
+        "x": "dVYG5NYAHcMH656ngFNW_2i-e6KJIDN9HsLCVvC085Q",
+        "y": "kHBMoxXLXFBSHD6_TJEoaGNpInt3_wzKmBV--xUwi6o",
+        "crv": "P-256",
+        "alg": "ES256",
+        "kid": "929138CA5F21C8089DB6F0073EB54245DDA20B56ES256"
+      }
+    ]
+  }
+}
