@@ -8,7 +8,12 @@ import { verifyBrowser } from './verify-host-browser.spec.ts';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const npmCli = process.env.npm_execpath;
 if (!npmCli || !path.isAbsolute(npmCli)) throw new Error('npm_execpath must be an absolute path');
-const commandEnvironment = { ...process.env, PATH: [path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter) };
+// The public Node installer invokes npm by name, even when Node and npm
+// are installed separately. Bind that lookup to the validated CLI on POSIX.
+const npmBin = fs.mkdtempSync(path.join(os.tmpdir(), 'toggly-angular-npm-'));
+process.once('exit', () => fs.rmSync(npmBin, { recursive: true, force: true }));
+fs.symlinkSync(npmCli, path.join(npmBin, 'npm'));
+const commandEnvironment = { ...process.env, PATH: [npmBin, path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter) };
 const fixtures = path.join(root, 'host-fixtures');
 const packageDirectory = path.join(root, 'dist/ngx-feature-flags-toggly');
 const metadata = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'package.json')));
