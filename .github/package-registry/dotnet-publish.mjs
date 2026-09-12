@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { verifySignedCandidate } from "./dotnet-signed-candidate.mjs";
 import { orderPackages } from "./dotnet-inventory.mjs";
 
 export async function publishPackages(plan, directory, push) {
@@ -30,7 +31,8 @@ export async function publishPackages(plan, directory, push) {
       artifacts.push(artifact);
     }
   }
-  // Validate the complete artifact set before the first irreversible registry push.
+  // Validate the complete artifact set and its frozen signing-job checksums before any push.
+  verifySignedCandidate(directory);
   for (const artifact of artifacts) {
     await push(artifact);
   }

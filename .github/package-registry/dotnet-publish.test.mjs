@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { sealSignedCandidate } from "./dotnet-signed-candidate.mjs";
 import { publishPackages } from "./dotnet-publish.mjs";
 
 test("registry pushes use dependency order and require symbols for the complete candidate", async () => {
@@ -41,6 +42,7 @@ test("registry pushes use dependency order and require symbols for the complete 
       path.join(directory, "nupkgs/Desktop.0.2.0.snupkg"),
       "test symbols",
     );
+    sealSignedCandidate(directory);
     await publishPackages(plan, directory, (file) =>
       pushed.push(path.basename(file)),
     );

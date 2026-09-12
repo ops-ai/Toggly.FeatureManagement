@@ -279,7 +279,7 @@ jobs:
               /d:sonar.host.url="${SONAR_HOST_URL}" \
               /d:sonar.token="${SONAR_SERVER_TOKEN}" \
               /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
-            /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
+              /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
               /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info" \
               /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
@@ -344,18 +344,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ steps.gitversion.outputs.semVer }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Packages Analyzed" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement (Core SDK)" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Web" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Hangfire" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.HealthChecks" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.NSwag" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Storage.DistributedCache" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Storage.RavenDB" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Storage.Dapper" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Storage.EntityFramework" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Storage.MongoDB" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Metrics.SystemMetrics" >> $GITHUB_STEP_SUMMARY
+          node .github/package-registry/dotnet-ci.mjs summary >> "$GITHUB_STEP_SUMMARY"
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-dotnet" >> $GITHUB_STEP_SUMMARY
           echo "SonarQube Server: ${SONAR_HOST_URL}/dashboard?id=toggly-sdks-dotnet" >> $GITHUB_STEP_SUMMARY

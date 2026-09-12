@@ -30,6 +30,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Retry failed jobs to reuse the original signed artifact. A full-workflow
+  # rerun refuses the existing fixed-name candidate before signing or pushing;
+  # start a new dispatch for new manifest/registry decisions.
   validate:
     runs-on: ubuntu-latest
     outputs:
@@ -68,16 +71,16 @@ jobs:
         with:
           name: dotnet-release-candidate
           path: release-candidate/
+          overwrite: false
           if-no-files-found: error
 
-  publish:
+  sign:
     needs: validate
     if: needs.validate.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment: nuget-publish
     permissions:
       contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
@@ -168,6 +171,39 @@ jobs:
             # Sectigo requires spacing between all timestamp requests.
             sleep 15
           done
+      - name: Freeze signed package checksums
+        run: node .github/package-registry/dotnet-signed-candidate.mjs seal release-candidate
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: signed-dotnet-packages
+          path: release-candidate/
+          overwrite: false
+          if-no-files-found: error
+          retention-days: 14
+
+  # A failed registry push is retried from this completed, immutable signing job.
+  # Never sign again in publication or release jobs: RFC3161 timestamps change bytes.
+  publish:
+    needs: sign
+    runs-on: ubuntu-latest
+    environment: nuget-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: signed-dotnet-packages
+          path: release-candidate/
+      - name: Verify immutable signed candidate before registry access
+        run: node .github/package-registry/dotnet-signed-candidate.mjs verify release-candidate
       - name: NuGet login (OIDC)
         id: nuget_login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
@@ -178,12 +214,6 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
         run: node .github/package-registry/dotnet-publish.mjs release-candidate
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: signed-dotnet-packages
-          path: release-candidate/
-          if-no-files-found: error
-          retention-days: 14
 
   release:
     needs: publish
@@ -202,6 +232,8 @@ jobs:
         with:
           name: signed-dotnet-packages
           path: release-candidate/
+      - name: Verify immutable signed candidate before release metadata
+        run: node .github/package-registry/dotnet-signed-candidate.mjs verify release-candidate
       - name: Import existing GPG signing identity
         id: import_gpg
         uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
@@ -236,9 +268,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
-          cd release-candidate/nupkgs
-          sha256sum *.nupkg *.snupkg | sort -k2 > ../SHA256SUMS
-          cd ..
+          cd release-candidate
           gpg --batch --yes --detach-sign --armor SHA256SUMS
           cd ..
           node .github/package-registry/dotnet-release-notes.mjs release-candidate
