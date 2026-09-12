@@ -1,25 +1,35 @@
+import { createPersistence, verifyEnvelope } from './persistence.js';
 import { captureEvaluatedResponse } from './transport.js';
 import { selectDefinitions, publicContext, type TogglySnapshot } from './snapshot.js';
 import { buildEvaluatedSignedUrl, evaluateResolvedKeys, resolveEvaluatedDefinition, type EvaluatedDefinitions, type TogglyEntityContext, type TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
-import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions, isEvaluatedDefinitions, readAndParseEvaluatedResponseCached } from '@ops-ai/toggly-signed-defs';
+import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
 import { applyLocalGate, buildFlagGateIndex, type LocalGate } from '@ops-ai/toggly-local-gates';
 
 export type { TogglyEntityContext, TogglyEvaluationContext, EvaluatedDefinitions, LocalGate };
 export interface TogglyOptions extends TogglyEvaluationContext {
   /** Restrict every browser snapshot to these public keys. */
   expose?: readonly string[];
+  /** Public frontend application key; never use a backend key in a browser. */
   appKey?: string;
   environment?: string;
   baseURI?: string;
   flagDefaults?: Record<string, boolean>;
+  /** Verify ES256 signatures (default true). Disabling this also disables persistence. */
   verifySignatures?: boolean;
+  /** Optional independent signing-key allowlist, applied to network and stored data. */
   allowedKeyIds?: string[];
+  /** Maximum envelope age in seconds; unset/nonpositive disables age expiry. */
   maxSignatureAgeSeconds?: number;
   fetch?: typeof fetch;
   connectTimeout?: number;
+  /** Polling interval in milliseconds (default 180000); zero disables polling. */
   refreshInterval?: number;
+  /** Enable reconnecting WebSocket invalidations (default true). */
   enableLiveUpdates?: boolean;
-  /** Opt-in envelope persistence. Storage is never accessed unless injected. */
+  /**
+   * Opt-in origin/application-owned storage for signed envelopes and verified
+   * public keys. Reads are reverified; keys include public targeting data.
+   */
   storage?: Pick<Storage, 'getItem' | 'setItem'>;
   localGates?: LocalGate[];
 }
@@ -40,6 +50,8 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
   let gateIndex = buildFlagGateIndex(gates);
   const listeners = new Set<(state: ClientState) => void>();
   const jwks = new InMemoryJwksCache();
+  const persistence = createPersistence(config.storage, config.baseURI);
+  const timestamps = new Map<string, number>();
   let generation = 0;
   let disposed = false;
   let revision: string | null = null;
@@ -55,25 +67,15 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
 
   const isCurrent = (current: number) => current === generation && !disposed;
 
-  function restoreCached(cacheKey: string, fetchImpl: typeof fetch, current: number): Promise<void> | undefined {
-    if (!config.storage || !config.verifySignatures) return;
-    try {
-      const cached = config.storage.getItem(cacheKey);
-      if (!cached) return;
-      return readAndParseEvaluatedResponseCached(new Response(cached), jwks, { ...config, fetchImpl }, headers)
-        .then(defs => {
-          if (isCurrent(current) && isEvaluatedDefinitions(defs)) {
-            emit({ definitions: selectDefinitions(defs, expose) });
-          }
-        })
-        .catch(() => { /* Invalid or expired cache must not prevent a network attempt. */ });
-    } catch { /* Unavailable storage must not prevent a network attempt. */ }
-  }
-
-  function persistEnvelope(cacheKey: string, body: string | undefined) {
-    if (!body || !config.verifySignatures) return;
-    try { config.storage?.setItem(cacheKey, body); }
-    catch { /* Storage quota must not prevent evaluation. */ }
+  function restoreCached(scope: string, current: number): Promise<void> | undefined {
+    if (!config.verifySignatures) return;
+    return persistence.read(scope, config, timestamps.get(scope) ?? 0)
+      ?.then(verified => {
+        if (!isCurrent(current)) return;
+        timestamps.set(scope, verified.timestamp);
+        emit({ definitions: selectDefinitions(verified.definitions, expose) });
+      })
+      .catch(() => { /* Invalid or expired storage cannot block network recovery. */ });
   }
 
   async function fetchRemote(url: string, fetchImpl: typeof fetch, pin?: string | null) {
@@ -86,13 +88,22 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     return { result, body: capture.body() };
   }
 
-  function acceptRemote(remote: Awaited<ReturnType<typeof fetchRemote>>, cacheKey: string, current: number) {
+  async function acceptRemote(remote: Awaited<ReturnType<typeof fetchRemote>>, scope: string, current: number, fetchImpl: typeof fetch) {
     if (!isCurrent(current)) return;
     const { result, body } = remote;
     if (!result.notModified) {
+      let definitions = result.defs;
+      if (config.verifySignatures) {
+        if (!body) throw new Error('Missing signed envelope');
+        const keys = await jwks.get({ ...config, fetchImpl });
+        const verified = await verifyEnvelope(body, keys, config, timestamps.get(scope) ?? 0);
+        if (!isCurrent(current)) return;
+        definitions = verified.definitions;
+        timestamps.set(scope, verified.timestamp);
+        persistence.write(scope, body, verified.keys);
+      }
       // Complete validation precedes state, persistence and revision adoption.
-      emit({ definitions: selectDefinitions(result.defs, expose) });
-      persistEnvelope(cacheKey, body);
+      emit({ definitions: selectDefinitions(definitions, expose) });
     }
     revision = result.revision ?? revision;
   }
@@ -111,10 +122,9 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       if (!config.appKey) return flags();
       // The full URL scopes persisted envelopes by app, environment and targeting.
       const url = buildEvaluatedSignedUrl(config.baseURI, encodeURIComponent(config.appKey), encodeURIComponent(config.environment), context, false);
-      const cacheKey = `toggly:solid:envelope:${url}`;
-      const cached = restoreCached(cacheKey, fetchImpl, current);
+      const cached = restoreCached(url, current);
       if (cached) await cached;
-      acceptRemote(await fetchRemote(url, fetchImpl, pin), cacheKey, current);
+      await acceptRemote(await fetchRemote(url, fetchImpl, pin), url, current, fetchImpl);
     } catch (error) {
       if (isCurrent(current)) emit({ error: error instanceof Error ? error : new Error(String(error)) });
     } finally {
@@ -139,8 +149,14 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
           const message = data === 'update' || data === 'flags-updated' ? { type: data } : JSON.parse(data);
           const changed = ['flags-updated', 'update'].includes(message.type) && (!message.etag || message.etag !== revision);
           const sync = message.type === 'sync' && message.unchanged !== true && (!revision || (message.etag && message.etag !== revision));
-          if (message.type === 'signing-key-updated') jwks.clear();
+          if (message.type === 'signing-key-updated') {
+            jwks.clear();
+            persistence.invalidate();
+          }
           if (changed || sync || message.type === 'signing-key-updated') {
+            // Invalidation retires pending work before the debounce window.
+            generation++;
+            controller?.abort();
             clearTimeout(debounce);
             // null means a server invalidation without a pin: it must bypass the
             // prior conditional revision just as a revision-pinned fetch does.

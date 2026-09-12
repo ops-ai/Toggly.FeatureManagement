@@ -8,6 +8,8 @@
 - Packed SolidStart 2 host coverage for server/client boundaries and lifecycle.
 
 ### Fixed
+- Restore verified definitions after a fully offline restart by persisting the exact signed envelope and its verified public key in opt-in, targeting-scoped storage.
+- Revalidate key constraints, signature age and full entity schema on restore, retire historical storage on key rotation, and reject older signed state within each running context.
 - Separate refresh cache, transport and acceptance steps while preserving signed state and revision behavior.
 - Capture exact response bytes for string, URL and Request inputs and harden packed-host npm invocation.
 - Isolate synchronous and asynchronous error observers from server snapshot defaults.

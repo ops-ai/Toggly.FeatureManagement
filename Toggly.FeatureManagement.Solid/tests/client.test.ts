@@ -145,9 +145,9 @@ describe('verified envelope caching', () => {
     const envelope=JSON.stringify({defs:JSON.parse(raw),timestamp,kid,signature});
     const map=new Map<string,string>(); const storage={getItem:(k:string)=>map.get(k)??null,setItem:(k:string,v:string)=>{map.set(k,v)}};
     let offline=false;
-    const f=vi.fn((url:any)=> String(url).includes('.well-known') ? Promise.resolve(new Response(JSON.stringify({keys:[{...publicKey,kid,alg:'ES256'}]}))) : offline ? Promise.reject(new Error('offline')) : Promise.resolve(new Response(envelope)));
+    const f=vi.fn((url:any)=> offline ? Promise.reject(new Error('offline')) : String(url).includes('.well-known') ? Promise.resolve(new Response(JSON.stringify({keys:[{...publicKey,kid,alg:'ES256'}]}))) : Promise.resolve(new Response(envelope)));
     const c=createClient({appKey:'test',identity:'alice',fetch:f,storage}); await c.refresh();
-    expect(c.state().error).toBeUndefined(); expect(c.evaluate(['signed'])).toBe(true); expect(map.size).toBe(1); c.dispose();
+    expect(c.state().error).toBeUndefined(); expect(c.evaluate(['signed'])).toBe(true); expect(map.size).toBe(2); c.dispose();
     offline=true;
     const cached=createClient({appKey:'test',identity:'alice',fetch:f,storage}); await cached.refresh(); expect(cached.evaluate(['signed'])).toBe(true); cached.dispose();
     const bob=createClient({appKey:'test',identity:'bob',fetch:f,storage}); await bob.refresh(); expect(bob.evaluate(['signed'])).toBe(false); bob.dispose();

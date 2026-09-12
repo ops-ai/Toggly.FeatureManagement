@@ -100,7 +100,21 @@ Without an app key, the client performs no definitions requests and uses default
 
 Signature verification defaults to **true**. The shared client verifies ES256 evaluated-signed responses using the service JWKS before applying booleans or entity gates. Configure `allowedKeyIds` to constrain trusted keys and `maxSignatureAgeSeconds` to reject old envelopes. Set `verifySignatures: false` only for explicitly unsigned development fixtures.
 
-Each client keeps a same-context in-memory snapshot and conditional HTTP revision. Persistent caching is opt-in: pass `storage: window.localStorage` in browser-only code. Cache keys include the base URL, app, environment and complete targeting URL. Only signed raw envelopes are persisted, and startup reads reverify signatures and freshness. Unavailable storage, corrupt data and invalid signatures never enable cached flags. Verified cached envelopes still require JWKS retrieval for a newly created client; no guarantee is made for a cold start with no network at all. Storage retains identity-bearing cache keys; choose its lifecycle to match your privacy requirements.
+Each client keeps a same-context in-memory snapshot and conditional HTTP revision. Persistent caching is opt-in: supply the application's storage adapter. The SDK stores the exact signed envelope with the public key that verified it. A fresh client rechecks the signature, current key pins, key metadata/expiry, configured signature age and complete entity schema before restoring definitions, without a network key fetch. Refresh still attempts the service; an offline error leaves the verified restored flags usable. With no matching valid record, defaults remain active.
+
+```ts
+const storage = {
+  getItem: (key: string) => window.localStorage.getItem(key),
+  setItem: (key: string, value: string) => window.localStorage.setItem(key, value),
+};
+// Use in browser configuration; the callbacks defer storage access until refresh.
+const client = createClient({ appKey: 'your-frontend-app-key', storage });
+await client.refresh();
+```
+
+Cache records are partitioned by endpoint, app, environment and complete targeting URL. Signing-key notifications retire all stored targeting records for that endpoint before refreshing. Corrupt/unsupported records and inaccessible storage cannot enable cached flags or prevent network recovery. If retirement cannot be written, that client stops using persistence for its lifetime; restoring storage access or clearing the affected storage is the application's responsibility before a later restart.
+
+Storage is application/origin-owned local trust material. A party able to replace both stored keys and envelopes can replace that trust anchor unless you independently configure `allowedKeyIds`. Signature verification is repeated on every restore; a signed timestamp floor rejects rollback within a running context. Detecting rollback of the entire store after process loss requires external protected state. `maxSignatureAgeSeconds` limits how old a persisted envelope may be at restart; unset/nonpositive values disable the age limit. Future timestamps and expired keys are rejected. Storage keys include identity/groups/claims; clear or partition storage according to your application's privacy and logout policy. Caching definitions does not make application HTML, assets or server queries available offline.
 
 Set `expose` to restrict browser definitions to an explicit list of public keys. A server snapshot supplies its own allowlist, which also applies to subsequent refreshes. Every fetch uses `cache: 'no-store'`; polling sends its explicit confirmed ETag, while revisionless invalidations omit validators.
 
@@ -231,6 +245,8 @@ try {
 ## Signatures, defaults and lifecycle
 
 Frontend snapshots always verify ES256 signatures; there is no server snapshot option to disable verification. `frontend` accepts `baseURI`, `environment`, `allowedKeyIds`, `maxSignatureAgeSeconds`, `timeout` (10 seconds by default), `fetch` and `onError`. Set allowed keys and freshness limits to match your security policy. Invalid signatures, unavailable JWKS, malformed results and transport errors return only allowlisted defaults with `source: 'defaults'`; successful verification returns `source: 'signed'`. A disposed/aborted request rejects. Each wrapper memoizes one snapshot fetch and returns defensive copies. There is no cross-request frontend snapshot cache.
+
+Browser `storage` supports the same signed offline-restart behavior described above. It does not cache SolidStart server queries or application HTML/assets; a fully offline page launch requires an application-owned offline shell.
 
 Browser refreshes independently verify signed responses. Every browser fetch uses `cache: 'no-store'`; polling explicitly supplies its last confirmed ETag, while revisionless live invalidations omit validators. This prevents native browser caching from quietly adding stale validators. Same-context network/signature failures retain the previous verified flags. A new request snapshot replaces prior identity state immediately. Unmounting the provider aborts pending HTTP and clears polling, reconnect/debounce timers and sockets. See the [SolidJS API](https://docs.toggly.io/sdks/javascript/solid) for local gates, resources, all/any/negate and lazy components.
 
