@@ -1,5 +1,10 @@
 # Changelog
 
+## Toggly.FeatureManagement.Storage.RavenDB 3.7.0 - 2026-09-12
+
+### Added
+- Optimistic-concurrency storage for offline embedded feature catalogs using isolated `TogglyCatalogs/{sha256}` RavenDB documents.
+
 ## Toggly.FeatureManagement.Storage.EntityFramework 3.7.0 - 2026-09-11
 
 ### Added
