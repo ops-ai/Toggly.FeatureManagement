@@ -13,17 +13,21 @@ import { Module } from '@nestjs/common';
 import { TogglyModule } from '@ops-ai/toggly-nestjs';
 
 @Module({
-  imports: [TogglyModule.forRoot({
-    appKey: process.env.TOGGLY_APP_KEY,
-    environment: process.env.TOGGLY_ENVIRONMENT ?? 'Production',
-    verifySignatures: true,
-    featureDefaults: { 'new-dashboard': false },
-    contextFactory: (request: { user?: { id: string; groups: string[]; claims: Record<string, string> } }) => ({
-      identity: request.user?.id ?? 'anonymous',
-      groups: request.user?.groups,
-      claims: request.user?.claims,
+  imports: [
+    TogglyModule.forRoot({
+      appKey: process.env.TOGGLY_APP_KEY,
+      environment: process.env.TOGGLY_ENVIRONMENT ?? 'Production',
+      verifySignatures: true,
+      featureDefaults: { 'new-dashboard': false },
+      contextFactory: (request: {
+        user?: { id: string; groups: string[]; claims: Record<string, string> };
+      }) => ({
+        identity: request.user?.id ?? 'anonymous',
+        groups: request.user?.groups,
+        claims: request.user?.claims,
+      }),
     }),
-  })],
+  ],
 })
 export class AppModule {}
 ```
@@ -36,7 +40,12 @@ export class AppModule {}
 
 ```ts
 import { Controller, Get, Inject, UseGuards } from '@nestjs/common';
-import { TogglyService, FeatureFlag, FeatureFlagGuard, FeatureEnabled } from '@ops-ai/toggly-nestjs';
+import {
+  TogglyService,
+  FeatureFlag,
+  FeatureFlagGuard,
+  FeatureEnabled,
+} from '@ops-ai/toggly-nestjs';
 
 @Controller('dashboard')
 export class DashboardController {
@@ -52,7 +61,9 @@ export class DashboardController {
   @Get('legacy')
   @UseGuards(FeatureFlagGuard)
   @FeatureFlag('api-v2', { negate: true })
-  legacy() { return { version: 1 }; }
+  legacy() {
+    return { version: 1 };
+  }
 
   @Get('status')
   async status() {
@@ -83,6 +94,10 @@ const forAlice = await toggly.isFeatureOn('beta-access', {
 Inject singleton `TogglyProvider` for `provider.client` and `provider.state`. `initialized` means startup completed, including defaults/cache fallback. Check `state.error`, `lastRefresh` and `definitions` to distinguish a degraded fetch. Missing app keys use defaults without network. Core defaults to a 180000ms refresh and streaming when configured; `refreshInterval: 0` and `enableStreaming: false` disable those channels independently. `client.refresh()` triggers a manual refresh and preserves last-known-good definitions on network/verification failure. `onError(error, context)` observes failures.
 
 All Node server configuration is accepted, including `verifySignatures`, `allowedKeyIds`, `maxSignatureAgeSeconds`, `timeout`, `cacheProvider` and `enableFileCache`/`fileCachePath`. Exported `FileCacheProvider`/`MemoryCacheProvider` support snapshots; durable storage must be application-controlled. The core persists parsed definitions and startup reads that trusted cache; signature validation protects downloaded envelopes and is not re-applied to raw local cache entries. Hooks such as `afterRefresh` and `afterEvaluation` pass through to core.
+
+NestJS is a trusted backend adapter: the core downloads raw `definitions-signed` rules and evaluates them locally with request and entity context. It does not use the browser `evaluated-signed` protocol. Downloaded envelopes are verified when `verifySignatures` is enabled; WebSocket notifications trigger refreshed definitions through the shared core.
+
+A durable cache stores parsed definition models, and startup may adopt those models before a network refresh. That cold restore does not retain or reverify the original signed envelope. Cached JWKS are persisted separately with their own expiry; they do not authenticate the restored model array. Protect cache files or custom providers as trusted server state. Network signature checks and allowed key/age policies do not make writable cache contents a cryptographic trust boundary.
 
 `TogglyService.recordUsage(key, variant?)` and `recordView(key, variant?)` bind request identity. `provider.client.measure`, `incrementCounter`, `observe` and `flushTelemetry` expose core business metrics. Usage and metrics default on when an app key is supplied; turn them off explicitly for local fixture work. `metricsBaseUrl` is separate from definitions `baseUrl`. Hook evaluation context follows core's hook contract (identity/groups/traits), while evaluator context also receives claims/request fields.
 

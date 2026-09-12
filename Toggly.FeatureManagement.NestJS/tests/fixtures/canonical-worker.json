@@ -7,9 +7,7 @@
     "jwks": {
       "keys": [
         {
-          "key_ops": [
-            "verify"
-          ],
+          "key_ops": ["verify"],
           "ext": true,
           "kty": "EC",
           "x": "fKDAVfnovoOmmAg-rnDuqiTDRWX88zqAafH2hU6_qhQ",
@@ -29,9 +27,7 @@
     "jwks": {
       "keys": [
         {
-          "key_ops": [
-            "verify"
-          ],
+          "key_ops": ["verify"],
           "ext": true,
           "kty": "EC",
           "x": "vV57e6t-Hgdn1UjSyBpEkM8EMzF_cadWlkHtxkKADRQ",

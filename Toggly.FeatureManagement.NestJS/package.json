@@ -47,11 +47,15 @@
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit",
+    "lint": "npm run format:check && npm run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:packed": "node tests/check-packed.mjs"
+    "test:packed": "node tests/check-packed.mjs",
+    "format": "npm exec --yes --package=prettier@3.6.2 -- prettier --no-error-on-unmatched-pattern --write \"src/**/*.{ts,js,css}\" \"tests/**/*.{ts,mjs,json,md}\" \"test/**/*.{ts,mjs,json,md}\" \"examples/**/*.ts\" \"*.{ts,mjs,json,md}\"",
+    "format:check": "npm exec --yes --package=prettier@3.6.2 -- prettier --no-error-on-unmatched-pattern --check \"src/**/*.{ts,js,css}\" \"tests/**/*.{ts,mjs,json,md}\" \"test/**/*.{ts,mjs,json,md}\" \"examples/**/*.ts\" \"*.{ts,mjs,json,md}\"",
+    "pretest": "npm run format:check",
+    "pretest:coverage": "npm run format:check"
   },
   "dependencies": {
     "@ops-ai/toggly-node-core": "^0.9.1"
