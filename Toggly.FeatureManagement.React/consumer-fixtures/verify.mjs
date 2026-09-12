@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,7 +19,9 @@ assert.equal(packageManifest.exports?.['.']?.import, './dist/esm/index.js')
 assert.equal(packageManifest.exports?.['.']?.require, './dist/cjs/index.cjs')
 assert.match(rollupConfig, /external:\s*\[[\s\S]*['"]react['"][\s\S]*['"]react\/jsx-runtime['"][\s\S]*\]/)
 
-const artifactsDirectory = join(packageDirectory, 'artifacts')
+const isolatedDirectory = mkdtempSync(join(tmpdir(), 'toggly-react-isolated-'))
+console.log(`Isolated packed consumers: ${isolatedDirectory}`)
+const artifactsDirectory = join(isolatedDirectory, 'artifacts')
 const packedArtifact = join(artifactsDirectory, 'toggly-react.tgz')
 const npmCacheDirectory = mkdtempSync(join(tmpdir(), 'toggly-react-consumer-npm-cache-'))
 const npmEnvironment = { ...process.env, npm_config_cache: npmCacheDirectory }
@@ -49,8 +51,12 @@ try {
   )
   copyFileSync(join(artifactsDirectory, packed[0].filename), packedArtifact)
 
-  for (const fixture of ['react-18', 'react-19']) {
-    const fixtureDirectory = join(packageDirectory, fixture)
+  for (const fixture of ['react-18-min', 'react-18', 'react-19']) {
+    const fixtureDirectory = join(isolatedDirectory, fixture)
+    cpSync(join(packageDirectory, fixture), fixtureDirectory, {
+      recursive: true,
+      filter: path => !/(?:^|\/)(?:node_modules|dist|dist-ssr)(?:\/|$)/.test(path),
+    })
     rmSync(join(fixtureDirectory, 'node_modules'), { recursive: true, force: true })
     rmSync(join(fixtureDirectory, 'dist'), { recursive: true, force: true })
 
@@ -66,6 +72,7 @@ try {
     })
     execFileSync('npm', ['run', 'typecheck'], { cwd: fixtureDirectory, env: npmEnvironment, stdio: 'inherit' })
     execFileSync('npm', ['run', 'build'], { cwd: fixtureDirectory, env: npmEnvironment, stdio: 'inherit' })
+    execFileSync('node', [join(packageDirectory, 'browser-check.mjs')], { cwd: fixtureDirectory, env: npmEnvironment, stdio: 'inherit' })
     execFileSync('npm', ['run', 'verify'], { cwd: fixtureDirectory, env: npmEnvironment, stdio: 'inherit' })
     execFileSync(
       'node',
@@ -77,5 +84,6 @@ try {
   if (existsSync(artifactsDirectory)) {
     rmSync(artifactsDirectory, { recursive: true, force: true })
   }
+  rmSync(isolatedDirectory, { recursive: true, force: true })
   rmSync(npmCacheDirectory, { recursive: true, force: true })
 }

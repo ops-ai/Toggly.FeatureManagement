@@ -15,6 +15,14 @@ A feature flag (or toggle) in software development provides an alternative to ma
 
 In agile settings the feature flag is used in production, to switch on the feature on demand, for some or all the users. Thus, feature flags make it easier to release often. Advanced roll out strategies such as canary roll out and A/B testing are easier to handle.
 
+## Compatibility
+
+Requires matching React and React DOM versions: React 18.2+ or React 19.x.
+The SDK uses your application's React and JSX runtimes as peer dependencies.
+React 18 applications can retain their existing React 18 setup.
+Packed consumer tests cover 18.2.0, 18.3.1, and 19.3.0, including provider,
+hooks, feature gates, context changes, refresh, and cleanup in a browser.
+
 ## Installation
 
 Simply install use NPM to install this package.
@@ -28,6 +36,8 @@ $ npm i -s @ops-ai/react-feature-flags-toggly
 Import **createTogglyProvider** in your index file.
 
 ```js
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
 import { createTogglyProvider } from '@ops-ai/react-feature-flags-toggly'
 ```
 
@@ -43,15 +53,15 @@ Create a TogglyProvider with your App Key & Environment name from your [Toggly a
 Wrap your App component with the newly created TogglyProvider.
 
 ```js
-  const root = ReactDOM.createRoot(
+  const root = createRoot(
     document.getElementById('root') as HTMLElement,
   )
   root.render(
-    <React.StrictMode>
+    <StrictMode>
       <TogglyProvider>
         <App />
       </TogglyProvider>
-    </React.StrictMode>,
+    </StrictMode>,
   )
 ```
 
@@ -106,6 +116,8 @@ You can also check multiple feature keys and make use of the *requirement* (all/
 Import **createTogglyProvider** in your index file.
 
 ```js
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
 import { createTogglyProvider } from '@ops-ai/react-feature-flags-toggly'
 ```
 
@@ -126,15 +138,15 @@ Create a TogglyProvider and provide your feature defaults.
 Wrap your App component with the newly created TogglyProvider.
 
 ```js
-  const root = ReactDOM.createRoot(
+  const root = createRoot(
     document.getElementById('root') as HTMLElement,
   )
   root.render(
-    <React.StrictMode>
+    <StrictMode>
       <TogglyProvider>
         <App />
       </TogglyProvider>
-    </React.StrictMode>,
+    </StrictMode>,
   )
 ```
 
