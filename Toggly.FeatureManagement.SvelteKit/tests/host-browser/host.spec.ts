@@ -31,6 +31,14 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
   ).toBe(200);
   const html = await (await request.get('/one?user=alice')).text();
   expect(html).toContain('data-testid="on"');
+  expect(html).not.toContain('data-testid="off"');
+  const disabledHTML = await (await request.get('/one?user=bob')).text();
+  expect(disabledHTML).toContain('data-testid="off"');
+  expect(disabledHTML).not.toContain('data-testid="on"');
+  const expectBranch = async (enabled: boolean) => {
+    await expect(page.getByTestId(enabled ? 'on' : 'off')).toBeVisible();
+    await expect(page.getByTestId(enabled ? 'off' : 'on')).toHaveCount(0);
+  };
   expect(html).not.toContain('server-secret');
   expect(html).not.toContain('backend-private-fixture');
   expect(html).not.toContain('not-exposed');
@@ -50,7 +58,7 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
     }).observe(document, { subtree: true, childList: true });
   });
   await page.goto('/one?user=alice');
-  await expect(page.getByTestId('on')).toBeVisible();
+  await expectBranch(true);
   await expect(page.getByTestId('vip')).toHaveText('true');
   await expect(page.getByTestId('no-entity')).toHaveText('false');
   await expect(page.getByTestId('any')).toBeVisible();
@@ -60,15 +68,15 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
     .toBe(1);
   expect(await page.evaluate(() => (window as any).wrongFlash)).toBe(false);
   await page.getByRole('button', { name: 'Local prerequisite' }).click();
-  await expect(page.getByTestId('off')).toBeVisible();
+  await expectBranch(false);
   await page.getByRole('button', { name: 'Local prerequisite' }).click();
-  await expect(page.getByTestId('on')).toBeVisible();
+  await expectBranch(true);
   await page.getByRole('link', { name: 'Bob', exact: true }).click();
-  await expect(page.getByTestId('off')).toBeVisible();
+  await expectBranch(false);
   await expect(page.getByTestId('snapshot')).toContainText('bob');
   const connections = (await (await request.get(definitions + '/state')).json()).connections;
   await page.getByRole('link', { name: 'Alice', exact: true }).click();
-  await expect(page.getByTestId('on')).toBeVisible();
+  await expectBranch(true);
   await expect
     .poll(async () => (await (await request.get(definitions + '/state')).json()).connections)
     .toBeGreaterThan(connections);
@@ -91,7 +99,7 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
       },
     });
     try {
-      await expect(page.getByTestId(enabled ? 'on' : 'off')).toBeVisible();
+      await expectBranch(enabled);
     } catch (error) {
       console.log('Protocol state', await (await request.get(definitions + '/state')).json());
       throw error;
@@ -109,11 +117,11 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
   await expect
     .poll(async () => (await (await request.get(definitions + '/state')).json()).jwks)
     .toBeGreaterThan(before);
-  await expect(page.getByTestId('off')).toBeVisible();
+  await expectBranch(false);
   await request.post(definitions + '/control', {
     data: { enabled: true, revision: 'r4', message: 'update' },
   });
-  await expect(page.getByTestId('on')).toBeVisible();
+  await expectBranch(true);
   // These shapes have valid signatures. Observer notification synchronizes with
   // rejection, so old visible values cannot make an unfinished refresh look safe.
   for (const shape of [
@@ -127,12 +135,14 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
     await expect
       .poll(async () => Number(await page.getByTestId('refresh-errors').textContent()))
       .toBeGreaterThan(failures);
-    await expect(page.getByTestId('on')).toBeVisible();
+    await expectBranch(true);
     await expect(page.getByTestId('vip')).toHaveText('true');
     await expect(page.getByTestId('no-entity')).toHaveText('false');
     const rejectedSSR = await request.get('/one?user=alice');
     expect(rejectedSSR.status()).toBe(200);
-    expect(await rejectedSSR.text()).toContain('data-testid="off"');
+    const rejectedHTML = await rejectedSSR.text();
+    expect(rejectedHTML).toContain('data-testid="off"');
+    expect(rejectedHTML).not.toContain('data-testid="on"');
   }
   let failures = Number(await page.getByTestId('refresh-errors').textContent());
   await request.post(definitions + '/control', {
@@ -141,16 +151,18 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
   await expect
     .poll(async () => Number(await page.getByTestId('refresh-errors').textContent()))
     .toBeGreaterThan(failures);
-  await expect(page.getByTestId('on')).toBeVisible();
+  await expectBranch(true);
   failures = Number(await page.getByTestId('refresh-errors').textContent());
   await request.post(definitions + '/control', { data: { invalid: false, offline: true } });
   await expect
     .poll(async () => Number(await page.getByTestId('refresh-errors').textContent()))
     .toBeGreaterThan(failures);
-  await expect(page.getByTestId('on')).toBeVisible();
+  await expectBranch(true);
   const offlineSSR = await request.get('/one?user=alice');
   expect(offlineSSR.status()).toBe(200);
-  expect(await offlineSSR.text()).toContain('data-testid="off"');
+  const offlineHTML = await offlineSSR.text();
+  expect(offlineHTML).toContain('data-testid="off"');
+  expect(offlineHTML).not.toContain('data-testid="on"');
   // Hold the old identity's response explicitly, then release it after navigation.
   // The fixture reports completion instead of relying on a guessed network delay.
   await request.post(definitions + '/control', {
@@ -160,13 +172,13 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
     .poll(async () => (await (await request.get(definitions + '/state')).json()).pending)
     .toBeGreaterThan(0);
   await page.getByRole('link', { name: 'Bob', exact: true }).click();
-  await expect(page.getByTestId('off')).toBeVisible();
+  await expectBranch(false);
   const completed = (await (await request.get(definitions + '/state')).json()).completed;
   await request.post(definitions + '/control', { data: { delayUser: '', release: true } });
   await expect
     .poll(async () => (await (await request.get(definitions + '/state')).json()).completed)
     .toBeGreaterThan(completed);
-  await expect(page.getByTestId('off')).toBeVisible();
+  await expectBranch(false);
   await page.getByRole('button', { name: 'Toggle owner' }).click();
   await expect
     .poll(async () => (await (await request.get(definitions + '/state')).json()).active)

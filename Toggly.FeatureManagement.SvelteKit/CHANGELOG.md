@@ -2,6 +2,10 @@
 
 ## 0.1.0 — 2026-09-12
 
+### Changed
+
+- Remove the provisional Feature fallback slot. Render disabled content in a separate Feature with the same gate options and `negate: true`; SSR and browser rendering still use the current snapshot immediately.
+
 ### Added
 
 - Keep failed key-retirement persistence disabled across navigation and reconnects in the same layout.

@@ -7,4 +7,4 @@
   $: allowed = $toggly && toggly.gate(typeof feature === 'string' ? [feature] : feature, options);
 </script>
 
-{#if allowed}<slot />{:else}<slot name="fallback" />{/if}
+{#if allowed}<slot />{/if}

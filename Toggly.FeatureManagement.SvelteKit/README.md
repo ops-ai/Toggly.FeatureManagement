@@ -67,10 +67,14 @@ Return `await loadToggly(event)` from `+layout.server.ts` as `toggly`, plus your
 
 <Feature {toggly} feature="new-dashboard">
   <p>New dashboard</p>
-  <p slot="fallback">Classic dashboard</p>
+</Feature>
+<Feature {toggly} feature="new-dashboard" options={{ negate: true }}>
+  <p>Classic dashboard</p>
 </Feature>
 <slot />
 ```
+
+Use separate `Feature` blocks for enabled and disabled content. Keep their feature keys, requirement, entity and defaults identical, and add `negate: true` to the disabled block. Both evaluate the current snapshot synchronously; no loading state is introduced.
 
 Synchronous initialization selects the same SSR and hydration branch. `update(snapshot)` handles new server data after navigation/login/logout and rejects prior session completions. Invalidate your server load when authentication changes. This instance has no global Svelte stores.
 

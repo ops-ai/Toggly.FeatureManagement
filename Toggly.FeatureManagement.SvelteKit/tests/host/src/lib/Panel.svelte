@@ -29,10 +29,8 @@
   onDestroy(() => toggly.dispose());
 </script>
 
-<Feature {toggly} feature="on"
-  ><p data-testid="on">ON</p>
-  <p slot="fallback" data-testid="off">OFF</p></Feature
->
+<Feature {toggly} feature="on"><p data-testid="on">ON</p></Feature>
+<Feature {toggly} feature="on" options={{ negate: true }}><p data-testid="off">OFF</p></Feature>
 <p data-testid="programmatic">{String(enabled)}</p>
 <p data-testid="vip">{String(vip)}</p>
 <p data-testid="no-entity">{String(noEntity)}</p>
