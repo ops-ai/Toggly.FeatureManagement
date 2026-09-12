@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.3
+
+2026-09-12
+
+### Changed
+
+- Validate packed consumers against AsyncStorage 1.24, 2.2, and 3.1 while
+  retaining the adapter's default singleton API and `@toggly:` key format.
+- Use `removeItem` for each Toggly key when AsyncStorage 3 does not expose
+  `multiRemove`, while retaining the batched clear path for earlier versions.
+- Document current bare React Native and Expo host prerequisites. The package
+  peer remains `>=1.17.0` because all retained AsyncStorage API generations
+  expose the methods used by this adapter.
 
 ## 1.1.2
 
