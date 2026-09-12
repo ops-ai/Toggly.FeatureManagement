@@ -10,6 +10,8 @@ export default defineConfig({
     'client/setup': 'src/client/setup.ts',
     'frameworks/react/index': 'src/frameworks/react/index.ts',
     'frameworks/react/Feature': 'src/frameworks/react/Feature.tsx',
+    'frameworks/vue/index': 'src/frameworks/vue/index.ts',
+    'frameworks/svelte/index': 'src/frameworks/svelte/index.ts',
     'frameworks/vue/composables': 'src/frameworks/vue/composables.ts',
     'frameworks/svelte/stores': 'src/frameworks/svelte/stores.ts',
   },

@@ -60,6 +60,9 @@ export default function togglyIntegration(
         // Add Vite plugin to strip x-feature directives before Astro's compiler
         updateConfig({
           vite: {
+            // Source Vue/Svelte components import the same store as client setup.
+            // Prebundling only the JS entry points creates a second store in dev.
+            optimizeDeps: { exclude: ['@ops-ai/astro-feature-flags-toggly'] },
             ssr: {
               noExternal: ['@ops-ai/astro-feature-flags-toggly'],
             },

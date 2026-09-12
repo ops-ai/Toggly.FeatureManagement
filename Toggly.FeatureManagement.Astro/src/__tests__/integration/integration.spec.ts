@@ -119,6 +119,19 @@ describe('Toggly Integration', () => {
       );
     });
 
+    it('keeps client setup and source components on one store in development', async () => {
+      const integration = togglyIntegration();
+      const updateConfig = vi.fn();
+      await (integration.hooks['astro:config:setup'] as any)({
+        config: { srcDir: { pathname: '/tmp/src/' } },
+        injectScript: vi.fn(),
+        updateConfig,
+      });
+      expect(updateConfig.mock.calls[0][0].vite.optimizeDeps?.exclude).toContain(
+        '@ops-ai/astro-feature-flags-toggly'
+      );
+    });
+
     it('should configure SSR noExternal', async () => {
       const integration = togglyIntegration();
       const updateConfig = vi.fn();

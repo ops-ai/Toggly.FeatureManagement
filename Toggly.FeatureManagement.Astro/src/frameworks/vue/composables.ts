@@ -2,10 +2,19 @@
  * Vue Composables for Toggly
  */
 
-import { computed, type Ref } from 'vue';
+import { computed, getCurrentInstance, onMounted, ref, type Ref } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { $flag, $gate, $isReady, $variants, $flags, $localGatesRevision } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
+
+/** @internal Preserve the SSR loading snapshot until the island mounts. */
+export function useTogglyReady(): Readonly<Ref<boolean>> {
+  const ready = useStore($isReady);
+  if (!getCurrentInstance()) return ready;
+  const mounted = ref(false);
+  onMounted(() => { mounted.value = true; });
+  return computed(() => mounted.value && ready.value);
+}
 
 /**
  * Hook to check if a feature flag is enabled (includes local post-filter gates).
@@ -19,7 +28,7 @@ export function useFeatureFlag(
 } {
   const flags = useStore($flags);
   const localGatesRevision = useStore($localGatesRevision);
-  const isReady = useStore($isReady);
+  const isReady = useTogglyReady();
 
   const enabled = computed(() => {
     void flags.value;
@@ -43,7 +52,7 @@ export function useFeatureGate(
 } {
   const flags = useStore($flags);
   const localGatesRevision = useStore($localGatesRevision);
-  const isReady = useStore($isReady);
+  const isReady = useTogglyReady();
   const keysKey = flagKeys.join('\0');
 
   const gateAtom = computed(() => $gate(flagKeys, requirement, negate));

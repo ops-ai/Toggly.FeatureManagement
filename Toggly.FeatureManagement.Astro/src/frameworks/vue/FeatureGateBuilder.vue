@@ -11,7 +11,8 @@
 
 import { computed } from 'vue';
 import { useStore } from '@nanostores/vue';
-import { $flags, $gate, $isReady, $localGatesRevision } from '../../client/store.js';
+import { useTogglyReady } from './composables.js';
+import { $flags, $gate, $localGatesRevision } from '../../client/store.js';
 
 export interface FeatureGateBuilderProps {
   /** Single feature flag key to check */
@@ -34,7 +35,7 @@ const props = withDefaults(defineProps<FeatureGateBuilderProps>(), {
   context: null,
 });
 
-const isReady = useStore($isReady);
+const isReady = useTogglyReady();
 const flags = useStore($flags);
 const localGatesRevision = useStore($localGatesRevision);
 

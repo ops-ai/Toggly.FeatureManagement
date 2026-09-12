@@ -4,7 +4,7 @@
  * Use `negate` for the off path (no fallback slot).
  */
 
-import { $gate, $isReady, $flags, $localGatesRevision } from '../../client/store.js';
+import { $gate as createGate, $isReady as ready } from '../../client/store.js';
 import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 
 export let flag: string | undefined = undefined;
@@ -21,15 +21,11 @@ $: flagKeys = (() => {
   return keys;
 })();
 
-$: gateAtom = $gate(flagKeys, requirement, negate, context, contextKind);
+$: gateAtom = createGate(flagKeys, requirement, negate, context, contextKind);
 
-$: isEnabled = (() => {
-  void $flags;
-  void $localGatesRevision;
-  return gateAtom.get();
-})();
+$: isEnabled = $gateAtom;
 </script>
 
-{#if $isReady && isEnabled}
+{#if $ready && isEnabled}
   <slot />
 {/if}
