@@ -82,6 +82,8 @@ public class RegistrationTests
         var services = CreateServices();
         services.AddSingleton<IDocumentStore>(new DocumentStore());
         services.AddTogglyEntityFrameworkCatalogStore(_ => { });
+        services.AddTogglyEntityFrameworkCatalogStore(_ => { });
+        services.AddTogglyRavenDbCatalogStore();
         services.AddTogglyRavenDbCatalogStore();
         services.AddTogglyEmbedded(options => options.CatalogName = "Orders");
         using var provider = services.BuildServiceProvider();
