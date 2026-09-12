@@ -157,6 +157,7 @@ export class ElectronTogglyClient {
     }
 
     this.config = {
+      ...config,
       baseURI: config.baseURI ?? DEFAULT_BASE_URI,
       environment: config.environment ?? DEFAULT_ENVIRONMENT,
       connectTimeout: config.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT,
@@ -166,7 +167,6 @@ export class ElectronTogglyClient {
       isDebug: config.isDebug ?? false,
       enableLiveUpdates:
         config.enableLiveUpdates ?? Boolean(config.appKey),
-      ...config,
       userDataPath: config.userDataPath,
     }
 

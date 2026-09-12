@@ -80,6 +80,24 @@ describe('ElectronTogglyClient', () => {
     ).toThrow(/userDataPath/)
   })
 
+  it('keeps defaults when optional config keys are undefined', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      mockResponse(200, { defs: { A: true } }),
+    )
+    await initToggly({
+      appKey: 'app-defaults',
+      userDataPath,
+      fetch: fetchImpl,
+      enableLiveUpdates: false,
+      baseURI: undefined,
+      environment: undefined,
+      connectTimeout: undefined,
+    } as never)
+    const url = String(fetchImpl.mock.calls[0][0])
+    expect(url).toContain('https://definitions.toggly.io/evaluated-signed/')
+    expect(url).toContain('/Production')
+  })
+
   it('init with defaults and no appKey uses flagDefaults', async () => {
     const flags = await initToggly({
       userDataPath,
