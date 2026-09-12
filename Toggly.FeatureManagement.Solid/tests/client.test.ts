@@ -160,3 +160,14 @@ describe('verified envelope caching', () => {
     const c=createClient({appKey:'test',storage,fetch:vi.fn().mockRejectedValue(new Error('offline'))}); await c.refresh(); expect(c.flags()).toEqual({}); c.dispose();
   });
 });
+
+it.each(['visible','unexposed'])('retains verified browser state and revision after a signed malformed %s gate',async keyName=>{
+ const {webcrypto}=await import('node:crypto');const {computeKid}=await import('@ops-ai/toggly-signed-defs');
+ const pair=await webcrypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
+ const key=await webcrypto.subtle.exportKey('jwk',pair.publicKey);const kid=await computeKid(key.x!,key.y!);
+ async function sign(defs:unknown){const raw=JSON.stringify(defs);const timestamp=Math.floor(Date.now()/1000);return JSON.stringify({defs,timestamp,kid,signature:Buffer.from(await webcrypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},pair.privateKey,await webcrypto.subtle.digest('SHA-256',new TextEncoder().encode(`${raw}|${timestamp}`)))).toString('base64')});}
+ let malformed=false;const calls:any[]=[];
+ const f=vi.fn(async(url,init)=>{if(String(url).includes('.well-known'))return new Response(JSON.stringify({keys:[{...key,kid,alg:'ES256'}]}));calls.push(init);return new Response(await sign(malformed?{visible:true,[keyName]:{requirement:'all',rules:[{property:'Vip'}]}}:{visible:true}),{headers:{ETag:malformed?'bad-rev':'good-rev'}});});
+ const c=createClient({appKey:'front',fetch:f,expose:['visible']});
+ try{await c.refresh();expect(c.flags()).toEqual({visible:true});malformed=true;await c.refresh();expect(c.flags()).toEqual({visible:true});expect(c.state().error).toBeInstanceOf(Error);expect(c.evaluate(['visible'],'all',false,{kind:'Order',key:'1',attributes:{Vip:true}})).toBe(true);await c.refresh();expect(calls.at(-1).headers['If-None-Match']).toBe('good-rev');}finally{c.dispose();}
+});

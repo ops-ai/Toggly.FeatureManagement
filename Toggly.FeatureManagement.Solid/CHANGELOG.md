@@ -8,6 +8,9 @@
 - Packed SolidStart 2 host coverage for server/client boundaries and lifecycle.
 
 ### Fixed
+- Isolate synchronous and asynchronous error observers from server snapshot defaults.
+- Validate complete signed entity maps before projection, state updates or revision adoption.
+- Require packed SolidStart host success in the grouped analysis summary.
 - Bypass native HTTP caches while retaining explicit polling revision headers, so live invalidations cannot reuse stale browser validators.
 
 ## 0.1.0 — 2026-09-12

@@ -18,7 +18,7 @@ export const backendDefinitions=[
  {featureKey:'ExpressCheckout',requirementType:'Any',contextRequirementType:'All',filters:[{name:'AlwaysOn',parameters:{}},{name:'ContextProperty',parameters:{Property:'Vip',Operator:'eq',Value:'true',ValueType:'boolean'}}]},
 ];
 export async function startService() {
- const state={on:true,invalid:false,offline:false,revision:1,requests:[]};
+ const state={on:true,invalid:false,malformed:false,offline:false,revision:1,requests:[]};
  const server=createServer((req,res)=>{
    res.setHeader('Access-Control-Allow-Origin','*');
    res.setHeader('Access-Control-Allow-Headers','*');
@@ -33,7 +33,8 @@ export async function startService() {
    const etag=`"rev${state.revision}"`;
    if(req.headers['if-none-match']===etag){res.writeHead(304).end();return;}
    res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','public,max-age=0');res.setHeader('ETag',etag);
-   const body=envelope(defs,backend?'der':'ieee-p1363');
+   const payload=!backend&&state.malformed?{...defs,ExpressCheckout:{requirement:'all',rules:[{property:'Vip'}]}}:defs;
+   const body=envelope(payload,backend?'der':'ieee-p1363');
    res.end(state.invalid?body.replace(/"signature":"./,'"signature":"!'):body);
  });
  const sockets=new WebSocketServer({server});

@@ -24,7 +24,7 @@ export interface ServerRequestOptions {
     maxSignatureAgeSeconds?: number;
     timeout?: number;
     fetch?: typeof fetch;
-    onError?: (cause: unknown) => void;
+    onError?: (cause: unknown) => void | Promise<void>;
   };
 }
 export interface ServerGateOptions {
@@ -71,7 +71,10 @@ export function createTogglyRequest(options: ServerRequestOptions) {
       return { ...fallback, definitions: selectDefinitions(result.defs, frontend.expose), source: 'signed' };
     } catch (cause) {
       assertActive();
-      frontend.onError?.(cause);
+      // Observers must not replace defaults or produce an unhandled rejection.
+      // Do not await user code: an observer cannot hold the request open.
+      try { void Promise.resolve(frontend.onError?.(cause)).catch(() => {}); }
+      catch { /* Synchronous observer failures are isolated too. */ }
       return fallback;
     }
   }

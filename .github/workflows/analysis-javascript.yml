@@ -554,7 +554,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [test, test-node-server, smoke-test, smoke-test-node-server, sonar, dependency-check]
+    needs: [test, test-node-server, smoke-test, smoke-test-node-server, solidstart-host, sonar, dependency-check]
     if: always()
 
     steps:
@@ -565,7 +565,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: test,test-node-server,smoke-test,smoke-test-node-server
+          required-jobs: test,test-node-server,smoke-test,smoke-test-node-server,solidstart-host
 
       - name: Check test results
         run: |

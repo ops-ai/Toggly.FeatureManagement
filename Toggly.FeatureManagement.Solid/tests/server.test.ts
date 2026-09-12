@@ -79,3 +79,22 @@ describe('canonical signed server boundary',()=>{
     const c=createTogglyRequest(options);const pending=c.snapshot();c.dispose();await expect(pending).rejects.toThrow('disposed');
   });
 });
+
+describe('failure-path observer and payload isolation',()=>{
+ it.each(['throw','reject'])('preserves allowlisted defaults when observer %s',async mode=>{
+  let calls=0;const error=()=>{calls++;if(mode==='throw')throw Error('observer failure');return Promise.reject(Error('observer rejection'));};
+  const c=createTogglyRequest({client:{} as any,request:new Request('http://app/'),frontend:{appKey:'front',expose:['safe'],flagDefaults:{safe:false,secret:true},fetch:async()=>{throw Error('offline')},onError:error}});
+  try{expect(await c.snapshot()).toMatchObject({source:'defaults',definitions:{safe:false}});expect(calls).toBe(1);await new Promise(r=>setTimeout(r,0));}finally{c.dispose();}
+ });
+ it.each(['visible','unexposed'])('rejects a correctly signed malformed %s gate before projection',async key=>{
+  const error=vi.fn();const f=vi.fn(async url=>new Response(String(url).includes('.well-known')?JSON.stringify(jwks):envelope({visible:true,[key]:{requirement:'all',rules:[{property:'Vip'}]}})));
+  const c=createTogglyRequest({client:{} as any,request:new Request('http://app/'),frontend:{appKey:'front',expose:['visible'],flagDefaults:{visible:false},fetch:f,onError:error}});
+  try{expect(await c.snapshot()).toMatchObject({source:'defaults',definitions:{visible:false}});expect(error).toHaveBeenCalledOnce();}finally{c.dispose();}
+ });
+});
+
+it('accepts signed complete rules with optional types and case-insensitive operators',async()=>{
+ const definitions=Object.fromEntries(['eq','neq','gt','gte','lt','lte','in','contains','EQ'].map((op,i)=>['gate'+i,{requirement:'any',rules:[{property:'',op,value:''},...['datetime','number','boolean','string','string[]'].map(type=>({property:'Vip',op,value:'true',type}))]}]));
+ const c=createTogglyRequest({client:{} as any,request:new Request('http://app/'),frontend:{appKey:'front',expose:Object.keys(definitions),fetch:async url=>new Response(String(url).includes('.well-known')?JSON.stringify(jwks):envelope(definitions))}});
+ try{expect(await c.snapshot()).toMatchObject({source:'signed',definitions});}finally{c.dispose();}
+});

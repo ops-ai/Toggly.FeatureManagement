@@ -4,6 +4,6 @@ const backend=createTogglyClient({appKey:process.env.TOGGLY_BACKEND_APP_KEY,base
 const initialized=backend.init();
 export async function scope(identity:string,request=getRequestEvent()!.request){
  await initialized;
- return createTogglyRequest({client:backend,request,context:{identity,groups:identity==='alice'?['staff']:[],claims:{role:identity==='alice'?'admin':'user'}},clientContext:{identity},frontend:{appKey:process.env.VITE_TOGGLY_APP_KEY,baseURI:process.env.TOGGLY_BASE_URL,expose:['BetaDashboard','LiveFeature','ExpressCheckout'],flagDefaults:{BetaDashboard:false}}});
+ return createTogglyRequest({client:backend,request,context:{identity,groups:identity==='alice'?['staff']:[],claims:{role:identity==='alice'?'admin':'user'}},clientContext:{identity},frontend:{appKey:process.env.VITE_TOGGLY_APP_KEY,baseURI:process.env.TOGGLY_BASE_URL,expose:['BetaDashboard','LiveFeature','ExpressCheckout'],flagDefaults:{BetaDashboard:false},onError:()=>{if(identity==='observer-throw')throw Error('observer throw');if(identity==='observer-reject')return Promise.reject(Error('observer rejection'));}}});
 }
 export async function requestFlags(identity:string){const flags=await scope(identity);try{return await flags.snapshot();}finally{flags.dispose();}}
