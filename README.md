@@ -48,14 +48,14 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 | Next.js | `@ops-ai/nextjs-toggly-*` | [`Toggly.FeatureManagement.Next`](Toggly.FeatureManagement.Next) | [Docs](https://docs.toggly.io) |
 | Nuxt | `@ops-ai/nuxt-toggly-*` | [`Toggly.FeatureManagement.Nuxt`](Toggly.FeatureManagement.Nuxt) | [Docs](https://docs.toggly.io) |
 | Remix | `@ops-ai/remix-toggly-*` | [`Toggly.FeatureManagement.Remix`](Toggly.FeatureManagement.Remix) | [Docs](https://docs.toggly.io) |
-| HTML / CSS | CSS helpers | [`Toggly.FeatureManagement.Css`](Toggly.FeatureManagement.Css) | [Docs](https://docs.toggly.io) |
+| HTML / CSS | CSS helpers | [`Toggly.FeatureManagement.Css`](Toggly.FeatureManagement.Css) | [Docs](https://docs.toggly.io/sdks/css) |
 | WordPress | WordPress plugin | [`Toggly.FeatureManagement.Wordpress`](Toggly.FeatureManagement.Wordpress) | [Docs](https://docs.toggly.io) |
 
 ### Mobile
 
 | Platform | Package | Path | Docs |
 |----------|---------|------|------|
-| Flutter | `feature_flags_toggly` (+ storage packages) | [`Toggly.FeatureManagement.Flutter`](Toggly.FeatureManagement.Flutter) | [Docs](https://docs.toggly.io) |
+| Flutter | `feature_flags_toggly` (+ storage packages) | [`Toggly.FeatureManagement.Flutter`](Toggly.FeatureManagement.Flutter) | [Docs](https://docs.toggly.io/sdks/flutter) |
 | React Native | `@ops-ai/react-native-toggly*` | [`Toggly.FeatureManagement.ReactNative`](Toggly.FeatureManagement.ReactNative) | [Docs](https://docs.toggly.io) |
 | Android | `io.toggly:toggly-android-*` | [`Toggly.FeatureManagement.Android`](Toggly.FeatureManagement.Android) | [Docs](https://docs.toggly.io) |
 | iOS | Swift Package `Toggly` | [`Toggly.FeatureManagement.iOS`](Toggly.FeatureManagement.iOS) | [Docs](https://docs.toggly.io) |
@@ -77,11 +77,11 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 
 | Integration | Package | Path | Docs |
 |-------------|---------|------|------|
-| Google Analytics 4 | `@ops-ai/toggly-ga4-hook` | [`toggly-ga4-hook`](toggly-ga4-hook) | [Docs](https://docs.toggly.io) |
-| Microsoft Clarity | `@ops-ai/toggly-clarity-hook` | [`toggly-clarity-hook`](toggly-clarity-hook) | [Docs](https://docs.toggly.io) |
-| Application Insights | `@ops-ai/toggly-appinsights-hook` | [`toggly-appinsights-hook`](toggly-appinsights-hook) | [Docs](https://docs.toggly.io) |
-| Hook types | `@ops-ai/toggly-hooks-types` | [`toggly-hooks-types`](toggly-hooks-types) | [Docs](https://docs.toggly.io) |
-| Docusaurus / edge | `@ops-ai/toggly-docusaurus-plugin`, Cloudflare helpers | [`toggly-docusaurus-edge-sdk`](toggly-docusaurus-edge-sdk) | [Docs](https://docs.toggly.io) |
+| Google Analytics 4 | `@ops-ai/toggly-ga4-hook` | [`toggly-ga4-hook`](toggly-ga4-hook) | [Docs](https://docs.toggly.io/sdks/hooks/ga4) |
+| Microsoft Clarity | `@ops-ai/toggly-clarity-hook` | [`toggly-clarity-hook`](toggly-clarity-hook) | [Docs](https://docs.toggly.io/sdks/hooks/clarity) |
+| Application Insights | `@ops-ai/toggly-appinsights-hook` | [`toggly-appinsights-hook`](toggly-appinsights-hook) | [Docs](https://docs.toggly.io/sdks/hooks/appinsights) |
+| Hook types | `@ops-ai/toggly-hooks-types` | [`toggly-hooks-types`](toggly-hooks-types) | [Docs](https://docs.toggly.io/sdks/hooks) |
+| Docusaurus / edge | `@ops-ai/toggly-docusaurus-plugin`, Cloudflare helpers | [`toggly-docusaurus-edge-sdk`](toggly-docusaurus-edge-sdk) | [Docs](https://docs.toggly.io/sdks/docusaurus) |
 | Generic JS client | `@ops-ai/toggly-client-core` (standalone; not required by the plugin) | [`toggly-docusaurus-edge-sdk/libs/core`](toggly-docusaurus-edge-sdk/libs/core) | [Docs](https://docs.toggly.io) |
 | Local gates | `@ops-ai/toggly-local-gates` | [`toggly-local-gates`](toggly-local-gates) | [Docs](https://docs.toggly.io) |
 
@@ -89,7 +89,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 
 | Tool | Path | Docs |
 |------|------|------|
-| Toggly CLI | [`Toggly.CLI`](Toggly.CLI) | [Docs](https://docs.toggly.io) · [Releases](https://github.com/ops-ai/Toggly.FeatureManagement/releases) |
+| Toggly CLI | [`Toggly.CLI`](Toggly.CLI) | [Docs](https://docs.toggly.io/sdks/cli) · [Releases](https://github.com/ops-ai/Toggly.FeatureManagement/releases?q=cli-v) |
 
 ## Documentation & resources
 

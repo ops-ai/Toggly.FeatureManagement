@@ -20,7 +20,7 @@ flutter pub add feature_flags_toggly
 
 ## Documentation
 
-- [docs.toggly.io](https://docs.toggly.io)
+- [Flutter SDK docs](https://docs.toggly.io/sdks/flutter)
 - Core package README: [`toggly/README.md`](toggly/README.md)
 
 ## License
