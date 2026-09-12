@@ -180,17 +180,40 @@ function runElectron(
   )
 }
 
-function withoutKnownMacDisplayDiagnostic(stderr: string): string {
+function withoutKnownElectronInfrastructureDiagnostics(stderr: string): string {
   // Electron 44 can emit this macOS display-link diagnostic in headless mode
   // before BrowserWindow starts. It is unrelated to preload execution, which
   // the fixture verifies through its exit code and renderer bridge report.
-  return stderr.replace(
+  const withoutMacDisplayDiagnostic = stderr.replace(
     /^\[\d+:\d{4}\/\d{6}\.\d+:ERROR:ui\/display\/mac\/cv_display_link_mac\.mm:195\] CVDisplayLinkCreateWithCGDisplay failed\. CVReturn: -6670\r?\n?/gm,
     '',
   )
+
+  // GitHub's Linux runner has no session D-Bus service. Chromium reports these
+  // two exact connection attempts even when the BrowserWindow and preload run
+  // successfully under Xvfb. Keep every other stderr line visible to this test.
+  return withoutMacDisplayDiagnostic
+    .replace(
+      /^\[\d+:\d{4}\/\d{6}\.\d+:ERROR:dbus\/bus\.cc:406\] Failed to connect to the bus: Could not parse server address: Unknown address type \(examples of valid types are "tcp" and on UNIX "unix"\)\r?\n?/gm,
+      '',
+    )
+    .replace(
+      /^\[\d+:\d{4}\/\d{6}\.\d+:ERROR:dbus\/object_proxy\.cc:572\] Failed to call method: org\.freedesktop\.DBus\.NameHasOwner: object_path= \/org\/freedesktop\/DBus: unknown error type: \r?\n?/gm,
+      '',
+    )
 }
 
 describe('Electron preload runtime', () => {
+  it('removes only the known display and session-bus infrastructure diagnostics', () => {
+    const diagnostics = [
+      '[123:0912/233532.881172:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")',
+      '[123:0912/233533.012923:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: ',
+      'unexpected preload diagnostic',
+    ].join('\n')
+
+    expect(withoutKnownElectronInfrastructureDiagnostics(diagnostics)).toBe('unexpected preload diagnostic')
+  })
+
   it('uses only the Linux sandbox exception when CI provides a display', () => {
     expect(electronFixtureArguments('linux')).toEqual([
       '--disable-gpu',
@@ -281,7 +304,7 @@ app.whenReady().then(async () => {
     }
     expect(result.timedOut, describeElectronRun(result)).toBe(false)
     expect(result.exitCode, describeElectronRun(result)).toBe(0)
-    expect(withoutKnownMacDisplayDiagnostic(result.stderr), describeElectronRun(result)).toBe('')
+    expect(withoutKnownElectronInfrastructureDiagnostics(result.stderr), describeElectronRun(result)).toBe('')
     expect(result.report, describeElectronRun(result)).toBeDefined()
 
     const report = JSON.parse(result.report!) as {
