@@ -98,3 +98,8 @@ it('accepts signed complete rules with optional types and case-insensitive opera
  const c=createTogglyRequest({client:{} as any,request:new Request('http://app/'),frontend:{appKey:'front',expose:Object.keys(definitions),fetch:async url=>new Response(String(url).includes('.well-known')?JSON.stringify(jwks):envelope(definitions))}});
  try{expect(await c.snapshot()).toMatchObject({source:'signed',definitions});}finally{c.dispose();}
 });
+
+it('uses the canonical shared public-key identifier independently of signature hashing',async()=>{
+ const {computeKid}=await import('@ops-ai/toggly-signed-defs');
+ expect(jwks.keys[0].kid).toBe(await computeKid(jwks.keys[0].x,jwks.keys[0].y));
+});

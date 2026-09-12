@@ -8,6 +8,8 @@
 - Packed SolidStart 2 host coverage for server/client boundaries and lifecycle.
 
 ### Fixed
+- Separate refresh cache, transport and acceptance steps while preserving signed state and revision behavior.
+- Capture exact response bytes for string, URL and Request inputs and harden packed-host npm invocation.
 - Isolate synchronous and asynchronous error observers from server snapshot defaults.
 - Validate complete signed entity maps before projection, state updates or revision adoption.
 - Require packed SolidStart host success in the grouped analysis summary.

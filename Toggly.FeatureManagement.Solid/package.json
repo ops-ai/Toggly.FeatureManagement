@@ -26,8 +26,8 @@
   "scripts": {
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test": "node --test tests/npm-cli.test.mjs && vitest run",
+    "test:coverage": "node --test tests/npm-cli.test.mjs && vitest run --coverage",
     "test:host": "npm run build && node tests/install-host.mjs && cd tests/host && node verify.mjs"
   },
   "peerDependencies": {

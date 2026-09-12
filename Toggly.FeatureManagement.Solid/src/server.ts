@@ -1,8 +1,8 @@
-import { createTogglyClient, type TogglyClient, type EvaluationContext } from '@ops-ai/toggly-node-core';
+import type { TogglyClient, EvaluationContext } from '@ops-ai/toggly-node-core';
 import { buildEvaluatedSignedUrl, serializeJsonForInlineScript, type TogglyEntityContext, type TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions, isEvaluatedDefinitions } from '@ops-ai/toggly-signed-defs';
 import { publicContext, selectDefinitions, type TogglySnapshot } from './snapshot.js';
-export { createTogglyClient };
+export { createTogglyClient } from '@ops-ai/toggly-node-core';
 export type { TogglyClient, EvaluationContext, TogglyServerConfig } from '@ops-ai/toggly-node-core';
 export type { TogglySnapshot } from './snapshot.js';
 

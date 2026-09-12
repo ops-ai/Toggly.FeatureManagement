@@ -124,9 +124,9 @@ describe('transport and lifecycle', () => {
     } finally { c.dispose(); vi.unstubAllGlobals(); vi.useRealTimers(); }
   });
   it('retries unavailable sockets and permits HTTP-only runtimes', async () => {
-    vi.useFakeTimers(); vi.stubGlobal('WebSocket',class {constructor(){throw new Error('blocked')}});
-    const c=createClient({appKey:'test',refreshInterval:0}); c.start(); await vi.advanceTimersByTimeAsync(5000); c.dispose();
-    vi.stubGlobal('WebSocket',undefined); const d=createClient({appKey:'test',refreshInterval:0}); d.start(); d.dispose();
+    vi.useFakeTimers(); const attempts=vi.fn(); vi.stubGlobal('WebSocket',class {constructor(){attempts();throw new Error('blocked')}});
+    const c=createClient({appKey:'test',refreshInterval:0}); c.start(); expect(attempts).toHaveBeenCalledTimes(1); await vi.advanceTimersByTimeAsync(5000); expect(attempts).toHaveBeenCalledTimes(2); c.dispose(); await vi.advanceTimersByTimeAsync(5000); expect(attempts).toHaveBeenCalledTimes(2);
+    vi.stubGlobal('WebSocket',undefined); const d=createClient({appKey:'test',refreshInterval:0}); d.start(); expect(d.state().error).toBeUndefined(); d.dispose();
     vi.unstubAllGlobals(); vi.useRealTimers();
   });
 });

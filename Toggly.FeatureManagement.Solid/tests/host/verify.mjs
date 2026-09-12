@@ -1,3 +1,4 @@
+import { resolveNpmCli } from '../npm-cli.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { readFile,readdir } from 'node:fs/promises';
@@ -5,12 +6,13 @@ import { chromium } from 'playwright';
 import { startService } from '../fixtures/service.mjs';
 const service=await startService();
 const env={...process.env,TOGGLY_BACKEND_APP_KEY:'backend-private-key-sentinel',TOGGLY_BASE_URL:service.baseURI,VITE_TOGGLY_APP_KEY:'frontend-test-key',VITE_TOGGLY_BASE_URL:service.baseURI,PORT:'5197',HOST:'127.0.0.1'};
-const run=(cmd,args)=>new Promise((resolve,reject)=>{const p=spawn(cmd,args,{env,stdio:'inherit'});p.on('exit',code=>code===0?resolve():reject(Error(`${cmd} exited ${code}`)));});
+const npmCli=resolveNpmCli();
+const run=args=>new Promise((resolve,reject)=>{const p=spawn(process.execPath,[npmCli,...args],{env,stdio:'inherit'});p.on('exit',code=>code===0?resolve():reject(new Error(`npm exited ${code}`)));});
 let server,browser;
 try{
  const {build}=await import('vite');
  await assert.rejects(build({configFile:false,logLevel:'silent',build:{write:false,lib:{entry:'boundary.ts',formats:['es']}}}),/No known conditions|Failed to resolve|Missing.*server|not exported/);
- await run('npm',['run','build']);
+ await run(['run','build']);
  const files=await readdir('.output/public/_build/assets');
  for(const name of files.filter(n=>n.endsWith('.js'))){const text=await readFile(`.output/public/_build/assets/${name}`,'utf8');assert.doesNotMatch(text,/backend-private-key-sentinel|toggly-node-core|node:crypto|node:fs|backend-only-sentinel/);}
  server=spawn(process.execPath,['.output/server/index.mjs'],{env,stdio:'inherit'});
@@ -35,7 +37,7 @@ try{
  const goodRevision=`"rev${service.state.revision}"`;service.state.malformed=true;service.state.on=false;service.state.revision++;service.broadcast('update');await page.waitForTimeout(600);
  assert(await page.getByText('Live on',{exact:true}).isVisible());assert(await page.getByText('VIP checkout',{exact:true}).isVisible());
  const probe=service.state.requests.length;await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.waitForTimeout(200);
- const malformedRefresh=service.state.requests.slice(probe).find(r=>r.url.includes('/evaluated-signed/'));assert.equal(malformedRefresh.headers['if-none-match'],goodRevision);
+ const malformedRefresh=service.state.requests.slice(probe).find(r=>r.url.includes('/evaluated-signed/'));assert(malformedRefresh, 'Manual refresh must issue an evaluated request');assert.equal(malformedRefresh.headers['if-none-match'],goodRevision);
  for(const identity of ['observer-throw','observer-reject']){const result=await fetch(`http://127.0.0.1:5197/?identity=${identity}`);assert.equal(result.status,200);assert.match(await result.text(),/Beta disabled/);}
  service.state.malformed=false;
  // Signature failure at a NEW revision retains the verified previous snapshot.

@@ -1,3 +1,4 @@
+import { captureEvaluatedResponse } from './transport.js';
 import { selectDefinitions, publicContext, type TogglySnapshot } from './snapshot.js';
 import { buildEvaluatedSignedUrl, evaluateResolvedKeys, resolveEvaluatedDefinition, type EvaluatedDefinitions, type TogglyEntityContext, type TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions, isEvaluatedDefinitions, readAndParseEvaluatedResponseCached } from '@ops-ai/toggly-signed-defs';
@@ -52,55 +53,73 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
   const flags = () => ({ ...state.definitions });
   const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.2.0' };
 
+  const isCurrent = (current: number) => current === generation && !disposed;
+
+  function restoreCached(cacheKey: string, fetchImpl: typeof fetch, current: number): Promise<void> | undefined {
+    if (!config.storage || !config.verifySignatures) return;
+    try {
+      const cached = config.storage.getItem(cacheKey);
+      if (!cached) return;
+      return readAndParseEvaluatedResponseCached(new Response(cached), jwks, { ...config, fetchImpl }, headers)
+        .then(defs => {
+          if (isCurrent(current) && isEvaluatedDefinitions(defs)) {
+            emit({ definitions: selectDefinitions(defs, expose) });
+          }
+        })
+        .catch(() => { /* Invalid or expired cache must not prevent a network attempt. */ });
+    } catch { /* Unavailable storage must not prevent a network attempt. */ }
+  }
+
+  function persistEnvelope(cacheKey: string, body: string | undefined) {
+    if (!body || !config.verifySignatures) return;
+    try { config.storage?.setItem(cacheKey, body); }
+    catch { /* Storage quota must not prevent evaluation. */ }
+  }
+
+  async function fetchRemote(url: string, fetchImpl: typeof fetch, pin?: string | null) {
+    const capture = captureEvaluatedResponse(fetchImpl);
+    const requestURL = new URL(url);
+    if (pin) requestURL.searchParams.set('rev', pin);
+    const result = await fetchEvaluatedSignedDefinitions(requestURL.toString(), jwks,
+      { ...config, fetchImpl: capture.fetch },
+      { revision: pin === undefined ? revision : null, headers });
+    return { result, body: capture.body() };
+  }
+
+  function acceptRemote(remote: Awaited<ReturnType<typeof fetchRemote>>, cacheKey: string, current: number) {
+    if (!isCurrent(current)) return;
+    const { result, body } = remote;
+    if (!result.notModified) {
+      // Complete validation precedes state, persistence and revision adoption.
+      emit({ definitions: selectDefinitions(result.defs, expose) });
+      persistEnvelope(cacheKey, body);
+    }
+    revision = result.revision ?? revision;
+  }
+
   async function refresh(pin?: string | null): Promise<EvaluatedDefinitions> {
     if (disposed) return flags();
     const current = ++generation;
     controller?.abort();
     controller = new AbortController();
-    const signal = controller.signal;
-    const timeout = setTimeout(() => controllerForRequest.abort(), config.connectTimeout ?? 10000);
     const controllerForRequest = controller;
-    const fetchImpl: typeof fetch = (url, init) => (config.fetch ?? fetch)(url, { ...init, signal, cache: 'no-store' });
-    const parseConfig = { ...config, fetchImpl };
+    const timeout = setTimeout(() => controllerForRequest.abort(), config.connectTimeout ?? 10000);
+    const fetchImpl: typeof fetch = (url, init) => (config.fetch ?? fetch)(url,
+      { ...init, signal: controllerForRequest.signal, cache: 'no-store' });
     emit({ loading: true, error: undefined });
     try {
       if (!config.appKey) return flags();
-      // The canonical full request URL scopes cache entries by application, environment
-      // and targeting, avoiding delimiter collisions in user-provided identities.
+      // The full URL scopes persisted envelopes by app, environment and targeting.
       const url = buildEvaluatedSignedUrl(config.baseURI, encodeURIComponent(config.appKey), encodeURIComponent(config.environment), context, false);
       const cacheKey = `toggly:solid:envelope:${url}`;
-      if (config.storage && config.verifySignatures) {
-        try {
-          const cached = config.storage.getItem(cacheKey);
-          if (cached) {
-            const defs = await readAndParseEvaluatedResponseCached(new Response(cached), jwks, parseConfig, headers);
-            if (current === generation && !disposed && isEvaluatedDefinitions(defs)) emit({ definitions: selectDefinitions(defs, expose) });
-          }
-        } catch { /* Invalid, expired or unavailable cache is never trusted. Try network. */ }
-      }
-      let body: string | undefined;
-      const captureFetch: typeof fetch = async (input, init) => {
-        const response = await fetchImpl(input, init);
-        if (String(input).includes('/evaluated-signed/') && response.ok) body = await response.clone().text();
-        return response;
-      };
-      const requestURL = new URL(url);
-      if (pin) requestURL.searchParams.set('rev', pin);
-      const result = await fetchEvaluatedSignedDefinitions(requestURL.toString(), jwks, { ...parseConfig, fetchImpl: captureFetch }, { revision: pin === undefined ? revision : null, headers });
-      if (current !== generation || disposed) return flags();
-      if (!result.notModified) {
-        if (!isEvaluatedDefinitions(result.defs)) throw new Error('Invalid evaluated definitions');
-        emit({ definitions: selectDefinitions(result.defs, expose) });
-        if (body && config.verifySignatures) {
-          try { config.storage?.setItem(cacheKey, body); } catch { /* Storage quota must not prevent evaluation. */ }
-        }
-      }
-      revision = result.revision ?? revision;
+      const cached = restoreCached(cacheKey, fetchImpl, current);
+      if (cached) await cached;
+      acceptRemote(await fetchRemote(url, fetchImpl, pin), cacheKey, current);
     } catch (error) {
-      if (current === generation && !disposed) emit({ error: error instanceof Error ? error : new Error(String(error)) });
+      if (isCurrent(current)) emit({ error: error instanceof Error ? error : new Error(String(error)) });
     } finally {
       clearTimeout(timeout);
-      if (current === generation && !disposed) emit({ loading: false });
+      if (isCurrent(current)) emit({ loading: false });
     }
     return flags();
   }

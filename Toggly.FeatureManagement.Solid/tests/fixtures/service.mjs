@@ -3,6 +3,9 @@ import { generateKeyPairSync, createHash, sign } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 const { privateKey, publicKey } = generateKeyPairSync('ec', {namedCurve:'prime256v1'});
 const jwk = publicKey.export({format:'jwk'});
+// Canonical public-key lookup ID only: SHA1(x || y) + ES256. Not a signature or
+// password/security digest; changing it breaks the service JWKS wire contract.
+// Sonar javascript:S4790 rationale: this lookup ID does not provide authenticity.
 const kid = createHash('sha1').update(Buffer.concat([Buffer.from(jwk.x,'base64url'),Buffer.from(jwk.y,'base64url')])).digest('hex').toUpperCase()+'ES256';
 export const jwks={keys:[{...jwk,kid,alg:'ES256'}]};
 export function envelope(defs, encoding='der', timestamp=Math.floor(Date.now()/1000)) {
@@ -39,5 +42,16 @@ export async function startService() {
  });
  const sockets=new WebSocketServer({server});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- return {state,baseURI:`http://127.0.0.1:${server.address().port}`,broadcast(data){for(const ws of sockets.clients)ws.send(data);}, async close(){for(const ws of sockets.clients)ws.terminate();await new Promise(resolve=>sockets.close(resolve));await new Promise(resolve=>server.close(resolve));}};
+ return {
+  state,
+  baseURI:`http://127.0.0.1:${server.address().port}`,
+  broadcast(data) {
+   for (const ws of sockets.clients) { ws.send(data); }
+  },
+  async close() {
+   for (const ws of sockets.clients) { ws.terminate(); }
+   await new Promise(resolve=>sockets.close(resolve));
+   await new Promise(resolve=>server.close(resolve));
+  },
+ };
 }
