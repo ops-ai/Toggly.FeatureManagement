@@ -1,7 +1,39 @@
 import assert from 'node:assert/strict'
+import dns from 'node:dns'
 import { createServer } from 'node:http'
+import http2 from 'node:http2'
+import { syncBuiltinESMExports } from 'node:module'
+import tls from 'node:tls'
 import Koa from 'koa'
-import { closeKoaToggly, featureGate, getKoaToggly, togglyMiddleware } from '@ops-ai/toggly-koa'
+
+// This child fixture needs only numeric loopback HTTP. Reject telemetry's
+// DNS/TLS/HTTP2 attempts before they can reach production, even if the SDK
+// catches the transport error or starts an asynchronous flush during close.
+const unexpectedConnections = []
+function rejectConnection(transport) {
+  return () => {
+    unexpectedConnections.push(transport)
+    throw new Error(`Unexpected ${transport} connection in local Koa fixture`)
+  }
+}
+function loopbackLookup(lookup) {
+  return (hostname, ...args) => {
+    if (hostname === '127.0.0.1' || hostname === '::1') return lookup(hostname, ...args)
+    return rejectConnection('DNS')()
+  }
+}
+dns.lookup = loopbackLookup(dns.lookup.bind(dns))
+dns.promises.lookup = loopbackLookup(dns.promises.lookup.bind(dns.promises))
+dns.promises.resolveTxt = rejectConnection('DNS TXT')
+http2.connect = rejectConnection('HTTP2')
+tls.connect = rejectConnection('TLS')
+syncBuiltinESMExports()
+process.on('beforeExit', () => {
+  assert.deepEqual(unexpectedConnections, [], 'No external transport attempts, including shutdown')
+})
+
+const { closeKoaToggly, featureGate, getKoaToggly, togglyMiddleware } =
+  await import('@ops-ai/toggly-koa')
 
 let definitions = [
   { featureKey: 'enabled', filters: [{ name: 'AlwaysOn', parameters: {} }] },
@@ -29,7 +61,13 @@ const { port } = definitionsServer.address()
 const baseUrl = `http://127.0.0.1:${port}`
 
 const app = new Koa()
-app.use(togglyMiddleware({ appKey: 'packed-host', baseUrl, refreshInterval: 0 }))
+app.use(togglyMiddleware({
+  appKey: 'packed-host',
+  baseUrl,
+  refreshInterval: 0,
+  enableUsageTracking: false,
+  enableMetrics: false,
+}))
 app.use(async (ctx, next) => {
   if (ctx.path === '/identity') {
     ctx.body = { identity: ctx.state.toggly.identity }
@@ -71,6 +109,8 @@ try {
       appKey: 'packed-host',
       baseUrl,
       refreshInterval: 0,
+      enableUsageTracking: false,
+      enableMetrics: false,
       verifySignatures: true,
       onError: (error) => signatureErrors.push(error.message),
     })
