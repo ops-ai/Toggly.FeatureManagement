@@ -1,6 +1,6 @@
 # Toggly for NestJS
 
-HTTP integration for NestJS 10/11 on Node 20+. `@ops-ai/toggly-nestjs` wraps `@ops-ai/toggly-node-core` 0.9+, sharing its evaluator, signed definitions, snapshots, streaming and telemetry.
+HTTP integration for NestJS 10/11 on Node 20+. `@ops-ai/toggly-nestjs` wraps `@ops-ai/toggly-node-core` 0.9.1+, sharing its evaluator, signed definitions, snapshots, streaming and telemetry.
 
 ```sh
 npm install @ops-ai/toggly-nestjs reflect-metadata rxjs
@@ -95,7 +95,7 @@ The HTTP adapter does not provide a Terminus indicator, response-transform inter
 See [`examples/app.ts`](examples/app.ts) and the [full NestJS sample](https://github.com/ops-ai/Toggly.Samples/tree/develop/nestjs-sdk). The sample includes a first-toggle exercise, shared filter presets and offline transport tests.
 
 ```sh
-npm ci
+npm install
 npm run typecheck
 npm run build
 npm run test:coverage

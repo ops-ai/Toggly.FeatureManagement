@@ -20,11 +20,11 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-          cache-dependency-path: Toggly.FeatureManagement.NestJS/package-lock.json
-      - run: npm ci
+          cache-dependency-path: Toggly.FeatureManagement.NestJS/package.json
+      - run: npm install --package-lock=false
       - name: Install host compatibility version
-        run: npm install --no-save @nestjs/common@${{ matrix.nest }} @nestjs/core@${{ matrix.nest }} @nestjs/testing@${{ matrix.nest }} @nestjs/platform-express@${{ matrix.nest }}
-      - run: npm run typecheck && npm run build && npm run test:coverage
+        run: npm install --no-save --package-lock=false @nestjs/common@${{ matrix.nest }} @nestjs/core@${{ matrix.nest }} @nestjs/testing@${{ matrix.nest }} @nestjs/platform-express@${{ matrix.nest }}
+      - run: npm run typecheck && npm run build && npm run test:coverage && npm run test:packed
   publish:
     needs: test
     if: github.ref == 'refs/heads/develop'
@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
-      - run: npm ci && npm run build
+      - run: npm install --package-lock=false && npm run build
       - name: Resolve manifest version
         id: release
         uses: ./.github/actions/resolve-release-version

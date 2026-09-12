@@ -3,3 +3,5 @@ dist/
 coverage/
 *.tgz
 .env
+# Generate a registry-derived lock after the core dependency is published.
+package-lock.json

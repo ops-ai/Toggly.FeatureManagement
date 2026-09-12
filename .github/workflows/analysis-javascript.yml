@@ -80,7 +80,7 @@ jobs:
         include:
           - sdk: NestJS
             path: Toggly.FeatureManagement.NestJS
-            test-cmd: npm run test:coverage
+            test-cmd: npm run test:coverage && npm run test:packed
             has-lint: false
           - sdk: Angular
             path: Toggly.FeatureManagement.Angular
@@ -138,14 +138,19 @@ jobs:
         with:
           node-version: 'lts/*'
           cache: 'npm'
-          cache-dependency-path: ${{ matrix.path }}/package-lock.json
+          cache-dependency-path: ${{ matrix.path }}/${{ matrix.sdk == 'NestJS' && 'package.json' || 'package-lock.json' }}
 
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
       - name: Install dependencies
         working-directory: ${{ matrix.path }}
-        run: npm ci || npm install
+        run: |
+          if [ "${{ matrix.sdk }}" = "NestJS" ]; then
+            npm install --package-lock=false
+          else
+            npm ci || npm install
+          fi
 
       - name: Overlay shared JS deps into node_modules
         uses: ./.github/actions/overlay-shared-js-deps

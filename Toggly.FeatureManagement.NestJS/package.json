@@ -50,10 +50,11 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:packed": "node tests/check-packed.mjs"
   },
   "dependencies": {
-    "@ops-ai/toggly-node-core": "^0.9.0"
+    "@ops-ai/toggly-node-core": "^0.9.1"
   },
   "devDependencies": {
     "@nestjs/common": "^11.1.0",
