@@ -10,6 +10,15 @@ on:
       - 'Toggly.CLI/**'
       - 'Toggly.FeatureManagement.Client/**'
       - '.github/workflows/analysis-dotnet.yml'
+      - '.github/package-registry/**'
+      - '.github/workflows/sdk-dotnet-release.yml'
+      - '**/*.cs'
+      - '**/*.csproj'
+      - '**/*.razor'
+      - '**/wwwroot/*.js'
+      - '**/*.runsettings'
+      - '**/Directory.Build.props'
+      - '**/.editorconfig'
   pull_request:
     branches:
       - develop
@@ -19,6 +28,15 @@ on:
       - 'Toggly.CLI/**'
       - 'Toggly.FeatureManagement.Client/**'
       - '.github/workflows/analysis-dotnet.yml'
+      - '.github/package-registry/**'
+      - '.github/workflows/sdk-dotnet-release.yml'
+      - '**/*.cs'
+      - '**/*.csproj'
+      - '**/*.razor'
+      - '**/wwwroot/*.js'
+      - '**/*.runsettings'
+      - '**/Directory.Build.props'
+      - '**/.editorconfig'
   workflow_dispatch:
 
 jobs:
@@ -38,8 +56,21 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: |
+            6.0.x
             8.0.x
             9.0.x
+            10.0.x
+
+      - name: Setup Node.js for shared package governance
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+
+      - name: Validate all declared .NET sources
+        id: dotnet_inventory
+        run: |
+          node .github/package-registry/dotnet-ci.mjs validate
+          echo "sources=$(node .github/package-registry/dotnet-ci.mjs source-inclusions)" >> "$GITHUB_OUTPUT"
 
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@7417b1089e2c7de93510f1901d656ddf60bb024f # v4
@@ -94,6 +125,8 @@ jobs:
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
+            /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
+            /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info" \
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
@@ -206,6 +239,9 @@ jobs:
             --logger "trx;LogFileName=systemmetrics-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
 
+      - name: Test every additional .NET family and enforce coverage
+        run: node .github/package-registry/dotnet-ci.mjs test-families
+
       - name: Merge coverage reports
         run: |
           reportgenerator \
@@ -214,12 +250,6 @@ jobs:
             -reporttypes:"SonarQube;Cobertura" \
             -assemblyfilters:"-*Tests*"
         continue-on-error: true
-
-      - name: Build and test distributed .NET client
-        run: |
-          dotnet build Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests -c Release -t:Rebuild
-          dotnet test Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests -c Release --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Client/coverage.runsettings --results-directory ./TestResults/client
-          python3 Toggly.FeatureManagement.Client/check-coverage.py TestResults/client
 
       - name: End SonarCloud Scan
         env:
@@ -249,6 +279,8 @@ jobs:
               /d:sonar.host.url="${SONAR_HOST_URL}" \
               /d:sonar.token="${SONAR_SERVER_TOKEN}" \
               /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
+              /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
+              /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info" \
               /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
               /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
@@ -272,11 +304,8 @@ jobs:
       - name: Build solution (SonarQube Server)
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
 
-      - name: Build and test distributed .NET client
-        run: |
-          dotnet build Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests -c Release -t:Rebuild
-          dotnet test Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests -c Release --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Client/coverage.runsettings --results-directory ./TestResults/client
-          python3 Toggly.FeatureManagement.Client/check-coverage.py TestResults/client
+      - name: Build every additional .NET family inside the server scanner
+        run: node .github/package-registry/dotnet-ci.mjs build-families
 
       - name: End SonarQube Server Scan
         env:
@@ -302,6 +331,7 @@ jobs:
           path: |
             **/TestResults/**/coverage.opencover.xml
             coverage-report/
+            Toggly.FeatureManagement.*/coverage/
           retention-days: 7
           if-no-files-found: ignore
 
@@ -314,18 +344,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ steps.gitversion.outputs.semVer }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Packages Analyzed" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement (Core SDK)" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Web" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Hangfire" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.HealthChecks" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.NSwag" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Storage.DistributedCache" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Storage.RavenDB" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Storage.Dapper" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Storage.EntityFramework" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Storage.MongoDB" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Metrics.SystemMetrics" >> $GITHUB_STEP_SUMMARY
+          node .github/package-registry/dotnet-ci.mjs summary >> "$GITHUB_STEP_SUMMARY"
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-dotnet" >> $GITHUB_STEP_SUMMARY
           echo "SonarQube Server: ${SONAR_HOST_URL}/dashboard?id=toggly-sdks-dotnet" >> $GITHUB_STEP_SUMMARY
@@ -346,6 +365,15 @@ jobs:
           restore-keys: |
             dependency-check-db-${{ runner.os }}-
 
+      - name: Setup Node.js for shared package governance
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+
+      - name: Select all declared .NET dependency scan roots
+        id: dotnet_roots
+        run: echo "args=$(node .github/package-registry/dotnet-ci.mjs scan-args)" >> "$GITHUB_OUTPUT"
+
       - name: Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c # main
         with:
@@ -353,7 +381,7 @@ jobs:
           path: 'Toggly.FeatureManagement.NET'
           format: 'ALL'
           args: >-
-            --scan /github/workspace/Toggly.FeatureManagement.Client
+            ${{ steps.dotnet_roots.outputs.args }}
             --nvdApiKey ${{ secrets.NVD_API_KEY }}
             --enableExperimental
             --disableRubygems
@@ -421,34 +449,24 @@ jobs:
             9.0.x
             10.0.x
 
-      - name: Pack
-        working-directory: Toggly.FeatureManagement.NET
-        run: |
-          # GeneratePackageOnBuild=true races across multi-TFM projects and
-          # produces NU5026 (dll to be packed was not found). Build first with
-          # packaging off, then pack from the built outputs.
-          dotnet build Toggly.FeatureManagement.sln -c Release -p:GeneratePackageOnBuild=false
-          dotnet pack Toggly.FeatureManagement.sln -c Release --no-build --output ./nupkgs
-          ls -la ./nupkgs
-
-      - name: Pack distributed client artifacts and verify metadata
-        run: |
-          dotnet pack Toggly.FeatureManagement.Client/src/Toggly.FeatureManagement.Client -c Release -p:ContinuousIntegrationBuild=true -o Toggly.FeatureManagement.Client/nupkgs
-          dotnet pack Toggly.FeatureManagement.Client/src/Toggly.FeatureManagement.Client.Desktop -c Release -p:ContinuousIntegrationBuild=true -o Toggly.FeatureManagement.Client/nupkgs
-          NUGET_CLIENT_PACK_DIR=Toggly.FeatureManagement.Client/nupkgs node --test .github/package-registry/verify-nuget-client.test.mjs
-
-      - name: Upload distributed client packages
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - name: Setup Node.js for shared package governance
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          name: nuget-client-packages
-          path: Toggly.FeatureManagement.Client/nupkgs/*.*nupkg
-          if-no-files-found: error
+          node-version: '24'
 
-      - name: Upload NuGet packages
+      - name: Pack all declared NuGet projects
+        run: node .github/package-registry/dotnet-ci.mjs pack
+
+      - name: Verify packed metadata for every .NET family
+        env:
+          NUGET_ALL_PACK_DIR: nuget-analysis-pack
+        run: node --test .github/package-registry/dotnet-inventory.test.mjs
+
+      - name: Upload NuGet packages and symbols
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: nuget-packages
-          path: Toggly.FeatureManagement.NET/nupkgs/*.nupkg
+          path: nuget-analysis-pack/*.*nupkg
           if-no-files-found: error
           retention-days: 7
 

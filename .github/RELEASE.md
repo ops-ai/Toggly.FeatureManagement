@@ -166,11 +166,39 @@ README install snippets, and `CHANGELOG.md` in the same PR before running
 
 See [package-versioning rule](../../../.cursor/rules/package-versioning.mdc) for semver and changelog conventions.
 
-## Distributed .NET client packages
+## Unified .NET package release
 
-The `distributed-client` family in `package-registry/nuget-packages.json` uses
-`sdk-dotnet-client-release.yml`. It resolves each package manifest independently,
-runs coverage, packs deterministically, signs both nupkg and snupkg with the
-existing Key Vault policy, and publishes with NuGet OIDC. Before first publication,
-configure the `opsai` trust policy for this exact workflow and `nuget-publish`
+All NuGet families use `sdk-dotnet-release.yml` and grouped `analysis-dotnet.yml`.
+The inventory in `package-registry/nuget-packages.json` owns package IDs, project
+paths, family tests and changelogs. Adding a publishable C# project without an
+inventory record fails validation. Do not create another NuGet release workflow.
+
+Select `all`, an exact family name (`server`, `distributed-client`), package IDs,
+or the existing server aliases such as `Core` and `Web`. Dependencies present in
+the inventory are included automatically and published first. Each package is
+compared to NuGet independently: an already published server version does not
+skip an unpublished client. Each selected family runs tests/coverage before
+artifacts are packed and verified; signing and publication use those artifacts.
+
+The default `publish` mode uses every package's manifest version. Legacy
+`auto_bump` remains available for the server family's shared `Directory.Build.props`
+only; other selected families still use their manifest versions. It requires a
+selected server package and retains the signed server-version commit. Prefer
+version/changelog changes reviewed in a PR.
+
+The protected `nuget-publish` job retains direct NuGet OIDC, existing Key Vault
+package/symbol signing and paced HTTPS timestamps. All action references use
+immutable commit SHAs with readable version comments; weekly Dependabot updates
+keep those pins current. Before first publication, verify that the `opsai` trust
+policy covers each new package through `sdk-dotnet-release.yml` and the existing
 environment. No API-key fallback is introduced.
+
+Server GitHub release tags retain `dotnet-sdk-v<version>`. Independent families
+use `dotnet-<family>-sdk-v<version>`, with package IDs/versions in the release
+notes and GPG-signed checksums for the signed artifacts. A family tag retains its
+first publication commit. Later sibling packages at the same version append their
+package list and immutable, content-addressed checksum assets to that release;
+retries retain earlier assets and notes. Workflow runs are serialized across refs
+to avoid concurrent publication races. Re-run failed jobs to resume the retained
+candidate after a partial registry push. CLI binary releases
+continue through `cli-build-release.yml`; the CLI is not a NuGet SDK package.
