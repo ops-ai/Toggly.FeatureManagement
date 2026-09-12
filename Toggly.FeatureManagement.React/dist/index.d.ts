@@ -3,7 +3,7 @@ import * as React from 'react';
 import React__default, { ReactNode } from 'react';
 import * as _ops_ai_toggly_hooks_types from '@ops-ai/toggly-hooks-types';
 import { EvaluatedDefinitions, Hook, TogglyEntityContext, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
-export { EvaluatedDefinitions, TogglyEntityContext, isEntityGate, mapEntityContext, registerContext } from '@ops-ai/toggly-hooks-types';
+export { EvaluatedDefinitions, TogglyEntityContext, isEntityGate, mapEntityContext, normalizeEntityContext, registerContext } from '@ops-ai/toggly-hooks-types';
 import { LocalGate } from '@ops-ai/toggly-local-gates';
 
 /**
@@ -100,8 +100,9 @@ declare class Toggly implements TogglyService {
     _wsReconnectAttempt: number;
     _refreshDebounceTimer: any;
     _cachedDefinitionsRevision: string | null;
+    _pendingDefinitionsPin: string | null;
     _lastFallbackRefresh: number;
-    private _inMemoryJwks;
+    private _jwks;
     static readonly FALLBACK_REFRESH_INTERVAL: number;
     shouldShowFeatureDuringEvaluation: boolean;
     get lastError(): string | undefined;
@@ -110,27 +111,22 @@ declare class Toggly implements TogglyService {
     private get _definitionsRevision();
     private _cacheDefinitionsRevision;
     private _scheduleDebouncedRefresh;
-    private _fetchJwks;
-    /**
-     * Parse evaluated-signed body. When verifySignatures is enabled, verify ES256
-     * against the exact raw defs JSON (Web Crypto double-hash).
-     */
-    private _readResponseBody;
-    private _parseEvaluatedSignedBody;
     private _handleWsSyncMessage;
+    private _beginPinnedDefinitionsRefresh;
     private _handleWsUpdateMessage;
     private get _canPersist();
     private _getEvaluationContext;
     private _contextCacheKey;
     setContext: (context: TogglyEvaluationContext) => Promise<void>;
-    _loadFeatures: (forceRefresh?: boolean) => Promise<{
+    _loadFeatures: (forceRefresh?: boolean, options?: {
+        strict?: boolean;
+    }) => Promise<{
         [key: string]: boolean;
     } | null>;
     private _booleanFeatures;
     _featuresLoaded: () => Promise<{
         [key: string]: boolean;
     } | null>;
-    private _normalizeEntityContext;
     private _getEffectiveFlagValue;
     _evaluateFeatureGate: (gate: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
     evaluateFeatureGate: (featureKeys: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
@@ -195,6 +191,10 @@ type FeatureProps = {
     /** Context kind for {@link registerContext} mapper lookup when `context` is a domain object. */
     contextKind?: string;
     children?: React__default.ReactNode;
+    /**
+     * @deprecated Off-path content: use a separate `<Feature negate>` instead.
+     * Still accepted for one release; prefer `negate`.
+     */
     fallback?: React__default.ReactNode;
     /** Render prop for conditional styling; always invoked with resolved gate boolean. */
     render?: (enabled: boolean) => React__default.ReactNode;

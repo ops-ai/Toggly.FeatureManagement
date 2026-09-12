@@ -1,0 +1,26 @@
+{
+  "name": "toggly-react-consumer-19",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "verify": "vite build --ssr src/verify.tsx --outDir dist-ssr && node dist-ssr/verify.js"
+  },
+  "dependencies": {
+    "@ops-ai/react-feature-flags-toggly": "file:../artifacts/toggly-react.tgz",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.7.3",
+    "vite": "6.0.7",
+    "@types/node": "22.20.2",
+    "puppeteer-core": "25.10.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
