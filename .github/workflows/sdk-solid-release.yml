@@ -24,11 +24,14 @@ jobs:
           registry: npm
           package_name: '@ops-ai/solid-feature-flags-toggly'
           release_mode: publish
-      - run: npm ci
+      - run: npm install
       - run: npm run typecheck
       - run: npm run test:coverage
       - run: npm run build
       - run: npm pack --dry-run
+      - run: node tests/install-host.mjs
+      - run: npx --prefix tests/host playwright install --with-deps chromium
+      - run: cd tests/host && node verify.mjs
       - name: Publish manifest version with provenance
         if: steps.release.outputs.action == 'publish'
         run: npm publish --provenance --access public

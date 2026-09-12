@@ -43,7 +43,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 | Angular | `@ops-ai/ngx-feature-flags-toggly` | [`Toggly.FeatureManagement.Angular`](Toggly.FeatureManagement.Angular) | [Docs](https://docs.toggly.io) |
 | Vue | `@ops-ai/vue-feature-flags-toggly` | [`Toggly.FeatureManagement.Vue`](Toggly.FeatureManagement.Vue) | [Docs](https://docs.toggly.io) |
 | Svelte | `@ops-ai/svelte-feature-flags-toggly` | [`Toggly.FeatureManagement.Svelte`](Toggly.FeatureManagement.Svelte) | [Docs](https://docs.toggly.io) |
-| SolidJS | `@ops-ai/solid-feature-flags-toggly` | [`Toggly.FeatureManagement.Solid`](Toggly.FeatureManagement.Solid) | [Docs](https://docs.toggly.io/sdks/javascript/solid) |
+| SolidJS / SolidStart | `@ops-ai/solid-feature-flags-toggly` | [`Toggly.FeatureManagement.Solid`](Toggly.FeatureManagement.Solid) | [Docs](https://docs.toggly.io/sdks/javascript/solid) |
 | Astro | `@ops-ai/astro-feature-flags-toggly` | [`Toggly.FeatureManagement.Astro`](Toggly.FeatureManagement.Astro) | [Docs](https://docs.toggly.io) |
 | Gatsby | `@ops-ai/gatsby-feature-flags-toggly` | [`Toggly.FeatureManagement.Gatsby`](Toggly.FeatureManagement.Gatsby) | [Docs](https://docs.toggly.io) |
 | Next.js | `@ops-ai/nextjs-toggly-*` | [`Toggly.FeatureManagement.Next`](Toggly.FeatureManagement.Next) | [Docs](https://docs.toggly.io) |

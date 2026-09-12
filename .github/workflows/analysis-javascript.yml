@@ -138,7 +138,7 @@ jobs:
         with:
           node-version: 'lts/*'
           cache: 'npm'
-          cache-dependency-path: ${{ matrix.path }}/package-lock.json
+          cache-dependency-path: ${{ matrix.path }}/package*.json
 
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
@@ -148,6 +148,7 @@ jobs:
         run: npm ci || npm install
 
       - name: Overlay shared JS deps into node_modules
+        if: matrix.sdk != 'SolidJS'
         uses: ./.github/actions/overlay-shared-js-deps
         with:
           package-dir: ${{ matrix.path }}
@@ -594,3 +595,21 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-javascript" >> $GITHUB_STEP_SUMMARY
           echo "Check SonarQube Server for detailed results: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=toggly-sdks-javascript" >> $GITHUB_STEP_SUMMARY
+
+  solidstart-host:
+    name: SolidStart packed production host
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Toggly.FeatureManagement.Solid
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm install
+      - run: npm run build
+      - run: node tests/install-host.mjs
+      - run: npx --prefix tests/host playwright install --with-deps chromium
+      - run: cd tests/host && node verify.mjs

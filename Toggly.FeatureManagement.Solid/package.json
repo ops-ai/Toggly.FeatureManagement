@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/solid-feature-flags-toggly",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Native reactive feature flags for SolidJS with signed definitions, targeting and declarative gates.",
   "type": "module",
   "main": "./dist/index.js",
@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "solid": "./dist/index.jsx",
       "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "node": "./dist/server.js"
     }
   },
   "files": [
@@ -23,7 +27,8 @@
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:host": "npm run build && node tests/install-host.mjs && cd tests/host && node verify.mjs"
   },
   "peerDependencies": {
     "solid-js": "^1.9.0"
@@ -31,7 +36,8 @@
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.4.5",
     "@ops-ai/toggly-local-gates": "^1.0.1",
-    "@ops-ai/toggly-signed-defs": "^1.2.5"
+    "@ops-ai/toggly-signed-defs": "^1.2.6",
+    "@ops-ai/toggly-node-core": "^0.9.1"
   },
   "devDependencies": {
     "@solidjs/testing-library": "^0.8.10",

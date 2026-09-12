@@ -8,7 +8,7 @@
 npm install @ops-ai/solid-feature-flags-toggly solid-js
 ```
 
-Requires SolidJS 1.9+ and Node 22.12+ for tooling. Configure Vite with `vite-plugin-solid`; the package exports preserved JSX through the `solid` condition, so the consumer compiles it with the same Solid runtime. Browsers need Fetch, AbortController and WebCrypto for signed definitions. This package's supported rendering surface is client rendering; SolidStart server rendering is not supported by this version.
+Requires SolidJS 1.9+ and Node 22.12+ for tooling. Configure Vite with `vite-plugin-solid`; the package exports preserved JSX through the `solid` condition, so the consumer compiles it with the same Solid runtime. Browsers need Fetch, AbortController and WebCrypto for signed definitions. For Node-hosted SSR, use the [SolidStart integration](https://docs.toggly.io/sdks/javascript/solidstart) with its separate Node-only server entrypoint, signed public snapshots and reactive hydration.
 
 ## Provider and declarative gates
 
@@ -102,12 +102,14 @@ Signature verification defaults to **true**. The shared client verifies ES256 ev
 
 Each client keeps a same-context in-memory snapshot and conditional HTTP revision. Persistent caching is opt-in: pass `storage: window.localStorage` in browser-only code. Cache keys include the base URL, app, environment and complete targeting URL. Only signed raw envelopes are persisted, and startup reads reverify signatures and freshness. Unavailable storage, corrupt data and invalid signatures never enable cached flags. Verified cached envelopes still require JWKS retrieval for a newly created client; no guarantee is made for a cold start with no network at all. Storage retains identity-bearing cache keys; choose its lifecycle to match your privacy requirements.
 
-On mount, live WebSocket updates are enabled by default and coalesced for 300 ms. Revision notifications trigger a pinned HTTP fetch; revisions are accepted only after HTTP confirmation. Signing-key changes clear JWKS. Connections retry after 5 seconds and polling remains a fallback. Use `enableLiveUpdates: false` to disable sockets, `refreshInterval: 0` to disable polling, or `connectTimeout` to set request timeout (10,000 ms default). Polling defaults to 180,000 ms. `baseURI` defaults to `https://definitions.toggly.io`; `environment` defaults to `Production`. `fetch` can inject a transport for tests. No variant assignment, usage metrics or analytics hook API is exposed by this package; a boolean fallback is not an experiment assignment.
+Set `expose` to restrict browser definitions to an explicit list of public keys. A server snapshot supplies its own allowlist, which also applies to subsequent refreshes. Every fetch uses `cache: 'no-store'`; polling sends its explicit confirmed ETag, while revisionless invalidations omit validators.
+
+On mount, live WebSocket updates are enabled by default and coalesced for 300 ms. Revision notifications trigger a pinned HTTP fetch; revisions are accepted only after HTTP confirmation. Signing-key changes clear JWKS. Connections retry after 5 seconds and polling remains a fallback. Use `enableLiveUpdates: false` to disable sockets, `refreshInterval: 0` to disable polling, or `connectTimeout` to set request timeout (10,000 ms default). Polling defaults to 180,000 ms. `baseURI` defaults to `https://definitions.toggly.io`; `environment` defaults to `Production`. `fetch` can inject a transport for tests. The browser entrypoint exposes no variant assignment, usage metrics or analytics hook API; a boolean fallback is not an experiment assignment.
 
 ## Development
 
 ```sh
-npm ci
+npm install
 npm run typecheck
 npm run build
 npm run test:coverage
@@ -115,6 +117,125 @@ npm pack --dry-run
 ```
 
 Tests cover real WebCrypto envelopes and tampering, cache failures, identity races, fine-grained rendering, lazy children, Suspense, live notifications and disposal. See the [complete SolidJS sample](https://github.com/ops-ai/Toggly.Samples/tree/main/solidjs-sdk) for the interactive workshop and app setup.
+
+## SolidStart
+
+Use `@ops-ai/solid-feature-flags-toggly` with SolidStart 2 and Node 24+. The browser entrypoint provides native Solid gates and accessors. The Node-only `/server` entrypoint reuses the Toggly Node client for backend evaluation and builds a separately verified public snapshot for server rendering.
+
+```sh
+npm install @ops-ai/solid-feature-flags-toggly solid-js
+```
+
+Use separate backend and frontend application keys. The backend key and full definitions remain on the server. Only explicitly exposed frontend definitions and deliberately projected public targeting are serialized. Feature gates control rollout behavior; authenticate and authorize requests separately.
+
+## Create a server scope
+
+Put this code in `src/lib/toggly.server.ts`. Keep its imports behind server queries, actions or API handlers. Initialize one backend client for the process, then create a new request wrapper for each operation.
+
+```ts
+import { createTogglyClient, createTogglyRequest } from '@ops-ai/solid-feature-flags-toggly/server';
+import type { EvaluationContext } from '@ops-ai/solid-feature-flags-toggly/server';
+
+const backend = createTogglyClient({
+  appKey: process.env.TOGGLY_BACKEND_APP_KEY,
+  environment: 'Production',
+  verifySignatures: true,
+  enableFileCache: false,
+  featureDefaults: { 'enhanced-submit': false },
+});
+const initialized = backend.init();
+process.once('SIGTERM', () => { void backend.close(); });
+
+export async function requestScope(request: Request, principal: EvaluationContext) {
+  await initialized;
+  return createTogglyRequest({
+    client: backend, request, context: principal,
+    // Explicit public projection: omit private claims and session credentials.
+    clientContext: { identity: principal.identity, groups: principal.groups },
+    frontend: {
+      appKey: process.env.VITE_TOGGLY_APP_KEY,
+      environment: 'Production',
+      expose: ['new-dashboard', 'ExpressCheckout'],
+      flagDefaults: { 'new-dashboard': false },
+    },
+  });
+}
+```
+
+The wrapper copies context once and passes it to each shared-core evaluation. It never calls `setIdentity` on the shared client. Omitted identity evaluates as an empty identity, preventing inheritance of a process-wide default identity. `request` supplies User-Agent and Accept-Language; trusted server code can supply `context.request.country` explicitly. Do not accept a client-controlled country header as a trusted geolocation assertion. A server snapshot fetch originates from your server, so IP-derived country rules can differ from later browser refreshes.
+
+`clientContext` defaults to empty. It is independent of backend context. `frontend.appKey` must differ from the backend client's app key. Application configuration must ensure it is a real frontend key; the adapter cannot infer key type from arbitrary strings. Missing frontend key uses the explicitly allowlisted defaults without a network call.
+
+## Server query and hydration
+
+Create `src/lib/flags.ts` with a SolidStart server query. Replace the demonstration principal with your authenticated session lookup.
+
+```ts
+import { query } from '@solidjs/router';
+export const getFlags = query(async () => {
+  'use server';
+  const { getRequestEvent } = await import('solid-js/web');
+  const { requestScope } = await import('./toggly.server');
+  const scope = await requestScope(getRequestEvent()!.request, { identity: 'demo-user' });
+  try { return await scope.snapshot(); }
+  finally { scope.dispose(); }
+}, 'public-toggly-flags');
+```
+
+Then render a route using the query result. SolidStart serializes its server query result; do not manually insert JSON into script tags.
+
+```tsx
+import { createAsync } from '@solidjs/router';
+import { Show } from 'solid-js';
+import { Feature, TogglyProvider } from '@ops-ai/solid-feature-flags-toggly';
+import { getFlags } from '../lib/flags';
+
+export default function Home() {
+  const snapshot = createAsync(() => getFlags());
+  return <Show when={snapshot()}>{initial =>
+    <TogglyProvider snapshot={snapshot() ?? initial()} config={{
+      appKey: import.meta.env.VITE_TOGGLY_APP_KEY,
+      environment: 'Production',
+    }}>
+      <Feature feature="new-dashboard" loading={<p>Refreshing…</p>}
+        fallback={<p>Classic dashboard</p>}><p>New dashboard</p></Feature>
+    </TogglyProvider>
+  }</Show>;
+}
+```
+
+The snapshot initializes signals synchronously for matching server HTML and browser hydration. Browser transport starts on mount. A changed `snapshot` prop replaces definitions, allowlist and public context, aborts older fetches and refreshes the new targeting. For session changes, invalidate or revalidate the server query using your router's data lifecycle; do not reuse a cached principal's query result after logout. The [full sample](https://github.com/ops-ai/Toggly.Samples/tree/main/solidstart-sdk) uses a query argument to demonstrate route-dependent targeting.
+
+`createToggly(config, snapshot)` and `createClient(config, snapshot)` accept the same initial snapshot. `useToggly().hydrate(snapshot)` applies an updated server result directly. The low-level client's `hydrate` replaces state but does not trigger fetching; call `refresh` yourself when using it outside the provider. Configuration other than targeting/allowlist is fixed for a provider's lifetime. Remount the provider when switching application, environment or endpoint.
+
+Snapshots are trusted application-provided SSR state, not portable signed credentials. `snapshot()` verifies the frontend response before projecting its definitions; it does not serialize the original signed envelope or backend definitions. Obtain snapshots from your server query. Never hydrate arbitrary user-supplied JSON. If authoring a manual inline script, `serializeSnapshot(snapshot)` escapes script-breaking characters and applies the allowlist again.
+
+## Evaluation and server guards
+
+```ts
+const scope = await requestScope(request, principal);
+try {
+  const on = await scope.isEnabled('new-dashboard');
+  const any = await scope.evaluate(['new-dashboard', 'api-v2'], { requirement: 'any' });
+  const standard = await scope.evaluate(['ExpressCheckout'], {
+    negate: true,
+    entity: { kind: 'Order', key: 'ord-1', attributes: { Vip: false } },
+  });
+  await scope.requireFeature('enhanced-submit');
+  // Run the rollout-controlled server operation here.
+} finally { scope.dispose(); }
+```
+
+`requireFeature(string | string[], options?)` throws a generic `Response` with status 404 when disabled. Return that response from an API handler or let your framework handle it. Options support `requirement: 'all' | 'any'`, `negate` and explicit `entity`. The same options apply to `evaluate`; `isEnabled(key, entity?)` evaluates one key. Backend filters, identity/groups/claims, entity rules, refresh and caching use the shared [Node core](https://docs.toggly.io/sdks/nodejs). The process owner closes that client on shutdown. `dispose()` aborts only this request's frontend fetch and prevents further wrapper operations; it never closes the shared backend client.
+
+## Signatures, defaults and lifecycle
+
+Frontend snapshots always verify ES256 signatures; there is no server snapshot option to disable verification. `frontend` accepts `baseURI`, `environment`, `allowedKeyIds`, `maxSignatureAgeSeconds`, `timeout` (10 seconds by default), `fetch` and `onError`. Set allowed keys and freshness limits to match your security policy. Invalid signatures, unavailable JWKS, malformed results and transport errors return only allowlisted defaults with `source: 'defaults'`; successful verification returns `source: 'signed'`. A disposed/aborted request rejects. Each wrapper memoizes one snapshot fetch and returns defensive copies. There is no cross-request frontend snapshot cache.
+
+Browser refreshes independently verify signed responses. Every browser fetch uses `cache: 'no-store'`; polling explicitly supplies its last confirmed ETag, while revisionless live invalidations omit validators. This prevents native browser caching from quietly adding stale validators. Same-context network/signature failures retain the previous verified flags. A new request snapshot replaces prior identity state immediately. Unmounting the provider aborts pending HTTP and clears polling, reconnect/debounce timers and sockets. See the [SolidJS API](https://docs.toggly.io/sdks/javascript/solid) for local gates, resources, all/any/negate and lazy components.
+
+`VITE_` variables are public build-time values and require rebuilding when changed. Backend variables are server runtime values. Keep the Node-only entrypoint out of client modules. This integration targets Node-hosted SolidStart; it does not claim edge or static-export backend evaluation support.
+
 
 ## License
 

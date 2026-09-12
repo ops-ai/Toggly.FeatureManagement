@@ -119,6 +119,7 @@ describe('transport and lifecycle', () => {
       await vi.advanceTimersByTimeAsync(300);
       expect(f).toHaveBeenCalledTimes(2);
       expect(f.mock.calls[1][1].headers['If-None-Match']).toBeUndefined();
+      expect(f.mock.calls[1][1].cache).toBe('no-store');
       expect(c.evaluate(['on'])).toBe(true);
     } finally { c.dispose(); vi.unstubAllGlobals(); vi.useRealTimers(); }
   });

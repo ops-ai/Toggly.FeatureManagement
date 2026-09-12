@@ -1,9 +1,12 @@
+import { selectDefinitions, publicContext, type TogglySnapshot } from './snapshot.js';
 import { buildEvaluatedSignedUrl, evaluateResolvedKeys, resolveEvaluatedDefinition, type EvaluatedDefinitions, type TogglyEntityContext, type TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions, isEvaluatedDefinitions, readAndParseEvaluatedResponseCached } from '@ops-ai/toggly-signed-defs';
 import { applyLocalGate, buildFlagGateIndex, type LocalGate } from '@ops-ai/toggly-local-gates';
 
 export type { TogglyEntityContext, TogglyEvaluationContext, EvaluatedDefinitions, LocalGate };
 export interface TogglyOptions extends TogglyEvaluationContext {
+  /** Restrict every browser snapshot to these public keys. */
+  expose?: readonly string[];
   appKey?: string;
   environment?: string;
   baseURI?: string;
@@ -26,10 +29,12 @@ export interface ClientState {
 }
 
 /** One targeting session; create a distinct instance for each owner/request. */
-export function createClient(options: TogglyOptions = {}) {
+export function createClient(options: TogglyOptions = {}, initialSnapshot?: TogglySnapshot) {
   const config = { ...options, baseURI: options.baseURI ?? 'https://definitions.toggly.io', environment: options.environment ?? 'Production', verifySignatures: options.verifySignatures ?? true };
-  let context: TogglyEvaluationContext = { identity: options.identity, groups: [...(options.groups ?? [])], claims: { ...options.claims } };
-  let state: ClientState = { definitions: { ...options.flagDefaults }, loading: false, error: undefined };
+  let expose = initialSnapshot ? [...initialSnapshot.expose] : options.expose;
+  const initialContext = initialSnapshot?.context ?? options;
+  let context: TogglyEvaluationContext = { identity: initialContext.identity, groups: [...(initialContext.groups ?? [])], claims: { ...initialContext.claims } };
+  let state: ClientState = { definitions: selectDefinitions(initialSnapshot?.definitions ?? options.flagDefaults ?? {}, expose), loading: false, error: undefined };
   let gates = options.localGates ?? [];
   let gateIndex = buildFlagGateIndex(gates);
   const listeners = new Set<(state: ClientState) => void>();
@@ -45,7 +50,7 @@ export function createClient(options: TogglyOptions = {}) {
   let liveStarted = false;
   const emit = (next: Partial<ClientState>) => { state = { ...state, ...next }; listeners.forEach(listener => listener(state)); };
   const flags = () => ({ ...state.definitions });
-  const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.1.0' };
+  const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.2.0' };
 
   async function refresh(pin?: string | null): Promise<EvaluatedDefinitions> {
     if (disposed) return flags();
@@ -55,7 +60,7 @@ export function createClient(options: TogglyOptions = {}) {
     const signal = controller.signal;
     const timeout = setTimeout(() => controllerForRequest.abort(), config.connectTimeout ?? 10000);
     const controllerForRequest = controller;
-    const fetchImpl: typeof fetch = (url, init) => (config.fetch ?? fetch)(url, { ...init, signal });
+    const fetchImpl: typeof fetch = (url, init) => (config.fetch ?? fetch)(url, { ...init, signal, cache: 'no-store' });
     const parseConfig = { ...config, fetchImpl };
     emit({ loading: true, error: undefined });
     try {
@@ -69,7 +74,7 @@ export function createClient(options: TogglyOptions = {}) {
           const cached = config.storage.getItem(cacheKey);
           if (cached) {
             const defs = await readAndParseEvaluatedResponseCached(new Response(cached), jwks, parseConfig, headers);
-            if (current === generation && !disposed && isEvaluatedDefinitions(defs)) emit({ definitions: defs });
+            if (current === generation && !disposed && isEvaluatedDefinitions(defs)) emit({ definitions: selectDefinitions(defs, expose) });
           }
         } catch { /* Invalid, expired or unavailable cache is never trusted. Try network. */ }
       }
@@ -85,7 +90,7 @@ export function createClient(options: TogglyOptions = {}) {
       if (current !== generation || disposed) return flags();
       if (!result.notModified) {
         if (!isEvaluatedDefinitions(result.defs)) throw new Error('Invalid evaluated definitions');
-        emit({ definitions: result.defs });
+        emit({ definitions: selectDefinitions(result.defs, expose) });
         if (body && config.verifySignatures) {
           try { config.storage?.setItem(cacheKey, body); } catch { /* Storage quota must not prevent evaluation. */ }
         }
@@ -105,7 +110,7 @@ export function createClient(options: TogglyOptions = {}) {
     const url = new URL(`${config.baseURI.replace(/\/$/, '')}/${encodeURIComponent(config.appKey)}/ws`);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('sdk', 'solidjs');
-    url.searchParams.set('sdkVersion', '0.1.0');
+    url.searchParams.set('sdkVersion', '0.2.0');
     if (revision) url.searchParams.set('rev', revision);
     try {
       socket = new WebSocket(url);
@@ -131,6 +136,14 @@ export function createClient(options: TogglyOptions = {}) {
 
   return {
     flags,
+    /** Replace request-produced public state when a SolidStart route loader changes. */
+    hydrate(snapshot: TogglySnapshot) {
+      if (disposed) return;
+      const definitions = selectDefinitions(snapshot.definitions, snapshot.expose);
+      generation++; controller?.abort(); revision = null;
+      expose = [...snapshot.expose]; context = publicContext(snapshot.context);
+      emit({ definitions, loading: false, error: undefined });
+    },
     state: () => state,
     context: () => structuredClone(context),
     refresh,
@@ -150,7 +163,7 @@ export function createClient(options: TogglyOptions = {}) {
       context = { ...context, ...structuredClone(next) };
       // Never display the previous user's flags while a new user's request is pending.
       revision = null;
-      emit({ definitions: { ...config.flagDefaults }, error: undefined });
+      emit({ definitions: selectDefinitions(config.flagDefaults ?? {}, expose), error: undefined });
       await refresh();
     },
     setLocalGates(next: LocalGate[]) { const index = buildFlagGateIndex(next); gates = next; gateIndex = index; emit({}); },

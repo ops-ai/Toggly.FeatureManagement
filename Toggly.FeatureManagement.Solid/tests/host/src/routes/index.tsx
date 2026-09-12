@@ -1,0 +1,6 @@
+import { A,createAsync,useSearchParams } from '@solidjs/router';
+import { Show } from 'solid-js';
+import { Feature,TogglyProvider,useToggly } from '@ops-ai/solid-feature-flags-toggly';
+import { getFlags } from '../lib/flags';
+function Status(){const flags=useToggly();return <><p data-testid="identity">{flags.client.context().identity}</p><pre data-testid="flags">{JSON.stringify(flags.flags())}</pre><button onClick={()=>flags.client.refresh()}>Refresh</button></>;}
+export default function Home(){const [params]=useSearchParams();const snapshot=createAsync(()=>getFlags(String(params.identity??'alice')));return <><A href="/?identity=alice">Alice</A><A href="/?identity=bob">Bob</A><A href="/away">Leave</A><Show when={snapshot()}>{initial=><TogglyProvider snapshot={snapshot()??initial()} config={{appKey:import.meta.env.VITE_TOGGLY_APP_KEY,baseURI:import.meta.env.VITE_TOGGLY_BASE_URL,refreshInterval:0}}><Feature feature="BetaDashboard" fallback={<h1>Beta disabled</h1>} loading={<p>Fetching flags</p>}><h1>Beta enabled</h1></Feature><Feature feature="LiveFeature" fallback={<p>Live off</p>}><p>Live on</p></Feature><Feature feature="ExpressCheckout" entity={{kind:'Order',key:'1',attributes:{Vip:true}}}><p>VIP checkout</p></Feature><Status /></TogglyProvider>}</Show></>;}
