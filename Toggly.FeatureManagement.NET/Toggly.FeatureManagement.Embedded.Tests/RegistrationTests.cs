@@ -4,6 +4,9 @@ using Microsoft.Extensions.Hosting;
 using Toggly.FeatureManagement.Configuration;
 using Toggly.FeatureManagement.Context;
 using Toggly.FeatureManagement.Catalog;
+using Toggly.FeatureManagement.Storage.EntityFramework.Configuration;
+using Toggly.FeatureManagement.Storage.RavenDB.Configuration;
+using Raven.Client.Documents;
 using Xunit;
 
 namespace Toggly.FeatureManagement.Embedded.Tests;
@@ -71,6 +74,21 @@ public class RegistrationTests
         var action = () => provider.GetRequiredService<EmbeddedCatalogCoordinator>();
 
         action.Should().Throw<InvalidOperationException>().WithMessage("*exactly one ITogglyCatalogStore; found 0*");
+    }
+
+    [Fact]
+    public void EmbeddedCoordinator_Rejects_distinct_entity_framework_and_ravendb_catalog_stores()
+    {
+        var services = CreateServices();
+        services.AddSingleton<IDocumentStore>(new DocumentStore());
+        services.AddTogglyEntityFrameworkCatalogStore(_ => { });
+        services.AddTogglyRavenDbCatalogStore();
+        services.AddTogglyEmbedded(options => options.CatalogName = "Orders");
+        using var provider = services.BuildServiceProvider();
+
+        var action = () => provider.GetRequiredService<EmbeddedCatalogCoordinator>();
+
+        action.Should().Throw<InvalidOperationException>().WithMessage("*exactly one ITogglyCatalogStore; found 2*");
     }
 
     [Fact]

@@ -16,7 +16,7 @@ namespace Toggly.FeatureManagement.Storage.RavenDB.Configuration
         {
             if (services == null) throw new ArgumentNullException(nameof(services));
 
-            services.TryAddSingleton<ITogglyCatalogStore, RavenDbCatalogStore>();
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<ITogglyCatalogStore, RavenDbCatalogStore>());
             return services;
         }
 
