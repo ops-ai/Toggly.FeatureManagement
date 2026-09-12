@@ -35,8 +35,9 @@ describe('Solid ownership and native gates', () => {
           <Feature feature="off" negate>
             <span>negate works</span>
           </Feature>
-          <Feature feature="off" fallback={<span>fallback</span>}>
-            hidden
+          <Feature feature="off">hidden</Feature>
+          <Feature feature="off" negate>
+            <span>disabled content</span>
           </Feature>
         </>
       );
@@ -48,7 +49,7 @@ describe('Solid ownership and native gates', () => {
     ));
     await screen.findByText('any works');
     expect(screen.getByText('negate works')).toBeTruthy();
-    expect(screen.getByText('fallback')).toBeTruthy();
+    expect(screen.getByText('disabled content')).toBeTruthy();
     expect(screen.getByText('true/true/true')).toBeTruthy();
     change('off');
     expect(screen.getByText('false/true/true')).toBeTruthy();
@@ -57,6 +58,7 @@ describe('Solid ownership and native gates', () => {
     let resolve!: (value: Response) => void;
     const fetcher = vi.fn(() => new Promise<Response>((r) => (resolve = r)));
     const child = vi.fn(() => <span>expensive</span>);
+    const disabledChild = vi.fn(() => <span>disabled experience</span>);
     const Reader = () => {
       const t = useToggly();
       return <span>{JSON.stringify(t.resource())}</span>;
@@ -73,6 +75,9 @@ describe('Solid ownership and native gates', () => {
         <Feature feature="on" loading={<span>Loading gate</span>}>
           {child()}
         </Feature>
+        <Feature feature="on" negate>
+          {disabledChild()}
+        </Feature>
         <Suspense fallback={<span>Loading resource</span>}>
           <Reader />
         </Suspense>
@@ -81,10 +86,59 @@ describe('Solid ownership and native gates', () => {
     expect(screen.getByText('Loading gate')).toBeTruthy();
     expect(screen.getByText('Loading resource')).toBeTruthy();
     expect(child).not.toHaveBeenCalled();
+    expect(disabledChild).not.toHaveBeenCalled();
+    expect(screen.queryByText('expensive')).toBeNull();
+    expect(screen.queryByText('disabled experience')).toBeNull();
     resolve(new Response('{"on":true}'));
     await screen.findByText('expensive');
     expect(child).toHaveBeenCalledTimes(1);
+    expect(disabledChild).not.toHaveBeenCalled();
   });
+  it.each(['all', 'any'] as const)(
+    'keeps paired %s gates complementary when entity and snapshot values change',
+    (requirement) => {
+      const [vip, setVip] = createSignal(false);
+      const [enabled, setEnabled] = createSignal(true);
+      const yes = vi.fn(() => <span>paired enabled</span>);
+      const no = vi.fn(() => <span>paired disabled</span>);
+      const entity = () => ({ kind: 'Order', key: '1', attributes: { Vip: vip() } });
+      render(() => (
+        <TogglyProvider
+          snapshot={{
+            definitions: {
+              on: enabled(),
+              checkout: {
+                requirement: 'all',
+                rules: [{ property: 'Vip', op: 'eq', value: 'true', type: 'boolean' }],
+              },
+            },
+            context: {},
+            expose: ['on', 'checkout'],
+            source: 'signed',
+          }}
+        >
+          <Feature feature={['on', 'checkout']} requirement={requirement} entity={entity()}>
+            {yes()}
+          </Feature>
+          <Feature feature={['on', 'checkout']} requirement={requirement} entity={entity()} negate>
+            {no()}
+          </Feature>
+        </TogglyProvider>
+      ));
+      const assertBranch = (allowed: boolean) => {
+        expect(screen.queryByText('paired enabled') !== null).toBe(allowed);
+        expect(screen.queryByText('paired disabled') !== null).toBe(!allowed);
+      };
+      assertBranch(requirement === 'any');
+      expect(requirement === 'any' ? no : yes).not.toHaveBeenCalled();
+      setVip(true);
+      assertBranch(true);
+      setEnabled(false);
+      assertBranch(requirement === 'any');
+      setVip(false);
+      assertBranch(false);
+    },
+  );
   it('reacts to refresh, exposes errors and disposes subscriptions', async () => {
     let t!: ReturnType<typeof createToggly>;
     let dispose!: () => void;

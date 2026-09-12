@@ -27,12 +27,11 @@ export default function App() {
         claims: { role: 'admin' },
       }}
     >
-      <Feature
-        feature="new-dashboard"
-        loading={<p>Loading…</p>}
-        fallback={<p>Classic dashboard</p>}
-      >
+      <Feature feature="new-dashboard" loading={<p>Loading…</p>}>
         <p>New dashboard</p>
+      </Feature>
+      <Feature feature="new-dashboard" negate>
+        <p>Classic dashboard</p>
       </Feature>
       <Feature feature={['new-dashboard', 'api-v2']} requirement="all">
         Both enabled
@@ -40,15 +39,12 @@ export default function App() {
       <Feature feature={['new-dashboard', 'api-v2']} requirement="any">
         Either enabled
       </Feature>
-      <Feature feature="new-dashboard" negate>
-        Dashboard disabled
-      </Feature>
     </TogglyProvider>
   );
 }
 ```
 
-Configuration is read once when the provider is created. Change targeting using `client.setContext`; changing the config prop does not reconfigure a running provider. App keys are browser-visible identifiers; never supply a management credential. Missing keys evaluate false. Empty key lists evaluate true before negation. Feature children and fallback are lazy Solid branches: an expensive or `lazy()` component is instantiated only when its branch is selected. While a request runs, `Feature` shows its `loading` branch (empty by default).
+Configuration is read once when the provider is created. Change targeting using `client.setContext`; changing the config prop does not reconfigure a running provider. App keys are browser-visible identifiers; never supply a management credential. Missing keys evaluate false. Empty key lists evaluate true before negation. Each Feature block keeps its children lazy: an expensive or `lazy()` component is instantiated only when its branch is selected. Disabled content belongs in a separate `Feature` block with `negate` and the same gate parameters. While a request runs, both blocks suppress their children; put `loading` content on only one block to avoid duplicate indicators. Loading content is empty by default.
 
 ## Reactive and programmatic API
 
@@ -246,12 +242,11 @@ export default function Home() {
             environment: 'Production',
           }}
         >
-          <Feature
-            feature="new-dashboard"
-            loading={<p>Refreshing…</p>}
-            fallback={<p>Classic dashboard</p>}
-          >
+          <Feature feature="new-dashboard" loading={<p>Refreshing…</p>}>
             <p>New dashboard</p>
+          </Feature>
+          <Feature feature="new-dashboard" negate>
+            <p>Classic dashboard</p>
           </Feature>
         </TogglyProvider>
       )}

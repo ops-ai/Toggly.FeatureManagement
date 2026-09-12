@@ -30,15 +30,17 @@ export default function Home() {
               refreshInterval: 0,
             }}
           >
-            <Feature
-              feature="BetaDashboard"
-              fallback={<h1>Beta disabled</h1>}
-              loading={<p>Fetching flags</p>}
-            >
+            <Feature feature="BetaDashboard" loading={<p>Fetching flags</p>}>
               <h1>Beta enabled</h1>
             </Feature>
-            <Feature feature="LiveFeature" fallback={<p>Live off</p>}>
+            <Feature feature="BetaDashboard" negate>
+              <h1>Beta disabled</h1>
+            </Feature>
+            <Feature feature="LiveFeature">
               <p>Live on</p>
+            </Feature>
+            <Feature feature="LiveFeature" negate>
+              <p>Live off</p>
             </Feature>
             <Feature
               feature="ExpressCheckout"

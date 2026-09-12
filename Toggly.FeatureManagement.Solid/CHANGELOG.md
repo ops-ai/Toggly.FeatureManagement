@@ -2,6 +2,10 @@
 
 ## 0.2.0 — 2026-09-12
 
+### Changed
+
+- Remove the provisional `Feature.fallback` prop. Render disabled content in a separate `Feature` block with the same feature, requirement and entity plus `negate`; loading remains a separate state.
+
 ### Added
 
 - Node-only SolidStart server entrypoint with request-scoped evaluation and guards using the shared Node client.

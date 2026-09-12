@@ -130,7 +130,6 @@ export interface FeatureProps {
   requirement?: 'all' | 'any';
   negate?: boolean;
   entity?: TogglyEntityContext;
-  fallback?: JSX.Element;
   loading?: JSX.Element;
   children?: JSX.Element;
 }
@@ -147,9 +146,7 @@ export function Feature(props: FeatureProps): JSX.Element {
   );
   return (
     <Show when={!toggly.loading()} fallback={props.loading}>
-      <Show when={enabled()} fallback={props.fallback}>
-        {props.children}
-      </Show>
+      <Show when={enabled()}>{props.children}</Show>
     </Show>
   );
 }

@@ -21,17 +21,22 @@ it('renders the server snapshot and replaces it on client navigation', async () 
     navigate = set;
     return (
       <TogglyProvider snapshot={current()}>
-        <Feature feature="visible" fallback={<p>Hidden</p>}>
+        <Feature feature="visible">
           <p>Visible</p>
+        </Feature>
+        <Feature feature="visible" negate>
+          <p>Hidden</p>
         </Feature>
         <Status />
       </TogglyProvider>
     );
   });
   expect(screen.getByText('Visible')).toBeTruthy();
+  expect(screen.queryByText('Hidden')).toBeNull();
   expect(screen.getByTestId('flags').textContent).not.toContain('secret');
   navigate(snapshot(false));
   await screen.findByText('Hidden');
+  expect(screen.queryByText('Visible')).toBeNull();
 });
 
 import { createClient } from '../src/client';
