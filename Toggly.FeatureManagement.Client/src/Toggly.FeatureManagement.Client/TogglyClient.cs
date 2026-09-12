@@ -88,28 +88,30 @@ public sealed partial class TogglyClient : IAsyncDisposable
         await refreshLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            EvaluationContext current; long version;
-            lock(stateLock) { ObjectDisposedException.ThrowIf(disposed,this); current=context; version=generation; }
+            EvaluationContext current; long version; string? keys;
+            lock(stateLock) { ObjectDisposedException.ThrowIf(disposed,this); current=context; version=generation; keys=jwks; }
             if(string.IsNullOrWhiteSpace(options.AppKey)) return;
             var key=ContextKey(current);
             try
             {
-                if(jwks is null) jwks=await FetchKeysAsync(ct).ConfigureAwait(false);
-                await RestoreSnapshotAsync(key,version,ct).ConfigureAwait(false);
-                await FetchDefinitionsAsync(current,key,version,ct).ConfigureAwait(false);
+                // Keep this operation's immutable keys coherent with its captured generation.
+                keys ??= await FetchKeysAsync(version,ct).ConfigureAwait(false);
+                if (keys is null) return;
+                await RestoreSnapshotAsync(key,version,keys,ct).ConfigureAwait(false);
+                await FetchDefinitionsAsync(current,key,version,keys,ct).ConfigureAwait(false);
             }
             catch(Exception ex) when(ex is not OperationCanceledException) { Report(ex); }
         }
         finally { refreshLock.Release(); }
     }
-    private async Task RestoreSnapshotAsync(string key,long version,CancellationToken ct)
+    private async Task RestoreSnapshotAsync(string key,long version,string keys,CancellationToken ct)
     {
         if (store is null || timestamp != 0) return;
         try
         {
             var snapshot=await store.LoadAsync(key,ct).ConfigureAwait(false);
             if (snapshot is not null && snapshot.ContextKey==key)
-                await AcceptAsync(snapshot.Envelope,snapshot.Revision,version,ct).ConfigureAwait(false);
+                await AcceptAsync(snapshot.Envelope,snapshot.Revision,version,keys,ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException) { Report(ex); }
     }
@@ -135,8 +137,9 @@ public sealed partial class TogglyClient : IAsyncDisposable
         request.Headers.Add("X-Toggly-Sdk-Version","0.1.0");
         return request;
     }
-    private async Task FetchDefinitionsAsync(EvaluationContext current,string key,long version,CancellationToken ct)
+    private async Task FetchDefinitionsAsync(EvaluationContext current,string key,long version,string keys,CancellationToken ct)
     {
+        if (!IsCurrent(version)) return;
         using var request=CreateRequest(current);
         using var response=await http.SendAsync(request,ct).ConfigureAwait(false);
         if (response.StatusCode==HttpStatusCode.NotModified) return;
@@ -144,12 +147,27 @@ public sealed partial class TogglyClient : IAsyncDisposable
         var body=await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         var nextRevision=response.Headers.TryGetValues("X-Definitions-Revision",out var values)
             ? values.FirstOrDefault() : response.Headers.ETag?.ToString();
-        if (await AcceptAsync(body,nextRevision,version,ct).ConfigureAwait(false) && store is not null)
+        if (await AcceptAsync(body,nextRevision,version,keys,ct).ConfigureAwait(false) && store is not null)
             await store.SaveAsync(key,new(key,body,nextRevision),ct).ConfigureAwait(false);
     }
-    private async Task<string> FetchKeysAsync(CancellationToken ct) => await http.GetStringAsync(new Uri(options.BaseUri,".well-known/jwks"),ct).ConfigureAwait(false);
-    private async Task<bool> AcceptAsync(string body,string? rev,long version,CancellationToken ct)
+    private async Task<string?> FetchKeysAsync(long version,CancellationToken ct)
     {
+        var keys=await http.GetStringAsync(new Uri(options.BaseUri,".well-known/jwks"),ct).ConfigureAwait(false);
+        lock (stateLock)
+        {
+            // A late key fetch must not overwrite a newer signing-key invalidation.
+            if (disposed || version!=generation) return null;
+            jwks=keys;
+            return keys;
+        }
+    }
+    private bool IsCurrent(long version)
+    {
+        lock (stateLock) return !disposed && version==generation;
+    }
+    private async Task<bool> AcceptAsync(string body,string? rev,long version,string keys,CancellationToken ct)
+    {
+        if (!IsCurrent(version)) return false;
         using var document=JsonDocument.Parse(body); var root=document.RootElement;
         if(root.EnumerateObject().Select(p=>p.Name).Distinct(StringComparer.Ordinal).Count()!=root.EnumerateObject().Count()) throw new JsonException("Duplicate envelope properties.");
         var defs=root.GetProperty("defs"); var time=root.GetProperty("timestamp").GetInt64(); var kid=root.GetProperty("kid").GetString()!;
@@ -157,12 +175,13 @@ public sealed partial class TogglyClient : IAsyncDisposable
         if(time>now+300 || time<now-options.MaximumSignatureAge.TotalSeconds || time<timestamp) throw new CryptographicException("Stale signature.");
         if(options.AllowedKeyIds.Count>0 && !options.AllowedKeyIds.Contains(kid)) throw new CryptographicException("Signing key is not allowed.");
         var signature=root.GetProperty("signature").GetString()!;
-        if(!await verifier.VerifyAsync(defs.GetRawText(),time,signature,kid,jwks!,ct).ConfigureAwait(false))
+        if(!await verifier.VerifyAsync(defs.GetRawText(),time,signature,kid,keys,ct).ConfigureAwait(false))
         {
             // A client may miss a signing-key WebSocket notification while offline.
             // Retry against fresh trusted endpoint keys once; never trust keys in a snapshot.
-            jwks=await FetchKeysAsync(ct).ConfigureAwait(false);
-            if(!await verifier.VerifyAsync(defs.GetRawText(),time,signature,kid,jwks,ct).ConfigureAwait(false)) throw new CryptographicException("Invalid signature.");
+            var freshKeys=await FetchKeysAsync(version,ct).ConfigureAwait(false);
+            if (freshKeys is null) return false;
+            if(!await verifier.VerifyAsync(defs.GetRawText(),time,signature,kid,freshKeys,ct).ConfigureAwait(false)) throw new CryptographicException("Invalid signature.");
         }
         var next=defs.EnumerateObject().ToDictionary(p=>p.Name,p=>p.Value.Clone(),StringComparer.Ordinal);
         if(next.Values.Any(v=>v.ValueKind is not (JsonValueKind.True or JsonValueKind.False or JsonValueKind.Object))) throw new JsonException("Invalid definition.");
