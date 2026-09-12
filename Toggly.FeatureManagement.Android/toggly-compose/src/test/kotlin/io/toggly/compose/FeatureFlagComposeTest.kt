@@ -2,6 +2,7 @@ package io.toggly.compose
 
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import io.toggly.core.TogglyEntityContext
@@ -154,6 +155,42 @@ class FeatureFlagComposeTest {
         composeRule.onNodeWithText("legacy-feature-primary").assertDoesNotExist()
     }
 
+    @Suppress("DEPRECATION")
+    @Test
+    fun `primary and legacy Feature overloads respond to recomposed arguments`() {
+        val featureKey = mutableStateOf("banner")
+        val negate = mutableStateOf(false)
+
+        setWithFlags {
+            Feature(featureKey.value, negate.value, null, null) {
+                BasicText("primary-feature")
+            }
+            Feature(
+                featureKey.value,
+                negate.value,
+                null,
+                null,
+                { BasicText("legacy-feature-fallback") }
+            ) {
+                BasicText("legacy-feature-content")
+            }
+        }
+
+        composeRule.onNodeWithText("primary-feature").assertExists()
+        composeRule.onNodeWithText("legacy-feature-content").assertExists()
+        composeRule.onNodeWithText("legacy-feature-fallback").assertDoesNotExist()
+
+        composeRule.runOnIdle { featureKey.value = "maintenance" }
+        composeRule.onNodeWithText("primary-feature").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-feature-content").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-feature-fallback").assertExists()
+
+        composeRule.runOnIdle { negate.value = true }
+        composeRule.onNodeWithText("primary-feature").assertExists()
+        composeRule.onNodeWithText("legacy-feature-content").assertExists()
+        composeRule.onNodeWithText("legacy-feature-fallback").assertDoesNotExist()
+    }
+
     @Test
     fun `FeatureFlagOff is deprecate alias for negate`() {
         setWithFlags {
@@ -231,6 +268,49 @@ class FeatureFlagComposeTest {
         }
         composeRule.onNodeWithText("legacy-gate-fallback").assertExists()
         composeRule.onNodeWithText("legacy-gate-primary").assertDoesNotExist()
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `primary and legacy FeatureGate overloads respond to recomposed requirements`() {
+        val featureKeys = mutableStateOf(listOf("a", "b"))
+        val requirement = mutableStateOf(FeatureRequirement.ALL)
+        val negate = mutableStateOf(false)
+
+        setWithFlags {
+            FeatureGate(featureKeys.value, requirement.value, negate.value, null, null) {
+                BasicText("primary-gate")
+            }
+            FeatureGate(
+                featureKeys.value,
+                requirement.value,
+                negate.value,
+                null,
+                null,
+                { BasicText("legacy-gate-fallback") }
+            ) {
+                BasicText("legacy-gate-content")
+            }
+        }
+
+        composeRule.onNodeWithText("primary-gate").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-gate-content").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-gate-fallback").assertExists()
+
+        composeRule.runOnIdle { requirement.value = FeatureRequirement.ANY }
+        composeRule.onNodeWithText("primary-gate").assertExists()
+        composeRule.onNodeWithText("legacy-gate-content").assertExists()
+        composeRule.onNodeWithText("legacy-gate-fallback").assertDoesNotExist()
+
+        composeRule.runOnIdle { negate.value = true }
+        composeRule.onNodeWithText("primary-gate").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-gate-content").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-gate-fallback").assertExists()
+
+        composeRule.runOnIdle { featureKeys.value = listOf("b") }
+        composeRule.onNodeWithText("primary-gate").assertExists()
+        composeRule.onNodeWithText("legacy-gate-content").assertExists()
+        composeRule.onNodeWithText("legacy-gate-fallback").assertDoesNotExist()
     }
 
     @Test

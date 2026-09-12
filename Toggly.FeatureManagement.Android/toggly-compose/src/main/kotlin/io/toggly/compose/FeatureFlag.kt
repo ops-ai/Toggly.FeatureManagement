@@ -150,6 +150,8 @@ fun rememberFeatureGateAsState(
  * @param content Content to show when the check passes
  */
 @Composable
+@NonRestartableComposable
+@Suppress("DEPRECATION")
 fun Feature(
     featureKey: String,
     negate: Boolean = false,
@@ -157,7 +159,7 @@ fun Feature(
     contextKind: String? = null,
     content: @Composable () -> Unit
 ) {
-    FeatureContent(featureKey, negate, context, contextKind, null, content)
+    Feature(featureKey, negate, context, contextKind, null, content)
 }
 
 /**
@@ -175,18 +177,6 @@ fun Feature(
     context: Any? = null,
     contextKind: String? = null,
     fallback: @Composable (() -> Unit)? = null,
-    content: @Composable () -> Unit
-) {
-    FeatureContent(featureKey, negate, context, contextKind, fallback, content)
-}
-
-@Composable
-private fun FeatureContent(
-    featureKey: String,
-    negate: Boolean,
-    context: Any?,
-    contextKind: String?,
-    fallback: @Composable (() -> Unit)?,
     content: @Composable () -> Unit
 ) {
     val shouldShow = rememberFeature(
@@ -267,6 +257,8 @@ fun FeatureFlagOff(
  * @param content Content to show when gate passes
  */
 @Composable
+@NonRestartableComposable
+@Suppress("DEPRECATION")
 fun FeatureGate(
     featureKeys: List<String>,
     requirement: FeatureRequirement = FeatureRequirement.ALL,
@@ -275,7 +267,7 @@ fun FeatureGate(
     contextKind: String? = null,
     content: @Composable () -> Unit
 ) {
-    FeatureGateContent(featureKeys, requirement, negate, context, contextKind, null, content)
+    FeatureGate(featureKeys, requirement, negate, context, contextKind, null, content)
 }
 
 /**
@@ -294,19 +286,6 @@ fun FeatureGate(
     context: Any? = null,
     contextKind: String? = null,
     fallback: @Composable (() -> Unit)? = null,
-    content: @Composable () -> Unit
-) {
-    FeatureGateContent(featureKeys, requirement, negate, context, contextKind, fallback, content)
-}
-
-@Composable
-private fun FeatureGateContent(
-    featureKeys: List<String>,
-    requirement: FeatureRequirement,
-    negate: Boolean,
-    context: Any?,
-    contextKind: String?,
-    fallback: @Composable (() -> Unit)?,
     content: @Composable () -> Unit
 ) {
     val isEnabled = rememberFeatureGate(
