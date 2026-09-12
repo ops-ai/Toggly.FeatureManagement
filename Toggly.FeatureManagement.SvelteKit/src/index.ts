@@ -39,8 +39,12 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
   let generation = 0;
   let disposed = false;
   let mounted = false;
-  // Keep signed timestamp floors across route-driven context changes in this layout.
-  const session: BrowserSession = { timestamps: new Map(), keys: new Map() };
+  // Keep trust and failed-retirement state across route-driven connections in this layout.
+  const session: BrowserSession = {
+    timestamps: new Map(),
+    keys: new Map(),
+    persistence: new Map(),
+  };
   const publish = (next: TogglySnapshot) => {
     snapshot = acceptSnapshot(next);
     store.set(snapshot);

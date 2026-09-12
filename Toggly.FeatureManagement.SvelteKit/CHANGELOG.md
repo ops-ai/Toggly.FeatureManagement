@@ -4,6 +4,7 @@
 
 ### Added
 
+- Keep failed key-retirement persistence disabled across navigation and reconnects in the same layout.
 - SvelteKit Node hook with one copied evaluation context per request and server load/action guards using Node core.
 - Explicitly allowlisted signed frontend hydration that preserves entity gates and never serializes backend configuration.
 - Layout-owned Svelte store, declarative Feature component, all/any/negate/defaults, local gates, navigation replacement and disposal.

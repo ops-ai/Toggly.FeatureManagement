@@ -9,10 +9,11 @@ import { createPersistence, verifyEnvelope } from './persistence.js';
 import { captureEvaluatedResponse } from './transport.js';
 import type { BrowserOptions, TogglySnapshot, EvaluatedDefinitions } from './types.js';
 
-/** Trusted key and timestamp state survives browser reconnects within one layout. */
+/** Trusted keys, timestamps and persistence retirement survive reconnects within one layout. */
 export interface BrowserSession {
   timestamps: Map<string, number>;
   keys: Map<string, JwkSet>;
+  persistence: Map<string, ReturnType<typeof createPersistence>>;
 }
 
 /** Layout-owned lifecycle around the shared evaluated-signed transport; no rule evaluator here. */
@@ -23,7 +24,7 @@ export function connectBrowser(
     defs: EvaluatedDefinitions,
     verification?: Pick<TogglySnapshot, 'signedTimestamp' | 'signingKey'>,
   ) => void,
-  session: BrowserSession = { timestamps: new Map(), keys: new Map() },
+  session: BrowserSession = { timestamps: new Map(), keys: new Map(), persistence: new Map() },
 ): () => void {
   if (!options.appKey) return () => {};
   const baseURI = options.baseURI ?? 'https://definitions.toggly.io';
@@ -37,7 +38,13 @@ export function connectBrowser(
     false,
   );
   let jwks = new InMemoryJwksCache();
-  const persistence = createPersistence(options.storage, baseURI);
+  const endpoint = baseURI.replace(/\/$/, '');
+  // Retirement failure belongs to the layout, not a disposable route connection.
+  let persistence = session.persistence.get(endpoint);
+  if (!persistence) {
+    persistence = createPersistence(options.storage, baseURI);
+    session.persistence.set(endpoint, persistence);
+  }
   // Authoritative SSR/manual state must never be replaced by an older cache.
   let mayRestore = snapshot.source === 'defaults';
   if (snapshot.source === 'signed') {

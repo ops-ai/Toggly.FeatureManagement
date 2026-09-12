@@ -9,6 +9,86 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it('keeps failed key retirement disabled across storage recovery, route changes and reconnects', async () => {
+  vi.stubGlobal('window', {});
+  const records = new Map<string, string>();
+  let denyWrites = false;
+  const storage = {
+    getItem: (key: string) => records.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      if (denyWrites) throw new Error('Storage temporarily denied');
+      records.set(key, value);
+    },
+  };
+  class Socket {
+    static current: Socket;
+    onmessage: any;
+    onclose: any;
+    onopen: any;
+    onerror: any;
+    close() {}
+    constructor() {
+      Socket.current = this;
+    }
+  }
+  vi.stubGlobal('WebSocket', Socket);
+  const endpoint = 'https://definitions.toggly.io';
+  createPersistence(storage, endpoint).write(
+    `${endpoint}/evaluated-signed/front/Production?u=alice`,
+    envelope({ old: true }),
+    { keys: [jwk] },
+  );
+  const onError = vi.fn();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      throw new Error('All network disabled');
+    }),
+  );
+  const client = createToggly(
+    {
+      definitions: { current: true },
+      context: { identity: 'bob' },
+      expose: ['current', 'old'],
+      source: 'signed',
+      signedTimestamp: Math.floor(Date.now() / 1000),
+      signingKey: jwk,
+    },
+    { appKey: 'front', storage, refreshInterval: 0, onError },
+  );
+  const snapshots: Record<string, unknown>[] = [];
+  const unsubscribe = client.subscribe((snapshot) => snapshots.push(snapshot.definitions));
+  try {
+    await client.start();
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    denyWrites = true;
+    Socket.current.onmessage({ data: '{"type":"signing-key-updated"}' });
+    denyWrites = false;
+    client.update({
+      definitions: {},
+      context: { identity: 'alice' },
+      expose: ['old'],
+      source: 'defaults',
+    });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(2));
+    expect(client.isEnabled('old')).toBe(false);
+    // Explicit restart and another route transition share the same layout trust lifetime.
+    await client.start();
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(3));
+    client.update({
+      definitions: {},
+      context: { identity: 'alice' },
+      expose: ['old'],
+      source: 'defaults',
+    });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(4));
+    expect(snapshots.every((snapshot) => snapshot.old !== true)).toBe(true);
+  } finally {
+    unsubscribe();
+    client.dispose();
+  }
+});
+
 it('keeps the observed SSR key authoritative over an older context cache after navigation', async () => {
   vi.stubGlobal('window', {});
   const records = new Map<string, string>();
