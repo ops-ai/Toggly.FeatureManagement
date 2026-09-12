@@ -1,5 +1,6 @@
 import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
-import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions, isEvaluatedDefinitions } from '@ops-ai/toggly-signed-defs';
+import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
+import { validateEvaluatedDefinitions } from './validation.js';
 import type { BrowserOptions, TogglySnapshot, EvaluatedDefinitions } from './types.js';
 
 /** Layout-owned lifecycle around the shared evaluated-signed transport; no rule evaluator here. */
@@ -50,7 +51,7 @@ export function connectBrowser(snapshot: TogglySnapshot, options: BrowserOptions
         if (!revision || unconditional) throw new Error('Unexpected 304 without a matching verified snapshot');
         return;
       }
-      if (!isEvaluatedDefinitions(result.defs)) throw new Error('Invalid evaluated definitions');
+      validateEvaluatedDefinitions(result.defs);
       // HTTP confirms revisions only after verification. WS metadata never becomes a cache validator.
       revision = result.revision;
       publish(result.defs);

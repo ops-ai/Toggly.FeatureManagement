@@ -5,7 +5,8 @@
  export let snapshot:TogglySnapshot;
  export let baseURI:string;
  let local=true;
- const toggly=createToggly(snapshot,{appKey:'frontend-fixture',baseURI,refreshInterval:200,timeout:2000,onError:()=>{throw Error('host browser observer failed');},localGates:[{id:'local',flagKeys:['on'],isEnabled:()=>local}]});
+ let failures=0;
+ const toggly=createToggly(snapshot,{appKey:'frontend-fixture',baseURI,refreshInterval:200,timeout:2000,onError:()=>{failures++;throw Error('host browser observer failed');},localGates:[{id:'local',flagKeys:['on'],isEnabled:()=>local}]});
  $: toggly.update(snapshot);
  $: enabled=$toggly && toggly.isEnabled('on');
  $: vip=$toggly && toggly.isEnabled('Order',{entity:{kind:'Order',key:'1',attributes:{Vip:true}}});
@@ -17,5 +18,6 @@
 <p data-testid="programmatic">{String(enabled)}</p><p data-testid="vip">{String(vip)}</p><p data-testid="no-entity">{String(noEntity)}</p>
 <Feature {toggly} feature={['on','off']} options={{requirement:'any'}}><p data-testid="any">ANY</p></Feature>
 <Feature {toggly} feature="off" options={{negate:true}}><p data-testid="negate">NEGATED</p></Feature>
+<output data-testid="refresh-errors">{failures}</output>
 <pre data-testid="snapshot">{JSON.stringify($toggly)}</pre>
 <button on:click={()=>{local=!local;toggly.notifyLocalGatesChanged();}}>Local prerequisite</button>

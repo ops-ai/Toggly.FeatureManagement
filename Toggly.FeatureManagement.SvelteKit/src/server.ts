@@ -2,6 +2,7 @@ import { error, type Handle, type RequestEvent } from '@sveltejs/kit';
 import type { TogglyClient, EvaluationContext } from '@ops-ai/toggly-node-core';
 import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
 import { selectDefinitions, type GateOptions, type TogglySnapshot, type TogglyEvaluationContext } from './types.js';
+import { validateEvaluatedDefinitions } from './validation.js';
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
 export { createTogglyClient } from '@ops-ai/toggly-node-core';
 export type { TogglyClient, TogglyServerConfig, EvaluationContext } from '@ops-ai/toggly-node-core';
@@ -57,6 +58,7 @@ export function createTogglyHandle(options: ServerOptions): Handle {
           'Accept-Language': context.request!.acceptLanguage ?? '',
           'cf-ipcountry': context.request!.country ?? '',
         } });
+        if (!result.notModified) validateEvaluatedDefinitions(result.defs);
         return { definitions: selectDefinitions((result.notModified ? definitions : result.defs) as TogglySnapshot['definitions'], frontend.expose), context: publicContext, expose: [...frontend.expose] };
       } catch (cause) {
         // Reporting must not turn a safe default snapshot into a failed request.

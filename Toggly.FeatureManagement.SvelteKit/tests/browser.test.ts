@@ -46,7 +46,11 @@ it.each(['unsigned','invalid','wrongkid','expired'])('rejects %s transport data 
 });
 it('uses default polling settings and tolerates errors without a callback',async()=>{
  vi.useFakeTimers();socket();vi.stubGlobal('fetch',vi.fn(async()=>new Response(null,{status:500})));
- const stop=connectBrowser(initial,{appKey:'frontend'},()=>{});await vi.advanceTimersByTimeAsync(1);stop();
+ const publish=vi.fn();const fetcher=vi.mocked(fetch);
+ const stop=connectBrowser(initial,{appKey:'frontend'},publish);
+ await vi.advanceTimersByTimeAsync(1);expect(fetcher).toHaveBeenCalledOnce();
+ await vi.advanceTimersByTimeAsync(180000);expect(fetcher).toHaveBeenCalledTimes(2);
+ expect(publish).not.toHaveBeenCalled();stop();expect(vi.getTimerCount()).toBe(0);
 });
 it.each(['update','flags-updated','{"type":"update"}','{"type":"flags-updated"}'])('refreshes unconditionally for an invalidation without an etag: %s',async(message)=>{
  vi.useFakeTimers();const Socket=socket();let enabled=true;

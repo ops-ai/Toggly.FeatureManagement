@@ -16,7 +16,7 @@ const run=(command,args,cwd,env={})=>new Promise((resolve,reject)=>{
  child.stdout.on('data',chunk=>{output+=chunk;process.stdout.write(chunk);});child.stderr.on('data',chunk=>{output+=chunk;process.stderr.write(chunk);});
  child.on('error',reject);child.on('close',code=>code===0?resolve(output):reject(new Error(`${command} exited ${code}`)));
 });
-let app;let server;let sockets;
+let app;let server;let sockets;const pending=[];
 try {
  await run('npm',['run','build'],root);
  await run('npm',['pack','--pack-destination',temporary],root);
@@ -36,13 +36,13 @@ try {
  let jwk=await crypto.subtle.exportKey('jwk',pair.publicKey);
  jwk.kid=createHash('sha1').update(Buffer.from(jwk.x,'base64url')).update(Buffer.from(jwk.y,'base64url')).digest('hex').toUpperCase()+'ES256';jwk.alg='ES256';
  const sign=async defs=>{const raw=JSON.stringify(defs);const timestamp=Math.floor(Date.now()/1000);const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw+'|'+timestamp));const signature=Buffer.from(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},pair.privateKey,digest)).toString('base64');return JSON.stringify({defs,signature,timestamp,kid:jwk.kid});};
- const state={enabled:true,revision:'r1',invalid:false,offline:false,delayUser:'',requests:[],connections:0,closes:0,jwks:0};
+ const state={enabled:true,revision:'r1',invalid:false,shape:null,offline:false,delayUser:'',requests:[],connections:0,closes:0,jwks:0,pending:0,completed:0};
  server=createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
   res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Headers','*');res.setHeader('Access-Control-Expose-Headers','ETag');
   if(req.method==='OPTIONS'){res.end();return;}
   if(url.pathname==='/control'){
-   const chunks=[];for await(const chunk of req)chunks.push(chunk);const changes=JSON.parse(Buffer.concat(chunks).toString()||'{}');const {message,rotate,...settings}=changes;if(rotate){pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);jwk=await crypto.subtle.exportKey('jwk',pair.publicKey);jwk.kid=createHash('sha1').update(Buffer.from(jwk.x,'base64url')).update(Buffer.from(jwk.y,'base64url')).digest('hex').toUpperCase()+'ES256';jwk.alg='ES256';}Object.assign(state,settings);if(message!==undefined)for(const socket of sockets.clients)socket.send(typeof message==='string'?message:JSON.stringify(message));res.end('{}');return;
+   const chunks=[];for await(const chunk of req)chunks.push(chunk);const changes=JSON.parse(Buffer.concat(chunks).toString()||'{}');const {message,rotate,release,...settings}=changes;if(rotate){pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);jwk=await crypto.subtle.exportKey('jwk',pair.publicKey);jwk.kid=createHash('sha1').update(Buffer.from(jwk.x,'base64url')).update(Buffer.from(jwk.y,'base64url')).digest('hex').toUpperCase()+'ES256';jwk.alg='ES256';}Object.assign(state,settings);if(release)for(const resume of pending.splice(0))resume();if(message!==undefined)for(const socket of sockets.clients)socket.send(typeof message==='string'?message:JSON.stringify(message));res.end('{}');return;
   }
   if(url.pathname==='/state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({...state,active:sockets.clients.size}));return;}
   if(url.pathname==='/.well-known/jwks'){state.jwks++;res.end(JSON.stringify({keys:[jwk]}));return;}
@@ -55,8 +55,9 @@ try {
    {featureKey:'Order',contextKind:'Order',filters:[{name:'ContextProperty',parameters:{Property:'Vip',Operator:'eq',Value:'true'}}]},
    {featureKey:'backend-rule-only',filters:[{name:'AlwaysOn'}]},
   ]:{on:state.enabled&&url.searchParams.get('u')==='alice',off:false,Order:{requirement:'all',rules:[{property:'Vip',op:'eq',value:'true',type:'boolean'}]},'not-exposed':true};
+  if(!backend&&state.shape!==null)defs.Order=state.shape;
   const body=state.invalid?'{}':await sign(defs);const revision=state.revision;
-  if(!backend&&state.delayUser&&url.searchParams.get('u')===state.delayUser)await new Promise(resolve=>setTimeout(resolve,650));
+  if(!backend&&state.delayUser&&url.searchParams.get('u')===state.delayUser){state.pending++;await new Promise(resolve=>pending.push(resolve));state.pending--;state.completed++;}
   if(!backend&&req.headers['if-none-match']===revision){res.writeHead(304,{ETag:revision});res.end();return;}
   res.setHeader('Content-Type','application/json');res.setHeader('ETag',revision);res.end(body);
  });
@@ -71,6 +72,7 @@ try {
  await run(process.execPath,[join(root,'node_modules/@playwright/test/cli.js'),'test','--config',join(temporary,'playwright.config.mjs')],root,{TOGGLY_HOST_DEFINITIONS:definitions});
  console.log('Packed SvelteKit host: typecheck, build, server/browser export boundary and Chromium protocol checks passed.');
 } finally {
+ for(const resume of pending.splice(0))resume();
  if(app){app.kill('SIGTERM');await Promise.race([once(app,'close'),new Promise(resolve=>setTimeout(resolve,3000))]);if(app.exitCode===null)app.kill('SIGKILL');}
  if(sockets){for(const socket of sockets.clients)socket.terminate();await new Promise(resolve=>sockets.close(resolve));}
  if(server)await new Promise(resolve=>server.close(resolve));
