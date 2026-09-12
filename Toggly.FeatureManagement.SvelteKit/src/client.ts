@@ -92,6 +92,11 @@ export function connectBrowser(
         // Invalid stored state must not prevent a fresh network attempt.
       });
   };
+  const validateUnchangedResponse = (unconditional: boolean): void => {
+    // A 304 can reuse only the verified snapshot that supplied this request's validator.
+    if (!revision || unconditional)
+      throw new Error('Unexpected 304 without a matching verified snapshot');
+  };
   const refresh = async (unconditional = false, pin?: string): Promise<void> => {
     if (disposed) return;
     active?.abort();
@@ -125,8 +130,7 @@ export function connectBrowser(
       );
       if (disposed || ownRequest !== requestId) return;
       if (result.notModified) {
-        if (!revision || unconditional)
-          throw new Error('Unexpected 304 without a matching verified snapshot');
+        validateUnchangedResponse(unconditional);
         return;
       }
       validateEvaluatedDefinitions(result.defs);
