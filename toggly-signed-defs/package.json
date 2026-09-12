@@ -26,12 +26,13 @@
     "dist"
   ],
   "scripts": {
-    "build": "npm run clean && tsc && tsc -p tsconfig.esm.json && node scripts/finalize-esm.mjs && tsc -p tsconfig.browser.json && node scripts/finalize-esm.mjs browser",
+    "build": "npm run clean && tsc && tsc -p tsconfig.esm.json && tsc -p tsconfig.browser.json && node scripts/select-crypto-provider.mjs && node scripts/finalize-esm.mjs && node scripts/finalize-esm.mjs browser",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:consumer": "npm run build && node scripts/verify-consumer-types.mjs",
     "prepublishOnly": "npm run clean && npm run build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "toggly",
@@ -60,7 +61,8 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "4.1.10",
     "typescript": "^5.0.0",
-    "vitest": "^4.1.5"
+    "vitest": "4.1.10"
   }
 }

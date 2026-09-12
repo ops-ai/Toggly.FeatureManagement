@@ -5,6 +5,10 @@
 2026-09-12
 
 ### Fixed
+- Retain Node 18 support through its built-in WebCrypto provider while keeping
+  the browser artifact free of Node imports.
+- Reject malformed DER sequence lengths, trailing bytes, and noncanonical
+  INTEGER encodings before verifying signatures.
 - Verify canonical ES256 signed definitions with WebCrypto in Node and browser
   consumers, avoiding the Node verifier's incompatible extra hash.
 - Add a browser export condition with a browser-specific ESM artifact, so

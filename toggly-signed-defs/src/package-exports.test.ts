@@ -43,6 +43,6 @@ describe('published ESM artifact', () => {
       .map((file) => readFileSync(join(browserDir, file), 'utf8'))
       .join('\n')
 
-    expect(browserSources).not.toMatch(/(?:from|require)\s*\(?['\"](?:node:)?crypto['\"]\)?/)
+    expect(browserSources).not.toMatch(/(?:from\s*|require\s*\(|import\s*\()\s*['"](?:node:|crypto['"])/)
   })
 })
