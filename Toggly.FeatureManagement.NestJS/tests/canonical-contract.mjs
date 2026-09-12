@@ -12,7 +12,17 @@ const listen = server => new Promise((resolve, reject) => { server.once('error',
 const stop = server => new Promise(resolve => server.close(resolve));
 async function eventually(assertion) {
   const deadline = Date.now() + 4000;
-  while (true) { try { await assertion(); return; } catch (error) { if (Date.now() >= deadline) throw error; await new Promise(resolve => setTimeout(resolve, 20)); } }
+  while (true) {
+    try {
+      await assertion();
+      return;
+    } catch (error) {
+      if (Date.now() >= deadline) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  }
 }
 // Shared behavioral contract runs once against source and again in an isolated
 // installed-tarball consumer. The fixtures are public Worker-format signatures,
