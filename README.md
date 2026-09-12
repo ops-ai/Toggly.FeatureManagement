@@ -50,6 +50,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 | Remix | `@ops-ai/remix-toggly-*` | [`Toggly.FeatureManagement.Remix`](Toggly.FeatureManagement.Remix) | [Docs](https://docs.toggly.io) |
 | HTML / CSS | CSS helpers | [`Toggly.FeatureManagement.Css`](Toggly.FeatureManagement.Css) | [Docs](https://docs.toggly.io) |
 | WordPress | WordPress plugin | [`Toggly.FeatureManagement.Wordpress`](Toggly.FeatureManagement.Wordpress) | [Docs](https://docs.toggly.io) |
+| .NET client / desktop | `Toggly.FeatureManagement.Client`, `Toggly.FeatureManagement.Client.Desktop` | [`Toggly.FeatureManagement.Client`](Toggly.FeatureManagement.Client) | [Docs](https://docs.toggly.io/sdks/dotnet-client) |
 
 ### Mobile
 
@@ -119,7 +120,3 @@ Most packages in this repository are licensed under the [MIT License](LICENSE). 
 - Questions and ideas: [GitHub Discussions](https://github.com/ops-ai/Toggly.FeatureManagement/discussions)
 - Bugs and features: [GitHub Issues](https://github.com/ops-ai/Toggly.FeatureManagement/issues/new/choose) (structured templates)
 - Code of conduct: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
-
-### Distributed .NET clients
-
-[Toggly.FeatureManagement.Client](Toggly.FeatureManagement.Client/) provides verified frontend feature flags for .NET 8 console and desktop apps, with a separate native storage/cryptography companion.
