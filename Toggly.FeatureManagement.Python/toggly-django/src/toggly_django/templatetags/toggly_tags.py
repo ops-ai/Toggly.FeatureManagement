@@ -106,11 +106,7 @@ def feature_gate(
         return False
 
     eval_context = get_context_from_request(request) if request else None
-    req = (
-        FeatureRequirement.ALL
-        if requirement.lower() == "all"
-        else FeatureRequirement.ANY
-    )
+    req = FeatureRequirement.ALL if requirement.lower() == "all" else FeatureRequirement.ANY
     return client.evaluate_gate(list(feature_keys), req, eval_context, negate)
 
 
@@ -121,9 +117,13 @@ def do_iffeature(parser: template.base.Parser, token: template.base.Token):
     Usage:
         {% iffeature 'my-feature' %}
             Feature is enabled!
-        {% else %}
+        {% endiffeature %}
+        {% iffeature 'my-feature' negate=True %}
             Feature is disabled!
         {% endiffeature %}
+
+    The optional negate value is a Django filter expression. Existing else
+    blocks remain supported for compatibility.
 
     Args:
         parser: Template parser.
@@ -133,10 +133,21 @@ def do_iffeature(parser: template.base.Parser, token: template.base.Token):
         IfFeatureNode for rendering.
     """
     bits = token.split_contents()
-    if len(bits) != 2:
+    if len(bits) < 2:
         raise template.TemplateSyntaxError(
-            f"'{bits[0]}' tag takes exactly one argument (feature key)"
+            f"'{bits[0]}' tag requires a feature key and optional negate=expression"
         )
+
+    negate = None
+    for option in bits[2:]:
+        name, separator, expression = option.partition("=")
+        if name != "negate" or not separator or not expression:
+            raise template.TemplateSyntaxError(
+                f"'{bits[0]}' tag only accepts the option negate=expression"
+            )
+        if negate is not None:
+            raise template.TemplateSyntaxError(f"'{bits[0]}' tag received duplicate negate options")
+        negate = parser.compile_filter(expression)
 
     feature_key = bits[1]
     # Remove quotes if present
@@ -154,7 +165,7 @@ def do_iffeature(parser: template.base.Parser, token: template.base.Token):
     else:
         nodelist_false = template.NodeList()
 
-    return IfFeatureNode(feature_key, nodelist_true, nodelist_false)
+    return IfFeatureNode(feature_key, nodelist_true, nodelist_false, negate)
 
 
 class IfFeatureNode(template.Node):
@@ -165,17 +176,20 @@ class IfFeatureNode(template.Node):
         feature_key: str,
         nodelist_true: template.NodeList,
         nodelist_false: template.NodeList,
+        negate: template.base.FilterExpression | None = None,
     ) -> None:
         """Initialize the node.
 
         Args:
             feature_key: The feature key to check.
             nodelist_true: Nodes to render if feature is enabled.
-            nodelist_false: Nodes to render if feature is disabled.
+            nodelist_false: Legacy else nodes to render if the final result is false.
+            negate: Optional expression resolved against each render's context.
         """
         self.feature_key = feature_key
         self.nodelist_true = nodelist_true
         self.nodelist_false = nodelist_false
+        self.negate = negate
 
     def render(self, context: template.Context) -> str:
         """Render the node.
@@ -193,6 +207,9 @@ class IfFeatureNode(template.Node):
         if client is not None:
             eval_context = get_context_from_request(request) if request else None
             is_enabled = client.is_enabled(self.feature_key, eval_context)
+
+        if self.negate is not None and self.negate.resolve(context):
+            is_enabled = not is_enabled
 
         if is_enabled:
             return self.nodelist_true.render(context)

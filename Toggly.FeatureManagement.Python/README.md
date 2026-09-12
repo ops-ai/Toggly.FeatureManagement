@@ -73,10 +73,13 @@ from toggly_django.decorators import feature_flag_required
 def new_dashboard(request):
     return render(request, 'new_dashboard.html')
 
-# templates
+# templates (toggly-django 0.4.0+)
 {% load toggly_tags %}
 {% iffeature 'new-feature' %}
     <div>New feature content!</div>
+{% endiffeature %}
+{% iffeature 'new-feature' negate=True %}
+    <div>Classic content</div>
 {% endiffeature %}
 ```
 
