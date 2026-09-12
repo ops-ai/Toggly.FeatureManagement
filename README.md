@@ -119,3 +119,7 @@ Most packages in this repository are licensed under the [MIT License](LICENSE). 
 - Questions and ideas: [GitHub Discussions](https://github.com/ops-ai/Toggly.FeatureManagement/discussions)
 - Bugs and features: [GitHub Issues](https://github.com/ops-ai/Toggly.FeatureManagement/issues/new/choose) (structured templates)
 - Code of conduct: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+
+### SolidJS
+
+[SolidJS SDK](Toggly.FeatureManagement.Solid/README.md) — native reactive browser flags, signed definitions, targeting, and lazy feature gates.
