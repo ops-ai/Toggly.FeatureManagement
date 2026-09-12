@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,10 +8,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 const packageDirectory = dirname(fileURLToPath(import.meta.url))
 const sdkDirectory = dirname(packageDirectory)
-const electronExecutable = process.platform === 'darwin'
-  ? join(sdkDirectory, 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron')
-  : join(sdkDirectory, 'node_modules', '.bin', 'electron')
-const electronApplication = join(sdkDirectory, 'node_modules', 'electron', 'dist', 'Electron.app')
+const require = createRequire(import.meta.url)
+const electronExecutable = require('electron') as string
+const electronApplication = dirname(dirname(dirname(electronExecutable)))
 const fixtureTimeoutMs = 15_000
 
 const fixtureDirectories: string[] = []
@@ -24,7 +24,26 @@ afterEach(async () => {
 type ElectronRunResult = {
   exitCode: number | null
   stderr: string
+  report: string | undefined
+  timedOut: boolean
   launchStrategy: 'direct' | 'launch-services'
+}
+
+async function readOptionalFile(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8')
+  } catch {
+    return undefined
+  }
+}
+
+function describeElectronRun(result: ElectronRunResult): string {
+  return [
+    `Electron preload fixture exited with ${result.exitCode} using ${result.launchStrategy}.`,
+    `timed out: ${result.timedOut}`,
+    `stderr:\n${result.stderr || '(empty)'}`,
+    `report:\n${result.report || '(missing)'}`,
+  ].join('\n')
 }
 
 function waitForElectronExit(
@@ -32,6 +51,9 @@ function waitForElectronExit(
   args: string[],
   env: NodeJS.ProcessEnv,
   launchStrategy: ElectronRunResult['launchStrategy'],
+  stderrPath: string,
+  reportPath: string,
+  electronPidPath: string,
 ): Promise<ElectronRunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -41,6 +63,7 @@ function waitForElectronExit(
 
     let stderr = ''
     let settled = false
+    let timedOut = false
     const settle = (result: ElectronRunResult | Error) => {
       if (settled) return
       settled = true
@@ -48,11 +71,17 @@ function waitForElectronExit(
       if (result instanceof Error) reject(result)
       else resolve(result)
     }
-    const timeout = setTimeout(() => {
+    const timeout = setTimeout(async () => {
+      timedOut = true
+      const electronPid = Number((await readOptionalFile(electronPidPath))?.trim())
+      if (Number.isSafeInteger(electronPid) && electronPid > 0) {
+        try {
+          process.kill(electronPid, 'SIGTERM')
+        } catch {
+          // The fixture may have already terminated while the timeout fired.
+        }
+      }
       child.kill('SIGTERM')
-      settle(new Error(
-        `Electron preload fixture timed out after ${fixtureTimeoutMs}ms using ${launchStrategy}.`,
-      ))
     }, fixtureTimeoutMs)
 
     child.stderr.setEncoding('utf8')
@@ -60,7 +89,17 @@ function waitForElectronExit(
       stderr += chunk
     })
     child.once('error', (error) => settle(error))
-    child.once('close', (exitCode) => settle({ exitCode, stderr, launchStrategy }))
+    child.once('close', async (exitCode) => {
+      const electronStderr = await readOptionalFile(stderrPath)
+      const report = await readOptionalFile(reportPath)
+      settle({
+        exitCode,
+        stderr: `${stderr}${electronStderr ?? ''}`,
+        report,
+        timedOut,
+        launchStrategy,
+      })
+    })
   })
 }
 
@@ -69,23 +108,35 @@ function runElectron(
   preloadPath: string,
   reportPath: string,
 ): Promise<ElectronRunResult> {
+  const stderrPath = join(fixtureDirectory, 'electron.stderr.log')
+  const electronPidPath = join(fixtureDirectory, 'electron.pid')
   const env = {
     ...process.env,
     ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
     TOGGLY_PRELOAD_PATH: preloadPath,
     TOGGLY_REPORT_PATH: reportPath,
+    TOGGLY_PID_PATH: electronPidPath,
   }
 
   if (process.platform === 'darwin') {
-    // LaunchServices initializes the Electron application in the same way as
-    // a user opening Electron.app. Directly spawning its Mach-O executable
-    // can abort inside AppKit before the ESM main module gets control.
+    // LaunchServices initializes Electron.app like a normal macOS application.
+    // The app bundle, not its Mach-O executable, is the supported launch target.
     return waitForElectronExit(
       '/usr/bin/open',
       [
-        '--wait-apps',
-        '--new',
-        '--hide',
+        '-W',
+        '-n',
+        '-g',
+        '--stderr',
+        stderrPath,
+        '--env',
+        `ELECTRON_DISABLE_SECURITY_WARNINGS=${env.ELECTRON_DISABLE_SECURITY_WARNINGS}`,
+        '--env',
+        `TOGGLY_PRELOAD_PATH=${preloadPath}`,
+        '--env',
+        `TOGGLY_REPORT_PATH=${reportPath}`,
+        '--env',
+        `TOGGLY_PID_PATH=${electronPidPath}`,
         electronApplication,
         '--args',
         fixtureDirectory,
@@ -95,6 +146,9 @@ function runElectron(
       ],
       env,
       'launch-services',
+      stderrPath,
+      reportPath,
+      electronPidPath,
     )
   }
 
@@ -103,6 +157,9 @@ function runElectron(
     [fixtureDirectory, '--headless', '--disable-gpu', '--disable-software-rasterizer'],
     env,
     'direct',
+    stderrPath,
+    reportPath,
+    electronPidPath,
   )
 }
 
@@ -136,6 +193,11 @@ const reportPath = process.env.TOGGLY_REPORT_PATH
 if (!reportPath) {
   throw new Error('TOGGLY_REPORT_PATH is required by the preload fixture')
 }
+const pidPath = process.env.TOGGLY_PID_PATH
+if (!pidPath) {
+  throw new Error('TOGGLY_PID_PATH is required by the preload fixture')
+}
+await writeFile(pidPath, String(process.pid))
 
 let finished = false
 const complete = async (exitCode, report) => {
@@ -184,10 +246,12 @@ app.whenReady().then(async () => {
     if (process.platform === 'darwin') {
       expect(result.launchStrategy).toBe('launch-services')
     }
-    expect(result.exitCode).toBe(0)
-    expect(withoutKnownMacDisplayDiagnostic(result.stderr)).toBe('')
+    expect(result.timedOut, describeElectronRun(result)).toBe(false)
+    expect(result.exitCode, describeElectronRun(result)).toBe(0)
+    expect(withoutKnownMacDisplayDiagnostic(result.stderr), describeElectronRun(result)).toBe('')
+    expect(result.report, describeElectronRun(result)).toBeDefined()
 
-    const report = JSON.parse(await readFile(reportPath, 'utf8')) as {
+    const report = JSON.parse(result.report!) as {
       completed: boolean
       bridge: string
       messages: Array<{ path: string; error: string }>
