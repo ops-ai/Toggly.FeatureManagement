@@ -1,0 +1,39 @@
+name: SolidJS SDK - Build & Publish
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    defaults:
+      run:
+        working-directory: Toggly.FeatureManagement.Solid
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - uses: ./.github/actions/resolve-release-version
+        id: release
+        with:
+          manifest_path: Toggly.FeatureManagement.Solid/package.json
+          registry: npm
+          package_name: '@ops-ai/solid-feature-flags-toggly'
+          release_mode: publish
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - run: npm run build
+      - run: npm pack --dry-run
+      - run: node tests/install-host.mjs
+      - run: npx --prefix tests/host playwright install --with-deps chromium
+      - run: cd tests/host && node verify.mjs
+      - name: Publish manifest version with provenance
+        if: steps.release.outputs.action == 'publish'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
