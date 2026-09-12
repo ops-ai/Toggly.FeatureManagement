@@ -64,6 +64,44 @@ public class EmbeddedCatalogCoordinatorTests
         coordinator.Diagnostics.StorageState.Should().Be(EmbeddedStorageState.Stale);
     }
 
+    [Fact]
+    public async Task RefreshAsync_UnchangedRevision_DoesNotRepublishOrNotifyDefinitions()
+    {
+        var store = new TestStore(EnabledSnapshot("one", "Feature"));
+        var state = new TogglyFeatureStateService();
+        var notifications = 0;
+        state.WhenDefinitionsChange(() => notifications++);
+        var coordinator = new EmbeddedCatalogCoordinator(store, new EmbeddedFeatureProvider(), new TogglyEmbeddedOptions { CatalogName = "Orders" }, state);
+
+        await coordinator.RefreshAsync(CancellationToken.None);
+        await coordinator.RefreshAsync(CancellationToken.None);
+
+        notifications.Should().Be(1);
+        coordinator.Diagnostics.StorageState.Should().Be(EmbeddedStorageState.Available);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_DeletionOfEnabledFeature_EmitsDisabledState()
+    {
+        var store = new TestStore(EnabledSnapshot("one", "Feature"));
+        var state = new TogglyFeatureStateService();
+        var offTransitions = 0;
+        state.WhenFeatureTurnsOff("Feature", () => offTransitions++);
+        var coordinator = new EmbeddedCatalogCoordinator(store, new EmbeddedFeatureProvider(), new TogglyEmbeddedOptions { CatalogName = "Orders" }, state);
+
+        await coordinator.RefreshAsync(CancellationToken.None);
+        store.Current = new CatalogSnapshot { CatalogName = "Orders", Revision = "two", UpdatedAtUtc = DateTimeOffset.UtcNow, Document = new CatalogDocument() };
+        await coordinator.RefreshAsync(CancellationToken.None);
+
+        offTransitions.Should().Be(1);
+    }
+
+    private static CatalogSnapshot EnabledSnapshot(string revision, string key) => new()
+    {
+        CatalogName = "Orders", Revision = revision, UpdatedAtUtc = DateTimeOffset.UtcNow,
+        Document = new CatalogDocument { Features = { new CatalogFeature { Key = key, Name = key, Enabled = true } } }
+    };
+
     private sealed class TestStore : ITogglyCatalogStore
     {
         public TestStore(CatalogSnapshot? current) => Current = current;

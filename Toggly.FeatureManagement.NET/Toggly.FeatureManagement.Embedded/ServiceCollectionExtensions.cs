@@ -43,8 +43,10 @@ public static class ServiceCollectionExtensions
         {
             var stores = p.GetServices<ITogglyCatalogStore>().ToArray();
             if (stores.Length != 1) throw new InvalidOperationException($"Toggly embedded requires exactly one ITogglyCatalogStore; found {stores.Length}.");
-            return new EmbeddedCatalogCoordinator(stores[0], p.GetRequiredService<EmbeddedFeatureProvider>(), p.GetRequiredService<IOptions<TogglyEmbeddedOptions>>().Value, p.GetRequiredService<IFeatureStateInternalService>());
+            return new EmbeddedCatalogCoordinator(stores[0], p.GetRequiredService<EmbeddedFeatureProvider>(), p.GetRequiredService<IOptions<TogglyEmbeddedOptions>>().Value, p.GetRequiredService<IFeatureStateInternalService>(), p.GetRequiredService<IEmbeddedClock>());
         });
+        services.TryAddSingleton<IEmbeddedClock, SystemEmbeddedClock>();
+        services.TryAddSingleton<IEmbeddedRefreshTimerFactory, PeriodicEmbeddedRefreshTimerFactory>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, EmbeddedCatalogRefreshService>());
         return services.AddTogglyFeatureManagement();
     }

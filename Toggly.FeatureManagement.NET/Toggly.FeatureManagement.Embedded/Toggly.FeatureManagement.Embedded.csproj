@@ -17,6 +17,9 @@
     <ProjectReference Include="..\Toggly.FeatureManagement.Catalog\Toggly.FeatureManagement.Catalog.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
     <None Include="..\README.md" Pack="true" PackagePath="" Link="README.md" />
   </ItemGroup>

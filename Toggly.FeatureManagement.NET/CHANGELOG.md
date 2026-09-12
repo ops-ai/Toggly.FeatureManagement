@@ -1,5 +1,13 @@
 # Changelog
 
+## Toggly.FeatureManagement.Embedded 0.1.0 - 2026-09-11
+
+### Added
+- Offline embedded catalog runtime with atomic definition publication, local refresh diagnostics, and no-op usage and metrics reporting.
+
+### Fixed
+- Initial catalog reads now have a hard timeout, unchanged revisions do not trigger definition notifications, and deleted enabled features notify state subscribers that they are off.
+
 ## Toggly.FeatureManagement.Catalog 0.1.0 - 2026-09-11
 
 ### Added
