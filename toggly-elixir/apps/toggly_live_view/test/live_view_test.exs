@@ -1,5 +1,6 @@
 defmodule Toggly.LiveViewTest do
   use ExUnit.Case
+  use Phoenix.Component
   import Phoenix.LiveViewTest
 
   setup do
@@ -14,7 +15,7 @@ defmodule Toggly.LiveViewTest do
     :ok
   end
 
-  test "assigns flags using socket-local context and declarative fallback slots" do
+  test "assigns flags using socket-local context and ordinary feature content" do
     socket = %Phoenix.LiveView.Socket{
       assigns: %{__changed__: %{}, toggly_context: %{"identity" => "alice"}}
     }
@@ -30,27 +31,57 @@ defmodule Toggly.LiveViewTest do
            }) =~ "ON"
   end
 
-  test "HEEx gates all, any, negate, default and fallback" do
-    flags = %{"on" => true, "off" => false}
+  test "feature exposes ordinary content without a disabled-content slot" do
+    slots = Toggly.LiveView.__components__().feature.slots
+    assert Enum.map(slots, & &1.name) == [:inner_block]
+  end
 
-    for {options, expect} <- [
-          {%{feature: ["on", "off"]}, "FALLBACK"},
-          {%{feature: ["on", "off"], requirement: :any}, "ON"},
-          {%{feature: "off", negate: true}, "ON"},
-          {%{feature: "missing", default: true}, "ON"}
+  test "paired HEEx blocks render exactly one branch for all, any and defaults" do
+    for {feature, requirement, default, expected} <- [
+          {"on", :all, false, "enabled"},
+          {"off", :all, false, "disabled"},
+          {["on", "off"], :all, false, "disabled"},
+          {["on", "off"], :any, false, "enabled"},
+          {["off", "missing"], :any, false, "disabled"},
+          {"missing", :all, true, "enabled"},
+          {"off", :all, true, "disabled"},
+          {[], :all, true, "disabled"},
+          {[], :any, true, "disabled"}
         ] do
-      assigns =
-        Map.merge(
-          %{
-            flags: flags,
-            inner_block: [%{inner_block: fn _, _ -> "ON" end}],
-            fallback: [%{inner_block: fn _, _ -> "FALLBACK" end}]
-          },
-          options
-        )
+      html =
+        render_component(&paired_features/1, %{
+          flags: %{"on" => true, "off" => false},
+          feature: feature,
+          requirement: requirement,
+          default: default
+        })
 
-      assert render_component(&Toggly.LiveView.feature/1, assigns) =~ expect
+      other = if expected == "enabled", do: "disabled", else: "enabled"
+      assert html =~ ~s(id="#{expected}")
+      refute html =~ ~s(id="#{other}")
     end
+  end
+
+  defp paired_features(assigns) do
+    ~H"""
+    <Toggly.LiveView.feature
+      flags={@flags}
+      feature={@feature}
+      requirement={@requirement}
+      default={@default}
+    >
+      <p id="enabled">Enabled</p>
+    </Toggly.LiveView.feature>
+    <Toggly.LiveView.feature
+      flags={@flags}
+      feature={@feature}
+      requirement={@requirement}
+      default={@default}
+      negate={true}
+    >
+      <p id="disabled">Disabled</p>
+    </Toggly.LiveView.feature>
+    """
   end
 end
 
@@ -61,12 +92,29 @@ end
 
 defmodule Toggly.TestLive do
   use Phoenix.LiveView
-  on_mount({Toggly.LiveView, {LiveHostFlags, ["audience"]}})
+  on_mount({Toggly.LiveView, {LiveHostFlags, ["audience", "always", "never"]}})
 
   def render(assigns) do
     ~H"""
     <div id="identity">{@toggly_context["identity"]}</div>
     <div id="result">{to_string(@toggly_flags["audience"])}</div>
+    <div :for={{id, keys, requirement} <- [
+      {"single", "audience", :all},
+      {"all", ["audience", "always"], :all},
+      {"any", ["audience", "never"], :any}
+    ]}>
+      <Toggly.LiveView.feature flags={@toggly_flags} feature={keys} requirement={requirement}>
+        <p id={id <> "-enabled"}>Enabled</p>
+      </Toggly.LiveView.feature>
+      <Toggly.LiveView.feature
+        flags={@toggly_flags}
+        feature={keys}
+        requirement={requirement}
+        negate={true}
+      >
+        <p id={id <> "-disabled"}>Disabled</p>
+      </Toggly.LiveView.feature>
+    </div>
     <div id="custom">{Map.get(assigns,:custom,"none")}</div>
     """
   end
@@ -110,6 +158,7 @@ defmodule Toggly.LiveHostTest do
         {Toggly,
          name: LiveHostFlags,
          app_key: "test",
+         defaults: %{"always" => true, "never" => false},
          signed: false,
          transport: transport,
          refresh_interval: 0,
@@ -134,6 +183,8 @@ defmodule Toggly.LiveHostTest do
 
     assert has_element?(alice, "#result", "true")
     assert has_element?(bob, "#result", "false")
+    assert_paired_branches(alice, "enabled")
+    assert_paired_branches(bob, "disabled")
 
     Agent.update(definitions, fn _ ->
       [
@@ -147,6 +198,8 @@ defmodule Toggly.LiveHostTest do
     Toggly.refresh(LiveHostFlags)
     assert has_element?(alice, "#result", "false")
     assert has_element?(bob, "#result", "true")
+    assert_paired_branches(alice, "disabled")
+    assert_paired_branches(bob, "enabled")
     assert has_element?(alice, "#identity", "alice")
     send(alice.pid, :custom)
     assert has_element?(alice, "#custom", "received")
@@ -170,6 +223,16 @@ defmodule Toggly.LiveHostTest do
     Process.sleep(150)
     Toggly.refresh(LiveHostFlags)
     assert has_element?(view, "#result", "true")
+    assert_paired_branches(view, "enabled")
     assert map_size(:sys.get_state(LiveHostFlags).subscribers) == 1
+  end
+
+  defp assert_paired_branches(view, expected) do
+    other = if expected == "enabled", do: "disabled", else: "enabled"
+
+    for gate <- ~w(single all any) do
+      assert has_element?(view, "##{gate}-#{expected}")
+      refute has_element?(view, "##{gate}-#{other}")
+    end
   end
 end

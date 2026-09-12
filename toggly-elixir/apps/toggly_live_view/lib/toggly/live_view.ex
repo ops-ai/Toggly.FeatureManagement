@@ -79,9 +79,8 @@ defmodule Toggly.LiveView do
   attr(:negate, :boolean, default: false)
   attr(:default, :boolean, default: false)
   slot(:inner_block, required: true)
-  slot(:fallback)
 
-  @doc "Renders the inner block or fallback from already evaluated socket-local boolean flags."
+  @doc "Renders ordinary content when the combined socket-local flags match; use negate for disabled content."
   def feature(assigns) do
     checks =
       for key <- List.wrap(assigns.feature),
@@ -96,8 +95,6 @@ defmodule Toggly.LiveView do
     ~H"""
     <%= if @enabled do %>
       {render_slot(@inner_block)}
-    <% else %>
-      {render_slot(@fallback)}
     <% end %>
     """
   end
