@@ -1,5 +1,6 @@
 defmodule Toggly.LiveView do
   @moduledoc "Socket-local feature assigns, supervised-client subscriptions and HEEx gates."
+
   use Phoenix.Component
   import Phoenix.LiveView, only: [connected?: 1, attach_hook: 4]
 
@@ -21,6 +22,8 @@ defmodule Toggly.LiveView do
     context = Map.get(socket.assigns, :toggly_context, Map.get(session, "toggly_context", %{}))
     socket = assign_feature_flags(socket, client, keys, context: context)
 
+    # Static HTTP renders do not subscribe. Each connected socket monitors
+    # the client and reevaluates using its own current authenticated context.
     socket =
       if connected?(socket) do
         socket
@@ -77,6 +80,7 @@ defmodule Toggly.LiveView do
   attr(:default, :boolean, default: false)
   slot(:inner_block, required: true)
   slot(:fallback)
+
   @doc "Renders the inner block or fallback from already evaluated socket-local boolean flags."
   def feature(assigns) do
     checks =

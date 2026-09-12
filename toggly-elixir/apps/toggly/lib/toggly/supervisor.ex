@@ -1,7 +1,9 @@
 defmodule Toggly.Supervisor do
   @moduledoc false
   use Supervisor
+
   def start_link(options), do: Supervisor.start_link(__MODULE__, options)
+
   @impl true
   def init(options) do
     name = Keyword.fetch!(options, :name)
@@ -16,6 +18,8 @@ defmodule Toggly.Supervisor do
         do: children ++ [{Toggly.WebSocket, options}],
         else: children
 
+    # A restarted client owns a new ETS table. Restart its socket too, so
+    # invalidation delivery always follows that client lifecycle.
     Supervisor.init(children, strategy: :rest_for_one)
   end
 end

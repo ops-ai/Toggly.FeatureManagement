@@ -1,5 +1,6 @@
 defmodule Toggly.Evaluator do
   @moduledoc "Canonical local filter evaluation. Unknown or malformed filters fail closed."
+
   @spec percentile(String.t(), String.t()) :: float()
   def percentile(identity, key) do
     <<value::little-unsigned-32, _::binary>> = :crypto.hash(:sha256, key <> "\n" <> identity)
@@ -12,6 +13,8 @@ defmodule Toggly.Evaluator do
     {entity, user} = Enum.split_with(filters, &(name(&1) == "ContextProperty"))
     requirement = Map.get(definition, "requirementType", "Any")
 
+    # Entity conditions form a mandatory gate independent of user targeting.
+    # An AlwaysOn user filter cannot bypass a required entity condition.
     entity_pass =
       entity == [] or
         (valid_entity?(definition, context) and

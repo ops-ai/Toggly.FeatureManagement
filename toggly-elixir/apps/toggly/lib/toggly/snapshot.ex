@@ -1,9 +1,11 @@
 defmodule Toggly.Snapshot do
   @moduledoc false
+
+  @max_bytes 5_242_880
+
   def read(nil), do: {:error, :disabled}
 
   # Limit allocation before decoding an application-owned file.
-  @max_bytes 5_242_880
   def read(path) do
     case File.open(path, [:read, :binary]) do
       {:ok, file} ->
@@ -32,6 +34,8 @@ defmodule Toggly.Snapshot do
     )
   end
 
+  # Context prevents accidental cross-application reuse, not malicious edits to
+  # local storage. The caller must still verify the original envelope bytes.
   def decode(body, opts) do
     case Toggly.JSON.decode!(body) do
       %{"version" => 1, "context" => scope, "envelope" => envelope, "jwks" => stored_keys}
@@ -69,13 +73,16 @@ defmodule Toggly.Snapshot do
   end
 
   defp context(opts) do
-    %{
-      "base_url" =>
-        String.trim_trailing(Keyword.get(opts, :base_url, "https://definitions.toggly.io"), "/"),
-      "app_key" => opts[:app_key] || "",
-      "environment" => Keyword.get(opts, :environment, "Production"),
-      "signed" => Keyword.get(opts, :signed, true)
-    }
+    # A stable ordered tuple partitions by trusted configuration without copying
+    # the backend SDK credential into the local record's metadata.
+    scope = [
+      String.trim_trailing(Keyword.get(opts, :base_url, "https://definitions.toggly.io"), "/"),
+      opts[:app_key] || "",
+      Keyword.get(opts, :environment, "Production"),
+      Keyword.get(opts, :signed, true)
+    ]
+
+    :crypto.hash(:sha256, :json.encode(scope)) |> Base.encode16(case: :lower)
   end
 
   def write(nil, _), do: :ok
@@ -83,6 +90,7 @@ defmodule Toggly.Snapshot do
   def write(_, body) when byte_size(body) > @max_bytes, do: {:error, :snapshot_too_large}
 
   def write(path, body) do
+    # Write beside the destination so rename atomically replaces the old record.
     temporary = path <> ".#{System.unique_integer([:positive])}.tmp"
 
     with :ok <- File.mkdir_p(Path.dirname(path)),

@@ -1,7 +1,9 @@
 defmodule Toggly.SignedClientTest do
   use ExUnit.Case
   import ExUnit.CaptureIO
+
   @fixture Jason.decode!(File.read!(Path.join(__DIR__, "fixtures/webcrypto.json")))
+
   test "accepts independent WebCrypto signature; fetched JWKS and trusted offline snapshot" do
     body = @fixture["body"]
     jwks = @fixture["jwks"]
@@ -222,6 +224,14 @@ defmodule Toggly.SignedClientTest do
     end
   end
 
+  test "scope fingerprint does not duplicate backend app credentials in the file" do
+    {path, _} = persisted_fixture()
+    record = Jason.decode!(File.read!(path))
+    assert is_binary(record["context"])
+    refute Map.has_key?(record, "app_key")
+    assert byte_size(record["context"]) == 64
+  end
+
   test "cold restore rejects corrupt envelope, public keys, scope, format and resource limits" do
     {path, original} = persisted_fixture()
 
@@ -245,10 +255,7 @@ defmodule Toggly.SignedClientTest do
           fn record ->
             update_in(record["jwks"]["keys"], fn [key] -> [Map.put(key, "exp", 1)] end)
           end,
-          fn record -> put_in(record["context"]["app_key"], "other") end,
-          fn record -> put_in(record["context"]["environment"], "Staging") end,
-          fn record -> put_in(record["context"]["base_url"], "https://other.example") end,
-          fn record -> put_in(record["context"]["signed"], false) end,
+          fn record -> put_in(record["context"], "invalid-scope") end,
           fn record -> put_in(record["version"], 2) end
         ] do
       File.write!(path, Jason.encode!(corrupt.(original)))
@@ -269,6 +276,7 @@ defmodule Toggly.SignedClientTest do
     assert_offline(path, false, max_signature_age_seconds: 60)
     assert_offline(path, false, app_key: "other")
     assert_offline(path, false, environment: "Staging")
+    assert_offline(path, false, signed: false)
     assert_offline(path, false, base_url: "https://other.example")
     assert_offline(path, true, allowed_kids: [hd(@fixture["jwks"]["keys"])["kid"]])
 
@@ -277,7 +285,15 @@ defmodule Toggly.SignedClientTest do
     File.write!(path, Jason.encode!(put_in(original["jwks"], %{"keys" => []})))
     assert_offline(path, true, jwks: @fixture["jwks"])
 
-    http = put_in(original["context"]["base_url"], "http://example.test")
+    http_scope =
+      Toggly.Snapshot.encode(@fixture["body"], @fixture["jwks"],
+        app_key: "test",
+        base_url: "http://example.test"
+      )
+      |> Jason.decode!()
+      |> Map.fetch!("context")
+
+    http = put_in(original["context"], http_scope)
     File.write!(path, Jason.encode!(http))
     assert_offline(path, false, base_url: "http://example.test")
   end

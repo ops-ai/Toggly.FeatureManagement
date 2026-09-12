@@ -35,6 +35,8 @@ defmodule Toggly.WebSocket do
 
   @impl true
   def handle_connect(_, state) do
+    # Connect/reconnect triggers a signed HTTP refresh. Socket frames never
+    # directly activate definitions or public verification keys.
     send(state.client, :invalidate)
     {:ok, %{state | delay: state.base_delay}}
   end
@@ -46,6 +48,7 @@ defmodule Toggly.WebSocket do
   end
 
   def handle_frame(_, state), do: {:ok, state}
+
   @impl true
   def handle_disconnect(_, state) do
     # This delay belongs only to the socket process; evaluations remain ETS reads.

@@ -1,5 +1,13 @@
 defmodule Toggly.Signature do
   @moduledoc "Verifies Toggly's ES256 signed definitions before they become active."
+
+  @doc """
+  Verifies the raw envelope against trusted public JWKS and current time policy.
+
+  Key IDs are derived from coordinates and may be independently allowlisted.
+  Caller-provided or persisted keys are a trust input; this function cannot
+  authenticate a simultaneous replacement of an unpinned envelope and keyset.
+  """
   @spec verify(binary(), map(), keyword()) :: {:ok, list(), integer()} | {:error, atom()}
   def verify(body, jwks, options \\ []) do
     max_age = validate_max_age!(Keyword.get(options, :max_signature_age_seconds))
@@ -30,6 +38,8 @@ defmodule Toggly.Signature do
           der
       end
 
+    # Preserve the server's exact JSON byte slice, including whitespace and
+    # number spelling. The protocol signs SHA256(SHA256(defs <> "|" <> time)).
     data = Toggly.JSON.raw_field!(body, "defs") <> "|" <> to_string(timestamp)
 
     true =
@@ -43,6 +53,7 @@ defmodule Toggly.Signature do
     _ -> {:error, :invalid_signature}
   end
 
+  # Bound cardinality and retain public verification parameters only.
   @doc false
   def public_jwks(%{"keys" => keys}) when is_list(keys) and length(keys) in 1..32 do
     public = Enum.map(keys, &public_key!/1)

@@ -30,11 +30,17 @@ defmodule Toggly.NetworkTest do
   use ExUnit.Case
 
   setup do
-    {:ok, script} =
-      Agent.start_link(fn ->
-        {200, Jason.encode!([%{"featureKey" => "live", "filters" => [%{"name" => "AlwaysOn"}]}]),
-         [{"etag", "v1"}]}
-      end)
+    # Start the response script before the listener under the same supervisor.
+    # Reverse-order shutdown keeps it alive until in-flight handlers stop.
+    script =
+      start_supervised!(
+        {Agent,
+         fn ->
+           {200,
+            Jason.encode!([%{"featureKey" => "live", "filters" => [%{"name" => "AlwaysOn"}]}]),
+            [{"etag", "v1"}]}
+         end}
+      )
 
     server =
       start_supervised!(

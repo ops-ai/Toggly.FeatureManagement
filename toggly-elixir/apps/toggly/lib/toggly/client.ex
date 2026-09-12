@@ -1,10 +1,12 @@
 defmodule Toggly.Client do
   @moduledoc false
   use GenServer
+
   alias Toggly.{JSON, Signature, Snapshot, Transport}
 
-  def start_link(opts),
-    do: GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
+  end
 
   @impl true
   def init(opts) do
@@ -73,6 +75,7 @@ defmodule Toggly.Client do
   @impl true
   def handle_cast({:usage, key, enabled, kind}, state) do
     bucket = {key, if(enabled, do: "enabled", else: "disabled"), kind}
+
     # Bound cardinality to configured features/defaults; never retain identity.
     usage =
       if Map.has_key?(state.definitions, key) or Map.has_key?(state.defaults, key),
@@ -141,6 +144,8 @@ defmodule Toggly.Client do
                {:ok, updated} <-
                  activate(body, %{state | jwks: jwks}, header(headers, "etag"), :remote) do
             publish(updated)
+            # Cache IO is best effort: verified live definitions remain active
+            # even when this host cannot persist a file.
             Snapshot.write(opts[:snapshot_path], Snapshot.encode(body, updated.jwks, opts))
 
             Enum.each(updated.subscribers, fn {pid, _} ->
@@ -204,20 +209,23 @@ defmodule Toggly.Client do
   end
 
   defp valid_definition?(%{"featureKey" => key, "filters" => filters})
-       when is_binary(key) and key != "" and is_list(filters),
-       do:
-         Enum.all?(filters, fn f ->
-           is_map(f) and is_binary(f["name"]) and is_map(Map.get(f, "parameters", %{}))
-         end)
+       when is_binary(key) and key != "" and is_list(filters) do
+    Enum.all?(filters, fn filter ->
+      is_map(filter) and is_binary(filter["name"]) and
+        is_map(Map.get(filter, "parameters", %{}))
+    end)
+  end
 
   defp valid_definition?(_), do: false
 
-  defp publish(state),
-    do:
-      :ets.insert(
-        state.name,
-        {:snapshot, Map.take(state, [:definitions, :defaults, :source, :revision, :timestamp])}
-      )
+  defp publish(state) do
+    # Readers receive an atomic view; subscribers and verification material stay
+    # private to the owner process rather than entering the evaluation table.
+    :ets.insert(
+      state.name,
+      {:snapshot, Map.take(state, [:definitions, :defaults, :source, :revision, :timestamp])}
+    )
+  end
 
   defp fetch_keys(state) do
     case request(state, :get, ".well-known/jwks", []) do
