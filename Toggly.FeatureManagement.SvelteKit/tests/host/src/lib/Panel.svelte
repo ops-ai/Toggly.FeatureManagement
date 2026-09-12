@@ -5,7 +5,7 @@
  export let snapshot:TogglySnapshot;
  export let baseURI:string;
  let local=true;
- const toggly=createToggly(snapshot,{appKey:'frontend-fixture',baseURI,refreshInterval:200,timeout:2000,localGates:[{id:'local',flagKeys:['on'],isEnabled:()=>local}]});
+ const toggly=createToggly(snapshot,{appKey:'frontend-fixture',baseURI,refreshInterval:200,timeout:2000,onError:()=>{throw Error('host browser observer failed');},localGates:[{id:'local',flagKeys:['on'],isEnabled:()=>local}]});
  $: toggly.update(snapshot);
  $: enabled=$toggly && toggly.isEnabled('on');
  $: vip=$toggly && toggly.isEnabled('Order',{entity:{kind:'Order',key:'1',attributes:{Vip:true}}});

@@ -59,7 +59,14 @@ export function createTogglyHandle(options: ServerOptions): Handle {
         } });
         return { definitions: selectDefinitions((result.notModified ? definitions : result.defs) as TogglySnapshot['definitions'], frontend.expose), context: publicContext, expose: [...frontend.expose] };
       } catch (cause) {
-        options.frontend.onError?.(cause);
+        // Reporting must not turn a safe default snapshot into a failed request.
+        try {
+          void Promise.resolve(options.frontend.onError?.(cause)).catch(() => {
+            // A rejected observer cannot invalidate the fallback snapshot.
+          });
+        } catch {
+          // Synchronous observers are isolated from request handling too.
+        }
         return { definitions, context: publicContext, expose: [...frontend.expose] };
       }
     };

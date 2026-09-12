@@ -18,7 +18,16 @@ export function connectBrowser(snapshot: TogglySnapshot, options: BrowserOptions
   let reconnect: ReturnType<typeof setTimeout> | undefined;
   let debounce: ReturnType<typeof setTimeout> | undefined;
   let attempts = 0;
-  const report = (cause: unknown) => { options.onError?.('Toggly signed refresh failed', cause); };
+  const report = (cause: unknown) => {
+    // Observers cannot interrupt recovery, including accidentally async callbacks.
+    try {
+      void Promise.resolve(options.onError?.('Toggly signed refresh failed', cause)).catch(() => {
+        // Rejected observers must not become unhandled refresh failures.
+      });
+    } catch {
+      // Synchronous observers must not prevent retries or cleanup either.
+    }
+  };
   const refresh = async (unconditional = false, pin?: string): Promise<void> => {
     if (disposed) return;
     active?.abort();

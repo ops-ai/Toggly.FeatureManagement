@@ -7,3 +7,4 @@
 - Explicitly allowlisted signed frontend hydration that preserves entity gates and never serializes backend configuration.
 - Layout-owned Svelte store, declarative Feature component, all/any/negate/defaults, local gates, navigation replacement and disposal.
 - Layout-owned refresh and WebSocket lifecycle around shared signed transport, with unconditional invalidations, verified conditional polling, key rotation, cancellation and in-memory recovery.
+- Isolate throwing or rejecting error observers so server defaults, browser recovery and cleanup remain reliable.

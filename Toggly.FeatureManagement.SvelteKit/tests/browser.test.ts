@@ -91,3 +91,49 @@ it('backs off failed sockets, recovers without browser socket support, and cance
  vi.stubGlobal('WebSocket',undefined);const withoutSocket=connectBrowser(initial,{appKey:'frontend',refreshInterval:0},()=>{});withoutSocket();
  vi.stubGlobal('fetch',vi.fn(()=>new Promise(()=>{})));const pending=connectBrowser(initial,{appKey:'frontend',refreshInterval:0},()=>{});pending();expect(vi.getTimerCount()).toBe(0);
 });
+it.each(['throw', 'reject'])('retains verified browser state and cleans up when an error observer fails: %s', async (mode) => {
+ vi.useFakeTimers();
+ const Socket = socket();
+ let online = true;
+ const observer = vi.fn(() => {
+  if (mode === 'throw') throw Error('observer failed');
+  return Promise.reject(Error('observer rejected'));
+ });
+ const fetcher = vi.fn(async (input: any) => {
+  if (!online) throw Error('offline');
+  return new Response(String(input).endsWith('/.well-known/jwks') ? JSON.stringify({ keys: [jwk] }) : envelope({ on: true }));
+ });
+ vi.stubGlobal('fetch', fetcher);
+ const t = createToggly(initial, { appKey: 'frontend', refreshInterval: 100, onError: observer });
+ await t.start();
+ await vi.waitFor(() => expect(t.isEnabled('on')).toBe(true));
+ online = false;
+ await vi.waitFor(() => expect(observer).toHaveBeenCalled());
+ expect(t.isEnabled('on')).toBe(true);
+ Socket.all[0].onclose();
+ await vi.advanceTimersByTimeAsync(5000);
+ expect(Socket.all).toHaveLength(2);
+ t.dispose();
+ const requests = fetcher.mock.calls.length;
+ await vi.advanceTimersByTimeAsync(10000);
+ expect(fetcher).toHaveBeenCalledTimes(requests);
+ expect(vi.getTimerCount()).toBe(0);
+});
+it.each(['throw', 'reject'])('retries failed WebSocket construction despite an error observer failure: %s', async (mode) => {
+ vi.useFakeTimers();
+ vi.stubGlobal('window', {});
+ let attempts = 0;
+ vi.stubGlobal('WebSocket', class { constructor() { attempts++; throw Error('socket unavailable'); } });
+ vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 503 })));
+ const t = createToggly(initial, { appKey: 'frontend', refreshInterval: 0, onError: () => {
+  if (mode === 'throw') throw Error('observer failed');
+  return Promise.reject(Error('observer rejected'));
+ } });
+ await expect(t.start()).resolves.toBeUndefined();
+ await vi.advanceTimersByTimeAsync(5000);
+ expect(attempts).toBe(2);
+ t.dispose();
+ await vi.advanceTimersByTimeAsync(10000);
+ expect(attempts).toBe(2);
+ expect(vi.getTimerCount()).toBe(0);
+});

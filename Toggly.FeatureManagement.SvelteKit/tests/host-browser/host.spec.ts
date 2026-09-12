@@ -27,6 +27,8 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
  await request.post(definitions+'/control',{data:{rotate:true,message:{type:'signing-key-updated'}}});await expect.poll(async()=>(await (await request.get(definitions+'/state')).json()).jwks).toBeGreaterThan(before);
  await request.post(definitions+'/control',{data:{invalid:true,message:'update'}});await page.waitForTimeout(550);await expect(page.getByTestId('on')).toBeVisible();
  await request.post(definitions+'/control',{data:{invalid:false,offline:true}});await page.waitForTimeout(350);await expect(page.getByTestId('on')).toBeVisible();
+ // Throwing server observers must leave the exposed default snapshot usable.
+ const offlineSSR=await request.get('/one?user=alice');expect(offlineSSR.status()).toBe(200);expect(await offlineSSR.text()).toContain('data-testid="off"');
  await request.post(definitions+'/control',{data:{offline:false,delayUser:'alice',message:'update'}});await page.waitForTimeout(330);await page.getByRole('link',{name:'Bob',exact:true}).click();await expect(page.getByTestId('off')).toBeVisible();await page.waitForTimeout(750);await expect(page.getByTestId('off')).toBeVisible();
  await page.getByRole('button',{name:'Toggle owner'}).click();await expect.poll(async()=>(await (await request.get(definitions+'/state')).json()).active).toBe(0);
  const state=await (await request.get(definitions+'/state')).json();await page.waitForTimeout(400);expect((await (await request.get(definitions+'/state')).json()).requests.length).toBe(state.requests.length);

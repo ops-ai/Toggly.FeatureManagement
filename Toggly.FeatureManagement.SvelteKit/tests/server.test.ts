@@ -82,3 +82,20 @@ it('captures absent headers, supports array guards, handles 304 and errors witho
   expect((await loadToggly(e)).definitions.on).toBe(true);await requireFeature(e,['on']);
  }await client.close();
 });
+it.each(['throw', 'reject'])('preserves exposed server defaults when the error observer fails: %s', async (mode) => {
+ const client = createTogglyClient();
+ await client.init();
+ vi.stubGlobal('fetch', vi.fn(async () => { throw Error('offline'); }));
+ const onError = vi.fn(() => {
+  if (mode === 'throw') throw Error('observer failed');
+  return Promise.reject(Error('observer rejected'));
+ });
+ const e = event();
+ await createTogglyHandle({ client, frontend: {
+  appKey: 'frontend', expose: ['fallback'], featureDefaults: { fallback: true, private: true }, onError,
+ } })({ event: e, resolve: async () => new Response() } as any);
+ try {
+  await expect(loadToggly(e)).resolves.toMatchObject({ definitions: { fallback: true } });
+  expect(onError).toHaveBeenCalledOnce();
+ } finally { await client.close(); }
+});
