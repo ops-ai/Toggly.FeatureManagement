@@ -50,12 +50,14 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 | Remix | `@ops-ai/remix-toggly-*` | [`Toggly.FeatureManagement.Remix`](Toggly.FeatureManagement.Remix) | [Docs](https://docs.toggly.io) |
 | HTML / CSS | CSS helpers | [`Toggly.FeatureManagement.Css`](Toggly.FeatureManagement.Css) | [Docs](https://docs.toggly.io/sdks/css) |
 | WordPress | WordPress plugin | [`Toggly.FeatureManagement.Wordpress`](Toggly.FeatureManagement.Wordpress) | [Docs](https://docs.toggly.io) |
+| .NET client / desktop | `Toggly.FeatureManagement.Client`, `Toggly.FeatureManagement.Client.Desktop` | [`Toggly.FeatureManagement.Client`](Toggly.FeatureManagement.Client) | [Docs](https://docs.toggly.io/sdks/dotnet-client) |
 
 ### Mobile
 
 | Platform | Package | Path | Docs |
 |----------|---------|------|------|
 | Flutter | `feature_flags_toggly` (+ storage packages) | [`Toggly.FeatureManagement.Flutter`](Toggly.FeatureManagement.Flutter) | [Docs](https://docs.toggly.io/sdks/flutter) |
+| Electron | `@ops-ai/electron-feature-flags-toggly` | [`Toggly.FeatureManagement.Electron`](Toggly.FeatureManagement.Electron) | [Docs](https://docs.toggly.io/sdks/electron) |
 | React Native | `@ops-ai/react-native-toggly*` | [`Toggly.FeatureManagement.ReactNative`](Toggly.FeatureManagement.ReactNative) | [Docs](https://docs.toggly.io) |
 | Android | `io.toggly:toggly-android-*` | [`Toggly.FeatureManagement.Android`](Toggly.FeatureManagement.Android) | [Docs](https://docs.toggly.io) |
 | iOS | Swift Package `Toggly` | [`Toggly.FeatureManagement.iOS`](Toggly.FeatureManagement.iOS) | [Docs](https://docs.toggly.io) |
@@ -64,6 +66,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 
 | Platform | Package | Path | Docs |
 |----------|---------|------|------|
+| Elixir / Phoenix / LiveView | `toggly`, `toggly_phoenix`, `toggly_live_view` | [`toggly-elixir`](toggly-elixir/) | [Docs](https://docs.toggly.io/sdks/elixir) |
 | .NET | `Toggly.FeatureManagement` (+ Hangfire, storage, NSwag, …) | [`Toggly.FeatureManagement.NET`](Toggly.FeatureManagement.NET) | [Docs](https://docs.toggly.io) |
 | Node.js | `@ops-ai/toggly-node-core`, Express / Fastify / Hono / Koa | [`Toggly.FeatureManagement.Node`](Toggly.FeatureManagement.Node) | [Docs](https://docs.toggly.io) |
 | Python | `toggly` (+ cache / framework packages) | [`Toggly.FeatureManagement.Python`](Toggly.FeatureManagement.Python) | [Docs](https://docs.toggly.io) |
