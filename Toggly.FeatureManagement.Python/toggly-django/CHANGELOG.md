@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 - 2026-09-12
+
+### Added
+- Optional `negate=True` or Django filter expression on `iffeature` blocks.
+  Use matching positive and negated blocks for enabled and disabled content.
+
+### Compatibility
+- Existing feature-key interpretation and legacy `else` blocks remain supported.
+  Negation changes only the final rendering decision; request context, decorators
+  and programmatic helpers are unchanged.
+
 ## 0.3.0 - 2026-09-08
 
 ### Added
