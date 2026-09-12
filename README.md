@@ -119,3 +119,7 @@ Most packages in this repository are licensed under the [MIT License](LICENSE). 
 - Questions and ideas: [GitHub Discussions](https://github.com/ops-ai/Toggly.FeatureManagement/discussions)
 - Bugs and features: [GitHub Issues](https://github.com/ops-ai/Toggly.FeatureManagement/issues/new/choose) (structured templates)
 - Code of conduct: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+
+### NestJS
+
+[`@ops-ai/toggly-nestjs`](Toggly.FeatureManagement.NestJS) provides HTTP modules, request-scoped evaluation and declarative guards for NestJS 10/11. [Documentation](https://docs.toggly.io/sdks/nestjs).

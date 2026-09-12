@@ -1,0 +1,60 @@
+name: NestJS SDK - Build and Publish
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22, 24]
+        nest: [10, 11]
+    defaults:
+      run:
+        working-directory: Toggly.FeatureManagement.NestJS
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: Toggly.FeatureManagement.NestJS/package-lock.json
+      - run: npm ci
+      - name: Install host compatibility version
+        run: npm install --no-save @nestjs/common@${{ matrix.nest }} @nestjs/core@${{ matrix.nest }} @nestjs/testing@${{ matrix.nest }} @nestjs/platform-express@${{ matrix.nest }}
+      - run: npm run typecheck && npm run build && npm run test:coverage
+  publish:
+    needs: test
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    defaults:
+      run:
+        working-directory: Toggly.FeatureManagement.NestJS
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - run: npm ci && npm run build
+      - name: Resolve manifest version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: Toggly.FeatureManagement.NestJS/package.json
+          registry: npm
+          package_name: '@ops-ai/toggly-nestjs'
+          release_mode: publish
+      - name: Verify package
+        if: steps.release.outputs.action == 'publish'
+        uses: ./.github/actions/verify-package-tarball
+        with:
+          package_dir: Toggly.FeatureManagement.NestJS
+      - name: Publish manifest version
+        if: steps.release.outputs.action == 'publish'
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
