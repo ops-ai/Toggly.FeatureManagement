@@ -69,6 +69,8 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     loading: false,
     error: undefined,
   };
+  // Signed SSR and accepted cache/network values are authoritative for this context.
+  let hasAcceptedState = initialSnapshot?.source === 'signed';
   let gates = options.localGates ?? [];
   let gateIndex = buildFlagGateIndex(gates);
   const listeners = new Set<(state: ClientState) => void>();
@@ -94,13 +96,15 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
   const isCurrent = (current: number) => current === generation && !disposed;
 
   function restoreCached(scope: string, current: number): Promise<void> | undefined {
-    if (!config.verifySignatures) return;
+    if (!config.verifySignatures || hasAcceptedState) return;
     return persistence
       .read(scope, config, timestamps.get(scope) ?? 0)
       ?.then((verified) => {
         if (!isCurrent(current)) return;
         timestamps.set(scope, verified.timestamp);
-        emit({ definitions: selectDefinitions(verified.definitions, expose) });
+        const definitions = selectDefinitions(verified.definitions, expose);
+        hasAcceptedState = true;
+        emit({ definitions });
       })
       .catch(() => {
         /* Invalid or expired storage cannot block network recovery. */
@@ -140,7 +144,9 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
         persistence.write(scope, body, verified.keys);
       }
       // Complete validation precedes state, persistence and revision adoption.
-      emit({ definitions: selectDefinitions(definitions, expose) });
+      const projected = selectDefinitions(definitions, expose);
+      hasAcceptedState = true;
+      emit({ definitions: projected });
     }
     revision = result.revision ?? revision;
   }
@@ -252,6 +258,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       revision = null;
       expose = [...snapshot.expose];
       context = publicContext(snapshot.context);
+      hasAcceptedState = snapshot.source === 'signed';
       emit({ definitions, loading: false, error: undefined });
     },
     state: () => state,
@@ -291,6 +298,8 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     async setContext(next: TogglyEvaluationContext) {
       if (disposed) return;
       context = { ...context, ...structuredClone(next) };
+      // The new context may restore its own cache, but never reuse prior-user state.
+      hasAcceptedState = false;
       // Never display the previous user's flags while a new user's request is pending.
       revision = null;
       emit({ definitions: selectDefinitions(config.flagDefaults ?? {}, expose), error: undefined });

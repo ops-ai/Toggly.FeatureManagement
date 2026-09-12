@@ -19,6 +19,138 @@ function memoryStorage() {
 }
 
 describe('verified persistent storage', () => {
+  it.each(['initial snapshot', 'later hydration'])(
+    'preserves authoritative signed %s over older cache while fully offline',
+    async (entry) => {
+      const storage = memoryStorage();
+      const initial = createClient({
+        appKey: 'front',
+        identity: 'alice',
+        storage,
+        fetch: async (input) =>
+          new Response(
+            String(input).includes('.well-known') ? JSON.stringify(jwks) : envelope({ on: false }),
+          ),
+      });
+      await initial.refresh();
+      initial.dispose();
+      const snapshot = {
+        definitions: { on: true },
+        context: { identity: 'alice' },
+        expose: ['on'],
+        source: 'signed' as const,
+      };
+      const read = vi.spyOn(storage, 'getItem');
+      const client = createClient(
+        {
+          appKey: 'front',
+          identity: 'alice',
+          storage,
+          fetch: async () => {
+            throw new Error('Every network request disabled');
+          },
+        },
+        entry === 'initial snapshot' ? snapshot : undefined,
+      );
+      try {
+        if (entry === 'later hydration') client.hydrate(snapshot);
+        expect(client.flags()).toEqual({ on: true });
+        read.mockClear();
+        await client.refresh();
+        await client.refresh();
+        expect(client.flags()).toEqual({ on: true });
+        expect(read).not.toHaveBeenCalled();
+      } finally {
+        client.dispose();
+      }
+    },
+  );
+
+  it.each(['network', 'cache'])(
+    'does not reread storage after accepted %s state',
+    async (source) => {
+      const storage = memoryStorage();
+      let offline = false;
+      const options = {
+        appKey: 'front',
+        identity: 'alice',
+        storage,
+        fetch: async (input: any) => {
+          if (offline) throw new Error('Every network request disabled');
+          return new Response(
+            String(input).includes('.well-known') ? JSON.stringify(jwks) : envelope({ on: true }),
+          );
+        },
+      };
+      const original = createClient(options);
+      await original.refresh();
+      offline = true;
+      const client = source === 'network' ? original : createClient(options);
+      if (source === 'cache') {
+        original.dispose();
+        await client.refresh();
+      }
+      const read = vi.spyOn(storage, 'getItem');
+      try {
+        await client.refresh();
+        expect(client.flags()).toEqual({ on: true });
+        expect(read).not.toHaveBeenCalled();
+      } finally {
+        client.dispose();
+      }
+    },
+  );
+
+  it('resets accepted state for a new context and fallback hydration without showing prior flags', async () => {
+    const storage = memoryStorage();
+    const seed = createClient({
+      appKey: 'front',
+      identity: 'alice',
+      storage,
+      fetch: async (input) =>
+        new Response(
+          String(input).includes('.well-known') ? JSON.stringify(jwks) : envelope({ on: true }),
+        ),
+    });
+    await seed.refresh();
+    seed.dispose();
+    const client = createClient(
+      {
+        appKey: 'front',
+        identity: 'bob',
+        storage,
+        fetch: async () => {
+          throw new Error('Every network request disabled');
+        },
+      },
+      {
+        definitions: { previousUser: true },
+        context: { identity: 'bob' },
+        expose: ['on', 'previousUser'],
+        source: 'signed',
+      },
+    );
+    try {
+      const switching = client.setContext({ identity: 'alice' });
+      expect(client.flags()).toEqual({});
+      await switching;
+      expect(client.flags()).toEqual({ on: true });
+      await client.setContext({ identity: 'uncached' });
+      expect(client.flags()).toEqual({});
+      client.hydrate({
+        definitions: {},
+        context: { identity: 'alice' },
+        expose: ['on'],
+        source: 'defaults',
+      });
+      expect(client.flags()).toEqual({});
+      await client.refresh();
+      expect(client.flags()).toEqual({ on: true });
+    } finally {
+      client.dispose();
+    }
+  });
+
   it('does not let a retired in-flight JWKS fetch refill the new key cache', async () => {
     class Socket {
       static current: Socket;

@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Preserve signed SSR/hydration and accepted memory over persisted records; restore only for defaults after a fresh start or context reset.
 - Restore verified definitions after a fully offline restart by persisting the exact signed envelope and its verified public key in opt-in, targeting-scoped storage.
 - Revalidate key constraints, signature age and full entity schema on restore, retire historical storage on key rotation, and reject older signed state within each running context.
 - Separate refresh cache, transport and acceptance steps while preserving signed state and revision behavior.
