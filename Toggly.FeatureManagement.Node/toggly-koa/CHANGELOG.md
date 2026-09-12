@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+2026-09-12
+
+### Added
+- Support Koa 3 alongside the retained Koa 2 integration. Packed Koa 2 and
+  Koa 3 host fixtures typecheck and verify request-scoped identity, local
+  feature gates, refresh, signed-definition rejection, and shutdown
+  [OPS-1182].
+
 ## 0.3.0
 
 2026-09-04

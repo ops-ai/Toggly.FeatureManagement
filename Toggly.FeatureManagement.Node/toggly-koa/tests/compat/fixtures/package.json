@@ -1,0 +1,16 @@
+{
+  "name": "toggly-koa-packed-host-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "verify": "node .compiled/verify.test.js",
+    "verify:cjs": "node .compiled/verify-cjs.test.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "koa": "0.0.0",
+    "@types/koa": "0.0.0",
+    "typescript": "^5.9.3"
+  }
+}
