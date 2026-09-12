@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-koa",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Toggly feature flags Koa middleware",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -58,7 +58,7 @@
     "node": ">=18.0.0"
   },
   "peerDependencies": {
-    "koa": "^2.0.0"
+    "koa": "^2.0.0 || ^3.0.0"
   },
   "dependencies": {
     "@ops-ai/toggly-node-core": "workspace:^"

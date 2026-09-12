@@ -126,6 +126,28 @@
   ],
   "families": [
     {
+      "name": "distributed-client",
+      "sdkRoot": "Toggly.FeatureManagement.Client",
+      "changelog": "Toggly.FeatureManagement.Client/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-dotnet-release.yml",
+      "packages": [
+        {
+          "id": "Toggly.FeatureManagement.Client",
+          "project": "src/Toggly.FeatureManagement.Client/Toggly.FeatureManagement.Client.csproj"
+        },
+        {
+          "id": "Toggly.FeatureManagement.Client.Desktop",
+          "project": "src/Toggly.FeatureManagement.Client.Desktop/Toggly.FeatureManagement.Client.Desktop.csproj",
+          "dependencies": [
+            "Toggly.FeatureManagement.Client"
+          ]
+        }
+      ],
+      "testProject": "Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests",
+      "coverageSettings": "Toggly.FeatureManagement.Client/coverage.runsettings",
+      "coverageCheck": "Toggly.FeatureManagement.Client/check-coverage.py"
+    },
+    {
       "name": "blazor",
       "sdkRoot": "Toggly.FeatureManagement.Blazor",
       "changelog": "Toggly.FeatureManagement.Blazor/CHANGELOG.md",

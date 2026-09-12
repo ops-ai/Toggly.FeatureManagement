@@ -1,0 +1,132 @@
+{
+  "name": "@ops-ai/electron-feature-flags-toggly",
+  "version": "1.0.0",
+  "description": "Toggly feature flags SDK for Electron — main-process evaluated-signed client with Flutter-like renderer DX",
+  "keywords": [
+    "feature-flags",
+    "feature-toggles",
+    "toggly",
+    "electron",
+    "desktop",
+    "feature-management",
+    "experimentation"
+  ],
+  "author": "Toggly <support@toggly.io>",
+  "license": "MIT",
+  "homepage": "https://docs.toggly.io/sdks/electron",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.Electron"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./main": {
+      "import": {
+        "types": "./dist/main/index.d.ts",
+        "default": "./dist/main/index.js"
+      },
+      "require": {
+        "types": "./dist/main/index.d.cts",
+        "default": "./dist/main/index.cjs"
+      }
+    },
+    "./preload": {
+      "import": {
+        "types": "./dist/preload/index.d.ts",
+        "default": "./dist/preload/index.js"
+      },
+      "require": {
+        "types": "./dist/preload/index.d.cts",
+        "default": "./dist/preload/index.cjs"
+      }
+    },
+    "./renderer": {
+      "import": {
+        "types": "./dist/renderer/index.d.ts",
+        "default": "./dist/renderer/index.js"
+      },
+      "require": {
+        "types": "./dist/renderer/index.d.cts",
+        "default": "./dist/renderer/index.cjs"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/react/index.d.ts",
+        "default": "./dist/react/index.js"
+      },
+      "require": {
+        "types": "./dist/react/index.d.cts",
+        "default": "./dist/react/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@ops-ai/toggly-hooks-types": "^1.4.3",
+    "@ops-ai/toggly-local-gates": "^1.0.1",
+    "@ops-ai/toggly-signed-defs": "^1.2.3",
+    "ws": "^8.0.0"
+  },
+  "peerDependencies": {
+    "electron": ">=28",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "electron": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.12",
+    "@types/react": "^18.3.18",
+    "@types/ws": "^8.0.0",
+    "@vitest/coverage-v8": "^3.0.4",
+    "electron": "^28.3.3",
+    "react": "^18.3.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

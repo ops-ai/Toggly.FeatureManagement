@@ -173,11 +173,12 @@ The inventory in `package-registry/nuget-packages.json` owns package IDs, projec
 paths, family tests and changelogs. Adding a publishable C# project without an
 inventory record fails validation. Do not create another NuGet release workflow.
 
-Select `all`, an exact family name (`server`, `distributed-client`), package IDs,
-or the existing server aliases such as `Core` and `Web`. Dependencies present in
-the inventory are included automatically and published first. Each package is
-compared to NuGet independently: an already published server version does not
-skip an unpublished client. Each selected family runs tests/coverage before
+Select `all`, an exact family name (`server`, `distributed-client`, `blazor`),
+package IDs, or the existing server aliases such as `Core` and `Web`.
+Dependencies present in the inventory are included automatically and published
+first. Each package is compared to NuGet independently: an already published
+server version does not skip an unpublished client. Each selected family runs
+tests/coverage before
 artifacts are packed and verified; signing and publication use those artifacts.
 
 The default `publish` mode uses every package's manifest version. Legacy

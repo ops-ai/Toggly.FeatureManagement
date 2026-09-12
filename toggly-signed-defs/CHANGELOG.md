@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.2.7
+
+2026-09-12
+
+### Fixed
+- Carry browser WebCrypto provider selection inside both compiled module trees,
+  so legacy main/module resolution and dist-only dependency overlays stay browser
+  safe. Preserve Node 18 CJS/ESM providers and signature validation [OPS-1176].
+
+## 1.2.6
+
+2026-09-12
+
+### Fixed
+- Retain Node 18 support through its built-in WebCrypto provider while keeping
+  the browser artifact free of Node imports.
+- Reject malformed DER sequence lengths, trailing bytes, and noncanonical
+  INTEGER encodings before verifying signatures.
+- Verify canonical ES256 signed definitions with WebCrypto in Node and browser
+  consumers, avoiding the Node verifier's incompatible extra hash.
+- Add a browser export condition with a browser-specific ESM artifact, so
+  browser bundlers do not resolve a Node crypto path while preserving the
+  existing Node CJS and ESM entry points [OPS-1176].
+
 ## 1.2.5
 
 2026-09-04

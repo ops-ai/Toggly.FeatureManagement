@@ -1,8 +1,8 @@
-using System.Security.Claims;
 using Bunit;
 using Bunit.TestDoubles;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using System.Security.Claims;
 using Toggly.FeatureManagement.Blazor;
 using Toggly.FeatureManagement.Client;
 using Xunit;

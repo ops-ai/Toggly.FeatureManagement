@@ -15,6 +15,7 @@ on:
       - 'Toggly.FeatureManagement.NET/**/*.csproj'
       - 'Toggly.FeatureManagement.NET/Directory.Build.props'
       - 'Toggly.FeatureManagement.NET/assets/**'
+      - 'Toggly.FeatureManagement.Client/**'
   push:
     branches:
       - develop
@@ -29,6 +30,7 @@ on:
       - 'Toggly.FeatureManagement.NET/**/*.csproj'
       - 'Toggly.FeatureManagement.NET/Directory.Build.props'
       - 'Toggly.FeatureManagement.NET/assets/**'
+      - 'Toggly.FeatureManagement.Client/**'
 
 permissions:
   contents: read
@@ -56,6 +58,9 @@ jobs:
 
       - name: Verify NuGet metadata inventory and contract
         run: node --test .github/package-registry/verify-nuget-metadata.test.mjs
+
+      - name: Verify distributed client NuGet family
+        run: node --test .github/package-registry/verify-nuget-client.test.mjs
 
       - name: Verify NuGet CI props for GitHub Actions
         run: node --test .github/package-registry/verify-nuget-ci-props.test.mjs
