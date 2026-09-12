@@ -3,13 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyBrowser } from './verify-host-browser.mjs';
+import { verifyBrowser } from './verify-host-browser.spec.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const npmCli = process.env.npm_execpath;
+if (!npmCli || !path.isAbsolute(npmCli)) throw new Error('npm_execpath must be an absolute path');
+const commandEnvironment = { ...process.env, PATH: [path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter) };
 const fixtures = path.join(root, 'host-fixtures');
 const packageDirectory = path.join(root, 'dist/ngx-feature-flags-toggly');
 const metadata = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'package.json')));
-const packed = JSON.parse(execFileSync('npm', ['pack', '--json'], { cwd: packageDirectory, encoding: 'utf8' }));
+const packed = JSON.parse(execFileSync(process.execPath, [npmCli, 'pack', '--json'], { cwd: packageDirectory, encoding: 'utf8', env: commandEnvironment }));
 const tarball = path.join(packageDirectory, packed[0].filename);
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'toggly-angular-hosts-'));
 const matrix = JSON.parse(fs.readFileSync(path.join(fixtures, 'matrix.json')));
@@ -17,8 +20,8 @@ try {
   for (const entry of matrix.filter(entry => !process.env.TOGGLY_HOST || process.env.TOGGLY_HOST.split(',').includes(entry.fixture))) {
     const cwd = path.join(temporaryRoot, entry.fixture);
     fs.cpSync(path.join(fixtures, entry.fixture), cwd, { recursive: true });
-    fs.copyFileSync(path.join(fixtures, 'host.ts'), path.join(cwd, 'src/host.ts'));
-    const run = args => execFileSync('npm', ['exec', '--yes', `--package=node@${entry.node}`, '--package=npm@10.8.2', '--', ...args], { cwd, stdio: 'inherit' });
+    fs.copyFileSync(path.join(fixtures, 'host.spec.ts'), path.join(cwd, 'src/host.spec.ts'));
+    const run = args => execFileSync(process.execPath, [npmCli, 'exec', '--yes', `--package=node@${entry.node}`, '--package=npm@10.8.2', '--', ...args], { cwd, stdio: 'inherit', env: commandEnvironment });
     console.log(`HOST ${JSON.stringify(entry)}`);
     run(['node', '--version']);
     run(['npm', 'ci', '--no-audit', '--no-fund']);

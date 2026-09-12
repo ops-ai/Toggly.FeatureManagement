@@ -12,7 +12,7 @@
           "options": {
             "outputPath": "dist",
             "index": "src/index.html",
-            "browser": "src/main.ts",
+            "browser": "src/main.spec.ts",
             "tsConfig": "tsconfig.app.json",
             "polyfills": [
               "zone.js"

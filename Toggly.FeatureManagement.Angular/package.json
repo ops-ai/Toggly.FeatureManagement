@@ -7,10 +7,11 @@
     "build": "node scripts/build-compatible-package.mjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "test:hosts": "node scripts/verify-host-fixtures.mjs",
+    "test:hosts": "node scripts/verify-host-fixtures.spec.ts",
     "lint": "ng lint",
     "build-lib": "node scripts/build-compatible-package.mjs",
-    "pack-lib": "cd dist/ngx-feature-flags-toggly && npm pack"
+    "pack-lib": "cd dist/ngx-feature-flags-toggly && npm pack",
+    "posttest": "node scripts/verify-build-coverage.spec.ts"
   },
   "private": true,
   "dependencies": {
@@ -53,6 +54,7 @@
     "ng-packagr": "^22.0.0",
     "typescript": "~6.0.0",
     "typescript-eslint": "^8.70.0",
-    "playwright": "1.58.2"
+    "playwright": "1.58.2",
+    "c8": "12.0.0"
   }
 }

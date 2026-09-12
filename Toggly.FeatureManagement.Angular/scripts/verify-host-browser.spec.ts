@@ -18,7 +18,8 @@ export async function verifyBrowser(cwd, entry) {
     const url = new URL(req.url, 'http://localhost');
     let file = path.join(dist, url.pathname);
     if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(dist, 'index.html');
-    res.setHeader('content-type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html');
+    const contentTypes = { '.js': 'text/javascript', '.css': 'text/css' };
+    res.setHeader('content-type', contentTypes[path.extname(file)] ?? 'text/html');
     res.end(fs.readFileSync(file));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -42,7 +43,7 @@ export async function verifyBrowser(cwd, entry) {
       await page.evaluate(() => window.navigate('/'));
     };
     await rendered(true);
-    assert.equal(await page.evaluate(() => typeof window.Zone === 'undefined'), entry.mode === 'zoneless OnPush', 'host uses its declared change detection mode');
+    assert.equal(await page.evaluate(() => window.Zone === undefined), entry.mode === 'zoneless OnPush', 'host uses its declared change detection mode');
     assert.ok(requests.length > 0, 'initialization fetched definitions');
     for (const route of ['/function', '/class']) await navigate(route, route);
     await page.click('#input');
