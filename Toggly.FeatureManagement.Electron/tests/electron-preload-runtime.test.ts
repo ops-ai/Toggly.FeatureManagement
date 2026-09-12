@@ -55,9 +55,10 @@ function electronFixtureArguments(platform: NodeJS.Platform): string[] {
 
   if (platform === 'linux') {
     // GitHub's Linux runner does not grant the downloaded Electron helper the
-    // ownership required by Chromium's sandbox. This only starts the isolated
-    // test fixture; it does not change the SDK's runtime defaults.
-    argumentsForFixture.push('--no-sandbox')
+    // ownership required by Chromium's sandbox or provide a display server.
+    // These switches only start the isolated test fixture; they do not change
+    // the SDK's runtime defaults.
+    argumentsForFixture.push('--no-sandbox', '--ozone-platform=headless')
   }
 
   return argumentsForFixture
@@ -189,10 +190,15 @@ function withoutKnownMacDisplayDiagnostic(stderr: string): string {
 }
 
 describe('Electron preload runtime', () => {
-  it('adds the test-only sandbox switch on Linux only', () => {
-    expect(electronFixtureArguments('linux')).toContain('--no-sandbox')
+  it('adds test-only sandbox and headless Ozone switches on Linux only', () => {
+    expect(electronFixtureArguments('linux')).toEqual(expect.arrayContaining([
+      '--no-sandbox',
+      '--ozone-platform=headless',
+    ]))
     expect(electronFixtureArguments('darwin')).not.toContain('--no-sandbox')
+    expect(electronFixtureArguments('darwin')).not.toContain('--ozone-platform=headless')
     expect(electronFixtureArguments('win32')).not.toContain('--no-sandbox')
+    expect(electronFixtureArguments('win32')).not.toContain('--ozone-platform=headless')
   })
 
   it('loads the compiled CommonJS preload entry from an ESM Electron app', async () => {
