@@ -49,7 +49,10 @@ jobs:
 
       - name: Run tests with coverage
         working-directory: Toggly.FeatureManagement.Electron
-        run: npm run test:coverage
+        # The preload fixture creates a real BrowserWindow. Xvfb supplies the
+        # display server on Ubuntu so Electron retains its normal multiprocess
+        # browser path instead of using a single-process test-only fallback.
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm run test:coverage
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7

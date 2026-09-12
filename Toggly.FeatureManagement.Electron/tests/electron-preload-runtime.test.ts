@@ -48,21 +48,18 @@ function describeElectronRun(result: ElectronRunResult): string {
 
 function electronFixtureArguments(platform: NodeJS.Platform): string[] {
   const argumentsForFixture = [
-    '--headless',
     '--disable-gpu',
     '--disable-software-rasterizer',
   ]
 
   if (platform === 'linux') {
     // GitHub's Linux runner does not grant the downloaded Electron helper the
-    // ownership required by Chromium's sandbox, provide a display server, or
-    // permit Chromium's zygote to fork. These switches only start the isolated
-    // test fixture; they do not change the SDK's runtime defaults.
-    argumentsForFixture.push(
-      '--no-sandbox',
-      '--ozone-platform=headless',
-      '--single-process',
-    )
+    // ownership required by Chromium's sandbox. The CI workflow supplies Xvfb,
+    // so the fixture can keep Chromium's normal multiprocess browser behavior.
+    // This only starts the isolated test fixture; it does not change SDK defaults.
+    argumentsForFixture.push('--no-sandbox')
+  } else {
+    argumentsForFixture.push('--headless')
   }
 
   return argumentsForFixture
@@ -194,15 +191,17 @@ function withoutKnownMacDisplayDiagnostic(stderr: string): string {
 }
 
 describe('Electron preload runtime', () => {
-  it('adds test-only constrained Linux switches only', () => {
-    expect(electronFixtureArguments('linux')).toEqual(expect.arrayContaining([
+  it('uses only the Linux sandbox exception when CI provides a display', () => {
+    expect(electronFixtureArguments('linux')).toEqual([
+      '--disable-gpu',
+      '--disable-software-rasterizer',
       '--no-sandbox',
-      '--ozone-platform=headless',
-      '--single-process',
-    ]))
+    ])
+    expect(electronFixtureArguments('darwin')).toContain('--headless')
     expect(electronFixtureArguments('darwin')).not.toContain('--no-sandbox')
     expect(electronFixtureArguments('darwin')).not.toContain('--ozone-platform=headless')
     expect(electronFixtureArguments('darwin')).not.toContain('--single-process')
+    expect(electronFixtureArguments('win32')).toContain('--headless')
     expect(electronFixtureArguments('win32')).not.toContain('--no-sandbox')
     expect(electronFixtureArguments('win32')).not.toContain('--ozone-platform=headless')
     expect(electronFixtureArguments('win32')).not.toContain('--single-process')
