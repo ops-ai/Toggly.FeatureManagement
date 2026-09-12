@@ -17,7 +17,7 @@ public sealed class Feature : ComponentBase, IDisposable
     [Parameter] public RenderFragment? Enabled { get; set; }
     [Parameter] public RenderFragment? Disabled { get; set; }
     [Parameter] public RenderFragment? Loading { get; set; }
-    private bool enabled, disposed, hydrated;
+    private bool enabled, disposed, hydrated, pending;
     private long generation;
     protected override void OnInitialized() => Session.Changed += Changed;
     protected override Task OnParametersSetAsync() => EvaluateAsync();
@@ -27,14 +27,27 @@ public sealed class Feature : ComponentBase, IDisposable
         var keys = (Keys ?? (Key is null ? [] : [Key])).ToArray();
         var result = false;
         hydrated = !Session.IsReady && Entity is null && Snapshot?.TryEvaluate(keys, Requirement, Negate, out result) == true;
+        pending = !hydrated;
         if (!hydrated) result = await Session.EvaluateAsync(keys, Requirement, Negate, Entity);
-        if (!disposed && version == generation) enabled = result;
+        if (!disposed && version == generation)
+        {
+            enabled = result;
+            pending = false;
+        }
     }
     private void Changed(object? sender, EventArgs args)
     {
-        if (!disposed) _ = InvokeAsync(async () => { if (disposed) return; await EvaluateAsync(); if (!disposed) StateHasChanged(); });
+        if (!disposed) _ = InvokeAsync(async () =>
+        {
+            if (disposed) return;
+            var evaluation = EvaluateAsync();
+            // Live notifications do not receive ComponentBase's automatic intermediate render.
+            StateHasChanged();
+            await evaluation;
+            if (!disposed) StateHasChanged();
+        });
     }
     protected override void BuildRenderTree(RenderTreeBuilder builder)
-        => builder.AddContent(0, !Session.IsReady && !hydrated ? Loading : enabled ? Enabled ?? ChildContent : Disabled);
+        => builder.AddContent(0, pending || (!Session.IsReady && !hydrated) ? Loading : enabled ? Enabled ?? ChildContent : Disabled);
     public void Dispose() { disposed = true; generation++; Session.Changed -= Changed; }
 }
