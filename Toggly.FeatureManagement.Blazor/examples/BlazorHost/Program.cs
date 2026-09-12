@@ -1,10 +1,13 @@
-using Toggly.FeatureManagement.Configuration;
-using Toggly.FeatureManagement.Blazor.Server;
 using BlazorHost;
+using Toggly.FeatureManagement.Blazor.Server;
+using Toggly.FeatureManagement.Configuration;
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+
 // The backend key belongs to this server process, never a browser configuration.
-builder.Services.AddToggly(options => {
+builder.Services.AddToggly(options =>
+{
     options.AppKey = builder.Configuration["TOGGLY_APP_KEY"] ?? "";
     options.Environment = "Production";
     options.UseSignedDefinitions = true;

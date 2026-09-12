@@ -5,7 +5,12 @@
 @using Toggly.FeatureManagement.Client
 @inject IFeatureSession Features
 <!DOCTYPE html>
-<html><head><base href="/" /><title>Toggly Blazor</title></head><body>
+<html>
+<head>
+    <base href="/" />
+    <title>Toggly Blazor</title>
+</head>
+<body>
 <FeatureProvider>
     <Feature Key="new-dashboard">
         <Enabled><h1>New dashboard</h1></Enabled>
@@ -14,7 +19,9 @@
     </Feature>
     <Feature Key="ExpressCheckout" Entity="order"><p>VIP express checkout</p></Feature>
 </FeatureProvider>
-</body></html>
-@code {
+</body>
+</html>
+@code
+{
     private readonly EntityContext order = new("Order", "ord-vip", new Dictionary<string, object?> { ["Vip"] = true });
 }

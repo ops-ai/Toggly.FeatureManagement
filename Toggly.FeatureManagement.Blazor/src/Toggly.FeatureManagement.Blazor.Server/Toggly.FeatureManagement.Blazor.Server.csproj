@@ -1,1 +1,15 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor"><PropertyGroup><Version>0.1.0</Version><TargetFramework>net8.0</TargetFramework><Description>Scoped Blazor feature gates and trusted server integration for Toggly.</Description><PackageReadmeFile>README.md</PackageReadmeFile></PropertyGroup><ItemGroup><ProjectReference Include="../Toggly.FeatureManagement.Blazor/Toggly.FeatureManagement.Blazor.csproj" /><PackageReference Include="Toggly.FeatureManagement" Version="3.6.6" /><FrameworkReference Include="Microsoft.AspNetCore.App" /><None Include="../../README.md" Pack="true" PackagePath="/" /><None Include="../../LICENSE" Pack="true" PackagePath="/" /></ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <TargetFramework>net8.0</TargetFramework>
+    <Description>Scoped Blazor feature gates and trusted server integration for Toggly.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Toggly.FeatureManagement.Blazor/Toggly.FeatureManagement.Blazor.csproj" />
+    <PackageReference Include="Toggly.FeatureManagement" Version="3.6.6" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>
