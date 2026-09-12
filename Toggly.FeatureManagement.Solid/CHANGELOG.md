@@ -5,3 +5,6 @@
 ### Added
 - Native Solid provider, signals, accessors, resource/Suspense and lazy declarative gates.
 - Isolated targeting, verified signed definitions/cache, live updates, entity and device-local gates, and lifecycle disposal.
+
+### Fixed
+- Honor plain-text live invalidations and fetch unconditionally when update notifications omit a revision.

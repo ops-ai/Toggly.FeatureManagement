@@ -43,6 +43,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 | Angular | `@ops-ai/ngx-feature-flags-toggly` | [`Toggly.FeatureManagement.Angular`](Toggly.FeatureManagement.Angular) | [Docs](https://docs.toggly.io) |
 | Vue | `@ops-ai/vue-feature-flags-toggly` | [`Toggly.FeatureManagement.Vue`](Toggly.FeatureManagement.Vue) | [Docs](https://docs.toggly.io) |
 | Svelte | `@ops-ai/svelte-feature-flags-toggly` | [`Toggly.FeatureManagement.Svelte`](Toggly.FeatureManagement.Svelte) | [Docs](https://docs.toggly.io) |
+| SolidJS | `@ops-ai/solid-feature-flags-toggly` | [`Toggly.FeatureManagement.Solid`](Toggly.FeatureManagement.Solid) | [Docs](https://docs.toggly.io/sdks/javascript/solid) |
 | Astro | `@ops-ai/astro-feature-flags-toggly` | [`Toggly.FeatureManagement.Astro`](Toggly.FeatureManagement.Astro) | [Docs](https://docs.toggly.io) |
 | Gatsby | `@ops-ai/gatsby-feature-flags-toggly` | [`Toggly.FeatureManagement.Gatsby`](Toggly.FeatureManagement.Gatsby) | [Docs](https://docs.toggly.io) |
 | Next.js | `@ops-ai/nextjs-toggly-*` | [`Toggly.FeatureManagement.Next`](Toggly.FeatureManagement.Next) | [Docs](https://docs.toggly.io) |
@@ -119,7 +120,3 @@ Most packages in this repository are licensed under the [MIT License](LICENSE). 
 - Questions and ideas: [GitHub Discussions](https://github.com/ops-ai/Toggly.FeatureManagement/discussions)
 - Bugs and features: [GitHub Issues](https://github.com/ops-ai/Toggly.FeatureManagement/issues/new/choose) (structured templates)
 - Code of conduct: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
-
-### SolidJS
-
-[SolidJS SDK](Toggly.FeatureManagement.Solid/README.md) — native reactive browser flags, signed definitions, targeting, and lazy feature gates.

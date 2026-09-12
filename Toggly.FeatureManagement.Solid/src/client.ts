@@ -47,7 +47,7 @@ export function createClient(options: TogglyOptions = {}) {
   const flags = () => ({ ...state.definitions });
   const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.1.0' };
 
-  async function refresh(pin?: string): Promise<EvaluatedDefinitions> {
+  async function refresh(pin?: string | null): Promise<EvaluatedDefinitions> {
     if (disposed) return flags();
     const current = ++generation;
     controller?.abort();
@@ -81,7 +81,7 @@ export function createClient(options: TogglyOptions = {}) {
       };
       const requestURL = new URL(url);
       if (pin) requestURL.searchParams.set('rev', pin);
-      const result = await fetchEvaluatedSignedDefinitions(requestURL.toString(), jwks, { ...parseConfig, fetchImpl: captureFetch }, { revision: pin ? null : revision, headers });
+      const result = await fetchEvaluatedSignedDefinitions(requestURL.toString(), jwks, { ...parseConfig, fetchImpl: captureFetch }, { revision: pin === undefined ? revision : null, headers });
       if (current !== generation || disposed) return flags();
       if (!result.notModified) {
         if (!isEvaluatedDefinitions(result.defs)) throw new Error('Invalid evaluated definitions');
@@ -111,13 +111,17 @@ export function createClient(options: TogglyOptions = {}) {
       socket = new WebSocket(url);
       socket.onmessage = event => {
         try {
-          const message = JSON.parse(String(event.data));
+          const data = String(event.data);
+          const message = data === 'update' || data === 'flags-updated' ? { type: data } : JSON.parse(data);
           const changed = ['flags-updated', 'update'].includes(message.type) && (!message.etag || message.etag !== revision);
           const sync = message.type === 'sync' && message.unchanged !== true && (!revision || (message.etag && message.etag !== revision));
           if (message.type === 'signing-key-updated') jwks.clear();
           if (changed || sync || message.type === 'signing-key-updated') {
             clearTimeout(debounce);
-            debounce = setTimeout(() => { void refresh(message.etag); }, 300);
+            // null means a server invalidation without a pin: it must bypass the
+            // prior conditional revision just as a revision-pinned fetch does.
+            const pin = typeof message.etag === 'string' ? message.etag : null;
+            debounce = setTimeout(() => { void refresh(pin); }, 300);
           }
         } catch { /* Ignore non-protocol messages. */ }
       };

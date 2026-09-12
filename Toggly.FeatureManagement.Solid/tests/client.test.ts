@@ -103,6 +103,25 @@ describe('transport and lifecycle', () => {
     c.dispose(); expect(Socket.all[1].close).toHaveBeenCalled(); expect(Socket.all[1].onclose).toBeNull();
     vi.unstubAllGlobals(); vi.useRealTimers();
   });
+  it.each(['update', 'flags-updated', '{"type":"update"}', '{"type":"flags-updated"}'])('fetches unconditionally after legacy invalidation %s', async data => {
+    vi.useFakeTimers();
+    class Socket { static current: Socket; onmessage: any; onclose: any; close() {} constructor() { Socket.current=this; } }
+    vi.stubGlobal('WebSocket', Socket);
+    // A stale conditional request would return 304 and leave the previous flag off.
+    const f=vi.fn((_url, init) => Promise.resolve(init.headers['If-None-Match']
+      ? new Response(null, {status:304})
+      : new Response(JSON.stringify({on:f.mock.calls.length > 1}), {headers:{ETag:'old'}})));
+    const c=createClient({appKey:'test', verifySignatures:false, fetch:f, refreshInterval:0});
+    try {
+      await c.refresh(); c.start();
+      expect(c.evaluate(['on'])).toBe(false);
+      Socket.current.onmessage({data});
+      await vi.advanceTimersByTimeAsync(300);
+      expect(f).toHaveBeenCalledTimes(2);
+      expect(f.mock.calls[1][1].headers['If-None-Match']).toBeUndefined();
+      expect(c.evaluate(['on'])).toBe(true);
+    } finally { c.dispose(); vi.unstubAllGlobals(); vi.useRealTimers(); }
+  });
   it('retries unavailable sockets and permits HTTP-only runtimes', async () => {
     vi.useFakeTimers(); vi.stubGlobal('WebSocket',class {constructor(){throw new Error('blocked')}});
     const c=createClient({appKey:'test',refreshInterval:0}); c.start(); await vi.advanceTimersByTimeAsync(5000); c.dispose();

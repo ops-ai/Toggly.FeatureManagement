@@ -514,6 +514,7 @@ jobs:
             Toggly.FeatureManagement.React
             Toggly.FeatureManagement.Vue
             Toggly.FeatureManagement.Svelte
+            Toggly.FeatureManagement.Solid
             Toggly.FeatureManagement.Astro
             Toggly.FeatureManagement.Javascript
             Toggly.FeatureManagement.Node
