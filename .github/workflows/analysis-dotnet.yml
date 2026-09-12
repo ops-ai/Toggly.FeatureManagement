@@ -30,28 +30,28 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: |
             8.0.x
             9.0.x
 
       - name: Install GitVersion
-        uses: gittools/actions/gitversion/setup@v4
+        uses: gittools/actions/gitversion/setup@7417b1089e2c7de93510f1901d656ddf60bb024f # v4
         with:
           versionSpec: '6.x'
 
       - name: Determine version
         id: gitversion
-        uses: gittools/actions/gitversion/execute@v4
+        uses: gittools/actions/gitversion/execute@7417b1089e2c7de93510f1901d656ddf60bb024f # v4
 
       - name: Cache NuGet packages
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}
@@ -230,7 +230,7 @@ jobs:
       # ── SonarQube Server ────────────────────────────────────────────────────
 
       - name: Download Dependency Check report (for SonarQube Server)
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: dependency-check-report-dotnet
           path: dependency-check-reports/
@@ -286,7 +286,7 @@ jobs:
       # ── Artifacts ───────────────────────────────────────────────────────────
 
       - name: Upload test results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: test-results
@@ -295,7 +295,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload coverage reports
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: coverage-reports
@@ -306,6 +306,8 @@ jobs:
           if-no-files-found: ignore
 
       - name: Test Summary
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         if: always()
         run: |
           echo "## .NET SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
@@ -326,7 +328,7 @@ jobs:
           echo "- Toggly.Metrics.SystemMetrics" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-dotnet" >> $GITHUB_STEP_SUMMARY
-          echo "SonarQube Server: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=toggly-sdks-dotnet" >> $GITHUB_STEP_SUMMARY
+          echo "SonarQube Server: ${SONAR_HOST_URL}/dashboard?id=toggly-sdks-dotnet" >> $GITHUB_STEP_SUMMARY
 
   dependency-check:
     name: OWASP Dependency Check
@@ -334,10 +336,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Cache OWASP Dependency Check database
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: /home/runner/OWASP-Dependency-Check/data/
           key: dependency-check-db-${{ runner.os }}-v6
@@ -345,12 +347,13 @@ jobs:
             dependency-check-db-${{ runner.os }}-
 
       - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
+        uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c # main
         with:
           project: 'toggly-sdks-dotnet'
           path: 'Toggly.FeatureManagement.NET'
           format: 'ALL'
           args: >-
+            --scan /github/workspace/Toggly.FeatureManagement.Client
             --nvdApiKey ${{ secrets.NVD_API_KEY }}
             --enableExperimental
             --disableRubygems
@@ -362,7 +365,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Dependency Check report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: dependency-check-report-dotnet
@@ -371,7 +374,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
         if: always()
         with:
           sarif_file: reports/dependency-check-report.sarif
@@ -383,10 +386,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: |
             8.0.x
@@ -407,10 +410,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: |
             6.0.x
@@ -435,14 +438,14 @@ jobs:
           NUGET_CLIENT_PACK_DIR=Toggly.FeatureManagement.Client/nupkgs node --test .github/package-registry/verify-nuget-client.test.mjs
 
       - name: Upload distributed client packages
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: nuget-client-packages
           path: Toggly.FeatureManagement.Client/nupkgs/*.*nupkg
           if-no-files-found: error
 
       - name: Upload NuGet packages
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: nuget-packages
           path: Toggly.FeatureManagement.NET/nupkgs/*.nupkg
@@ -456,10 +459,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: |
             8.0.x

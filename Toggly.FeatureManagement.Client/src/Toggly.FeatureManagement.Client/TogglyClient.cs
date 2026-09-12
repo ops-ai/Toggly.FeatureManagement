@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace Toggly.FeatureManagement.Client;
 
 /// <summary>One user session. Supply a separate client for independent users.</summary>
-public sealed class TogglyClient : IAsyncDisposable
+public sealed partial class TogglyClient : IAsyncDisposable
 {
     private readonly TogglyClientOptions options;
     private readonly HttpClient http;
@@ -18,13 +18,24 @@ public sealed class TogglyClient : IAsyncDisposable
     private readonly object stateLock = new();
     private Dictionary<string,JsonElement> definitions = [];
     private EvaluationContext context;
-    private string? revision, jwks;
+    private string? revision, jwks, requestedRevision;
+    private bool invalidated;
     private long generation, timestamp;
     private bool disposed, initialized;
     private Task? pollTask, liveTask;
     public bool IsReady { get; private set; }
-    public event EventHandler? Changed;
-    public event EventHandler<Exception>? Error;
+    private EventHandler? changedHandlers;
+    private EventHandler<Exception>? errorHandlers;
+    public event EventHandler? Changed
+    {
+        add { lock (stateLock) changedHandlers += value; }
+        remove { lock (stateLock) changedHandlers -= value; }
+    }
+    public event EventHandler<Exception>? Error
+    {
+        add { lock (stateLock) errorHandlers += value; }
+        remove { lock (stateLock) errorHandlers -= value; }
+    }
 
     public TogglyClient(TogglyClientOptions options, HttpClient http, ISignatureVerifier verifier, ISnapshotStore? store = null, IUpdateSource? updates = null)
     {
@@ -67,7 +78,7 @@ public sealed class TogglyClient : IAsyncDisposable
     public async Task SetContextAsync(EvaluationContext value, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(value);
-        lock(stateLock) { ObjectDisposedException.ThrowIf(disposed,this); context=Copy(value); generation++; definitions=[]; revision=null; timestamp=0; }
+        lock(stateLock) { ObjectDisposedException.ThrowIf(disposed,this); context=Copy(value); generation++; definitions=[]; revision=null; timestamp=0; invalidated=false; requestedRevision=null; }
         Notify(); await RefreshAsync(cancellationToken).ConfigureAwait(false);
     }
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -84,34 +95,57 @@ public sealed class TogglyClient : IAsyncDisposable
             try
             {
                 if(jwks is null) jwks=await FetchKeysAsync(ct).ConfigureAwait(false);
-                if(store is not null && timestamp==0)
-                {
-                    try
-                    {
-                        var snapshot=await store.LoadAsync(key,ct).ConfigureAwait(false);
-                        if(snapshot is not null && snapshot.ContextKey==key) await AcceptAsync(snapshot.Envelope,snapshot.Revision,version,ct).ConfigureAwait(false);
-                    }
-                    catch(Exception ex) when(ex is not OperationCanceledException) { Report(ex); }
-                }
-                var query=new List<string>();
-                if(current.Identity is not null) query.Add("u="+Uri.EscapeDataString(current.Identity));
-                foreach(var group in current.Groups ?? []) query.Add("g="+Uri.EscapeDataString(group));
-                foreach(var claim in current.Claims ?? new Dictionary<string,string>()) query.Add("claim."+Uri.EscapeDataString(claim.Key)+"="+Uri.EscapeDataString(claim.Value));
-                var path=$"evaluated-signed/{Uri.EscapeDataString(options.AppKey)}/{Uri.EscapeDataString(options.Environment)}";
-                using var request=new HttpRequestMessage(HttpMethod.Get,new Uri(options.BaseUri,path+"?"+string.Join("&",query)));
-                string? rev; lock(stateLock) rev=revision;
-                if(rev is not null) request.Headers.TryAddWithoutValidation("If-None-Match",rev);
-                request.Headers.Add("X-Toggly-Sdk","dotnet-client"); request.Headers.Add("X-Toggly-Sdk-Version","0.1.0");
-                using var response=await http.SendAsync(request,ct).ConfigureAwait(false);
-                if(response.StatusCode==HttpStatusCode.NotModified) return;
-                response.EnsureSuccessStatusCode();
-                var body=await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                var nextRevision=response.Headers.TryGetValues("X-Definitions-Revision",out var values) ? values.FirstOrDefault() : response.Headers.ETag?.ToString();
-                if(await AcceptAsync(body,nextRevision,version,ct).ConfigureAwait(false) && store is not null) await store.SaveAsync(key,new(key,body,nextRevision),ct).ConfigureAwait(false);
+                await RestoreSnapshotAsync(key,version,ct).ConfigureAwait(false);
+                await FetchDefinitionsAsync(current,key,version,ct).ConfigureAwait(false);
             }
             catch(Exception ex) when(ex is not OperationCanceledException) { Report(ex); }
         }
         finally { refreshLock.Release(); }
+    }
+    private async Task RestoreSnapshotAsync(string key,long version,CancellationToken ct)
+    {
+        if (store is null || timestamp != 0) return;
+        try
+        {
+            var snapshot=await store.LoadAsync(key,ct).ConfigureAwait(false);
+            if (snapshot is not null && snapshot.ContextKey==key)
+                await AcceptAsync(snapshot.Envelope,snapshot.Revision,version,ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Report(ex); }
+    }
+    private HttpRequestMessage CreateRequest(EvaluationContext current)
+    {
+        var query=new List<string>();
+        if (current.Identity is not null) query.Add("u="+Uri.EscapeDataString(current.Identity));
+        foreach (var group in current.Groups ?? []) query.Add("g="+Uri.EscapeDataString(group));
+        foreach (var claim in current.Claims ?? new Dictionary<string,string>())
+            query.Add("claim."+Uri.EscapeDataString(claim.Key)+"="+Uri.EscapeDataString(claim.Value));
+        string? conditionalRevision, pinnedRevision;
+        lock (stateLock)
+        {
+            conditionalRevision=invalidated ? null : revision;
+            pinnedRevision=requestedRevision;
+        }
+        // A notification revision routes the GET; only the signed HTTP response updates cached state.
+        if (pinnedRevision is not null) query.Add("rev="+Uri.EscapeDataString(pinnedRevision));
+        var path=$"evaluated-signed/{Uri.EscapeDataString(options.AppKey!)}/{Uri.EscapeDataString(options.Environment)}";
+        var request=new HttpRequestMessage(HttpMethod.Get,new Uri(options.BaseUri,path+"?"+string.Join("&",query)));
+        if (conditionalRevision is not null) request.Headers.TryAddWithoutValidation("If-None-Match",conditionalRevision);
+        request.Headers.Add("X-Toggly-Sdk","dotnet-client");
+        request.Headers.Add("X-Toggly-Sdk-Version","0.1.0");
+        return request;
+    }
+    private async Task FetchDefinitionsAsync(EvaluationContext current,string key,long version,CancellationToken ct)
+    {
+        using var request=CreateRequest(current);
+        using var response=await http.SendAsync(request,ct).ConfigureAwait(false);
+        if (response.StatusCode==HttpStatusCode.NotModified) return;
+        response.EnsureSuccessStatusCode();
+        var body=await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        var nextRevision=response.Headers.TryGetValues("X-Definitions-Revision",out var values)
+            ? values.FirstOrDefault() : response.Headers.ETag?.ToString();
+        if (await AcceptAsync(body,nextRevision,version,ct).ConfigureAwait(false) && store is not null)
+            await store.SaveAsync(key,new(key,body,nextRevision),ct).ConfigureAwait(false);
     }
     private async Task<string> FetchKeysAsync(CancellationToken ct) => await http.GetStringAsync(new Uri(options.BaseUri,".well-known/jwks"),ct).ConfigureAwait(false);
     private async Task<bool> AcceptAsync(string body,string? rev,long version,CancellationToken ct)
@@ -132,60 +166,57 @@ public sealed class TogglyClient : IAsyncDisposable
         }
         var next=defs.EnumerateObject().ToDictionary(p=>p.Name,p=>p.Value.Clone(),StringComparer.Ordinal);
         if(next.Values.Any(v=>v.ValueKind is not (JsonValueKind.True or JsonValueKind.False or JsonValueKind.Object))) throw new JsonException("Invalid definition.");
-        lock(stateLock) { if(disposed || version!=generation) return false; definitions=next; revision=rev; timestamp=time; }
+        lock (stateLock)
+        {
+            if (disposed || version!=generation) return false;
+            definitions=next;
+            revision=rev;
+            timestamp=time;
+            invalidated=false;
+            requestedRevision=null;
+        }
         Notify(); return true;
     }
-    private void Notify() { foreach(EventHandler handler in Changed?.GetInvocationList() ?? []) { try { handler(this,EventArgs.Empty); } catch(Exception ex) { Report(ex); } } }
-    private void Report(Exception ex) { foreach(EventHandler<Exception> handler in Error?.GetInvocationList() ?? []) { try { handler(this,ex); } catch { /* Consumer errors must not kill refresh. */ } } }
+    private void Notify()
+    {
+        EventHandler? handlers;
+        lock (stateLock) handlers=changedHandlers;
+        foreach (var handler in handlers?.GetInvocationList().Cast<EventHandler>() ?? [])
+        {
+            try { handler.Invoke(this,EventArgs.Empty); }
+            catch (Exception ex) { Report(ex); }
+        }
+    }
+    private void Report(Exception ex)
+    {
+        EventHandler<Exception>? handlers;
+        lock (stateLock) handlers=errorHandlers;
+        foreach (var handler in handlers?.GetInvocationList().Cast<EventHandler<Exception>>() ?? [])
+        {
+            try { handler.Invoke(this,ex); }
+            catch (Exception) { /* Consumer errors must not kill refresh or prevent other subscribers running. */ }
+        }
+    }
     private async Task PollAsync(CancellationToken ct)
     {
         try { while(true) { await Task.Delay(options.RefreshInterval,ct).ConfigureAwait(false); await RefreshAsync(ct).ConfigureAwait(false); } }
-        catch(OperationCanceledException) when(ct.IsCancellationRequested) { }
-    }
-    private async Task LiveAsync(CancellationToken ct)
-    {
-        var backoff=TimeSpan.FromSeconds(5);
-        CancellationTokenSource? debounce=null; Task pending=Task.CompletedTask;
-        while(!ct.IsCancellationRequested)
-        {
-            try
-            {
-                string? rev; lock(stateLock) rev=revision;
-                var uri=new Uri(options.WebSocketBaseUri,$"{Uri.EscapeDataString(options.AppKey!)}/{Uri.EscapeDataString(options.Environment)}/ws?sdk=dotnet-client&sdkVersion=0.1.0"+(rev is null?"":"&rev="+Uri.EscapeDataString(rev)));
-                await foreach(var message in updates.ListenAsync(uri,ct).ConfigureAwait(false))
-                {
-                    backoff=TimeSpan.FromSeconds(5);
-                    try
-                    {
-                        using var doc=JsonDocument.Parse(message); var root=doc.RootElement;
-                        var type=root.GetProperty("type").GetString();
-                        if(type is not ("sync" or "flags-updated" or "signing-key-updated")) continue;
-                        if(type=="signing-key-updated") { jwks=null; lock(stateLock) revision=null; }
-                        else { var etag=root.TryGetProperty("etag",out var tag)?tag.GetString():null; lock(stateLock) { if(revision is not null && ((etag is not null && etag==revision) || (root.TryGetProperty("unchanged",out var unchanged) && unchanged.ValueKind==JsonValueKind.True))) continue; } }
-                        debounce?.Cancel(); debounce?.Dispose(); debounce=CancellationTokenSource.CreateLinkedTokenSource(ct);
-                        pending=DebouncedRefreshAsync(debounce.Token);
-                    }
-                    catch(Exception ex) when(ex is not OperationCanceledException) { Report(ex); }
-                }
-            }
-            catch(Exception ex) when(ex is not OperationCanceledException) { Report(ex); }
-            catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }
-            try { await Task.Delay(backoff,ct).ConfigureAwait(false); } catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }
-            backoff=TimeSpan.FromSeconds(Math.Min(60,backoff.TotalSeconds*2));
-        }
-        debounce?.Cancel(); await pending.ConfigureAwait(false); debounce?.Dispose();
-    }
-    private async Task DebouncedRefreshAsync(CancellationToken ct)
-    {
-        try { await Task.Delay(300,ct).ConfigureAwait(false); await RefreshAsync(ct).ConfigureAwait(false); }
-        catch(OperationCanceledException) when(ct.IsCancellationRequested) { }
+        catch(OperationCanceledException) when(ct.IsCancellationRequested) { /* Normal lifetime shutdown. */ }
     }
     public async ValueTask DisposeAsync()
     {
-        lock(stateLock) { if(disposed) return; disposed=true; generation++; }
+        lock (stateLock)
+        {
+            if (disposed) return;
+            disposed=true;
+            generation++;
+        }
         await lifetime.CancelAsync().ConfigureAwait(false);
         await Task.WhenAll(pollTask ?? Task.CompletedTask,liveTask ?? Task.CompletedTask).ConfigureAwait(false);
-        await refreshLock.WaitAsync().ConfigureAwait(false); refreshLock.Release();
-        Changed=null; Error=null; lifetime.Dispose();
+        // The lifetime token is already cancelled. Drain any caller-owned refresh that is still
+        // unwinding so disposal cannot return while transport/store callbacks remain active.
+        await refreshLock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+        refreshLock.Release();
+        lock (stateLock) { changedHandlers=null; errorHandlers=null; }
+        lifetime.Dispose();
     }
 }

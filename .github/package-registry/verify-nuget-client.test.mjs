@@ -13,7 +13,7 @@ test('client packages have manifest versions, changelog and release inventory', 
   const workflow = fs.readFileSync(path.join(root, family.workflow), 'utf8');
   assert.deepEqual(parseReleaseWorkflowProjects(workflow), family.packages.map(p => p.id));
   assert.match(workflow, /release_mode: publish/);
-  assert.match(workflow, /NuGet\/login@v1/);
+  assert.match(workflow, /NuGet\/login@[0-9a-f]{40}/);
   assert.match(workflow, /NuGetKeyVaultSignTool sign .*\.snupkg/);
   assert.match(workflow, /--collect:"XPlat Code Coverage"/);
   assert.ok(fs.existsSync(path.join(root, family.changelog)));
@@ -31,4 +31,18 @@ test('client packed artifacts meet existing NuGet metadata contract', () => {
   const result = verifyPackedNupkgs({ inventory: {...inventory, ...family}, packDir: process.env.NUGET_CLIENT_PACK_DIR });
   assert.equal(result.ok, true, result.errors.join('\n'));
   assert.equal(result.foundIds.length, 2);
+});
+
+test('client release and analysis pin external actions and protect shell secrets', () => {
+  for (const name of ['sdk-dotnet-client-release.yml', 'analysis-dotnet.yml']) {
+    const workflow = fs.readFileSync(path.join(root, '.github/workflows', name), 'utf8');
+    for (const match of workflow.matchAll(/uses:\s+(?!\.\/)([^\s#]+)/g)) {
+      assert.match(match[1], /@[0-9a-f]{40}$/, `Unpinned action: ${match[1]}`);
+    }
+    assert.doesNotMatch(workflow, /http:\/\/timestamp/);
+    assert.doesNotMatch(workflow, /(?:echo|--api-key).*\$\{\{\s*(?:secrets\.|steps\.nuget_login\.outputs)/);
+  }
+  const analysis = fs.readFileSync(path.join(root, '.github/workflows/analysis-dotnet.yml'), 'utf8');
+  assert.match(analysis, /path: 'Toggly.FeatureManagement.NET'/);
+  assert.match(analysis, /--scan \/github\/workspace\/Toggly.FeatureManagement.Client/);
 });

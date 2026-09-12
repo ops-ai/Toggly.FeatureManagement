@@ -3,6 +3,7 @@ using System.Text.Json;
 using Toggly.FeatureManagement.Client;
 namespace ClientTests;
 public class EntityTests {
+ private static readonly string[] Tags = ["VIP","new"];
  [Theory]
  [InlineData("eq","string","Alice","alice",true)] [InlineData("neq","string","Alice","bob",true)]
  [InlineData("in","string","Alice"," bob,alice, ",true)] [InlineData("contains","string","Alphabet","pha",true)]
@@ -15,7 +16,7 @@ public class EntityTests {
   Assert.Equal(result,EntityEvaluator.Resolve(doc.RootElement,new("Order","one",new Dictionary<string,object?>{{"value",actual}})));
  }
  [Fact] public void ArraysAnyMissingAndMalformedFailClosed() {
-  var entity=new EntityContext("Order","one",new Dictionary<string,object?>{{"tags",new[]{"VIP","new"}}});
+  var entity=new EntityContext("Order","one",new Dictionary<string,object?>{{"tags",Tags}});
   using var doc=JsonDocument.Parse("{\"requirement\":\"any\",\"rules\":[{\"property\":\"missing\",\"op\":\"eq\",\"value\":\"x\"},{\"property\":\"tags\",\"op\":\"contains\",\"type\":\"string[]\",\"value\":\"vip\"}]}");
   Assert.True(EntityEvaluator.Resolve(doc.RootElement,entity)); Assert.False(EntityEvaluator.Resolve(doc.RootElement));
   foreach(var raw in new[]{"false","null","{}","{\"rules\":[]}","{\"rules\":[{}]}","{\"requirement\":\"invalid\",\"rules\":[{}]}"}) {using var invalid=JsonDocument.Parse(raw);Assert.False(EntityEvaluator.Resolve(invalid.RootElement,entity));}

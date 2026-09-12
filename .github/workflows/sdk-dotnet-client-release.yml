@@ -19,10 +19,10 @@ jobs:
     env:
       SDK_ROOT: Toggly.FeatureManagement.Client
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: '8.0.x'
       - name: Resolve manifest version
@@ -119,7 +119,7 @@ jobs:
 
           NuGetKeyVaultSignTool sign ./nupkgs/*.nupkg \
             --file-digest sha256 \
-            --timestamp-rfc3161 http://timestamp.globalsign.com/tsa/r6advanced1 \
+            --timestamp-rfc3161 https://timestamp.sectigo.com \
             --timestamp-digest sha256 \
             --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
             --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
@@ -127,9 +127,11 @@ jobs:
             --azure-key-vault-client-secret "$AZURE_KEY_VAULT_CLIENT_SECRET" \
             --azure-key-vault-certificate "$AZURE_KEY_VAULT_CERTIFICATE"
 
+          # Sectigo requests at least 15 seconds between timestamp submissions.
+          sleep 15
           NuGetKeyVaultSignTool sign ./nupkgs/*.snupkg \
             --file-digest sha256 \
-            --timestamp-rfc3161 http://timestamp.globalsign.com/tsa/r6advanced1 \
+            --timestamp-rfc3161 https://timestamp.sectigo.com \
             --timestamp-digest sha256 \
             --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
             --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
@@ -146,7 +148,7 @@ jobs:
       - name: NuGet login (OIDC)
         if: steps.version.outputs.action == 'publish'
         id: nuget_login
-        uses: NuGet/login@v1
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
         with:
           # nuget.org matches OIDC to the trust-policy *creator* username,
           # not the package/org owner (Toggly). Policy "GitHub Toggly" was
@@ -154,6 +156,8 @@ jobs:
           user: opsai
 
       - name: Publish to NuGet
+        env:
+          NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
         if: steps.version.outputs.action == 'publish'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
@@ -167,7 +171,7 @@ jobs:
           echo "Pushing package: $PACKAGE_TO_PUSH"
           # nuget.org accepts the adjacent .snupkg when pushing the .nupkg from the same folder.
           dotnet nuget push "$PACKAGE_TO_PUSH" \
-            --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
+            --api-key "$NUGET_API_KEY" \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
 
@@ -175,7 +179,7 @@ jobs:
           if [ -f "$SYMBOL_TO_PUSH" ]; then
             echo "Pushing symbols: $SYMBOL_TO_PUSH"
             dotnet nuget push "$SYMBOL_TO_PUSH" \
-              --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
+              --api-key "$NUGET_API_KEY" \
               --source https://api.nuget.org/v3/index.json \
               --skip-duplicate
           else
@@ -185,7 +189,7 @@ jobs:
 
       - name: Upload signed packages for release checksums
         if: steps.version.outputs.action == 'publish'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: nuget-${{ matrix.project }}
           path: |

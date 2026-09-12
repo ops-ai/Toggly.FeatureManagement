@@ -23,6 +23,70 @@ public class LiveUpdateTests {
   await WaitUntil(()=>calls==2);Assert.True(client.IsEnabled("on"));
   await updates.Messages.Writer.WriteAsync("invalid");await updates.Messages.Writer.WriteAsync("{\"type\":\"signing-key-updated\"}");await WaitUntil(()=>keys==1&&calls==3);
  }
+ [Theory]
+ [InlineData("update")]
+ [InlineData("flags-updated")]
+ [InlineData("{\"type\":\"update\"}")]
+ [InlineData("{\"type\":\"flags-updated\"}")]
+ public async Task NotificationsWithoutRevisionBypassConditionalCache(string notification) {
+  using var fixture=new SignedFixture();var updates=new Updates();var calls=0;
+  var refreshed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+  using var http=new HttpClient(new Handler((request,ct)=> {
+   var call=Interlocked.Increment(ref calls);
+   if(call>1) {Assert.False(request.Headers.Contains("If-None-Match"));refreshed.TrySetResult();}
+   var response=new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(fixture.Envelope(call==1?"{\"on\":false}":"{\"on\":true}"))};
+   response.Headers.TryAddWithoutValidation("ETag","\"v1\"");return Task.FromResult(response);
+  }));
+  await using var client=new TogglyClient(new(){AppKey="public",TrustedJwks=fixture.Jwks,RefreshInterval=TimeSpan.FromHours(1)},http,new Es256SignatureVerifier(),updates:updates);
+  await client.InitializeAsync();await updates.Messages.Writer.WriteAsync(notification);
+  await refreshed.Task.WaitAsync(TimeSpan.FromSeconds(3));await WaitUntil(()=>client.IsEnabled("on"));
+ }
+ [Fact] public async Task RevisionNotificationPinsFetchUntilHttpConfirmsIt() {
+  using var fixture=new SignedFixture();var updates=new Updates();var requests=new List<(string Query,bool Conditional)>();
+  using var http=new HttpClient(new Handler((request,ct)=> {
+   requests.Add((request.RequestUri!.Query,request.Headers.Contains("If-None-Match")));
+   var response=new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(fixture.Envelope("{}"))};
+   response.Headers.TryAddWithoutValidation("ETag",requests.Count==1?"\"v1\"":"\"v2\"");return Task.FromResult(response);
+  }));
+  await using var client=new TogglyClient(new(){AppKey="public",TrustedJwks=fixture.Jwks,RefreshInterval=TimeSpan.FromHours(1)},http,new Es256SignatureVerifier(),updates:updates);
+  await client.InitializeAsync();await updates.Messages.Writer.WriteAsync("{\"type\":\"flags-updated\",\"etag\":\"v2\"}");
+  await WaitUntil(()=>requests.Count==2);Assert.Contains("rev=v2",requests[1].Query);Assert.False(requests[1].Conditional);
+ }
+ [Fact] public async Task NewNotificationCancelsAndDrainsTheSupersededRefresh() {
+  using var fixture=new SignedFixture();var updates=new Updates();var calls=0;
+  var started=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+  var cancelled=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+  var release=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+  using var http=new HttpClient(new Handler(async (request,ct)=> {
+   var call=Interlocked.Increment(ref calls);
+   if(call==2) {using var registration=ct.Register(()=>cancelled.TrySetResult());started.TrySetResult();await release.Task;}
+   return new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(fixture.Envelope(call==3?"{\"on\":true}":"{\"on\":false}"))};
+  }));
+  await using var client=new TogglyClient(new(){AppKey="public",TrustedJwks=fixture.Jwks,RefreshInterval=TimeSpan.FromHours(1)},http,new Es256SignatureVerifier(),updates:updates);
+  await client.InitializeAsync();await updates.Messages.Writer.WriteAsync("update");await started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+  await updates.Messages.Writer.WriteAsync("flags-updated");await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+  Assert.Equal(2,calls);Assert.False(client.IsEnabled("on"));release.TrySetResult();await WaitUntil(()=>client.IsEnabled("on"));Assert.Equal(3,calls);
+ }
+ [Fact] public async Task DisposalDrainsRefreshEvenWhenTransportDelaysCancellation() {
+  using var fixture=new SignedFixture();var started=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);var release=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+  using var http=new HttpClient(new Handler(async (request,ct)=> {started.SetResult();await release.Task;return new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(fixture.Envelope("{}"))};}));
+  var client=new TogglyClient(new(){AppKey="public",TrustedJwks=fixture.Jwks,EnableLiveUpdates=false},http,new Es256SignatureVerifier());
+  var refresh=client.RefreshAsync();await started.Task;var disposal=client.DisposeAsync().AsTask();Assert.False(disposal.IsCompleted);
+  release.SetResult();await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>refresh);await disposal.WaitAsync(TimeSpan.FromSeconds(3));
+ }
+ [Fact] public async Task SubscriberFailuresDoNotSkipLaterHandlersAndHandlersCanBeRemoved() {
+  using var fixture=new SignedFixture();using var http=new HttpClient(new Handler((r,c)=>Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(fixture.Envelope("{}"))})));
+  await using var client=new TogglyClient(new(){AppKey="public",TrustedJwks=fixture.Jwks,EnableLiveUpdates=false},http,new Es256SignatureVerifier());
+  var changes=0;var errors=0;
+  EventHandler throwingChange=(_,_)=>throw new InvalidOperationException("consumer");
+  EventHandler change=(_,_)=>changes++;
+  EventHandler<Exception> throwingError=(_,_)=>throw new InvalidOperationException("error consumer");
+  EventHandler<Exception> error=(_,_)=>errors++;
+  client.Changed+=throwingChange;client.Changed+=change;client.Error+=throwingError;client.Error+=error;
+  await client.InitializeAsync();Assert.Equal(1,changes);Assert.Equal(1,errors);
+  client.Changed-=throwingChange;client.Changed-=change;client.Error-=throwingError;client.Error-=error;
+  await client.RefreshAsync();Assert.Equal(1,changes);Assert.Equal(1,errors);
+ }
  [Fact] public async Task PollingContinuesWithoutLiveUpdatesAndDisposalStopsIt() {
   using var fixture=new SignedFixture();var calls=0;using var http=new HttpClient(new Handler((r,c)=>{Interlocked.Increment(ref calls);return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(fixture.Envelope("{}"))});}));
   var client=new TogglyClient(new(){AppKey="public",TrustedJwks=fixture.Jwks,EnableLiveUpdates=false,RefreshInterval=TimeSpan.FromMilliseconds(30)},http,new Es256SignatureVerifier());

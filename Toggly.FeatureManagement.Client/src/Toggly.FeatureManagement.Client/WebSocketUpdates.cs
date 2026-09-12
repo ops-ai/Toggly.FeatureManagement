@@ -21,7 +21,7 @@ public sealed class WebSocketUpdates(Func<Uri,CancellationToken,Task<WebSocket>>
             var result=await socket.ReceiveAsync(buffer.AsMemory(),cancellationToken).ConfigureAwait(false);
             if(result.MessageType==WebSocketMessageType.Close) yield break;
             if(result.MessageType!=WebSocketMessageType.Text) throw new WebSocketException("Expected text updates.");
-            message.Write(buffer,0,result.Count);
+            await message.WriteAsync(buffer.AsMemory(0,result.Count),cancellationToken).ConfigureAwait(false);
             if(message.Length>65536) throw new WebSocketException("Update too large.");
             if(!result.EndOfMessage) continue;
             yield return Encoding.UTF8.GetString(message.ToArray()); message.SetLength(0);
