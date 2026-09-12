@@ -16,18 +16,35 @@ Requires SolidJS 1.9+ and Node 22.12+ for tooling. Configure Vite with `vite-plu
 import { Feature, TogglyProvider } from '@ops-ai/solid-feature-flags-toggly';
 
 export default function App() {
-  return <TogglyProvider config={{
-    appKey: import.meta.env.VITE_TOGGLY_APP_KEY,
-    environment: 'Production',
-    flagDefaults: { 'new-dashboard': false },
-    identity: 'alice', groups: ['staff'], claims: { role: 'admin' },
-  }}>
-    <Feature feature="new-dashboard" loading={<p>Loading…</p>}
-      fallback={<p>Classic dashboard</p>}><p>New dashboard</p></Feature>
-    <Feature feature={['new-dashboard', 'api-v2']} requirement="all">Both enabled</Feature>
-    <Feature feature={['new-dashboard', 'api-v2']} requirement="any">Either enabled</Feature>
-    <Feature feature="new-dashboard" negate>Dashboard disabled</Feature>
-  </TogglyProvider>;
+  return (
+    <TogglyProvider
+      config={{
+        appKey: import.meta.env.VITE_TOGGLY_APP_KEY,
+        environment: 'Production',
+        flagDefaults: { 'new-dashboard': false },
+        identity: 'alice',
+        groups: ['staff'],
+        claims: { role: 'admin' },
+      }}
+    >
+      <Feature
+        feature="new-dashboard"
+        loading={<p>Loading…</p>}
+        fallback={<p>Classic dashboard</p>}
+      >
+        <p>New dashboard</p>
+      </Feature>
+      <Feature feature={['new-dashboard', 'api-v2']} requirement="all">
+        Both enabled
+      </Feature>
+      <Feature feature={['new-dashboard', 'api-v2']} requirement="any">
+        Either enabled
+      </Feature>
+      <Feature feature="new-dashboard" negate>
+        Dashboard disabled
+      </Feature>
+    </TogglyProvider>
+  );
 }
 ```
 
@@ -44,15 +61,17 @@ function Dashboard() {
   const enabled = useFeatureFlag(key); // also accepts a fixed string
   const definitions = useFeatureFlags(); // raw boolean/entity-gate definitions
   const toggly = useToggly();
-  return <>
-    <p>{enabled() ? 'Enabled' : 'Disabled'}</p>
-    <button onClick={() => toggly.client.refresh()}>Refresh</button>
-    <Suspense fallback={<p>Loading definitions…</p>}>
-      <pre>{JSON.stringify(toggly.resource())}</pre>
-    </Suspense>
-    <pre>{JSON.stringify(definitions())}</pre>
-    <p>{toggly.error()?.message}</p>
-  </>;
+  return (
+    <>
+      <p>{enabled() ? 'Enabled' : 'Disabled'}</p>
+      <button onClick={() => toggly.client.refresh()}>Refresh</button>
+      <Suspense fallback={<p>Loading definitions…</p>}>
+        <pre>{JSON.stringify(toggly.resource())}</pre>
+      </Suspense>
+      <pre>{JSON.stringify(definitions())}</pre>
+      <p>{toggly.error()?.message}</p>
+    </>
+  );
 }
 ```
 
@@ -74,7 +93,9 @@ Omitted fields preserve the current value; empty values clear it. Initial target
 ```tsx
 const order = { kind: 'Order', key: 'ord-vip', attributes: { Vip: true } };
 const enabled = useFeatureFlag('ExpressCheckout', () => order);
-<Feature feature="ExpressCheckout" entity={order}>Express checkout</Feature>;
+<Feature feature="ExpressCheckout" entity={order}>
+  Express checkout
+</Feature>;
 
 let deviceReady = false;
 toggly.client.setLocalGates([
@@ -158,12 +179,16 @@ const backend = createTogglyClient({
   featureDefaults: { 'enhanced-submit': false },
 });
 const initialized = backend.init();
-process.once('SIGTERM', () => { void backend.close(); });
+process.once('SIGTERM', () => {
+  void backend.close();
+});
 
 export async function requestScope(request: Request, principal: EvaluationContext) {
   await initialized;
   return createTogglyRequest({
-    client: backend, request, context: principal,
+    client: backend,
+    request,
+    context: principal,
     // Explicit public projection: omit private claims and session credentials.
     clientContext: { identity: principal.identity, groups: principal.groups },
     frontend: {
@@ -191,8 +216,11 @@ export const getFlags = query(async () => {
   const { getRequestEvent } = await import('solid-js/web');
   const { requestScope } = await import('./toggly.server');
   const scope = await requestScope(getRequestEvent()!.request, { identity: 'demo-user' });
-  try { return await scope.snapshot(); }
-  finally { scope.dispose(); }
+  try {
+    return await scope.snapshot();
+  } finally {
+    scope.dispose();
+  }
 }, 'public-toggly-flags');
 ```
 
@@ -206,15 +234,27 @@ import { getFlags } from '../lib/flags';
 
 export default function Home() {
   const snapshot = createAsync(() => getFlags());
-  return <Show when={snapshot()}>{initial =>
-    <TogglyProvider snapshot={snapshot() ?? initial()} config={{
-      appKey: import.meta.env.VITE_TOGGLY_APP_KEY,
-      environment: 'Production',
-    }}>
-      <Feature feature="new-dashboard" loading={<p>Refreshing…</p>}
-        fallback={<p>Classic dashboard</p>}><p>New dashboard</p></Feature>
-    </TogglyProvider>
-  }</Show>;
+  return (
+    <Show when={snapshot()}>
+      {(initial) => (
+        <TogglyProvider
+          snapshot={snapshot() ?? initial()}
+          config={{
+            appKey: import.meta.env.VITE_TOGGLY_APP_KEY,
+            environment: 'Production',
+          }}
+        >
+          <Feature
+            feature="new-dashboard"
+            loading={<p>Refreshing…</p>}
+            fallback={<p>Classic dashboard</p>}
+          >
+            <p>New dashboard</p>
+          </Feature>
+        </TogglyProvider>
+      )}
+    </Show>
+  );
 }
 ```
 
@@ -237,7 +277,9 @@ try {
   });
   await scope.requireFeature('enhanced-submit');
   // Run the rollout-controlled server operation here.
-} finally { scope.dispose(); }
+} finally {
+  scope.dispose();
+}
 ```
 
 `requireFeature(string | string[], options?)` throws a generic `Response` with status 404 when disabled. Return that response from an API handler or let your framework handle it. Options support `requirement: 'all' | 'any'`, `negate` and explicit `entity`. The same options apply to `evaluate`; `isEnabled(key, entity?)` evaluates one key. Backend filters, identity/groups/claims, entity rules, refresh and caching use the shared [Node core](https://docs.toggly.io/sdks/nodejs). The process owner closes that client on shutdown. `dispose()` aborts only this request's frontend fetch and prevents further wrapper operations; it never closes the shared backend client.
@@ -251,7 +293,6 @@ Browser `storage` supports the same signed offline-restart behavior described ab
 Browser refreshes independently verify signed responses. Every browser fetch uses `cache: 'no-store'`; polling explicitly supplies its last confirmed ETag, while revisionless live invalidations omit validators. This prevents native browser caching from quietly adding stale validators. Same-context network/signature failures retain the previous verified flags. A new request snapshot replaces prior identity state immediately. Unmounting the provider aborts pending HTTP and clears polling, reconnect/debounce timers and sockets. See the [SolidJS API](https://docs.toggly.io/sdks/javascript/solid) for local gates, resources, all/any/negate and lazy components.
 
 `VITE_` variables are public build-time values and require rebuilding when changed. Backend variables are server runtime values. Keep the Node-only entrypoint out of client modules. This integration targets Node-hosted SolidStart; it does not claim edge or static-export backend evaluation support.
-
 
 ## License
 

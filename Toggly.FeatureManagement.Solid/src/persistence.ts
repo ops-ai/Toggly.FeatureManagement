@@ -23,10 +23,14 @@ export async function verifyEnvelope(
 ) {
   const { envelope, defsRaw } = parseSignedEnvelope(body);
   const now = Math.floor(Date.now() / 1000);
-  if (!Number.isSafeInteger(envelope.timestamp) || envelope.timestamp < minimumTimestamp || envelope.timestamp > now + 60) {
+  if (
+    !Number.isSafeInteger(envelope.timestamp) ||
+    envelope.timestamp < minimumTimestamp ||
+    envelope.timestamp > now + 60
+  ) {
     throw new Error('Invalid or rolled-back signed timestamp');
   }
-  const key = keys.keys.find(candidate => candidate.kid === envelope.kid);
+  const key = keys.keys.find((candidate) => candidate.kid === envelope.kid);
   assertPublicKey(key, now);
   await verifySignedDefinitions(defsRaw, envelope, { keys: [key] }, policy.allowedKeyIds, {
     maxSignatureAgeSeconds: policy.maxSignatureAgeSeconds,
@@ -38,13 +42,23 @@ export async function verifyEnvelope(
 function assertPublicKey(value: unknown, now: number): asserts value is Jwk {
   if (!value || typeof value !== 'object') throw new Error('Missing verification key');
   const key = value as Record<string, unknown>;
-  if (key.kty !== 'EC' || key.crv !== 'P-256' || key.alg !== 'ES256' || typeof key.x !== 'string' || typeof key.y !== 'string' || typeof key.kid !== 'string') {
+  if (
+    key.kty !== 'EC' ||
+    key.crv !== 'P-256' ||
+    key.alg !== 'ES256' ||
+    typeof key.x !== 'string' ||
+    typeof key.y !== 'string' ||
+    typeof key.kid !== 'string'
+  ) {
     throw new Error('Invalid verification key');
   }
   if (key.d !== undefined || (key.use !== undefined && key.use !== 'sig')) {
     throw new Error('Verification requires a public signing key');
   }
-  if (key.key_ops !== undefined && (!Array.isArray(key.key_ops) || key.key_ops.length !== 1 || key.key_ops[0] !== 'verify')) {
+  if (
+    key.key_ops !== undefined &&
+    (!Array.isArray(key.key_ops) || key.key_ops.length !== 1 || key.key_ops[0] !== 'verify')
+  ) {
     throw new Error('Invalid verification key operations');
   }
   if (key.exp !== undefined && (!Number.isSafeInteger(key.exp) || (key.exp as number) <= now)) {
@@ -80,7 +94,15 @@ export function createPersistence(storage: DefinitionStorage | undefined, baseUR
         if (!raw) return;
         const record = JSON.parse(raw);
         const currentGeneration = generation(false);
-        if (!currentGeneration || record?.version !== 1 || record.scope !== scope || record.generation !== currentGeneration || typeof record.body !== 'string' || !Array.isArray(record.jwks?.keys)) return;
+        if (
+          !currentGeneration ||
+          record?.version !== 1 ||
+          record.scope !== scope ||
+          record.generation !== currentGeneration ||
+          typeof record.body !== 'string' ||
+          !Array.isArray(record.jwks?.keys)
+        )
+          return;
         return verifyEnvelope(record.body, record.jwks, policy, minimumTimestamp);
       } catch {
         // Corrupt or inaccessible storage cannot block the network path.
@@ -91,7 +113,10 @@ export function createPersistence(storage: DefinitionStorage | undefined, baseUR
       try {
         const currentGeneration = generation(true);
         if (!currentGeneration) return;
-        storage!.setItem(`toggly:solid:envelope:${scope}`, JSON.stringify({ version: 1, scope, generation: currentGeneration, body, jwks: keys }));
+        storage!.setItem(
+          `toggly:solid:envelope:${scope}`,
+          JSON.stringify({ version: 1, scope, generation: currentGeneration, body, jwks: keys }),
+        );
       } catch {
         // Quota/private-mode failures must not interrupt verified evaluation.
       }

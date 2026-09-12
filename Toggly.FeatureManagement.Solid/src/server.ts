@@ -1,6 +1,15 @@
 import type { TogglyClient, EvaluationContext } from '@ops-ai/toggly-node-core';
-import { buildEvaluatedSignedUrl, serializeJsonForInlineScript, type TogglyEntityContext, type TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
-import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions, isEvaluatedDefinitions } from '@ops-ai/toggly-signed-defs';
+import {
+  buildEvaluatedSignedUrl,
+  serializeJsonForInlineScript,
+  type TogglyEntityContext,
+  type TogglyEvaluationContext,
+} from '@ops-ai/toggly-hooks-types';
+import {
+  InMemoryJwksCache,
+  fetchEvaluatedSignedDefinitions,
+  isEvaluatedDefinitions,
+} from '@ops-ai/toggly-signed-defs';
 import { publicContext, selectDefinitions, type TogglySnapshot } from './snapshot.js';
 export { createTogglyClient } from '@ops-ai/toggly-node-core';
 export type { TogglyClient, EvaluationContext, TogglyServerConfig } from '@ops-ai/toggly-node-core';
@@ -12,12 +21,14 @@ export interface ServerRequestOptions {
   request: Request;
   /** Trusted server principal/context. Not copied to browser unless explicitly projected. */
   context?: EvaluationContext;
+  /** Explicit public projection only; omitted context remains anonymous. */
   clientContext?: TogglyEvaluationContext;
   frontend: {
     /** A frontend key, never the backend client's key. */
     appKey?: string;
     environment?: string;
     baseURI?: string;
+    /** Public flag allowlist applied before any snapshot reaches the browser. */
     expose: readonly string[];
     flagDefaults?: Record<string, boolean>;
     allowedKeyIds?: string[];
@@ -35,46 +46,97 @@ export interface ServerGateOptions {
 
 /** Create in a server query/action/API handler, once for its current Request. */
 export function createTogglyRequest(options: ServerRequestOptions) {
-  const context: EvaluationContext = structuredClone({ ...options.context, identity: options.context?.identity ?? '', request: {
-    userAgent: options.request.headers.get('user-agent') ?? undefined,
-    acceptLanguage: options.request.headers.get('accept-language') ?? undefined,
-    ...options.context?.request,
-  } });
+  const context: EvaluationContext = structuredClone({
+    ...options.context,
+    identity: options.context?.identity ?? '',
+    request: {
+      userAgent: options.request.headers.get('user-agent') ?? undefined,
+      acceptLanguage: options.request.headers.get('accept-language') ?? undefined,
+      ...options.context?.request,
+    },
+  });
   const projected = publicContext(options.clientContext);
   const { fetch: fetcher, onError, ...frontendConfig } = options.frontend;
   const frontend = { ...structuredClone(frontendConfig), fetch: fetcher, onError };
-  if (frontend.appKey && frontend.appKey === options.client.config?.appKey) throw new Error('Use a distinct frontend application key');
+  if (frontend.appKey && frontend.appKey === options.client.config?.appKey)
+    throw new Error('Use a distinct frontend application key');
   const controller = new AbortController();
   let disposed = false;
   let pending: Promise<TogglySnapshot> | undefined;
-  const assertActive = () => { if (disposed || options.request.signal.aborted) throw new Error('Toggly request disposed'); };
+  const assertActive = () => {
+    if (disposed || options.request.signal.aborted) throw new Error('Toggly request disposed');
+  };
   async function evaluate(keys: readonly string[], gate: ServerGateOptions = {}) {
     assertActive();
-    const result = await options.client.evaluateFeatureGate([...keys], gate.requirement, gate.negate, context, gate.entity);
+    const result = await options.client.evaluateFeatureGate(
+      [...keys],
+      gate.requirement,
+      gate.negate,
+      context,
+      gate.entity,
+    );
     assertActive();
     return result;
   }
   async function loadSnapshot(): Promise<TogglySnapshot> {
-    const fallback: TogglySnapshot = { definitions: selectDefinitions(frontend.flagDefaults ?? {}, frontend.expose), context: projected, expose: [...frontend.expose], source: 'defaults' };
+    const fallback: TogglySnapshot = {
+      definitions: selectDefinitions(frontend.flagDefaults ?? {}, frontend.expose),
+      context: projected,
+      expose: [...frontend.expose],
+      source: 'defaults',
+    };
     if (!frontend.appKey) return fallback;
     // Snapshot transport is independent of the backend definition cache and key.
     try {
       const baseURI = frontend.baseURI ?? 'https://definitions.toggly.io';
-      const url = buildEvaluatedSignedUrl(baseURI, encodeURIComponent(frontend.appKey), encodeURIComponent(frontend.environment ?? 'Production'), projected, false);
-      const signal = AbortSignal.any([controller.signal, options.request.signal, AbortSignal.timeout(frontend.timeout ?? 10000)]);
-      const result = await fetchEvaluatedSignedDefinitions(url, new InMemoryJwksCache(), {
-        ...frontend, baseURI, verifySignatures: true,
-        fetchImpl: (input, init) => (frontend.fetch ?? fetch)(input, { ...init, signal, cache: 'no-store' }),
-      }, { headers: { 'User-Agent': context.request?.userAgent ?? '', 'Accept-Language': context.request?.acceptLanguage ?? '', 'X-Toggly-Sdk':'solidstart', 'X-Toggly-Sdk-Version':'0.2.0' } });
+      const url = buildEvaluatedSignedUrl(
+        baseURI,
+        encodeURIComponent(frontend.appKey),
+        encodeURIComponent(frontend.environment ?? 'Production'),
+        projected,
+        false,
+      );
+      const signal = AbortSignal.any([
+        controller.signal,
+        options.request.signal,
+        AbortSignal.timeout(frontend.timeout ?? 10000),
+      ]);
+      const result = await fetchEvaluatedSignedDefinitions(
+        url,
+        new InMemoryJwksCache(),
+        {
+          ...frontend,
+          baseURI,
+          verifySignatures: true,
+          fetchImpl: (input, init) =>
+            (frontend.fetch ?? fetch)(input, { ...init, signal, cache: 'no-store' }),
+        },
+        {
+          headers: {
+            'User-Agent': context.request?.userAgent ?? '',
+            'Accept-Language': context.request?.acceptLanguage ?? '',
+            'X-Toggly-Sdk': 'solidstart',
+            'X-Toggly-Sdk-Version': '0.2.0',
+          },
+        },
+      );
       assertActive();
-      if (result.notModified || !isEvaluatedDefinitions(result.defs)) throw new Error('Invalid frontend snapshot response');
-      return { ...fallback, definitions: selectDefinitions(result.defs, frontend.expose), source: 'signed' };
+      if (result.notModified || !isEvaluatedDefinitions(result.defs))
+        throw new Error('Invalid frontend snapshot response');
+      return {
+        ...fallback,
+        definitions: selectDefinitions(result.defs, frontend.expose),
+        source: 'signed',
+      };
     } catch (cause) {
       assertActive();
       // Observers must not replace defaults or produce an unhandled rejection.
       // Do not await user code: an observer cannot hold the request open.
-      try { void Promise.resolve(frontend.onError?.(cause)).catch(() => {}); }
-      catch { /* Synchronous observer failures are isolated too. */ }
+      try {
+        void Promise.resolve(frontend.onError?.(cause)).catch(() => {});
+      } catch {
+        /* Synchronous observer failures are isolated too. */
+      }
       return fallback;
     }
   }
@@ -86,9 +148,14 @@ export function createTogglyRequest(options: ServerRequestOptions) {
       return result;
     },
     evaluate,
-    async requireFeature(keys: string | readonly string[], gate?: ServerGateOptions): Promise<void> {
-      if (!await evaluate(typeof keys === 'string' ? [keys] : keys, gate)) throw new Response('Feature unavailable', {status:404});
+    async requireFeature(
+      keys: string | readonly string[],
+      gate?: ServerGateOptions,
+    ): Promise<void> {
+      if (!(await evaluate(typeof keys === 'string' ? [keys] : keys, gate)))
+        throw new Response('Feature unavailable', { status: 404 });
     },
+    /** Memoize within this request and return defensive copies to its loaders. */
     async snapshot(): Promise<TogglySnapshot> {
       assertActive();
       pending ??= loadSnapshot();
@@ -96,10 +163,18 @@ export function createTogglyRequest(options: ServerRequestOptions) {
       assertActive();
       return structuredClone(snapshot);
     },
-    dispose() { disposed = true; controller.abort(); },
+    dispose() {
+      disposed = true;
+      controller.abort();
+    },
   };
 }
 /** Use only for manual inline scripts; SolidStart queries use its native serializer. */
 export function serializeSnapshot(snapshot: TogglySnapshot): string {
-  return serializeJsonForInlineScript({ definitions: selectDefinitions(snapshot.definitions, snapshot.expose), context: publicContext(snapshot.context), expose: [...snapshot.expose], source: snapshot.source });
+  return serializeJsonForInlineScript({
+    definitions: selectDefinitions(snapshot.definitions, snapshot.expose),
+    context: publicContext(snapshot.context),
+    expose: [...snapshot.expose],
+    source: snapshot.source,
+  });
 }

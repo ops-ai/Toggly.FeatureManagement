@@ -9,8 +9,11 @@ export function validateNpmCli(candidate) {
   }
   const npmRoot = resolve(dirname(cli), '..');
   const metadata = JSON.parse(readFileSync(join(npmRoot, 'package.json'), 'utf8'));
-  if (metadata.name !== 'npm' || typeof metadata.bin?.npm !== 'string' ||
-      resolve(npmRoot, metadata.bin.npm) !== cli) {
+  if (
+    metadata.name !== 'npm' ||
+    typeof metadata.bin?.npm !== 'string' ||
+    resolve(npmRoot, metadata.bin.npm) !== cli
+  ) {
     throw new Error('npm CLI does not match the npm package executable');
   }
   return cli;
@@ -25,7 +28,7 @@ export function resolveNpmCli(environment = process.env, executable = process.ex
     join(runtimeDirectory, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
     resolve(runtimeDirectory, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
   ];
-  const candidate = candidates.find(path => existsSync(path));
+  const candidate = candidates.find((path) => existsSync(path));
   if (!candidate) throw new Error('npm CLI is unavailable beside the Node runtime');
   return validateNpmCli(candidate);
 }

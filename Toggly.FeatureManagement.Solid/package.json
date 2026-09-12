@@ -28,7 +28,11 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/npm-cli.test.mjs && vitest run",
     "test:coverage": "node --test tests/npm-cli.test.mjs && vitest run --coverage",
-    "test:host": "npm run build && node tests/install-host.mjs && cd tests/host && node verify.mjs"
+    "test:host": "npm run build && node tests/offline-process.mjs && node tests/install-host.mjs && cd tests/host && node verify.mjs",
+    "format": "npm exec --yes --package=prettier@3.6.2 -- prettier --no-error-on-unmatched-pattern --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx,mjs,json,css,html}\" \"*.{ts,mjs,json,md,html}\"",
+    "format:check": "npm exec --yes --package=prettier@3.6.2 -- prettier --no-error-on-unmatched-pattern --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx,mjs,json,css,html}\" \"*.{ts,mjs,json,md,html}\"",
+    "pretest": "npm run format:check",
+    "pretest:coverage": "npm run format:check"
   },
   "peerDependencies": {
     "solid-js": "^1.9.0"

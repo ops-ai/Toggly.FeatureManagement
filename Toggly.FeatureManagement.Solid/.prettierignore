@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+.output
+.solid
+.vinxi
+.nitro
+package-lock.json
+tests/host/package-lock.json
+*.tgz
