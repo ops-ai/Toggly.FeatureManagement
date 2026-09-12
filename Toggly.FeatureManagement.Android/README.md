@@ -11,7 +11,7 @@ Native Android SDK for [Toggly.io](https://toggly.io) feature flags with Kotlin,
 
 ## Initial targeting context
 
-These config fields require `io.toggly:toggly-android-core:1.4.1`.
+These config fields require `io.toggly:toggly-android-core:1.5.0`.
 Provide known targeting context before initialization to avoid an intermediate fetch with incomplete targeting:
 
 ```kotlin
@@ -65,15 +65,15 @@ Add the dependencies to your `build.gradle.kts`:
 ```kotlin
 dependencies {
     // Core module (required)
-    implementation("io.toggly:toggly-android-core:1.4.1")
+    implementation("io.toggly:toggly-android-core:1.5.0")
 
     // UI modules (pick what you need)
-    implementation("io.toggly:toggly-compose:1.4.1")  // Jetpack Compose
-    implementation("io.toggly:toggly-views:1.4.1")    // Android Views
+    implementation("io.toggly:toggly-compose:1.5.0")  // Jetpack Compose
+    implementation("io.toggly:toggly-views:1.5.0")    // Android Views
 
     // Storage modules (pick one, or use built-in SharedPreferences)
-    implementation("io.toggly:toggly-room:1.4.1")      // Room database
-    implementation("io.toggly:toggly-datastore:1.4.1") // DataStore
+    implementation("io.toggly:toggly-room:1.5.0")      // Room database
+    implementation("io.toggly:toggly-datastore:1.5.0") // DataStore
 }
 ```
 
@@ -142,15 +142,15 @@ fun MyScreen() {
     }
 }
 
-// Component-style API — Feature + negate for the off path
+// Component-style API — use separate Feature blocks for the on and off paths
 @Composable
 fun WelcomeSection() {
     Feature("welcome-banner") {
         WelcomeBanner()
     }
 
-    Feature(featureKey = "maintenance-mode", negate = true) {
-        MainContent()
+    Feature(featureKey = "welcome-banner", negate = true) {
+        WelcomePlaceholder()
     }
 
     // Entity-aware evaluation
@@ -167,6 +167,14 @@ fun AdminSection() {
         requirement = FeatureRequirement.ALL
     ) {
         AdminPanel()
+    }
+
+    FeatureGate(
+        featureKeys = listOf("admin-access", "premium-tier"),
+        requirement = FeatureRequirement.ALL,
+        negate = true
+    ) {
+        AccessRequest()
     }
 }
 ```

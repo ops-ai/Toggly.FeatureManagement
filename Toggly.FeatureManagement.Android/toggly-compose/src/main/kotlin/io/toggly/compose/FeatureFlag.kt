@@ -147,7 +147,6 @@ fun rememberFeatureGateAsState(
  * @param negate Invert the check (show content when the feature is off)
  * @param context Optional per-evaluation entity context
  * @param contextKind Optional kind for registerContext mapper lookup
- * @param fallback Optional fallback when the check fails
  * @param content Content to show when the check passes
  */
 @Composable
@@ -156,7 +155,38 @@ fun Feature(
     negate: Boolean = false,
     context: Any? = null,
     contextKind: String? = null,
+    content: @Composable () -> Unit
+) {
+    FeatureContent(featureKey, negate, context, contextKind, null, content)
+}
+
+/**
+ * Compatibility overload that renders [fallback] when the feature check fails.
+ *
+ * Use two [Feature] blocks with opposite `negate` values for enabled and disabled content.
+ */
+@Deprecated(
+    message = "Use separate Feature blocks with opposite negate values for enabled and disabled content"
+)
+@Composable
+fun Feature(
+    featureKey: String,
+    negate: Boolean = false,
+    context: Any? = null,
+    contextKind: String? = null,
     fallback: @Composable (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    FeatureContent(featureKey, negate, context, contextKind, fallback, content)
+}
+
+@Composable
+private fun FeatureContent(
+    featureKey: String,
+    negate: Boolean,
+    context: Any?,
+    contextKind: String?,
+    fallback: @Composable (() -> Unit)?,
     content: @Composable () -> Unit
 ) {
     val shouldShow = rememberFeature(
@@ -183,12 +213,9 @@ fun Feature(
  * @param content Content to show when feature is enabled
  */
 @Deprecated(
-    message = "Use Feature(featureKey, ...) instead",
-    replaceWith = ReplaceWith(
-        "Feature(featureKey = featureKey, fallback = fallback, content = content)",
-        "io.toggly.compose.Feature"
-    )
+    message = "Use Feature(featureKey) and a separate Feature(featureKey, negate = true) for disabled content"
 )
+@Suppress("DEPRECATION")
 @Composable
 fun FeatureFlag(
     featureKey: String,
@@ -212,12 +239,9 @@ fun FeatureFlag(
  * @param content Content to show when feature is disabled
  */
 @Deprecated(
-    message = "Use Feature(featureKey, negate = true) instead",
-    replaceWith = ReplaceWith(
-        "Feature(featureKey = featureKey, negate = true, fallback = fallback, content = content)",
-        "io.toggly.compose.Feature"
-    )
+    message = "Use Feature(featureKey, negate = true) and a separate Feature(featureKey) for enabled content"
 )
+@Suppress("DEPRECATION")
 @Composable
 fun FeatureFlagOff(
     featureKey: String,
@@ -240,7 +264,6 @@ fun FeatureFlagOff(
  * @param negate Whether to negate the result
  * @param context Optional per-evaluation entity context
  * @param contextKind Optional kind for registerContext mapper lookup
- * @param fallback Optional fallback content when gate fails
  * @param content Content to show when gate passes
  */
 @Composable
@@ -250,7 +273,40 @@ fun FeatureGate(
     negate: Boolean = false,
     context: Any? = null,
     contextKind: String? = null,
+    content: @Composable () -> Unit
+) {
+    FeatureGateContent(featureKeys, requirement, negate, context, contextKind, null, content)
+}
+
+/**
+ * Compatibility overload that renders [fallback] when the feature gate fails.
+ *
+ * Use two [FeatureGate] blocks with opposite `negate` values for enabled and disabled content.
+ */
+@Deprecated(
+    message = "Use separate FeatureGate blocks with opposite negate values for enabled and disabled content"
+)
+@Composable
+fun FeatureGate(
+    featureKeys: List<String>,
+    requirement: FeatureRequirement = FeatureRequirement.ALL,
+    negate: Boolean = false,
+    context: Any? = null,
+    contextKind: String? = null,
     fallback: @Composable (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    FeatureGateContent(featureKeys, requirement, negate, context, contextKind, fallback, content)
+}
+
+@Composable
+private fun FeatureGateContent(
+    featureKeys: List<String>,
+    requirement: FeatureRequirement,
+    negate: Boolean,
+    context: Any?,
+    contextKind: String?,
+    fallback: @Composable (() -> Unit)?,
     content: @Composable () -> Unit
 ) {
     val isEnabled = rememberFeatureGate(
