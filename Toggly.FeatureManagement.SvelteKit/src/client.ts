@@ -1,15 +1,33 @@
 import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
-import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
+import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions, type JwkSet } from '@ops-ai/toggly-signed-defs';
 import { validateEvaluatedDefinitions } from './validation.js';
+import { createPersistence, verifyEnvelope } from './persistence.js';
+import { captureEvaluatedResponse } from './transport.js';
 import type { BrowserOptions, TogglySnapshot, EvaluatedDefinitions } from './types.js';
 
+/** Trusted key and timestamp state survives browser reconnects within one layout. */
+export interface BrowserSession {
+  timestamps: Map<string, number>;
+  keys: Map<string, JwkSet>;
+}
+
 /** Layout-owned lifecycle around the shared evaluated-signed transport; no rule evaluator here. */
-export function connectBrowser(snapshot: TogglySnapshot, options: BrowserOptions, publish: (defs: EvaluatedDefinitions) => void): () => void {
+export function connectBrowser(snapshot: TogglySnapshot, options: BrowserOptions, publish: (defs: EvaluatedDefinitions, verification?: Pick<TogglySnapshot, 'signedTimestamp' | 'signingKey'>) => void, session: BrowserSession = { timestamps: new Map(), keys: new Map() }): () => void {
   if (!options.appKey) return () => {};
   const baseURI = options.baseURI ?? 'https://definitions.toggly.io';
   const appKey = options.appKey;
+  const { timestamps, keys: observedKeys } = session;
   const url = buildEvaluatedSignedUrl(baseURI, appKey, options.environment ?? 'Production', snapshot.context, false);
-  const jwks = new InMemoryJwksCache();
+  let jwks = new InMemoryJwksCache();
+  const persistence = createPersistence(options.storage, baseURI);
+  // Authoritative SSR/manual state must never be replaced by an older cache.
+  let mayRestore = snapshot.source === 'defaults';
+  if (snapshot.source === 'signed') {
+    if (Number.isSafeInteger(snapshot.signedTimestamp)) {
+      timestamps.set(url, Math.max(timestamps.get(url) ?? 0, snapshot.signedTimestamp!));
+    }
+    if (snapshot.signingKey) observedKeys.set(baseURI, { keys: [structuredClone(snapshot.signingKey)] });
+  }
   let revision: string | null = null;
   let disposed = false;
   let requestId = 0;
@@ -39,12 +57,30 @@ export function connectBrowser(snapshot: TogglySnapshot, options: BrowserOptions
     const timeout = setTimeout(() => controller.abort(), options.timeout ?? 5000);
     activeTimeout = timeout;
     try {
+      const cached = mayRestore
+        ? persistence.read(url, options, timestamps.get(url) ?? 0, observedKeys.get(baseURI))
+        : undefined;
+      mayRestore = false;
+      if (cached) {
+        try {
+          const restored = await cached;
+          if (disposed || ownRequest !== requestId) return;
+          timestamps.set(url, restored.timestamp);
+          publish(restored.definitions, { signedTimestamp: restored.timestamp, signingKey: restored.keys.keys[0] });
+        } catch {
+          // Invalid stored state must not prevent a fresh network attempt.
+        }
+      }
+      if (disposed || ownRequest !== requestId) return;
+      const fetcher: typeof fetch = (input, init) => fetch(input, { ...init, cache: 'no-store', signal: controller.signal });
+      const capture = captureEvaluatedResponse(fetcher);
+      const requestKeys = jwks;
       const target = new URL(url);
       if (pin) target.searchParams.set('rev', pin);
-      const result = await fetchEvaluatedSignedDefinitions(target.toString(), jwks, {
+      const result = await fetchEvaluatedSignedDefinitions(target.toString(), requestKeys, {
         ...options, baseURI, verifySignatures: true,
         // Own the verified cache: native HTTP caching must not add validators to forced invalidations.
-        fetchImpl: (input, init) => fetch(input, { ...init, cache: 'no-store', signal: controller.signal }),
+        fetchImpl: capture.fetch,
       }, { revision: unconditional ? null : revision });
       if (disposed || ownRequest !== requestId) return;
       if (result.notModified) {
@@ -52,9 +88,17 @@ export function connectBrowser(snapshot: TogglySnapshot, options: BrowserOptions
         return;
       }
       validateEvaluatedDefinitions(result.defs);
+      const body = capture.body();
+      if (!body) throw new Error('Missing signed envelope');
+      const keys = await requestKeys.get({ ...options, baseURI, fetchImpl: fetcher });
+      const verified = await verifyEnvelope(body, keys, options, timestamps.get(url) ?? 0);
+      if (disposed || ownRequest !== requestId) return;
+      timestamps.set(url, verified.timestamp);
+      observedKeys.set(baseURI, structuredClone(keys));
+      persistence.write(url, body, verified.keys);
       // HTTP confirms revisions only after verification. WS metadata never becomes a cache validator.
       revision = result.revision;
-      publish(result.defs);
+      publish(verified.definitions, { signedTimestamp: verified.timestamp, signingKey: verified.keys.keys[0] });
     } catch (cause) {
       if (!disposed && ownRequest === requestId) report(cause);
     } finally {
@@ -64,7 +108,12 @@ export function connectBrowser(snapshot: TogglySnapshot, options: BrowserOptions
   };
   const invalidate = (pin?: string, rotate = false) => {
     if (disposed) return;
-    if (rotate) jwks.clear();
+    if (rotate) {
+      // Retire the instance: pending old key fetches cannot refill this epoch.
+      jwks = new InMemoryJwksCache();
+      observedKeys.delete(baseURI);
+      persistence.invalidate();
+    }
     // An old response must not publish during the debounce window after a newer invalidation.
     requestId++;
     active?.abort();

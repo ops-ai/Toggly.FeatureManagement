@@ -85,7 +85,7 @@ Pass explicit entities: `{ kind: 'Order', key: 'ord-vip', attributes: { Vip: tru
 
 Browser options include `appKey`, `environment`, `baseURI`, `allowedKeyIds`, `maxSignatureAgeSeconds`, `refreshInterval` (180000ms; zero disables polling), `enableLiveUpdates` (default true), `timeout` (5000ms), `localGates` and `onError`. Signatures are always verified. The adapter reconnects WebSockets and fetches on update messages. Disposal stops polling/sockets and prevents late publication.
 
-Only matching in-memory SSR/verified snapshots survive failed browser refreshes. Parsed localStorage caches are never trusted. New server requests use explicit exposed defaults on frontend fetch/verification failure. Backend defaults/cache behavior is controlled by the supplied Node client. No key is a supported offline mode. `frontend.onError` reports failed snapshot fetches.
+Matching SSR/verified snapshots survive failed browser refreshes. Optional signed storage can also restore definitions after a fresh offline restart. Parsed-flag caches are never trusted. New server requests use explicit exposed defaults on frontend fetch/verification failure. Backend defaults/cache behavior is controlled by the supplied Node client. No key is a supported offline mode. `frontend.onError` reports failed snapshot fetches.
 
 Local gates use `{ id, flagKeys, isEnabled }`; they AND with remote values and cannot enable a remotely disabled flag. Keep initial local gate state identical for SSR/hydration.
 
@@ -102,3 +102,26 @@ npm run test:host
 ```
 
 The [SvelteKit sample](https://github.com/ops-ai/Toggly.Samples/tree/develop/sveltekit-sdk) includes a real adapter-node host, filter matrix and browser smoke tests. [Full guide](https://docs.toggly.io/sdks/javascript/sveltekit). MIT license. [Toggly](https://toggly.io).
+
+
+## Persistent signed definitions
+
+Pass an optional `storage` adapter to browser configuration to restore matching definitions after a fresh process or browser restart without fetching signing keys:
+
+```ts
+const storage = {
+  getItem: (key: string) => window.localStorage.getItem(key),
+  setItem: (key: string, value: string) => window.localStorage.setItem(key, value),
+};
+const toggly = createToggly(data.toggly, { appKey: data.publicKey, storage });
+```
+
+These callbacks defer browser storage access until `start()` runs after mounting. The adapter stores a versioned exact signed envelope and only the public key that verified it. It partitions records by endpoint, app, environment and complete identity/groups/claims URL. Restore rechecks the current key pins, public-key constraints/expiry, signature age and complete entity schema before publishing; it never trusts a parsed-flag cache or fetches a URL supplied by a stored record. Failed storage access, corrupt data and verification failure leave defaults or already verified state intact.
+
+`loadToggly` marks its fallback snapshot `source: 'defaults'`, allowing a fresh browser store to restore the matching signed record before the network attempt. A successful server snapshot carries `source: 'signed'`, its verified `signedTimestamp` and selected public `signingKey`. These are trusted host hydration metadata, not portable signed credentials: no raw backend definitions or signed envelope are serialized. Browser `allowedKeyIds` also applies before signed SSR values seed the UI. Older stored state never replaces signed SSR or live state. The layout retains observed key trust across navigation; current observed keys take precedence over stored keys. Manual snapshots without source metadata remain authoritative; explicitly label application defaults `source: 'defaults'` when they may be replaced by a verified cache.
+
+Signature timestamps cannot move backwards within a running layout/context. Signing-key notifications replace the in-memory key-cache instance and retire historical stored contexts through an endpoint generation marker. If retirement cannot be saved, the client stops using persistence for that session; repair storage access or clear affected storage before a later restart.
+
+Storage is application/origin-owned local trust material. A party able to replace both stored keys and envelopes can replace that trust anchor unless independent `allowedKeyIds` pins constrain it. Detecting rollback of the entire store after process loss needs external protected state and is not promised. `maxSignatureAgeSeconds` is rechecked on restore; unset/nonpositive values disable age expiry. Future timestamps and expired keys are rejected. Storage keys contain targeting data, so apply the application's privacy/logout lifecycle.
+
+Definition persistence does not provide cached HTML/assets, offline server loads or actions. A full offline page launch needs an application-owned offline shell. A server-side snapshot failure still returns only the explicit exposed defaults.

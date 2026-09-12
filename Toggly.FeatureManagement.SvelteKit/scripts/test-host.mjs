@@ -19,6 +19,7 @@ const run=(command,args,cwd,env={})=>new Promise((resolve,reject)=>{
 let app;let server;let sockets;const pending=[];
 try {
  await run('npm',['run','build'],root);
+ await run(process.execPath,[join(root,'tests/offline-process.mjs')],root);
  await run('npm',['pack','--pack-destination',temporary],root);
  await cp(join(root,'tests/host'),host,{recursive:true});
  // Optional candidate artifacts are temporary install inputs only, never written into a manifest/lock.

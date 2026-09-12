@@ -2,7 +2,8 @@ import { error, type Handle, type RequestEvent } from '@sveltejs/kit';
 import type { TogglyClient, EvaluationContext } from '@ops-ai/toggly-node-core';
 import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
 import { selectDefinitions, type GateOptions, type TogglySnapshot, type TogglyEvaluationContext } from './types.js';
-import { validateEvaluatedDefinitions } from './validation.js';
+import { verifyEnvelope } from './persistence.js';
+import { captureEvaluatedResponse } from './transport.js';
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
 export { createTogglyClient } from '@ops-ai/toggly-node-core';
 export type { TogglyClient, TogglyServerConfig, EvaluationContext } from '@ops-ai/toggly-node-core';
@@ -46,20 +47,32 @@ export function createTogglyHandle(options: ServerOptions): Handle {
     let pending: Promise<TogglySnapshot> | undefined;
     const snapshot = async (): Promise<TogglySnapshot> => {
       const definitions = selectDefinitions(frontend.featureDefaults ?? {}, frontend.expose);
-      if (!frontend.appKey) return { definitions, context: publicContext, expose: [...frontend.expose] };
+      if (!frontend.appKey) return { definitions, context: publicContext, expose: [...frontend.expose], source: 'defaults' };
       try {
         const baseURI = frontend.baseURI ?? 'https://definitions.toggly.io';
         const url = buildEvaluatedSignedUrl(baseURI, frontend.appKey, frontend.environment ?? 'Production', publicContext, false);
         const fetchImpl: typeof fetch = (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(frontend.timeout ?? 5000) });
-        const result = await fetchEvaluatedSignedDefinitions(url, new InMemoryJwksCache(), {
-          ...frontend, baseURI, verifySignatures: true, fetchImpl,
+        const capture = captureEvaluatedResponse(fetchImpl);
+        const keys = new InMemoryJwksCache();
+        const result = await fetchEvaluatedSignedDefinitions(url, keys, {
+          ...frontend, baseURI, verifySignatures: true, fetchImpl: capture.fetch,
         }, { headers: {
           'User-Agent': context.request!.userAgent ?? '',
           'Accept-Language': context.request!.acceptLanguage ?? '',
           'cf-ipcountry': context.request!.country ?? '',
         } });
-        if (!result.notModified) validateEvaluatedDefinitions(result.defs);
-        return { definitions: selectDefinitions((result.notModified ? definitions : result.defs) as TogglySnapshot['definitions'], frontend.expose), context: publicContext, expose: [...frontend.expose] };
+        if (result.notModified) throw new Error('Unexpected 304 without a verified request snapshot');
+        const body = capture.body();
+        if (!body) throw new Error('Missing signed envelope');
+        const verified = await verifyEnvelope(body, await keys.get({ ...frontend, baseURI, fetchImpl }), frontend);
+        return {
+          definitions: selectDefinitions(verified.definitions, frontend.expose),
+          context: publicContext,
+          expose: [...frontend.expose],
+          source: 'signed',
+          signedTimestamp: verified.timestamp,
+          signingKey: verified.keys.keys[0],
+        };
       } catch (cause) {
         // Reporting must not turn a safe default snapshot into a failed request.
         try {
@@ -69,7 +82,7 @@ export function createTogglyHandle(options: ServerOptions): Handle {
         } catch {
           // Synchronous observers are isolated from request handling too.
         }
-        return { definitions, context: publicContext, expose: [...frontend.expose] };
+        return { definitions, context: publicContext, expose: [...frontend.expose], source: 'defaults' };
       }
     };
     event.locals.toggly = {

@@ -1,8 +1,14 @@
+import type { Jwk } from '@ops-ai/toggly-signed-defs';
 import type { EvaluatedDefinitions, TogglyEntityContext, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
 export type { EvaluatedDefinitions, TogglyEntityContext, TogglyEvaluationContext, LocalGate };
 export interface TogglySnapshot {
   definitions: EvaluatedDefinitions;
+  /** Server-owned provenance; omitted/manual snapshots are authoritative. */
+  source?: 'signed' | 'defaults';
+  /** Trusted SSR verification metadata, not a portable signed credential. */
+  signedTimestamp?: number;
+  signingKey?: Jwk;
   /** Explicitly public targeting data. Never put secrets or authentication claims here. */
   context: TogglyEvaluationContext;
   expose: string[];
@@ -18,6 +24,9 @@ export interface BrowserOptions {
   appKey?: string;
   environment?: string;
   baseURI?: string;
+  /** Origin-owned persistence for exact signed envelopes and verified public keys. */
+  storage?: Pick<Storage, 'getItem' | 'setItem'>;
+  /** Independent key pins, applied to network and restored signed state. */
   allowedKeyIds?: string[];
   maxSignatureAgeSeconds?: number;
   refreshInterval?: number;

@@ -1,3 +1,4 @@
+import type { BrowserSession } from './client.js';
 import { writable } from 'svelte/store';
 import { evaluateResolvedKeys, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types';
 import { applyLocalGate, buildFlagGateIndex } from '@ops-ai/toggly-local-gates';
@@ -6,7 +7,17 @@ export type * from './types.js';
 
 /** A layout-owned store: synchronous SSR/hydration, no module-level identity or store. */
 export function createToggly(initial: TogglySnapshot, options: BrowserOptions = {}) {
-  let snapshot = structuredClone(initial);
+  const acceptSnapshot = (value: TogglySnapshot): TogglySnapshot => {
+    const copy = structuredClone(value);
+    // Server-produced metadata comes from the host trust boundary, but current
+    // browser pins still constrain whether its signed values may seed the UI.
+    if (copy.source === 'signed' && options.allowedKeyIds?.length
+      && !options.allowedKeyIds.includes(copy.signingKey?.kid ?? '')) {
+      return { ...copy, definitions: {}, source: 'defaults', signedTimestamp: undefined, signingKey: undefined };
+    }
+    return copy;
+  };
+  let snapshot = acceptSnapshot(initial);
   const store = writable(snapshot);
   const localGates = options.localGates ?? [];
   const gateIndex = buildFlagGateIndex(localGates);
@@ -14,7 +25,9 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
   let generation = 0;
   let disposed = false;
   let mounted = false;
-  const publish = (next: TogglySnapshot) => { snapshot = structuredClone(next); store.set(snapshot); };
+  // Keep signed timestamp floors across route-driven context changes in this layout.
+  const session: BrowserSession = { timestamps: new Map(), keys: new Map() };
+  const publish = (next: TogglySnapshot) => { snapshot = acceptSnapshot(next); store.set(snapshot); };
   const isEnabled = (key: string, gate: GateOptions = {}) => applyLocalGate(
     resolveEvaluatedDefinition(snapshot.definitions[key], gate.entity, gate.defaultValue), key, localGates, gateIndex,
   );
@@ -26,9 +39,9 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
     // Dynamic import keeps browser transports out of SSR execution and allows deterministic hydration.
     const { connectBrowser } = await import('./client.js');
     if (disposed || ownGeneration !== generation) return;
-    stop = connectBrowser(snapshot, options, definitions => {
-      if (!disposed && ownGeneration === generation) publish({ ...snapshot, definitions: selectDefinitions(definitions, snapshot.expose) });
-    });
+    stop = connectBrowser(snapshot, options, (definitions, verification) => {
+      if (!disposed && ownGeneration === generation) publish({ ...snapshot, ...verification, source: 'signed', definitions: selectDefinitions(definitions, snapshot.expose) });
+    }, session);
   };
   return {
     subscribe: store.subscribe,

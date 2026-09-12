@@ -42,6 +42,9 @@ it('verifies frontend snapshot once, allowlists keys, preserves entity rules and
  supplied.identity='changed';supplied.groups.push('later');
  const [a,b]=await Promise.all([loadToggly(e),loadToggly(e)]);
  expect(a.definitions).toEqual({on:true,Order:entity});
+ expect(a.source).toBe('signed');
+ expect(a.signedTimestamp).toBeTypeOf('number');
+ expect(a.signingKey).toEqual(jwk);
  expect(a.context).toEqual({identity:'alice',groups:['team']});
  a.definitions.on=false;expect(b.definitions.on).toBe(true);
  expect(fetcher).toHaveBeenCalledTimes(2);
