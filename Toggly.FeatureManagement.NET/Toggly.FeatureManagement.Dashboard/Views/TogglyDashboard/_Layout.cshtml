@@ -1,0 +1,18 @@
+@{
+    var mount = (string?)ViewData["DashboardMount"] ?? "";
+    var basePath = $"{Context.Request.PathBase}{mount}";
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Toggly Embedded</title>
+    <link rel="stylesheet" href="@basePath/assets/dashboard.css" />
+</head>
+<body>
+    <header class="toggly-header"><a href="@basePath" class="brand">Toggly <span>Embedded</span></a><nav><a href="@basePath">Features</a></nav></header>
+    <main class="toggly-main">@RenderBody()</main>
+    <script src="@basePath/assets/dashboard.js"></script>
+</body>
+</html>

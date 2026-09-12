@@ -1,0 +1,25 @@
+@model DashboardFeatureListViewModel
+@{
+    Layout = "_Layout";
+    var mount = (string?)ViewData["DashboardMount"] ?? "";
+    var basePath = $"{Context.Request.PathBase}{mount}";
+}
+<section class="page-heading"><div><p class="eyebrow">Feature management</p><h1>Features</h1></div>@if (Model.CatalogExists && !Model.ReadOnly) { <a class="button" href="@basePath/features/new">Create feature</a> }</section>
+@if (!Model.CatalogExists)
+{
+    <section class="empty-state"><h2>No catalog yet</h2><p>Initialize an empty catalog before creating features.</p>@if (!Model.ReadOnly) { <form method="post" action="@basePath/initialize">@Html.AntiForgeryToken()<button class="button" type="submit">Initialize catalog</button></form> }</section>
+}
+else if (Model.Features.Count == 0)
+{
+    <section class="empty-state"><h2>No features yet</h2><p>Create a feature to start managing flags in this application.</p></section>
+}
+else
+{
+    <section class="card feature-list"><table><thead><tr><th>Feature</th><th>Targeting</th><th>Tags</th><th>State</th><th></th></tr></thead><tbody>
+    @foreach (var feature in Model.Features)
+    {
+        <tr><td><strong>@feature.Name</strong><code>@feature.Key</code><span>@feature.Description</span></td><td>@(feature.Enabled ? (feature.Rules.Count == 0 ? "Everyone" : $"{feature.Rules.Count} rules") : "Disabled")</td><td>@string.Join(", ", feature.Tags)</td><td><span class="state @(feature.Enabled ? "enabled" : "disabled")">@(feature.Enabled ? "Enabled" : "Disabled")</span></td><td><a href="@basePath/features/edit?key=@Uri.EscapeDataString(feature.Key)">Edit</a>
+        @if (!Model.ReadOnly) { <form method="post" action="@basePath/features/state" class="inline">@Html.AntiForgeryToken()<input type="hidden" name="key" value="@feature.Key" /><input type="hidden" name="expectedRevision" value="@Model.Revision" /><input type="hidden" name="enabled" value="@(!feature.Enabled)" /><button type="submit">@(feature.Enabled ? "Disable" : "Enable")</button></form> }</td></tr>
+    }
+    </tbody></table></section>
+}

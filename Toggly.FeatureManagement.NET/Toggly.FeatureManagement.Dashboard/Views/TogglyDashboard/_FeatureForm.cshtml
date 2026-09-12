@@ -1,0 +1,17 @@
+@model DashboardFeatureInput
+@{
+    var mount = (string?)ViewData["DashboardMount"] ?? "";
+    var basePath = $"{Context.Request.PathBase}{mount}";
+    var isNew = string.IsNullOrEmpty(Model.ExpectedRevision);
+}
+<form method="post" action="@(isNew ? basePath + "/features/create" : basePath + "/features/save")" class="card form-card" data-unsaved-warning>
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+    <input type="hidden" asp-for="ExpectedRevision" />
+    <label>Name<input asp-for="Name" autocomplete="off" /></label><span asp-validation-for="Name"></span>
+    <label>Key<input asp-for="Key" autocomplete="off" readonly="@(!isNew)" /></label><span asp-validation-for="Key"></span>
+    <label>Description<textarea asp-for="Description" rows="4"></textarea></label><span asp-validation-for="Description"></span>
+    <label>Tags <small>Separate tags with commas.</small><input asp-for="Tags" /></label>
+    @if (!isNew) { <label class="checkbox"><input asp-for="Enabled" /> Enabled</label> }
+    <div class="form-actions"><button type="submit" class="button">Save</button><a href="@basePath">Cancel</a></div>
+</form>
