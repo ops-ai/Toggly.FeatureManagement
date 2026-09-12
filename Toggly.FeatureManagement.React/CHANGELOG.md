@@ -1,3 +1,12 @@
+## 1.11.2
+
+2026-09-11
+
+### Changed
+- Externalize the React and JSX runtime imports so React hosts provide one
+  runtime instance, and declare peer support for React and React DOM 18.2+
+  and 19.x.
+
 ## 1.11.1
 
 2026-09-04

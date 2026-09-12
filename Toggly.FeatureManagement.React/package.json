@@ -1,10 +1,11 @@
 {
   "name": "@ops-ai/react-feature-flags-toggly",
-  "version": "1.11.1",
+  "version": "1.11.2",
   "description": "Provides feature flags support for React applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "scripts": {
-    "build": "rollup -c",
+    "build": "node scripts/clean.mjs && node scripts/build.mjs && node scripts/remove-intermediate-types.mjs && node scripts/normalize-distribution.mjs",
     "test": "jest --coverage",
+    "test:consumers": "node consumer-fixtures/verify.mjs",
     "test:watch": "jest --watch"
   },
   "author": "Toggly <support@toggly.io>",
@@ -42,12 +43,24 @@
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
   },
-  "main": "dist/cjs/index.js",
+  "peerDependencies": {
+    "react": "^18.2.0 || ^19.0.0",
+    "react-dom": "^18.2.0 || ^19.0.0"
+  },
+  "main": "dist/cjs/index.cjs",
   "module": "dist/esm/index.js",
   "files": [
     "dist"
   ],
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs",
+      "default": "./dist/esm/index.js"
+    }
+  },
   "type": "module",
   "keywords": [
     "toggly",

@@ -6,9 +6,10 @@ import dts from "rollup-plugin-dts";
 export default [
   {
     input: "src/index.ts",
+    external: ["react", "react/jsx-runtime"],
     output: [
       {
-        file: "dist/cjs/index.js",
+        file: "dist/cjs/index.cjs",
         format: "cjs",
         sourcemap: true,
       },

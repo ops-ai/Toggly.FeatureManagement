@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { jsx, Fragment } from 'react/jsx-runtime';
+'use strict';
 
-var context = createContext({
+var React = require('react');
+var jsxRuntime = require('react/jsx-runtime');
+
+var context = React.createContext({
     toggly: undefined,
 });
 var Provider = context.Provider, Consumer = context.Consumer;
@@ -2525,7 +2527,7 @@ var Feature = /** @class */ (function (_super) {
     };
     Feature.prototype.render = function () {
         if (this.props.render) {
-            return jsx(Fragment, { children: this.props.render(this.state.shouldShow) });
+            return jsxRuntime.jsx(jsxRuntime.Fragment, { children: this.props.render(this.state.shouldShow) });
         }
         // Off path: prefer a separate <Feature negate>. `fallback` is deprecated.
         if (this.state.shouldShow) {
@@ -2550,7 +2552,7 @@ function createTogglyProvider(config) {
             toggly = new Toggly(config);
             TogglyProvider = function (_a) {
                 var children = _a.children;
-                return jsx(Provider, __assign({ value: { toggly: toggly } }, { children: children }));
+                return jsxRuntime.jsx(Provider, __assign({ value: { toggly: toggly } }, { children: children }));
             };
             return [2 /*return*/, TogglyProvider];
         });
@@ -2562,9 +2564,9 @@ function createTogglyProvider(config) {
  * Re-renders after feature definitions refresh (HTTP load or WebSocket update).
  */
 function useVariant(featureKey) {
-    var toggly = useContext(context).toggly;
-    var _a = useState(function () { var _a; return (_a = toggly === null || toggly === void 0 ? void 0 : toggly.getVariant(featureKey)) !== null && _a !== void 0 ? _a : null; }), variant = _a[0], setVariant = _a[1];
-    useEffect(function () {
+    var toggly = React.useContext(context).toggly;
+    var _a = React.useState(function () { var _a; return (_a = toggly === null || toggly === void 0 ? void 0 : toggly.getVariant(featureKey)) !== null && _a !== void 0 ? _a : null; }), variant = _a[0], setVariant = _a[1];
+    React.useEffect(function () {
         if (!toggly) {
             setVariant(null);
             return undefined;
@@ -2584,7 +2586,7 @@ function useVariant(featureKey) {
 }
 
 function useTogglyService() {
-    return useContext(context).toggly;
+    return React.useContext(context).toggly;
 }
 /**
  * Hook to check if a single feature flag is enabled.
@@ -2602,11 +2604,11 @@ function useFeatureGate(featureKeys, options) {
     if (options === void 0) { options = {}; }
     var _a = options.requirement, requirement = _a === void 0 ? 'all' : _a, _b = options.negate, negate = _b === void 0 ? false : _b, _c = options.defaultValue, defaultValue = _c === void 0 ? false : _c, context = options.context, contextKind = options.contextKind;
     var toggly = useTogglyService();
-    var _d = useState(defaultValue), isEnabled = _d[0], setIsEnabled = _d[1];
-    var _e = useState(true), isLoading = _e[0], setIsLoading = _e[1];
-    var keysKey = useMemo(function () { return featureKeys.join('\0'); }, [featureKeys]);
-    var stableKeys = useMemo(function () { return __spreadArray([], featureKeys, true); }, [keysKey]);
-    var evaluate = useCallback(function () { return __awaiter(_this, void 0, void 0, function () {
+    var _d = React.useState(defaultValue), isEnabled = _d[0], setIsEnabled = _d[1];
+    var _e = React.useState(true), isLoading = _e[0], setIsLoading = _e[1];
+    var keysKey = React.useMemo(function () { return featureKeys.join('\0'); }, [featureKeys]);
+    var stableKeys = React.useMemo(function () { return __spreadArray([], featureKeys, true); }, [keysKey]);
+    var evaluate = React.useCallback(function () { return __awaiter(_this, void 0, void 0, function () {
         var result;
         return __generator(this, function (_b) {
             switch (_b.label) {
@@ -2641,10 +2643,10 @@ function useFeatureGate(featureKeys, options) {
             }
         });
     }); }, [toggly, stableKeys, keysKey, requirement, negate, defaultValue, context, contextKind]);
-    useEffect(function () {
+    React.useEffect(function () {
         void evaluate();
     }, [evaluate]);
-    useEffect(function () {
+    React.useEffect(function () {
         if (!toggly || stableKeys.length === 0) {
             return;
         }
@@ -2659,7 +2661,7 @@ function useFeatureGate(featureKeys, options) {
             unsubLocalGates();
         };
     }, [toggly, keysKey, evaluate, stableKeys.length]);
-    var refresh = useCallback(function () { return __awaiter(_this, void 0, void 0, function () {
+    var refresh = React.useCallback(function () { return __awaiter(_this, void 0, void 0, function () {
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, evaluate()];
@@ -2672,9 +2674,17 @@ function useFeatureGate(featureKeys, options) {
     return { isEnabled: isEnabled, isLoading: isLoading, refresh: refresh };
 }
 
-var isEntityGate$1 = dist.isEntityGate;
-var mapEntityContext$1 = dist.mapEntityContext;
-var normalizeEntityContext$1 = dist.normalizeEntityContext;
-var registerContext$1 = dist.registerContext;
-export { Consumer, Feature, Provider, Toggly, context, createTogglyProvider, isEntityGate$1 as isEntityGate, mapEntityContext$1 as mapEntityContext, normalizeEntityContext$1 as normalizeEntityContext, registerContext$1 as registerContext, useFeatureFlag, useFeatureGate, useVariant };
-//# sourceMappingURL=index.js.map
+exports.Consumer = Consumer;
+exports.Feature = Feature;
+exports.Provider = Provider;
+exports.Toggly = Toggly;
+exports.context = context;
+exports.createTogglyProvider = createTogglyProvider;
+exports.isEntityGate = dist.isEntityGate;
+exports.mapEntityContext = dist.mapEntityContext;
+exports.normalizeEntityContext = dist.normalizeEntityContext;
+exports.registerContext = dist.registerContext;
+exports.useFeatureFlag = useFeatureFlag;
+exports.useFeatureGate = useFeatureGate;
+exports.useVariant = useVariant;
+//# sourceMappingURL=index.cjs.map
