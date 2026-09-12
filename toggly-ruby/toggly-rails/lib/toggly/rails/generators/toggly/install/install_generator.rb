@@ -37,8 +37,11 @@ module Toggly
         say "  end"
         say ""
         say "Usage in views:"
-        say "  <% if feature_enabled?(:my_feature) %>"
+        say "  <%= feature(:my_feature) do %>"
         say "    Feature content"
+        say "  <% end %>"
+        say "  <%= feature(:my_feature, negate: true) do %>"
+        say "    Standard content"
         say "  <% end %>"
         say ""
       end
