@@ -15,9 +15,18 @@ The hook reads `socket.assigns.toggly_context`, or the signed session's `"toggly
 ```heex
 <.feature flags={@toggly_flags} feature={["new-dashboard", "api-v2"]} requirement={:any}>
   <p>New dashboard</p>
-  <:fallback><p>Classic dashboard</p></:fallback>
+</.feature>
+<.feature
+  flags={@toggly_flags}
+  feature={["new-dashboard", "api-v2"]}
+  requirement={:any}
+  negate={true}
+>
+  <p>Classic dashboard</p>
 </.feature>
 ```
+
+Use a second feature block with `negate={true}` for disabled content, keeping the same flags, feature keys, requirement and default on both blocks. Negation applies after the all/any result is combined. Each block renders its ordinary children only when its result is true.
 
 `requirement` defaults to `:all`; `negate` and `default` default to false. Empty features are false before negation. Flags are booleans, not multivariate experiment assignments. Gates render presentation branches and do not authorize access.
 
