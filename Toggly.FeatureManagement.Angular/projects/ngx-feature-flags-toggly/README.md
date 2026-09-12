@@ -1,6 +1,6 @@
 # @ops-ai/ngx-feature-flags-toggly
 
-Angular SDK for [Toggly](https://toggly.io) feature flags. Supports Angular 15-19+.
+Angular SDK for [Toggly](https://toggly.io) feature flags. Supports Angular 15-22.
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@ops-ai/ngx-feature-flags-toggly"><img src="https://img.shields.io/npm/v/@ops-ai/ngx-feature-flags-toggly.svg" alt="npm version"></a>
@@ -175,23 +175,48 @@ export class MyComponent {
 
 ## Compatibility
 
-| Angular Version | Support |
-|-----------------|---------|
-| 15.x | ✅ Full |
-| 16.x | ✅ Full |
-| 17.x | ✅ Full |
-| 18.x | ✅ Full |
-| 19.x | ✅ Full |
+| Angular | CLI / build | TypeScript | Node.js | Host |
+| --- | --- | --- | --- | --- |
+| 15.0.0 | 15.0.0 | 4.8.4 | 18.20.8 | Zone.js OnPush |
+| 15.2.10 | 15.2.11 | 4.9.5 | 18.20.8 | Zone.js OnPush |
+| 16.2.12 | 16.2.16 | 5.1.6 | 18.20.8 | Zone.js OnPush |
+| 17.3.12 | 17.3.17 | 5.4.5 | 18.20.8 | Zone.js OnPush |
+| 18.2.14 | 18.2.21 | 5.5.4 | 18.20.8 | Zone.js OnPush |
+| 19.2.25 | 19.2.27 | 5.8.3 | 22.23.2 | Zone.js OnPush |
+| 20.3.31 | 20.3.37 | 5.9.3 | 24.18.0 | Zone.js OnPush |
+| 21.2.23 | 21.2.24 | 5.9.3 | 24.18.0 | zoneless OnPush |
+| 22.1.6 | 22.1.8 | 6.0.3 | 24.18.0 | zoneless OnPush |
 
-## Security Notes
+The peer minimum remains Angular 15.0.0. These exact packed fixtures verify
+public types with `skipLibCheck: false`, production builds, browser rendering,
+input changes, both route guards, local gates, WebSocket updates, context changes,
+and shutdown. Angular 18 includes an SDK 2.8.1 locked-consumer upgrade.
+See `host-fixtures/matrix.json` and its committed dependency locks.
 
-This SDK is built with Angular 18 development dependencies to maximize compatibility with Angular 15-19+ applications. The Angular 18 build tooling has known security advisories (XSS vulnerabilities in SSR/template sanitization) that:
+`npm run build` / `npm run build-lib` package the library with Angular 15.0.0,
+ng-packagr 15.0.3, TypeScript 4.8.4, and Node 18.20.8 in the isolated `packaging/`
+toolchain. This preserves the minimum Angular declaration ABI. The main workspace
+retains Angular 22 for source tests. Do not publish output from a direct `ng build`
+using the current test compiler.
 
-- **Do not affect this library** - The vulnerabilities are in Angular's server-side rendering and template sanitization features
-- **Do not affect your application** - Your app uses its own Angular version with its own security patches
-- **Only impact development builds** - These are dev dependencies, not runtime dependencies
+Run `npm run test:hosts` after building. Each host selects its exact Node runtime
+and npm 10.8.2, installs its committed lock, upgrades to the packed SDK, and launches
+Chromium. Install Chromium with `npx playwright install chromium`, or set `CHROME_BIN`.
+`TOGGLY_HOST=angular-22` selects one host. `TOGGLY_SIGNED_DEFS_TARBALL` supplies an
+explicit local signer artifact for integration testing only; ordinary resolution
+must also pass before release. The shipped signer dependency requires `^1.2.6`.
 
-Your application should use the latest patch version of your Angular version to ensure you have all security fixes.
+### Zoneless applications
+
+Angular 21–22 applications using `provideZonelessChangeDetection()` support OnPush
+hosts. Feature components and directives notify Angular after asynchronous
+refreshes and device-local gate changes. Older applications may retain Zone.js.
+Default browser builds need no Node crypto external.
+
+Choose the Node and TypeScript versions required by your Angular generation:
+[Angular version compatibility](https://angular.dev/reference/versions).
+Older Angular versions are retained compatibility targets; upstream security
+support follows Angular's own lifecycle.
 
 ## Device-local post-filter gates
 

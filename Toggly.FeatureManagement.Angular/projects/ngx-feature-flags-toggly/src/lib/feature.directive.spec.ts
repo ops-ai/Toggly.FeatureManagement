@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { Component } from '@angular/core';
+import { Component, ChangeDetectorRef } from '@angular/core';
 import { FeatureFlagDirective } from './feature.directive';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
 import { TogglyService } from './toggly.service';
@@ -95,6 +95,7 @@ describe('FeatureFlagDirective', () => {
       expect(fixture.nativeElement.querySelector('.content')).toBeNull();
 
       host.requirement = 'any';
+      fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
       fixture.detectChanges();
       tick();
       fixture.detectChanges();
@@ -111,6 +112,7 @@ describe('FeatureFlagDirective', () => {
       expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
 
       host.negate = true;
+      fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
       fixture.detectChanges();
       tick();
       fixture.detectChanges();
@@ -188,6 +190,7 @@ describe('FeatureFlagDirective', () => {
       expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
 
       host.flag = 'Disabled';
+      fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
       fixture.detectChanges();
       tick();
       fixture.detectChanges();
@@ -268,6 +271,7 @@ describe('FeatureFlagDirective entity context', () => {
       attributes: { BirthDate: entity.BirthDate },
     }));
     fixture.componentInstance.context = { BirthDate: '2026-06-15T00:00:00Z' };
+    fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
     fixture.detectChanges();
     tick();
     fixture.detectChanges();

@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": false,
+    "module": "ES2022",
+    "lib": [
+      "ES2022",
+      "dom"
+    ],
+    "moduleResolution": "node",
+    "strict": true,
+    "skipLibCheck": false,
+    "experimentalDecorators": true,
+    "types": []
+  },
+  "angularCompilerOptions": {
+    "strictTemplates": true
+  },
+  "files": [
+    "src/main.ts",
+    "src/polyfills.ts"
+  ]
+}

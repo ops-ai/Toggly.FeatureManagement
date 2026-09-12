@@ -1,4 +1,6 @@
 import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   ContentChild,
   Input,
@@ -53,6 +55,7 @@ import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 @Component({
   selector: 'feature',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule],
   template: `
     <ng-container *ngIf="shouldShow && content">
@@ -81,7 +84,10 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
   private unsubscribeFeaturesRefresh: (() => void) | undefined
   private unsubscribeLocalGates: (() => void) | undefined
 
-  constructor(private toggly: TogglyService) {}
+  constructor(
+    private readonly toggly: TogglyService,
+    private readonly changeDetector: ChangeDetectorRef,
+  ) {}
 
   ngOnInit(): void {
     this.unsubscribeFeaturesRefresh = this.toggly.subscribeFeaturesRefresh(() => {
@@ -112,6 +118,7 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
     }
 
     this.isLoading = true
+    this.changeDetector.markForCheck()
 
     // Check if we should show the feature during the evaluation of a feature flag
     this.shouldShow = this.toggly.shouldShowFeatureDuringEvaluation
@@ -119,12 +126,19 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
     if (gate.length <= 0) {
       this.shouldShow = !this.negate
       this.isLoading = false
+      this.changeDetector.markForCheck()
     } else {
       const kind = this.contextKind ?? this.kind
       this.toggly
         .evaluateFeatureGate(gate, this.requirement, this.negate, this.context, kind)
-        .then((isEnabled) => (this.shouldShow = isEnabled))
-        .finally(() => (this.isLoading = false))
+        .then((isEnabled) => {
+          this.shouldShow = isEnabled
+          this.changeDetector.markForCheck()
+        })
+        .finally(() => {
+          this.isLoading = false
+          this.changeDetector.markForCheck()
+        })
     }
   }
 }

@@ -1,4 +1,5 @@
 import {
+  ChangeDetectorRef,
   Directive,
   EmbeddedViewRef,
   Input,
@@ -83,6 +84,7 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
     private readonly templateRef: TemplateRef<{ $implicit: boolean; enabled: boolean }>,
     private readonly viewContainer: ViewContainerRef,
     private readonly toggly: TogglyService,
+    private readonly changeDetector: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -122,11 +124,13 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
         $implicit: isEnabled,
         enabled: isEnabled,
       })
+      this.changeDetector.markForCheck()
       return
     }
 
     this.viewRef.context.$implicit = isEnabled
     this.viewRef.context.enabled = isEnabled
     this.viewRef.markForCheck()
+    this.changeDetector.markForCheck()
   }
 }

@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "sourceMap": true,
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@ops-ai/ngx-feature-flags-toggly": [
         "dist/ngx-feature-flags-toggly"

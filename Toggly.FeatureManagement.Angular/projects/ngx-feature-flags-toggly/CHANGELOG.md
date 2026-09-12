@@ -1,3 +1,17 @@
+## 2.8.2
+
+2026-09-12
+
+### Added
+- Angular 22 zoneless and OnPush change-detection support for feature components,
+  directives, remote refreshes, and device-local post-filter gates [OPS-1177].
+
+### Fixed
+- Package with the Angular 15 compiler ABI so the retained minimum consumer can
+  check all public declarations without `skipLibCheck` [OPS-1177].
+- Require browser-safe signed definitions 1.2.6 so locked upgrades cannot retain
+  the previous browser crypto import [OPS-1177].
+
 ## 2.8.1
 
 2026-09-04

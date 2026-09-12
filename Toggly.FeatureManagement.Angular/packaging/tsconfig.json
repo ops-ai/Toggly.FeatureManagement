@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "lib": [
+      "ES2022",
+      "dom"
+    ],
+    "strict": true,
+    "skipLibCheck": false,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "declaration": true,
+    "types": [],
+    "baseUrl": "."
+  },
+  "angularCompilerOptions": {
+    "compilationMode": "partial",
+    "strictTemplates": true
+  },
+  "files": [
+    ".build/src/public-api.ts"
+  ]
+}

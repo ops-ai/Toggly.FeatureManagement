@@ -1,4 +1,5 @@
 import {
+  ChangeDetectorRef,
   Directive,
   Input,
   OnDestroy,
@@ -59,7 +60,6 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
     } else {
       this.flag = []
     }
-
     this.updateView()
   }
 
@@ -98,6 +98,7 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
     private _templateRef: TemplateRef<unknown>,
     private _viewContainer: ViewContainerRef,
     private _toggly: TogglyService,
+    private _changeDetector: ChangeDetectorRef,
   ) {}
 
   ngOnInit() {
@@ -128,6 +129,7 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
           this._viewContainer.clear()
           this.isHidden = true
         }
+        this._changeDetector.markForCheck()
       })
   }
 }
