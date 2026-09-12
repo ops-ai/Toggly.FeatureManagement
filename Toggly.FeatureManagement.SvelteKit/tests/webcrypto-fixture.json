@@ -6,9 +6,7 @@
   "jwks": {
     "keys": [
       {
-        "key_ops": [
-          "verify"
-        ],
+        "key_ops": ["verify"],
         "ext": true,
         "kty": "EC",
         "x": "oMW6cLmf3V-oFPfWaiBiCUck_CXTzEbACYuWib-ZLtk",

@@ -24,7 +24,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:host": "node scripts/test-host.mjs"
+    "test:host": "node scripts/test-host.mjs",
+    "format": "npm exec --yes --package=prettier@3.6.2 --package=prettier-plugin-svelte@3.4.1 -- node scripts/format.mjs --write",
+    "format:check": "npm exec --yes --package=prettier@3.6.2 --package=prettier-plugin-svelte@3.4.1 -- node scripts/format.mjs --check",
+    "pretest": "npm run format:check",
+    "pretest:coverage": "npm run format:check"
   },
   "engines": {
     "node": ">=22.12.0"

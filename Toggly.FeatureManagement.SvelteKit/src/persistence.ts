@@ -88,7 +88,12 @@ export function createPersistence(storage: DefinitionStorage | undefined, baseUR
   }
 
   return {
-    read(scope: string, policy: VerificationPolicy, minimumTimestamp: number, observedKeys?: JwkSet) {
+    read(
+      scope: string,
+      policy: VerificationPolicy,
+      minimumTimestamp: number,
+      observedKeys?: JwkSet,
+    ) {
       if (!storage || unusable) return;
       try {
         const raw = storage.getItem(`toggly:sveltekit:envelope:${scope}`);

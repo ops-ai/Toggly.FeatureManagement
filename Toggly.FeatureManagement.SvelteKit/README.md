@@ -24,7 +24,9 @@ const client = createTogglyClient({
   featureDefaults: { 'new-dashboard': false },
 });
 await client.init();
-process.once('SIGTERM', () => { void client.close(); });
+process.once('SIGTERM', () => {
+  void client.close();
+});
 export const handle = createTogglyHandle({
   client,
   context: () => ({ identity: '', groups: [], claims: {} }),
@@ -52,13 +54,20 @@ Return `await loadToggly(event)` from `+layout.server.ts` as `toggly`, plus your
   import Feature from '@ops-ai/toggly-sveltekit/Feature.svelte';
   import type { LayoutData } from './$types';
   export let data: LayoutData;
-  const toggly = createToggly(data.toggly, { appKey: data.publicKey, environment: data.environment });
+  const toggly = createToggly(data.toggly, {
+    appKey: data.publicKey,
+    environment: data.environment,
+  });
   $: toggly.update(data.toggly);
-  onMount(() => { void toggly.start(); });
+  onMount(() => {
+    void toggly.start();
+  });
   onDestroy(() => toggly.dispose());
 </script>
+
 <Feature {toggly} feature="new-dashboard">
-  <p>New dashboard</p><p slot="fallback">Classic dashboard</p>
+  <p>New dashboard</p>
+  <p slot="fallback">Classic dashboard</p>
 </Feature>
 <slot />
 ```
@@ -67,17 +76,17 @@ Synchronous initialization selects the same SSR and hydration branch. `update(sn
 
 ## API
 
-| Surface | Behavior |
-| --- | --- |
-| `createToggly(snapshot, options)` | Creates a synchronous Svelte readable store and evaluation methods |
-| `isEnabled(key, { entity, defaultValue })` | Browser boolean; missing default false; entity gate without entity fails closed |
-| `gate(keys, { requirement, negate, entity, defaultValue })` | all/any, optional negation; empty gate true before negation |
-| `start()` / `update(snapshot)` / `dispose()` | Browser refresh lifecycle, context replacement, cleanup |
-| `notifyLocalGatesChanged()` | Notify reactive readers after a local prerequisite changes |
-| `event.locals.toggly.isEnabled(key, { entity })` | Async request-bound Node evaluation using configured defaults |
-| `event.locals.toggly.gate(keys, { requirement, negate, entity })` | Async request-bound composite gate |
-| `loadToggly(event)` | One verified, allowlisted frontend fetch per request |
-| `requireFeature(event, keys, options)` | Throws HTTP404 on a failed server gate; suitable for loads/actions |
+| Surface                                                           | Behavior                                                                        |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `createToggly(snapshot, options)`                                 | Creates a synchronous Svelte readable store and evaluation methods              |
+| `isEnabled(key, { entity, defaultValue })`                        | Browser boolean; missing default false; entity gate without entity fails closed |
+| `gate(keys, { requirement, negate, entity, defaultValue })`       | all/any, optional negation; empty gate true before negation                     |
+| `start()` / `update(snapshot)` / `dispose()`                      | Browser refresh lifecycle, context replacement, cleanup                         |
+| `notifyLocalGatesChanged()`                                       | Notify reactive readers after a local prerequisite changes                      |
+| `event.locals.toggly.isEnabled(key, { entity })`                  | Async request-bound Node evaluation using configured defaults                   |
+| `event.locals.toggly.gate(keys, { requirement, negate, entity })` | Async request-bound composite gate                                              |
+| `loadToggly(event)`                                               | One verified, allowlisted frontend fetch per request                            |
+| `requireFeature(event, keys, options)`                            | Throws HTTP404 on a failed server gate; suitable for loads/actions              |
 
 Pass explicit entities: `{ kind: 'Order', key: 'ord-vip', attributes: { Vip: true } }`. The Node core owns rule evaluation; shared entity/local-gate packages own browser gate evaluation. No evaluator is duplicated here. Boolean branches are not A/B experiment assignment; variant assignment is not exposed.
 
@@ -102,7 +111,6 @@ npm run test:host
 ```
 
 The [SvelteKit sample](https://github.com/ops-ai/Toggly.Samples/tree/develop/sveltekit-sdk) includes a real adapter-node host, filter matrix and browser smoke tests. [Full guide](https://docs.toggly.io/sdks/javascript/sveltekit). MIT license. [Toggly](https://toggly.io).
-
 
 ## Persistent signed definitions
 

@@ -6,4 +6,5 @@
   // Subscribe to this layout instance so navigation and verified refreshes invalidate the gate.
   $: allowed = $toggly && toggly.gate(typeof feature === 'string' ? [feature] : feature, options);
 </script>
+
 {#if allowed}<slot />{:else}<slot name="fallback" />{/if}

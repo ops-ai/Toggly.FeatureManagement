@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { createPersistence, verifyEnvelope } from '../src/persistence.js';
 import { envelope as signEnvelope, jwk } from './signing.js';
 const jwks = { keys: [jwk] };
-const envelope = (defs: unknown, _encoding?: string, timestamp?: number) => signEnvelope(defs, timestamp);
+const envelope = (defs: unknown, _encoding?: string, timestamp?: number) =>
+  signEnvelope(defs, timestamp);
 function memoryStorage() {
   const entries = new Map<string, string>();
   return {
     entries,
     getItem: (key: string) => entries.get(key) ?? null,
-    setItem: (key: string, value: string) => { entries.set(key, value); },
+    setItem: (key: string, value: string) => {
+      entries.set(key, value);
+    },
   };
 }
 describe('persistent storage integrity', () => {
@@ -165,5 +168,4 @@ describe('restored key and envelope validation', () => {
       'Missing',
     );
   });
-
 });
