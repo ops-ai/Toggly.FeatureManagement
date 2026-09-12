@@ -7,10 +7,10 @@
  * digest  = SHA-256(SHA-256(utf8(payload)))
  * signature = standard or URL-safe base64 of IEEE P1363 (r||s) or DER
  *
- * On Node (and Jest) we verify with crypto.verify(null, doubleHash).
- * In browsers, WebCrypto's ECDSA verify hashes again, so we pass the first
- * SHA-256 digest into subtle.verify (effective double-hash). DER signatures
- * are converted to P1363 before subtle.verify.
+ * WebCrypto's ECDSA verify hashes the supplied digest once more, so we pass
+ * the first SHA-256 digest into subtle.verify (effective double-hash). This
+ * matches the canonical Worker signer and works consistently in Node and
+ * browser runtimes. DER signatures are converted to P1363 before verification.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.assertEnvelopeFreshness = void 0;
@@ -257,31 +257,16 @@ function toP1363Signature(signature) {
     }
     return derSignatureToP1363(signature);
 }
-function isNodeRuntime() {
-    return (typeof process !== 'undefined' &&
-        typeof process.versions?.node === 'string');
-}
 async function sha1HexUpper(bytes) {
-    if (isNodeRuntime()) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const nodeCrypto = require('crypto');
-        return nodeCrypto.createHash('sha1').update(bytes).digest('hex').toUpperCase();
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+        throw new Error('WebCrypto is required to validate JWKs');
     }
-    if (typeof crypto !== 'undefined' && crypto.subtle) {
-        const exact = bytes.slice();
-        const digest = await crypto.subtle.digest('SHA-1', exact);
-        return Array.from(new Uint8Array(digest))
-            .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
-            .join('');
-    }
-    throw new Error('WebCrypto is required to validate JWKs');
+    const digest = await crypto.subtle.digest('SHA-1', bytes.slice());
+    return Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
+        .join('');
 }
 async function sha256Bytes(data) {
-    if (isNodeRuntime()) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const nodeCrypto = require('crypto');
-        return Uint8Array.from(nodeCrypto.createHash('sha256').update(data).digest());
-    }
     if (typeof crypto === 'undefined' || !crypto.subtle) {
         throw new Error('WebCrypto is required to hash signed definitions');
     }
@@ -327,27 +312,7 @@ async function verifySignedDefinitions(defsRaw, envelope, jwks, allowedKids, fre
     }
     const payloadBytes = new TextEncoder().encode(`${defsRaw}|${envelope.timestamp}`);
     const firstDigest = await sha256Bytes(payloadBytes);
-    const doubleDigest = await sha256Bytes(firstDigest);
     const signature = base64ToBytes(envelope.signature);
-    if (isNodeRuntime()) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const nodeCrypto = require('crypto');
-        const key = nodeCrypto.createPublicKey({
-            key: {
-                kty: matching.kty ?? 'EC',
-                crv: matching.crv ?? 'P-256',
-                x: matching.x,
-                y: matching.y,
-            },
-            format: 'jwk',
-        });
-        const encoding = signature.length === 64 ? 'ieee-p1363' : 'der';
-        const ok = nodeCrypto.verify(null, doubleDigest, { key, dsaEncoding: encoding }, signature);
-        if (!ok) {
-            throw new Error('invalid signature');
-        }
-        return;
-    }
     if (typeof crypto === 'undefined' || !crypto.subtle) {
         throw new Error('WebCrypto is required to verify signed definitions');
     }

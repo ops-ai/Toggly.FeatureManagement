@@ -6,10 +6,10 @@
  * digest  = SHA-256(SHA-256(utf8(payload)))
  * signature = standard or URL-safe base64 of IEEE P1363 (r||s) or DER
  *
- * On Node (and Jest) we verify with crypto.verify(null, doubleHash).
- * In browsers, WebCrypto's ECDSA verify hashes again, so we pass the first
- * SHA-256 digest into subtle.verify (effective double-hash). DER signatures
- * are converted to P1363 before subtle.verify.
+ * WebCrypto's ECDSA verify hashes the supplied digest once more, so we pass
+ * the first SHA-256 digest into subtle.verify (effective double-hash). This
+ * matches the canonical Worker signer and works consistently in Node and
+ * browser runtimes. DER signatures are converted to P1363 before verification.
  */
 import { type VerifyFreshnessOptions } from './freshness';
 export type { VerifyFreshnessOptions };

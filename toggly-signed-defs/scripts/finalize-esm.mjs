@@ -2,7 +2,8 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const esmDir = fileURLToPath(new URL('../dist/esm/', import.meta.url))
+const buildTarget = process.argv[2] ?? 'esm'
+const esmDir = fileURLToPath(new URL(`../dist/${buildTarget}/`, import.meta.url))
 writeFileSync(join(esmDir, 'package.json'), `${JSON.stringify({ type: 'module' }, null, 2)}\n`)
 
 function walk(dir) {
@@ -12,7 +13,7 @@ function walk(dir) {
       walk(path)
       continue
     }
-    if (!entry.name.endsWith('.js')) {
+    if (!entry.name.endsWith('.js') && !entry.name.endsWith('.d.ts')) {
       continue
     }
 

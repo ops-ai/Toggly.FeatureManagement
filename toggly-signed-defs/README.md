@@ -14,6 +14,12 @@ Dependent packages in this monorepo declare a **registry** range (not `file:`):
 "@ops-ai/toggly-signed-defs": "^1.0.0"
 ```
 
+## Runtime resolution
+
+Keep importing from `@ops-ai/toggly-signed-defs`. Browser-aware bundlers select
+the browser ESM condition; Node ESM and CommonJS consumers retain their existing
+root import behavior. All three entry points expose the same public API.
+
 ## Entity context
 
 Evaluated-signed `defs` may mix booleans and `EntityGate` objects (`EvaluatedDefinitions`). This package parses and verifies the envelope; it does not evaluate gates. Consumers resolve gates with `@ops-ai/toggly-hooks-types` (or an SDK wrapper) and per-eval entity context.

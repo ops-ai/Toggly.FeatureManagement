@@ -1,24 +1,35 @@
 {
   "name": "@ops-ai/toggly-signed-defs",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "Shared ES256 signed-definitions verification for Toggly SDKs (browser and Node)",
   "main": "dist/index.js",
   "module": "dist/esm/index.js",
+  "browser": "dist/browser/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/esm/index.js",
-      "require": "./dist/index.js"
+      "browser": {
+        "types": "./dist/browser/index.d.ts",
+        "default": "./dist/browser/index.js"
+      },
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "npm run clean && tsc && tsc -p tsconfig.esm.json && node scripts/finalize-esm.mjs",
+    "build": "npm run clean && tsc && tsc -p tsconfig.esm.json && node scripts/finalize-esm.mjs && tsc -p tsconfig.browser.json && node scripts/finalize-esm.mjs browser",
     "clean": "rm -rf dist",
     "test": "vitest run",
+    "test:consumer": "npm run build && node scripts/verify-consumer-types.mjs",
     "prepublishOnly": "npm run clean && npm run build",
     "typecheck": "tsc --noEmit"
   },
