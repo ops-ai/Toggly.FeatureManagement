@@ -319,8 +319,8 @@ describe('signed-defs-verify', () => {
     expect(converted.length).toBe(64);
   });
 
-  it('accepts long-form DER length prefixes', async () => {
-    const { privateKey } = await makeSignedKey();
+  it('rejects nonminimal long-form DER length prefixes', async () => {
+    const { privateKey, jwk } = await makeSignedKey();
     const p1363 = await signDoubleHashP1363(privateKey, '{"a":1}', 1);
     const shortDer = p1363ToDer(p1363);
     const longDer = new Uint8Array(shortDer.length + 1);
@@ -328,7 +328,13 @@ describe('signed-defs-verify', () => {
     longDer[1] = 0x81;
     longDer[2] = shortDer[1]!;
     longDer.set(shortDer.slice(2), 3);
-    expect(derSignatureToP1363(longDer).length).toBe(64);
+    // A P-256 signature fits the short form; DER forbids this redundant prefix.
+    expect(() => derSignatureToP1363(longDer)).toThrowError(/invalid DER sequence length/);
+    await expectAsync(
+      verifySignedDefinitions('{"a":1}', {
+        signature: bytesToBase64(longDer), timestamp: 1, kid: jwk.kid,
+      }, { keys: [jwk] })
+    ).toBeRejectedWithError(/invalid DER sequence length/);
   });
 
   it('rejects invalid DER signatures', () => {

@@ -23,9 +23,9 @@ function computeKidSync(x, y) {
   return `${digest}ES256`;
 }
 
-function doubleSha256(payload) {
-  const first = createHash('sha256').update(payload, 'utf8').digest();
-  return createHash('sha256').update(first).digest();
+function sha256ForSigning(payload) {
+  // ECDSA sign('sha256', digest) hashes once more, matching the Worker signer.
+  return createHash('sha256').update(payload, 'utf8').digest();
 }
 
 function makeSignedKey() {
@@ -47,11 +47,11 @@ function makeSignedKey() {
 }
 
 function signP1363(privateKey, hash) {
-  return sign(null, hash, { key: privateKey, dsaEncoding: 'ieee-p1363' });
+  return sign('sha256', hash, { key: privateKey, dsaEncoding: 'ieee-p1363' });
 }
 
 function signDer(privateKey, hash) {
-  return sign(null, hash, { key: privateKey, dsaEncoding: 'der' });
+  return sign('sha256', hash, { key: privateKey, dsaEncoding: 'der' });
 }
 
 describe('signed-defs-verify', () => {
@@ -104,7 +104,7 @@ describe('signed-defs-verify', () => {
     const jwks = { keys: [jwk] };
     const defs = '{"PresalePhotos":true,"OrderSales":false}';
     const timestamp = 1783915396;
-    const signature = signP1363(privateKey, doubleSha256(`${defs}|${timestamp}`)).toString('base64');
+    const signature = signP1363(privateKey, sha256ForSigning(`${defs}|${timestamp}`)).toString('base64');
 
     await expect(
       verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, jwks)
@@ -115,7 +115,7 @@ describe('signed-defs-verify', () => {
     const { privateKey, jwk } = makeSignedKey();
     const defs = '{"a":1}';
     const timestamp = 3;
-    const signature = signP1363(privateKey, doubleSha256(`${defs}|${timestamp}`)).toString('base64');
+    const signature = signP1363(privateKey, sha256ForSigning(`${defs}|${timestamp}`)).toString('base64');
     await expect(
       verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, { keys: [jwk] }, [])
     ).resolves.toBeUndefined();
@@ -176,7 +176,7 @@ describe('signed-defs-verify', () => {
     const { privateKey, jwk } = makeSignedKey();
     const defs = '{"a":1}';
     const timestamp = 100;
-    const signature = signP1363(privateKey, doubleSha256(`${defs}|${timestamp}`)).toString('base64');
+    const signature = signP1363(privateKey, sha256ForSigning(`${defs}|${timestamp}`)).toString('base64');
     await expect(
       verifySignedDefinitions(
         defs,
@@ -193,7 +193,7 @@ describe('signed-defs-verify', () => {
     const jwks = { keys: [jwk] };
     const defs = '{"a":1}';
     const timestamp = 7;
-    const signature = signP1363(privateKey, doubleSha256(`${defs}|${timestamp}`))
+    const signature = signP1363(privateKey, sha256ForSigning(`${defs}|${timestamp}`))
       .toString('base64')
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
@@ -209,7 +209,7 @@ describe('signed-defs-verify', () => {
     const jwks = { keys: [jwk] };
     const defs = '{"PresalePhotos":true}';
     const timestamp = 1783915396;
-    const signature = signDer(privateKey, doubleSha256(`${defs}|${timestamp}`)).toString('base64');
+    const signature = signDer(privateKey, sha256ForSigning(`${defs}|${timestamp}`)).toString('base64');
 
     await expect(
       verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, jwks)
@@ -221,11 +221,23 @@ describe('signed-defs-verify', () => {
     const jwks = { keys: [jwk] };
     const defs = '{"PresalePhotos":true}';
     const timestamp = 1783915396;
-    const singleHash = createHash('sha256').update(`${defs}|${timestamp}`, 'utf8').digest();
-    const signature = signP1363(privateKey, singleHash).toString('base64');
+    // Signing the raw payload hashes exactly once.
+    const signature = signP1363(privateKey, Buffer.from(`${defs}|${timestamp}`)).toString('base64');
 
     await expect(
       verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, jwks)
+    ).rejects.toThrow(/invalid signature/);
+  });
+
+  it('rejects triple-SHA256 signatures from double-digested Node signing inputs', async () => {
+    const { privateKey, jwk } = makeSignedKey();
+    const defs = '{"PresalePhotos":true}';
+    const timestamp = 1783915396;
+    const secondDigest = createHash('sha256').update(sha256ForSigning(`${defs}|${timestamp}`)).digest();
+    const signature = signP1363(privateKey, secondDigest).toString('base64');
+
+    await expect(
+      verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, { keys: [jwk] })
     ).rejects.toThrow(/invalid signature/);
   });
 
@@ -234,7 +246,7 @@ describe('signed-defs-verify', () => {
     const jwks = { keys: [jwk] };
     const defs = '{"feature-a":true}';
     const timestamp = 42;
-    const signature = signP1363(privateKey, doubleSha256(`${defs}|${timestamp}`)).toString('base64');
+    const signature = signP1363(privateKey, sha256ForSigning(`${defs}|${timestamp}`)).toString('base64');
     const body = `{"defs":${defs},"signature":"${signature}","timestamp":${timestamp},"kid":"${jwk.kid}"}`;
 
     const { envelope, defsRaw } = parseSignedEnvelope(body);
@@ -264,7 +276,7 @@ describe('signed-defs-verify', () => {
     // Signature covers nested/innocent bytes only.
     const signature = signP1363(
       privateKey,
-      doubleSha256(`${innocent}|${timestamp}`)
+      sha256ForSigning(`${innocent}|${timestamp}`)
     ).toString('base64');
     const body =
       `{"data":{"defs":${innocent}},"defs":${evil},"signature":"${signature}","timestamp":${timestamp},"kid":"${jwk.kid}"}`;
@@ -294,7 +306,7 @@ describe('signed-defs-verify', () => {
     const { privateKey, jwk } = makeSignedKey();
     const defs = '{"a":1}';
     const timestamp = 1;
-    const signature = signP1363(privateKey, doubleSha256(`${defs}|${timestamp}`)).toString('base64');
+    const signature = signP1363(privateKey, sha256ForSigning(`${defs}|${timestamp}`)).toString('base64');
 
     await expect(
       verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, { keys: [jwk] }, [
@@ -360,7 +372,7 @@ describe('signed-defs-verify', () => {
 
   it('converts DER signatures to P1363 for WebCrypto', () => {
     const { privateKey } = makeSignedKey();
-    const hash = doubleSha256('{"a":1}|1');
+    const hash = sha256ForSigning('{"a":1}|1');
     const p1363 = derSignatureToP1363(Uint8Array.from(signDer(privateKey, hash)));
     expect(p1363.length).toBe(64);
   });
@@ -388,19 +400,12 @@ describe('signed-defs-verify', () => {
     ).toBe('{"a":1}');
   });
 
-  describe('WebCrypto verify path', () => {
-    const originalNode = process.versions.node;
+  describe('selected Node WebCrypto provider', () => {
     let verifySpy: jest.SpyInstance;
     let importKeySpy: jest.SpyInstance;
     let digestSpy: jest.SpyInstance;
 
     beforeAll(() => {
-      Object.defineProperty(process.versions, 'node', {
-        value: undefined,
-        configurable: true,
-        enumerable: true,
-        writable: true,
-      });
       // jsdom/React often expose a non-configurable crypto stub without subtle.
       Object.defineProperty(globalThis, 'crypto', {
         value: webcrypto,
@@ -409,17 +414,8 @@ describe('signed-defs-verify', () => {
       });
     });
 
-    afterAll(() => {
-      Object.defineProperty(process.versions, 'node', {
-        value: originalNode,
-        configurable: true,
-        enumerable: true,
-        writable: true,
-      });
-    });
-
     beforeEach(() => {
-      // Node's SubtleCrypto does not re-hash like browsers; mock the browser contract.
+      // Spy on the selected Node provider to check the shared WebCrypto call contract.
       const subtle = globalThis.crypto.subtle;
       digestSpy = jest.spyOn(subtle, 'digest').mockImplementation(async (algorithm, data) => {
         const name =
@@ -437,7 +433,7 @@ describe('signed-defs-verify', () => {
       verifySpy?.mockRestore();
     });
 
-    it('passes first SHA-256 digest into subtle.verify (browser double-hash)', async () => {
+    it('passes first SHA-256 digest into subtle.verify (effective double-hash)', async () => {
       const { jwk } = makeSignedKey();
       const defs = '{"web":true}';
       const timestamp = 55;
@@ -458,7 +454,7 @@ describe('signed-defs-verify', () => {
       const { privateKey, jwk } = makeSignedKey();
       const defs = '{"web":true}';
       const timestamp = 56;
-      const der = signDer(privateKey, doubleSha256(`${defs}|${timestamp}`));
+      const der = signDer(privateKey, sha256ForSigning(`${defs}|${timestamp}`));
       const signature = der.toString('base64');
 
       await verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, { keys: [jwk] });
@@ -488,38 +484,26 @@ describe('signed-defs-verify', () => {
     });
   });
 
-  it('throws when WebCrypto is unavailable outside Node', async () => {
-    const originalNode = process.versions.node;
+  it('retains the selected Node provider without global WebCrypto', async () => {
+    // Node entry selection is fixed by package resolution, not process.versions.
+    // Browser-only missing-provider behavior is covered by packed browser consumers.
+    const { privateKey, jwk } = makeSignedKey();
+    const defs = '{"a":1}';
+    const timestamp = 1;
+    const signature = signP1363(privateKey, sha256ForSigning(`${defs}|${timestamp}`)).toString('base64');
     const originalCrypto = globalThis.crypto;
-    Object.defineProperty(process.versions, 'node', {
-      value: undefined,
-      configurable: true,
-      enumerable: true,
-      writable: true,
-    });
     Object.defineProperty(globalThis, 'crypto', {
       value: undefined,
       configurable: true,
     });
     try {
-      const { jwk } = makeSignedKey();
       await expect(
-        verifySignedDefinitions(
-          '{"a":1}',
-          { signature: Buffer.alloc(64).toString('base64'), timestamp: 1, kid: jwk.kid },
-          { keys: [jwk] }
-        )
-      ).rejects.toThrow(/WebCrypto is required/);
+        verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, { keys: [jwk] })
+      ).resolves.toBeUndefined();
     } finally {
       Object.defineProperty(globalThis, 'crypto', {
         value: originalCrypto,
         configurable: true,
-      });
-      Object.defineProperty(process.versions, 'node', {
-        value: originalNode,
-        configurable: true,
-        enumerable: true,
-        writable: true,
       });
     }
   });

@@ -14,6 +14,16 @@ Dependent packages in this monorepo declare a **registry** range (not `file:`):
 "@ops-ai/toggly-signed-defs": "^1.0.0"
 ```
 
+## Runtime resolution
+
+Keep importing from `@ops-ai/toggly-signed-defs`. Browser-aware bundlers select
+the browser ESM condition; Node ESM and CommonJS consumers retain their existing
+root import behavior. All three entry points expose the same public API.
+Node 18 and newer use the built-in Node WebCrypto provider; browsers use
+platform WebCrypto and do not import Node modules.
+Legacy browser bundlers that use `main` or `module` also select platform
+WebCrypto through browser metadata shipped inside each compiled module tree.
+
 ## Entity context
 
 Evaluated-signed `defs` may mix booleans and `EntityGate` objects (`EvaluatedDefinitions`). This package parses and verifies the envelope; it does not evaluate gates. Consumers resolve gates with `@ops-ai/toggly-hooks-types` (or an SDK wrapper) and per-eval entity context.
@@ -33,3 +43,24 @@ npm link @ops-ai/toggly-signed-defs
 ```
 
 After the first registry publish, prefer `npm install` against `^1.0.0`.
+
+## Verification
+
+Use Node 24 for the development tooling. The published Node runtime floor is 18.
+
+```bash
+npm run typecheck
+npm run build
+npm test
+npm run test:coverage
+npm run test:consumer -- /path/to/node18/bin/node
+```
+
+The consumer check installs a packed artifact, compiles TypeScript consumers,
+then runs real CJS and ESM files with the current Node runtime and any additional
+Node executable paths supplied. It verifies canonical P1363 and DER signatures,
+rejects malformed DER, and exercises the browser export condition in the current
+Node runtime. It also builds the packed package with webpack through conditional,
+legacy module, legacy CommonJS, and dist-only overlay resolution, then verifies
+signatures in each bundle without Node globals. These checks do not replace a
+browser-host test.

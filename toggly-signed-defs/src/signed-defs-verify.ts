@@ -6,11 +6,13 @@
  * digest  = SHA-256(SHA-256(utf8(payload)))
  * signature = standard or URL-safe base64 of IEEE P1363 (r||s) or DER
  *
- * On Node (and Jest) we verify with crypto.verify(null, doubleHash).
- * In browsers, WebCrypto's ECDSA verify hashes again, so we pass the first
- * SHA-256 digest into subtle.verify (effective double-hash). DER signatures
- * are converted to P1363 before subtle.verify.
+ * WebCrypto's ECDSA verify hashes the supplied digest once more, so we pass
+ * the first SHA-256 digest into subtle.verify (effective double-hash). This
+ * matches the canonical Worker signer and works consistently in Node and
+ * browser runtimes. DER signatures are converted to P1363 before verification.
  */
+
+import { getSubtleCrypto } from './webcrypto'
 
 import {
   assertEnvelopeFreshness,
@@ -243,44 +245,35 @@ export function derSignatureToP1363(der: Uint8Array): Uint8Array {
     throw new Error('invalid DER signature')
   }
 
-  let offset = 1
-  const readLength = (): number => {
-    const first = der[offset++]!
-    if (first < 0x80) {
-      return first
-    }
-    const count = first & 0x7f
-    if (count === 0 || count > 2 || offset + count > der.length) {
-      throw new Error('invalid DER length')
-    }
-    let value = 0
-    for (let i = 0; i < count; i++) {
-      value = (value << 8) | der[offset++]!
-    }
-    return value
+  // P-256 has at most two 33-byte INTEGERs: every valid DER length fits
+  // the short form. Reject indefinite and nonminimal long-form encodings.
+  if (der[1] >= 0x80 || der[1] !== der.length - 2) {
+    throw new Error('invalid DER sequence length')
   }
-
-  readLength() // sequence length
-
+  let offset = 2
   const readInteger = (): Uint8Array => {
     if (der[offset++] !== 0x02) {
       throw new Error('invalid DER integer')
     }
-    const length = readLength()
-    if (offset + length > der.length) {
+    const length = der[offset++]
+    if (length === undefined || length === 0 || length > 33 || offset + length > der.length) {
       throw new Error('invalid DER integer length')
     }
-    let start = offset
-    let end = offset + length
-    // Strip leading zero padding used for sign bit.
-    while (end - start > 32 && der[start] === 0x00) {
-      start += 1
+    const end = offset + length
+    if ((der[offset] & 0x80) !== 0) {
+      throw new Error('invalid negative DER integer')
     }
-    const out = new Uint8Array(32)
-    const src = der.subarray(start, end)
+    if (length > 1 && der[offset] === 0) {
+      if ((der[offset + 1] & 0x80) === 0) {
+        throw new Error('invalid DER integer padding')
+      }
+      offset += 1
+    }
+    const src = der.subarray(offset, end)
     if (src.length > 32) {
       throw new Error('DER integer too large for P-256')
     }
+    const out = new Uint8Array(32)
     out.set(src, 32 - src.length)
     offset = end
     return out
@@ -288,6 +281,9 @@ export function derSignatureToP1363(der: Uint8Array): Uint8Array {
 
   const r = readInteger()
   const s = readInteger()
+  if (offset !== der.length) {
+    throw new Error('invalid DER trailing data')
+  }
   const p1363 = new Uint8Array(64)
   p1363.set(r, 0)
   p1363.set(s, 32)
@@ -301,47 +297,15 @@ function toP1363Signature(signature: Uint8Array): Uint8Array {
   return derSignatureToP1363(signature)
 }
 
-function isNodeRuntime(): boolean {
-  return (
-    typeof process !== 'undefined' &&
-    typeof (process as { versions?: { node?: string } }).versions?.node === 'string'
-  )
-}
-
 async function sha1HexUpper(bytes: Uint8Array): Promise<string> {
-  if (isNodeRuntime()) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeCrypto = require('crypto') as {
-      createHash: (alg: string) => {
-        update: (d: Uint8Array) => { digest: (enc: string) => string }
-      }
-    }
-    return nodeCrypto.createHash('sha1').update(bytes).digest('hex').toUpperCase()
-  }
-  if (typeof crypto !== 'undefined' && crypto.subtle) {
-    const exact = bytes.slice()
-    const digest = await crypto.subtle.digest('SHA-1', exact)
-    return Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
-      .join('')
-  }
-  throw new Error('WebCrypto is required to validate JWKs')
+  const digest = await getSubtleCrypto().digest('SHA-1', bytes.slice())
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
+    .join('')
 }
 
 async function sha256Bytes(data: Uint8Array): Promise<Uint8Array> {
-  if (isNodeRuntime()) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeCrypto = require('crypto') as {
-      createHash: (alg: string) => {
-        update: (d: Uint8Array) => { digest: () => Uint8Array }
-      }
-    }
-    return Uint8Array.from(nodeCrypto.createHash('sha256').update(data).digest())
-  }
-  if (typeof crypto === 'undefined' || !crypto.subtle) {
-    throw new Error('WebCrypto is required to hash signed definitions')
-  }
-  const digest = await crypto.subtle.digest('SHA-256', data.slice())
+  const digest = await getSubtleCrypto().digest('SHA-256', data.slice())
   return new Uint8Array(digest)
 }
 
@@ -396,47 +360,10 @@ export async function verifySignedDefinitions(
 
   const payloadBytes = new TextEncoder().encode(`${defsRaw}|${envelope.timestamp}`)
   const firstDigest = await sha256Bytes(payloadBytes)
-  const doubleDigest = await sha256Bytes(firstDigest)
   const signature = base64ToBytes(envelope.signature)
 
-  if (isNodeRuntime()) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeCrypto = require('crypto') as {
-      createPublicKey: (key: unknown) => unknown
-      verify: (
-        algorithm: null,
-        data: Uint8Array,
-        key: { key: unknown; dsaEncoding: string },
-        signature: Uint8Array
-      ) => boolean
-    }
-    const key = nodeCrypto.createPublicKey({
-      key: {
-        kty: matching.kty ?? 'EC',
-        crv: matching.crv ?? 'P-256',
-        x: matching.x,
-        y: matching.y,
-      },
-      format: 'jwk',
-    })
-    const encoding = signature.length === 64 ? 'ieee-p1363' : 'der'
-    const ok = nodeCrypto.verify(
-      null,
-      doubleDigest,
-      { key, dsaEncoding: encoding },
-      signature
-    )
-    if (!ok) {
-      throw new Error('invalid signature')
-    }
-    return
-  }
-
-  if (typeof crypto === 'undefined' || !crypto.subtle) {
-    throw new Error('WebCrypto is required to verify signed definitions')
-  }
-
-  const cryptoKey = await crypto.subtle.importKey(
+  const subtle = getSubtleCrypto()
+  const cryptoKey = await subtle.importKey(
     'jwk',
     {
       kty: matching.kty ?? 'EC',
@@ -451,7 +378,7 @@ export async function verifySignedDefinitions(
   )
 
   const p1363 = toP1363Signature(signature)
-  const isValid = await crypto.subtle.verify(
+  const isValid = await subtle.verify(
     { name: 'ECDSA', hash: 'SHA-256' },
     cryptoKey,
     p1363 as BufferSource,
