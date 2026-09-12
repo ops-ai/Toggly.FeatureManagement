@@ -55,10 +55,14 @@ function electronFixtureArguments(platform: NodeJS.Platform): string[] {
 
   if (platform === 'linux') {
     // GitHub's Linux runner does not grant the downloaded Electron helper the
-    // ownership required by Chromium's sandbox or provide a display server.
-    // These switches only start the isolated test fixture; they do not change
-    // the SDK's runtime defaults.
-    argumentsForFixture.push('--no-sandbox', '--ozone-platform=headless')
+    // ownership required by Chromium's sandbox, provide a display server, or
+    // permit Chromium's zygote to fork. These switches only start the isolated
+    // test fixture; they do not change the SDK's runtime defaults.
+    argumentsForFixture.push(
+      '--no-sandbox',
+      '--ozone-platform=headless',
+      '--single-process',
+    )
   }
 
   return argumentsForFixture
@@ -190,15 +194,18 @@ function withoutKnownMacDisplayDiagnostic(stderr: string): string {
 }
 
 describe('Electron preload runtime', () => {
-  it('adds test-only sandbox and headless Ozone switches on Linux only', () => {
+  it('adds test-only constrained Linux switches only', () => {
     expect(electronFixtureArguments('linux')).toEqual(expect.arrayContaining([
       '--no-sandbox',
       '--ozone-platform=headless',
+      '--single-process',
     ]))
     expect(electronFixtureArguments('darwin')).not.toContain('--no-sandbox')
     expect(electronFixtureArguments('darwin')).not.toContain('--ozone-platform=headless')
+    expect(electronFixtureArguments('darwin')).not.toContain('--single-process')
     expect(electronFixtureArguments('win32')).not.toContain('--no-sandbox')
     expect(electronFixtureArguments('win32')).not.toContain('--ozone-platform=headless')
+    expect(electronFixtureArguments('win32')).not.toContain('--single-process')
   })
 
   it('loads the compiled CommonJS preload entry from an ESM Electron app', async () => {
