@@ -55,7 +55,8 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 
 | Platform | Package | Path | Docs |
 |----------|---------|------|------|
-| Flutter | `feature_flags_toggly` (+ storage packages) | [`Toggly.FeatureManagement.Flutter`](Toggly.FeatureManagement.Flutter) | [Docs](https://docs.toggly.io) |
+| Flutter | `feature_flags_toggly` (+ storage packages) | [`Toggly.FeatureManagement.Flutter`](Toggly.FeatureManagement.Flutter) | [Docs](https://docs.toggly.io/sdks/flutter) |
+| Electron | `@ops-ai/electron-feature-flags-toggly` | [`Toggly.FeatureManagement.Electron`](Toggly.FeatureManagement.Electron) | [Docs](https://docs.toggly.io/sdks/electron) |
 | React Native | `@ops-ai/react-native-toggly*` | [`Toggly.FeatureManagement.ReactNative`](Toggly.FeatureManagement.ReactNative) | [Docs](https://docs.toggly.io) |
 | Android | `io.toggly:toggly-android-*` | [`Toggly.FeatureManagement.Android`](Toggly.FeatureManagement.Android) | [Docs](https://docs.toggly.io) |
 | iOS | Swift Package `Toggly` | [`Toggly.FeatureManagement.iOS`](Toggly.FeatureManagement.iOS) | [Docs](https://docs.toggly.io) |
