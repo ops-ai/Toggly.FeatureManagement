@@ -46,6 +46,23 @@ function describeElectronRun(result: ElectronRunResult): string {
   ].join('\n')
 }
 
+function electronFixtureArguments(platform: NodeJS.Platform): string[] {
+  const argumentsForFixture = [
+    '--headless',
+    '--disable-gpu',
+    '--disable-software-rasterizer',
+  ]
+
+  if (platform === 'linux') {
+    // GitHub's Linux runner does not grant the downloaded Electron helper the
+    // ownership required by Chromium's sandbox. This only starts the isolated
+    // test fixture; it does not change the SDK's runtime defaults.
+    argumentsForFixture.push('--no-sandbox')
+  }
+
+  return argumentsForFixture
+}
+
 function waitForElectronExit(
   command: string,
   args: string[],
@@ -140,9 +157,7 @@ function runElectron(
         electronApplication,
         '--args',
         fixtureDirectory,
-        '--headless',
-        '--disable-gpu',
-        '--disable-software-rasterizer',
+        ...electronFixtureArguments(process.platform),
       ],
       env,
       'launch-services',
@@ -154,7 +169,7 @@ function runElectron(
 
   return waitForElectronExit(
     electronExecutable,
-    [fixtureDirectory, '--headless', '--disable-gpu', '--disable-software-rasterizer'],
+    [fixtureDirectory, ...electronFixtureArguments(process.platform)],
     env,
     'direct',
     stderrPath,
@@ -174,6 +189,12 @@ function withoutKnownMacDisplayDiagnostic(stderr: string): string {
 }
 
 describe('Electron preload runtime', () => {
+  it('adds the test-only sandbox switch on Linux only', () => {
+    expect(electronFixtureArguments('linux')).toContain('--no-sandbox')
+    expect(electronFixtureArguments('darwin')).not.toContain('--no-sandbox')
+    expect(electronFixtureArguments('win32')).not.toContain('--no-sandbox')
+  })
+
   it('loads the compiled CommonJS preload entry from an ESM Electron app', async () => {
     const fixtureDirectory = await mkdtemp(join(tmpdir(), 'toggly-electron-preload-'))
     fixtureDirectories.push(fixtureDirectory)
