@@ -1,5 +1,14 @@
 # Changelog
 
+## Toggly.FeatureManagement.Dashboard 0.1.0 - 2026-09-12
+
+### Added
+- Offline, server-rendered dashboard pages for catalog initialization, feature
+  editing, targeting rules, contexts, storage diagnostics, export, import
+  preview, and Cloud migration guidance.
+- Host-controlled authorization, antiforgery protection, revision-aware writes,
+  and private no-store responses for every dashboard resource.
+
 ## Toggly.FeatureManagement.Storage.DistributedCache 3.7.0 - 2026-09-12
 
 ### Added

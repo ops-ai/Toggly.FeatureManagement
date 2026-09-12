@@ -1,0 +1,3 @@
+@model Toggly.FeatureManagement.Embedded.EmbeddedRuntimeDiagnostics
+@{ Layout = "_Layout"; }
+<h1>Storage</h1><section class="card"><dl><dt>State</dt><dd>@Model.StorageState</dd><dt>Active revision</dt><dd>@Model.ActiveRevision</dd><dt>Last refresh</dt><dd>@Model.LastSuccessfulRefreshUtc</dd><dt>Read-only</dt><dd>@Model.ReadOnly</dd><dt>Writer mode</dt><dd>@Model.IsWriter</dd></dl></section>

@@ -30,6 +30,7 @@ public static class ServiceCollectionExtensions
         services.AddControllersWithViews()
             .AddApplicationPart(typeof(ServiceCollectionExtensions).Assembly);
         services.TryAddScoped<TogglyDashboardAccessFilter>();
+        services.TryAddScoped<TogglyDashboardNoStoreFilter>();
         return featureManagement;
     }
 }

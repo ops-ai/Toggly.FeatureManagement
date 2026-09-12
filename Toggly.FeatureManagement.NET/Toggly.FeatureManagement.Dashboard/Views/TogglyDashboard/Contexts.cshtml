@@ -1,0 +1,3 @@
+@model DashboardContextsViewModel
+@{ Layout = "_Layout"; }
+<h1>Contexts</h1><section class="card"><h2>Host registered schemas</h2>@if (!Model.Registered.Any()) { <p>No entity contexts are registered by this host.</p> } else { <ul>@foreach (var context in Model.Registered) { <li><strong>@context.Kind</strong> — key: @context.KeyPropertyName</li> }</ul> }</section><section class="card"><h2>Catalog retained schemas</h2>@if (!Model.Retained.Any()) { <p>No retained schemas.</p> } else { <ul>@foreach (var context in Model.Retained) { <li><strong>@context.Kind</strong> — key: @context.KeyPropertyName</li> }</ul> }</section>

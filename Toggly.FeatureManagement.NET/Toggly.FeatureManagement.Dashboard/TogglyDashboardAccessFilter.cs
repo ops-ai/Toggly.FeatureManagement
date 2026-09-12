@@ -11,6 +11,7 @@ public sealed class TogglyDashboardAccessFilter : IAsyncActionFilter
     /// <inheritdoc />
     public Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
+        context.HttpContext.Response.Headers.CacheControl = "private, no-store";
         var endpoint = context.HttpContext.GetEndpoint();
         if (endpoint?.Metadata.GetMetadata<TogglyDashboardEndpointMetadata>() == null)
         {

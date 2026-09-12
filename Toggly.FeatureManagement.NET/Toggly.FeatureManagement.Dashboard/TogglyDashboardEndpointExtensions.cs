@@ -1,21 +1,31 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Constraints;
+using Microsoft.Extensions.Hosting;
 
 namespace Toggly.FeatureManagement.Dashboard;
 
 /// <summary>Maps the fixed, authorization-aware embedded dashboard endpoints.</summary>
 public static class TogglyDashboardEndpointExtensions
 {
+    private static readonly ConditionalWeakTable<IEndpointRouteBuilder, object> MountedHosts = new();
     /// <summary>Maps one dashboard mount and returns an aggregate endpoint convention builder for host authorization.</summary>
     public static IEndpointConventionBuilder MapTogglyDashboard(this IEndpointRouteBuilder endpoints, string pattern = "/toggly", TogglyDashboardOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         var mount = NormalizeMount(pattern);
+        lock (MountedHosts)
+        {
+            if (MountedHosts.TryGetValue(endpoints, out _)) throw new InvalidOperationException("Only one Toggly dashboard mount is supported per host.");
+            MountedHosts.Add(endpoints, new object());
+        }
+        var applicationName = options?.ApplicationName;
+        if (string.IsNullOrWhiteSpace(applicationName)) applicationName = (endpoints.ServiceProvider.GetService(typeof(IHostEnvironment)) as IHostEnvironment)?.ApplicationName ?? "Application";
         var group = endpoints.MapGroup(mount);
-        group.WithMetadata(new TogglyDashboardEndpointMetadata(mount));
+        group.WithMetadata(new TogglyDashboardEndpointMetadata(mount, applicationName));
         group.WithDisplayName("Toggly Embedded Dashboard");
 
         MapController(group, "index", "", "Index", HttpMethods.Get);
@@ -27,10 +37,18 @@ public static class TogglyDashboardEndpointExtensions
         MapController(group, "delete-confirm", "features/delete", "DeleteConfirm", HttpMethods.Get);
         MapController(group, "delete", "features/delete", "Delete", HttpMethods.Post);
         MapController(group, "initialize", "initialize", "Initialize", HttpMethods.Post);
+        MapController(group, "contexts", "contexts", "Contexts", HttpMethods.Get);
+        MapController(group, "storage", "storage", "Storage", HttpMethods.Get);
+        MapController(group, "export", "export", "Export", HttpMethods.Get);
+        MapController(group, "import", "import", "Import", HttpMethods.Get);
+        MapController(group, "import-preview", "import/preview", "ImportPreview", HttpMethods.Post);
+        MapController(group, "import-apply", "import/apply", "ImportApply", HttpMethods.Post);
+        MapController(group, "cloud", "cloud", "Cloud", HttpMethods.Get);
 
         group.MapGet("assets/{knownName}", async (HttpContext context, string knownName) =>
         {
             if (!TogglyDashboardAccess.IsAllowed(context, context.GetEndpoint()!)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            context.Response.Headers.CacheControl = "private, no-store";
             return await DashboardAssets.GetAsync(knownName).ConfigureAwait(false);
         }).WithDisplayName("Toggly Dashboard assets");
 
