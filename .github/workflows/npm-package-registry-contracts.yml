@@ -11,6 +11,7 @@ on:
       - '.github/workflows/npm-package-registry-contracts.yml'
       - '**/package.json'
       - '**/CHANGELOG.md'
+      - 'Toggly.FeatureManagement.Blazor/**'
       - 'Toggly.FeatureManagement.NET/**/*.csproj'
       - 'Toggly.FeatureManagement.NET/Directory.Build.props'
       - 'Toggly.FeatureManagement.NET/assets/**'
@@ -24,6 +25,7 @@ on:
       - '.github/workflows/npm-package-registry-contracts.yml'
       - '**/package.json'
       - '**/CHANGELOG.md'
+      - 'Toggly.FeatureManagement.Blazor/**'
       - 'Toggly.FeatureManagement.NET/**/*.csproj'
       - 'Toggly.FeatureManagement.NET/Directory.Build.props'
       - 'Toggly.FeatureManagement.NET/assets/**'
@@ -60,3 +62,6 @@ jobs:
 
       - name: Verify NuGet trusted publishing contract
         run: node --test .github/package-registry/verify-nuget-trusted-publishing.test.mjs
+
+      - name: Verify Blazor NuGet family
+        run: node --test .github/package-registry/verify-nuget-blazor.test.mjs

@@ -1,0 +1,20 @@
+@page "/"
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Toggly.FeatureManagement.Blazor
+@using Toggly.FeatureManagement.Client
+@inject IFeatureSession Features
+<!DOCTYPE html>
+<html><head><base href="/" /><title>Toggly Blazor</title></head><body>
+<FeatureProvider>
+    <Feature Key="new-dashboard">
+        <Enabled><h1>New dashboard</h1></Enabled>
+        <Disabled><h1>Classic dashboard</h1></Disabled>
+        <Loading><p>Loading definitions…</p></Loading>
+    </Feature>
+    <Feature Key="ExpressCheckout" Entity="order"><p>VIP express checkout</p></Feature>
+</FeatureProvider>
+</body></html>
+@code {
+    private readonly EntityContext order = new("Order", "ord-vip", new Dictionary<string, object?> { ["Vip"] = true });
+}

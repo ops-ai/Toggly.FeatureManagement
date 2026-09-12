@@ -1,0 +1,4 @@
+<Project>
+  <Import Project="../Toggly.FeatureManagement.NET/Directory.Build.props" />
+  <PropertyGroup><Version>0.1.0</Version><AssemblyVersion></AssemblyVersion><FileVersion></FileVersion><InformationalVersion></InformationalVersion><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><LangVersion>12</LangVersion></PropertyGroup>
+</Project>

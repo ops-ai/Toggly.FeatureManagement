@@ -165,3 +165,14 @@ README install snippets, and `CHANGELOG.md` in the same PR before running
 **PHP monorepo workflow:** `sdk-php-release.yml` requires `Toggly.FeatureManagement.PHP/` in the checkout. If that directory is absent, use the release workflow in the standalone **Toggly.FeatureManagement.PHP** repository instead.
 
 See [package-versioning rule](../../../.cursor/rules/package-versioning.mdc) for semver and changelog conventions.
+
+## Blazor family
+
+`Toggly.FeatureManagement.Blazor` and `.Blazor.Server` use the manual manifest-first
+`SDK Blazor` workflow (`sdk-blazor-release.yml`). Publish portable Client 0.1.0 first,
+then browser Blazor 0.1.0 and its Server sibling. The version lives in each csproj;
+version+changelog changes are reviewed in the PR. No automatic version bump, merge,
+or publication happens from analysis workflows. The existing NuGet signing secrets
+and `NuGet/login@v1` identity are reused. An owner must register this exact new
+workflow as a NuGet trusted publisher before first publication; inventory is not
+evidence that registration or first-publication permissions already exist.

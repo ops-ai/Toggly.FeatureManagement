@@ -6,6 +6,7 @@ on:
       - develop
       - main
     paths:
+      - 'Toggly.FeatureManagement.Blazor/**'
       - 'Toggly.FeatureManagement.NET/**'
       - 'Toggly.CLI/**'
       - '.github/workflows/analysis-dotnet.yml'
@@ -14,6 +15,7 @@ on:
       - develop
       - main
     paths:
+      - 'Toggly.FeatureManagement.Blazor/**'
       - 'Toggly.FeatureManagement.NET/**'
       - 'Toggly.CLI/**'
       - '.github/workflows/analysis-dotnet.yml'
@@ -35,7 +37,13 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
 
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@v4
@@ -89,7 +97,8 @@ jobs:
             /v:"${{ steps.gitversion.outputs.semVer }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.token="${SONAR_TOKEN}" \
-            /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET" \
+            /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
+            /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.Blazor/coverage/lcov.info" \
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
@@ -111,6 +120,12 @@ jobs:
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj -c Release
+
+      - name: Build and test Blazor family
+        run: |
+          dotnet test Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests -c Release --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Blazor/coverage.runsettings --results-directory TestResults/blazor
+          python3 Toggly.FeatureManagement.Blazor/check-coverage.py TestResults/blazor
+          bash Toggly.FeatureManagement.Blazor/test-browser.sh
 
       - name: Run core tests
         run: |
@@ -238,7 +253,8 @@ jobs:
               /v:"${{ steps.gitversion.outputs.semVer }}" \
               /d:sonar.host.url="${SONAR_HOST_URL}" \
               /d:sonar.token="${SONAR_SERVER_TOKEN}" \
-              /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET" \
+              /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
+            /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.Blazor/coverage/lcov.info" \
               /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
               /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
@@ -261,6 +277,9 @@ jobs:
 
       - name: Build solution (SonarQube Server)
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
+
+      - name: Build Blazor family (SonarQube Server)
+        run: dotnet build Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor.Server -c Release --no-incremental
 
       - name: End SonarQube Server Scan
         env:
@@ -286,6 +305,7 @@ jobs:
           path: |
             **/TestResults/**/coverage.opencover.xml
             coverage-report/
+            Toggly.FeatureManagement.Blazor/coverage/
           retention-days: 7
           if-no-files-found: ignore
 
@@ -336,6 +356,7 @@ jobs:
           format: 'ALL'
           args: >-
             --nvdApiKey ${{ secrets.NVD_API_KEY }}
+            --scan Toggly.FeatureManagement.Blazor
             --enableExperimental
             --disableRubygems
             --disableBundleAudit
@@ -440,3 +461,42 @@ jobs:
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
         run: dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj -c Release --logger "trx;LogFileName=smoke-test-results.trx" --blame-hang-timeout 90s --blame-hang-dump-type none
+
+  blazor-runtime:
+    name: Blazor .NET ${{ matrix.sdk }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - sdk: '8.0.x'
+            framework: net8.0
+          - sdk: '10.0.x'
+            framework: net10.0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            ${{ matrix.sdk }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: dotnet test Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests -c Release -p:TestFramework=${{ matrix.framework }} --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Blazor/coverage.runsettings --results-directory TestResults/blazor
+      - run: python3 Toggly.FeatureManagement.Blazor/check-coverage.py TestResults/blazor
+      - run: bash Toggly.FeatureManagement.Blazor/test-browser.sh
+      - run: |
+          dotnet pack Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
+          dotnet pack Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor.Server -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
+      - run: NUGET_BLAZOR_PACK_DIR=blazor-pack node --test .github/package-registry/verify-nuget-blazor.test.mjs
+      - name: Compile packed artifact consumer
+        run: |
+          dotnet restore Toggly.FeatureManagement.Blazor/examples/BlazorHost --source "${GITHUB_WORKSPACE}/blazor-pack" --source https://api.nuget.org/v3/index.json
+          dotnet build Toggly.FeatureManagement.Blazor/examples/BlazorHost -c Release --no-restore
+      - uses: actions/upload-artifact@v7
+        with:
+          name: blazor-${{ matrix.sdk }}
+          path: |
+            TestResults/blazor
+            blazor-pack
+            Toggly.FeatureManagement.Blazor/coverage/

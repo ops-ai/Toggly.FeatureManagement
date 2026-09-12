@@ -23,5 +23,23 @@
     { "id": "Toggly.FeatureManagement.Storage.Dapper", "project": "Toggly.Storage.Dapper/Toggly.Storage.Dapper.csproj" },
     { "id": "Toggly.FeatureManagement.Storage.EntityFramework", "project": "Toggly.Storage.EntityFramework/Toggly.Storage.EntityFramework.csproj" },
     { "id": "Toggly.Metrics.SystemMetrics", "project": "Toggly.Metrics.SystemMetrics/Toggly.Metrics.SystemMetrics.csproj" }
+  ],
+  "families": [
+    {
+      "name": "blazor",
+      "sdkRoot": "Toggly.FeatureManagement.Blazor",
+      "changelog": "Toggly.FeatureManagement.Blazor/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-blazor-release.yml",
+      "packages": [
+        {
+          "id": "Toggly.FeatureManagement.Blazor",
+          "project": "src/Toggly.FeatureManagement.Blazor/Toggly.FeatureManagement.Blazor.csproj"
+        },
+        {
+          "id": "Toggly.FeatureManagement.Blazor.Server",
+          "project": "src/Toggly.FeatureManagement.Blazor.Server/Toggly.FeatureManagement.Blazor.Server.csproj"
+        }
+      ]
+    }
   ]
 }
