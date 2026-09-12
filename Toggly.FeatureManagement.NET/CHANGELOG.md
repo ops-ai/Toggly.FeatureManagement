@@ -1,5 +1,10 @@
 # Changelog
 
+## Toggly.FeatureManagement.Storage.DistributedCache 3.7.0 - 2026-09-12
+
+### Added
+- Conditional, process-local single-writer catalog storage for offline embedded feature dashboards, with explicit reader replicas and isolated cache keys.
+
 ## Toggly.FeatureManagement.Storage.RavenDB 3.7.0 - 2026-09-12
 
 ### Added
