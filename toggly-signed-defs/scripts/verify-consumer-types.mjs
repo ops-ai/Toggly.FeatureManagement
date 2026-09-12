@@ -69,17 +69,23 @@ try {
 
   const fixture = JSON.parse(readFileSync(join(packageRoot, 'testdata/webcrypto-fixture.json'), 'utf8'))
   const derCases = JSON.parse(readFileSync(join(packageRoot, 'testdata/der-signatures.json'), 'utf8'))
+  const hashes = JSON.parse(readFileSync(join(packageRoot, 'testdata/hash-depth-signatures.json'), 'utf8'))
   const assertions = `
 const fixture = ${JSON.stringify(fixture)}
 const derCases = ${JSON.stringify(derCases)}
+const hashes = ${JSON.stringify(hashes)}
 async function check() {
   assert.equal(await m.computeKid('AA', 'AA'), '1489F923C4DCA729178B3E3233458550D8DDDF29ES256')
   await m.verifySignedDefinitions(fixture.defs, fixture, fixture.jwks)
   await m.verifySignedDefinitions(fixture.defs, { ...fixture, signature: derCases.valid }, fixture.jwks)
+  await m.verifySignedDefinitions(hashes.defs, { ...hashes, signature: hashes.signatures.double }, hashes.jwks)
+  for (const signature of [hashes.signatures.single, hashes.signatures.triple]) {
+    await assert.rejects(m.verifySignedDefinitions(hashes.defs, { ...hashes, signature }, hashes.jwks), /invalid signature/)
+  }
   for (const [name, signature] of Object.entries(derCases.invalid)) {
     await assert.rejects(m.verifySignedDefinitions(fixture.defs, { ...fixture, signature }, fixture.jwks), undefined, name)
   }
-  console.log(process.version + ': KID, P1363, DER and malformed signature checks passed')
+  console.log(process.version + ': KID, P1363, DER, exact double-hash and malformed signature checks passed')
 }
 check().catch(error => { console.error(error); process.exitCode = 1 })
 `
