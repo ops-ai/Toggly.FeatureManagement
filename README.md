@@ -65,6 +65,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 
 | Platform | Package | Path | Docs |
 |----------|---------|------|------|
+| Blazor | `Toggly.FeatureManagement.Blazor` / `.Blazor.Server` | [`Toggly.FeatureManagement.Blazor`](Toggly.FeatureManagement.Blazor) | [Docs](https://docs.toggly.io/sdks/blazor) |
 | .NET | `Toggly.FeatureManagement` (+ Hangfire, storage, NSwag, …) | [`Toggly.FeatureManagement.NET`](Toggly.FeatureManagement.NET) | [Docs](https://docs.toggly.io) |
 | Node.js | `@ops-ai/toggly-node-core`, Express / Fastify / Hono / Koa | [`Toggly.FeatureManagement.Node`](Toggly.FeatureManagement.Node) | [Docs](https://docs.toggly.io) |
 | Python | `toggly` (+ cache / framework packages) | [`Toggly.FeatureManagement.Python`](Toggly.FeatureManagement.Python) | [Docs](https://docs.toggly.io) |

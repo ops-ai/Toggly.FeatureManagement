@@ -7,21 +7,143 @@
   "repositoryUrl": "https://github.com/ops-ai/Toggly.FeatureManagement",
   "license": "MIT",
   "packageIcon": "toggly-package-icon.png",
-  "requiredTags": ["toggly", "feature-flags", "feature-management"],
+  "requiredTags": [
+    "toggly",
+    "feature-flags",
+    "feature-management"
+  ],
   "workflow": ".github/workflows/sdk-dotnet-release.yml",
   "changelog": "Toggly.FeatureManagement.NET/CHANGELOG.md",
   "sdkRoot": "Toggly.FeatureManagement.NET",
   "packages": [
-    { "id": "Toggly.FeatureManagement", "project": "Toggly.FeatureManagement/Toggly.FeatureManagement.csproj" },
-    { "id": "Toggly.FeatureManagement.Web", "project": "Toggly.FeatureManagement.Web/Toggly.FeatureManagement.Web.csproj" },
-    { "id": "Toggly.FeatureManagement.Storage.RavenDB", "project": "Toggly.FeatureManagement.Storage.RavenDB/Toggly.FeatureManagement.Storage.RavenDB.csproj" },
-    { "id": "Toggly.FeatureManagement.Storage.DistributedCache", "project": "Toggly.FeatureManagement.Storage.DistributedCache/Toggly.FeatureManagement.Storage.DistributedCache.csproj" },
-    { "id": "Toggly.FeatureManagement.Hangfire", "project": "Toggly.FeatureManagement.Hangfire/Toggly.FeatureManagement.Hangfire.csproj" },
-    { "id": "Toggly.FeatureManagement.HealthChecks", "project": "Toggly.FeatureManagement.HealthChecks/Toggly.FeatureManagement.HealthChecks.csproj" },
-    { "id": "Toggly.FeatureManagement.NSwag", "project": "Toggly.FeatureManagement.NSwag/Toggly.FeatureManagement.NSwag.csproj" },
-    { "id": "Toggly.FeatureManagement.Storage.MongoDB", "project": "Toggly.Storage.MongoDB/Toggly.Storage.MongoDB.csproj" },
-    { "id": "Toggly.FeatureManagement.Storage.Dapper", "project": "Toggly.Storage.Dapper/Toggly.Storage.Dapper.csproj" },
-    { "id": "Toggly.FeatureManagement.Storage.EntityFramework", "project": "Toggly.Storage.EntityFramework/Toggly.Storage.EntityFramework.csproj" },
-    { "id": "Toggly.Metrics.SystemMetrics", "project": "Toggly.Metrics.SystemMetrics/Toggly.Metrics.SystemMetrics.csproj" }
+    {
+      "id": "Toggly.FeatureManagement",
+      "project": "Toggly.FeatureManagement/Toggly.FeatureManagement.csproj",
+      "aliases": [
+        "Core"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.Web",
+      "project": "Toggly.FeatureManagement.Web/Toggly.FeatureManagement.Web.csproj",
+      "aliases": [
+        "Web"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.Storage.RavenDB",
+      "project": "Toggly.FeatureManagement.Storage.RavenDB/Toggly.FeatureManagement.Storage.RavenDB.csproj",
+      "aliases": [
+        "Storage.RavenDB"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.Storage.DistributedCache",
+      "project": "Toggly.FeatureManagement.Storage.DistributedCache/Toggly.FeatureManagement.Storage.DistributedCache.csproj",
+      "aliases": [
+        "Storage.DistributedCache"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.Hangfire",
+      "project": "Toggly.FeatureManagement.Hangfire/Toggly.FeatureManagement.Hangfire.csproj",
+      "aliases": [
+        "Hangfire"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.HealthChecks",
+      "project": "Toggly.FeatureManagement.HealthChecks/Toggly.FeatureManagement.HealthChecks.csproj",
+      "aliases": [
+        "HealthChecks"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.NSwag",
+      "project": "Toggly.FeatureManagement.NSwag/Toggly.FeatureManagement.NSwag.csproj",
+      "aliases": [
+        "NSwag"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.Storage.MongoDB",
+      "project": "Toggly.Storage.MongoDB/Toggly.Storage.MongoDB.csproj",
+      "aliases": [
+        "Storage.MongoDB"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.Storage.Dapper",
+      "project": "Toggly.Storage.Dapper/Toggly.Storage.Dapper.csproj",
+      "aliases": [
+        "Storage.Dapper"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.Storage.EntityFramework",
+      "project": "Toggly.Storage.EntityFramework/Toggly.Storage.EntityFramework.csproj",
+      "aliases": [
+        "Storage.EntityFramework"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.Metrics.SystemMetrics",
+      "project": "Toggly.Metrics.SystemMetrics/Toggly.Metrics.SystemMetrics.csproj",
+      "aliases": [
+        "Metrics.SystemMetrics"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement"
+      ]
+    }
+  ],
+  "families": [
+    {
+      "name": "blazor",
+      "sdkRoot": "Toggly.FeatureManagement.Blazor",
+      "changelog": "Toggly.FeatureManagement.Blazor/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-dotnet-release.yml",
+      "packages": [
+        {
+          "id": "Toggly.FeatureManagement.Blazor",
+          "project": "src/Toggly.FeatureManagement.Blazor/Toggly.FeatureManagement.Blazor.csproj"
+        },
+        {
+          "id": "Toggly.FeatureManagement.Blazor.Server",
+          "project": "src/Toggly.FeatureManagement.Blazor.Server/Toggly.FeatureManagement.Blazor.Server.csproj"
+        }
+      ],
+      "testProject": "Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests",
+      "coverageSettings": "Toggly.FeatureManagement.Blazor/coverage.runsettings",
+      "coverageCheck": "Toggly.FeatureManagement.Blazor/check-coverage.py",
+      "browserTests": "Toggly.FeatureManagement.Blazor/test-browser.sh"
+    }
   ]
 }

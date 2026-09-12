@@ -4,195 +4,98 @@ on:
   workflow_dispatch:
     inputs:
       release_mode:
-        description: 'publish = use manifest version; auto_bump = legacy CI bump'
-        required: false
-        default: 'publish'
+        description: 'publish = all manifests; auto_bump = legacy server family only, other packages keep their manifests'
         type: choice
-        options:
-          - publish
-          - auto_bump
+        default: publish
+        options: [publish, auto_bump]
       bump_type:
-        description: 'Bump type (only used when release_mode is auto_bump)'
-        required: false
-        default: 'patch'
+        description: 'Legacy server-family bump only when release_mode is auto_bump'
         type: choice
-        options:
-          - patch
-          - minor
-          - major
+        default: patch
+        options: [patch, minor, major]
       packages:
-        description: 'Packages to release (comma-separated or "all")'
-        required: false
-        default: 'all'
+        description: 'Exact package IDs, legacy aliases, family names, or all (dependencies included)'
         type: string
+        default: all
       prerelease:
-        description: 'Is this a pre-release?'
-        required: false
-        default: false
+        description: 'Mark GitHub releases as prereleases'
         type: boolean
+        default: false
 
 permissions:
-  contents: write
+  contents: read
 
-env:
-  SDK_ROOT: Toggly.FeatureManagement.NET
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
-  DOTNET_CLI_TELEMETRY_OPTOUT: true
+concurrency:
+  group: dotnet-sdk-release
+  cancel-in-progress: false
 
 jobs:
+  # Retry failed jobs to reuse the original signed artifact. A full-workflow
+  # rerun refuses the existing fixed-name candidate before signing or pushing;
+  # start a new dispatch for new manifest/registry decisions.
   validate:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.release.outputs.version }}
-      action: ${{ steps.release.outputs.action }}
-      reason: ${{ steps.release.outputs.reason }}
-      manifest_version: ${{ steps.release.outputs.manifest_version }}
-      registry_latest: ${{ steps.release.outputs.registry_latest }}
-      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
+      publish: ${{ steps.plan.outputs.publish }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-
-      - name: Resolve release version
-        id: release
-        uses: ./.github/actions/resolve-release-version
-        with:
-          manifest_path: ${{ env.SDK_ROOT }}/Directory.Build.props
-          manifest_type: props
-          registry: nuget
-          package_name: Toggly.FeatureManagement
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
-
-  build-and-test:
-    needs: validate
-    if: needs.validate.outputs.action == 'publish'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: |
             6.0.x
             8.0.x
             9.0.x
             10.0.x
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - name: Resolve selected package manifest versions
+        id: plan
+        env:
+          PACKAGES: ${{ inputs.packages }}
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          BUMP_TYPE: ${{ inputs.bump_type }}
+        run: node .github/package-registry/dotnet-release-plan.mjs
+      - name: Build, test and check family coverage
+        if: steps.plan.outputs.publish == 'true'
+        run: node .github/package-registry/dotnet-ci.mjs test release-candidate/plan.json
+      - name: Pack each selected manifest version
+        if: steps.plan.outputs.publish == 'true'
+        run: |
+          node .github/package-registry/dotnet-ci.mjs pack release-candidate/plan.json
+          node .github/package-registry/dotnet-ci.mjs verify-pack release-candidate/plan.json
+      - name: Retain validated artifacts and version decisions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dotnet-release-candidate
+          path: release-candidate/
+          overwrite: false
+          if-no-files-found: error
 
-      - name: Restore dependencies
-        working-directory: ${{ env.SDK_ROOT }}
-        run: dotnet restore Toggly.FeatureManagement.sln
-
-      - name: Build solution
-        working-directory: ${{ env.SDK_ROOT }}
-        run: dotnet build Toggly.FeatureManagement.sln -c Release --no-restore -p:Version=${{ needs.validate.outputs.version }}
-
-      - name: Run tests
-        working-directory: ${{ env.SDK_ROOT }}
-        run: dotnet test Toggly.FeatureManagement.sln -c Release --no-build
-
-  publish:
-    needs: [build-and-test, validate]
-    if: needs.validate.outputs.action == 'publish'
+  sign:
+    needs: validate
+    if: needs.validate.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment: nuget-publish
     permissions:
-      id-token: write
       contents: read
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        include:
-          - project: Toggly.FeatureManagement
-            name: Core
-          - project: Toggly.FeatureManagement.Web
-            name: Web
-          - project: Toggly.FeatureManagement.Storage.RavenDB
-            name: Storage.RavenDB
-          - project: Toggly.FeatureManagement.Storage.DistributedCache
-            name: Storage.DistributedCache
-          - project: Toggly.FeatureManagement.Hangfire
-            name: Hangfire
-          - project: Toggly.FeatureManagement.HealthChecks
-            name: HealthChecks
-          - project: Toggly.FeatureManagement.NSwag
-            name: NSwag
-          - project: Toggly.Storage.MongoDB
-            name: Storage.MongoDB
-          - project: Toggly.Storage.Dapper
-            name: Storage.Dapper
-          - project: Toggly.Storage.EntityFramework
-            name: Storage.EntityFramework
-          - project: Toggly.Metrics.SystemMetrics
-            name: Metrics.SystemMetrics
-
     steps:
-      - name: Check if package should be published
-        id: should_publish
-        run: |
-          PACKAGES="${{ github.event.inputs.packages || 'all' }}"
-          if [ "$PACKAGES" == "all" ]; then
-            echo "publish=true" >> $GITHUB_OUTPUT
-          elif echo "$PACKAGES" | grep -qi "${{ matrix.name }}"; then
-            echo "publish=true" >> $GITHUB_OUTPUT
-          else
-            echo "publish=false" >> $GITHUB_OUTPUT
-            echo "Skipping ${{ matrix.name }} (not in selected packages)"
-          fi
-
-      - name: Checkout code
-        if: steps.should_publish.outputs.publish == 'true'
-        uses: actions/checkout@v7
-
-      - name: Setup .NET
-        if: steps.should_publish.outputs.publish == 'true'
-        uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          dotnet-version: |
-            6.0.x
-            8.0.x
-            9.0.x
-            10.0.x
-
-      - name: Install NuGetKeyVaultSignTool
-        if: steps.should_publish.outputs.publish == 'true'
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dotnet-release-candidate
+          path: release-candidate/
+      - name: Install signing tool
         run: dotnet tool install --global NuGetKeyVaultSignTool
-
-      - name: Restore dependencies
-        if: steps.should_publish.outputs.publish == 'true'
-        working-directory: ${{ env.SDK_ROOT }}
-        run: dotnet restore ${{ matrix.project }}/${{ matrix.project }}.csproj
-
-      - name: Build project for packing
-        if: steps.should_publish.outputs.publish == 'true'
-        working-directory: ${{ env.SDK_ROOT }}
-        run: |
-          dotnet build ${{ matrix.project }}/${{ matrix.project }}.csproj \
-            -c Release \
-            --no-restore \
-            -p:Version=${{ needs.validate.outputs.version }} \
-            -p:ContinuousIntegrationBuild=true
-
-      - name: Pack NuGet package
-        if: steps.should_publish.outputs.publish == 'true'
-        working-directory: ${{ env.SDK_ROOT }}
-        run: |
-          dotnet pack ${{ matrix.project }}/${{ matrix.project }}.csproj \
-            -c Release \
-            --no-build \
-            --no-restore \
-            -p:Version=${{ needs.validate.outputs.version }} \
-            -p:PackageVersion=${{ needs.validate.outputs.version }} \
-            -p:ContinuousIntegrationBuild=true \
-            --output ./nupkgs
-
       - name: Import signing CA certificate chain
-        if: steps.should_publish.outputs.publish == 'true'
         run: |
           if [ -z "$NUGET_SIGN_CA_CHAIN_B64" ]; then
             echo "Missing required secret: NUGET_SIGN_CA_CHAIN_B64"
@@ -244,252 +147,129 @@ jobs:
         env:
           NUGET_SIGN_CA_CHAIN_B64: ${{ secrets.NUGET_SIGN_CA_CHAIN_B64 }}
 
-      - name: Sign NuGet packages and symbols
-        id: sign_packages
-        if: steps.should_publish.outputs.publish == 'true'
-        working-directory: ${{ env.SDK_ROOT }}
-        run: |
-          shopt -s nullglob
-          NUPKGS=(./nupkgs/*.nupkg)
-          SNUPKGS=(./nupkgs/*.snupkg)
-          if [ ${#NUPKGS[@]} -eq 0 ]; then
-            echo "No .nupkg files found to sign in ./nupkgs"
-            ls -la ./nupkgs || true
-            exit 1
-          fi
-          if [ ${#SNUPKGS[@]} -eq 0 ]; then
-            echo "No .snupkg files found to sign in ./nupkgs"
-            ls -la ./nupkgs || true
-            exit 1
-          fi
 
-          NuGetKeyVaultSignTool sign ./nupkgs/*.nupkg \
-            --file-digest sha256 \
-            --timestamp-rfc3161 http://timestamp.globalsign.com/tsa/r6advanced1 \
-            --timestamp-digest sha256 \
-            --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
-            --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
-            --azure-key-vault-tenant-id "$AZURE_KEY_VAULT_TENANT_ID" \
-            --azure-key-vault-client-secret "$AZURE_KEY_VAULT_CLIENT_SECRET" \
-            --azure-key-vault-certificate "$AZURE_KEY_VAULT_CERTIFICATE"
-
-          NuGetKeyVaultSignTool sign ./nupkgs/*.snupkg \
-            --file-digest sha256 \
-            --timestamp-rfc3161 http://timestamp.globalsign.com/tsa/r6advanced1 \
-            --timestamp-digest sha256 \
-            --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
-            --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
-            --azure-key-vault-tenant-id "$AZURE_KEY_VAULT_TENANT_ID" \
-            --azure-key-vault-client-secret "$AZURE_KEY_VAULT_CLIENT_SECRET" \
-            --azure-key-vault-certificate "$AZURE_KEY_VAULT_CERTIFICATE"
+      - name: Sign packages and symbols with paced HTTPS timestamps
+        working-directory: release-candidate
         env:
           AZURE_KEY_VAULT_URL: ${{ secrets.NUGET_SIGN_VAULT_URL }}
           AZURE_KEY_VAULT_CLIENT_ID: ${{ secrets.NUGET_SIGN_CLIENT_ID }}
           AZURE_KEY_VAULT_CLIENT_SECRET: ${{ secrets.NUGET_SIGN_CLIENT_SECRET }}
           AZURE_KEY_VAULT_TENANT_ID: ${{ secrets.NUGET_SIGN_TENANT_ID }}
           AZURE_KEY_VAULT_CERTIFICATE: ${{ secrets.NUGET_SIGN_CERTIFICATE }}
-
-      - name: NuGet login (OIDC)
-        if: steps.should_publish.outputs.publish == 'true'
-        id: nuget_login
-        uses: NuGet/login@v1
-        with:
-          # nuget.org matches OIDC to the trust-policy *creator* username,
-          # not the package/org owner (Toggly). Policy "GitHub Toggly" was
-          # created while signed in as opsai.
-          user: opsai
-
-      - name: Publish to NuGet
-        if: steps.should_publish.outputs.publish == 'true'
-        working-directory: ${{ env.SDK_ROOT }}
         run: |
-          PACKAGE_TO_PUSH=$(ls ./nupkgs/*.${{ needs.validate.outputs.version }}.nupkg 2>/dev/null | head -n 1)
-          if [ -z "$PACKAGE_TO_PUSH" ]; then
-            echo "No .nupkg found for version ${{ needs.validate.outputs.version }} in ./nupkgs"
-            ls -la ./nupkgs || true
-            exit 1
-          fi
-
-          echo "Pushing package: $PACKAGE_TO_PUSH"
-          # nuget.org accepts the adjacent .snupkg when pushing the .nupkg from the same folder.
-          dotnet nuget push "$PACKAGE_TO_PUSH" \
-            --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
-            --source https://api.nuget.org/v3/index.json \
-            --skip-duplicate
-
-          SYMBOL_TO_PUSH="${PACKAGE_TO_PUSH%.nupkg}.snupkg"
-          if [ -f "$SYMBOL_TO_PUSH" ]; then
-            echo "Pushing symbols: $SYMBOL_TO_PUSH"
-            dotnet nuget push "$SYMBOL_TO_PUSH" \
-              --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate
-          else
-            echo "Expected symbol package missing: $SYMBOL_TO_PUSH"
-            exit 1
-          fi
-
-      - name: Upload signed packages for release checksums
-        if: steps.should_publish.outputs.publish == 'true'
-        uses: actions/upload-artifact@v7
+          for artifact in ./nupkgs/*.nupkg ./nupkgs/*.snupkg; do
+            test -f "$artifact"
+            NuGetKeyVaultSignTool sign "$artifact" \
+              --file-digest sha256 \
+              --timestamp-rfc3161 https://timestamp.sectigo.com \
+              --timestamp-digest sha256 \
+              --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
+              --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
+              --azure-key-vault-tenant-id "$AZURE_KEY_VAULT_TENANT_ID" \
+              --azure-key-vault-client-secret "$AZURE_KEY_VAULT_CLIENT_SECRET" \
+              --azure-key-vault-certificate "$AZURE_KEY_VAULT_CERTIFICATE"
+            # Sectigo requires spacing between all timestamp requests.
+            sleep 15
+          done
+      - name: Freeze signed package checksums
+        run: node .github/package-registry/dotnet-signed-candidate.mjs seal release-candidate
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: nuget-${{ matrix.project }}
-          path: |
-            ${{ env.SDK_ROOT }}/nupkgs/*.nupkg
-            ${{ env.SDK_ROOT }}/nupkgs/*.snupkg
+          name: signed-dotnet-packages
+          path: release-candidate/
+          overwrite: false
           if-no-files-found: error
           retention-days: 14
 
-  release:
-    needs: [publish, validate]
-    if: needs.validate.outputs.action == 'publish'
+  # A failed registry push is retried from this completed, immutable signing job.
+  # Never sign again in publication or release jobs: RFC3161 timestamps change bytes.
+  publish:
+    needs: sign
     runs-on: ubuntu-latest
+    environment: nuget-publish
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: signed-dotnet-packages
+          path: release-candidate/
+      - name: Verify immutable signed candidate before registry access
+        run: node .github/package-registry/dotnet-signed-candidate.mjs verify release-candidate
+      - name: NuGet login (OIDC)
+        id: nuget_login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
+        with:
+          # Trust-policy creator, not the package-owner organization.
+          user: opsai
+      - name: Publish in dependency order
+        env:
+          NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
+        run: node .github/package-registry/dotnet-publish.mjs release-candidate
 
-      - name: Import GPG key
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: signed-dotnet-packages
+          path: release-candidate/
+      - name: Verify immutable signed candidate before release metadata
+        run: node .github/package-registry/dotnet-signed-candidate.mjs verify release-candidate
+      - name: Import existing GPG signing identity
         id: import_gpg
-        uses: crazy-max/ghaction-import-gpg@v7
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
           git_user_signingkey: true
           git_commit_gpgsign: true
           git_tag_gpgsign: true
-
-      - name: Configure git
-        run: |
-          git config user.name "${{ steps.import_gpg.outputs.name }}"
-          git config user.email "${{ steps.import_gpg.outputs.email }}"
-
-      - name: Commit version bump
-        if: needs.validate.outputs.manifest_changed == 'true'
-        run: |
-          git add ${{ env.SDK_ROOT }}/Directory.Build.props
-          git commit -S -m "Bumped .NET SDK to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]"
-
-          MAX_RETRIES=3
-          RETRY_COUNT=0
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if git pull --rebase --autostash origin develop; then
-              if git push origin develop; then
-                echo "Successfully pushed version bump"
-                exit 0
-              fi
-            else
-              git rebase --abort 2>/dev/null || true
-            fi
-
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              sleep 2
-            fi
-          done
-
-          echo "Failed to push after $MAX_RETRIES attempts"
-          exit 1
-
-      - name: Create and push tag
-        run: |
-          git tag -s -m ".NET SDK v${{ needs.validate.outputs.version }}" "dotnet-sdk-v${{ needs.validate.outputs.version }}"
-          git push origin "dotnet-sdk-v${{ needs.validate.outputs.version }}"
-
-      - name: Download signed NuGet packages
-        uses: actions/download-artifact@v8
-        with:
-          path: ./release-packages
-          pattern: nuget-*
-          merge-multiple: true
-
-      - name: Generate and GPG-sign SHA-256 checksums
-        run: |
-          cd ./release-packages
-          sha256sum *.nupkg *.snupkg | sort -k2 > ../SHA256SUMS
-          cd ..
-          gpg --batch --yes --detach-sign --armor SHA256SUMS
-          echo "Checksum entries: $(wc -l < SHA256SUMS)"
-          cat SHA256SUMS
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: dotnet-sdk-v${{ needs.validate.outputs.version }}
-          name: .NET SDK v${{ needs.validate.outputs.version }}
-          body: |
-            ## .NET SDK v${{ needs.validate.outputs.version }}
-
-            ### Installation
-
-            ```bash
-            dotnet add package Toggly.FeatureManagement --version ${{ needs.validate.outputs.version }}
-            ```
-
-            ### NuGet Packages
-
-            | Package | Description |
-            |---------|-------------|
-            | `Toggly.FeatureManagement` | Core feature management extending Microsoft.FeatureManagement |
-            | `Toggly.FeatureManagement.Web` | ASP.NET Core filters for browser, language, country, OS targeting |
-            | `Toggly.FeatureManagement.Storage.RavenDB` | RavenDB storage provider |
-            | `Toggly.FeatureManagement.Storage.DistributedCache` | Distributed cache storage provider |
-            | `Toggly.FeatureManagement.Hangfire` | Hangfire background job integration |
-            | `Toggly.FeatureManagement.HealthChecks` | Health check integration |
-            | `Toggly.FeatureManagement.NSwag` | NSwag/OpenAPI integration |
-            | `Toggly.Storage.MongoDB` | MongoDB storage provider |
-            | `Toggly.Storage.Dapper` | Dapper storage provider |
-            | `Toggly.Storage.EntityFramework` | Entity Framework storage provider |
-            | `Toggly.Metrics.SystemMetrics` | System metrics collection |
-
-            ### Verification
-
-            Release assets include `SHA256SUMS` and `SHA256SUMS.asc` (GPG-signed with the same key used for the release tag). Packages are also NuGet-signed via Azure Key Vault.
-
-            ### Requirements
-
-            - .NET Standard 2.1 / .NET Core 3.1 / .NET 5.0–10.0
-          files: |
-            SHA256SUMS
-            SHA256SUMS.asc
-          prerelease: ${{ github.event.inputs.prerelease }}
-          generate_release_notes: true
+      - name: Preserve legacy server manifest bump
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  summary:
-    needs: [publish, release, validate]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Summary
+          GIT_AUTHOR_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_AUTHOR_EMAIL: ${{ steps.import_gpg.outputs.email }}
+          GIT_COMMITTER_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_COMMITTER_EMAIL: ${{ steps.import_gpg.outputs.email }}
         run: |
-          echo "## .NET SDK Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Action | ${{ needs.validate.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Manifest | ${{ needs.validate.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Registry latest | ${{ needs.validate.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Reason | ${{ needs.validate.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tag | dotnet-sdk-v${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Packages | ${{ github.event.inputs.packages || 'all' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Published Packages" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Web" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Storage.RavenDB" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Storage.DistributedCache" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.Hangfire" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.HealthChecks" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.FeatureManagement.NSwag" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Storage.MongoDB" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Storage.Dapper" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Storage.EntityFramework" >> $GITHUB_STEP_SUMMARY
-          echo "- Toggly.Metrics.SystemMetrics" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[View on NuGet](https://www.nuget.org/packages?q=Toggly.FeatureManagement)" >> $GITHUB_STEP_SUMMARY
+          if test -f release-candidate/Directory.Build.props; then
+            cp release-candidate/Directory.Build.props Toggly.FeatureManagement.NET/Directory.Build.props
+            git add Toggly.FeatureManagement.NET/Directory.Build.props
+            git commit -S -m "Bump legacy .NET server manifest (auto_bump) [skip ci]"
+            for attempt in 1 2 3; do
+              if git pull --rebase origin develop && git push origin HEAD:develop; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              if test "$attempt" -eq 3; then exit 1; fi
+              sleep 2
+            done
+          fi
+      - name: Create signed checksums and family releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          cd release-candidate
+          gpg --batch --yes --detach-sign --armor SHA256SUMS
+          cd ..
+          node .github/package-registry/dotnet-release-notes.mjs release-candidate
+          node .github/package-registry/dotnet-create-releases.mjs release-candidate
