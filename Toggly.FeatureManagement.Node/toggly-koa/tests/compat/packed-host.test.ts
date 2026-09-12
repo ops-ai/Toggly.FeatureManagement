@@ -4,23 +4,23 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import test from 'node:test'
+import { test } from 'vitest'
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const fixturesDirectory = join(packageDirectory, 'tests', 'compat', 'fixtures')
 
-function run(command, args, cwd) {
+function run(command: string, args: string[], cwd: string) {
   return execFileSync(command, args, { cwd, encoding: 'utf8', stdio: 'pipe' })
 }
 
-function pack(directory, destination) {
+function pack(directory: string, destination: string) {
   run('pnpm', ['pack', '--pack-destination', destination], directory)
   const tarballs = readdirSync(destination).filter((file) => file.endsWith('.tgz'))
   assert.equal(tarballs.length, 1, `Expected one tarball from ${directory}`)
   return join(destination, tarballs[0])
 }
 
-function installAndVerify(koaVersion) {
+function installAndVerify(koaVersion: string) {
   const temporaryDirectory = mkdtempSync(join(tmpdir(), `toggly-koa-${koaVersion}-`))
 
   try {
@@ -50,6 +50,7 @@ function installAndVerify(koaVersion) {
       temporaryDirectory
     )
     run('npm', ['run', 'typecheck'], temporaryDirectory)
+    run('npm', ['run', 'build'], temporaryDirectory)
     run('npm', ['run', 'verify'], temporaryDirectory)
     run('npm', ['run', 'verify:cjs'], temporaryDirectory)
   } finally {
@@ -59,8 +60,8 @@ function installAndVerify(koaVersion) {
 
 test('packed release installs, typechecks, and handles Koa 2 requests', () => {
   installAndVerify('2.16.3')
-})
+}, 120000)
 
 test('packed release installs, typechecks, and handles Koa 3 requests', () => {
   installAndVerify('3.2.1')
-})
+}, 120000)

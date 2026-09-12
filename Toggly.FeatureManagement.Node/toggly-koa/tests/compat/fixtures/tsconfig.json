@@ -2,9 +2,11 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "noEmit": true,
     "strict": true,
-    "target": "ES2022"
+    "target": "ES2022",
+    "outDir": ".compiled"
   },
-  "include": ["consumer.ts"]
+  "include": [
+    "*.test.ts"
+  ]
 }

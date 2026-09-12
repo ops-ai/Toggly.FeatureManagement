@@ -1,3 +1,6 @@
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
 const assert = require('node:assert/strict')
 const togglyKoa = require('@ops-ai/toggly-koa')
 

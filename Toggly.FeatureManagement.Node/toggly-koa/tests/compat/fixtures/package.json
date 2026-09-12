@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "verify": "node verify.mjs",
-    "verify:cjs": "node verify.cjs"
+    "verify": "node .compiled/verify.test.js",
+    "verify:cjs": "node .compiled/verify-cjs.test.js",
+    "build": "tsc"
   },
   "dependencies": {
     "koa": "0.0.0",
