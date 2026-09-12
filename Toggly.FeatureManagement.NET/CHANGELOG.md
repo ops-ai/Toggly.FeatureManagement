@@ -1,5 +1,10 @@
 # Changelog
 
+## Toggly.FeatureManagement.Catalog 0.1.0 - 2026-09-11
+
+### Added
+- Portable embedded feature catalog contracts, strict canonical JSON serialization, validation, and conditional storage interfaces.
+
 ## 3.6.6
 
 2026-09-07
