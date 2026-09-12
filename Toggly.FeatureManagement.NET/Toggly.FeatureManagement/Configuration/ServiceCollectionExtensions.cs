@@ -31,6 +31,8 @@ namespace Toggly.FeatureManagement.Configuration
         /// <returns><paramref name="services"/> for chaining.</returns>
         public static IServiceCollection AddToggly(this IServiceCollection services, Action<TogglySettings> togglyOptions)
         {
+            if (!services.EnsureTogglyRuntimeMode(TogglyRuntimeMode.Cloud))
+                return services;
             services.Configure(togglyOptions);
 
             AddCoreServices(services);
@@ -48,6 +50,9 @@ namespace Toggly.FeatureManagement.Configuration
         {
             if (togglyOptions == null)
                 throw new ArgumentNullException(nameof(togglyOptions));
+
+            if (!services.EnsureTogglyRuntimeMode(TogglyRuntimeMode.Cloud))
+                return services;
 
             services.AddOptions<TogglySettings>()
                 .Configure(options =>
@@ -89,6 +94,8 @@ namespace Toggly.FeatureManagement.Configuration
         /// <returns><paramref name="services"/> for chaining.</returns>
         public static IServiceCollection AddToggly(this IServiceCollection services)
         {
+            if (!services.EnsureTogglyRuntimeMode(TogglyRuntimeMode.Cloud))
+                return services;
             AddCoreServices(services);
 
             return services;

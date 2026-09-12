@@ -1114,7 +1114,7 @@ namespace Toggly.FeatureManagement
             ReportError(message);
         }
 
-        private static FeatureDefinition BuildFeatureDefinition(FeatureDefinitionModel featureDefinition)
+        internal static FeatureDefinition BuildFeatureDefinition(FeatureDefinitionModel featureDefinition)
         {
             var userFilters = featureDefinition.Filters
                 .Where(f => !Filters.ContextPropertyEvaluator.IsContextPropertyFilter(f))
