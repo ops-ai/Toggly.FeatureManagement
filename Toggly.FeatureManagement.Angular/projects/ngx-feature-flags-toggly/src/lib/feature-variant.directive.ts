@@ -43,6 +43,7 @@ import { TogglyService } from './toggly.service'
 export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
   private isHidden = true
   private unsubscribeFeaturesRefresh: (() => void) | undefined
+  private evaluationGeneration = 0
   private unsubscribeLocalGates: (() => void) | undefined
 
   @Input() featureVariant = ''
@@ -68,6 +69,7 @@ export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.evaluationGeneration++
     this.unsubscribeFeaturesRefresh?.()
     this.unsubscribeLocalGates?.()
   }
@@ -77,6 +79,7 @@ export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
   }
 
   private updateView(): void {
+    const generation = ++this.evaluationGeneration
     if (!this.featureVariant || !this.variant) {
       this._viewContainer.clear()
       this.isHidden = true
@@ -85,6 +88,7 @@ export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
     }
 
     this._toggly.getVariant(this.featureVariant).then((result) => {
+      if (generation !== this.evaluationGeneration) return
       const matches = result !== null && result.name === this.variant
       if (matches) {
         if (this.isHidden) {

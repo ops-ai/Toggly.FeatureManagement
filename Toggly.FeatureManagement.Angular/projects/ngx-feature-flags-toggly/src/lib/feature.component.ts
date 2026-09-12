@@ -82,6 +82,7 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
   shouldShow: boolean = false
   isLoading: boolean = false
   private unsubscribeFeaturesRefresh: (() => void) | undefined
+  private evaluationGeneration = 0
   private unsubscribeLocalGates: (() => void) | undefined
 
   constructor(
@@ -99,6 +100,7 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.evaluationGeneration++
     this.unsubscribeFeaturesRefresh?.()
     this.unsubscribeLocalGates?.()
   }
@@ -108,6 +110,7 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private updateVisibility(): void {
+    const generation = ++this.evaluationGeneration
     let gate: string[] = []
 
     if (this.featureKey) {
@@ -132,10 +135,12 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
       this.toggly
         .evaluateFeatureGate(gate, this.requirement, this.negate, this.context, kind)
         .then((isEnabled) => {
+          if (generation !== this.evaluationGeneration) return
           this.shouldShow = isEnabled
           this.changeDetector.markForCheck()
         })
         .finally(() => {
+          if (generation !== this.evaluationGeneration) return
           this.isLoading = false
           this.changeDetector.markForCheck()
         })

@@ -49,6 +49,7 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
   private isHidden = true
   private entityContext: TogglyEntityContext | Record<string, unknown> | null = null
   private kind: string | undefined
+  private evaluationGeneration = 0
   private unsubscribeLocalGates: (() => void) | undefined
   private unsubscribeFeaturesRefresh: (() => void) | undefined
 
@@ -112,14 +113,17 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.evaluationGeneration++
     this.unsubscribeLocalGates?.()
     this.unsubscribeFeaturesRefresh?.()
   }
 
   private updateView() {
+    const generation = ++this.evaluationGeneration
     this._toggly
       .evaluateFeatureGate(this.flag, this.requirement, this.negate, this.entityContext, this.kind)
       .then((isEnabled) => {
+        if (generation !== this.evaluationGeneration) return
         if (isEnabled) {
           if (this.isHidden) {
             this._viewContainer.createEmbeddedView(this._templateRef)

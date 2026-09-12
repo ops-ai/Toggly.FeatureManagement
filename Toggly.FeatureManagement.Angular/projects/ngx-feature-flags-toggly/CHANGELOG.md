@@ -1,3 +1,12 @@
+## 2.8.3
+
+2026-09-12
+
+### Fixed
+- Keep the latest feature input, refresh, or local-gate evaluation when older
+  asynchronous evaluations finish later. Pending evaluations no longer update
+  destroyed components/directives or clear a newer loading state [OPS-1177].
+
 ## 2.8.2
 
 2026-09-12

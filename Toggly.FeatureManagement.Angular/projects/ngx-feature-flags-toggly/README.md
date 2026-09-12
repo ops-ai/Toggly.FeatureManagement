@@ -211,6 +211,9 @@ must also pass before release. The shipped signer dependency requires `^1.2.6`.
 Angular 21–22 applications using `provideZonelessChangeDetection()` support OnPush
 hosts. Feature components and directives notify Angular after asynchronous
 refreshes and device-local gate changes. Older applications may retain Zone.js.
+When evaluations overlap, components and directives retain the newest input or
+refresh result and ignore older results that finish later. Pending evaluations
+also stop updating a component or directive after it is destroyed.
 Default browser builds need no Node crypto external.
 
 Choose the Node and TypeScript versions required by your Angular generation:
