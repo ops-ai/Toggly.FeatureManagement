@@ -78,9 +78,11 @@ Wrap a render-mode subtree in `FeatureProvider`. The provider initializes truste
 ```razor
 <FeatureProvider>
     <Feature Key="new-dashboard">
-        <Enabled><p>New dashboard</p></Enabled>
-        <Disabled><p>Classic dashboard</p></Disabled>
+        <ChildContent><p>New dashboard</p></ChildContent>
         <Loading><p>Loading feature definitions…</p></Loading>
+    </Feature>
+    <Feature Key="new-dashboard" Negate="true">
+        <p>Classic dashboard</p>
     </Feature>
     <Feature Key="beta-access" Negate="true">
         <p>Join the beta waitlist.</p>
@@ -92,7 +94,7 @@ Wrap a render-mode subtree in `FeatureProvider`. The provider initializes truste
 </FeatureProvider>
 ```
 
-`ChildContent` is the enabled-content shorthand. Use `Requirement.Any` for at least one flag. An empty list evaluates true, then `Negate` applies. Do not combine `Key` and `Keys`: when `Keys` is supplied it takes precedence. Components subscribe to changes and marshal reevaluation through the renderer dispatcher; they unsubscribe on disposal.
+`ChildContent` is the content rendered when the combined evaluation is true. Use a second `Feature` with identical keys, requirement and entity plus `Negate="true"` for complementary content. Put `Loading` on one of the pair so pending content is not duplicated; Razor requires the ordinary content to use the named `ChildContent` fragment when `Loading` is named. Use `Requirement.Any` for at least one flag. An empty list evaluates true, then `Negate` applies. Do not combine `Key` and `Keys`: when `Keys` is supplied it takes precedence. Components subscribe to changes and marshal reevaluation through the renderer dispatcher; they unsubscribe on disposal.
 
 Boolean content selection is not named variant/experiment assignment. The Blazor session API exposes boolean evaluation; use the trusted .NET variant API separately where appropriate. Presentation gates do not replace authorization of backend actions.
 
@@ -123,8 +125,10 @@ Configure context kind **Order**, key property **Id**, and boolean property **Vi
 
 ```razor
 <Feature Key="ExpressCheckout" Entity="order">
-    <Enabled><button>Express checkout</button></Enabled>
-    <Disabled><p>Standard checkout</p></Disabled>
+    <button>Express checkout</button>
+</Feature>
+<Feature Key="ExpressCheckout" Entity="order" Negate="true">
+    <p>Standard checkout</p>
 </Feature>
 
 @code {

@@ -4,73 +4,40 @@ using Toggly.FeatureManagement.Client;
 
 namespace Toggly.FeatureManagement.Blazor;
 
-/// <summary>Renders one of three fragments, and marshals live changes onto the renderer.</summary>
+/// <summary>Renders child or loading content, and marshals live changes onto the renderer.</summary>
 public sealed class Feature : ComponentBase, IDisposable
 {
     /// <summary>An optional allowlisted presentation snapshot from prerendering.</summary>
     [CascadingParameter]
-    public FeatureSnapshot? Snapshot
-    {
-        get; set;
-    }
+    public FeatureSnapshot? Snapshot { get; set; }
 
     [Inject]
     public IFeatureSession Session { get; set; } = default!;
 
     /// <summary>A single feature key; Keys takes precedence when supplied.</summary>
     [Parameter]
-    public string? Key
-    {
-        get; set;
-    }
+    public string? Key { get; set; }
 
     /// <summary>The keys to combine using Requirement and Negate.</summary>
     [Parameter]
-    public IEnumerable<string>? Keys
-    {
-        get; set;
-    }
+    public IEnumerable<string>? Keys { get; set; }
 
     [Parameter]
     public Requirement Requirement { get; set; } = Requirement.All;
 
     [Parameter]
-    public bool Negate
-    {
-        get; set;
-    }
+    public bool Negate { get; set; }
 
     /// <summary>Entity data for this evaluation only; it is never taken from hydration.</summary>
     [Parameter]
-    public EntityContext? Entity
-    {
-        get; set;
-    }
+    public EntityContext? Entity { get; set; }
 
     [Parameter]
-    public RenderFragment? ChildContent
-    {
-        get; set;
-    }
-
-    [Parameter]
-    public RenderFragment? Enabled
-    {
-        get; set;
-    }
-
-    [Parameter]
-    public RenderFragment? Disabled
-    {
-        get; set;
-    }
+    public RenderFragment? ChildContent { get; set; }
 
     /// <summary>Content shown before initialization or while the current evaluation is pending.</summary>
     [Parameter]
-    public RenderFragment? Loading
-    {
-        get; set;
-    }
+    public RenderFragment? Loading { get; set; }
 
     // Only the latest evaluation may replace content or end the pending state.
     private bool enabled,
@@ -122,8 +89,8 @@ public sealed class Feature : ComponentBase, IDisposable
         builder.AddContent(
             0,
             pending || (!Session.IsReady && !hydrated) ? Loading
-                : enabled ? Enabled ?? ChildContent
-                : Disabled
+                : enabled ? ChildContent
+                : null
         );
 
     public void Dispose()

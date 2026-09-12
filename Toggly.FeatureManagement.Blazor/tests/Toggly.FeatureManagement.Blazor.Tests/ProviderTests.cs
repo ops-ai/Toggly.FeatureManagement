@@ -77,7 +77,7 @@ public class ProviderTests : BlazorTestContext
             p.Add(x => x.PublicKeys, new[] { "public" })
                 .AddChildContent<Feature>(f =>
                     f.Add(x => x.Key, "public")
-                        .Add(x => x.Enabled, "enabled")
+                        .AddChildContent("enabled")
                         .Add(x => x.Loading, "loading")
                 )
         );

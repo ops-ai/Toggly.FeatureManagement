@@ -3,10 +3,11 @@
 ## 0.1.0 — 2026-09-12
 
 ### Changed
+- Standardize complementary content on paired `Feature` components and remove the unpublished `Enabled` and `Disabled` fragments; use identical inputs with `Negate="true"` for the off branch.
 - Persist verified browser snapshots in durable localStorage so a new browser runtime can restore definitions and accepted public keys without a definitions-service connection. Revalidate context, key restrictions, signature age and the signature on every restoration.
 
 ### Added
-- Native enabled/disabled/loading Feature components and programmatic all/any/negate/entity gates.
+- Native child/loading Feature components and programmatic all/any/negate/entity gates.
 - Scoped browser and trusted server sessions, authentication synchronization, renderer dispatch, reconnect and disposal.
 - Explicit public boolean hydration allowlist and lazy browser WebCrypto/localStorage adapters.
 - .NET 8 packages, complete Blazor render-mode samples and grouped test/analysis/manual release integration.
