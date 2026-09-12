@@ -1,3 +1,10 @@
+## 1.11.3
+
+2026-09-11
+
+### Changed
+- Document host-owned React 18.2+ and React 19 setup in the published README.
+
 ## 1.11.2
 
 2026-09-11

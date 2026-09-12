@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/react-feature-flags-toggly",
-  "version": "1.11.2",
+  "version": "1.11.3",
   "description": "Provides feature flags support for React applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "scripts": {
     "build": "node scripts/clean.mjs && node scripts/build.mjs && node scripts/remove-intermediate-types.mjs && node scripts/normalize-distribution.mjs",
