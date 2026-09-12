@@ -72,7 +72,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
   let gates = options.localGates ?? [];
   let gateIndex = buildFlagGateIndex(gates);
   const listeners = new Set<(state: ClientState) => void>();
-  const jwks = new InMemoryJwksCache();
+  let jwks = new InMemoryJwksCache();
   const persistence = createPersistence(config.storage, config.baseURI);
   const timestamps = new Map<string, number>();
   let generation = 0;
@@ -212,7 +212,9 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
             message.unchanged !== true &&
             (!revision || (message.etag && message.etag !== revision));
           if (message.type === 'signing-key-updated') {
-            jwks.clear();
+            // Old in-flight key fetches may complete after invalidation. Retire
+            // the entire cache instance so they cannot refill the new epoch.
+            jwks = new InMemoryJwksCache();
             persistence.invalidate();
           }
           if (changed || sync || message.type === 'signing-key-updated') {

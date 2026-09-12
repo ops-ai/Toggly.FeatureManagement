@@ -19,6 +19,43 @@ function memoryStorage() {
 }
 
 describe('verified persistent storage', () => {
+  it('does not let a retired in-flight JWKS fetch refill the new key cache', async () => {
+    class Socket {
+      static current: Socket;
+      onmessage: any;
+      onclose: any;
+      close() {}
+      constructor() {
+        Socket.current = this;
+      }
+    }
+    vi.stubGlobal('WebSocket', Socket);
+    let keyRequests = 0;
+    let release: ((response: Response) => void) | undefined;
+    const fetcher: typeof fetch = async (input) => {
+      if (!String(input).includes('.well-known')) return new Response(envelope({ on: true }));
+      if (++keyRequests === 1)
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      return new Response(JSON.stringify(jwks));
+    };
+    const client = createClient({ appKey: 'front', fetch: fetcher, refreshInterval: 0 });
+    try {
+      client.start();
+      const pending = client.refresh();
+      await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+      Socket.current.onmessage({ data: '{"type":"signing-key-updated"}' });
+      release!(new Response(JSON.stringify(jwks)));
+      await pending;
+      await client.refresh();
+      expect(keyRequests).toBe(2);
+      expect(client.flags()).toEqual({ on: true });
+    } finally {
+      client.dispose();
+    }
+  });
+
   it('retires in-flight responses before the key-rotation debounce window', async () => {
     class Socket {
       static current: Socket;
