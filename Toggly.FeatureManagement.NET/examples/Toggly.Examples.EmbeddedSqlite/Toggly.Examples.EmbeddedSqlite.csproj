@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Toggly.FeatureManagement.Embedded\Toggly.FeatureManagement.Embedded.csproj" />
+    <ProjectReference Include="..\..\Toggly.Storage.EntityFramework\Toggly.Storage.EntityFramework.csproj" />
+  </ItemGroup>
+</Project>
