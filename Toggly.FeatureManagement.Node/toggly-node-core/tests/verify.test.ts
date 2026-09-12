@@ -18,9 +18,8 @@ function computeKid(x: string, y: string): string {
   return `${digest}ES256`
 }
 
-function doubleSha256(payload: string): Buffer {
-  const first = createHash('sha256').update(payload, 'utf8').digest()
-  return createHash('sha256').update(first).digest()
+function firstSha256(payload: string): Buffer {
+  return createHash('sha256').update(payload, 'utf8').digest()
 }
 
 function makeSignedKey(): {
@@ -49,9 +48,9 @@ function makeSignedKey(): {
 
 function signP1363(
   privateKey: ReturnType<typeof generateKeyPairSync>['privateKey'],
-  hash: Buffer
+  firstDigest: Buffer
 ): Buffer {
-  return sign(null, hash, {
+  return sign('sha256', firstDigest, {
     key: privateKey,
     dsaEncoding: 'ieee-p1363',
   })
@@ -59,9 +58,9 @@ function signP1363(
 
 function signDer(
   privateKey: ReturnType<typeof generateKeyPairSync>['privateKey'],
-  hash: Buffer
+  firstDigest: Buffer
 ): Buffer {
-  return sign(null, hash, {
+  return sign('sha256', firstDigest, {
     key: privateKey,
     dsaEncoding: 'der',
   })
@@ -92,7 +91,7 @@ describe('verifySignedDefinitions', () => {
     const defs = '[{"featureKey":"demo","filters":[{"name":"AlwaysOn","parameters":{}}]}]'
     const timestamp = 1730000000
     const payload = `${defs}|${timestamp}`
-    const signature = signP1363(privateKey, doubleSha256(payload)).toString('base64')
+    const signature = signP1363(privateKey, firstSha256(payload)).toString('base64')
 
     expect(() =>
       verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, jwks)
@@ -104,7 +103,7 @@ describe('verifySignedDefinitions', () => {
     const jwks: JwkSet = { keys: [jwk] }
     const defs = '{"PresalePhotos":true}'
     const timestamp = 1783915396
-    const signature = signDer(privateKey, doubleSha256(`${defs}|${timestamp}`)).toString(
+    const signature = signDer(privateKey, firstSha256(`${defs}|${timestamp}`)).toString(
       'base64'
     )
 
@@ -120,7 +119,7 @@ describe('verifySignedDefinitions', () => {
     const timestamp = 100
     const signature = signP1363(
       privateKey,
-      doubleSha256(`${compact}|${timestamp}`)
+      firstSha256(`${compact}|${timestamp}`)
     ).toString('base64')
 
     expect(() =>
@@ -138,7 +137,7 @@ describe('verifySignedDefinitions', () => {
     const jwks: JwkSet = { keys: [jwk] }
     const defs = '[]'
     const timestamp = 1730000000
-    const sig = Buffer.from(signP1363(privateKey, doubleSha256(`${defs}|${timestamp}`)))
+    const sig = Buffer.from(signP1363(privateKey, firstSha256(`${defs}|${timestamp}`)))
     sig[0] ^= 0xff
 
     expect(() =>
@@ -150,13 +149,33 @@ describe('verifySignedDefinitions', () => {
     ).toThrow(/invalid signature/)
   })
 
-  it('rejects single-SHA256 signatures (Web Crypto production mismatch)', () => {
+  it('rejects extra-hash self-signatures (verify(null, doubleHash))', () => {
+    const { privateKey, jwk } = makeSignedKey()
+    const jwks: JwkSet = { keys: [jwk] }
+    const defs = '[]'
+    const timestamp = 1730000000
+    const payload = `${defs}|${timestamp}`
+    const doubleHash = createHash('sha256').update(firstSha256(payload)).digest()
+    const signature = sign(null, doubleHash, {
+      key: privateKey,
+      dsaEncoding: 'ieee-p1363',
+    }).toString('base64')
+
+    expect(() =>
+      verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, jwks)
+    ).toThrow(/invalid signature/)
+  })
+
+  it('rejects ECDSA-SHA256 over the raw payload (single hash, not first digest)', () => {
     const { privateKey, jwk } = makeSignedKey()
     const jwks: JwkSet = { keys: [jwk] }
     const defs = '{"PresalePhotos":true}'
     const timestamp = 1783915396
-    const singleHash = createHash('sha256').update(`${defs}|${timestamp}`, 'utf8').digest()
-    const signature = signP1363(privateKey, singleHash).toString('base64')
+    const payload = `${defs}|${timestamp}`
+    const signature = sign('sha256', Buffer.from(payload, 'utf8'), {
+      key: privateKey,
+      dsaEncoding: 'ieee-p1363',
+    }).toString('base64')
 
     expect(() =>
       verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, jwks)
@@ -170,7 +189,7 @@ describe('verifySignedDefinitions', () => {
     const timestamp = 1
     const signature = signP1363(
       privateKey,
-      doubleSha256(`${defs}|${timestamp}`)
+      firstSha256(`${defs}|${timestamp}`)
     ).toString('base64')
 
     expect(() =>
@@ -189,7 +208,7 @@ describe('verifySignedDefinitions', () => {
     const timestamp = 100
     const signature = signP1363(
       privateKey,
-      doubleSha256(`${defs}|${timestamp}`)
+      firstSha256(`${defs}|${timestamp}`)
     ).toString('base64')
 
     expect(() =>
@@ -207,7 +226,7 @@ describe('verifySignedDefinitions', () => {
     const timestamp = 42
     const signature = signP1363(
       privateKey,
-      doubleSha256(`${defs}|${timestamp}`)
+      firstSha256(`${defs}|${timestamp}`)
     ).toString('base64')
     const body = `{"defs":${defs},"signature":"${signature}","timestamp":${timestamp},"kid":"${jwk.kid}"}`
 
@@ -226,7 +245,7 @@ describe('verifySignedDefinitions', () => {
     // Signature covers nested/innocent bytes only.
     const signature = signP1363(
       privateKey,
-      doubleSha256(`${innocent}|${timestamp}`)
+      firstSha256(`${innocent}|${timestamp}`)
     ).toString('base64')
     const body = `{"data":{"defs":${innocent}},"defs":${evil},"signature":"${signature}","timestamp":${timestamp},"kid":"${jwk.kid}"}`
 

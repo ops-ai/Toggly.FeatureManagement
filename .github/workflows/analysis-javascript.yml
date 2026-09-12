@@ -189,6 +189,10 @@ jobs:
           - { package: Fastify, dir: toggly-fastify }
           - { package: Hono, dir: toggly-hono }
           - { package: Koa, dir: toggly-koa }
+        include:
+          # Exercise the explicit ECDSA hash contract on the current Node runtime.
+          - node-version: '24.x'
+            config: { package: Core, dir: toggly-node-core }
 
     steps:
       - name: Checkout code

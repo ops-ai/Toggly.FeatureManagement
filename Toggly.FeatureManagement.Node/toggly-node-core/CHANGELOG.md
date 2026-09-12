@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.1
+
+2026-09-12
+
+### Fixed
+- Verify canonical Definitions ES256 signatures using the explicit ECDSA-SHA256
+  algorithm over the first SHA-256 digest. This preserves the service's
+  double-hash contract and avoids an unintended extra hash that rejected
+  valid signed definitions.
+- Add independent WebCrypto fixtures covering raw-byte verification, DER and
+  P1363 signatures, malformed signatures, and signed client initialization.
+
 ## 0.9.0
 
 2026-09-07
