@@ -50,6 +50,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 | Remix | `@ops-ai/remix-toggly-*` | [`Toggly.FeatureManagement.Remix`](Toggly.FeatureManagement.Remix) | [Docs](https://docs.toggly.io) |
 | HTML / CSS | CSS helpers | [`Toggly.FeatureManagement.Css`](Toggly.FeatureManagement.Css) | [Docs](https://docs.toggly.io) |
 | WordPress | WordPress plugin | [`Toggly.FeatureManagement.Wordpress`](Toggly.FeatureManagement.Wordpress) | [Docs](https://docs.toggly.io) |
+| .NET client / desktop | `Toggly.FeatureManagement.Client`, `Toggly.FeatureManagement.Client.Desktop` | [`Toggly.FeatureManagement.Client`](Toggly.FeatureManagement.Client) | [Docs](https://docs.toggly.io/sdks/dotnet-client) |
 
 ### Mobile
 
