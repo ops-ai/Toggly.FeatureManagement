@@ -1,5 +1,13 @@
 # Changelog
 
+## Toggly.FeatureManagement.Storage.EntityFramework 3.7.0 - 2026-09-11
+
+### Added
+- Transactional, optimistic-concurrency catalog storage for the offline embedded dashboard, with a dedicated `TogglyCatalogs` table and catalog-only schema scripts.
+
+### Changed
+- The .NET 10 Entity Framework dependencies now use the stable 10.0.0 release.
+
 ## Toggly.FeatureManagement.Embedded 0.1.0 - 2026-09-11
 
 ### Added

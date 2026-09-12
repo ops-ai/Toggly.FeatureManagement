@@ -70,6 +70,29 @@ services.AddDbContext<TogglyEntities>(options =>
 services.AddTogglyEntityFrameworkSnapshotProvider();
 ```
 
+## Embedded catalog store
+
+The embedded dashboard stores its editable, authoritative catalog separately from cloud-definition snapshots. Register it with its own database options:
+
+```csharp
+using Toggly.FeatureManagement.Storage.EntityFramework.Configuration;
+
+services.AddTogglyEntityFrameworkCatalogStore(options =>
+    options.UseSqlite("Data Source=toggly.db"));
+```
+
+The registration uses `IDbContextFactory<TogglyCatalogDbContext>` and opens one context per read or write. It never calls `EnsureCreated()` and never changes `TogglySnapshots`; create the dedicated `TogglyCatalogs` table as part of application provisioning.
+
+The package includes creation scripts for SQLite, SQL Server, and PostgreSQL in its `schema` package folder:
+
+- `TogglyCatalogs.sqlite.sql`
+- `TogglyCatalogs.sqlserver.sql`
+- `TogglyCatalogs.postgresql.sql`
+
+For the SQLite sample application only, it is acceptable to call `EnsureCreatedAsync()` on `TogglyCatalogDbContext` during explicit sample setup. Production applications should apply the matching catalog-only script or an equivalent migration before serving requests.
+
+Each persisted catalog has an application-generated revision token. `TryWriteAsync` creates only when the expected revision is `null`; later writes must submit the revision returned by the preceding read or write. Concurrent updates return a conflict and the current stored catalog. The catalog name is retained verbatim, while its SHA-256 digest is used as the table key.
+
 ### Database Examples
 
 #### SQL Server
