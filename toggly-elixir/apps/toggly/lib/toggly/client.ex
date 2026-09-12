@@ -8,6 +8,7 @@ defmodule Toggly.Client do
 
   @impl true
   def init(opts) do
+    Signature.validate_max_age!(Keyword.get(opts, :max_signature_age_seconds))
     name = Keyword.fetch!(opts, :name)
     :ets.new(name, [:named_table, :protected, read_concurrency: true])
 
@@ -166,7 +167,8 @@ defmodule Toggly.Client do
       if Keyword.get(state.opts, :signed, true) do
         Signature.verify(body, state.jwks || %{"keys" => []},
           minimum_timestamp: state.timestamp,
-          allowed_kids: Keyword.get(state.opts, :allowed_kids, [])
+          allowed_kids: Keyword.get(state.opts, :allowed_kids, []),
+          max_signature_age_seconds: Keyword.get(state.opts, :max_signature_age_seconds)
         )
       else
         try do

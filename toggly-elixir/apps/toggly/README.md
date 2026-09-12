@@ -62,6 +62,7 @@ Evaluations read a protected ETS snapshot and do not wait for HTTP. A GenServer 
 | `base_url` | `https://definitions.toggly.io` | Definitions and JWKS origin |
 | `signed` | true | Verify ES256 before activation; false explicitly opts into unsigned definitions |
 | `jwks` | fetched from origin | Trusted configured JWKS, also enables authenticated offline snapshot restart |
+| `max_signature_age_seconds` | nil (disabled) | Optional integer envelope age limit in seconds; nil/0/negative disable it; exact boundary is accepted |
 | `allowed_kids` | `[]` | Optional trusted key-ID allowlist |
 | `snapshot_path` | nil | Optional atomic file snapshot path; protect its directory with OS permissions |
 | `refresh_interval` | 60000 ms | Poll interval; 0 disables automatic first fetch/polling |
@@ -74,6 +75,8 @@ Evaluations read a protected ETS snapshot and do not wait for HTTP. A GenServer 
 | `usage_base_url` | `https://app.toggly.io` | HTTPS usage ingestion origin |
 
 Signatures bind exact raw JSON bytes and timestamp, using the backend's double-SHA256 ES256 contract. Verification checks algorithm, curve, coordinate length, key ID derived from coordinates, optional key allowlist/expiry, duplicate JSON keys, future timestamps and rollback against the active timestamp. Raw definitions are never reserialized for verification. Failed refreshes preserve the previous definitions and ETag. Startup snapshot verification uses **configured trusted JWKS only**; no cached, self-supplied public key is trusted. With fetched-only JWKS, signed offline restarts use defaults until network verification succeeds. Key rotation requires updating a configured JWKS/allowlist when you pin keys. Snapshot restore does not provide an external monotonic anti-replay ledger.
+
+A positive `max_signature_age_seconds` rejects a signed envelope when `now - timestamp` is **greater** than the limit; equality is accepted. Set an integer (for example `86_400` for one day); `nil`, `0` and negative integers disable only the age limit. Other types fail client startup validation. The existing 300-second future skew and active-timestamp rollback checks still apply. This setting is evaluated on **every signed activation**, including remote refresh and trusted file snapshots. It does not expire already active definitions: rejection preserves last-known-good flags and ETag. On a cold/offline start, a trusted snapshot older than the limit is rejected and defaults remain active until a sufficiently fresh, valid signed response arrives. Choose a limit that accommodates your expected outage/offline duration. Unsigned definitions are unaffected.
 
 ```elixir
 Toggly.refresh(MyApp.Flags) # :ok or {:error, reason}

@@ -2,11 +2,13 @@ defmodule Toggly.Signature do
   @moduledoc "Verifies Toggly's ES256 signed definitions before they become active."
   @spec verify(binary(), map(), keyword()) :: {:ok, list(), integer()} | {:error, atom()}
   def verify(body, jwks, options \\ []) do
+    max_age = validate_max_age!(Keyword.get(options, :max_signature_age_seconds))
     envelope = Toggly.JSON.decode!(body)
     %{"defs" => defs, "signature" => signature, "timestamp" => timestamp, "kid" => kid} = envelope
     true = is_list(defs) and is_integer(timestamp)
     now = Keyword.get(options, :now, System.system_time(:second))
     true = timestamp >= Keyword.get(options, :minimum_timestamp, 0) and timestamp <= now + 300
+    true = is_nil(max_age) or max_age <= 0 or now - timestamp <= max_age
     allowed = Keyword.get(options, :allowed_kids, [])
     true = allowed == [] or kid in allowed
     key = Enum.find(jwks["keys"], &(&1["kid"] == kid))
@@ -39,4 +41,10 @@ defmodule Toggly.Signature do
   rescue
     _ -> {:error, :invalid_signature}
   end
+
+  @doc false
+  def validate_max_age!(value) when is_nil(value) or is_integer(value), do: value
+
+  def validate_max_age!(_),
+    do: raise(ArgumentError, "max_signature_age_seconds must be an integer or nil")
 end
