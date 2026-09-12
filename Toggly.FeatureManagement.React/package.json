@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node scripts/clean.mjs && node scripts/build.mjs && node scripts/remove-intermediate-types.mjs && node scripts/normalize-distribution.mjs",
     "test": "jest --coverage",
-    "test:consumers": "node consumer-fixtures/verify.mjs",
+    "test:consumers": "tsc --project consumer-fixtures/tsconfig.runner.json && node consumer-fixtures/.runner/verify.spec.js",
     "test:watch": "jest --watch"
   },
   "author": "Toggly <support@toggly.io>",
@@ -41,7 +41,7 @@
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.4.5",
     "@ops-ai/toggly-local-gates": "^1.0.1",
-    "@ops-ai/toggly-signed-defs": "^1.2.3"
+    "@ops-ai/toggly-signed-defs": "^1.2.7"
   },
   "peerDependencies": {
     "react": "^18.2.0 || ^19.0.0",

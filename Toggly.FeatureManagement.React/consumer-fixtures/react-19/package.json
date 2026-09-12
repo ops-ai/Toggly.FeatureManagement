@@ -5,7 +5,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "vite build",
-    "verify": "vite build --ssr src/verify.tsx --outDir dist-ssr && node dist-ssr/verify.js"
+    "verify": "vite build --ssr src/verify.spec.tsx --outDir dist-ssr && node dist-ssr/verify.spec.js"
   },
   "dependencies": {
     "@ops-ai/react-feature-flags-toggly": "file:../artifacts/toggly-react.tgz",

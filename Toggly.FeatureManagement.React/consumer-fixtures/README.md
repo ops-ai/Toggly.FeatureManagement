@@ -30,3 +30,9 @@ After changing published package contents, rebuild and pack into
 `node_modules/@ops-ai/react-feature-flags-toggly` entry, and run
 `npm install --package-lock-only --ignore-scripts` per fixture to refresh the
 locked artifact checksum. Do not suppress integrity checks in `npm ci`.
+
+When validating an unpublished browser-safe signed-definitions candidate, set
+`TOGGLY_SIGNED_DEFS_TARBALL` to its exact reviewed tarball. The verifier copies
+that artifact only into its temporary packed consumers and keeps the checked-in
+lock targeting the required published package. This is local integration
+evidence; a normal registry install remains required before release.

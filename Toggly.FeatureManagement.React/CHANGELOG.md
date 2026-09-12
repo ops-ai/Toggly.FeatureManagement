@@ -5,6 +5,9 @@
 ### Changed
 - Document host-owned React 18.2+ and React 19 setup in the published README.
 
+### Fixed
+- Resolve the signed-definitions verifier from the consuming runtime so browser builds use the browser-safe 1.2.7+ provider instead of bundling Node crypto.
+
 ## 1.11.2
 
 2026-09-11

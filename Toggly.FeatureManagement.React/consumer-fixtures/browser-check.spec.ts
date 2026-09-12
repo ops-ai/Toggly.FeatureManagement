@@ -53,9 +53,9 @@ try {
   await page.click('#refresh')
   await state('on')
   // Count real service listener registrations/unsubscriptions at its public boundary.
-  assert.ok(await page.evaluate(() => window.fixture.activeSubscriptions > 0))
+  assert.ok(await page.evaluate(() => (window as unknown as Window & { fixture: { activeSubscriptions: number } }).fixture.activeSubscriptions > 0))
   await page.click('#unmount')
-  await page.waitForFunction(() => window.fixture.activeSubscriptions === 0)
+  await page.waitForFunction(() => (window as unknown as Window & { fixture: { activeSubscriptions: number } }).fixture.activeSubscriptions === 0)
   assert.equal(await page.$eval('#root', el => el.innerHTML), '')
   assert.deepEqual(errors, [])
   console.log('Browser: provider, hooks, all/negated/render gates, local gates, context, refresh and unmount cleanup passed')
