@@ -47,7 +47,8 @@ jobs:
           if [ "$PACKAGES" == "all" ]; then
             MATRIX='["toggly-node-core","toggly-express","toggly-fastify","toggly-hono","toggly-koa"]'
           else
-            MATRIX=$(echo "$PACKAGES" | sed 's/core/toggly-node-core/g; s/express/toggly-express/g; s/fastify/toggly-fastify/g; s/hono/toggly-hono/g; s/koa/toggly-koa/g' | tr ',' '\n' | jq -R . | jq -s .)
+            # GITHUB_OUTPUT key=value entries require JSON on one line.
+            MATRIX=$(echo "$PACKAGES" | sed 's/core/toggly-node-core/g; s/express/toggly-express/g; s/fastify/toggly-fastify/g; s/hono/toggly-hono/g; s/koa/toggly-koa/g' | tr ',' '\n' | jq -R . | jq -cs .)
           fi
 
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
