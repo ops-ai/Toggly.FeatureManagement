@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -8,6 +9,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 describe('published ESM artifact', () => {
   const esmReady = existsSync(join(root, 'dist/esm/package.json'))
   const browserReady = existsSync(join(root, 'dist/browser/package.json'))
+
+  it.skipIf(!esmReady || !browserReady)('verifies signatures in packed webpack browser consumers including legacy and dist overlay paths', () => {
+    execFileSync(process.execPath, [join(root, 'scripts/verify-webpack-consumers.mjs')], {
+      cwd: root, stdio: 'pipe', timeout: 30000,
+    })
+  }, 35000)
 
   it('publishes a browser condition before Node import and require conditions', () => {
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {

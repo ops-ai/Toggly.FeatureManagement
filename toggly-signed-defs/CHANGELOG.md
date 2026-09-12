@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.7
+
+2026-09-12
+
+### Fixed
+- Carry browser WebCrypto provider selection inside both compiled module trees,
+  so legacy main/module resolution and dist-only dependency overlays stay browser
+  safe. Preserve Node 18 CJS/ESM providers and signature validation [OPS-1176].
+
 ## 1.2.6
 
 2026-09-12

@@ -21,6 +21,8 @@ the browser ESM condition; Node ESM and CommonJS consumers retain their existing
 root import behavior. All three entry points expose the same public API.
 Node 18 and newer use the built-in Node WebCrypto provider; browsers use
 platform WebCrypto and do not import Node modules.
+Legacy browser bundlers that use `main` or `module` also select platform
+WebCrypto through browser metadata shipped inside each compiled module tree.
 
 ## Entity context
 
@@ -58,4 +60,7 @@ The consumer check installs a packed artifact, compiles TypeScript consumers,
 then runs real CJS and ESM files with the current Node runtime and any additional
 Node executable paths supplied. It verifies canonical P1363 and DER signatures,
 rejects malformed DER, and exercises the browser export condition in the current
-Node runtime. The browser condition check does not replace a browser-host test.
+Node runtime. It also builds the packed package with webpack through conditional,
+legacy module, legacy CommonJS, and dist-only overlay resolution, then verifies
+signatures in each bundle without Node globals. These checks do not replace a
+browser-host test.

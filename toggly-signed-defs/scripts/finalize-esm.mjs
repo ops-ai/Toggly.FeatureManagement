@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url'
 
 const buildTarget = process.argv[2] ?? 'esm'
 const esmDir = fileURLToPath(new URL(`../dist/${buildTarget}/`, import.meta.url))
-writeFileSync(join(esmDir, 'package.json'), `${JSON.stringify({ type: 'module' }, null, 2)}\n`)
+writeFileSync(join(esmDir, 'package.json'), `${JSON.stringify({
+  type: 'module',
+  ...(buildTarget === 'esm' ? { browser: { './webcrypto.js': './webcrypto.browser.js' } } : {}),
+}, null, 2)}\n`)
 
 function walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
