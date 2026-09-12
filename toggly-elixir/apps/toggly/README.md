@@ -13,16 +13,23 @@ Requires Elixir **1.20+** and Erlang/OTP **29+**. Verified on Elixir 1.20.4 / OT
 {:toggly, "~> 0.1.0"}
 
 # Application.start/2 child list; create one named client per application/environment.
-{Toggly, name: MyApp.Flags, app_key: System.get_env("TOGGLY_APP_KEY"),
- environment: "Production", defaults: %{"new-dashboard" => false}}
+{Toggly,
+ name: MyApp.Flags,
+ app_key: System.get_env("TOGGLY_APP_KEY"),
+ environment: "Production",
+ defaults: %{"new-dashboard" => false}}
 ```
 
 Use a **backend app key** from your application's settings. This is an SDK key, not a management API credential. Keys stay on the server. Signed definitions are enabled by default and verified before replacing the active snapshot. No key means defaults remain usable; `Toggly.refresh/1` returns `{:error, :missing_app_key}`.
 
 ```elixir
-context = %{"identity" => "alice", "groups" => ["beta"],
+context = %{
+  "identity" => "alice",
+  "groups" => ["beta"],
   "claims" => %{"role" => "admin"},
-  "request" => %{"country" => "US", "acceptLanguage" => "en-US"}}
+  "request" => %{"country" => "US", "acceptLanguage" => "en-US"}
+}
+
 Toggly.enabled?(MyApp.Flags, "new-dashboard", context)
 Toggly.enabled?(MyApp.Flags, ["new-dashboard", "api-v2"], context, requirement: :any)
 Toggly.enabled?(MyApp.Flags, "maintenance", context, negate: true, default: false)
@@ -36,8 +43,14 @@ Contexts are ordinary maps with **string keys**, supplied per evaluation. There 
 
 ```elixir
 context = Toggly.Context.from_headers(conn.req_headers, %{"identity" => current_user.id})
-order_context = Map.put(context, "entity", %{"kind" => "Order", "key" => "ord-vip",
-  "attributes" => %{"Vip" => true, "Total" => 120}})
+
+order_context =
+  Map.put(context, "entity", %{
+    "kind" => "Order",
+    "key" => "ord-vip",
+    "attributes" => %{"Vip" => true, "Total" => 120}
+  })
+
 Toggly.enabled?(MyApp.Flags, "ExpressCheckout", order_context)
 ```
 
@@ -61,10 +74,10 @@ Evaluations read a protected ETS snapshot and do not wait for HTTP. A GenServer 
 | `defaults` | `%{}` | Offline boolean defaults |
 | `base_url` | `https://definitions.toggly.io` | Definitions and JWKS origin |
 | `signed` | true | Verify ES256 before activation; false explicitly opts into unsigned definitions |
-| `jwks` | fetched from origin | Trusted configured JWKS, also enables authenticated offline snapshot restart |
+| `jwks` | fetched from origin | Trusted configured JWKS; overrides persisted keys on restart |
 | `max_signature_age_seconds` | nil (disabled) | Optional integer envelope age limit in seconds; nil/0/negative disable it; exact boundary is accepted |
 | `allowed_kids` | `[]` | Optional trusted key-ID allowlist |
-| `snapshot_path` | nil | Optional atomic file snapshot path; protect its directory with OS permissions |
+| `snapshot_path` | nil | Optional atomic signed envelope/public-key snapshot; use a durable host-owned directory |
 | `refresh_interval` | 60000 ms | Poll interval; 0 disables automatic first fetch/polling |
 | `websocket` | true | Real-time invalidation, only when app key exists |
 | `debounce` | 300 ms | Coalesce WebSocket invalidation bursts |
@@ -74,7 +87,20 @@ Evaluations read a protected ETS snapshot and do not wait for HTTP. A GenServer 
 | `flush_interval` | 60000 ms | Usage batch interval; 0 disables timer |
 | `usage_base_url` | `https://app.toggly.io` | HTTPS usage ingestion origin |
 
-Signatures bind exact raw JSON bytes and timestamp, using the backend's double-SHA256 ES256 contract. Verification checks algorithm, curve, coordinate length, key ID derived from coordinates, optional key allowlist/expiry, duplicate JSON keys, future timestamps and rollback against the active timestamp. Raw definitions are never reserialized for verification. Failed refreshes preserve the previous definitions and ETag. Startup snapshot verification uses **configured trusted JWKS only**; no cached, self-supplied public key is trusted. With fetched-only JWKS, signed offline restarts use defaults until network verification succeeds. Key rotation requires updating a configured JWKS/allowlist when you pin keys. Snapshot restore does not provide an external monotonic anti-replay ledger.
+Signatures bind exact raw JSON bytes and timestamp, using the backend's double-SHA256 ES256 contract. Verification checks algorithm, curve, coordinate length, key ID derived from coordinates, optional key allowlist/expiry, duplicate JSON keys, future timestamps and rollback against the active timestamp. Raw definitions are never reserialized for verification. Failed refreshes preserve the previous definitions and ETag. With `snapshot_path`, successful signed refreshes atomically persist the original envelope and accepted **public** JWKS fetched from the configured HTTPS origin. A fresh client verifies this file before any network refresh, using configured `jwks` when supplied or the persisted public keys otherwise. Current `allowed_kids`, key expiry, signature age and full definition schema checks apply again. Key rotation requires updating a configured JWKS/allowlist when you pin keys.
+
+Snapshots are scoped to the definitions endpoint, backend app key, environment and signed mode. Identity, groups, claims and entity context are never cached: this backend SDK stores raw definitions and evaluates each caller locally. Use a separate file per application/environment. Corrupt, oversized (over 5 MiB), unsupported-version, mismatched or unverifiable files fall back to defaults; successful live refreshes survive storage failures. JWKS responses are limited to 128 KiB and 32 unique ES256 keys. Legacy signed files without versioned context are ignored; explicitly unsigned local JSON fixtures remain supported with `signed: false`.
+
+Persisted public keys are trusted **application-owned local state**, not an independent trust authority. Protect the directory with OS permissions. Independently configured `jwks` or coordinate-derived `allowed_kids` constrain whole-store key substitution; a signature alone cannot authenticate a replaced envelope plus its replaced local keyset. Snapshots do not provide whole-store rollback protection or indefinite offline validity. Key expiry and your configured signature age still apply.
+
+```elixir
+{Toggly,
+ name: MyApp.Flags,
+ app_key: System.fetch_env!("TOGGLY_APP_KEY"),
+ environment: "Production",
+ snapshot_path: "/var/lib/my-app/toggly-production.json",
+ max_signature_age_seconds: 86_400}
+```
 
 A positive `max_signature_age_seconds` rejects a signed envelope when `now - timestamp` is **greater** than the limit; equality is accepted. Set an integer (for example `86_400` for one day); `nil`, `0` and negative integers disable only the age limit. Other types fail client startup validation. The existing 300-second future skew and active-timestamp rollback checks still apply. This setting is evaluated on **every signed activation**, including remote refresh and trusted file snapshots. It does not expire already active definitions: rejection preserves last-known-good flags and ETag. On a cold/offline start, a trusted snapshot older than the limit is rejected and defaults remain active until a sufficiently fresh, valid signed response arrives. Choose a limit that accommodates your expected outage/offline duration. Unsigned definitions are unaffected.
 

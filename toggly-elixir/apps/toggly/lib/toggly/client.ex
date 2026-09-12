@@ -26,16 +26,15 @@ defmodule Toggly.Client do
       jwks: Keyword.get(opts, :jwks)
     }
 
+    # Restore and reverify before any refresh can reach the network. Identity,
+    # groups and claims are evaluated per call and never persisted in this cache.
     state =
-      case Snapshot.read(opts[:snapshot_path]) do
-        {:ok, body} ->
-          case activate(body, state, nil, :snapshot) do
-            {:ok, loaded} -> loaded
-            _ -> state
-          end
-
-        _ ->
-          state
+      with {:ok, stored} <- Snapshot.read(opts[:snapshot_path]),
+           {:ok, body, jwks} <- Snapshot.decode(stored, opts),
+           {:ok, loaded} <- activate(body, %{state | jwks: jwks}, nil, :snapshot) do
+        loaded
+      else
+        _ -> state
       end
 
     publish(state)
@@ -142,7 +141,7 @@ defmodule Toggly.Client do
                {:ok, updated} <-
                  activate(body, %{state | jwks: jwks}, header(headers, "etag"), :remote) do
             publish(updated)
-            Snapshot.write(opts[:snapshot_path], body)
+            Snapshot.write(opts[:snapshot_path], Snapshot.encode(body, updated.jwks, opts))
 
             Enum.each(updated.subscribers, fn {pid, _} ->
               send(pid, {:toggly_updated, state.name, updated.revision})
@@ -182,8 +181,22 @@ defmodule Toggly.Client do
          true <- Enum.all?(definitions, &valid_definition?/1),
          mapped <- Map.new(definitions, &{&1["featureKey"], &1}),
          true <- map_size(mapped) == length(definitions) do
+      # Only public verification fields cross the persistence boundary.
+      jwks =
+        if Keyword.get(state.opts, :signed, true) do
+          {:ok, public} = Signature.public_jwks(state.jwks)
+          public
+        end
+
       {:ok,
-       %{state | definitions: mapped, timestamp: timestamp, revision: revision, source: source}}
+       %{
+         state
+         | definitions: mapped,
+           timestamp: timestamp,
+           revision: revision,
+           source: source,
+           jwks: jwks
+       }}
     else
       {:error, _} = error -> error
       _ -> {:error, :invalid_definitions}
@@ -209,15 +222,17 @@ defmodule Toggly.Client do
   defp fetch_keys(state) do
     case request(state, :get, ".well-known/jwks", []) do
       {:ok, %{status: 200, body: body}} ->
-        try do
-          {:ok, JSON.decode!(body)}
-        rescue
-          _ -> {:error, :invalid_jwks}
+        if Snapshot.trusted_origin?(state.opts) and is_binary(body) and byte_size(body) <= 131_072 do
+          Signature.public_jwks(JSON.decode!(body))
+        else
+          {:error, :invalid_jwks}
         end
 
       _ ->
         {:error, :jwks_unavailable}
     end
+  rescue
+    _ -> {:error, :invalid_jwks}
   end
 
   defp request(state, method, path, headers, body \\ nil) do

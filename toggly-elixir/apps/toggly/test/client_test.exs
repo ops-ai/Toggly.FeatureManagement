@@ -74,6 +74,7 @@ defmodule Toggly.ClientTest do
     {:ok, sup2} =
       Toggly.start_link(
         name: RemoteFlags,
+        app_key: "test",
         signed: false,
         snapshot_path: path,
         refresh_interval: 0,

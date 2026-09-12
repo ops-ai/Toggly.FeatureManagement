@@ -3,6 +3,7 @@ defmodule Toggly.Signature do
   @spec verify(binary(), map(), keyword()) :: {:ok, list(), integer()} | {:error, atom()}
   def verify(body, jwks, options \\ []) do
     max_age = validate_max_age!(Keyword.get(options, :max_signature_age_seconds))
+    {:ok, jwks} = public_jwks(jwks)
     envelope = Toggly.JSON.decode!(body)
     %{"defs" => defs, "signature" => signature, "timestamp" => timestamp, "kid" => kid} = envelope
     true = is_list(defs) and is_integer(timestamp)
@@ -40,6 +41,32 @@ defmodule Toggly.Signature do
     {:ok, defs, timestamp}
   rescue
     _ -> {:error, :invalid_signature}
+  end
+
+  @doc false
+  def public_jwks(%{"keys" => keys}) when is_list(keys) and length(keys) in 1..32 do
+    public = Enum.map(keys, &public_key!/1)
+    true = length(Enum.uniq_by(public, & &1["kid"])) == length(public)
+    {:ok, %{"keys" => public}}
+  rescue
+    _ -> {:error, :invalid_jwks}
+  end
+
+  def public_jwks(_), do: {:error, :invalid_jwks}
+
+  defp public_key!(
+         %{"alg" => "ES256", "kty" => "EC", "crv" => "P-256", "kid" => kid, "x" => x, "y" => y} =
+           key
+       ) do
+    {:ok, <<x_bytes::binary-size(32)>>} = Base.url_decode64(x, padding: false)
+    {:ok, <<y_bytes::binary-size(32)>>} = Base.url_decode64(y, padding: false)
+    true = kid == Base.encode16(:crypto.hash(:sha, x_bytes <> y_bytes)) <> "ES256"
+    true = is_nil(key["exp"]) or is_integer(key["exp"])
+    true = is_nil(key["use"]) or key["use"] == "sig"
+
+    key
+    |> Map.take(~w(alg kty crv kid x y exp use))
+    |> Map.reject(fn {_, value} -> is_nil(value) end)
   end
 
   @doc false
