@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
 import {
   createFeatureMiddleware,
+  createFeatureProxy,
   isFeatureEnabledForRequest,
   getFeaturesForRequest,
 } from '../src/middleware'
@@ -126,5 +127,31 @@ describe('edge middleware identity safety [OPS-831]', () => {
     )
 
     expect(features['vip-only']).toBe(true)
+  })
+
+  it('creates a Next 16 proxy without installing a process-wide client', async () => {
+    mockFetch.mockResolvedValue(
+      createMockResponse([targeting('vip-only', 'alice')]),
+    )
+
+    const proxy = createFeatureProxy({
+      config: {
+        appKey: 'test-key',
+        identity: 'shared-default',
+        cache: false,
+        enableUsageTracking: false,
+        enableMetrics: false,
+      },
+      feature: { featureKey: 'vip-only' },
+    })
+
+    const [aliceRes, bobRes] = await Promise.all([
+      proxy(makeRequest('/vip', 'alice')),
+      proxy(makeRequest('/vip', 'bob')),
+    ])
+
+    expect(aliceRes.status).toBe(200)
+    expect(bobRes.status).toBe(404)
+    expect(getEdgeToggly()).toBeNull()
   })
 })

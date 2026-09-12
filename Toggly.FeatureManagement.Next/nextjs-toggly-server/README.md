@@ -23,6 +23,16 @@ client record usage; call `recordServerUsage` / `measureServerMetric` /
 `flushServerTelemetry` as needed. Transport is native gRPC to
 `metricsBaseUrl` (default `https://app.toggly.io/`).
 
+## Next.js 16 Cache Components
+
+`cachedIsFeatureOn`, `cachedEvaluateFeatureGate`, and `cachedGetFeatures`
+continue to use Next's `unstable_cache` API for retained Next 14/15 apps and
+Next 16 apps that have not enabled Cache Components. With Next 16
+`cacheComponents: true`, read request data such as `headers()` outside a
+`'use cache'` scope and pass the resolved identity or request context to the
+Toggly helper. This keeps a cached result partitioned by the request context
+instead of sharing one user's gate with another.
+
 ## Documentation
 
 - [docs.toggly.io](https://docs.toggly.io)
