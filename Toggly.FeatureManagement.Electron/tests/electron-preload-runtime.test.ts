@@ -49,6 +49,16 @@ function runElectron(
   })
 }
 
+function withoutKnownMacDisplayDiagnostic(stderr: string): string {
+  // Electron 44 can emit this macOS display-link diagnostic in headless mode
+  // before BrowserWindow starts. It is unrelated to preload execution, which
+  // the fixture verifies through its exit code and renderer bridge report.
+  return stderr.replace(
+    /^\[\d+:\d{4}\/\d{6}\.\d+:ERROR:ui\/display\/mac\/cv_display_link_mac\.mm:195\] CVDisplayLinkCreateWithCGDisplay failed\. CVReturn: -6670\r?\n?/gm,
+    '',
+  )
+}
+
 describe('Electron preload runtime', () => {
   it('loads the compiled CommonJS preload entry from an ESM Electron app', async () => {
     const fixtureDirectory = await mkdtemp(join(tmpdir(), 'toggly-electron-preload-'))
@@ -89,13 +99,14 @@ app.whenReady().then(async () => {
     )
 
     const result = await runElectron(fixtureDirectory, preloadPath, reportPath)
+    expect(result.exitCode).toBe(0)
+    expect(withoutKnownMacDisplayDiagnostic(result.stderr)).toBe('')
+
     const report = JSON.parse(await readFile(reportPath, 'utf8')) as {
       bridge: string
       messages: Array<{ path: string; error: string }>
     }
 
-    expect(result.stderr).toBe('')
-    expect(result.exitCode).toBe(0)
     expect(report).toEqual({ bridge: 'object:function', messages: [] })
   }, 20_000)
 })

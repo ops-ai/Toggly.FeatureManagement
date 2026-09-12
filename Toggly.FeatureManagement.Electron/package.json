@@ -99,10 +99,11 @@
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "pretest": "npm run build",
+    "install:electron": "install-electron",
+    "pretest": "npm run build && npm run install:electron",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pretest:coverage": "npm run build",
+    "pretest:coverage": "npm run build && npm run install:electron",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
@@ -128,7 +129,7 @@
     "@types/react": "^18.3.18",
     "@types/ws": "^8.0.0",
     "@vitest/coverage-v8": "^3.0.4",
-    "electron": "^28.3.3",
+    "electron": "^44.3.0",
     "react": "^18.3.1",
     "tsup": "^8.3.5",
     "typescript": "^5.7.3",
