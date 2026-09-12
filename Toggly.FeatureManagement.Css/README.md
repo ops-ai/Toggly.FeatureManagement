@@ -16,7 +16,7 @@ Show or hide DOM elements with feature flags using Toggly’s client CSS definit
 ```html
 <link
   rel="stylesheet"
-  href="https://client.toggly.io/YOUR_APP_KEY/defs.css"
+  href="https://client.toggly.io/YOUR_APP_KEY-YOUR_ENVIRONMENT/defs.css"
 />
 ```
 
@@ -35,7 +35,7 @@ See [`Demo.Css/index.html`](Demo.Css/index.html) for a complete demo page.
 
 ## Documentation & resources
 
-- **Product docs**: [docs.toggly.io](https://docs.toggly.io)
+- **Product docs**: [docs.toggly.io/sdks/css](https://docs.toggly.io/sdks/css)
 - **SDK catalog**: [`../README.md`](../README.md)
 
 ## Contributing
