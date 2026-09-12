@@ -67,6 +67,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 |----------|---------|------|------|
 | .NET | `Toggly.FeatureManagement` (+ Hangfire, storage, NSwag, …) | [`Toggly.FeatureManagement.NET`](Toggly.FeatureManagement.NET) | [Docs](https://docs.toggly.io) |
 | Node.js | `@ops-ai/toggly-node-core`, Express / Fastify / Hono / Koa | [`Toggly.FeatureManagement.Node`](Toggly.FeatureManagement.Node) | [Docs](https://docs.toggly.io) |
+| NestJS 10/11 | `@ops-ai/toggly-nestjs` | [`Toggly.FeatureManagement.NestJS`](Toggly.FeatureManagement.NestJS) | [Docs](https://docs.toggly.io/sdks/nestjs) |
 | Python | `toggly` (+ cache / framework packages) | [`Toggly.FeatureManagement.Python`](Toggly.FeatureManagement.Python) | [Docs](https://docs.toggly.io) |
 | Java | `io.toggly:toggly-*` | [`Toggly.FeatureManagement.Java`](Toggly.FeatureManagement.Java) | [Docs](https://docs.toggly.io) |
 | PHP | [`toggly/feature-management-php`](https://packagist.org/packages/toggly/feature-management-php) | [`ops-ai/Toggly.FeatureManagement.PHP`](https://github.com/ops-ai/Toggly.FeatureManagement.PHP) | [Docs](https://docs.toggly.io) · [Packagist](https://packagist.org/packages/toggly/feature-management-php) |

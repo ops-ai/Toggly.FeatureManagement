@@ -347,6 +347,15 @@
       "workflow": ".github/workflows/sdk-vue-release.yml",
       "docsUrl": "https://docs.toggly.io/sdks/javascript/vue",
       "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-nestjs",
+      "group": "node",
+      "manifest": "Toggly.FeatureManagement.NestJS/package.json",
+      "changelog": "Toggly.FeatureManagement.NestJS/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-nestjs-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/nestjs",
+      "oidcReady": false
     }
   ]
 }

@@ -1,0 +1,42 @@
+{
+  "initial": {
+    "defs": "[\n  {\n    \"featureKey\": \"target\",\n    \"filters\": [\n      {\n        \"name\": \"Targeting\",\n        \"parameters\": {\n          \"Audience.Users:0\": \"alice\"\n        }\n      }\n    ]\n  },\n  {\n    \"featureKey\": \"claims\",\n    \"filters\": [\n      {\n        \"name\": \"UserClaims\",\n        \"parameters\": {\n          \"Claim\": \"role\",\n          \"Value\": \"admin\",\n          \"Percentage\": 100\n        }\n      }\n    ]\n  },\n  {\n    \"featureKey\": \"country\",\n    \"filters\": [\n      {\n        \"name\": \"Country\",\n        \"parameters\": {\n          \"Country:0\": \"US\",\n          \"Percentage\": 100\n        }\n      }\n    ]\n  },\n  {\n    \"featureKey\": \"groups\",\n    \"filters\": [\n      {\n        \"name\": \"Targeting\",\n        \"parameters\": {\n          \"Audience.Groups:0:Name\": \"staff\",\n          \"Audience.Groups:0:RolloutPercentage\": 100\n        }\n      }\n    ]\n  },\n  {\n    \"featureKey\": \"vip\",\n    \"filters\": [\n      {\n        \"name\": \"ContextProperty\",\n        \"parameters\": {\n          \"Property\": \"Vip\",\n          \"Operator\": \"eq\",\n          \"Value\": \"true\",\n          \"ValueType\": \"boolean\"\n        }\n      }\n    ],\n    \"contextKind\": \"Order\"\n  }\n]",
+    "timestamp": 1700000000,
+    "signature": "3QZWf1F6o0ZP25iF4kE6vNRGNbJ8iRQjeET6gwfFz05cacu1aqb9lylD5eXEfiCyv/GgONCa+GQG8Z8+4diTdQ==",
+    "kid": "7E061B4AC9A1F2595D9017555F24728EE60B4132ES256",
+    "jwks": {
+      "keys": [
+        {
+          "key_ops": ["verify"],
+          "ext": true,
+          "kty": "EC",
+          "x": "fKDAVfnovoOmmAg-rnDuqiTDRWX88zqAafH2hU6_qhQ",
+          "y": "87_zEKMphB0L9fq3je8coie_74xLOyBisHMdi6BveHc",
+          "crv": "P-256",
+          "alg": "ES256",
+          "kid": "7E061B4AC9A1F2595D9017555F24728EE60B4132ES256"
+        }
+      ]
+    }
+  },
+  "rotated": {
+    "defs": "[\n  {\n    \"featureKey\": \"target\",\n    \"filters\": [\n      {\n        \"name\": \"Targeting\",\n        \"parameters\": {\n          \"Audience.Users:0\": \"bob\"\n        }\n      }\n    ]\n  },\n  {\n    \"featureKey\": \"claims\",\n    \"filters\": [\n      {\n        \"name\": \"UserClaims\",\n        \"parameters\": {\n          \"Claim\": \"role\",\n          \"Value\": \"admin\",\n          \"Percentage\": 100\n        }\n      }\n    ]\n  },\n  {\n    \"featureKey\": \"country\",\n    \"filters\": [\n      {\n        \"name\": \"Country\",\n        \"parameters\": {\n          \"Country:0\": \"US\",\n          \"Percentage\": 100\n        }\n      }\n    ]\n  },\n  {\n    \"featureKey\": \"groups\",\n    \"filters\": [\n      {\n        \"name\": \"Targeting\",\n        \"parameters\": {\n          \"Audience.Groups:0:Name\": \"staff\",\n          \"Audience.Groups:0:RolloutPercentage\": 100\n        }\n      }\n    ]\n  },\n  {\n    \"featureKey\": \"vip\",\n    \"filters\": [\n      {\n        \"name\": \"ContextProperty\",\n        \"parameters\": {\n          \"Property\": \"Vip\",\n          \"Operator\": \"eq\",\n          \"Value\": \"true\",\n          \"ValueType\": \"boolean\"\n        }\n      }\n    ],\n    \"contextKind\": \"Order\"\n  }\n]",
+    "timestamp": 1700000000,
+    "signature": "xjnM8VYTobjWe5GgsknLomGDhsmZQE2bhhmVk/ePJlImvkWJ9hv6+jnJ7LmPw4d5S6hgJNSeXTQtYNNp+lPJQA==",
+    "kid": "8019F862B31426FED3F084C4DC765CE2BDFA15B4ES256",
+    "jwks": {
+      "keys": [
+        {
+          "key_ops": ["verify"],
+          "ext": true,
+          "kty": "EC",
+          "x": "vV57e6t-Hgdn1UjSyBpEkM8EMzF_cadWlkHtxkKADRQ",
+          "y": "1x4YvC581dnfBUIXAMsZoC39WTfPoLF6uVhX9jaCoSc",
+          "crv": "P-256",
+          "alg": "ES256",
+          "kid": "8019F862B31426FED3F084C4DC765CE2BDFA15B4ES256"
+        }
+      ]
+    }
+  }
+}
