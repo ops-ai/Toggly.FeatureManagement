@@ -71,7 +71,10 @@ public class ComponentTests : BlazorTestContext
         using var http = new HttpClient();
         var session = new BrowserFeatureSession(
             new(
-                new() { Defaults = new Dictionary<string, bool> { { "on", true } } },
+                new()
+                {
+                    Defaults = new Dictionary<string, bool> { { "on", true } }
+                },
                 http,
                 new Reject()
             )
@@ -321,8 +324,12 @@ public sealed class FakeSession : IFeatureSession
     }
     public event EventHandler<Exception>? Error
     {
-        add { }
-        remove { }
+        add
+        {
+        }
+        remove
+        {
+        }
     }
 
     public void Notify() => changed?.Invoke(this, EventArgs.Empty);
