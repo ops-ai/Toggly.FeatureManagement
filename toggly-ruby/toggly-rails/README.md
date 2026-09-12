@@ -40,10 +40,20 @@ end
 ### Views
 
 ```erb
-<% if feature_enabled?(:promo) %>
+<%= feature(:promo) do %>
   <div class="promo">Special offer!</div>
 <% end %>
+
+<%= feature(:promo, negate: true) do %>
+  <div class="standard">Standard offer</div>
+<% end %>
 ```
+
+Use the same feature key and context for both blocks. `feature` captures only
+the selected block, and `negate: true` selects the complementary branch.
+`when_feature_enabled` and `when_feature_disabled` remain available as
+deprecated compatibility adapters. Boolean helpers and `feature_switch` are
+unchanged.
 
 ## Documentation
 

@@ -6,7 +6,7 @@ PATH
 PATH
   remote: .
   specs:
-    toggly-rails (0.2.1)
+    toggly-rails (0.3.0)
       railties (>= 7.0)
       toggly (~> 0.1)
 

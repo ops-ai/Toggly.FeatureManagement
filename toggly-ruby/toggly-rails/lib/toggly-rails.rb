@@ -32,9 +32,10 @@ module Toggly
   #   end
   #
   # @example View usage
-  #   <% if feature_enabled?(:new_header) %>
+  #   <%= feature(:new_header) do %>
   #     <%= render "new_header" %>
-  #   <% else %>
+  #   <% end %>
+  #   <%= feature(:new_header, negate: true) do %>
   #     <%= render "header" %>
   #   <% end %>
   module Rails

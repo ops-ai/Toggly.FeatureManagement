@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-12
+
+### Added
+
+- Add the canonical `feature(feature_key, context: nil, negate: false)` view helper, capturing only the selected ActionView block.
+
+### Changed
+
+- Keep `when_feature_enabled` and `when_feature_disabled` as deprecated compatibility adapters to `feature`.
+
 ## [0.2.1] - 2026-09-03
 
 ### Changed
