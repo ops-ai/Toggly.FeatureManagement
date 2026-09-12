@@ -165,3 +165,12 @@ README install snippets, and `CHANGELOG.md` in the same PR before running
 **PHP monorepo workflow:** `sdk-php-release.yml` requires `Toggly.FeatureManagement.PHP/` in the checkout. If that directory is absent, use the release workflow in the standalone **Toggly.FeatureManagement.PHP** repository instead.
 
 See [package-versioning rule](../../../.cursor/rules/package-versioning.mdc) for semver and changelog conventions.
+
+## Distributed .NET client packages
+
+The `distributed-client` family in `package-registry/nuget-packages.json` uses
+`sdk-dotnet-client-release.yml`. It resolves each package manifest independently,
+runs coverage, packs deterministically, signs both nupkg and snupkg with the
+existing Key Vault policy, and publishes with NuGet OIDC. Before first publication,
+configure the `opsai` trust policy for this exact workflow and `nuget-publish`
+environment. No API-key fallback is introduced.

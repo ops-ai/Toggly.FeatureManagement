@@ -23,5 +23,23 @@
     { "id": "Toggly.FeatureManagement.Storage.Dapper", "project": "Toggly.Storage.Dapper/Toggly.Storage.Dapper.csproj" },
     { "id": "Toggly.FeatureManagement.Storage.EntityFramework", "project": "Toggly.Storage.EntityFramework/Toggly.Storage.EntityFramework.csproj" },
     { "id": "Toggly.Metrics.SystemMetrics", "project": "Toggly.Metrics.SystemMetrics/Toggly.Metrics.SystemMetrics.csproj" }
+  ],
+  "families": [
+    {
+      "name": "distributed-client",
+      "sdkRoot": "Toggly.FeatureManagement.Client",
+      "changelog": "Toggly.FeatureManagement.Client/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-dotnet-client-release.yml",
+      "packages": [
+        {
+          "id": "Toggly.FeatureManagement.Client",
+          "project": "src/Toggly.FeatureManagement.Client/Toggly.FeatureManagement.Client.csproj"
+        },
+        {
+          "id": "Toggly.FeatureManagement.Client.Desktop",
+          "project": "src/Toggly.FeatureManagement.Client.Desktop/Toggly.FeatureManagement.Client.Desktop.csproj"
+        }
+      ]
+    }
   ]
 }

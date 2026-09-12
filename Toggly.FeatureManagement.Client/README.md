@@ -1,0 +1,114 @@
+# .NET client SDK
+
+Use `Toggly.FeatureManagement.Client` in distributed .NET applications with a **frontend App Key**. The portable core targets .NET 8 and has no ASP.NET Core or Generic Host dependency. `Toggly.FeatureManagement.Client.Desktop` adds native ES256 verification and filesystem snapshots for console and desktop hosts.
+
+Use the [trusted .NET server SDK](https://docs.toggly.io/sdks/dotnet) for backend definitions, authenticated targeting, middleware, metrics and server-side enforcement. This client fetches evaluated-signed booleans and EntityGates. Client-controlled identities and feature gates do not authorize access to protected resources.
+
+## Install and initialize
+
+```sh
+dotnet add package Toggly.FeatureManagement.Client.Desktop --version 0.1.0
+```
+
+```csharp
+using Toggly.FeatureManagement.Client;
+using Toggly.FeatureManagement.Client.Desktop;
+
+using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+await using var client = DesktopClient.Create(new TogglyClientOptions
+{
+    AppKey = Environment.GetEnvironmentVariable("TOGGLY_APP_KEY"),
+    Environment = "Production",
+    Context = new EvaluationContext("user-123", ["beta"],
+        new Dictionary<string, string> { ["plan"] = "premium" }),
+    Defaults = new Dictionary<string, bool> { ["new-dashboard"] = false }
+}, http);
+
+client.Error += (_, error) => Console.Error.WriteLine(error.Message);
+client.Changed += (_, _) => Console.WriteLine("Features or context changed");
+await client.InitializeAsync();
+if (client.IsEnabled("new-dashboard"))
+    Console.WriteLine("Show the new dashboard");
+```
+
+`InitializeAsync` awaits the first refresh attempt, then `IsReady` is true even when the network failed and defaults are in use. Missing/blank App Key deliberately selects offline defaults without network requests. Subscribe to `Error` before initialization to report connectivity, verification and storage failures. The caller owns `HttpClient`; dispose the client before disposing HTTP resources.
+
+## Feature checks and local prerequisites
+
+```csharp
+bool both = client.Evaluate(["new-dashboard", "api-v2"]);
+bool either = client.Evaluate(["new-dashboard", "api-v2"], Requirement.Any);
+bool fallback = client.Evaluate(["new-dashboard"], negate: true);
+```
+
+Unknown keys use their configured default, otherwise false. Empty key lists return true before negation. Negation applies after all/any evaluation.
+
+Set `LocalGates` to a dictionary mapping a flag to a synchronous `Func<bool>`. For example, `["enhanced-submit"] = () => deviceIsReady`. A local prerequisite is ANDed with the worker/entity result at every read, so it can turn a flag off but cannot turn a remotely disabled flag on. A throwing prerequisite fails closed and reports `Error`. Notify your UI when your device state changes; the SDK does not observe arbitrary application variables.
+
+## Identity, groups and claims
+
+```csharp
+await client.SetContextAsync(new EvaluationContext(
+    "another-user", ["staff"],
+    new Dictionary<string, string> { ["role"] = "editor" }));
+```
+
+A client represents one user session. Create separate clients for independent sessions. Context updates clear the previous flags and revision before fetching, and reject stale in-flight responses from the previous context. Input collections are copied. Groups are deduplicated and sorted; claims are sorted and limited to 20 types. Identity, groups and claims become `u`, repeatable `g`, and `claim.*` query parameters; use opaque IDs and coarse, non-sensitive rollout dimensions.
+
+User targeting, percentage, claims, time and request-derived filters execute on the definitions worker. Native desktop requests do not supply browser fingerprints or spoof geographic signals through this API.
+
+## Entity checks
+
+```csharp
+var order = new EntityContext("Order", "ord-vip",
+    new Dictionary<string, object?> { ["Vip"] = true, ["Total"] = 250 });
+bool checkout = client.IsEnabled("ExpressCheckout", order);
+```
+
+An EntityGate without entity context fails closed, even when a default is true. Attributes are resolved with exact then case-insensitive property lookup. Supported operators are `eq`, `neq`, `in`, `contains`, `gt`, `gte`, `lt`, and `lte`; ordered comparisons require number or datetime type. String comparisons ignore case. Empty, malformed and unsupported rules fail closed. Per-read entity context permits different Orders in different views without changing the user session.
+
+## Signatures and persistence
+
+All remote responses require ES256 verification. The exact raw `defs` JSON plus `|` plus Unix timestamp is double SHA-256 hashed, matching the definitions worker. Both P1363 and DER signatures are accepted by the desktop verifier. JWK curve, algorithm, key coordinates and key fingerprint are checked. `AllowedKeyIds` can restrict the accepted keys. `MaximumSignatureAge` defaults to 30 days; timestamps over five minutes in the future and rollback timestamps are rejected.
+
+Pass a directory as the third `DesktopClient.Create` argument to enable `FileSnapshotStore`. Restrict that directory to the current OS user. The store writes envelopes atomically under a SHA-256 context key covering endpoint, app, environment and complete evaluation context. Snapshot loads validate context and reverify signatures; malformed data never replaces last-known-good memory state.
+
+JWKS are fetched from the configured HTTPS endpoint. For **cold offline** snapshot restoration, provide `TrustedJwks` from an out-of-band trusted distribution channel. Without it, the client must fetch trusted keys before loading disk snapshots and falls back to defaults when that fetch fails. Never treat JWKS bundled inside an untrusted cache entry as trusted. Previously verified in-memory flags remain available during network errors; maximum signature age is checked when accepting envelopes, not a forced expiration of last-known-good memory.
+
+Implement `ISnapshotStore.LoadAsync(contextKey, cancellationToken)` and `SaveAsync(contextKey, snapshot, cancellationToken)` for alternate storage. Do not persist flattened entity decisions, since those belong to individual reads.
+
+## Live updates and host lifecycle
+
+`EnableLiveUpdates` defaults to true. WebSocket notifications invalidate the cache; full legacy WebSocket payloads are ignored. The client coalesces changes over 300 ms, refreshes with full context, sends conditional revision headers, and reconnects with backoff from 5 to 60 seconds. Polling every five minutes (`RefreshInterval`) continues as a fallback. A signing-key notification refreshes both JWKS and definitions. A verification failure also retries fresh endpoint keys once, covering missed rotation notifications.
+
+`RefreshAsync`, `InitializeAsync` and `SetContextAsync` accept cancellation tokens. `DisposeAsync` cancels requests, stops polling, closes subscriptions and removes event handlers. Notifications can run on I/O threads: Avalonia callers should use `Dispatcher.UIThread.Post`, and other desktop hosts should marshal to their own UI dispatcher. Avoid synchronously blocking on async lifecycle methods from callbacks.
+
+## Portable host integration
+
+The core constructor accepts `TogglyClientOptions`, a caller-owned `HttpClient`, mandatory `ISignatureVerifier`, optional `ISnapshotStore`, and optional `IUpdateSource`. Browser hosts can supply WebCrypto and browser storage adapters without importing the desktop package. A signature verifier must validate the exact signed bytes and JWK fingerprint; returning true unconditionally removes the trust boundary. `WebSocketUpdates` can take a host connection factory when custom WebSocket construction is needed.
+
+| Surface | Support |
+| --- | --- |
+| Console and desktop .NET 8+ | Native desktop package |
+| ASP.NET / Generic Host required | No |
+| Boolean, all/any/negate, defaults | Yes |
+| Identity/groups/claims and EntityGate | Yes |
+| Device-local post-filter prerequisites | Yes |
+| Signed snapshots and WebSocket invalidation | Yes |
+| Experiment variant assignment | Not exposed by this boolean client |
+| Usage metrics and server middleware | Use the trusted server SDK |
+| Browser-native storage / UI components | Supplied by a browser adapter |
+
+## Samples and development
+
+The [console and Avalonia showcase](https://github.com/ops-ai/Toggly.Samples/tree/develop/dotnet-client-sdk) covers startup, offline behavior, context changes, gates, entity context and UI-thread-safe events.
+
+From `Toggly.FeatureManagement.Client`:
+
+```sh
+dotnet test tests/Toggly.FeatureManagement.Client.Tests -c Release --collect:"XPlat Code Coverage" --settings coverage.runsettings
+dotnet pack src/Toggly.FeatureManagement.Client -c Release
+dotnet pack src/Toggly.FeatureManagement.Client.Desktop -c Release
+```
+
+MIT license. Learn more at [toggly.io](https://toggly.io).

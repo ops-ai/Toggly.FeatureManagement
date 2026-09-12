@@ -8,6 +8,7 @@ on:
     paths:
       - 'Toggly.FeatureManagement.NET/**'
       - 'Toggly.CLI/**'
+      - 'Toggly.FeatureManagement.Client/**'
       - '.github/workflows/analysis-dotnet.yml'
   pull_request:
     branches:
@@ -16,6 +17,7 @@ on:
     paths:
       - 'Toggly.FeatureManagement.NET/**'
       - 'Toggly.CLI/**'
+      - 'Toggly.FeatureManagement.Client/**'
       - '.github/workflows/analysis-dotnet.yml'
   workflow_dispatch:
 
@@ -35,7 +37,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: |
+            8.0.x
+            9.0.x
 
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@v4
@@ -89,7 +93,7 @@ jobs:
             /v:"${{ steps.gitversion.outputs.semVer }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.token="${SONAR_TOKEN}" \
-            /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET" \
+            /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
@@ -211,6 +215,12 @@ jobs:
             -assemblyfilters:"-*Tests*"
         continue-on-error: true
 
+      - name: Build and test distributed .NET client
+        run: |
+          dotnet build Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests -c Release -t:Rebuild
+          dotnet test Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests -c Release --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Client/coverage.runsettings --results-directory ./TestResults/client
+          python3 Toggly.FeatureManagement.Client/check-coverage.py TestResults/client
+
       - name: End SonarCloud Scan
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -238,7 +248,7 @@ jobs:
               /v:"${{ steps.gitversion.outputs.semVer }}" \
               /d:sonar.host.url="${SONAR_HOST_URL}" \
               /d:sonar.token="${SONAR_SERVER_TOKEN}" \
-              /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET" \
+              /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
               /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
               /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
@@ -261,6 +271,12 @@ jobs:
 
       - name: Build solution (SonarQube Server)
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
+
+      - name: Build and test distributed .NET client
+        run: |
+          dotnet build Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests -c Release -t:Rebuild
+          dotnet test Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests -c Release --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Client/coverage.runsettings --results-directory ./TestResults/client
+          python3 Toggly.FeatureManagement.Client/check-coverage.py TestResults/client
 
       - name: End SonarQube Server Scan
         env:
@@ -372,7 +388,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: |
+            8.0.x
+            9.0.x
 
       - name: Restore CLI dependencies
         run: dotnet restore Toggly.CLI/Toggly.CLI.csproj
@@ -410,6 +428,19 @@ jobs:
           dotnet pack Toggly.FeatureManagement.sln -c Release --no-build --output ./nupkgs
           ls -la ./nupkgs
 
+      - name: Pack distributed client artifacts and verify metadata
+        run: |
+          dotnet pack Toggly.FeatureManagement.Client/src/Toggly.FeatureManagement.Client -c Release -p:ContinuousIntegrationBuild=true -o Toggly.FeatureManagement.Client/nupkgs
+          dotnet pack Toggly.FeatureManagement.Client/src/Toggly.FeatureManagement.Client.Desktop -c Release -p:ContinuousIntegrationBuild=true -o Toggly.FeatureManagement.Client/nupkgs
+          NUGET_CLIENT_PACK_DIR=Toggly.FeatureManagement.Client/nupkgs node --test .github/package-registry/verify-nuget-client.test.mjs
+
+      - name: Upload distributed client packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-client-packages
+          path: Toggly.FeatureManagement.Client/nupkgs/*.*nupkg
+          if-no-files-found: error
+
       - name: Upload NuGet packages
         uses: actions/upload-artifact@v7
         with:
@@ -430,7 +461,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: |
+            8.0.x
+            9.0.x
 
       - name: Restore smoke tests
         run: dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj

@@ -1,0 +1,195 @@
+name: .NET Client SDKs - Build & Publish
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: nuget-publish
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      max-parallel: 1
+      matrix:
+        include:
+          - project: Toggly.FeatureManagement.Client
+          - project: Toggly.FeatureManagement.Client.Desktop
+    env:
+      SDK_ROOT: Toggly.FeatureManagement.Client
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+      - name: Resolve manifest version
+        id: version
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: Toggly.FeatureManagement.Client/src/${{ matrix.project }}/${{ matrix.project }}.csproj
+          manifest_type: csproj
+          package_name: ${{ matrix.project }}
+          registry: nuget
+          release_mode: publish
+      - name: Test and check coverage
+        if: steps.version.outputs.action == 'publish'
+        run: |
+          dotnet test Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests -c Release --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Client/coverage.runsettings --results-directory TestResults/client
+          python3 Toggly.FeatureManagement.Client/check-coverage.py TestResults/client
+      - name: Pack manifest version
+        if: steps.version.outputs.action == 'publish'
+        run: dotnet pack Toggly.FeatureManagement.Client/src/${{ matrix.project }} -c Release -p:ContinuousIntegrationBuild=true -o Toggly.FeatureManagement.Client/nupkgs
+      - name: Install signing tool
+        if: steps.version.outputs.action == 'publish'
+        run: dotnet tool install --global NuGetKeyVaultSignTool
+      - name: Import signing CA certificate chain
+        if: steps.version.outputs.action == 'publish'
+        run: |
+          if [ -z "$NUGET_SIGN_CA_CHAIN_B64" ]; then
+            echo "Missing required secret: NUGET_SIGN_CA_CHAIN_B64"
+            echo "Provide PEM text or base64-encoded PEM/CER chain (root + intermediates) used by the signing certificate."
+            exit 1
+          fi
+
+          # Support both raw PEM and base64-encoded content in the secret.
+          RAW_CHAIN_PATH="/tmp/toggly-signing-chain-input.pem"
+          if [[ "$NUGET_SIGN_CA_CHAIN_B64" == *"BEGIN CERTIFICATE"* ]]; then
+            printf '%s\n' "$NUGET_SIGN_CA_CHAIN_B64" > "$RAW_CHAIN_PATH"
+          elif printf '%s' "$NUGET_SIGN_CA_CHAIN_B64" | base64 --decode > "$RAW_CHAIN_PATH" 2>/tmp/toggly-ca-b64.err; then
+            echo "Decoded CA chain from base64 secret"
+          else
+            echo "Failed to parse NUGET_SIGN_CA_CHAIN_B64 as base64."
+            cat /tmp/toggly-ca-b64.err
+            exit 1
+          fi
+
+          # Convert DER to PEM when only a single DER cert is provided.
+          if ! grep -q "BEGIN CERTIFICATE" "$RAW_CHAIN_PATH"; then
+            if ! openssl x509 -inform DER -in "$RAW_CHAIN_PATH" -out "$RAW_CHAIN_PATH" 2>/dev/null; then
+              echo "The provided CA chain is neither PEM nor DER certificate content."
+              exit 1
+            fi
+          fi
+
+          # Split a PEM bundle into one-cert-per-file for update-ca-certificates.
+          rm -f /tmp/toggly-signing-ca-*.crt
+          awk '
+            /-----BEGIN CERTIFICATE-----/ { cert++; out=sprintf("/tmp/toggly-signing-ca-%02d.crt", cert) }
+            cert > 0 { print > out }
+            /-----END CERTIFICATE-----/ { close(out) }
+          ' "$RAW_CHAIN_PATH"
+
+          CERT_COUNT=$(ls /tmp/toggly-signing-ca-*.crt 2>/dev/null | wc -l)
+          if [ "$CERT_COUNT" -eq 0 ]; then
+            echo "No valid certificates found in provided CA chain."
+            exit 1
+          fi
+
+          sudo rm -f /usr/local/share/ca-certificates/toggly-signing-ca-*.crt
+          for cert in /tmp/toggly-signing-ca-*.crt; do
+            sudo cp "$cert" "/usr/local/share/ca-certificates/$(basename "$cert")"
+            sudo chmod 644 "/usr/local/share/ca-certificates/$(basename "$cert")"
+          done
+
+          sudo update-ca-certificates
+        env:
+          NUGET_SIGN_CA_CHAIN_B64: ${{ secrets.NUGET_SIGN_CA_CHAIN_B64 }}
+
+      - name: Sign NuGet packages and symbols
+        id: sign_packages
+        if: steps.version.outputs.action == 'publish'
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          shopt -s nullglob
+          NUPKGS=(./nupkgs/*.nupkg)
+          SNUPKGS=(./nupkgs/*.snupkg)
+          if [ ${#NUPKGS[@]} -eq 0 ]; then
+            echo "No .nupkg files found to sign in ./nupkgs"
+            ls -la ./nupkgs || true
+            exit 1
+          fi
+          if [ ${#SNUPKGS[@]} -eq 0 ]; then
+            echo "No .snupkg files found to sign in ./nupkgs"
+            ls -la ./nupkgs || true
+            exit 1
+          fi
+
+          NuGetKeyVaultSignTool sign ./nupkgs/*.nupkg \
+            --file-digest sha256 \
+            --timestamp-rfc3161 http://timestamp.globalsign.com/tsa/r6advanced1 \
+            --timestamp-digest sha256 \
+            --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
+            --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
+            --azure-key-vault-tenant-id "$AZURE_KEY_VAULT_TENANT_ID" \
+            --azure-key-vault-client-secret "$AZURE_KEY_VAULT_CLIENT_SECRET" \
+            --azure-key-vault-certificate "$AZURE_KEY_VAULT_CERTIFICATE"
+
+          NuGetKeyVaultSignTool sign ./nupkgs/*.snupkg \
+            --file-digest sha256 \
+            --timestamp-rfc3161 http://timestamp.globalsign.com/tsa/r6advanced1 \
+            --timestamp-digest sha256 \
+            --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
+            --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
+            --azure-key-vault-tenant-id "$AZURE_KEY_VAULT_TENANT_ID" \
+            --azure-key-vault-client-secret "$AZURE_KEY_VAULT_CLIENT_SECRET" \
+            --azure-key-vault-certificate "$AZURE_KEY_VAULT_CERTIFICATE"
+        env:
+          AZURE_KEY_VAULT_URL: ${{ secrets.NUGET_SIGN_VAULT_URL }}
+          AZURE_KEY_VAULT_CLIENT_ID: ${{ secrets.NUGET_SIGN_CLIENT_ID }}
+          AZURE_KEY_VAULT_CLIENT_SECRET: ${{ secrets.NUGET_SIGN_CLIENT_SECRET }}
+          AZURE_KEY_VAULT_TENANT_ID: ${{ secrets.NUGET_SIGN_TENANT_ID }}
+          AZURE_KEY_VAULT_CERTIFICATE: ${{ secrets.NUGET_SIGN_CERTIFICATE }}
+
+      - name: NuGet login (OIDC)
+        if: steps.version.outputs.action == 'publish'
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          # nuget.org matches OIDC to the trust-policy *creator* username,
+          # not the package/org owner (Toggly). Policy "GitHub Toggly" was
+          # created while signed in as opsai.
+          user: opsai
+
+      - name: Publish to NuGet
+        if: steps.version.outputs.action == 'publish'
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          PACKAGE_TO_PUSH=$(ls ./nupkgs/*.${{ steps.version.outputs.version }}.nupkg 2>/dev/null | head -n 1)
+          if [ -z "$PACKAGE_TO_PUSH" ]; then
+            echo "No .nupkg found for version ${{ steps.version.outputs.version }} in ./nupkgs"
+            ls -la ./nupkgs || true
+            exit 1
+          fi
+
+          echo "Pushing package: $PACKAGE_TO_PUSH"
+          # nuget.org accepts the adjacent .snupkg when pushing the .nupkg from the same folder.
+          dotnet nuget push "$PACKAGE_TO_PUSH" \
+            --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+          SYMBOL_TO_PUSH="${PACKAGE_TO_PUSH%.nupkg}.snupkg"
+          if [ -f "$SYMBOL_TO_PUSH" ]; then
+            echo "Pushing symbols: $SYMBOL_TO_PUSH"
+            dotnet nuget push "$SYMBOL_TO_PUSH" \
+              --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          else
+            echo "Expected symbol package missing: $SYMBOL_TO_PUSH"
+            exit 1
+          fi
+
+      - name: Upload signed packages for release checksums
+        if: steps.version.outputs.action == 'publish'
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-${{ matrix.project }}
+          path: |
+            ${{ env.SDK_ROOT }}/nupkgs/*.nupkg
+            ${{ env.SDK_ROOT }}/nupkgs/*.snupkg
+          if-no-files-found: error
+          retention-days: 14

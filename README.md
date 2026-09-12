@@ -119,3 +119,7 @@ Most packages in this repository are licensed under the [MIT License](LICENSE). 
 - Questions and ideas: [GitHub Discussions](https://github.com/ops-ai/Toggly.FeatureManagement/discussions)
 - Bugs and features: [GitHub Issues](https://github.com/ops-ai/Toggly.FeatureManagement/issues/new/choose) (structured templates)
 - Code of conduct: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+
+### Distributed .NET clients
+
+[Toggly.FeatureManagement.Client](Toggly.FeatureManagement.Client/) provides verified frontend feature flags for .NET 8 console and desktop apps, with a separate native storage/cryptography companion.

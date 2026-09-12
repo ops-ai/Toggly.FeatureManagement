@@ -1,0 +1,11 @@
+<Project>
+  <!-- Share the repository NuGet metadata, SourceLink and deterministic pack policy. -->
+  <Import Project="../Toggly.FeatureManagement.NET/Directory.Build.props" />
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <!-- Let SDK targets derive these from the client manifest, not the server version. -->
+    <AssemblyVersion></AssemblyVersion>
+    <FileVersion></FileVersion>
+    <InformationalVersion></InformationalVersion>
+  </PropertyGroup>
+</Project>
