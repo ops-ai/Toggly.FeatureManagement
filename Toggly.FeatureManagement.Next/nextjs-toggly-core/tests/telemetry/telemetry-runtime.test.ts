@@ -277,6 +277,85 @@ describe('TelemetryRuntime', () => {
     void runtime.flushUsage()
     void runtime.flushMetrics()
   })
+
+  it('attaches and removes Node signal handlers before re-emitting SIGTERM', async () => {
+    const on = vi.fn()
+    const off = vi.fn()
+    const kill = vi.fn()
+    const exit = vi.fn()
+    vi.stubGlobal('process', { pid: 1234, on, off, kill, exit })
+
+    try {
+      const runtime = new TelemetryRuntime({
+        appKey: 'app',
+        environment: 'Production',
+        enableUsageTracking: true,
+        enableMetrics: false,
+        usageFlushInterval: 0,
+        metricsFlushInterval: 0,
+        usageClient: { sendStats: vi.fn(), close: vi.fn() },
+        metricsClient: null,
+      })
+      runtime.start()
+
+      expect(on).toHaveBeenCalledWith('beforeExit', expect.any(Function))
+      expect(on).toHaveBeenCalledWith('SIGTERM', expect.any(Function))
+      expect(on).toHaveBeenCalledWith('SIGINT', expect.any(Function))
+
+      await (runtime as unknown as {
+        handleProcessSignal(signal: NodeJS.Signals): Promise<void>
+      }).handleProcessSignal('SIGTERM')
+
+      expect(off).toHaveBeenCalledTimes(3)
+      expect(kill).toHaveBeenCalledWith(1234, 'SIGTERM')
+      expect(exit).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('does not attach signal handlers when a Node process is unavailable', async () => {
+    vi.stubGlobal('process', undefined)
+
+    try {
+      const runtime = new TelemetryRuntime({
+        appKey: 'app',
+        environment: 'Production',
+        enableUsageTracking: true,
+        enableMetrics: false,
+        usageFlushInterval: 0,
+        metricsFlushInterval: 0,
+        usageClient: { sendStats: vi.fn(), close: vi.fn() },
+        metricsClient: null,
+      })
+
+      expect(() => runtime.start()).not.toThrow()
+      await runtime.close()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('falls back to the conventional signal exit code when re-emitting fails', () => {
+    const kill = vi.fn(() => {
+      throw new Error('signals unavailable')
+    })
+    const exit = vi.fn()
+    vi.stubGlobal('process', { pid: 1234, kill, exit })
+
+    try {
+      const runtime = new TelemetryRuntime({ appKey: 'app', environment: 'Production' })
+
+      ;(runtime as unknown as {
+        reemitSignalAndExit(signal: NodeJS.Signals): void
+      }).reemitSignalAndExit('SIGINT')
+
+      expect(kill).toHaveBeenCalledWith(1234, 'SIGINT')
+      expect(exit).toHaveBeenCalledWith(130)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('HttpsTelemetryClient', () => {

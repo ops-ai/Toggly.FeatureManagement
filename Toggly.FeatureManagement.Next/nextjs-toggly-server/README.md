@@ -23,6 +23,37 @@ client record usage; call `recordServerUsage` / `measureServerMetric` /
 `flushServerTelemetry` as needed. Transport is native gRPC to
 `metricsBaseUrl` (default `https://app.toggly.io/`).
 
+## Next.js 16 Cache Components
+
+`cachedIsFeatureOn`, `cachedEvaluateFeatureGate`, and `cachedGetFeatures`
+continue to use Next's `unstable_cache` API for retained Next 14/15 apps and
+Next 16 apps that have not enabled Cache Components. With Next 16
+`cacheComponents: true`, render request data such as `headers()` below a
+`<Suspense>` boundary (or another permitted Cache Components boundary), outside
+a `'use cache'` scope, and pass the resolved identity or request context to the
+Toggly helper. This keeps a cached result partitioned by the request context
+instead of sharing one user's gate with another:
+
+```tsx
+import { Suspense } from 'react'
+import { headers } from 'next/headers'
+import { cachedIsFeatureOn } from '@ops-ai/nextjs-toggly-server'
+
+async function RequestFeatureGate() {
+  const identity = (await headers()).get('x-toggly-identity') ?? 'anonymous'
+  const enabled = await cachedIsFeatureOn('vip-only', { identity, revalidate: 60 })
+  return <p>{String(enabled)}</p>
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<p>Loading feature gate…</p>}>
+      <RequestFeatureGate />
+    </Suspense>
+  )
+}
+```
+
 ## Documentation
 
 - [docs.toggly.io](https://docs.toggly.io)

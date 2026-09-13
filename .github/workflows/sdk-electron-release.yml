@@ -78,7 +78,9 @@ jobs:
 
       - name: Run tests
         if: steps.release.outputs.action == 'publish'
-        run: npm test
+        # The runtime fixture creates a real BrowserWindow. Linux release
+        # runners therefore need a display server just like the analysis job.
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm test
 
       - name: Verify packed tarball
         if: steps.release.outputs.action == 'publish'

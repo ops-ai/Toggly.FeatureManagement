@@ -102,7 +102,12 @@ export function resolveMetricsBaseUrl(raw?: string): string {
 
 export function isTelemetryEnvDisabled(): boolean {
   try {
-    return typeof process !== 'undefined' && process.env?.TOGGLY_DISABLE_TELEMETRY === '1'
+    const nodeProcess = (
+      globalThis as typeof globalThis & {
+        process?: { env?: Record<string, string | undefined> }
+      }
+    ).process
+    return nodeProcess?.env?.TOGGLY_DISABLE_TELEMETRY === '1'
   } catch {
     return false
   }

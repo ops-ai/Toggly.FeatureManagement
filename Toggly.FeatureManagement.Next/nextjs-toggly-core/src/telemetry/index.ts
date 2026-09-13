@@ -57,6 +57,19 @@ export interface TelemetryLogger {
   error: (...args: unknown[]) => void
 }
 
+type NodeProcess = {
+  env?: Record<string, string | undefined>
+  pid?: number
+  on?: (event: NodeJS.Signals | 'beforeExit', handler: (...args: unknown[]) => void) => unknown
+  off?: (event: NodeJS.Signals | 'beforeExit', handler: (...args: unknown[]) => void) => unknown
+  kill?: (pid: number, signal: NodeJS.Signals) => unknown
+  exit?: (code?: number) => never
+}
+
+function getNodeProcess(): NodeProcess | undefined {
+  return (globalThis as typeof globalThis & { process?: NodeProcess }).process
+}
+
 /**
  * Owns usage + metrics batchers, flush timers, and optional process signal handlers.
  */
@@ -211,7 +224,8 @@ export class TelemetryRuntime {
   static readonly SIGNAL_FLUSH_TIMEOUT_MS = 2_000
 
   private attachHandlers(): void {
-    if (typeof process === 'undefined' || typeof process.on !== 'function') {
+    const nodeProcess = getNodeProcess()
+    if (typeof nodeProcess?.on !== 'function') {
       return
     }
 
@@ -219,7 +233,7 @@ export class TelemetryRuntime {
       void this.flushAll()
     }
 
-    process.on('beforeExit', flush)
+    nodeProcess.on('beforeExit', flush)
     this.signalHandlers.push({ event: 'beforeExit', handler: flush })
 
     for (const signal of ['SIGTERM', 'SIGINT'] as const) {
@@ -227,7 +241,7 @@ export class TelemetryRuntime {
         const onSignal = () => {
           void this.handleProcessSignal(signal)
         }
-        process.on(signal, onSignal)
+        nodeProcess.on(signal, onSignal)
         this.signalHandlers.push({ event: signal, handler: onSignal })
       } catch {
         // Some runtimes disallow signal handlers
@@ -253,20 +267,26 @@ export class TelemetryRuntime {
   }
 
   private reemitSignalAndExit(signal: NodeJS.Signals): void {
+    const nodeProcess = getNodeProcess()
     try {
-      process.kill(process.pid, signal)
+      if (nodeProcess?.kill && nodeProcess.pid !== undefined) {
+        nodeProcess.kill(nodeProcess.pid, signal)
+        return
+      }
     } catch {
-      const code = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 0
-      process.exit(code)
+      // Fall through to an explicit exit below.
     }
+    const code = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 0
+    nodeProcess?.exit?.(code)
   }
 
   private detachProcessHandlers(): void {
-    if (typeof process === 'undefined' || typeof process.off !== 'function') {
+    const nodeProcess = getNodeProcess()
+    if (typeof nodeProcess?.off !== 'function') {
       return
     }
     for (const { event, handler } of this.signalHandlers) {
-      process.off(event, handler)
+      nodeProcess.off(event, handler)
     }
     this.signalHandlers.length = 0
   }

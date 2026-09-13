@@ -40,3 +40,6 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+# Temporary measured build-tool coverage (merged into Angular LCOV)
+/.tooling-coverage

@@ -1,12 +1,15 @@
 import { NextResponse, type NextRequest, type NextMiddleware } from 'next/server'
 import { normalizeFeatureKeys } from '@ops-ai/nextjs-toggly-core'
 import {
+  createEdgeClient,
   getEdgeToggly,
   initEdgeToggly,
   buildEdgeEvalOverrides,
+  type TogglyEdgeClient,
 } from './edge-client'
 import type {
   TogglyEdgeConfig,
+  FeatureProxyOptions,
   MiddlewareFeatureOptions,
   FeatureMiddlewareHandler,
   FeatureMiddlewareContext,
@@ -23,6 +26,46 @@ function resolveRequestOverrides(
     groups: config.groups,
     claims: config.claims,
   })
+}
+
+async function evaluateFeatureRequest(
+  client: TogglyEdgeClient,
+  request: NextRequest,
+  config: TogglyEdgeConfig,
+  options: MiddlewareFeatureOptions,
+): Promise<NextResponse | Response> {
+  const overrides = resolveRequestOverrides(request, config)
+  await client.init()
+
+  const featureKeys = normalizeFeatureKeys(options.featureKey)
+  const isEnabled = client.evaluateFeatureGateSync(
+    featureKeys,
+    options.requirement ?? 'all',
+    options.negate ?? false,
+    overrides,
+  )
+
+  if (!isEnabled) {
+    if (options.onDisabled) {
+      return options.onDisabled(request)
+    }
+
+    if (options.redirectTo) {
+      const url = new URL(options.redirectTo, request.url)
+      return NextResponse.redirect(url, {
+        status: options.redirectStatus ?? 307,
+      })
+    }
+
+    if (options.rewriteTo) {
+      const url = new URL(options.rewriteTo, request.url)
+      return NextResponse.rewrite(url)
+    }
+
+    return new NextResponse('Feature not available', { status: 404 })
+  }
+
+  return NextResponse.next()
 }
 
 /**
@@ -62,39 +105,36 @@ export function createFeatureMiddleware(
       client = await initEdgeToggly(config)
     }
 
-    const overrides = resolveRequestOverrides(request, config)
-    await client.init()
-
-    const featureKeys = normalizeFeatureKeys(options.featureKey)
-    const isEnabled = client.evaluateFeatureGateSync(
-      featureKeys,
-      options.requirement ?? 'all',
-      options.negate ?? false,
-      overrides,
-    )
-
-    if (!isEnabled) {
-      if (options.onDisabled) {
-        return options.onDisabled(request)
-      }
-
-      if (options.redirectTo) {
-        const url = new URL(options.redirectTo, request.url)
-        return NextResponse.redirect(url, {
-          status: options.redirectStatus ?? 307,
-        })
-      }
-
-      if (options.rewriteTo) {
-        const url = new URL(options.rewriteTo, request.url)
-        return NextResponse.rewrite(url)
-      }
-
-      return new NextResponse('Feature not available', { status: 404 })
-    }
-
-    return NextResponse.next()
+    return evaluateFeatureRequest(client, request, config, options)
   }
+}
+
+/**
+ * Create a Next.js 16 `proxy.ts` handler.
+ *
+ * Next 16 Proxy runs in the Node.js runtime and supersedes the middleware
+ * file convention. The returned handler deliberately keeps its definitions
+ * client in the Proxy closure, so Proxy request evaluation does not install or
+ * mutate the legacy process-wide Edge middleware client.
+ *
+ * @example
+ * ```ts
+ * // proxy.ts
+ * import { createFeatureProxy } from '@ops-ai/nextjs-toggly-edge'
+ *
+ * export const proxy = createFeatureProxy({
+ *   config: { appKey: process.env.TOGGLY_APP_KEY!, environment: 'Production' },
+ *   feature: { featureKey: 'beta-feature', redirectTo: '/coming-soon' },
+ * })
+ * ```
+ */
+export function createFeatureProxy(
+  options: FeatureProxyOptions,
+): (request: NextRequest) => Promise<NextResponse | Response> {
+  const client = createEdgeClient(options.config)
+
+  return async (request: NextRequest): Promise<NextResponse | Response> =>
+    evaluateFeatureRequest(client, request, options.config, options.feature)
 }
 
 /**

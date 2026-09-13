@@ -1,4 +1,5 @@
 import {
+  ChangeDetectorRef,
   Directive,
   Input,
   OnChanges,
@@ -42,6 +43,8 @@ import { TogglyService } from './toggly.service'
 export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
   private isHidden = true
   private unsubscribeFeaturesRefresh: (() => void) | undefined
+  private evaluationGeneration = 0
+  private unsubscribeLocalGates: (() => void) | undefined
 
   @Input() featureVariant = ''
   /** Bound via microsyntax: `*featureVariant="'key'; variant: 'name'"` → `featureVariantVariant` */
@@ -52,6 +55,7 @@ export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
     private _templateRef: TemplateRef<unknown>,
     private _viewContainer: ViewContainerRef,
     private _toggly: TogglyService,
+    private _changeDetector: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -59,10 +63,15 @@ export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
     this.unsubscribeFeaturesRefresh = this._toggly.subscribeFeaturesRefresh(() => {
       this.updateView()
     })
+    this.unsubscribeLocalGates = this._toggly.subscribeLocalGatesChanged(() => {
+      this.updateView()
+    })
   }
 
   ngOnDestroy(): void {
+    this.evaluationGeneration++
     this.unsubscribeFeaturesRefresh?.()
+    this.unsubscribeLocalGates?.()
   }
 
   ngOnChanges(_changes: SimpleChanges): void {
@@ -70,13 +79,16 @@ export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
   }
 
   private updateView(): void {
+    const generation = ++this.evaluationGeneration
     if (!this.featureVariant || !this.variant) {
       this._viewContainer.clear()
       this.isHidden = true
+      this._changeDetector.markForCheck()
       return
     }
 
     this._toggly.getVariant(this.featureVariant).then((result) => {
+      if (generation !== this.evaluationGeneration) return
       const matches = result !== null && result.name === this.variant
       if (matches) {
         if (this.isHidden) {
@@ -87,6 +99,7 @@ export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
         this._viewContainer.clear()
         this.isHidden = true
       }
+      this._changeDetector.markForCheck()
     })
   }
 }
