@@ -268,8 +268,8 @@ jobs:
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Nuxt"
             -Dsonar.sources=${{ env.SDK_ROOT }}/nuxt-toggly-core/src,${{ env.SDK_ROOT }}/nuxt-toggly-server/src,${{ env.SDK_ROOT }}/nuxt-toggly-client/src,${{ env.SDK_ROOT }}/nuxt-toggly/src
-            -Dsonar.tests=${{ env.SDK_ROOT }}/nuxt-toggly-core/tests,${{ env.SDK_ROOT }}/nuxt-toggly-server/tests,${{ env.SDK_ROOT }}/nuxt-toggly-client/tests
-            -Dsonar.javascript.lcov.reportPaths=coverage/nuxt-toggly-core.lcov.info,coverage/nuxt-toggly-server.lcov.info,coverage/nuxt-toggly-client.lcov.info
+            -Dsonar.tests=${{ env.SDK_ROOT }}/nuxt-toggly-core/tests,${{ env.SDK_ROOT }}/nuxt-toggly-server/tests,${{ env.SDK_ROOT }}/nuxt-toggly-client/tests,${{ env.SDK_ROOT }}/nuxt-toggly/tests
+            -Dsonar.javascript.lcov.reportPaths=coverage/nuxt-toggly-core.lcov.info,coverage/nuxt-toggly-server.lcov.info,coverage/nuxt-toggly-client.lcov.info,coverage/nuxt-toggly.lcov.info
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/playground/**
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
         continue-on-error: true
@@ -291,8 +291,8 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-nuxt
             -Dsonar.projectName="Toggly SDKs - Nuxt"
             -Dsonar.sources=${{ env.SDK_ROOT }}/nuxt-toggly-core/src,${{ env.SDK_ROOT }}/nuxt-toggly-server/src,${{ env.SDK_ROOT }}/nuxt-toggly-client/src,${{ env.SDK_ROOT }}/nuxt-toggly/src
-            -Dsonar.tests=${{ env.SDK_ROOT }}/nuxt-toggly-core/tests,${{ env.SDK_ROOT }}/nuxt-toggly-server/tests,${{ env.SDK_ROOT }}/nuxt-toggly-client/tests
-            -Dsonar.javascript.lcov.reportPaths=coverage/nuxt-toggly-core.lcov.info,coverage/nuxt-toggly-server.lcov.info,coverage/nuxt-toggly-client.lcov.info
+            -Dsonar.tests=${{ env.SDK_ROOT }}/nuxt-toggly-core/tests,${{ env.SDK_ROOT }}/nuxt-toggly-server/tests,${{ env.SDK_ROOT }}/nuxt-toggly-client/tests,${{ env.SDK_ROOT }}/nuxt-toggly/tests
+            -Dsonar.javascript.lcov.reportPaths=coverage/nuxt-toggly-core.lcov.info,coverage/nuxt-toggly-server.lcov.info,coverage/nuxt-toggly-client.lcov.info,coverage/nuxt-toggly.lcov.info
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/playground/**
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
