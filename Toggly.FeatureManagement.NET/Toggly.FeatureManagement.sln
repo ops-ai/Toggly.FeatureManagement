@@ -19,6 +19,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{8C
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.Examples.Mvc", "examples\Toggly.Examples.Mvc\Toggly.Examples.Mvc.csproj", "{A7B093E9-5F0C-4C31-8B5A-A1AE92556B35}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.Examples.EmbeddedSqlite", "examples\Toggly.Examples.EmbeddedSqlite\Toggly.Examples.EmbeddedSqlite.csproj", "{A7A7489A-AB97-4B08-B25C-120AE8A8C0D3}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Tests", "Toggly.FeatureManagement.Tests\Toggly.FeatureManagement.Tests.csproj", "{073EC4A5-2D67-419F-A990-1A66E15F4FB4}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Storage.RavenDB", "Toggly.FeatureManagement.Storage.RavenDB\Toggly.FeatureManagement.Storage.RavenDB.csproj", "{D51E272C-58A8-40B4-A0F2-41ABCBC2FFB7}"
@@ -62,6 +64,18 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Toggly.Storage.MongoDB", "Toggly.Storage.MongoDB\Toggly.Storage.MongoDB.csproj", "{D5E6F7A8-B9C0-1234-EFAB-678901234DEF}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Toggly.Storage.MongoDB.Tests", "Toggly.Storage.MongoDB.Tests\Toggly.Storage.MongoDB.Tests.csproj", "{E6F7A8B9-C0D1-2345-FABC-789012345EFA}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Catalog", "Toggly.FeatureManagement.Catalog\Toggly.FeatureManagement.Catalog.csproj", "{F2D7B09F-204C-4055-AE76-6E9A78518C6A}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Catalog.Tests", "Toggly.FeatureManagement.Catalog.Tests\Toggly.FeatureManagement.Catalog.Tests.csproj", "{9F055E7A-7C9A-47B9-9728-73B1120DD411}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Embedded", "Toggly.FeatureManagement.Embedded\Toggly.FeatureManagement.Embedded.csproj", "{FC6EAB1F-4A9A-485A-9A2B-02A51F20E932}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Embedded.Tests", "Toggly.FeatureManagement.Embedded.Tests\Toggly.FeatureManagement.Embedded.Tests.csproj", "{CD8BEC18-4C1C-45D2-A2A9-A04EE44D2E8C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Dashboard", "Toggly.FeatureManagement.Dashboard\Toggly.FeatureManagement.Dashboard.csproj", "{6EDCAF39-6E3D-4B58-85B8-F217E20B886D}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Toggly.FeatureManagement.Dashboard.Tests", "Toggly.FeatureManagement.Dashboard.Tests\Toggly.FeatureManagement.Dashboard.Tests.csproj", "{7FA962EF-701E-4151-9AB2-7D4C7DCC4B6B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -361,6 +375,34 @@ Global
 		{E6F7A8B9-C0D1-2345-FABC-789012345EFA}.Release|x64.Build.0 = Release|Any CPU
 		{E6F7A8B9-C0D1-2345-FABC-789012345EFA}.Release|x86.ActiveCfg = Release|Any CPU
 		{E6F7A8B9-C0D1-2345-FABC-789012345EFA}.Release|x86.Build.0 = Release|Any CPU
+		{F2D7B09F-204C-4055-AE76-6E9A78518C6A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F2D7B09F-204C-4055-AE76-6E9A78518C6A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F2D7B09F-204C-4055-AE76-6E9A78518C6A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F2D7B09F-204C-4055-AE76-6E9A78518C6A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9F055E7A-7C9A-47B9-9728-73B1120DD411}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9F055E7A-7C9A-47B9-9728-73B1120DD411}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9F055E7A-7C9A-47B9-9728-73B1120DD411}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9F055E7A-7C9A-47B9-9728-73B1120DD411}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FC6EAB1F-4A9A-485A-9A2B-02A51F20E932}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FC6EAB1F-4A9A-485A-9A2B-02A51F20E932}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FC6EAB1F-4A9A-485A-9A2B-02A51F20E932}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FC6EAB1F-4A9A-485A-9A2B-02A51F20E932}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CD8BEC18-4C1C-45D2-A2A9-A04EE44D2E8C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CD8BEC18-4C1C-45D2-A2A9-A04EE44D2E8C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CD8BEC18-4C1C-45D2-A2A9-A04EE44D2E8C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CD8BEC18-4C1C-45D2-A2A9-A04EE44D2E8C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6EDCAF39-6E3D-4B58-85B8-F217E20B886D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6EDCAF39-6E3D-4B58-85B8-F217E20B886D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6EDCAF39-6E3D-4B58-85B8-F217E20B886D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6EDCAF39-6E3D-4B58-85B8-F217E20B886D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7FA962EF-701E-4151-9AB2-7D4C7DCC4B6B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7FA962EF-701E-4151-9AB2-7D4C7DCC4B6B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7FA962EF-701E-4151-9AB2-7D4C7DCC4B6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7FA962EF-701E-4151-9AB2-7D4C7DCC4B6B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7A7489A-AB97-4B08-B25C-120AE8A8C0D3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7A7489A-AB97-4B08-B25C-120AE8A8C0D3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7A7489A-AB97-4B08-B25C-120AE8A8C0D3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7A7489A-AB97-4B08-B25C-120AE8A8C0D3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -368,6 +410,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{A7B093E9-5F0C-4C31-8B5A-A1AE92556B35} = {8C1BD1D5-6ED4-41D6-97A8-9EF4E5F4A4A4}
 		{1DEFD61A-9696-445C-BF84-9D015CA6D4FE} = {8C1BD1D5-6ED4-41D6-97A8-9EF4E5F4A4A4}
+		{A7A7489A-AB97-4B08-B25C-120AE8A8C0D3} = {8C1BD1D5-6ED4-41D6-97A8-9EF4E5F4A4A4}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0B9B4F6A-FB19-4930-9351-45988B4D0FB5}

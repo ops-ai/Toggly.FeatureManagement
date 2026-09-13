@@ -54,8 +54,8 @@ export function verifyNugetInventory(options = {}) {
   const errors = [];
 
   const packages = inventory.packages || [];
-  if (packages.length !== 11) {
-    errors.push(`expected 11 packages, found ${packages.length}`);
+  if (packages.length !== 14) {
+    errors.push(`expected 14 packages, found ${packages.length}`);
   }
 
   const ids = packages.map((p) => p.id);

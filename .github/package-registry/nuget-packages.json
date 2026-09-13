@@ -40,7 +40,8 @@
         "Storage.RavenDB"
       ],
       "dependencies": [
-        "Toggly.FeatureManagement"
+        "Toggly.FeatureManagement",
+        "Toggly.FeatureManagement.Catalog"
       ]
     },
     {
@@ -50,7 +51,8 @@
         "Storage.DistributedCache"
       ],
       "dependencies": [
-        "Toggly.FeatureManagement"
+        "Toggly.FeatureManagement",
+        "Toggly.FeatureManagement.Catalog"
       ]
     },
     {
@@ -110,7 +112,8 @@
         "Storage.EntityFramework"
       ],
       "dependencies": [
-        "Toggly.FeatureManagement"
+        "Toggly.FeatureManagement",
+        "Toggly.FeatureManagement.Catalog"
       ]
     },
     {
@@ -121,6 +124,36 @@
       ],
       "dependencies": [
         "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.Catalog",
+      "project": "Toggly.FeatureManagement.Catalog/Toggly.FeatureManagement.Catalog.csproj",
+      "aliases": [
+        "Catalog"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "Toggly.FeatureManagement.Embedded",
+      "project": "Toggly.FeatureManagement.Embedded/Toggly.FeatureManagement.Embedded.csproj",
+      "aliases": [
+        "Embedded"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement.Catalog",
+        "Toggly.FeatureManagement"
+      ]
+    },
+    {
+      "id": "Toggly.FeatureManagement.Dashboard",
+      "project": "Toggly.FeatureManagement.Dashboard/Toggly.FeatureManagement.Dashboard.csproj",
+      "aliases": [
+        "Dashboard"
+      ],
+      "dependencies": [
+        "Toggly.FeatureManagement.Embedded",
+        "Toggly.FeatureManagement.Web"
       ]
     }
   ],

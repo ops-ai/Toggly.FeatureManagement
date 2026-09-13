@@ -1,5 +1,73 @@
 # Changelog
 
+## Toggly.FeatureManagement 3.7.0 - 2026-09-12
+
+### Added
+- Shared evaluation registration, runtime-mode conflict detection, and coherent
+  evaluation snapshots for the embedded runtime without cloud services.
+
+## Toggly.FeatureManagement.Dashboard 0.1.0 - 2026-09-12
+
+### Added
+- Offline, server-rendered dashboard pages for catalog initialization, feature
+  editing, targeting rules, contexts, storage diagnostics, export, import
+  preview, and Cloud migration guidance.
+- Host-controlled authorization, antiforgery protection, revision-aware writes,
+  and private no-store responses for every dashboard resource.
+- Desktop and no-JavaScript mobile browser coverage against the SQLite host,
+  including immediate SDK evaluation, import/export, and literal targeting IDs.
+
+### Fixed
+- Preserve explicit 100% rules, targeting exclusions, case matching, entity
+  operators, claim percentages, and tags containing commas during editing.
+- Reject all read-only POSTs and forwarded localhost access; reject editable
+  mounts against reader stores. Preserve submitted values on stale edits.
+- Apply dashboard-specific form limits before antiforgery so valid catalogs up
+  to the configured limit can complete preview and apply.
+
+## Toggly.FeatureManagement.Storage.DistributedCache 3.7.0 - 2026-09-12
+
+### Added
+- Conditional, process-local single-writer catalog storage for offline embedded feature dashboards, with explicit reader replicas and isolated cache keys.
+
+## Toggly.FeatureManagement.Storage.RavenDB 3.7.0 - 2026-09-12
+
+### Added
+- Optimistic-concurrency storage for offline embedded feature catalogs using isolated `TogglyCatalogs/{sha256}` RavenDB documents.
+
+## Toggly.FeatureManagement.Storage.EntityFramework 3.7.0 - 2026-09-11
+
+### Added
+- Transactional, optimistic-concurrency catalog storage for the offline embedded dashboard, with a dedicated `TogglyCatalogs` table and catalog-only schema scripts.
+
+### Changed
+- The .NET 10 Entity Framework dependencies now use the stable 10.0.0 release.
+
+## Toggly.FeatureManagement.Embedded 0.1.0 - 2026-09-11
+
+### Added
+- Offline embedded catalog runtime with atomic definition publication, local refresh diagnostics, and no-op usage and metrics reporting.
+- Revision-bound import preview and additive application, including initial
+  create-only imports and compatible context property additions.
+
+### Fixed
+- Initial catalog reads now have a hard timeout, unchanged revisions do not trigger definition notifications, and deleted enabled features notify state subscribers that they are off.
+- Keep ownership of non-cooperative timed-out reads until completion, and honor
+  refresh cancellation. Reconcile uncertain write outcomes without retrying.
+- Enforce read and mutation size limits, reject changed content with reused
+  revisions, prevent reset of disappeared loaded catalogs,
+  retain registered entity schemas, and reject case-only import renames.
+
+## Toggly.FeatureManagement.Catalog 0.1.0 - 2026-09-11
+
+### Added
+- Portable embedded feature catalog contracts, strict canonical JSON serialization, validation, and conditional storage interfaces.
+- Read-only store capability for provider-independent dashboard startup checks.
+
+### Fixed
+- Validate the SDK-compatible targeting exclusion keys
+  `Audience.Exclusion.Users:n` and `Audience.Exclusion.Groups:n`.
+
 ## 3.6.6
 
 2026-09-07

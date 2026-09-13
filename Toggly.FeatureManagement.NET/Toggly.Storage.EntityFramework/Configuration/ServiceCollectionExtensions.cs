@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System;
+using Toggly.FeatureManagement.Catalog;
 
 namespace Toggly.FeatureManagement.Storage.EntityFramework.Configuration
 {
@@ -9,6 +11,27 @@ namespace Toggly.FeatureManagement.Storage.EntityFramework.Configuration
     /// </summary>
     public static class ServiceCollectionExtensions
     {
+        /// <summary>
+        /// Adds a dedicated Entity Framework catalog store for the embedded Toggly runtime.
+        /// </summary>
+        /// <param name="services">Service collection to configure.</param>
+        /// <param name="configureDatabase">Action that configures the catalog database provider.</param>
+        /// <returns>The service collection for chaining.</returns>
+        /// <remarks>
+        /// The host owns schema creation. This registration never calls <c>EnsureCreated</c> or modifies snapshot tables.
+        /// </remarks>
+        public static IServiceCollection AddTogglyEntityFrameworkCatalogStore(
+            this IServiceCollection services,
+            Action<DbContextOptionsBuilder> configureDatabase)
+        {
+            if (services == null) throw new ArgumentNullException(nameof(services));
+            if (configureDatabase == null) throw new ArgumentNullException(nameof(configureDatabase));
+
+            services.AddDbContextFactory<TogglyCatalogDbContext>(configureDatabase);
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<ITogglyCatalogStore, EntityFrameworkCatalogStore>());
+            return services;
+        }
+
         /// <summary>
         /// Adds Toggly Entity Framework snapshot provider with DbContext configuration
         /// </summary>

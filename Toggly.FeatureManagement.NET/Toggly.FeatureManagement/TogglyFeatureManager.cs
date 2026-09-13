@@ -26,6 +26,8 @@ namespace Toggly.FeatureManagement
 
         private readonly IFeatureAuthorizationService? _featureAuthorizationService = null;
 
+        private readonly IEvaluationSnapshotScope? _evaluationSnapshotScope;
+
         /// <summary>
         /// Constructor
         /// </summary>
@@ -41,6 +43,7 @@ namespace Toggly.FeatureManagement
             _definitions = serviceProvider.GetService<IFeatureDefinitionModelProvider>();
             _entityResolver = serviceProvider.GetService<ITogglyEntityContextResolver>();
             _featureAuthorizationService = serviceProvider.GetService<IFeatureAuthorizationService>();
+            _evaluationSnapshotScope = serviceProvider.GetService<IEvaluationSnapshotScope>();
         }
 
         /// <summary>
@@ -56,6 +59,7 @@ namespace Toggly.FeatureManagement
         /// <returns></returns>
         public async Task<bool> IsEnabledAsync(string feature)
         {
+            using var evaluationScope = _evaluationSnapshotScope?.BeginScope();
             bool allowed = await EvaluateUserOnlyAsync(feature).ConfigureAwait(false);
             allowed = await ApplySecurityAsync(feature, allowed).ConfigureAwait(false);
 
@@ -74,6 +78,7 @@ namespace Toggly.FeatureManagement
         /// <returns></returns>
         public async Task<bool> IsEnabledAsync<TContext>(string feature, TContext context)
         {
+            using var evaluationScope = _evaluationSnapshotScope?.BeginScope();
             bool allowed = await EvaluateWithContextAsync(feature, context).ConfigureAwait(false);
             allowed = await ApplySecurityAsync(feature, allowed).ConfigureAwait(false);
 

@@ -1,0 +1,6 @@
+@{ Layout = "_Layout"; var mount = (string?)ViewData["DashboardMount"] ?? ""; }
+<section class="card">
+    <h1>Changes could not be applied</h1>
+    <div asp-validation-summary="All" class="validation-summary" tabindex="-1" role="alert"></div>
+    <a href="@Context.Request.PathBase@mount/">Return to features</a>
+</section>

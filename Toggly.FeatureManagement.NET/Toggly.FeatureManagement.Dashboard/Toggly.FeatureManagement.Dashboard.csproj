@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <Version>0.1.0</Version>
+    <PackageId>Toggly.FeatureManagement.Dashboard</PackageId>
+    <Description>Offline embedded feature-management dashboard for Toggly.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Toggly.FeatureManagement.Embedded\Toggly.FeatureManagement.Embedded.csproj" />
+    <ProjectReference Include="..\Toggly.FeatureManagement.Web\Toggly.FeatureManagement.Web.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
+    <None Update="README.md" Pack="true" PackagePath="" />
+    <EmbeddedResource Include="Assets\dashboard.css" />
+    <EmbeddedResource Include="Assets\dashboard.js" />
+  </ItemGroup>
+</Project>

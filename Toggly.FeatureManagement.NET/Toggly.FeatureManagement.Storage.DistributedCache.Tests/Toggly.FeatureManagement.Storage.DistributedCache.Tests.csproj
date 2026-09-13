@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Toggly.FeatureManagement.Catalog\Toggly.FeatureManagement.Catalog.csproj" />
     <ProjectReference Include="..\Toggly.FeatureManagement.Storage.DistributedCache\Toggly.FeatureManagement.Storage.DistributedCache.csproj" />
   </ItemGroup>
 

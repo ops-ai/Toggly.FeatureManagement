@@ -59,6 +59,7 @@ jobs:
         with:
           dotnet-version: |
             6.0.x
+            7.0.x
             8.0.x
             9.0.x
             10.0.x
@@ -240,6 +241,22 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=systemmetrics-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+      - name: Run embedded catalog, runtime, and dashboard tests
+        run: |
+          for project in Catalog Embedded Dashboard; do
+            dotnet test "Toggly.FeatureManagement.NET/Toggly.FeatureManagement.$project.Tests/Toggly.FeatureManagement.$project.Tests.csproj" \
+              --no-build -c Release --collect:"XPlat Code Coverage" \
+              --results-directory ./TestResults \
+              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+          done
+
+      - name: Run SQLite dashboard browser tests
+        working-directory: Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+          npm test
 
       - name: Test every additional .NET family and enforce coverage
         run: node .github/package-registry/dotnet-ci.mjs test-families
@@ -447,6 +464,7 @@ jobs:
         with:
           dotnet-version: |
             6.0.x
+            7.0.x
             8.0.x
             9.0.x
             10.0.x
@@ -471,6 +489,36 @@ jobs:
           path: nuget-analysis-pack/*.*nupkg
           if-no-files-found: error
           retention-days: 7
+
+  embedded-consumer:
+    name: Embedded NuGet consumer (${{ matrix.framework }})
+    needs: [pack-packages]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [net8.0, net10.0]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: nuget-packages
+          path: candidate-packages
+      - name: Install browser test dependencies
+        working-directory: Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Verify packed dashboard without project references or Razor source
+        run: python3 Toggly.FeatureManagement.NET/scripts/verify-embedded-packages.py --feed candidate-packages --framework '${{ matrix.framework }}'
 
   smoke-test:
     name: Smoke Test

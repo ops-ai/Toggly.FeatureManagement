@@ -1,0 +1,41 @@
+@model DashboardFeatureInput
+@{
+    Layout = "_Layout";
+    var mount = (string?)ViewData["DashboardMount"] ?? "";
+    var basePath = $"{Context.Request.PathBase}{mount}";
+    var current = ViewData["CurrentFeature"] as Toggly.FeatureManagement.Catalog.CatalogFeature;
+    var currentPath = current == null ? basePath + "/" : basePath + "/features/edit?key=" + Uri.EscapeDataString(current.Key);
+}
+<section class="card">
+    <h1>Catalog changed</h1>
+    <p>Another edit changed the catalog before this request could be applied. Your changes were not saved.</p>
+    @if (!string.IsNullOrEmpty(Model.Key))
+    {
+        <h2>Submitted feature: @Model.Key</h2>
+        <table>
+            <thead><tr><th>Field</th><th>Current</th><th>Submitted</th></tr></thead>
+            <tbody>
+                <tr><th>Name</th><td>@current?.Name</td><td>@Model.Name</td></tr>
+                <tr><th>Description</th><td>@current?.Description</td><td>@Model.Description</td></tr>
+                <tr><th>Tags</th><td>@(current == null ? "" : string.Join(", ", current.Tags))</td><td>@Model.Tags</td></tr>
+                <tr><th>Enabled</th><td>@current?.Enabled</td><td>@Model.Enabled</td></tr>
+                <tr><th>User combination</th><td>@current?.RequirementType</td><td>@Model.RequirementType</td></tr>
+                <tr><th>Context kind</th><td>@current?.ContextKind</td><td>@Model.ContextKind</td></tr>
+                <tr><th>Entity combination</th><td>@current?.ContextRequirementType</td><td>@Model.ContextRequirementType</td></tr>
+            </tbody>
+        </table>
+        <h3>Current rules</h3>
+        @if (current != null)
+        {
+            @foreach (var rule in current.Rules)
+            {
+                <p>@rule.Name: @string.Join("; ", rule.Parameters.Select(pair => pair.Key + " = " + pair.Value))</p>
+            }
+        }
+        <details><summary>Return to submitted edit</summary>
+            <p>The submitted revision is preserved. Reload the current version before making a new revision-bound edit.</p>
+            @await Html.PartialAsync("_FeatureForm", Model)
+        </details>
+    }
+    <a class="button" href="@currentPath">Reload current version</a>
+</section>

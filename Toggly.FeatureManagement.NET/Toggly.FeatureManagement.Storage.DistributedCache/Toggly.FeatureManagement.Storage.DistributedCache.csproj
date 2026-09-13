@@ -11,6 +11,7 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <Description>Provides a DistributedCache implementation for feature snapshot storage. The application falls back to snapshot storage if it can't reach toggly.io</Description>
     <AssemblyTitle>Toggly DistributedCache Feature Snapshot Provider</AssemblyTitle>
+    <Version>3.7.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,7 +24,7 @@
   </ItemGroup>
 
 <ItemGroup>
-    <None Include="..\README.md">
+    <None Include="README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
@@ -31,6 +32,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Toggly.FeatureManagement\Toggly.FeatureManagement.csproj" />
+    <ProjectReference Include="..\Toggly.FeatureManagement.Catalog\Toggly.FeatureManagement.Catalog.csproj" />
   </ItemGroup>
 
 </Project>

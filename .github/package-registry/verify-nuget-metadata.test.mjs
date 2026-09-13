@@ -9,11 +9,14 @@ import {
   verifyPackedNupkgs,
 } from './verify-nuget-metadata.mjs';
 
-test('inventory lists exactly eleven unique NuGet package ids', () => {
+test('inventory lists exactly fourteen unique NuGet package ids', () => {
   const inventory = loadInventory();
   const ids = inventory.packages.map((p) => p.id);
-  assert.equal(ids.length, 11);
-  assert.equal(new Set(ids).size, 11);
+  assert.equal(ids.length, 14);
+  assert.equal(new Set(ids).size, 14);
+  for (const suffix of ['Catalog', 'Embedded', 'Dashboard']) {
+    assert.ok(ids.includes(`Toggly.FeatureManagement.${suffix}`));
+  }
 });
 
 test('inventory projects exist and release workflow folders match', () => {

@@ -1,0 +1,49 @@
+using Microsoft.FeatureManagement;
+using Toggly.FeatureManagement.Catalog;
+using Toggly.FeatureManagement.Data;
+
+namespace Toggly.FeatureManagement.Embedded;
+
+internal static class EmbeddedCatalogCompiler
+{
+    internal static EmbeddedCompiledSnapshot Compile(CatalogSnapshot snapshot)
+    {
+        var validation = CatalogValidator.NormalizeAndValidate(snapshot.Document);
+        if (!validation.IsValid || validation.Document == null) throw new CatalogValidationException(validation.Errors);
+        var models = new Dictionary<string, FeatureDefinitionModel>(StringComparer.Ordinal);
+        var definitions = new Dictionary<string, FeatureDefinition>(StringComparer.Ordinal);
+        foreach (var feature in validation.Document.Features)
+        {
+            var model = new FeatureDefinitionModel
+            {
+                FeatureKey = feature.Key,
+                Filters = feature.Enabled ? CompileFilters(feature) : new List<FeatureFilter>(),
+                SecuredFeature = false,
+                RequirementType = feature.RequirementType == CatalogRequirementType.All ? RequirementType.All : RequirementType.Any,
+                ContextKind = feature.ContextKind,
+                ContextRequirementType = feature.ContextRequirementType == null ? null : feature.ContextRequirementType == CatalogRequirementType.All ? RequirementType.All : RequirementType.Any,
+                Metrics = null,
+                Variants = null,
+                Allocation = null
+            };
+            models.Add(model.FeatureKey, model);
+            definitions.Add(model.FeatureKey, TogglyFeatureProvider.BuildFeatureDefinition(model));
+        }
+        return new EmbeddedCompiledSnapshot(snapshot.Revision, models, definitions);
+    }
+
+    private static List<FeatureFilter> CompileFilters(CatalogFeature feature)
+    {
+        if (feature.Rules.Count == 0) return new List<FeatureFilter> { new AlwaysOnFilter { Name = "AlwaysOn", Parameters = new Dictionary<string, string>() } };
+        return feature.Rules.Select(rule => new FeatureFilter { Name = rule.Name, Parameters = new Dictionary<string, string>(rule.Parameters, StringComparer.Ordinal) }).ToList();
+    }
+}
+
+internal sealed class EmbeddedCompiledSnapshot
+{
+    public EmbeddedCompiledSnapshot(string revision, IReadOnlyDictionary<string, FeatureDefinitionModel> models, IReadOnlyDictionary<string, FeatureDefinition> definitions)
+    { Revision = revision; Models = models; Definitions = definitions; }
+    public string Revision { get; }
+    public IReadOnlyDictionary<string, FeatureDefinitionModel> Models { get; }
+    public IReadOnlyDictionary<string, FeatureDefinition> Definitions { get; }
+}

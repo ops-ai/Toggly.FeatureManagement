@@ -10,10 +10,15 @@
     <Description>Entity Framework Core snapshot provider for Toggly Feature Management. Store feature flag snapshots in any database supported by EF Core.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>toggly;feature-flags;feature-management;entity framework;ef core;snapshot provider</PackageTags>
+    <Version>3.7.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Schema\*.sql" Pack="true" PackagePath="schema\" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,12 +44,13 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0-preview.1.25081.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0-preview.1.25081.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Toggly.FeatureManagement\Toggly.FeatureManagement.csproj" />
+    <ProjectReference Include="..\Toggly.FeatureManagement.Catalog\Toggly.FeatureManagement.Catalog.csproj" />
   </ItemGroup>
 
 </Project>

@@ -27,6 +27,10 @@ Here are some of the benefits of using this library:
 
 ## Requirements
 
+For a self-hosted, offline management UI, see the
+[Embedded Dashboard guide](Toggly.FeatureManagement.Dashboard/README.md).
+The dashboard and embedded runtime target .NET 8 and support later ASP.NET Core hosts.
+
 - Core package targets: `netstandard2.1`, `netcoreapp3.1`, `net5.0`–`net9.0` (see individual `.csproj` files for storage packages).
 - Automated tests in this repository run on **.NET 9** (`net9.0`). Older TFMs are built for NuGet consumers; they are not each re-tested in CI.
 

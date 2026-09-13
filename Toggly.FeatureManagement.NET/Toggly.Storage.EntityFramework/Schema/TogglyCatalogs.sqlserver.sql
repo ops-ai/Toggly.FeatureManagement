@@ -1,0 +1,7 @@
+CREATE TABLE [TogglyCatalogs] (
+    [Id] NVARCHAR(64) NOT NULL PRIMARY KEY,
+    [CatalogName] NVARCHAR(256) NOT NULL,
+    [Revision] NVARCHAR(36) NOT NULL,
+    [Payload] NVARCHAR(MAX) NOT NULL,
+    [UpdatedAtUtc] DATETIMEOFFSET NOT NULL
+);

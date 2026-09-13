@@ -1,0 +1,31 @@
+@model DashboardFeatureListViewModel
+@{
+    Layout = "_Layout";
+    var mount = (string?)ViewData["DashboardMount"] ?? "";
+    var basePath = $"{Context.Request.PathBase}{mount}";
+}
+<section class="page-heading"><div><p class="eyebrow">Feature management</p><h1>Features</h1></div>@if (Model.CatalogExists && !Model.ReadOnly) { <a class="button" href="@basePath/features/new">Create feature</a> }</section>
+@if (!Model.CatalogExists)
+{
+    <section class="empty-state"><h2>No catalog yet</h2><p>Initialize an empty catalog before creating features.</p>@if (!Model.ReadOnly) { <form method="post" action="@basePath/initialize"><input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" /><button class="button" type="submit">Initialize catalog</button></form> }</section>
+}
+else if (Model.Features.Count == 0)
+{
+    <section class="empty-state"><h2>No features yet</h2><p>Create a feature to start managing flags in this application.</p></section>
+}
+else
+{
+    var pageSize = 50;
+    var pageCount = Math.Max(1, (int)Math.Ceiling(Model.Features.Count / (double)pageSize));
+    var currentPage = Math.Min(Model.Page, pageCount);
+    var visibleFeatures = Model.Features.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
+    <form method="get" action="@basePath" class="card filters"><label>Search <input type="search" name="search" value="@Model.Search" /></label><label>State <select name="state"><option value="">All</option><option value="enabled" selected="@(Model.State == "enabled")">Enabled</option><option value="disabled" selected="@(Model.State == "disabled")">Disabled</option></select></label><label>Tag <select name="tag"><option value="">All tags</option>@foreach (var availableTag in Model.Tags) { <option value="@availableTag" selected="@(Model.Tag == availableTag)">@availableTag</option> }</select></label><button type="submit">Filter</button></form>
+    <section class="card feature-list"><table><thead><tr><th>Feature</th><th>Targeting</th><th>Tags</th><th>State</th><th></th></tr></thead><tbody>
+    @foreach (var feature in visibleFeatures)
+    {
+        <tr><td><strong>@feature.Name</strong><code>@feature.Key</code><span>@feature.Description</span></td><td>@(feature.Enabled ? (feature.Rules.Count == 0 ? "Everyone" : $"{feature.Rules.Count} rules") : "Disabled")</td><td>@string.Join(", ", feature.Tags)</td><td><span class="state @(feature.Enabled ? "enabled" : "disabled")">@(feature.Enabled ? "Enabled" : "Disabled")</span></td><td><a href="@basePath/features/edit?key=@Uri.EscapeDataString(feature.Key)">Edit</a>
+        @if (!Model.ReadOnly) { <form method="post" action="@basePath/features/state" class="inline"><input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" /><input type="hidden" name="key" value="@feature.Key" /><input type="hidden" name="expectedRevision" value="@Model.Revision" /><input type="hidden" name="enabled" value="@(!feature.Enabled ? "true" : "false")" /><button type="submit">@(feature.Enabled ? "Disable" : "Enable")</button></form> }</td></tr>
+    }
+    </tbody></table></section>
+    @if (pageCount > 1) { <nav class="pagination" aria-label="Feature pages">@for (var pageNumber = 1; pageNumber <= pageCount; pageNumber++) { <a href="@basePath?search=@Uri.EscapeDataString(Model.Search)&state=@Uri.EscapeDataString(Model.State)&tag=@Uri.EscapeDataString(Model.Tag)&page=@pageNumber" aria-current="@(pageNumber == currentPage ? "page" : null)">@pageNumber</a> }</nav> }
+}
