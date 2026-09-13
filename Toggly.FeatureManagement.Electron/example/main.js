@@ -27,7 +27,9 @@ async function createWindow() {
     width: 800,
     height: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      // Electron loads raw preload files with CommonJS semantics. Use the
+      // package's compiled entry instead of a source-level ESM import.
+      preload: path.join(__dirname, '../dist/preload/entry.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },

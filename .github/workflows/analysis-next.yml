@@ -292,7 +292,7 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=${{ env.SDK_ROOT }}
-            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/tests/fixtures/**
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -317,7 +317,7 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=${{ env.SDK_ROOT }}
-            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/tests/fixtures/**
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 

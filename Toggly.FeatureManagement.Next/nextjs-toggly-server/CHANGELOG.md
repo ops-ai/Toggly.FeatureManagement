@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.0
+
+2026-09-12
+
+### Changed
+- Validate the server package against Next.js 16 and document safe request
+  context partitioning when Cache Components are enabled [OPS-1183].
+
 ## 1.7.0
 
 2026-09-09

@@ -34,6 +34,18 @@ export interface MiddlewareFeatureOptions {
 }
 
 /**
+ * Next.js 16 Proxy configuration.
+ *
+ * A Proxy is a Node.js runtime boundary in Next 16. It uses the same
+ * request-local evaluation as the retained Edge middleware adapter, but owns
+ * its client in the returned closure instead of the legacy module singleton.
+ */
+export interface FeatureProxyOptions {
+  config: TogglyEdgeConfig
+  feature: MiddlewareFeatureOptions
+}
+
+/**
  * Middleware handler with feature context
  */
 export type FeatureMiddlewareHandler = (

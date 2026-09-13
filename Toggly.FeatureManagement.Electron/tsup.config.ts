@@ -5,6 +5,7 @@ export default defineConfig({
     'src/index.ts',
     'src/main/index.ts',
     'src/preload/index.ts',
+    'src/preload/entry.ts',
     'src/renderer/index.ts',
     'src/react/index.ts',
   ],
