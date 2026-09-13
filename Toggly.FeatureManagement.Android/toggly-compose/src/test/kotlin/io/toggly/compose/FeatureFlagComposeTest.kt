@@ -2,6 +2,7 @@ package io.toggly.compose
 
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import io.toggly.core.TogglyEntityContext
@@ -18,6 +19,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -97,6 +99,31 @@ class FeatureFlagComposeTest {
     }
 
     @Test
+    fun `primary Feature overload renders exactly one matching block`() {
+        setWithFlags {
+            Feature("banner", false, null, null) { BasicText("banner-on") }
+            Feature("banner", true, null, null) { BasicText("banner-off") }
+            Feature("maintenance", false, null, null) { BasicText("maintenance-on") }
+            Feature("maintenance", true, null, null) { BasicText("maintenance-off") }
+        }
+
+        composeRule.onAllNodesWithText("banner-on").assertCountEquals(1)
+        composeRule.onNodeWithText("banner-off").assertDoesNotExist()
+        composeRule.onNodeWithText("maintenance-on").assertDoesNotExist()
+        composeRule.onAllNodesWithText("maintenance-off").assertCountEquals(1)
+    }
+
+    @Test
+    fun `primary and legacy feature block JVM methods coexist`() {
+        val methods = Class.forName("io.toggly.compose.FeatureFlagKt").declaredMethods
+
+        assertTrue(methods.any { it.name == "Feature" && it.parameterCount == 8 })
+        assertTrue(methods.any { it.name == "Feature" && it.parameterCount == 9 })
+        assertTrue(methods.any { it.name == "FeatureGate" && it.parameterCount == 9 })
+        assertTrue(methods.any { it.name == "FeatureGate" && it.parameterCount == 10 })
+    }
+
+    @Test
     fun `Feature renders fallback when gate fails`() {
         setWithFlags {
             Feature(
@@ -108,6 +135,60 @@ class FeatureFlagComposeTest {
         }
         composeRule.onNodeWithText("fallback").assertExists()
         composeRule.onNodeWithText("primary").assertDoesNotExist()
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `legacy Feature positional fallback remains source compatible`() {
+        setWithFlags {
+            Feature(
+                "maintenance",
+                false,
+                null,
+                null,
+                { BasicText("legacy-feature-fallback") }
+            ) {
+                BasicText("legacy-feature-primary")
+            }
+        }
+        composeRule.onNodeWithText("legacy-feature-fallback").assertExists()
+        composeRule.onNodeWithText("legacy-feature-primary").assertDoesNotExist()
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `primary and legacy Feature overloads respond to recomposed arguments`() {
+        val featureKey = mutableStateOf("banner")
+        val negate = mutableStateOf(false)
+
+        setWithFlags {
+            Feature(featureKey.value, negate.value, null, null) {
+                BasicText("primary-feature")
+            }
+            Feature(
+                featureKey.value,
+                negate.value,
+                null,
+                null,
+                { BasicText("legacy-feature-fallback") }
+            ) {
+                BasicText("legacy-feature-content")
+            }
+        }
+
+        composeRule.onNodeWithText("primary-feature").assertExists()
+        composeRule.onNodeWithText("legacy-feature-content").assertExists()
+        composeRule.onNodeWithText("legacy-feature-fallback").assertDoesNotExist()
+
+        composeRule.runOnIdle { featureKey.value = "maintenance" }
+        composeRule.onNodeWithText("primary-feature").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-feature-content").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-feature-fallback").assertExists()
+
+        composeRule.runOnIdle { negate.value = true }
+        composeRule.onNodeWithText("primary-feature").assertExists()
+        composeRule.onNodeWithText("legacy-feature-content").assertExists()
+        composeRule.onNodeWithText("legacy-feature-fallback").assertDoesNotExist()
     }
 
     @Test
@@ -151,6 +232,88 @@ class FeatureFlagComposeTest {
     }
 
     @Test
+    fun `primary FeatureGate overload negates the combined requirement result`() {
+        setWithFlags {
+            FeatureGate(listOf("a", "b"), FeatureRequirement.ALL, false, null, null) {
+                BasicText("all-on")
+            }
+            FeatureGate(listOf("a", "b"), FeatureRequirement.ALL, true, null, null) {
+                BasicText("all-off")
+            }
+            FeatureGate(listOf("a", "b"), FeatureRequirement.ANY, false, null, null) {
+                BasicText("any-on")
+            }
+            FeatureGate(listOf("a", "b"), FeatureRequirement.ANY, true, null, null) {
+                BasicText("any-off")
+            }
+        }
+
+        composeRule.onNodeWithText("all-on").assertDoesNotExist()
+        composeRule.onAllNodesWithText("all-off").assertCountEquals(1)
+        composeRule.onAllNodesWithText("any-on").assertCountEquals(1)
+        composeRule.onNodeWithText("any-off").assertDoesNotExist()
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `legacy FeatureGate named fallback remains source compatible`() {
+        setWithFlags {
+            FeatureGate(
+                featureKeys = listOf("a", "b"),
+                requirement = FeatureRequirement.ALL,
+                fallback = { BasicText("legacy-gate-fallback") }
+            ) {
+                BasicText("legacy-gate-primary")
+            }
+        }
+        composeRule.onNodeWithText("legacy-gate-fallback").assertExists()
+        composeRule.onNodeWithText("legacy-gate-primary").assertDoesNotExist()
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `primary and legacy FeatureGate overloads respond to recomposed requirements`() {
+        val featureKeys = mutableStateOf(listOf("a", "b"))
+        val requirement = mutableStateOf(FeatureRequirement.ALL)
+        val negate = mutableStateOf(false)
+
+        setWithFlags {
+            FeatureGate(featureKeys.value, requirement.value, negate.value, null, null) {
+                BasicText("primary-gate")
+            }
+            FeatureGate(
+                featureKeys.value,
+                requirement.value,
+                negate.value,
+                null,
+                null,
+                { BasicText("legacy-gate-fallback") }
+            ) {
+                BasicText("legacy-gate-content")
+            }
+        }
+
+        composeRule.onNodeWithText("primary-gate").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-gate-content").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-gate-fallback").assertExists()
+
+        composeRule.runOnIdle { requirement.value = FeatureRequirement.ANY }
+        composeRule.onNodeWithText("primary-gate").assertExists()
+        composeRule.onNodeWithText("legacy-gate-content").assertExists()
+        composeRule.onNodeWithText("legacy-gate-fallback").assertDoesNotExist()
+
+        composeRule.runOnIdle { negate.value = true }
+        composeRule.onNodeWithText("primary-gate").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-gate-content").assertDoesNotExist()
+        composeRule.onNodeWithText("legacy-gate-fallback").assertExists()
+
+        composeRule.runOnIdle { featureKeys.value = listOf("b") }
+        composeRule.onNodeWithText("primary-gate").assertExists()
+        composeRule.onNodeWithText("legacy-gate-content").assertExists()
+        composeRule.onNodeWithText("legacy-gate-fallback").assertDoesNotExist()
+    }
+
+    @Test
     fun `FeatureSwitch picks enabled or disabled slot`() {
         setWithFlags {
             FeatureSwitch(
@@ -174,9 +337,10 @@ class FeatureFlagComposeTest {
                 LocalFeatureFlags provides flags
             ) {
                 Feature(
-                    featureKey = "banner",
-                    context = mapOf("id" to "1"),
-                    contextKind = "Order"
+                    "banner",
+                    false,
+                    mapOf("id" to "1"),
+                    "Order"
                 ) {
                     BasicText("entity-on")
                 }

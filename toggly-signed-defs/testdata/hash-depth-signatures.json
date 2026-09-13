@@ -1,0 +1,27 @@
+{
+  "description": "P-256 WebCrypto signs the raw payload, first SHA-256 digest, and second SHA-256 digest respectively. Only double matches the Worker signer. No private key is retained.",
+  "defs": "{\"hashContract\":true}",
+  "timestamp": 1700000000,
+  "kid": "647EBA18D2D1FCE1457C0EEA9DCC8DA662D7C97BES256",
+  "jwks": {
+    "keys": [
+      {
+        "key_ops": [
+          "verify"
+        ],
+        "ext": true,
+        "kty": "EC",
+        "x": "KNMI4XOigQNfH9yE6C6v5sU5Ou0LAafNraotxNhfgd8",
+        "y": "OP0LWEuSQg-pdoD7WySCKte6PEym947eNdLawQrMLIM",
+        "crv": "P-256",
+        "alg": "ES256",
+        "kid": "647EBA18D2D1FCE1457C0EEA9DCC8DA662D7C97BES256"
+      }
+    ]
+  },
+  "signatures": {
+    "single": "2OiVtM2egEAheNokTg4k6Sh9r8ejx5auBt9oYRbmjzxgG3SIXfQFmpaPJz1qM39VQ4EX6GZKXdv050X/4L4RWA==",
+    "double": "xiTtGqSYheTCfTfNuVBGT/KpHw7eKApfr5+x1Sz7SlgvdG/EVXm8rqlaSXfSpq2tW/kXmgDr29PUilQLvAdYgg==",
+    "triple": "SqfAa0F0yfz31LPjrINJRpDP2tl2rDQBgcNR3j395Nh5wnmAL9O7lNrSgKuk+kolFEUCHsvhv9cmNw4VV4ji/w=="
+  }
+}

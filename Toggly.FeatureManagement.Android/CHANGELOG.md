@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.0
+
+2026-09-12
+
+### Added
+- Add single-content `Feature` and `FeatureGate` overloads so enabled and
+  disabled UI use separate blocks with opposite `negate` values.
+
+### Deprecated
+- Keep the earlier `fallback` overloads for source and binary compatibility.
+  Migrate enabled and disabled content to separate `Feature` or `FeatureGate`
+  blocks.
+
 ## 1.4.1
 
 2026-09-11

@@ -1,0 +1,20 @@
+{
+  "defs": "{ \"enabled\": true, \"Order\": {\"requirement\":\"all\",\"rules\":[{\"property\":\"Vip\",\"op\":\"eq\",\"value\":\"true\"}]} }",
+  "timestamp": 1700000000,
+  "signature": "DdADEZMmXZfAb7k60vPgYSV3aZCm79dlP4BvRVrjOlb+O1ISZSN9IHmeWeG5IXzGEoD3Q83T6hdX7+MrGCNlQw==",
+  "kid": "F2845868DCD3FF1B86B90AEDE77DEC92E63344B4ES256",
+  "jwks": {
+    "keys": [
+      {
+        "key_ops": ["verify"],
+        "ext": true,
+        "kty": "EC",
+        "x": "oMW6cLmf3V-oFPfWaiBiCUck_CXTzEbACYuWib-ZLtk",
+        "y": "dwrp8M8ipMk55yFXPvsITLPwpbLmPa-_9RRGHcsvdWc",
+        "crv": "P-256",
+        "alg": "ES256",
+        "kid": "F2845868DCD3FF1B86B90AEDE77DEC92E63344B4ES256"
+      }
+    ]
+  }
+}

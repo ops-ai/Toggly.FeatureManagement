@@ -2,8 +2,12 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const esmDir = fileURLToPath(new URL('../dist/esm/', import.meta.url))
-writeFileSync(join(esmDir, 'package.json'), `${JSON.stringify({ type: 'module' }, null, 2)}\n`)
+const buildTarget = process.argv[2] ?? 'esm'
+const esmDir = fileURLToPath(new URL(`../dist/${buildTarget}/`, import.meta.url))
+writeFileSync(join(esmDir, 'package.json'), `${JSON.stringify({
+  type: 'module',
+  ...(buildTarget === 'esm' ? { browser: { './webcrypto.js': './webcrypto.browser.js' } } : {}),
+}, null, 2)}\n`)
 
 function walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -12,7 +16,7 @@ function walk(dir) {
       walk(path)
       continue
     }
-    if (!entry.name.endsWith('.js')) {
+    if (!entry.name.endsWith('.js') && !entry.name.endsWith('.d.ts')) {
       continue
     }
 
