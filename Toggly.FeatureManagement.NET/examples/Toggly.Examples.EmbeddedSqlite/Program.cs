@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Toggly.FeatureManagement.Embedded;
+using Toggly.FeatureManagement.Dashboard;
 using Toggly.FeatureManagement.Storage.EntityFramework;
 using Toggly.FeatureManagement.Storage.EntityFramework.Configuration;
 
@@ -7,7 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 var catalogConnection = builder.Configuration.GetConnectionString("TogglyCatalog") ?? "Data Source=toggly.embedded.db";
 
 builder.Services.AddTogglyEntityFrameworkCatalogStore(options => options.UseSqlite(catalogConnection));
-builder.Services.AddTogglyEmbedded(options => options.CatalogName = "EmbeddedSqliteSample");
+builder.Services.AddTogglyDashboard(options => options.CatalogName = "EmbeddedSqliteSample");
 
 var app = builder.Build();
 
@@ -21,6 +21,7 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 
 app.MapGet("/", () => Results.Ok(new { name = "Toggly Embedded SQLite sample", catalog = "EmbeddedSqliteSample" }));
+app.MapTogglyDashboard("/internal/features");
 
 app.Run();
 

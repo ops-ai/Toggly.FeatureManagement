@@ -10,6 +10,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Toggly.FeatureManagement.Embedded\Toggly.FeatureManagement.Embedded.csproj" />
+    <ProjectReference Include="..\..\Toggly.FeatureManagement.Dashboard\Toggly.FeatureManagement.Dashboard.csproj" />
     <ProjectReference Include="..\..\Toggly.Storage.EntityFramework\Toggly.Storage.EntityFramework.csproj" />
   </ItemGroup>
 </Project>
