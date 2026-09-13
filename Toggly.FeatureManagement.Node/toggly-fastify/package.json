@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-fastify",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Toggly feature flags Fastify plugin",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -27,6 +27,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:hosts": "node tests/packed-hosts.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src tests",
