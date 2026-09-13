@@ -18,15 +18,17 @@ public sealed class TogglyDashboardController : Controller
     private readonly EmbeddedContextSchemaProvider _contextSchemas;
     private readonly IAntiforgery _antiforgery;
     private readonly TogglyEmbeddedOptions _options;
+    private readonly EmbeddedImportService _importService;
 
     /// <summary>Creates the dashboard controller.</summary>
-    public TogglyDashboardController(EmbeddedCatalogEditor editor, EmbeddedCatalogCoordinator coordinator, EmbeddedContextSchemaProvider contextSchemas, IAntiforgery antiforgery, IOptions<TogglyEmbeddedOptions> options)
+    public TogglyDashboardController(EmbeddedCatalogEditor editor, EmbeddedCatalogCoordinator coordinator, EmbeddedContextSchemaProvider contextSchemas, IAntiforgery antiforgery, IOptions<TogglyEmbeddedOptions> options, EmbeddedImportService importService)
     {
         _editor = editor;
         _coordinator = coordinator;
         _contextSchemas = contextSchemas;
         _antiforgery = antiforgery;
         _options = options.Value;
+        _importService = importService;
     }
 
     /// <summary>Lists the catalog features.</summary>
@@ -199,21 +201,18 @@ public sealed class TogglyDashboardController : Controller
         try
         {
             using var reader = new StreamReader(catalog.OpenReadStream());
-            var document = CatalogJson.Parse(await reader.ReadToEndAsync(HttpContext.RequestAborted).ConfigureAwait(false));
-            var target = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
-            if (target == null) return NotFound();
-            var existing = target.Document.Features.ToDictionary(feature => feature.Key, StringComparer.OrdinalIgnoreCase);
-            var payload = CatalogJson.Serialize(document);
+            var preview = await _importService.PreviewAsync(await reader.ReadToEndAsync(HttpContext.RequestAborted).ConfigureAwait(false), HttpContext.RequestAborted).ConfigureAwait(false);
             return View(new DashboardImportPreviewViewModel
             {
-                Payload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(payload)),
-                Fingerprint = ComputeFingerprint(payload),
-                ExpectedRevision = target.Revision,
-                AddKeys = document.Features.Where(feature => !existing.ContainsKey(feature.Key)).Select(feature => feature.Key).OrderBy(key => key, StringComparer.Ordinal).ToList(),
-                IdenticalKeys = document.Features.Where(feature => existing.TryGetValue(feature.Key, out var current) && FeaturesEqual(current, feature)).Select(feature => feature.Key).OrderBy(key => key, StringComparer.Ordinal).ToList(),
-                ConflictKeys = document.Features.Where(feature => existing.TryGetValue(feature.Key, out var current) && !FeaturesEqual(current, feature)).Select(feature => feature.Key).OrderBy(key => key, StringComparer.Ordinal).ToList()
+                Payload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(preview.CanonicalPayload)),
+                Fingerprint = preview.Fingerprint,
+                ExpectedRevision = preview.ExpectedRevision,
+                AddKeys = preview.AddKeys,
+                IdenticalKeys = preview.IdenticalKeys,
+                ConflictKeys = preview.ConflictKeys
             });
         }
+        catch (EmbeddedCatalogNotFoundException) { return NotFound(); }
         catch (CatalogFormatException exception) { return BadRequest(exception.Message); }
         catch (CatalogValidationException exception) { return BadRequest(exception.Message); }
         catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
@@ -228,29 +227,18 @@ public sealed class TogglyDashboardController : Controller
             if (payload.Length > MaximumBase64Length(_options.MaxCatalogBytes)) return BadRequest("The catalog exceeds the configured maximum size.");
             var payloadBytes = Convert.FromBase64String(payload);
             if (payloadBytes.LongLength > _options.MaxCatalogBytes) return BadRequest("The catalog exceeds the configured maximum size.");
-            var document = CatalogJson.Parse(System.Text.Encoding.UTF8.GetString(payloadBytes));
-            var canonicalPayload = CatalogJson.Serialize(document);
-            if (!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(ComputeFingerprint(canonicalPayload)), Convert.FromHexString(fingerprint))) return BadRequest("The import preview is invalid. Create a new preview.");
-            var target = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
-            if (target == null) return NotFound();
-            var uploaded = document.Features.ToDictionary(feature => feature.Key, StringComparer.OrdinalIgnoreCase);
-            var existing = target.Document.Features.ToDictionary(feature => feature.Key, StringComparer.OrdinalIgnoreCase);
-            var additions = (selectedAddKeys ?? []).Where(uploaded.ContainsKey).Where(key => !existing.ContainsKey(key)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var updates = (selectedUpdateKeys ?? []).Where(uploaded.ContainsKey).Where(existing.ContainsKey).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            target.Document.Features.AddRange(additions.Select(key => uploaded[key]));
-            foreach (var key in updates)
+            var result = await _importService.ApplyAsync(new EmbeddedImportApplyRequest(System.Text.Encoding.UTF8.GetString(payloadBytes), fingerprint, expectedRevision, selectedAddKeys, selectedUpdateKeys), HttpContext.RequestAborted).ConfigureAwait(false);
+            if (result.Status == CatalogWriteStatus.Conflict)
             {
-                var index = target.Document.Features.IndexOf(existing[key]);
-                target.Document.Features[index] = uploaded[key];
+                Response.StatusCode = StatusCodes.Status409Conflict;
+                return View("Conflict", new DashboardFeatureInput { ExpectedRevision = expectedRevision });
             }
-            foreach (var context in document.Contexts)
-            {
-                var current = target.Document.Contexts.SingleOrDefault(candidate => string.Equals(candidate.Kind, context.Kind, StringComparison.OrdinalIgnoreCase));
-                if (current == null) target.Document.Contexts.Add(context);
-                else if (!ContextsEqual(current, context)) return BadRequest($"Context '{context.Kind}' conflicts with the current catalog.");
-            }
-            return await WriteOrConflictAsync(target.Document, expectedRevision, "Index", null).ConfigureAwait(false);
+            var mount = HttpContext.GetEndpoint()?.Metadata.GetMetadata<TogglyDashboardEndpointMetadata>()?.MountPath ?? string.Empty;
+            Response.StatusCode = StatusCodes.Status303SeeOther;
+            Response.Headers.Location = $"{HttpContext.Request.PathBase}{mount}/";
+            return new EmptyResult();
         }
+        catch (EmbeddedCatalogNotFoundException) { return NotFound(); }
         catch (FormatException) { return BadRequest("The import preview payload is invalid. Create a new preview."); }
         catch (CatalogFormatException exception) { return BadRequest(exception.Message); }
         catch (CatalogValidationException exception) { return BadRequest(exception.Message); }
