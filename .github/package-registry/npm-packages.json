@@ -25,6 +25,15 @@
       "oidcReady": false
     },
     {
+      "name": "@ops-ai/electron-feature-flags-toggly",
+      "group": "electron",
+      "manifest": "Toggly.FeatureManagement.Electron/package.json",
+      "changelog": "Toggly.FeatureManagement.Electron/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-electron-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/electron",
+      "oidcReady": false
+    },
+    {
       "name": "@ops-ai/feature-flags-toggly",
       "group": "javascript",
       "manifest": "Toggly.FeatureManagement.Javascript/feature_flags_toggly/package.json",
@@ -337,6 +346,24 @@
       "changelog": "Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/CHANGELOG.md",
       "workflow": ".github/workflows/sdk-vue-release.yml",
       "docsUrl": "https://docs.toggly.io/sdks/javascript/vue",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/solid-feature-flags-toggly",
+      "group": "javascript",
+      "manifest": "Toggly.FeatureManagement.Solid/package.json",
+      "changelog": "Toggly.FeatureManagement.Solid/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-solid-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/javascript/solid",
+      "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-sveltekit",
+      "group": "sveltekit",
+      "manifest": "Toggly.FeatureManagement.SvelteKit/package.json",
+      "changelog": "Toggly.FeatureManagement.SvelteKit/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-sveltekit-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/javascript/sveltekit",
       "oidcReady": false
     }
   ]

@@ -6,18 +6,22 @@ Command-line interface for Toggly feature flag management. This CLI enables auto
 
 ### Download Pre-built Binaries
 
-Download the appropriate binary for your platform from [GitHub Releases](https://github.com/ops-ai/Toggly.FeatureManagement/releases):
+Download the appropriate archive for your platform from the latest CLI GitHub Release ([`cli-v0.2.0`](https://github.com/ops-ai/Toggly.FeatureManagement/releases/tag/cli-v0.2.0); later tags follow `cli-v*`):
 
-- **Windows**: `toggly-cli.exe`
-- **Linux**: `toggly-cli` (x64 or ARM64)
-- **macOS**: `toggly-cli` (Intel or Apple Silicon)
+| Platform | Release asset | Binary |
+|----------|---------------|--------|
+| Windows x64 | `toggly-cli-windows-x64.zip` | `toggly-cli.exe` |
+| Linux x64 | `toggly-cli-linux-x64.tar.gz` | `toggly-cli` |
+| Linux ARM64 | `toggly-cli-linux-arm64.tar.gz` | `toggly-cli` |
+| macOS Intel | `toggly-cli-macos-x64.tar.gz` | `toggly-cli` |
+| macOS Apple Silicon | `toggly-cli-macos-arm64.tar.gz` | `toggly-cli` |
 
 ### Build from Source
 
 ```bash
 # Clone the repository
 git clone https://github.com/ops-ai/Toggly.FeatureManagement.git
-cd Toggly.FeatureManagement/Toggly.FeatureManagement/Toggly.CLI
+cd Toggly.FeatureManagement/Toggly.CLI
 
 # Build for your platform
 dotnet publish -c Release -r <RID> --self-contained -p:PublishSingleFile=true -p:PublishAot=true

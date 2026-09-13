@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { Component } from '@angular/core';
+import { Component, ChangeDetectorRef } from '@angular/core';
 import { FeatureGateBuilderDirective } from './feature-gate-builder.directive';
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module';
 import { TogglyService } from './toggly.service';
@@ -76,6 +76,7 @@ describe('FeatureGateBuilderDirective', () => {
     expect(button.classList.contains('active')).toBe(false);
 
     host.requirement = 'any';
+    fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
     fixture.detectChanges();
     tick();
     fixture.detectChanges();
@@ -95,6 +96,7 @@ describe('FeatureGateBuilderDirective', () => {
     expect(button.classList.contains('active')).toBe(true);
 
     host.negate = true;
+    fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
     fixture.detectChanges();
     tick();
     fixture.detectChanges();
@@ -179,6 +181,7 @@ describe('FeatureGateBuilderDirective entity context', () => {
       attributes: { BirthDate: entity.BirthDate },
     }));
     fixture.componentInstance.context = { BirthDate: '2026-06-15T00:00:00Z' };
+    fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
     fixture.detectChanges();
     tick();
     fixture.detectChanges();

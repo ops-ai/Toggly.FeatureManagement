@@ -1,0 +1,22 @@
+{
+  "defs": "[\n  {\"featureKey\":\"canonical-on\",\"filters\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]},\n  {\"featureKey\":\"canonical-off\",\"filters\":[]}\n]",
+  "timestamp": 1700000000,
+  "signature": "Jko0CH0zO1F2dtnGYAso2G5SSK5sclyTjcO/POvujjGQ0Oa7TwZaAYKe+0A7FPcrA2FffPhhzR5leAj7FaQX+w==",
+  "kid": "A4ACBC5209D5C6289321B7C4EAFF0D700F9854A0ES256",
+  "jwks": {
+    "keys": [
+      {
+        "key_ops": [
+          "verify"
+        ],
+        "ext": true,
+        "kty": "EC",
+        "x": "6g85PqDnB2mrP-0Sk-mdNZbafE4iHcCyvrQiO8zID7M",
+        "y": "AGfU_vbf0GHUUDvUM_LNe5O2qfileok5wsuBW3xfQiY",
+        "crv": "P-256",
+        "alg": "ES256",
+        "kid": "A4ACBC5209D5C6289321B7C4EAFF0D700F9854A0ES256"
+      }
+    ]
+  }
+}

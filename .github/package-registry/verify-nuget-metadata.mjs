@@ -3,29 +3,30 @@
  * Validate nuget-packages.json inventory against the SDK tree, release
  * workflow matrix, and (optionally) packed .nupkg nuspec metadata (OPS-725).
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
-import os from 'node:os';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+import os from "node:os";
+import { validateSources } from "./dotnet-inventory.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '../..');
-const INVENTORY_PATH = path.join(__dirname, 'nuget-packages.json');
-const FORBIDDEN_ICONS = ['packagephoto.png', 'toggly_favicon.png'];
+const REPO_ROOT = path.resolve(__dirname, "../..");
+const INVENTORY_PATH = path.join(__dirname, "nuget-packages.json");
+const FORBIDDEN_ICONS = ["packagephoto.png", "toggly_favicon.png"];
 
 export function loadInventory(inventoryPath = INVENTORY_PATH) {
-  return JSON.parse(fs.readFileSync(inventoryPath, 'utf8'));
+  return JSON.parse(fs.readFileSync(inventoryPath, "utf8"));
 }
 
 function textContent(xml, tag) {
-  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i');
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i");
   const m = xml.match(re);
   return m ? m[1].trim() : null;
 }
 
 function attrValue(xml, tag, attr) {
-  const re = new RegExp(`<${tag}\\b[^>]*\\b${attr}="([^"]*)"`, 'i');
+  const re = new RegExp(`<${tag}\\b[^>]*\\b${attr}="([^"]*)"`, "i");
   const m = xml.match(re);
   return m ? m[1].trim() : null;
 }
@@ -41,7 +42,7 @@ export function parseReleaseWorkflowProjects(workflowText) {
 }
 
 export function projectFolder(projectRel) {
-  return projectRel.split('/')[0];
+  return projectRel.split("/")[0];
 }
 
 /**
@@ -59,10 +60,13 @@ export function verifyNugetInventory(options = {}) {
 
   const ids = packages.map((p) => p.id);
   if (new Set(ids).size !== ids.length) {
-    errors.push('duplicate package ids in inventory');
+    errors.push("duplicate package ids in inventory");
   }
 
-  const sdkRoot = path.join(repoRoot, inventory.sdkRoot || 'Toggly.FeatureManagement.NET');
+  const sdkRoot = path.join(
+    repoRoot,
+    inventory.sdkRoot || "Toggly.FeatureManagement.NET",
+  );
   for (const pkg of packages) {
     const abs = path.join(sdkRoot, pkg.project);
     if (!fs.existsSync(abs)) {
@@ -70,41 +74,58 @@ export function verifyNugetInventory(options = {}) {
     }
   }
 
-  const changelog = path.join(repoRoot, inventory.changelog || '');
+  const changelog = path.join(repoRoot, inventory.changelog || "");
   if (inventory.changelog && !fs.existsSync(changelog)) {
     errors.push(`missing changelog: ${inventory.changelog}`);
   }
 
-  const workflowRel = inventory.workflow || '.github/workflows/sdk-dotnet-release.yml';
+  const workflowRel =
+    inventory.workflow || ".github/workflows/sdk-dotnet-release.yml";
   const workflowPath = path.join(repoRoot, workflowRel);
   if (!fs.existsSync(workflowPath)) {
     errors.push(`missing workflow: ${workflowRel}`);
   } else {
-    const workflowText = fs.readFileSync(workflowPath, 'utf8');
-    const workflowFolders = parseReleaseWorkflowProjects(workflowText);
+    const workflowText = fs.readFileSync(workflowPath, "utf8");
+    const inventoryDriven = workflowText.includes(
+      "node .github/package-registry/dotnet-release-plan.mjs",
+    );
+    if (inventoryDriven) {
+      try {
+        validateSources(inventory, repoRoot);
+      } catch (error) {
+        errors.push(error.message);
+      }
+    }
+    const workflowFolders = inventoryDriven
+      ? packages.map((pkg) => projectFolder(pkg.project))
+      : parseReleaseWorkflowProjects(workflowText);
     const inventoryFolders = packages.map((p) => projectFolder(p.project));
     const sortedWf = [...workflowFolders].sort();
     const sortedInv = [...inventoryFolders].sort();
     if (JSON.stringify(sortedWf) !== JSON.stringify(sortedInv)) {
       errors.push(
         `sdk-dotnet-release.yml project folders drift from inventory:\n` +
-          `  workflow: ${sortedWf.join(', ')}\n` +
-          `  inventory: ${sortedInv.join(', ')}`,
+          `  workflow: ${sortedWf.join(", ")}\n` +
+          `  inventory: ${sortedInv.join(", ")}`,
       );
     }
 
-    const folderToId = new Map(packages.map((p) => [projectFolder(p.project), p.id]));
+    const folderToId = new Map(
+      packages.map((p) => [projectFolder(p.project), p.id]),
+    );
     for (const folder of workflowFolders) {
       if (!folderToId.has(folder)) {
-        errors.push(`workflow project folder has no inventory PackageId mapping: ${folder}`);
+        errors.push(
+          `workflow project folder has no inventory PackageId mapping: ${folder}`,
+        );
       }
     }
   }
 
   const iconRel = path.join(
-    inventory.sdkRoot || 'Toggly.FeatureManagement.NET',
-    'assets',
-    inventory.packageIcon || 'toggly-package-icon.png',
+    inventory.sdkRoot || "Toggly.FeatureManagement.NET",
+    "assets",
+    inventory.packageIcon || "toggly-package-icon.png",
   );
   if (!fs.existsSync(path.join(repoRoot, iconRel))) {
     errors.push(`missing shared package icon: ${iconRel}`);
@@ -116,7 +137,7 @@ export function verifyNugetInventory(options = {}) {
 function listNupkgs(packDir) {
   return fs
     .readdirSync(packDir)
-    .filter((f) => f.endsWith('.nupkg') && !f.endsWith('.snupkg'))
+    .filter((f) => f.endsWith(".nupkg") && !f.endsWith(".snupkg"))
     .map((f) => path.join(packDir, f))
     .sort();
 }
@@ -125,7 +146,7 @@ function listNupkgs(packDir) {
 function matchPackageId(nupkgBasename, packageIds) {
   const sorted = [...packageIds].sort((a, b) => b.length - a.length);
   for (const id of sorted) {
-    const escaped = id.replace(/\./g, '\\.');
+    const escaped = id.replace(/\./g, "\\.");
     if (new RegExp(`^${escaped}\\.\\d`).test(nupkgBasename)) {
       return id;
     }
@@ -135,28 +156,28 @@ function matchPackageId(nupkgBasename, packageIds) {
 
 function normalizeUrl(url) {
   if (!url) return url;
-  return url.replace(/\/+$/, '');
+  return url.replace(/\/+$/, "");
 }
 
 function extractNuspecAndEntries(nupkgPath) {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nuget-verify-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nuget-verify-"));
   try {
-    execFileSync('unzip', ['-qq', nupkgPath, '-d', tmp], { stdio: 'pipe' });
+    execFileSync("unzip", ["-qq", nupkgPath, "-d", tmp], { stdio: "pipe" });
     const entries = [];
-    function walk(dir, prefix = '') {
+    function walk(dir, prefix = "") {
       for (const name of fs.readdirSync(dir)) {
         const abs = path.join(dir, name);
         const rel = prefix ? `${prefix}/${name}` : name;
         if (fs.statSync(abs).isDirectory()) walk(abs, rel);
-        else entries.push(rel.replace(/\\/g, '/'));
+        else entries.push(rel.replace(/\\/g, "/"));
       }
     }
     walk(tmp);
-    const nuspecName = entries.find((e) => e.endsWith('.nuspec'));
+    const nuspecName = entries.find((e) => e.endsWith(".nuspec"));
     if (!nuspecName) {
       return { entries, nuspec: null };
     }
-    const nuspec = fs.readFileSync(path.join(tmp, nuspecName), 'utf8');
+    const nuspec = fs.readFileSync(path.join(tmp, nuspecName), "utf8");
     return { entries, nuspec };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -172,7 +193,7 @@ export function verifyPackedNupkgs(options = {}) {
   const errors = [];
 
   if (!packDir) {
-    return { ok: false, errors: ['NUGET_PACK_DIR is not set'], skipped: true };
+    return { ok: false, errors: ["NUGET_PACK_DIR is not set"], skipped: true };
   }
   if (!fs.existsSync(packDir)) {
     return { ok: false, errors: [`pack dir does not exist: ${packDir}`] };
@@ -197,27 +218,41 @@ export function verifyPackedNupkgs(options = {}) {
       continue;
     }
 
-    const authors = textContent(nuspec, 'authors');
-    const owners = textContent(nuspec, 'owners');
-    const projectUrl = textContent(nuspec, 'projectUrl');
-    const license = textContent(nuspec, 'license') || attrValue(nuspec, 'license', 'type');
+    const authors = textContent(nuspec, "authors");
+    const owners = textContent(nuspec, "owners");
+    const projectUrl = textContent(nuspec, "projectUrl");
+    const license =
+      textContent(nuspec, "license") || attrValue(nuspec, "license", "type");
     const licenseExpr =
-      textContent(nuspec, 'license') ||
+      textContent(nuspec, "license") ||
       (nuspec.match(/<license\s+type="expression"[^>]*>([^<]+)</i) || [])[1] ||
       null;
-    const tags = (textContent(nuspec, 'tags') || '').split(/\s+/).filter(Boolean);
-    const icon = textContent(nuspec, 'icon');
+    const tags = (textContent(nuspec, "tags") || "")
+      .split(/\s+/)
+      .filter(Boolean);
+    const icon = textContent(nuspec, "icon");
     const repoUrl =
-      attrValue(nuspec, 'repository', 'url') || textContent(nuspec, 'repositoryUrl');
+      attrValue(nuspec, "repository", "url") ||
+      textContent(nuspec, "repositoryUrl");
 
     if (authors !== inventory.authors) {
-      errors.push(`${matchedId}: authors="${authors}" expected "${inventory.authors}"`);
+      errors.push(
+        `${matchedId}: authors="${authors}" expected "${inventory.authors}"`,
+      );
     }
     // NuGet may omit owners or mirror authors; accept either missing or Toggly.
-    if (owners != null && owners !== inventory.authors && owners !== inventory.company) {
-      errors.push(`${matchedId}: owners="${owners}" expected "${inventory.authors}"`);
+    if (
+      owners != null &&
+      owners !== inventory.authors &&
+      owners !== inventory.company
+    ) {
+      errors.push(
+        `${matchedId}: owners="${owners}" expected "${inventory.authors}"`,
+      );
     }
-    if (normalizeUrl(projectUrl) !== normalizeUrl(inventory.packageProjectUrl)) {
+    if (
+      normalizeUrl(projectUrl) !== normalizeUrl(inventory.packageProjectUrl)
+    ) {
       errors.push(
         `${matchedId}: projectUrl="${projectUrl}" expected "${inventory.packageProjectUrl}"`,
       );
@@ -227,30 +262,50 @@ export function verifyPackedNupkgs(options = {}) {
         `${matchedId}: repository url="${repoUrl}" expected "${inventory.repositoryUrl}"`,
       );
     }
-    const licenseValue = (licenseExpr || license || '').trim();
+    const licenseValue = (licenseExpr || license || "").trim();
     if (licenseValue !== inventory.license) {
-      errors.push(`${matchedId}: license="${licenseValue}" expected "${inventory.license}"`);
+      errors.push(
+        `${matchedId}: license="${licenseValue}" expected "${inventory.license}"`,
+      );
     }
     if (icon !== inventory.packageIcon) {
-      errors.push(`${matchedId}: icon="${icon}" expected "${inventory.packageIcon}"`);
+      errors.push(
+        `${matchedId}: icon="${icon}" expected "${inventory.packageIcon}"`,
+      );
     }
     for (const tag of inventory.requiredTags || []) {
       if (!tags.includes(tag)) {
-        errors.push(`${matchedId}: missing required tag "${tag}" (have: ${tags.join(' ')})`);
+        errors.push(
+          `${matchedId}: missing required tag "${tag}" (have: ${tags.join(" ")})`,
+        );
       }
     }
 
     const entryLower = entries.map((e) => e.toLowerCase());
     for (const forbidden of FORBIDDEN_ICONS) {
-      if (entryLower.some((e) => e === forbidden.toLowerCase() || e.endsWith(`/${forbidden.toLowerCase()}`))) {
+      if (
+        entryLower.some(
+          (e) =>
+            e === forbidden.toLowerCase() ||
+            e.endsWith(`/${forbidden.toLowerCase()}`),
+        )
+      ) {
         errors.push(`${matchedId}: packed package still contains ${forbidden}`);
       }
     }
     if (icon && FORBIDDEN_ICONS.includes(icon)) {
       errors.push(`${matchedId}: icon still references forbidden ${icon}`);
     }
-    if (!entries.some((e) => e === inventory.packageIcon || e.endsWith(`/${inventory.packageIcon}`))) {
-      errors.push(`${matchedId}: packed package missing icon file ${inventory.packageIcon}`);
+    if (
+      !entries.some(
+        (e) =>
+          e === inventory.packageIcon ||
+          e.endsWith(`/${inventory.packageIcon}`),
+      )
+    ) {
+      errors.push(
+        `${matchedId}: packed package missing icon file ${inventory.packageIcon}`,
+      );
     }
   }
 
@@ -289,8 +344,8 @@ export function verifyNugetMetadata(options = {}) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const result = verifyNugetMetadata();
   if (!result.ok) {
-    console.error(result.errors.join('\n'));
+    console.error(result.errors.join("\n"));
     process.exit(1);
   }
-  console.log('nuget metadata contract ok');
+  console.log("nuget metadata contract ok");
 }

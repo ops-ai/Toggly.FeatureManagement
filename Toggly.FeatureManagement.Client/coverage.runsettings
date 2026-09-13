@@ -1,0 +1,1 @@
+<RunSettings><DataCollectionRunSettings><DataCollectors><DataCollector friendlyName="XPlat Code Coverage"><Configuration><Format>cobertura,opencover</Format></Configuration></DataCollector></DataCollectors></DataCollectionRunSettings></RunSettings>

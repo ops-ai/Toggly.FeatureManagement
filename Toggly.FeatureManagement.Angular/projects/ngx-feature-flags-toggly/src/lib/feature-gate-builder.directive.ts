@@ -1,4 +1,5 @@
 import {
+  ChangeDetectorRef,
   Directive,
   EmbeddedViewRef,
   Input,
@@ -32,6 +33,7 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
   private viewRef?: EmbeddedViewRef<{ $implicit: boolean; enabled: boolean }>
   private entityContext: TogglyEntityContext | Record<string, unknown> | null = null
   private kind: string | undefined
+  private evaluationGeneration = 0
   private unsubscribeLocalGates: (() => void) | undefined
   private unsubscribeFeaturesRefresh: (() => void) | undefined
 
@@ -83,6 +85,7 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
     private readonly templateRef: TemplateRef<{ $implicit: boolean; enabled: boolean }>,
     private readonly viewContainer: ViewContainerRef,
     private readonly toggly: TogglyService,
+    private readonly changeDetector: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -96,12 +99,14 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.evaluationGeneration++
     this.unsubscribeLocalGates?.()
     this.unsubscribeFeaturesRefresh?.()
     this.viewContainer.clear()
   }
 
   private updateView(): void {
+    const generation = ++this.evaluationGeneration
     const evaluate = () => {
       if (this.flag.length === 0) {
         this.renderEnabled(!this.negate)
@@ -110,7 +115,10 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
 
       this.toggly
         .evaluateFeatureGate(this.flag, this.requirement, this.negate, this.entityContext, this.kind)
-        .then((isEnabled) => this.renderEnabled(isEnabled))
+        .then((isEnabled) => {
+          if (generation !== this.evaluationGeneration) return
+          this.renderEnabled(isEnabled)
+        })
     }
 
     evaluate()
@@ -122,11 +130,13 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
         $implicit: isEnabled,
         enabled: isEnabled,
       })
+      this.changeDetector.markForCheck()
       return
     }
 
     this.viewRef.context.$implicit = isEnabled
     this.viewRef.context.enabled = isEnabled
     this.viewRef.markForCheck()
+    this.changeDetector.markForCheck()
   }
 }

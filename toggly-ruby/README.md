@@ -116,13 +116,14 @@ end
 
 ```erb
 <!-- View -->
-<% if feature_enabled?(:new_header) %>
+<%= feature(:new_header) do %>
   <%= render "new_header" %>
-<% else %>
+<% end %>
+<%= feature(:new_header, negate: true) do %>
   <%= render "header" %>
 <% end %>
 
-<%= when_feature_enabled(:promo_banner) do %>
+<%= feature(:promo_banner) do %>
   <div class="promo">Special Offer!</div>
 <% end %>
 ```
@@ -318,7 +319,7 @@ rake toggly:config
 │  toggly-rails (optional)                                    │
 │  ├── Railtie (auto-configuration)                           │
 │  ├── ControllerConcern (feature_enabled?)                   │
-│  ├── ViewHelpers (when_feature_enabled)                     │
+│  ├── ViewHelpers (feature with optional negate)             │
 │  ├── Middleware (request context)                           │
 │  └── Generators (rails g toggly:install)                    │
 ├─────────────────────────────────────────────────────────────┤

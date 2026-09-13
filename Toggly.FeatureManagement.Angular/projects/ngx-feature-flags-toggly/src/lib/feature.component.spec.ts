@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { Component } from '@angular/core';
+import { Component, ChangeDetectorRef } from '@angular/core';
 import { FeatureComponent } from './feature.component';
 import { FeatureTemplateDirective } from './feature-template.directive';
 import { TogglyService } from './toggly.service';
@@ -193,6 +193,7 @@ describe('FeatureComponent', () => {
       expect(fixture.nativeElement.querySelector('.content')).toBeTruthy();
 
       host.featureKey = 'Disabled';
+      fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
       fixture.detectChanges();
       tick();
       fixture.detectChanges();

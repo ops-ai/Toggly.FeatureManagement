@@ -30,28 +30,40 @@ module Toggly
         !feature_enabled?(feature_key, context: context)
       end
 
+      # Render content when the feature evaluation matches the requested branch
+      #
+      # @param feature_key [String, Symbol] Feature key
+      # @param context [Toggly::Context, nil] Optional override context
+      # @param negate [Boolean] Render when the feature is disabled
+      # @yield Content to render for the selected branch
+      # @return [String, nil]
+      def feature(feature_key, context: nil, negate: false, &)
+        enabled = feature_enabled?(feature_key, context: context)
+        return unless negate ? !enabled : enabled
+
+        capture(&) if block_given?
+      end
+
       # Render content only if feature is enabled
       #
+      # @deprecated Use {#feature}.
       # @param feature_key [String, Symbol] Feature key
       # @param context [Toggly::Context, nil] Optional override context
       # @yield Content to render when enabled
       # @return [String, nil]
       def when_feature_enabled(feature_key, context: nil, &)
-        return unless feature_enabled?(feature_key, context: context)
-
-        capture(&) if block_given?
+        feature(feature_key, context: context, negate: false, &)
       end
 
       # Render content only if feature is disabled
       #
+      # @deprecated Use {#feature} with +negate: true+.
       # @param feature_key [String, Symbol] Feature key
       # @param context [Toggly::Context, nil] Optional override context
       # @yield Content to render when disabled
       # @return [String, nil]
       def when_feature_disabled(feature_key, context: nil, &)
-        return if feature_enabled?(feature_key, context: context)
-
-        capture(&) if block_given?
+        feature(feature_key, context: context, negate: true, &)
       end
 
       # Render enabled or disabled content based on feature state

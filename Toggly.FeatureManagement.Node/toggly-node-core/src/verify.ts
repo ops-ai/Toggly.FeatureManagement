@@ -233,9 +233,8 @@ export function parseDefinitionsFromRaw(defsRaw: string): unknown {
   return JSON.parse(defsRaw)
 }
 
-function doubleSha256(payload: string): Buffer {
-  const first = createHash('sha256').update(payload, 'utf8').digest()
-  return createHash('sha256').update(first).digest()
+function firstSha256(payload: string): Buffer {
+  return createHash('sha256').update(payload, 'utf8').digest()
 }
 
 function padBase64Url(value: string): string {
@@ -310,13 +309,17 @@ export function verifySignedDefinitions(
 
   const key = validateAndParseEs256Key(matching, allowedKids)
   const payload = `${defsRaw}|${envelope.timestamp}`
-  const hash = doubleSha256(payload)
+  // The Definitions Worker prehashes the payload, then ECDSA-SHA256 hashes
+  // that digest again. Node's explicit 'sha256' verification does the same:
+  // supply the first digest, not the double digest. Passing a double digest
+  // to crypto.verify(null, …) can add an unintended third hash.
+  const firstDigest = firstSha256(payload)
   const signature = Buffer.from(envelope.signature, 'base64')
 
   const encoding = signature.length === 64 ? 'ieee-p1363' : 'der'
   const ok = cryptoVerify(
-    null,
-    hash,
+    'sha256',
+    firstDigest,
     {
       key,
       dsaEncoding: encoding,

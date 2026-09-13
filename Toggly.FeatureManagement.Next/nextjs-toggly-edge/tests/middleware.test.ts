@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
 import {
   createFeatureMiddleware,
+  createFeatureProxy,
   isFeatureEnabledForRequest,
   getFeaturesForRequest,
 } from '../src/middleware'
@@ -126,5 +127,80 @@ describe('edge middleware identity safety [OPS-831]', () => {
     )
 
     expect(features['vip-only']).toBe(true)
+  })
+
+  it('creates a Next 16 proxy without installing a process-wide client', async () => {
+    mockFetch.mockResolvedValue(
+      createMockResponse([targeting('vip-only', 'alice')]),
+    )
+
+    const proxy = createFeatureProxy({
+      config: {
+        appKey: 'test-key',
+        identity: 'shared-default',
+        cache: false,
+        enableUsageTracking: false,
+        enableMetrics: false,
+      },
+      feature: { featureKey: 'vip-only' },
+    })
+
+    const [aliceRes, bobRes] = await Promise.all([
+      proxy(makeRequest('/vip', 'alice')),
+      proxy(makeRequest('/vip', 'bob')),
+    ])
+
+    expect(aliceRes.status).toBe(200)
+    expect(bobRes.status).toBe(404)
+    expect(getEdgeToggly()).toBeNull()
+  })
+
+  it('keeps disabled responses and destinations available through the Next 16 proxy', async () => {
+    mockFetch.mockResolvedValue(
+      createMockResponse([targeting('vip-only', 'alice')]),
+    )
+
+    const config = {
+      appKey: 'test-key',
+      cache: false,
+      enableUsageTracking: false,
+      enableMetrics: false,
+    }
+    const request = makeRequest('/vip', 'bob')
+
+    const customResponse = await createFeatureProxy({
+      config,
+      feature: {
+        featureKey: 'vip-only',
+        requirement: 'all',
+        negate: false,
+        onDisabled: () => new Response('membership required', { status: 451 }),
+      },
+    })(request)
+    expect(customResponse.status).toBe(451)
+    await expect(customResponse.text()).resolves.toBe('membership required')
+
+    const redirect = await createFeatureProxy({
+      config,
+      feature: {
+        featureKey: 'vip-only',
+        redirectTo: '/waitlist',
+        redirectStatus: 302,
+      },
+    })(request)
+    expect(redirect.status).toBe(302)
+    expect(redirect.headers.get('location')).toBe('http://localhost/waitlist')
+
+    const defaultRedirect = await createFeatureProxy({
+      config,
+      feature: { featureKey: 'vip-only', redirectTo: '/waitlist' },
+    })(request)
+    expect(defaultRedirect.status).toBe(307)
+
+    const rewrite = await createFeatureProxy({
+      config,
+      feature: { featureKey: 'vip-only', rewriteTo: '/waitlist' },
+    })(request)
+    expect(rewrite.headers.get('x-middleware-rewrite')).toBe('http://localhost/waitlist')
   })
 })

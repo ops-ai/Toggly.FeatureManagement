@@ -1,4 +1,6 @@
 import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   ContentChild,
   Input,
@@ -53,6 +55,7 @@ import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 @Component({
   selector: 'feature',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule],
   template: `
     <ng-container *ngIf="shouldShow && content">
@@ -79,9 +82,13 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
   shouldShow: boolean = false
   isLoading: boolean = false
   private unsubscribeFeaturesRefresh: (() => void) | undefined
+  private evaluationGeneration = 0
   private unsubscribeLocalGates: (() => void) | undefined
 
-  constructor(private toggly: TogglyService) {}
+  constructor(
+    private readonly toggly: TogglyService,
+    private readonly changeDetector: ChangeDetectorRef,
+  ) {}
 
   ngOnInit(): void {
     this.unsubscribeFeaturesRefresh = this.toggly.subscribeFeaturesRefresh(() => {
@@ -93,6 +100,7 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.evaluationGeneration++
     this.unsubscribeFeaturesRefresh?.()
     this.unsubscribeLocalGates?.()
   }
@@ -102,6 +110,7 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private updateVisibility(): void {
+    const generation = ++this.evaluationGeneration
     let gate: string[] = []
 
     if (this.featureKey) {
@@ -112,6 +121,7 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
     }
 
     this.isLoading = true
+    this.changeDetector.markForCheck()
 
     // Check if we should show the feature during the evaluation of a feature flag
     this.shouldShow = this.toggly.shouldShowFeatureDuringEvaluation
@@ -119,12 +129,21 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
     if (gate.length <= 0) {
       this.shouldShow = !this.negate
       this.isLoading = false
+      this.changeDetector.markForCheck()
     } else {
       const kind = this.contextKind ?? this.kind
       this.toggly
         .evaluateFeatureGate(gate, this.requirement, this.negate, this.context, kind)
-        .then((isEnabled) => (this.shouldShow = isEnabled))
-        .finally(() => (this.isLoading = false))
+        .then((isEnabled) => {
+          if (generation !== this.evaluationGeneration) return
+          this.shouldShow = isEnabled
+          this.changeDetector.markForCheck()
+        })
+        .finally(() => {
+          if (generation !== this.evaluationGeneration) return
+          this.isLoading = false
+          this.changeDetector.markForCheck()
+        })
     }
   }
 }
