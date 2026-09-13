@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0
+
+2026-09-12
+
+### Added
+- `createFeatureProxy` for the Next.js 16 `proxy.ts` convention. It keeps
+  request evaluation isolated from the retained Edge middleware singleton and
+  preserves per-request identity, groups, claims, and request context [OPS-1183].
+
 ## 1.5.0
 
 2026-09-09

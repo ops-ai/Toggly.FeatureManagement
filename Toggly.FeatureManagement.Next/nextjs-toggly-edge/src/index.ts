@@ -13,6 +13,7 @@ export {
 // Middleware utilities
 export {
   createFeatureMiddleware,
+  createFeatureProxy,
   createPathFeatureMiddleware,
   withFeatureGate,
   createFeatureHandler,
@@ -24,6 +25,7 @@ export {
 export type {
   TogglyEdgeConfig,
   MiddlewareFeatureOptions,
+  FeatureProxyOptions,
   FeatureMiddlewareHandler,
   FeatureMiddlewareContext,
   FeaturePathMatcher,
