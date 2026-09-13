@@ -19,4 +19,5 @@
     <ProjectReference Include="..\Toggly.Storage.EntityFramework\Toggly.Storage.EntityFramework.csproj" />
     <ProjectReference Include="..\Toggly.FeatureManagement.Storage.RavenDB\Toggly.FeatureManagement.Storage.RavenDB.csproj" />
   </ItemGroup>
+  <ItemGroup><None Update="Fixtures/Migration/*.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>
