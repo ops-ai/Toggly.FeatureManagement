@@ -138,7 +138,7 @@ jobs:
         with:
           node-version: 'lts/*'
           cache: 'npm'
-          cache-dependency-path: ${{ matrix.path }}/${{ matrix.sdk == 'NestJS' && 'package.json' || 'package-lock.json' }}
+          cache-dependency-path: ${{ matrix.path }}/package-lock.json
 
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
@@ -147,7 +147,7 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: |
           if [ "${{ matrix.sdk }}" = "NestJS" ]; then
-            npm install --package-lock=false
+            npm ci
           else
             npm ci || npm install
           fi

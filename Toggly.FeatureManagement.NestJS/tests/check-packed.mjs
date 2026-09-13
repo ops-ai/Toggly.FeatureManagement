@@ -80,32 +80,40 @@ try {
   const artifact = join(temp, JSON.parse(packed.stdout)[0].filename);
   const consumer = join(temp, 'consumer');
   mkdirSync(consumer);
-  writeFileSync(join(consumer, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
-  const packages = [
-    artifact,
-    `@nestjs/common@${nestVersion}`,
-    `@nestjs/core@${nestVersion}`,
-    `@nestjs/testing@${nestVersion}`,
-    `@nestjs/platform-express@${nestVersion}`,
-    'reflect-metadata@^0.2.2',
-    'rxjs@^7.8.2',
-    'ws@^8.0.0',
-  ];
+  const dependencies = {
+    '@ops-ai/toggly-nestjs': `file:${artifact}`,
+    '@nestjs/common': nestVersion,
+    '@nestjs/core': nestVersion,
+    '@nestjs/testing': nestVersion,
+    '@nestjs/platform-express': nestVersion,
+    'reflect-metadata': '^0.2.2',
+    rxjs: '^7.8.2',
+    ws: '^8.0.0',
+  };
   if (process.env.TOGGLY_TEST_CORE_TARBALL)
-    packages.push(resolve(process.env.TOGGLY_TEST_CORE_TARBALL));
+    dependencies['@ops-ai/toggly-node-core'] = `file:${resolve(
+      process.env.TOGGLY_TEST_CORE_TARBALL,
+    )}`;
+  writeFileSync(
+    join(consumer, 'package.json'),
+    JSON.stringify({ private: true, type: 'module', dependencies }),
+  );
   run(
-    [
-      npmCli,
-      'install',
-      '--no-save',
-      '--package-lock=false',
-      '--ignore-scripts',
-      '--no-audit',
-      '--no-fund',
-      ...packages,
-    ],
+    [npmCli, 'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'],
     consumer,
   );
+  const consumerLock = JSON.parse(readFileSync(join(consumer, 'package-lock.json'), 'utf8'));
+  const lockedCore = consumerLock.packages?.['node_modules/@ops-ai/toggly-node-core'];
+  if (!lockedCore) throw new Error('packed consumer lock does not resolve the Node core');
+  if (
+    !process.env.TOGGLY_TEST_CORE_TARBALL &&
+    !lockedCore.resolved?.startsWith(
+      'https://registry.npmjs.org/@ops-ai/toggly-node-core/-/toggly-node-core-',
+    )
+  ) {
+    throw new Error('packed consumer lock did not resolve the Node core from the public registry');
+  }
+  run([npmCli, 'ci', '--ignore-scripts', '--no-audit', '--no-fund'], consumer);
   for (const name of ['canonical-contract.mjs', 'packed-consumer.mjs'])
     cpSync(join(packageRoot, 'tests', name), join(consumer, name));
   cpSync(join(packageRoot, 'tests', 'fixtures'), join(consumer, 'fixtures'), { recursive: true });
@@ -118,6 +126,8 @@ try {
       core: core.version,
       nest: nestVersion,
       runtime: process.version,
+      consumerLockfile: consumerLock.lockfileVersion,
+      coreIntegrity: lockedCore.integrity,
       dependencySource: process.env.TOGGLY_TEST_CORE_TARBALL
         ? 'reviewed local artifact'
         : 'public registry',
