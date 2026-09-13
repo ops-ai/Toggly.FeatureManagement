@@ -31,7 +31,9 @@ def wheel_for(wheel_dir: Path, package: str) -> Path:
     prefix = package.replace("-", "_") + "-"
     matches = sorted(wheel_dir.glob(f"{prefix}*.whl"))
     if len(matches) != 1:
-        raise RuntimeError(f"Expected one {package} wheel in {wheel_dir}, found {matches}")
+        raise RuntimeError(
+            f"Expected one {package} wheel in {wheel_dir}, found {matches}"
+        )
     return matches[0]
 
 
@@ -214,9 +216,12 @@ def verify_current_optional_hosts() -> None:
         return {"enabled": request.state.toggly.is_enabled("packed-fastapi")}
 
     try:
+
         async def request_fastapi_host() -> httpx.Response:
             transport = httpx.ASGITransport(app=fastapi_app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://packed-host") as http:
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://packed-host"
+            ) as http:
                 return await http.get("/packed-fastapi")
 
         response = asyncio.run(request_fastapi_host())
@@ -230,10 +235,14 @@ def verify_current_optional_hosts() -> None:
     redis_client.ping()
     provider = RedisSnapshotProvider(client=redis_client, prefix="toggly-packed-host:")
     try:
-        provider.save("packed-app", "Production", [FeatureDefinition(feature_key="packed-cache")])
+        provider.save(
+            "packed-app", "Production", [FeatureDefinition(feature_key="packed-cache")]
+        )
         definitions = provider.load("packed-app", "Production")
         assert definitions is not None
-        assert [definition.feature_key for definition in definitions] == ["packed-cache"]
+        assert [definition.feature_key for definition in definitions] == [
+            "packed-cache"
+        ]
     finally:
         provider.delete("packed-app", "Production")
         provider.close()

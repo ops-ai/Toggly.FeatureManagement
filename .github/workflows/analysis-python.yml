@@ -55,6 +55,11 @@ jobs:
       - name: Lint toggly-cache
         run: ruff check toggly-cache/src
 
+      - name: Lint packed host fixture
+        run: |
+          ruff check tests/host-fixtures
+          ruff format --check tests/host-fixtures
+
   type-check:
     name: Type Check
     runs-on: ubuntu-latest
@@ -357,8 +362,13 @@ jobs:
 
       - name: Build release wheels
         run: |
+          if [ "${{ matrix.frameworks }}" = "all" ]; then
+            projects=(./toggly ./toggly-django ./toggly-flask ./toggly-fastapi ./toggly-cache)
+          else
+            projects=(./toggly ./toggly-django)
+          fi
           python -m pip wheel --no-deps --wheel-dir .packed-wheels \
-            ./toggly ./toggly-django ./toggly-flask ./toggly-fastapi ./toggly-cache
+            "${projects[@]}"
 
       - name: Run isolated packed host
         env:
@@ -538,12 +548,12 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-python
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Python"
-            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.sources=${{ env.SDK_ROOT }}/toggly/src,${{ env.SDK_ROOT }}/toggly-django/src,${{ env.SDK_ROOT }}/toggly-flask/src,${{ env.SDK_ROOT }}/toggly-fastapi/src,${{ env.SDK_ROOT }}/toggly-cache/src
             -Dsonar.exclusions=**/venv/**,**/.venv/**,**/dist/**,**/build/**,**/*.egg-info/**,**/tests/**,**/__pycache__/**,**/.pytest_cache/**,**/telemetry/pb/**
             -Dsonar.coverage.exclusions=**/telemetry/pb/**
             -Dsonar.cpd.exclusions=**/tests/**,**/telemetry/pb/**
-            -Dsonar.tests=${{ env.SDK_ROOT }}
-            -Dsonar.test.inclusions=**/tests/**
+            -Dsonar.tests=${{ env.SDK_ROOT }}/toggly/tests,${{ env.SDK_ROOT }}/toggly-django/tests,${{ env.SDK_ROOT }}/toggly-flask/tests,${{ env.SDK_ROOT }}/toggly-fastapi/tests,${{ env.SDK_ROOT }}/toggly-cache/tests,${{ env.SDK_ROOT }}/tests/host-fixtures
+            -Dsonar.test.inclusions=**/*.py
             -Dsonar.python.coverage.reportPaths=coverage/*-coverage.xml
         continue-on-error: true
 
@@ -563,12 +573,12 @@ jobs:
           args: >
             -Dsonar.projectKey=toggly-sdks-python
             -Dsonar.projectName="Toggly SDKs - Python"
-            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.sources=${{ env.SDK_ROOT }}/toggly/src,${{ env.SDK_ROOT }}/toggly-django/src,${{ env.SDK_ROOT }}/toggly-flask/src,${{ env.SDK_ROOT }}/toggly-fastapi/src,${{ env.SDK_ROOT }}/toggly-cache/src
             -Dsonar.exclusions=**/venv/**,**/.venv/**,**/dist/**,**/build/**,**/*.egg-info/**,**/tests/**,**/__pycache__/**,**/.pytest_cache/**,**/telemetry/pb/**
             -Dsonar.coverage.exclusions=**/telemetry/pb/**
             -Dsonar.cpd.exclusions=**/tests/**,**/telemetry/pb/**
-            -Dsonar.tests=${{ env.SDK_ROOT }}
-            -Dsonar.test.inclusions=**/tests/**
+            -Dsonar.tests=${{ env.SDK_ROOT }}/toggly/tests,${{ env.SDK_ROOT }}/toggly-django/tests,${{ env.SDK_ROOT }}/toggly-flask/tests,${{ env.SDK_ROOT }}/toggly-fastapi/tests,${{ env.SDK_ROOT }}/toggly-cache/tests,${{ env.SDK_ROOT }}/tests/host-fixtures
+            -Dsonar.test.inclusions=**/*.py
             -Dsonar.python.coverage.reportPaths=coverage/*-coverage.xml
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
