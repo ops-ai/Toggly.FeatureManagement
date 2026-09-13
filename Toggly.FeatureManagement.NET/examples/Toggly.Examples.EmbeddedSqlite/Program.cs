@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.FeatureManagement;
 using Toggly.FeatureManagement.Dashboard;
 using Toggly.FeatureManagement.Storage.EntityFramework;
 using Toggly.FeatureManagement.Storage.EntityFramework.Configuration;
@@ -21,6 +22,8 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 
 app.MapGet("/", () => Results.Ok(new { name = "Toggly Embedded SQLite sample", catalog = "EmbeddedSqliteSample" }));
+app.MapGet("/checkout", async (IFeatureManager features) =>
+    Results.Ok(new { newCheckout = await features.IsEnabledAsync("NewCheckout") }));
 app.MapTogglyDashboard("/internal/features");
 
 app.Run();

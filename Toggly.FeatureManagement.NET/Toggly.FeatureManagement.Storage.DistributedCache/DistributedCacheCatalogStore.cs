@@ -42,7 +42,11 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
         }
 
         /// <inheritdoc />
-        public CatalogStoreCapabilities Capabilities { get; } = new CatalogStoreCapabilities { SupportsMultipleWriters = false };
+        public CatalogStoreCapabilities Capabilities => new CatalogStoreCapabilities
+        {
+            SupportsMultipleWriters = false,
+            IsReadOnly = _options.AccessMode != CatalogCacheAccessMode.SingleWriter
+        };
 
         /// <inheritdoc />
         public async Task<CatalogSnapshot?> ReadAsync(string catalogName, CancellationToken cancellationToken = default(CancellationToken))

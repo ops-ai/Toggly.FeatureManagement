@@ -1,3 +1,0 @@
-@model DashboardFeatureInput
-@{ Layout = "_Layout"; var mount = (string?)ViewData["DashboardMount"] ?? ""; var basePath = $"{Context.Request.PathBase}{mount}"; }
-<section class="card"><h1>Catalog changed</h1><p>Another edit changed the catalog before this request could be applied. Your changes were not saved.</p><a class="button" href="@basePath">Reload current version</a></section>

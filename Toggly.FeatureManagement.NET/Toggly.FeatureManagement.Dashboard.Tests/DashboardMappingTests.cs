@@ -1,18 +1,280 @@
 using System.Net;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Toggly.FeatureManagement.Catalog;
 using Toggly.FeatureManagement.Dashboard;
+using Toggly.FeatureManagement.Configuration;
 using Xunit;
 
 namespace Toggly.FeatureManagement.Dashboard.Tests;
 
 public sealed class DashboardMappingTests
 {
+    [Fact]
+    public async Task Dashboard_area_does_not_collide_with_a_host_controller_of_the_same_name()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, addHostController: true);
+        (await host.Client.GetAsync("/features/")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await host.Client.GetStringAsync("/TogglyDashboard/Index")).Should().Be("host controller");
+    }
+    [Fact]
+    public async Task Invalid_rule_returns_the_create_form_with_field_errors()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Invalid", ["Name"] = "Keep my name",
+            ["Rules[0].Name"] = "Percentage", ["Rules[0].Percentage"] = "101"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("<h1>Create feature</h1>").And.Contain("Keep my name").And.Contain("validation-summary-errors");
+        host.Feature("Invalid").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Missing_upload_returns_the_import_form_with_validation_errors()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        var response = await PostForm(host, "/features/import", "/features/import/preview", new());
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("name=\"catalog\"").And.Contain("validation-summary-errors");
+    }
+
+    [Fact]
+    public async Task Tags_with_literal_commas_survive_editing()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Tags", ["Name"] = "Tags", ["Tags"] = "checkout,legacy\ncommerce"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        host.Feature("Tags")!.Tags.Should().BeEquivalentTo("checkout,legacy", "commerce");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("invalid")]
+    public async Task State_changes_require_an_explicit_valid_boolean(string? value)
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, featureCount: 1, allowWrites: true);
+        var fields = new Dictionary<string, string> { ["key"] = "Feature01", ["expectedRevision"] = "current" };
+        if (value != null) fields["enabled"] = value;
+        var response = await PostForm(host, "/features/features/edit?key=Feature01", "/features/features/state", fields);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        host.Feature("Feature01")!.Enabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Claim_editor_keeps_claim_value_separate_from_rollout_percentage()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Pro", ["Name"] = "Pro",
+            ["Rules[0].Name"] = "UserClaims", ["Rules[0].Claim"] = "plan", ["Rules[0].Value"] = "pro", ["Rules[0].Percentage"] = "25"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        var html = await host.Client.GetStringAsync("/features/features/edit?key=Pro");
+        html.Should().Contain("name=\"Rules[0].Percentage\" value=\"25\"").And.Contain("name=\"Rules[0].Value\" value=\"pro\"");
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/assets/dashboard.css")]
+    [InlineData("/export")]
+    [InlineData("/import")]
+    public async Task Host_policy_protects_remote_pages_assets_and_downloads(string path)
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, usePolicy: true, remote: true);
+        (await host.Client.GetAsync("/features" + path)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        host.Client.DefaultRequestHeaders.Add("X-Test-Admin", "false");
+        (await host.Client.GetAsync("/features" + path)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        host.Client.DefaultRequestHeaders.Remove("X-Test-Admin");
+        host.Client.DefaultRequestHeaders.Add("X-Test-Admin", "true");
+        (await host.Client.GetAsync("/features" + path)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Pathbase_and_nested_mount_are_preserved_in_forms_assets_and_redirects()
+    {
+        await using var host = await DashboardHost.StartAsync("/internal/flags/", catalogExists: true, allowWrites: true, pathBase: "/host");
+        var html = await host.Client.GetStringAsync("/host/internal/flags/features/new");
+        html.Should().Contain("/host/internal/flags/assets/dashboard.css").And.Contain("action=\"/host/internal/flags/features/create\"");
+        var response = await PostForm(host, "/host/internal/flags/features/new", "/host/internal/flags/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Checkout", ["Name"] = "Checkout"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        response.Headers.Location!.ToString().Should().Be("/host/internal/flags/");
+        (await host.Client.GetAsync("/host/health")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+    [Fact]
+    public void Editable_dashboard_rejects_a_reader_store_at_mapping()
+    {
+        var create = () => DashboardHost.Create("/features", storeReadOnly: true);
+        create.Should().Throw<InvalidOperationException>().WithMessage("*read-only catalog store*");
+    }
+    [Fact]
+    public async Task Entity_rule_creation_retains_the_registered_schema_and_operator()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "LargeOrder", ["Name"] = "Large order", ["ContextKind"] = "Order",
+            ["Rules[0].Name"] = "ContextProperty", ["Rules[0].ContextKind"] = "Order", ["Rules[0].Property"] = "Total", ["Rules[0].Operator"] = "gte", ["Rules[0].Value"] = "100"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
+        host.Feature("LargeOrder")!.Rules.Single().Parameters["ValueType"].Should().Be("number");
+        var form = await host.Client.GetStringAsync("/features/features/edit?key=LargeOrder");
+        form.Should().Contain("value=\"gte\" selected=\"selected\"");
+        var export = CatalogJson.Parse(await host.Client.GetStringAsync("/features/export"));
+        export.Contexts.Should().ContainSingle().Which.Kind.Should().Be("Order");
+    }
+    [Theory]
+    [InlineData("X-Forwarded-Proto")]
+    [InlineData("X-Original-Host")]
+    [InlineData("X-Original-Proto")]
+    [InlineData("X-Forwarded-Prefix")]
+    public async Task Forwarding_headers_cannot_enable_loopback_access(string header)
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/features/");
+        request.Headers.Add(header, "https");
+        (await host.Client.SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Readonly_rejects_a_valid_antiforgery_post_before_running_editor_commands()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", readOnly: true, catalogExists: true, allowWrites: true);
+        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Target", ["Name"] = "Target",
+            ["command"] = "add-rule", ["newRuleName"] = "Targeting"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        host.Feature("Target").Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(650)]
+    public async Task Import_preview_and_apply_create_an_absent_catalog_through_antiforgery_protected_forms(int featureCount)
+    {
+        await using var host = await DashboardHost.StartAsync("/features", allowWrites: true);
+        var form = await host.Client.GetAsync("/features/import");
+        var html = await form.Content.ReadAsStringAsync();
+        var token = WebUtility.HtmlDecode(Regex.Match(html, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value);
+        var cookie = form.Headers.GetValues("Set-Cookie").Single(value => value.StartsWith(".AspNetCore.Antiforgery.", StringComparison.Ordinal)).Split(';')[0];
+        using var upload = new MultipartFormDataContent();
+        upload.Add(new StringContent(token), "__RequestVerificationToken");
+        var document = new CatalogDocument
+        {
+            Features = Enumerable.Range(0, featureCount).Select(index => new CatalogFeature
+            {
+                Key = index == 0 ? "Checkout" : "Checkout" + index, Name = "Checkout " + index, Description = new string('x', 6000),
+                Rules = { new() { Name = "Percentage", Parameters = new() { ["Value"] = "25" } } }
+            }).ToList()
+        };
+        upload.Add(new StringContent(CatalogJson.Serialize(document)), "catalog", "catalog.json");
+        var previewRequest = new HttpRequestMessage(HttpMethod.Post, "/features/import/preview") { Content = upload };
+        previewRequest.Headers.Add("Cookie", cookie);
+        var preview = await host.Client.SendAsync(previewRequest);
+        preview.StatusCode.Should().Be(HttpStatusCode.OK, await preview.Content.ReadAsStringAsync());
+        var previewHtml = await preview.Content.ReadAsStringAsync();
+        var fields = new Dictionary<string, string>();
+        foreach (var name in new[] { "payload", "fingerprint", "expectedRevision", "__RequestVerificationToken" })
+            fields[name] = WebUtility.HtmlDecode(Regex.Match(previewHtml, $"name=\"{name}\" value=\"([^\"]*)\"").Groups[1].Value);
+        fields["selectedAddKeys"] = "Checkout";
+        var apply = new HttpRequestMessage(HttpMethod.Post, "/features/import/apply") { Content = new FormUrlEncodedContent(fields) };
+        apply.Headers.Add("Cookie", cookie);
+        var response = await host.Client.SendAsync(apply);
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
+        host.Feature("Checkout")!.Enabled.Should().BeFalse();
+        host.Feature("Checkout")!.Rules.Single().Parameters["Value"].Should().Be("25");
+    }
+
+    [Fact]
+    public async Task Stale_create_preserves_submitted_values_and_returns_conflict()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "stale", ["IsNew"] = "true", ["Key"] = "Checkout", ["Name"] = "My unsaved name",
+            ["Description"] = "My unsaved description"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("My unsaved name").And.Contain("My unsaved description");
+        host.Feature("Checkout").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Saving_a_full_percentage_rule_does_not_discard_it()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Rollout", ["Name"] = "Rollout",
+            ["Rules[0].Name"] = "Percentage", ["Rules[0].Percentage"] = "100"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
+        host.Feature("Rollout")!.Rules.Should().ContainSingle().Which.Parameters["Value"].Should().Be("100");
+    }
+
+    [Fact]
+    public async Task Targeting_editor_preserves_exclusions_and_case_matching()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Target", ["Name"] = "Target",
+            ["Rules[0].Name"] = "Targeting", ["Rules[0].Percentage"] = "0", ["Rules[0].Users"] = "Alice",
+            ["Rules[0].ExclusionUsers"] = "Bob", ["Rules[0].ExclusionGroups"] = "blocked", ["Rules[0].IgnoreCase"] = "false"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
+        var rule = host.Feature("Target")!.Rules.Single();
+        rule.Parameters.Should().Contain("Audience.Exclusion.Users:0", "Bob").And.Contain("Audience.Exclusion.Groups:0", "blocked").And.Contain("IgnoreCase", "false");
+        var form = await host.Client.GetStringAsync("/features/features/edit?key=Target");
+        form.Should().Contain("name=\"Rules[0].ExclusionUsers\">Bob</textarea>").And.Contain("name=\"Rules[0].ExclusionGroups\">blocked</textarea>");
+    }
+
+    [Fact]
+    public async Task Adding_a_targeting_rule_without_javascript_defaults_to_zero_rollout()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Target", ["Name"] = "Target",
+            ["command"] = "add-rule", ["newRuleName"] = "Targeting"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("name=\"Rules[0].Name\" value=\"Targeting\"")
+            .And.Contain("name=\"Rules[0].Percentage\" value=\"0\"")
+            .And.Contain("User.Identity.Name");
+        host.Feature("Target").Should().BeNull();
+    }
+
+    private static async Task<HttpResponseMessage> PostForm(DashboardHost host, string formPath, string action, Dictionary<string, string> values)
+    {
+        var form = await host.Client.GetAsync(formPath);
+        var html = await form.Content.ReadAsStringAsync();
+        values["__RequestVerificationToken"] = WebUtility.HtmlDecode(Regex.Match(html, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value);
+        var request = new HttpRequestMessage(HttpMethod.Post, action) { Content = new FormUrlEncodedContent(values) };
+        request.Headers.Add("Cookie", form.Headers.GetValues("Set-Cookie").Single(value => value.StartsWith(".AspNetCore.Antiforgery.", StringComparison.Ordinal)).Split(';')[0]);
+        return await host.Client.SendAsync(request);
+    }
+
     [Fact]
     public async Task Nested_mount_serves_dashboard_but_not_default_controller_route()
     {
@@ -171,27 +433,40 @@ public sealed class DashboardMappingTests
 
 internal sealed class DashboardHost : IAsyncDisposable
 {
+    private sealed class Order { public string Id { get; set; } = "one"; public decimal Total { get; set; } }
     private readonly WebApplication _application;
     private readonly TestCatalogStore _store;
     private DashboardHost(WebApplication application, TestCatalogStore store) { _application = application; _store = store; }
     public HttpClient Client { get; private set; } = null!;
 
-    public static DashboardHost Create(string mount, bool readOnly = false, bool catalogExists = false, int featureCount = 0, string? applicationName = null, bool allowWrites = false)
+    public static DashboardHost Create(string mount, bool readOnly = false, bool catalogExists = false, int featureCount = 0, string? applicationName = null, bool allowWrites = false, bool storeReadOnly = false, bool usePolicy = false, bool remote = false, string? pathBase = null, bool addHostController = false)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
+        if (usePolicy)
+        {
+            builder.Services.AddAuthentication("Test").AddScheme<AuthenticationSchemeOptions, DashboardTestAuthentication>("Test", _ => { });
+            builder.Services.AddAuthorization(options => options.AddPolicy("FeatureAdmins", policy => policy.RequireClaim("feature-admin", "true")));
+        }
         var store = new TestCatalogStore(catalogExists, featureCount, allowWrites);
+        store.Capabilities.IsReadOnly = storeReadOnly;
         builder.Services.AddSingleton<ITogglyCatalogStore>(store);
+        builder.Services.AddTogglyEntityContext<Order>("Order", order => order.Id, schema => schema.Property("Total", "number"));
         builder.Services.AddTogglyDashboard(options => { options.CatalogName = "Tests"; options.ReadOnly = readOnly; });
+        if (addHostController) builder.Services.AddControllersWithViews().AddApplicationPart(typeof(DashboardMappingTests).Assembly);
         var application = builder.Build();
+        if (pathBase != null) application.UsePathBase(pathBase);
+        if (usePolicy) { application.UseAuthentication(); application.UseAuthorization(); }
         application.Use(async (context, next) =>
         {
-            context.Connection.RemoteIpAddress ??= IPAddress.Loopback;
+            context.Connection.RemoteIpAddress = remote ? IPAddress.Parse("203.0.113.10") : IPAddress.Loopback;
             await next();
         });
         application.MapControllerRoute("host-default", "{controller=Home}/{action=Index}/{id?}");
+        application.MapGet("/health", () => "ok");
         var host = new DashboardHost(application, store);
-        host.Map(mount, applicationName);
+        var endpoints = application.MapTogglyDashboard(mount, new TogglyDashboardOptions { ApplicationName = applicationName });
+        if (usePolicy) endpoints.RequireAuthorization("FeatureAdmins");
         return host;
     }
 
@@ -205,9 +480,9 @@ internal sealed class DashboardHost : IAsyncDisposable
         return new DashboardHost(builder.Build(), store);
     }
 
-    public static async Task<DashboardHost> StartAsync(string mount, bool readOnly = false, bool catalogExists = false, int featureCount = 0, string? applicationName = null, bool allowWrites = false)
+    public static async Task<DashboardHost> StartAsync(string mount, bool readOnly = false, bool catalogExists = false, int featureCount = 0, string? applicationName = null, bool allowWrites = false, bool usePolicy = false, bool remote = false, string? pathBase = null, bool addHostController = false)
     {
-        var host = Create(mount, readOnly, catalogExists, featureCount, applicationName, allowWrites);
+        var host = Create(mount, readOnly, catalogExists, featureCount, applicationName, allowWrites, usePolicy: usePolicy, remote: remote, pathBase: pathBase, addHostController: addHostController);
         await host._application.StartAsync();
         host.Client = host._application.GetTestClient();
         return host;
@@ -246,9 +521,20 @@ internal sealed class DashboardHost : IAsyncDisposable
         public CatalogFeature? Feature(string key) => _snapshot?.Document.Features.SingleOrDefault(feature => string.Equals(feature.Key, key, StringComparison.Ordinal));
         public Task<CatalogWriteResult> TryWriteAsync(string catalogName, CatalogDocument document, string? expectedRevision, CancellationToken cancellationToken = default)
         {
-            if (!_allowWrites || _snapshot == null || !string.Equals(_snapshot.Revision, expectedRevision, StringComparison.Ordinal)) return Task.FromResult(CatalogWriteResult.Conflict(_snapshot));
-            _snapshot = new CatalogSnapshot { CatalogName = catalogName, Revision = "next", UpdatedAtUtc = DateTimeOffset.UtcNow, Document = document };
+            if (!_allowWrites || !string.Equals(_snapshot?.Revision, expectedRevision, StringComparison.Ordinal)) return Task.FromResult(CatalogWriteResult.Conflict(_snapshot));
+            _snapshot = new CatalogSnapshot { CatalogName = catalogName, Revision = Guid.NewGuid().ToString(), UpdatedAtUtc = DateTimeOffset.UtcNow, Document = document };
             return Task.FromResult(CatalogWriteResult.Written(_snapshot));
         }
+    }
+}
+
+internal sealed class DashboardTestAuthentication(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
+    : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+{
+    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    {
+        if (!Request.Headers.TryGetValue("X-Test-Admin", out var value)) return Task.FromResult(AuthenticateResult.NoResult());
+        var identity = new ClaimsIdentity([new Claim("feature-admin", value.ToString())], Scheme.Name);
+        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
     }
 }

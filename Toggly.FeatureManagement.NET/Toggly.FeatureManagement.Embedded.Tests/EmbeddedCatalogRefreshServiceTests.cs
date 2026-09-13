@@ -23,6 +23,9 @@ public class EmbeddedCatalogRefreshServiceTests
         await service.StartAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(1));
 
         coordinator.Diagnostics.StorageState.Should().Be(EmbeddedStorageState.Unavailable);
+        using var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(25));
+        await coordinator.RefreshAsync(cancelled.Token).WaitAsync(TimeSpan.FromSeconds(1));
+        store.ReadCount.Should().Be(1, "a timed-out non-cooperative read must not overlap a second read");
         await service.StopAsync(CancellationToken.None);
     }
 
@@ -47,8 +50,13 @@ public class EmbeddedCatalogRefreshServiceTests
 
     private sealed class NonCancellingStore : ITogglyCatalogStore
     {
+        public int ReadCount;
         public CatalogStoreCapabilities Capabilities => new() { SupportsMultipleWriters = true };
-        public Task<CatalogSnapshot?> ReadAsync(string catalogName, CancellationToken cancellationToken = default) => new TaskCompletionSource<CatalogSnapshot?>().Task;
+        public Task<CatalogSnapshot?> ReadAsync(string catalogName, CancellationToken cancellationToken = default)
+        {
+            ReadCount++;
+            return new TaskCompletionSource<CatalogSnapshot?>().Task;
+        }
         public Task<CatalogWriteResult> TryWriteAsync(string catalogName, CatalogDocument document, string? expectedRevision, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 

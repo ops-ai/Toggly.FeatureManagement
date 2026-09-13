@@ -2,11 +2,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
+using Toggly.FeatureManagement.Embedded;
 
 namespace Toggly.FeatureManagement.Dashboard;
 
 /// <summary>Prevents dashboard controllers from being exposed by unrelated host MVC routes.</summary>
-public sealed class TogglyDashboardAccessFilter : IAsyncActionFilter
+public sealed class TogglyDashboardAccessFilter(IOptions<TogglyEmbeddedOptions> options) : IAsyncActionFilter
 {
     /// <inheritdoc />
     public Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
@@ -19,7 +21,8 @@ public sealed class TogglyDashboardAccessFilter : IAsyncActionFilter
             return Task.CompletedTask;
         }
 
-        if (!TogglyDashboardAccess.IsAllowed(context.HttpContext, endpoint))
+        if (!TogglyDashboardAccess.IsAllowed(context.HttpContext, endpoint) ||
+            (options.Value.ReadOnly && HttpMethods.IsPost(context.HttpContext.Request.Method)))
         {
             context.Result = new StatusCodeResult(StatusCodes.Status403Forbidden);
             return Task.CompletedTask;
@@ -43,10 +46,10 @@ internal static class TogglyDashboardAccess
             return true;
         }
 
-        if (context.Request.Headers.ContainsKey("Forwarded") ||
-            context.Request.Headers.ContainsKey("X-Forwarded-For") ||
-            context.Request.Headers.ContainsKey("X-Forwarded-Host") ||
-            context.Request.Headers.ContainsKey("X-Original-For"))
+        if (context.Request.Headers.Keys.Any(header =>
+            header.Equals("Forwarded", StringComparison.OrdinalIgnoreCase) ||
+            header.StartsWith("X-Forwarded-", StringComparison.OrdinalIgnoreCase) ||
+            header.StartsWith("X-Original-", StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }

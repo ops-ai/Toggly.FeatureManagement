@@ -1,8 +1,9 @@
+using System.Text;
 using Toggly.FeatureManagement.Catalog;
 
 namespace Toggly.FeatureManagement.Embedded;
 
-public sealed class EmbeddedCatalogCoordinator
+public sealed class EmbeddedCatalogCoordinator : IDisposable
 {
     private readonly ITogglyCatalogStore _store;
     private readonly EmbeddedFeatureProvider _provider;
@@ -13,6 +14,9 @@ public sealed class EmbeddedCatalogCoordinator
     private readonly object _diagnosticsLock = new();
     private Dictionary<string, bool> _activeFeatureStates = new(StringComparer.Ordinal);
     private bool _hasPublished;
+    private string? _activeContent;
+    private Task<CatalogSnapshot?>? _pendingRead;
+    private CancellationTokenSource? _readCancellation;
 
     internal EmbeddedCatalogCoordinator(ITogglyCatalogStore store, EmbeddedFeatureProvider provider, TogglyEmbeddedOptions options, IFeatureStateInternalService? stateService = null, IEmbeddedClock? clock = null)
     {
@@ -21,7 +25,7 @@ public sealed class EmbeddedCatalogCoordinator
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _stateService = stateService;
         _clock = clock ?? new SystemEmbeddedClock();
-        Diagnostics = new EmbeddedRuntimeDiagnostics { ReadOnly = options.ReadOnly, IsWriter = !options.ReadOnly };
+        Diagnostics = new EmbeddedRuntimeDiagnostics { ReadOnly = options.ReadOnly || store.Capabilities.IsReadOnly, IsWriter = !options.ReadOnly && !store.Capabilities.IsReadOnly };
     }
 
     public EmbeddedRuntimeDiagnostics Diagnostics { get; }
@@ -30,28 +34,28 @@ public sealed class EmbeddedCatalogCoordinator
 
     internal async Task RefreshAsync(CancellationToken cancellationToken, TimeSpan? readTimeout)
     {
-        if (!await _refreshGate.WaitAsync(0, cancellationToken).ConfigureAwait(false)) return;
+        await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var readTask = _store.ReadAsync(_options.CatalogName!, cancellationToken);
-            CatalogSnapshot? snapshot;
-            if (readTimeout.HasValue)
+            if (_pendingRead is { IsCanceled: true } or { IsFaulted: true }) ClearRead();
+            if (_pendingRead == null)
             {
-                var timeoutTask = Task.Delay(readTimeout.Value);
-                var cancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-                var completed = await Task.WhenAny(readTask, timeoutTask, cancellationTask).ConfigureAwait(false);
-                if (completed == timeoutTask)
-                {
-                    _ = readTask.ContinueWith(task => _ = task.Exception, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
-                    SetFailure(new TimeoutException("Initial embedded catalog load timed out."));
-                    return;
-                }
-                if (completed == cancellationTask) throw new OperationCanceledException(cancellationToken);
+                _readCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                _pendingRead = _store.ReadAsync(_options.CatalogName!, _readCancellation.Token);
+                _ = _pendingRead.ContinueWith(task => _ = task.Exception,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
             }
-            snapshot = await readTask.ConfigureAwait(false);
+            // Keep ownership of timed-out reads until they finish, including stores
+            // which ignore cancellation. A later tick must not launch another read.
+            var snapshot = await _pendingRead.WaitAsync(readTimeout ?? _options.InitialLoadTimeout, cancellationToken).ConfigureAwait(false);
             if (snapshot == null) { SetMissing(); return; }
+            var content = CatalogJson.Serialize(snapshot.Document);
+            if (Encoding.UTF8.GetByteCount(content) > _options.MaxCatalogBytes)
+                throw new InvalidOperationException("The stored catalog exceeds the configured maximum size.");
             if (_hasPublished && string.Equals(Diagnostics.ActiveRevision, snapshot.Revision, StringComparison.Ordinal))
             {
+                if (!string.Equals(_activeContent, content, StringComparison.Ordinal))
+                    throw new InvalidOperationException("The stored catalog changed without a new revision.");
                 lock (_diagnosticsLock)
                 {
                     Diagnostics.LastSuccessfulRefreshUtc = _clock.UtcNow;
@@ -63,6 +67,7 @@ public sealed class EmbeddedCatalogCoordinator
             var candidate = EmbeddedCatalogCompiler.Compile(snapshot);
             _provider.Publish(candidate);
             _hasPublished = true;
+            _activeContent = content;
             lock (_diagnosticsLock)
             {
                 Diagnostics.ActiveRevision = snapshot.Revision;
@@ -80,16 +85,35 @@ public sealed class EmbeddedCatalogCoordinator
         }
         catch (Exception exception)
         {
+            _readCancellation?.Cancel();
             SetFailure(exception);
         }
-        finally { _refreshGate.Release(); }
+        finally
+        {
+            if (_pendingRead == null || _pendingRead.IsCompleted) ClearRead();
+            _refreshGate.Release();
+        }
+    }
+
+    private void ClearRead()
+    {
+        _pendingRead = null;
+        _readCancellation?.Dispose();
+        _readCancellation = null;
+    }
+
+    public void Dispose()
+    {
+        _readCancellation?.Cancel();
+        _readCancellation?.Dispose();
+        _refreshGate.Dispose();
     }
 
     private void SetMissing()
     {
         lock (_diagnosticsLock)
         {
-            Diagnostics.StorageState = _hasPublished ? EmbeddedStorageState.Stale : EmbeddedStorageState.Available;
+            Diagnostics.StorageState = _hasPublished ? EmbeddedStorageState.Stale : EmbeddedStorageState.Uninitialized;
             Diagnostics.LastError = _hasPublished ? "Catalog storage no longer contains the active catalog." : null;
         }
     }
@@ -99,7 +123,9 @@ public sealed class EmbeddedCatalogCoordinator
         lock (_diagnosticsLock)
         {
             Diagnostics.StorageState = _hasPublished ? EmbeddedStorageState.Stale : EmbeddedStorageState.Unavailable;
-            Diagnostics.LastError = exception.Message;
+            Diagnostics.LastError = exception is TimeoutException
+                ? "Catalog storage did not respond before the configured timeout."
+                : "Catalog storage could not supply a valid snapshot.";
         }
     }
 }

@@ -7,6 +7,14 @@ namespace Toggly.FeatureManagement.Embedded.Tests;
 public class EmbeddedCatalogCoordinatorTests
 {
     [Fact]
+    public async Task Absent_catalog_has_uninitialized_diagnostics()
+    {
+        using var coordinator = new EmbeddedCatalogCoordinator(new TestStore(null), new EmbeddedFeatureProvider(), new TogglyEmbeddedOptions { CatalogName = "Orders" });
+        await coordinator.RefreshAsync(default);
+        coordinator.Diagnostics.StorageState.Should().Be(EmbeddedStorageState.Uninitialized);
+        coordinator.Diagnostics.ActiveRevision.Should().BeNull();
+    }
+    [Fact]
     public async Task RefreshAsync_PublishesCompleteSnapshot_AndRemovesDeletedDefinitions()
     {
         var store = new TestStore(new CatalogSnapshot
@@ -94,6 +102,25 @@ public class EmbeddedCatalogCoordinatorTests
         await coordinator.RefreshAsync(CancellationToken.None);
 
         offTransitions.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Refresh_rejects_oversized_or_changed_content_even_when_revision_is_reused(bool oversized)
+    {
+        var store = new TestStore(EnabledSnapshot("one", "Feature"));
+        var provider = new EmbeddedFeatureProvider();
+        using var coordinator = new EmbeddedCatalogCoordinator(store, provider,
+            new TogglyEmbeddedOptions { CatalogName = "Orders", MaxCatalogBytes = 500 });
+        await coordinator.RefreshAsync(default);
+        store.Current = EnabledSnapshot("one", "Feature");
+        store.Current.Document.Features[0].Enabled = false;
+        if (oversized) store.Current.Document.Features[0].Description = new string('x', 600);
+        await coordinator.RefreshAsync(default);
+        coordinator.Diagnostics.StorageState.Should().Be(EmbeddedStorageState.Stale);
+        provider.TryGetFeatureModel("Feature", out var active).Should().BeTrue();
+        active!.Filters.Should().ContainSingle(filter => filter.Name == "AlwaysOn");
     }
 
     private static CatalogSnapshot EnabledSnapshot(string revision, string key) => new()

@@ -48,7 +48,8 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<EmbeddedCatalogEditor>(p => new EmbeddedCatalogEditor(
             p.GetRequiredService<ITogglyCatalogStore>(),
             p.GetRequiredService<EmbeddedCatalogCoordinator>(),
-            p.GetRequiredService<IOptions<TogglyEmbeddedOptions>>()));
+            p.GetRequiredService<IOptions<TogglyEmbeddedOptions>>(),
+            p.GetRequiredService<EmbeddedContextSchemaProvider>()));
         services.TryAddSingleton<EmbeddedImportService>(p => new EmbeddedImportService(
             p.GetRequiredService<EmbeddedCatalogEditor>(),
             p.GetRequiredService<IOptions<TogglyEmbeddedOptions>>()));

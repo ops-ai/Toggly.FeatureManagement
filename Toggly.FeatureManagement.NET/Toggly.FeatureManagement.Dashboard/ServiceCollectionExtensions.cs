@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
             .AddApplicationPart(typeof(ServiceCollectionExtensions).Assembly);
         services.TryAddScoped<TogglyDashboardAccessFilter>();
         services.TryAddScoped<TogglyDashboardNoStoreFilter>();
+        services.TryAddScoped<TogglyDashboardFormLimitsFilter>();
         return featureManagement;
     }
 }

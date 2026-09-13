@@ -364,7 +364,7 @@ namespace Toggly.FeatureManagement.Catalog
             {
                 if (key != "Audience.DefaultRolloutPercentage" && key != "IgnoreCase" &&
                     !IsIndexedKey(key, "Audience.Users:") && !IsIndexedKey(key, "Audience.Groups:") &&
-                    !IsIndexedKey(key, "Audience.ExclusionUsers:") && !IsIndexedKey(key, "Audience.ExclusionGroups:"))
+                    !IsIndexedKey(key, "Audience.Exclusion.Users:") && !IsIndexedKey(key, "Audience.Exclusion.Groups:"))
                 {
                     errors.Add(new CatalogValidationError(path + ".parameters." + key, "Unknown Targeting parameter."));
                 }
@@ -372,8 +372,8 @@ namespace Toggly.FeatureManagement.Catalog
 
             ValidateIndexedParameters(parameters, "Audience.Users:", path, errors);
             ValidateIndexedParameters(parameters, "Audience.Groups:", path, errors);
-            ValidateIndexedParameters(parameters, "Audience.ExclusionUsers:", path, errors);
-            ValidateIndexedParameters(parameters, "Audience.ExclusionGroups:", path, errors);
+            ValidateIndexedParameters(parameters, "Audience.Exclusion.Users:", path, errors);
+            ValidateIndexedParameters(parameters, "Audience.Exclusion.Groups:", path, errors);
             ValidatePercentage(parameters, path, errors, "Audience.DefaultRolloutPercentage");
             if (parameters.TryGetValue("IgnoreCase", out var ignoreCase) && !bool.TryParse(ignoreCase, out _))
             {

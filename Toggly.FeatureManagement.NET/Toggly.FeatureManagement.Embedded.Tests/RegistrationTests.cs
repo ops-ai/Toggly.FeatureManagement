@@ -62,6 +62,9 @@ public class RegistrationTests
         schemas[0].Kind.Should().Be("Order");
         schemas[0].KeyPropertyName.Should().Be("Id");
         schemas[0].Properties.Should().ContainSingle(property => property.Name == "Total" && property.Type == "number");
+        var document = new CatalogDocument { Contexts = schemas.ToList() };
+        var exported = () => CatalogJson.Serialize(document);
+        exported.Should().NotThrow("registered contexts must be valid portable schemas including their string key");
     }
 
     [Fact]

@@ -12,6 +12,12 @@ namespace Toggly.FeatureManagement.Catalog
         /// Gets or sets whether the provider provides safe optimistic concurrency across multiple writers.
         /// </summary>
         public bool SupportsMultipleWriters { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether this registration rejects writes, independently of concurrency support.
+        /// Allows dashboards to reject an editable mount against a reader without depending on provider types.
+        /// </summary>
+        public bool IsReadOnly { get; set; }
     }
 
     /// <summary>

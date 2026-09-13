@@ -20,7 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
-    <None Include="..\README.md" Pack="true" PackagePath="" Link="README.md" />
+    <None Update="README.md" Pack="true" PackagePath="" />
     <EmbeddedResource Include="Assets\dashboard.css" />
     <EmbeddedResource Include="Assets\dashboard.js" />
   </ItemGroup>

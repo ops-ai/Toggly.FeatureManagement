@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.Extensions.Options;
-using System.Security.Cryptography;
 using Toggly.FeatureManagement.Catalog;
 using Toggly.FeatureManagement.Embedded;
 
@@ -11,6 +10,8 @@ namespace Toggly.FeatureManagement.Dashboard;
 /// <summary>Server-rendered feature catalog pages for one embedded application.</summary>
 [ServiceFilter(typeof(TogglyDashboardAccessFilter))]
 [ServiceFilter(typeof(TogglyDashboardNoStoreFilter))]
+[ServiceFilter(typeof(TogglyDashboardFormLimitsFilter), Order = -1000)]
+[Area("TogglyDashboard")]
 public sealed class TogglyDashboardController : Controller
 {
     private readonly EmbeddedCatalogEditor _editor;
@@ -42,7 +43,7 @@ public sealed class TogglyDashboardController : Controller
                 CatalogExists = snapshot != null,
                 Revision = snapshot?.Revision ?? string.Empty,
                 Features = FilterFeatures(snapshot?.Document.Features ?? [], search, state, tag),
-                ReadOnly = _coordinator.Diagnostics.ReadOnly,
+                ReadOnly = WritesUnavailable,
                 Search = search ?? string.Empty,
                 State = state ?? string.Empty,
                 Tag = tag ?? string.Empty,
@@ -62,6 +63,7 @@ public sealed class TogglyDashboardController : Controller
         try
         {
             var snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+            SetContextKinds(snapshot);
             return snapshot == null ? NotFound() : View(new DashboardFeatureInput { IsNew = true, ExpectedRevision = snapshot.Revision });
         }
         catch (Exception)
@@ -72,9 +74,10 @@ public sealed class TogglyDashboardController : Controller
 
     /// <summary>Creates a disabled feature when the catalog has not changed.</summary>
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(DashboardFeatureInput input, string? command, int? removeRuleIndex)
+    public async Task<IActionResult> Create(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName)
     {
-        if (ApplyRuleEditorCommand(input, command, removeRuleIndex)) return View("New", input);
+        input.IsNew = true;
+        if (ApplyRuleEditorCommand(input, command, removeRuleIndex, newRuleName)) return View("New", input);
         input.Enabled = false;
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
@@ -98,14 +101,16 @@ public sealed class TogglyDashboardController : Controller
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
         catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
         var feature = snapshot?.Document.Features.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
+        SetContextKinds(snapshot);
         return feature == null || snapshot == null ? NotFound() : View(DashboardFeatureInput.FromFeature(feature, snapshot.Revision));
     }
 
     /// <summary>Saves editable metadata while preserving retained targeting rules.</summary>
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Save(DashboardFeatureInput input, string? command, int? removeRuleIndex)
+    public async Task<IActionResult> Save(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName)
     {
-        if (ApplyRuleEditorCommand(input, command, removeRuleIndex)) return View("Edit", input);
+        input.IsNew = false;
+        if (ApplyRuleEditorCommand(input, command, removeRuleIndex, newRuleName)) return View("Edit", input);
         if (!ModelState.IsValid) return ValidationView("Edit", input);
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
@@ -118,14 +123,16 @@ public sealed class TogglyDashboardController : Controller
 
     /// <summary>Sets an explicit enabled state without deleting rules.</summary>
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> State(string key, bool enabled, string expectedRevision)
+    public async Task<IActionResult> State(string key, bool? enabled, string expectedRevision)
     {
+        if (!ModelState.IsValid || enabled == null || string.IsNullOrEmpty(key) || string.IsNullOrEmpty(expectedRevision))
+            return BadRequest("A feature key, expected revision, and explicit true or false enabled state are required.");
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
         catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
         var feature = snapshot?.Document.Features.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
         if (snapshot == null || feature == null) return NotFound();
-        feature.Enabled = enabled;
+        feature.Enabled = enabled.Value;
         return await WriteOrConflictAsync(snapshot.Document, expectedRevision, "Index", null).ConfigureAwait(false);
     }
 
@@ -196,8 +203,8 @@ public sealed class TogglyDashboardController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ImportPreview(IFormFile? catalog)
     {
-        if (catalog == null || catalog.Length == 0) return BadRequest("Select a catalog JSON file.");
-        if (catalog.Length > _options.MaxCatalogBytes) return BadRequest("The catalog exceeds the configured maximum size.");
+        if (catalog == null || catalog.Length == 0) return ImportValidation("Select a catalog JSON file.");
+        if (catalog.Length > _options.MaxCatalogBytes) return ImportValidation("The catalog exceeds the configured maximum size.");
         try
         {
             using var reader = new StreamReader(catalog.OpenReadStream());
@@ -209,39 +216,39 @@ public sealed class TogglyDashboardController : Controller
                 ExpectedRevision = preview.ExpectedRevision,
                 AddKeys = preview.AddKeys,
                 IdenticalKeys = preview.IdenticalKeys,
-                ConflictKeys = preview.ConflictKeys
+                ConflictKeys = preview.ConflictKeys,
+                ContextConflictKinds = preview.ContextConflictKinds
             });
         }
-        catch (EmbeddedCatalogNotFoundException) { return NotFound(); }
-        catch (CatalogFormatException exception) { return BadRequest(exception.Message); }
-        catch (CatalogValidationException exception) { return BadRequest(exception.Message); }
+        catch (CatalogFormatException exception) { return ImportValidation(exception.Message); }
+        catch (CatalogValidationException exception) { return ImportValidation(exception.Message, exception.Errors); }
         catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
     }
 
     /// <summary>Applies the additive selections shown in a validated import preview.</summary>
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ImportApply(string payload, string fingerprint, string expectedRevision, string[]? selectedAddKeys, string[]? selectedUpdateKeys)
+    public async Task<IActionResult> ImportApply(string payload, string fingerprint, string? expectedRevision, string[]? selectedAddKeys, string[]? selectedUpdateKeys)
     {
+        if (!ModelState.IsValid || string.IsNullOrEmpty(payload) || string.IsNullOrEmpty(fingerprint)) return ImportValidation("The import preview is incomplete. Create a new preview.");
         try
         {
-            if (payload.Length > MaximumBase64Length(_options.MaxCatalogBytes)) return BadRequest("The catalog exceeds the configured maximum size.");
+            if (payload.Length > MaximumBase64Length(_options.MaxCatalogBytes)) return ImportValidation("The catalog exceeds the configured maximum size.");
             var payloadBytes = Convert.FromBase64String(payload);
-            if (payloadBytes.LongLength > _options.MaxCatalogBytes) return BadRequest("The catalog exceeds the configured maximum size.");
+            if (payloadBytes.LongLength > _options.MaxCatalogBytes) return ImportValidation("The catalog exceeds the configured maximum size.");
             var result = await _importService.ApplyAsync(new EmbeddedImportApplyRequest(System.Text.Encoding.UTF8.GetString(payloadBytes), fingerprint, expectedRevision, selectedAddKeys, selectedUpdateKeys), HttpContext.RequestAborted).ConfigureAwait(false);
             if (result.Status == CatalogWriteStatus.Conflict)
             {
                 Response.StatusCode = StatusCodes.Status409Conflict;
-                return View("Conflict", new DashboardFeatureInput { ExpectedRevision = expectedRevision });
+                return View("Conflict", new DashboardFeatureInput { ExpectedRevision = expectedRevision ?? string.Empty });
             }
             var mount = HttpContext.GetEndpoint()?.Metadata.GetMetadata<TogglyDashboardEndpointMetadata>()?.MountPath ?? string.Empty;
             Response.StatusCode = StatusCodes.Status303SeeOther;
             Response.Headers.Location = $"{HttpContext.Request.PathBase}{mount}/";
             return new EmptyResult();
         }
-        catch (EmbeddedCatalogNotFoundException) { return NotFound(); }
-        catch (FormatException) { return BadRequest("The import preview payload is invalid. Create a new preview."); }
-        catch (CatalogFormatException exception) { return BadRequest(exception.Message); }
-        catch (CatalogValidationException exception) { return BadRequest(exception.Message); }
+        catch (FormatException) { return ImportValidation("The import preview payload is invalid. Create a new preview."); }
+        catch (CatalogFormatException exception) { return ImportValidation(exception.Message); }
+        catch (CatalogValidationException exception) { return ImportValidation(exception.Message, exception.Errors); }
         catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
     }
 
@@ -253,10 +260,20 @@ public sealed class TogglyDashboardController : Controller
         var metadata = context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<TogglyDashboardEndpointMetadata>();
         ViewData["DashboardMount"] = metadata?.MountPath ?? string.Empty;
         ViewData["ApplicationName"] = metadata?.ApplicationName ?? "Application";
+        ViewData["ReadOnly"] = WritesUnavailable;
+        SetContextKinds(null);
         ViewData["AntiforgeryToken"] = _antiforgery.GetAndStoreTokens(context.HttpContext).RequestToken ?? string.Empty;
         context.HttpContext.Response.Headers.CacheControl = "private, no-store";
         base.OnActionExecuting(context);
     }
+
+    private void SetContextKinds(CatalogSnapshot? snapshot) => ViewData["ContextKinds"] =
+        _contextSchemas.GetRegisteredSchemas().Select(schema => schema.Kind)
+            .Concat(snapshot?.Document.Contexts.Select(schema => schema.Kind) ?? [])
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(kind => kind, StringComparer.Ordinal).ToArray();
+
+    private bool WritesUnavailable => _coordinator.Diagnostics.ReadOnly ||
+        _coordinator.Diagnostics.StorageState is EmbeddedStorageState.Stale or EmbeddedStorageState.Unavailable;
 
     private async Task<IActionResult> WriteOrConflictAsync(CatalogDocument document, string? revision, string successAction, DashboardFeatureInput? input)
     {
@@ -274,22 +291,31 @@ public sealed class TogglyDashboardController : Controller
                 return new EmptyResult();
             }
             Response.StatusCode = StatusCodes.Status409Conflict;
+            ViewData["CurrentFeature"] = result.Snapshot?.Document.Features.FirstOrDefault(feature => string.Equals(feature.Key, input?.Key, StringComparison.OrdinalIgnoreCase));
             return View("Conflict", input ?? new DashboardFeatureInput { ExpectedRevision = revision ?? string.Empty });
         }
         catch (CatalogValidationException exception)
         {
             foreach (var error in exception.Errors) ModelState.AddModelError(error.Path, error.Message);
             Response.StatusCode = StatusCodes.Status400BadRequest;
-            return View(input == null ? "Index" : "Edit", input);
+            return View(input == null ? "Validation" : input.IsNew ? "New" : "Edit", input);
         }
         catch (InvalidOperationException)
         {
-            return StatusCode(StatusCodes.Status403Forbidden);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable for writes.");
         }
         catch (Exception)
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
         }
+    }
+
+    private ViewResult ImportValidation(string message, IEnumerable<CatalogValidationError>? errors = null)
+    {
+        if (errors == null) ModelState.AddModelError("catalog", message);
+        else foreach (var error in errors) ModelState.AddModelError(error.Path, error.Message);
+        Response.StatusCode = StatusCodes.Status400BadRequest;
+        return View("Import");
     }
 
     private ViewResult ValidationView(string viewName, DashboardFeatureInput input)
@@ -311,37 +337,28 @@ public sealed class TogglyDashboardController : Controller
         return query.OrderBy(feature => feature.Name, StringComparer.OrdinalIgnoreCase).ThenBy(feature => feature.Key, StringComparer.Ordinal).ToList();
     }
 
-    private static bool ApplyRuleEditorCommand(DashboardFeatureInput input, string? command, int? removeRuleIndex)
+    private bool ApplyRuleEditorCommand(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName)
     {
         if (string.Equals(command, "add-rule", StringComparison.Ordinal))
         {
-            input.Rules.Add(new DashboardRuleInput());
+            if (newRuleName == null || !DashboardRuleInput.SupportedNames.ContainsKey(newRuleName))
+            {
+                ModelState.AddModelError("newRuleName", "Select a supported rule type.");
+                Response.StatusCode = StatusCodes.Status400BadRequest;
+                return true;
+            }
+            input.Rules.Add(new DashboardRuleInput { Name = newRuleName, Percentage = newRuleName == "Targeting" ? "0" : "100", ContextKind = input.ContextKind ?? string.Empty });
+            ModelState.Clear();
             return true;
         }
         if (removeRuleIndex is >= 0 and < int.MaxValue && removeRuleIndex.Value < input.Rules.Count)
         {
             input.Rules.RemoveAt(removeRuleIndex.Value);
+            ModelState.Clear();
             return true;
         }
         return false;
     }
 
-    private static string ComputeFingerprint(string canonicalPayload) => Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonicalPayload)));
-
     private static long MaximumBase64Length(long maximumBytes) => checked(((maximumBytes + 2) / 3) * 4);
-
-    private static bool FeaturesEqual(CatalogFeature left, CatalogFeature right)
-    {
-        return string.Equals(left.Key, right.Key, StringComparison.Ordinal) && string.Equals(left.Name, right.Name, StringComparison.Ordinal) &&
-            string.Equals(left.Description, right.Description, StringComparison.Ordinal) && left.Enabled == right.Enabled &&
-            left.RequirementType == right.RequirementType && left.ContextRequirementType == right.ContextRequirementType &&
-            string.Equals(left.ContextKind, right.ContextKind, StringComparison.Ordinal) && left.Tags.OrderBy(tag => tag, StringComparer.Ordinal).SequenceEqual(right.Tags.OrderBy(tag => tag, StringComparer.Ordinal), StringComparer.Ordinal) &&
-            left.Rules.Count == right.Rules.Count && left.Rules.Zip(right.Rules, (first, second) => string.Equals(first.Name, second.Name, StringComparison.Ordinal) && first.Parameters.OrderBy(pair => pair.Key, StringComparer.Ordinal).SequenceEqual(second.Parameters.OrderBy(pair => pair.Key, StringComparer.Ordinal))).All(equal => equal);
-    }
-
-    private static bool ContextsEqual(CatalogContextSchema left, CatalogContextSchema right)
-    {
-        return string.Equals(left.Kind, right.Kind, StringComparison.Ordinal) && string.Equals(left.KeyPropertyName, right.KeyPropertyName, StringComparison.Ordinal) &&
-            left.Properties.Count == right.Properties.Count && left.Properties.OrderBy(property => property.Name, StringComparer.Ordinal).Zip(right.Properties.OrderBy(property => property.Name, StringComparer.Ordinal), (first, second) => string.Equals(first.Name, second.Name, StringComparison.Ordinal) && string.Equals(first.Type, second.Type, StringComparison.Ordinal)).All(equal => equal);
-    }
 }

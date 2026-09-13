@@ -5,6 +5,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Constraints;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Toggly.FeatureManagement.Catalog;
+using Toggly.FeatureManagement.Embedded;
 
 namespace Toggly.FeatureManagement.Dashboard;
 
@@ -17,6 +21,9 @@ public static class TogglyDashboardEndpointExtensions
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         var mount = NormalizeMount(pattern);
+        var embeddedOptions = endpoints.ServiceProvider.GetRequiredService<IOptions<TogglyEmbeddedOptions>>().Value;
+        if (!embeddedOptions.ReadOnly && endpoints.ServiceProvider.GetServices<ITogglyCatalogStore>().Any(store => store.Capabilities.IsReadOnly))
+            throw new InvalidOperationException("An editable dashboard cannot use a read-only catalog store. Set ReadOnly=true or select the writer registration.");
         lock (MountedHosts)
         {
             if (MountedHosts.TryGetValue(endpoints, out _)) throw new InvalidOperationException("Only one Toggly dashboard mount is supported per host.");
@@ -60,7 +67,7 @@ public static class TogglyDashboardEndpointExtensions
         group.MapControllerRoute(
             "TogglyDashboard." + routeName,
             pattern,
-            new { controller = "TogglyDashboard", action },
+            new { area = "TogglyDashboard", controller = "TogglyDashboard", action },
             new { httpMethod = new HttpMethodRouteConstraint(method) });
     }
 
