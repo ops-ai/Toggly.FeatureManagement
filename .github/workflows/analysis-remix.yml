@@ -240,11 +240,11 @@ jobs:
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Remix"
             -Dsonar.sources=${{ env.SDK_ROOT }}
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
-            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts
+            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/all-lcov.info
             -Dsonar.tests=${{ env.SDK_ROOT }}
-            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -264,11 +264,11 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-remix
             -Dsonar.projectName="Toggly SDKs - Remix"
             -Dsonar.sources=${{ env.SDK_ROOT }}
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
-            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts
+            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/all-lcov.info
             -Dsonar.tests=${{ env.SDK_ROOT }}
-            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
