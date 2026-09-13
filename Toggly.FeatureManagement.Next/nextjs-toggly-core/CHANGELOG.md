@@ -1,3 +1,12 @@
+## 1.11.0
+
+2026-09-12
+
+### Fixed
+- Resolve optional Node process integration through `globalThis` so Edge
+  bundles do not statically include Node-only telemetry process APIs. Node
+  server signal-flush behavior is retained [OPS-1183].
+
 ## 1.10.0
 
 2026-09-09

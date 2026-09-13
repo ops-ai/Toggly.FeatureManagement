@@ -349,6 +349,15 @@
       "oidcReady": false
     },
     {
+      "name": "@ops-ai/solid-feature-flags-toggly",
+      "group": "javascript",
+      "manifest": "Toggly.FeatureManagement.Solid/package.json",
+      "changelog": "Toggly.FeatureManagement.Solid/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-solid-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/javascript/solid",
+      "oidcReady": false
+    },
+    {
       "name": "@ops-ai/toggly-sveltekit",
       "group": "sveltekit",
       "manifest": "Toggly.FeatureManagement.SvelteKit/package.json",
