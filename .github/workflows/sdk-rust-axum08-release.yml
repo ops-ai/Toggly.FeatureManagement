@@ -52,6 +52,14 @@ jobs:
       - run: cargo clippy -p toggly-axum08 --all-targets -- -D warnings
       - run: cargo test -p toggly-axum08
       - run: cargo package -p toggly-axum08 --allow-dirty --no-verify
+      - name: Run the packaged Axum 0.8 host
+        run: |
+          archive="target/package/toggly-axum08-0.1.0.crate"
+          unpacked="$RUNNER_TEMP/toggly-axum08-package"
+          mkdir -p "$unpacked"
+          tar -xf "$archive" -C "$unpacked"
+          cargo run --manifest-path "$unpacked/toggly-axum08-0.1.0/Cargo.toml" \
+            --example current_host
 
   release:
     needs: [validate, build-and-test]
