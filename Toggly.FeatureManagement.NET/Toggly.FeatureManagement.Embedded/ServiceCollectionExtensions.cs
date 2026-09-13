@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
             p.GetRequiredService<ITogglyCatalogStore>(),
             p.GetRequiredService<EmbeddedCatalogCoordinator>(),
             p.GetRequiredService<IOptions<TogglyEmbeddedOptions>>()));
+        services.TryAddSingleton<EmbeddedImportService>();
         services.TryAddSingleton<IEmbeddedClock, SystemEmbeddedClock>();
         services.TryAddSingleton<IEmbeddedRefreshTimerFactory, PeriodicEmbeddedRefreshTimerFactory>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, EmbeddedCatalogRefreshService>());
