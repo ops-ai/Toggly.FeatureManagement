@@ -51,6 +51,9 @@ jobs:
       - name: Verify npm trusted publishing contract
         run: node --test .github/package-registry/verify-npm-trusted-publishing.test.mjs
 
+      - name: Verify Node release package selection
+        run: node --test .github/package-registry/node-release-matrix.test.mjs
+
       - name: Verify shared .NET inventory and release behavior
         run: node --test .github/package-registry/dotnet-*.test.mjs
 

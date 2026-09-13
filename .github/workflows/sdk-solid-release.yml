@@ -24,7 +24,7 @@ jobs:
           registry: npm
           package_name: '@ops-ai/solid-feature-flags-toggly'
           release_mode: publish
-      - run: npm install
+      - run: npm ci
       - run: npm run typecheck
       - run: npm run test:coverage
       - run: npm run build

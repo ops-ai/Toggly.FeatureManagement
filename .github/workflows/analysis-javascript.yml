@@ -143,7 +143,13 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
+      - name: Install locked SolidJS dependencies
+        if: matrix.sdk == 'SolidJS'
+        working-directory: ${{ matrix.path }}
+        run: npm ci
+
       - name: Install dependencies
+        if: matrix.sdk != 'SolidJS'
         working-directory: ${{ matrix.path }}
         run: npm ci || npm install
 
@@ -612,7 +618,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - run: npm install
+      - run: npm ci
       - run: npm run build
       - run: node tests/install-host.mjs
       - run: npx --prefix tests/host playwright install --with-deps chromium

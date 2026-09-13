@@ -21,12 +21,16 @@ Peer: Electron ≥ 28. React ≥ 18 is optional (only for `@ops-ai/electron-feat
 ### 1. Main process
 
 ```js
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
+import { createRequire } from 'node:module'
 import {
   initToggly,
   registerTogglyIpc,
   isFeatureOn,
 } from '@ops-ai/electron-feature-flags-toggly/main'
+
+const require = createRequire(import.meta.url)
+const togglyPreload = require.resolve('@ops-ai/electron-feature-flags-toggly/preload/entry')
 
 await app.whenReady()
 
@@ -40,7 +44,7 @@ await initToggly({
   },
 })
 
-registerTogglyIpc(require('electron').ipcMain, () => BrowserWindow.getAllWindows())
+registerTogglyIpc(ipcMain, () => BrowserWindow.getAllWindows())
 
 // Trusted process can gate menus / windows directly:
 if (isFeatureOn('BetaMenu')) {
@@ -48,15 +52,28 @@ if (isFeatureOn('BetaMenu')) {
 }
 ```
 
-### 2. Preload
+### 2. Preload bridge
 
 ```js
-import { exposeToggly } from '@ops-ai/electron-feature-flags-toggly/preload'
-
-exposeToggly()
+const window = new BrowserWindow({
+  webPreferences: {
+    preload: togglyPreload,
+    contextIsolation: true,
+    nodeIntegration: false,
+  },
+})
 ```
 
-Wire this file as `webPreferences.preload` with `contextIsolation: true`.
+Electron executes `webPreferences.preload` files with its CommonJS loader, even
+when your main process uses ESM. `preload/entry` is the package's compiled
+CommonJS entry: it calls `exposeToggly()` and exposes only `window.toggly` to
+the renderer. Resolve it from the main process as shown; do not point
+`webPreferences.preload` at a source-level ESM `import` file.
+
+If you need to add your own preload APIs, bundle your preload as CommonJS and
+include `@ops-ai/electron-feature-flags-toggly/preload` in that bundle rather
+than externalizing it. Electron's sandboxed preload loader cannot resolve an
+arbitrary package with `require()` at runtime.
 
 ### 3. Renderer
 
@@ -101,7 +118,8 @@ export function App() {
 | Surface | Entry |
 |---------|--------|
 | Main | `@ops-ai/electron-feature-flags-toggly/main` |
-| Preload | `@ops-ai/electron-feature-flags-toggly/preload` |
+| Preload bridge | `@ops-ai/electron-feature-flags-toggly/preload/entry` |
+| Custom bundled preload | `@ops-ai/electron-feature-flags-toggly/preload` |
 | Renderer | `@ops-ai/electron-feature-flags-toggly` or `/renderer` |
 | React | `@ops-ai/electron-feature-flags-toggly/react` |
 
