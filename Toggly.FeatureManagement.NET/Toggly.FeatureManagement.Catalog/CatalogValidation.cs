@@ -59,8 +59,8 @@ namespace Toggly.FeatureManagement.Catalog
     /// </summary>
     public static class CatalogValidator
     {
-        private static readonly Regex FeatureKeyPattern = new Regex("^[A-Za-z_][A-Za-z0-9_.:-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-        private static readonly Regex ContextNamePattern = new Regex("^[A-Za-z][A-Za-z0-9_]{0,99}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex FeatureKeyPattern = new Regex("^[A-Za-z_][A-Za-z0-9_.:-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(250));
+        private static readonly Regex ContextNamePattern = new Regex("^[A-Za-z][A-Za-z0-9_]{0,99}$", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(250));
         private static readonly HashSet<string> ContextTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "string", "number", "boolean", "datetime", "string[]"
