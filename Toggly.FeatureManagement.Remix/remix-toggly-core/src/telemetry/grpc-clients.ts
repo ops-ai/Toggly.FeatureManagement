@@ -2,13 +2,18 @@ import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { moduleUrl } from './module-url.js'
 import { sdkUserAgent } from '../sdk-identity.js'
 import { DEFAULT_METRICS_BASE_URL } from './https-client.js'
 
-// The native ESM module URL lets a packed SDK find its vendored proto files
-// without relying on a consuming application's global `__filename` value.
-const thisModuleUrl = moduleUrl
+declare global {
+  var __TOGGLY_MODULE_URL__: string
+}
+
+// Rollup replaces this test seam with the native module URL for each output:
+// `import.meta.url` in ESM and `pathToFileURL(__filename).href` in CommonJS.
+// This lets a packed SDK find its proto files without asking the consuming app
+// to supply a process-global filename.
+const thisModuleUrl = globalThis.__TOGGLY_MODULE_URL__
 const nodeRequire = createRequire(thisModuleUrl)
 
 /**

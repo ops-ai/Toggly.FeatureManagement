@@ -3,6 +3,7 @@ const config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/src', '<rootDir>/tests'],
+  setupFiles: ['<rootDir>/tests/setup-module-url.cjs'],
   testMatch: ['**/*.spec.ts', '**/*.test.ts'],
   collectCoverageFrom: [
     'src/**/*.ts',
