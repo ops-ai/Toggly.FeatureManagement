@@ -76,7 +76,7 @@ export function createToggly(
     hydrate(snapshot) {
       client.hydrate(snapshot);
       mutate(client.flags());
-      if (mounted) void refetch();
+      if (mounted) refetch();
     },
     flags: () => state().definitions,
     loading: () => state().loading,
