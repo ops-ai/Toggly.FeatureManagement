@@ -51,8 +51,13 @@ jobs:
       - name: Verify npm trusted publishing contract
         run: node --test .github/package-registry/verify-npm-trusted-publishing.test.mjs
 
+      - name: Install pnpm for release selection contracts
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
       - name: Verify Node release package selection
-        run: node --test .github/package-registry/node-release-matrix.test.mjs
+        run: node --test .github/package-registry/node-release-*.test.mjs
 
       - name: Verify shared .NET inventory and release behavior
         run: node --test .github/package-registry/dotnet-*.test.mjs
