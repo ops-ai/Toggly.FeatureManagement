@@ -1,5 +1,11 @@
 # Changelog
 
+## Toggly.FeatureManagement 3.7.0 - 2026-09-12
+
+### Added
+- Shared evaluation registration, runtime-mode conflict detection, and coherent
+  evaluation snapshots for the embedded runtime without cloud services.
+
 ## Toggly.FeatureManagement.Dashboard 0.1.0 - 2026-09-12
 
 ### Added

@@ -26,3 +26,16 @@ and offline integration tests provide separate evidence.
 
 Failure traces and screenshots are written under `test-results/` and excluded
 from Git. The sample database is isolated in the OS temporary directory.
+
+To test a clean application using packed packages, build and pack the solution,
+then run from the repository root:
+
+```sh
+python3 Toggly.FeatureManagement.NET/scripts/verify-embedded-packages.py --feed /path/to/candidate-nupkgs --framework net8.0
+python3 Toggly.FeatureManagement.NET/scripts/verify-embedded-packages.py --feed /path/to/candidate-nupkgs --framework net10.0
+```
+
+The script reads versions from the artifacts, uses an isolated NuGet cache,
+and creates no project references or host Razor source. CI runs the same checks
+against its uploaded package artifacts. These are local-artifact checks, not
+public NuGet publication tests.
