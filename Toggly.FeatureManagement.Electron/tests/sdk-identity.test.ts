@@ -8,19 +8,21 @@ import {
   appendSdkQueryParams,
 } from '../src/sdk-identity.js'
 import { IPC_CHANNELS, IPC_PREFIX } from '../src/ipc-channels.js'
+import packageJson from '../package.json'
 
 describe('sdk-identity', () => {
   it('identifies as electron', () => {
     expect(SDK_ID).toBe('electron')
-    expect(SDK_VERSION).toBe('1.0.0')
+    expect(SDK_VERSION).toBe(packageJson.version)
     expect(sdkUserAgent()).toBe(`toggly-electron/${SDK_VERSION}`)
     expect(sdkCustomHeaders()['X-Toggly-Sdk']).toBe('electron')
   })
 
   it('builds fetch headers', () => {
     const headers = buildDefinitionFetchHeaders({ Accept: 'application/json' })
-    expect(headers['User-Agent']).toContain('electron')
+    expect(headers['User-Agent']).toBe(`toggly-electron/${packageJson.version}`)
     expect(headers['X-Toggly-Sdk']).toBe('electron')
+    expect(headers['X-Toggly-Sdk-Version']).toBe(packageJson.version)
     expect(headers.Accept).toBe('application/json')
   })
 
@@ -28,7 +30,7 @@ describe('sdk-identity', () => {
     const params = new URLSearchParams()
     appendSdkQueryParams(params)
     expect(params.get('sdk')).toBe('electron')
-    expect(params.get('sdkVersion')).toBe(SDK_VERSION)
+    expect(params.get('sdkVersion')).toBe(packageJson.version)
   })
 })
 

@@ -1,6 +1,7 @@
 # Electron SDK example
 
-Minimal main / preload / renderer wiring.
+Minimal main / renderer wiring. The main process configures the packaged
+CommonJS preload bridge directly.
 
 ```bash
 # From the package root after build:
