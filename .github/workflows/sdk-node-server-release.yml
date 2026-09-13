@@ -39,20 +39,14 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
       - name: Set package matrix
         id: set-matrix
-        run: |
-          PACKAGES="${{ github.event.inputs.packages || 'all' }}"
-
-          if [ "$PACKAGES" == "all" ]; then
-            MATRIX='["toggly-node-core","toggly-express","toggly-fastify","toggly-hono","toggly-koa"]'
-          else
-            # GITHUB_OUTPUT key=value entries require JSON on one line.
-            MATRIX=$(echo "$PACKAGES" | sed 's/core/toggly-node-core/g; s/express/toggly-express/g; s/fastify/toggly-fastify/g; s/hono/toggly-hono/g; s/koa/toggly-koa/g' | tr ',' '\n' | jq -R . | jq -cs .)
-          fi
-
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
-          echo "Building packages: $MATRIX"
+        env:
+          RELEASE_PACKAGES: ${{ github.event.inputs.packages || 'all' }}
+        run: node .github/package-registry/node-release-selection.mjs matrix
 
   build-and-test:
     name: Build & Test (Node ${{ matrix.node-version }})
@@ -91,8 +85,10 @@ jobs:
       - name: Build all packages
         run: pnpm -r build
 
-      - name: Run all tests
-        run: pnpm -r test
+      - name: Run selected package tests
+        run: node "$GITHUB_WORKSPACE/.github/package-registry/node-release-selection.mjs" test
+        env:
+          RELEASE_PACKAGES: ${{ github.event.inputs.packages || 'all' }}
 
   publish:
     runs-on: ubuntu-latest

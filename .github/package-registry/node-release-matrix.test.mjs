@@ -9,18 +9,15 @@ const workflow = fs.readFileSync(
   new URL("../workflows/sdk-node-server-release.yml", import.meta.url),
   "utf8",
 );
-const block = workflow.match(/        run: \|\n([\s\S]*?)\n  build-and-test:/);
-assert.ok(block, "Node release matrix step must exist");
-const script = block[1]
-  .replace(/^          /gm, "")
-  .replace(
-    "${{ github.event.inputs.packages || 'all' }}",
-    "${RELEASE_PACKAGES}",
-  );
+const script = workflow.match(/id: set-matrix[\s\S]*?\n        run: (.+)/)?.[1];
+assert.ok(script, "Node release matrix command must exist");
+const repository = new URL("../../", import.meta.url);
 
 for (const [selection, expected] of [
   ["core", ["toggly-node-core"]],
   ["core,hono", ["toggly-node-core", "toggly-hono"]],
+  ["koa,core", ["toggly-koa", "toggly-node-core"]],
+  [" core , hono , core ", ["toggly-node-core", "toggly-hono"]],
   ["express,fastify,koa", ["toggly-express", "toggly-fastify", "toggly-koa"]],
   [
     "all",
@@ -40,8 +37,9 @@ for (const [selection, expected] of [
     const output = path.join(temporary, "output");
 
     try {
-      // Execute the real workflow shell; pretty JSON breaks the runner output protocol.
+      // Execute the real workflow command; pretty JSON breaks the runner output protocol.
       execFileSync("bash", ["-e", "-c", script], {
+        cwd: repository,
         env: {
           ...process.env,
           RELEASE_PACKAGES: selection,
@@ -56,6 +54,31 @@ for (const [selection, expected] of [
       );
       assert.ok(lines[0].startsWith("matrix="));
       assert.deepEqual(JSON.parse(lines[0].slice("matrix=".length)), expected);
+    } finally {
+      fs.rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const selection of ["", "unknown", "core,unknown", "all,core", "core,"]) {
+  test(`invalid matrix selection ${JSON.stringify(selection)} produces no publication output`, () => {
+    const temporary = fs.mkdtempSync(
+      path.join(os.tmpdir(), "node-release-invalid-"),
+    );
+    const output = path.join(temporary, "output");
+    try {
+      assert.throws(() =>
+        execFileSync("bash", ["-e", "-c", script], {
+          cwd: repository,
+          env: {
+            ...process.env,
+            RELEASE_PACKAGES: selection,
+            GITHUB_OUTPUT: output,
+          },
+          stdio: "pipe",
+        }),
+      );
+      assert.equal(fs.existsSync(output), false);
     } finally {
       fs.rmSync(temporary, { recursive: true, force: true });
     }
