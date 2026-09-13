@@ -16,6 +16,20 @@ npm install @ops-ai/electron-feature-flags-toggly
 
 Peer: Electron ≥ 28. React ≥ 18 is optional (only for `@ops-ai/electron-feature-flags-toggly/react`).
 
+## Electron compatibility
+
+The declared Electron floor is 28. Actual packed native hosts are validated on
+Electron 28.3.3 and Electron 44.3.0. Each host runs the SDK from a packed
+artifact in a real Electron main process, the compiled CommonJS preload with
+context isolation, the renderer IPC bridge, and the optional React helpers.
+The Electron peer range preserves compatible retained majors; this evidence
+does not make an untested Electron major a tested support claim.
+
+For local host validation, run `npm run test:hosts`. It installs disposable
+host applications with public npm dependencies and launches hidden Electron
+BrowserWindows. On Linux, provide a display server such as Xvfb for normal
+Chromium multiprocess execution.
+
 ## Setup (3 snippets)
 
 ### 1. Main process

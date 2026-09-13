@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-09-12
+
+### Added
+
+- Add packed Electron consumer-host validation for the retained Electron 28.3.3
+  floor and Electron 44.3.0 current host. Both run actual main, compiled
+  preload, context-isolated renderer IPC, and optional React feature helpers.
+
 ## [1.0.1] - 2026-09-12
 
 ### Fixed
