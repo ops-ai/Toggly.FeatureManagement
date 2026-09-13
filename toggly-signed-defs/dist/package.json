@@ -1,0 +1,6 @@
+{
+  "type": "commonjs",
+  "browser": {
+    "./webcrypto.js": "./webcrypto.browser.js"
+  }
+}

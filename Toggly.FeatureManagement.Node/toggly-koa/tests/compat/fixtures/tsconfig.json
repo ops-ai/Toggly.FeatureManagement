@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "target": "ES2022",
+    "outDir": ".compiled"
+  },
+  "include": [
+    "*.test.ts"
+  ]
+}

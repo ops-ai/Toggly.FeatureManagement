@@ -1,0 +1,45 @@
+name: Elixir SDK - manual Hex release
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Publish core before Phoenix, and Phoenix before LiveView'
+        required: true
+        type: choice
+        options: [toggly, toggly_phoenix, toggly_live_view]
+      dry_run:
+        description: 'Build and compare manifest version without publication'
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: hex-publish
+    env:
+      PACKAGE: ${{ inputs.package }}
+    defaults:
+      run:
+        working-directory: toggly-elixir
+    steps:
+      - uses: actions/checkout@v7
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '29'
+          elixir-version: '1.20.4'
+      - run: mix deps.get --check-locked
+      - run: mix hex.audit
+      - run: mix format --check-formatted
+      - run: mix compile --warnings-as-errors
+      - run: mix test --cover
+      - id: version
+        run: mix run --no-start tools/release-check.exs "$PACKAGE"
+      - run: python3 tools/build-packages.py
+      - name: Publish manifest version
+        if: inputs.dry_run == false && steps.version.outputs.action == 'publish'
+        working-directory: toggly-elixir/apps/${{ inputs.package }}
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+          TOGGLY_HEX_BUILD: '1'
+        run: mix hex.publish package --yes

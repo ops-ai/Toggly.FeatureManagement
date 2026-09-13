@@ -1,0 +1,19 @@
+{
+  "valid": "MEUCIA3QAxGTJl2XwG+5OtLz4GEld2mQpu/XZT+Ab0Va4zpWAiEA/jtSEmUjfSB5nlnhuSF8xhKA90PN0+oXV+/jKxgjZUM=",
+  "invalid": {
+    "trailing bytes": "MEUCIA3QAxGTJl2XwG+5OtLz4GEld2mQpu/XZT+Ab0Va4zpWAiEA/jtSEmUjfSB5nlnhuSF8xhKA90PN0+oXV+/jKxgjZUMBAgM=",
+    "zero sequence length": "MAACIA3QAxGTJl2XwG+5OtLz4GEld2mQpu/XZT+Ab0Va4zpWAiEA/jtSEmUjfSB5nlnhuSF8xhKA90PN0+oXV+/jKxgjZUM=",
+    "short sequence length": "MEQCIA3QAxGTJl2XwG+5OtLz4GEld2mQpu/XZT+Ab0Va4zpWAiEA/jtSEmUjfSB5nlnhuSF8xhKA90PN0+oXV+/jKxgjZUM=",
+    "long sequence length": "MEYCIA3QAxGTJl2XwG+5OtLz4GEld2mQpu/XZT+Ab0Va4zpWAiEA/jtSEmUjfSB5nlnhuSF8xhKA90PN0+oXV+/jKxgjZUM=",
+    "indefinite length": "MIACIA3QAxGTJl2XwG+5OtLz4GEld2mQpu/XZT+Ab0Va4zpWAiEA/jtSEmUjfSB5nlnhuSF8xhKA90PN0+oXV+/jKxgjZUM=",
+    "nonminimal sequence length": "MIFFAiAN0AMRkyZdl8BvuTrS8+BhJXdpkKbv12U/gG9FWuM6VgIhAP47UhJlI30geZ5Z4bkhfMYSgPdDzdPqF1fv4ysYI2VD",
+    "truncated sequence length": "MIIA",
+    "empty integer": "MCUCAAIhAP47UhJlI30geZ5Z4bkhfMYSgPdDzdPqF1fv4ysYI2VD",
+    "negative integer": "MAYCAYACAQE=",
+    "redundant integer padding": "MEYCIQAN0AMRkyZdl8BvuTrS8+BhJXdpkKbv12U/gG9FWuM6VgIhAP47UhJlI30geZ5Z4bkhfMYSgPdDzdPqF1fv4ysYI2VD",
+    "oversized integer": "MCYCIQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIBAQ==",
+    "third integer": "MEgCIA3QAxGTJl2XwG+5OtLz4GEld2mQpu/XZT+Ab0Va4zpWAiEA/jtSEmUjfSB5nlnhuSF8xhKA90PN0+oXV+/jKxgjZUMCAQE=",
+    "wrong integer tag": "MEUDIA3QAxGTJl2XwG+5OtLz4GEld2mQpu/XZT+Ab0Va4zpWAiEA/jtSEmUjfSB5nlnhuSF8xhKA90PN0+oXV+/jKxgjZUM=",
+    "truncated integer": "MEUCIA3QAxGTJl2XwG+5OtLz4GEld2mQpu/XZT+Ab0Va4zpWAiEA/jtSEmUjfSB5nlnhuSF8xhKA90PN0+oXV+/jKxgjZQ=="
+  }
+}
