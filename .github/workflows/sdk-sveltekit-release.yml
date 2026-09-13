@@ -24,7 +24,7 @@ jobs:
           registry: npm
           package_name: '@ops-ai/toggly-sveltekit'
           release_mode: publish
-      - run: npm install
+      - run: npm ci
       - run: npm run build
       - run: npm run test:coverage
       - run: npx playwright install --with-deps chromium

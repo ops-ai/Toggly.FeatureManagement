@@ -137,13 +137,19 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 'lts/*'
-          cache: ${{ matrix.sdk != 'SvelteKit' && 'npm' || '' }}
+          cache: 'npm'
           cache-dependency-path: ${{ matrix.path }}/package-lock.json
 
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
+      - name: Install locked SvelteKit dependencies
+        if: matrix.sdk == 'SvelteKit'
+        working-directory: ${{ matrix.path }}
+        run: npm ci
+
       - name: Install dependencies
+        if: matrix.sdk != 'SvelteKit'
         working-directory: ${{ matrix.path }}
         run: npm ci || npm install
 
