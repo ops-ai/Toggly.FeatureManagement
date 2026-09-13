@@ -10,7 +10,6 @@
     <Description>Entity Framework Core snapshot provider for Toggly Feature Management. Store feature flag snapshots in any database supported by EF Core.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>toggly;feature-flags;feature-management;entity framework;ef core;snapshot provider</PackageTags>
-    <Version>3.7.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

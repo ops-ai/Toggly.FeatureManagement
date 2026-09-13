@@ -480,7 +480,8 @@ jobs:
       - name: Verify packed metadata for every .NET family
         env:
           NUGET_ALL_PACK_DIR: nuget-analysis-pack
-        run: node --test .github/package-registry/dotnet-inventory.test.mjs
+          DOTNET_VERSION_CHECK: '1'
+        run: node --test .github/package-registry/dotnet-inventory.test.mjs .github/package-registry/dotnet-version.test.mjs
 
       - name: Upload NuGet packages and symbols
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -546,7 +547,7 @@ jobs:
         run: dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj -c Release --logger "trx;LogFileName=smoke-test-results.trx" --blame-hang-timeout 90s --blame-hang-dump-type none
 
   blazor-runtime:
-    name: Blazor .NET ${{ matrix.sdk }}
+    name: Blazor .NET runtime ${{ matrix.framework }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -561,6 +562,7 @@ jobs:
         with:
           dotnet-version: |
             8.0.x
+            10.0.x
             ${{ matrix.sdk }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -569,6 +571,9 @@ jobs:
       - run: python3 Toggly.FeatureManagement.Blazor/check-coverage.py TestResults/blazor
       - run: bash Toggly.FeatureManagement.Blazor/test-browser.sh
       - run: |
+          # Package internal dependencies from the same source/version before the isolated consumer restore.
+          dotnet pack Toggly.FeatureManagement.NET/Toggly.FeatureManagement -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
+          dotnet pack Toggly.FeatureManagement.Client/src/Toggly.FeatureManagement.Client -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
           dotnet pack Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
           dotnet pack Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor.Server -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
       - run: NUGET_BLAZOR_PACK_DIR=blazor-pack node --test .github/package-registry/verify-nuget-blazor.test.mjs

@@ -1,4 +1,4 @@
-/** Resolve every selected package independently; only legacy server manifests support CI bumping. */
+/** Resolve every selected package against the registry using one shared .NET version. */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -19,21 +19,27 @@ export async function createReleasePlan(
     throw new Error("Unknown release mode");
   }
 
-  const server = packages.find((pkg) => pkg.family === "server");
-  if (releaseMode === "auto_bump" && !server) {
-    throw new Error("Legacy auto_bump requires selected server packages");
+  if (packages.length === 0) {
+    throw new Error("No packages selected");
+  }
+  const first = packages[0];
+  if (
+    !first.manifest ||
+    packages.some((pkg) => pkg.manifest !== first.manifest)
+  ) {
+    throw new Error("All .NET packages must use one common manifest");
   }
 
-  // The legacy server uses one shared manifest; bump it once before resolving siblings.
+  // Bump the common manifest once, then resolve each sibling against its own registry ID.
   let legacy;
   if (releaseMode === "auto_bump") {
-    legacy = await resolve(server, releaseMode, bumpType);
+    legacy = await resolve(first, releaseMode, bumpType);
   }
 
   const planned = [];
   for (const pkg of packages) {
     const result =
-      pkg === server && legacy
+      pkg === first && legacy
         ? legacy
         : await resolve(pkg, "publish", bumpType);
     if (!["publish", "skip"].includes(result.action)) {
@@ -42,14 +48,19 @@ export async function createReleasePlan(
       );
     }
 
+    if (planned.length > 0 && result.version !== planned[0].version) {
+      throw new Error(
+        `Version mismatch for ${pkg.id}: expected ${planned[0].version}, received ${result.version}`,
+      );
+    }
     planned.push({ ...pkg, ...result });
   }
 
   return {
     packages: planned,
     manifestChanged: legacy?.manifest_changed === "true",
-    serverManifest: server?.manifest,
-    serverVersion: planned.find((pkg) => pkg.family === "server")?.version,
+    versionManifest: first.manifest,
+    version: planned[0].version,
   };
 }
 
@@ -116,7 +127,7 @@ if (
   );
   if (plan.manifestChanged) {
     fs.copyFileSync(
-      plan.serverManifest,
+      plan.versionManifest,
       "release-candidate/Directory.Build.props",
     );
   }

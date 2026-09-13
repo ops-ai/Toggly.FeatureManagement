@@ -7,7 +7,6 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
-    <Version>0.1.0</Version>
     <PackageId>Toggly.FeatureManagement.Embedded</PackageId>
     <Description>Offline embedded feature-management runtime for Toggly.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>

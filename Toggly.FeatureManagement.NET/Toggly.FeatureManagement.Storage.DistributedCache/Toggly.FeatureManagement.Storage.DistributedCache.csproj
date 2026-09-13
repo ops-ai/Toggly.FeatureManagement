@@ -11,7 +11,6 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <Description>Provides a DistributedCache implementation for feature snapshot storage. The application falls back to snapshot storage if it can't reach toggly.io</Description>
     <AssemblyTitle>Toggly DistributedCache Feature Snapshot Provider</AssemblyTitle>
-    <Version>3.7.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

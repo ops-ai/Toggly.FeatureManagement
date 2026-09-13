@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.7.0 - 2026-09-13
+
+### Changed
+- Unify server, catalog, embedded, dashboard, distributed client, desktop and
+  Blazor package/assembly versions under the common .NET SDK version.
+- Keep internal SDK dependencies on the same version across every package.
+
 ## Toggly.FeatureManagement 3.7.0 - 2026-09-12
 
 ### Added

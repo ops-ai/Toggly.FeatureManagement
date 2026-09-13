@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.7.0 — 2026-09-13
+
+### Changed
+- Align package and assembly versions with the shared .NET SDK version.
+- Keep internal Toggly dependencies on that same version.
+
 ## 0.1.0 — 2026-09-12
 
 ### Changed

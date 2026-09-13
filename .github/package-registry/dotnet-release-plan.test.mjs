@@ -1,50 +1,82 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createReleasePlan } from "./dotnet-release-plan.mjs";
+
+const manifest = "server/Directory.Build.props";
 const packages = [
-  { id: "Core", family: "server", manifest: "server/Directory.Build.props" },
-  { id: "Client", family: "client", manifest: "client/Client.csproj" },
+  { id: "Core", family: "server", manifest },
+  { id: "Client", family: "client", manifest },
 ];
-test("an equal server version cannot hide an unpublished client with a different version", async () => {
+
+test("an equal sibling cannot hide an unpublished package at the common version", async () => {
   const plan = await createReleasePlan(packages, {
-    resolve: (pkg) =>
-      pkg.id === "Core"
-        ? { version: "3.6.6", action: "skip" }
-        : { version: "0.1.0", action: "publish" },
+    resolve: (pkg) => ({
+      version: "3.7.0",
+      action: pkg.id === "Core" ? "skip" : "publish",
+    }),
   });
   assert.deepEqual(
     plan.packages.map((pkg) => [pkg.id, pkg.version, pkg.action]),
     [
-      ["Core", "3.6.6", "skip"],
-      ["Client", "0.1.0", "publish"],
+      ["Core", "3.7.0", "skip"],
+      ["Client", "3.7.0", "publish"],
     ],
   );
 });
-test("legacy bump changes only the server manifest while selected clients stay manifest driven", async () => {
-  const calls = [];
-  const plan = await createReleasePlan(packages, {
-    releaseMode: "auto_bump",
-    bumpType: "minor",
-    resolve: (pkg, mode, bump) => {
-      calls.push([pkg.id, mode, bump]);
-      return {
-        version: pkg.id === "Core" ? "3.7.0" : "0.1.0",
-        action: "publish",
-        manifest_changed: pkg.id === "Core" ? "true" : "false",
-      };
-    },
-  });
-  assert.deepEqual(calls, [
-    ["Core", "auto_bump", "minor"],
-    ["Client", "publish", "minor"],
-  ]);
-  assert.equal(plan.manifestChanged, true);
-  assert.equal(plan.serverManifest, "server/Directory.Build.props");
+
+test("legacy bump updates the common manifest once, including client-only selections", async () => {
+  for (const selected of [packages, [packages[1]]]) {
+    const calls = [];
+    const plan = await createReleasePlan(selected, {
+      releaseMode: "auto_bump",
+      bumpType: "minor",
+      resolve: (pkg, mode, bump) => {
+        calls.push([pkg.id, mode, bump]);
+        return {
+          version: "3.8.0",
+          action: "publish",
+          manifest_changed: mode === "auto_bump" ? "true" : "false",
+        };
+      },
+    });
+    assert.deepEqual(
+      calls,
+      selected.map((pkg, index) => [
+        pkg.id,
+        index === 0 ? "auto_bump" : "publish",
+        "minor",
+      ]),
+    );
+    assert.equal(plan.manifestChanged, true);
+    assert.equal(plan.versionManifest, manifest);
+    assert.equal(plan.version, "3.8.0");
+  }
 });
-test("invalid selections and failed registry resolution stop a release", async () => {
+
+test("split manifests and mismatched resolved versions fail before publication", async () => {
   await assert.rejects(
-    createReleasePlan([packages[1]], { releaseMode: "auto_bump" }),
-    /requires selected server/,
+    createReleasePlan([
+      packages[0],
+      { ...packages[1], manifest: "client/Client.csproj" },
+    ]),
+    /common manifest/,
+  );
+  await assert.rejects(
+    createReleasePlan(packages, {
+      resolve: (pkg) => ({
+        action: "publish",
+        version: pkg.id === "Core" ? "3.7.0" : "0.1.0",
+      }),
+    }),
+    /Version mismatch/,
+  );
+});
+
+test("empty selections, unknown modes and behind-registry decisions stop a release", async () => {
+  await assert.rejects(createReleasePlan([]), /No packages/);
+  await assert.rejects(
+    createReleasePlan(packages, { releaseMode: "other" }),
+    /Unknown release mode/,
   );
   await assert.rejects(
     createReleasePlan(packages, {

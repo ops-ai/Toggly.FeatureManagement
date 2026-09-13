@@ -182,10 +182,13 @@ server version does not skip an unpublished client. Each selected family runs
 tests/coverage before
 artifacts are packed and verified; signing and publication use those artifacts.
 
-The default `publish` mode uses every package's manifest version. Legacy
-`auto_bump` remains available for the server family's shared `Directory.Build.props`
-only; other selected families still use their manifest versions. It requires a
-selected server package and retains the signed server-version commit. Prefer
+All .NET packages inherit one version from
+`Toggly.FeatureManagement.NET/Directory.Build.props`. Project-level version
+overrides fail validation. The default `publish` mode compares that common version
+to each selected package's registry version: equal versions skip, newer source
+versions publish, and versions behind NuGet fail. Legacy `auto_bump` updates the
+common manifest once, even for a client-only selection, then resolves every
+sibling at that version and retains the signed shared-version commit. Prefer
 version/changelog changes reviewed in a PR.
 
 The protected `nuget-publish` job retains direct NuGet OIDC, existing Key Vault
@@ -195,7 +198,7 @@ keep those pins current. Before first publication, verify that the `opsai` trust
 policy covers each new package through `sdk-dotnet-release.yml` and the existing
 environment. No API-key fallback is introduced.
 
-Server GitHub release tags retain `dotnet-sdk-v<version>`. Independent families
+Server GitHub release tags retain `dotnet-sdk-v<version>`. Other families
 use `dotnet-<family>-sdk-v<version>`, with package IDs/versions in the release
 notes and GPG-signed checksums for the signed artifacts. A family tag retains its
 first publication commit. Later sibling packages at the same version append their
@@ -208,10 +211,13 @@ continue through `cli-build-release.yml`; the CLI is not a NuGet SDK package.
 ### Blazor family
 
 The `blazor` family participates in the same inventory-driven analysis and manual
-release workflow. Its browser package requires published portable Client 0.1.0;
-publish that dependency first when it is absent from this checkout. Once the
-Client family is present, dependency order is derived from actual package/project
-references. The server adapter follows the Blazor browser package.
+release workflow. Its browser package depends on portable Client at the common
+.NET version. Internal SDK project references keep source builds independent of
+unpublished packages; packing emits versioned NuGet dependencies. Dependency order
+is derived from the inventory and actual project references. The server adapter
+follows the Blazor browser package and trusted server core. The SDK packed-consumer
+checks use the complete local candidate feed; Toggly.Samples remains a separate
+public-package installation gate.
 
 The Blazor runtime compatibility jobs retain .NET 8/.NET 10 tests, browser crypto
 coverage and packed consumer checks in `analysis-dotnet.yml`. No separate Blazor

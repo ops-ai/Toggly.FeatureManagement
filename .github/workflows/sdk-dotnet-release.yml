@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       release_mode:
-        description: 'publish = all manifests; auto_bump = legacy server family only, other packages keep their manifests'
+        description: 'publish = common .NET manifest; auto_bump = bump the shared version once'
         type: choice
         default: publish
         options: [publish, auto_bump]
       bump_type:
-        description: 'Legacy server-family bump only when release_mode is auto_bump'
+        description: 'Shared .NET version bump only when release_mode is auto_bump'
         type: choice
         default: patch
         options: [patch, minor, major]
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
-      - name: Resolve selected package manifest versions
+      - name: Resolve the shared version for selected packages
         id: plan
         env:
           PACKAGES: ${{ inputs.packages }}
@@ -62,7 +62,7 @@ jobs:
       - name: Build, test and check family coverage
         if: steps.plan.outputs.publish == 'true'
         run: node .github/package-registry/dotnet-ci.mjs test release-candidate/plan.json
-      - name: Pack each selected manifest version
+      - name: Pack selected packages at the shared version
         if: steps.plan.outputs.publish == 'true'
         run: |
           node .github/package-registry/dotnet-ci.mjs pack release-candidate/plan.json
@@ -244,7 +244,7 @@ jobs:
           git_user_signingkey: true
           git_commit_gpgsign: true
           git_tag_gpgsign: true
-      - name: Preserve legacy server manifest bump
+      - name: Preserve legacy shared manifest bump
         env:
           GIT_AUTHOR_NAME: ${{ steps.import_gpg.outputs.name }}
           GIT_AUTHOR_EMAIL: ${{ steps.import_gpg.outputs.email }}
@@ -254,7 +254,7 @@ jobs:
           if test -f release-candidate/Directory.Build.props; then
             cp release-candidate/Directory.Build.props Toggly.FeatureManagement.NET/Directory.Build.props
             git add Toggly.FeatureManagement.NET/Directory.Build.props
-            git commit -S -m "Bump legacy .NET server manifest (auto_bump) [skip ci]"
+            git commit -S -m "Bump shared .NET manifest (auto_bump) [skip ci]"
             for attempt in 1 2 3; do
               if git pull --rebase origin develop && git push origin HEAD:develop; then
                 break
