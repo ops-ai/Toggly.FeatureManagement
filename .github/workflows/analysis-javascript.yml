@@ -98,7 +98,7 @@ jobs:
             has-lint: false
           - sdk: Vue
             path: Toggly.FeatureManagement.Vue/vue-feature-flags-toggly
-            test-cmd: npm test -- --coverage
+            test-cmd: npm test -- --coverage && npm run test:host
             has-lint: false
           - sdk: SolidJS
             path: Toggly.FeatureManagement.Solid
@@ -106,7 +106,7 @@ jobs:
             has-lint: false
           - sdk: Svelte
             path: Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly
-            test-cmd: npx vitest run --coverage
+            test-cmd: npx vitest run --coverage && npm run test:host
             has-lint: false
           - sdk: SvelteKit
             path: Toggly.FeatureManagement.SvelteKit
@@ -225,6 +225,48 @@ jobs:
             ${{ matrix.path }}/coverage/lcov.info
           retention-days: 7
           if-no-files-found: ignore
+
+  test-current-browser-hosts:
+    name: Current ${{ matrix.host.sdk }} packed host (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['22.x', '24.x', '26.x']
+        host:
+          - sdk: Vue
+            path: Toggly.FeatureManagement.Vue/vue-feature-flags-toggly
+            browser: false
+          - sdk: Svelte
+            path: Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly
+            browser: false
+          - sdk: SvelteKit
+            path: Toggly.FeatureManagement.SvelteKit
+            browser: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: ${{ matrix.host.path }}/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: ${{ matrix.host.path }}
+        run: npm ci
+
+      - name: Install Chromium for packed SvelteKit host
+        if: matrix.host.browser
+        working-directory: ${{ matrix.host.path }}
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify packed host
+        working-directory: ${{ matrix.host.path }}
+        run: npm run test:host
 
   test-node-server:
     name: Test Node.js Server ${{ matrix.config.package }} (Node ${{ matrix.node-version }})
