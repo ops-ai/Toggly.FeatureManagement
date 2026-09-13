@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 - 2026-09-12
+
+### Changed
+- Declare Python 3.14 compatibility and validate the packed extension with
+  Flask 3.1. Existing Python 3.8+ support remains unchanged.
+
 ## 0.3.0 - 2026-09-08
 
 ### Added

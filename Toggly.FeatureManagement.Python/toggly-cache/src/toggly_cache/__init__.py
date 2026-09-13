@@ -41,7 +41,7 @@ Example usage with Memcached:
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 # Lazy imports to avoid requiring both redis and pymemcache
 def __getattr__(name: str):

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 - 2026-09-12
+
+### Changed
+- Declare Python 3.14 compatibility and add packed-host validation for the
+  core package and optional WebSocket and gRPC transports. Python 3.8 remains
+  the declared minimum.
+
 ## 0.7.0 - 2026-09-08
 
 ### Added

@@ -55,6 +55,11 @@ jobs:
       - name: Lint toggly-cache
         run: ruff check toggly-cache/src
 
+      - name: Lint packed host fixture
+        run: |
+          ruff check tests/host-fixtures
+          ruff format --check tests/host-fixtures
+
   type-check:
     name: Type Check
     runs-on: ubuntu-latest
@@ -90,7 +95,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -130,16 +135,30 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-        django-version: ["4.2", "5.0", "5.1"]
-        exclude:
-          - python-version: "3.8"
-            django-version: "5.0"
-          - python-version: "3.9"
-            django-version: "5.0"
-          - python-version: "3.8"
-            django-version: "5.1"
-          - python-version: "3.9"
-            django-version: "5.1"
+        django-version: ["4.2.*", "5.0.*", "5.1.*"]
+        include:
+          - python-version: "3.10"
+            django-version: "5.2.17"
+          - python-version: "3.11"
+            django-version: "5.2.17"
+          - python-version: "3.12"
+            django-version: "5.2.17"
+          - python-version: "3.12"
+            django-version: "6.0.8"
+          - python-version: "3.12"
+            django-version: "6.1.1"
+          - python-version: "3.13"
+            django-version: "5.2.17"
+          - python-version: "3.13"
+            django-version: "6.0.8"
+          - python-version: "3.13"
+            django-version: "6.1.1"
+          - python-version: "3.14"
+            django-version: "5.2.17"
+          - python-version: "3.14"
+            django-version: "6.0.8"
+          - python-version: "3.14"
+            django-version: "6.1.1"
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -157,7 +176,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e toggly/
-          pip install django==${{ matrix.django-version }}.*
+          pip install django==${{ matrix.django-version }}
           cd toggly-django
           pip install -e ".[dev]"
 
@@ -180,7 +199,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -220,7 +239,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -260,7 +279,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -293,6 +312,72 @@ jobs:
           name: python-coverage-cache
           path: ${{ env.SDK_ROOT }}/toggly-cache/coverage.xml
           retention-days: 7
+
+  test-packed-host:
+    name: Packed host (Python ${{ matrix.python-version }}, Django ${{ matrix.django-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: "3.8"
+            django-version: "4.2.*"
+            frameworks: "core,django"
+          - python-version: "3.10"
+            django-version: "5.0.*"
+            frameworks: "core,django"
+          - python-version: "3.11"
+            django-version: "5.1.*"
+            frameworks: "core,django"
+          - python-version: "3.12"
+            django-version: "5.2.17"
+            frameworks: "core,django"
+          - python-version: "3.12"
+            django-version: "6.0.8"
+            frameworks: "core,django"
+          - python-version: "3.14"
+            django-version: "6.1.1"
+            frameworks: "all"
+    defaults:
+      run:
+        working-directory: ${{ env.SDK_ROOT }}
+    services:
+      redis:
+        image: redis:8.2.3-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build release wheels
+        run: |
+          if [ "${{ matrix.frameworks }}" = "all" ]; then
+            projects=(./toggly ./toggly-django ./toggly-flask ./toggly-fastapi ./toggly-cache)
+          else
+            projects=(./toggly ./toggly-django)
+          fi
+          python -m pip wheel --no-deps --wheel-dir .packed-wheels \
+            "${projects[@]}"
+
+      - name: Run isolated packed host
+        env:
+          TOGGLY_REDIS_URL: redis://127.0.0.1:6379/15
+        run: |
+          python tests/host-fixtures/verify_packed_host.py \
+            --wheel-dir .packed-wheels \
+            --django-version '${{ matrix.django-version }}' \
+            --frameworks '${{ matrix.frameworks }}'
 
   integration:
     name: Integration Tests
@@ -374,7 +459,7 @@ jobs:
   build:
     name: Build Packages
     runs-on: ubuntu-latest
-    needs: [lint, test-core, test-django, test-flask, test-fastapi, test-cache]
+    needs: [lint, test-core, test-django, test-flask, test-fastapi, test-cache, test-packed-host]
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -463,12 +548,12 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-python
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Python"
-            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.sources=${{ env.SDK_ROOT }}/toggly/src,${{ env.SDK_ROOT }}/toggly-django/src,${{ env.SDK_ROOT }}/toggly-flask/src,${{ env.SDK_ROOT }}/toggly-fastapi/src,${{ env.SDK_ROOT }}/toggly-cache/src
             -Dsonar.exclusions=**/venv/**,**/.venv/**,**/dist/**,**/build/**,**/*.egg-info/**,**/tests/**,**/__pycache__/**,**/.pytest_cache/**,**/telemetry/pb/**
             -Dsonar.coverage.exclusions=**/telemetry/pb/**
             -Dsonar.cpd.exclusions=**/tests/**,**/telemetry/pb/**
-            -Dsonar.tests=${{ env.SDK_ROOT }}
-            -Dsonar.test.inclusions=**/tests/**
+            -Dsonar.tests=${{ env.SDK_ROOT }}/toggly/tests,${{ env.SDK_ROOT }}/toggly-django/tests,${{ env.SDK_ROOT }}/toggly-flask/tests,${{ env.SDK_ROOT }}/toggly-fastapi/tests,${{ env.SDK_ROOT }}/toggly-cache/tests,${{ env.SDK_ROOT }}/tests/host-fixtures
+            -Dsonar.test.inclusions=**/*.py
             -Dsonar.python.coverage.reportPaths=coverage/*-coverage.xml
         continue-on-error: true
 
@@ -488,12 +573,12 @@ jobs:
           args: >
             -Dsonar.projectKey=toggly-sdks-python
             -Dsonar.projectName="Toggly SDKs - Python"
-            -Dsonar.sources=${{ env.SDK_ROOT }}
+            -Dsonar.sources=${{ env.SDK_ROOT }}/toggly/src,${{ env.SDK_ROOT }}/toggly-django/src,${{ env.SDK_ROOT }}/toggly-flask/src,${{ env.SDK_ROOT }}/toggly-fastapi/src,${{ env.SDK_ROOT }}/toggly-cache/src
             -Dsonar.exclusions=**/venv/**,**/.venv/**,**/dist/**,**/build/**,**/*.egg-info/**,**/tests/**,**/__pycache__/**,**/.pytest_cache/**,**/telemetry/pb/**
             -Dsonar.coverage.exclusions=**/telemetry/pb/**
             -Dsonar.cpd.exclusions=**/tests/**,**/telemetry/pb/**
-            -Dsonar.tests=${{ env.SDK_ROOT }}
-            -Dsonar.test.inclusions=**/tests/**
+            -Dsonar.tests=${{ env.SDK_ROOT }}/toggly/tests,${{ env.SDK_ROOT }}/toggly-django/tests,${{ env.SDK_ROOT }}/toggly-flask/tests,${{ env.SDK_ROOT }}/toggly-fastapi/tests,${{ env.SDK_ROOT }}/toggly-cache/tests,${{ env.SDK_ROOT }}/tests/host-fixtures
+            -Dsonar.test.inclusions=**/*.py
             -Dsonar.python.coverage.reportPaths=coverage/*-coverage.xml
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
@@ -549,7 +634,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [lint, type-check, test-core, test-django, test-flask, test-fastapi, test-cache, integration, smoke-test, build, sonar, dependency-check]
+    needs: [lint, type-check, test-core, test-django, test-flask, test-fastapi, test-cache, test-packed-host, integration, smoke-test, build, sonar, dependency-check]
     if: always()
 
     steps:
@@ -560,7 +645,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: lint,type-check,test-core,test-django,test-flask,test-fastapi,test-cache,integration,smoke-test,build
+          required-jobs: lint,type-check,test-core,test-django,test-flask,test-fastapi,test-cache,test-packed-host,integration,smoke-test,build
 
       - name: Generate summary
         working-directory: .
@@ -577,7 +662,7 @@ jobs:
           echo "- toggly-cache" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Python Versions Tested" >> $GITHUB_STEP_SUMMARY
-          echo "- 3.8, 3.9, 3.10, 3.11, 3.12, 3.13" >> $GITHUB_STEP_SUMMARY
+          echo "- 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-python" >> $GITHUB_STEP_SUMMARY
           echo "Check SonarQube Server for detailed results: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=toggly-sdks-python" >> $GITHUB_STEP_SUMMARY

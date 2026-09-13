@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toggly-cache"
-version = "0.1.1"
+version = "0.1.2"
 description = "Caching providers for Toggly feature flag management (Redis, Memcached)"
 readme = "README.md"
 license = {text = "MIT"}
@@ -33,6 +33,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed"
 ]
