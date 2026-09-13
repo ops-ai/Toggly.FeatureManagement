@@ -1,0 +1,28 @@
+{
+  "name": "ngx-feature-flags-toggly-angular-19-host",
+  "private": true,
+  "engines": {
+    "node": "22.23.2"
+  },
+  "scripts": {
+    "build": "ng build --configuration production",
+    "typecheck": "tsc --project tsconfig.app.json --noEmit"
+  },
+  "dependencies": {
+    "@angular/common": "19.2.25",
+    "@angular/compiler": "19.2.25",
+    "@angular/core": "19.2.25",
+    "@angular/platform-browser": "19.2.25",
+    "@angular/router": "19.2.25",
+    "rxjs": "7.8.2",
+    "tslib": "2.8.1",
+    "zone.js": "0.15.1"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "19.2.27",
+    "@angular/cli": "19.2.27",
+    "@angular/compiler-cli": "19.2.25",
+    "typescript": "5.8.3",
+    "@types/node": "18.19.130"
+  }
+}
