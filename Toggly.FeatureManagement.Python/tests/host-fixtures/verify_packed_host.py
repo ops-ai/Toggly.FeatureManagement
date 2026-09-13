@@ -177,10 +177,11 @@ def verify_current_optional_hosts() -> None:
     import websocket
     from fastapi import FastAPI, Request
     from flask import Flask, g
-    from toggly import FeatureDefinition
     from toggly_cache import RedisSnapshotProvider
     from toggly_fastapi import TogglyMiddleware, configure_toggly
     from toggly_flask import Toggly
+
+    from toggly import FeatureDefinition
 
     for module in (toggly_cache, toggly_fastapi, toggly_flask):
         assert_installed(module)
