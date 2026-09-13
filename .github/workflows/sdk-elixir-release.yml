@@ -36,6 +36,31 @@ jobs:
       - id: version
         run: mix run --no-start tools/release-check.exs "$PACKAGE"
       - run: python3 tools/build-packages.py
+      - name: Validate standalone publication dependencies
+        if: steps.version.outputs.action == 'publish'
+        working-directory: toggly-elixir/apps/${{ inputs.package }}
+        env:
+          TOGGLY_HEX_BUILD: '1'
+        run: |
+          # Hex publishing loads dependencies from the standalone package paths.
+          # Seed the tested lock, allowing only newly published sibling entries.
+          cp ../../mix.lock mix.lock
+          mix deps.get
+          elixir -e '
+            {umbrella, _} = Code.eval_file("../../mix.lock")
+            {standalone, _} = Code.eval_file("mix.lock")
+            unless Map.take(standalone, Map.keys(umbrella)) == umbrella do
+              raise "Standalone dependency resolution changed the validated umbrella lock"
+            end
+            added = Map.keys(standalone) -- Map.keys(umbrella)
+            unexpected = added -- [:toggly, :toggly_phoenix]
+            unless unexpected == [] do
+              raise "Standalone dependency resolution added unexpected dependencies: #{inspect(unexpected)}"
+            end
+          '
+          mix deps.get --check-locked
+          # Exercise the dependency check used by hex.publish without credentials.
+          mix deps.loadpaths --no-compile --no-listeners
       - name: Publish manifest version
         if: inputs.dry_run == false && steps.version.outputs.action == 'publish'
         working-directory: toggly-elixir/apps/${{ inputs.package }}
