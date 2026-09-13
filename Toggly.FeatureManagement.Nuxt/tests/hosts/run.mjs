@@ -54,6 +54,10 @@ if (lockMode === 'record') {
   await cp(join(work, 'package-lock.json'), join(lockDir, 'package-lock.json'))
 }
 await run('npm', [lockMode === 'fresh' ? 'install' : 'ci', '--no-audit', '--no-fund', ...(retainedNode18 ? ['--engine-strict'] : [])])
+// Install the browser through this consumer's own Playwright dependency. This
+// keeps Nuxt 3's locked host and Nuxt 4's fresh host aligned with the exact
+// Playwright revision that each packed consumer resolved.
+await run('npx', ['playwright', 'install', 'chromium'])
 const consumerLock = JSON.parse(await readFile(join(work, 'package-lock.json'), 'utf8'))
 for (const [path, pkg] of Object.entries(consumerLock.packages)) {
   if (!path || Object.keys(dependencies).some(name => name.startsWith('@ops-ai/nuxt-toggly') && path === `node_modules/${name}`)) continue
