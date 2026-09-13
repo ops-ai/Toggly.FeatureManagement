@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/remix-toggly-core",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Core types and utilities for Toggly Remix SDK - shared between server and client packages",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -26,12 +26,13 @@
   ],
   "scripts": {
     "build": "rollup -c",
-    "test": "jest",
-    "test:coverage": "jest --coverage",
+    "test": "npm run build && jest && npm run test:package",
+    "test:coverage": "npm run build && jest --coverage && npm run test:package",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "clean": "rm -rf dist coverage"
+    "clean": "rm -rf dist coverage",
+    "test:package": "node tests/telemetry/grpc-package-smoke.test.mjs"
   },
   "keywords": [
     "remix",
