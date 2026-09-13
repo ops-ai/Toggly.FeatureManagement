@@ -524,7 +524,7 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=.
-            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.React/consumer-fixtures/**
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -550,7 +550,7 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=.
-            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.React/consumer-fixtures/**
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
