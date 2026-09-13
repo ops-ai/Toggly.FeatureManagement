@@ -1,0 +1,38 @@
+name: Elixir SDK family - native analysis
+on:
+  push:
+    branches: [develop, main]
+    paths: ['toggly-elixir/**', 'docs/filter-parity/**', '.github/workflows/analysis-elixir.yml']
+  pull_request:
+    branches: [develop, main]
+    paths: ['toggly-elixir/**', 'docs/filter-parity/**', '.github/workflows/analysis-elixir.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-analysis:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: toggly-elixir
+    steps:
+      - uses: actions/checkout@v7
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '29'
+          elixir-version: '1.20.4'
+      - run: mix deps.get --check-locked
+      - run: mix hex.audit
+      - run: mix format --check-formatted
+      - run: mix compile --warnings-as-errors
+      - run: mix test --cover
+      - name: Build all standalone Hex artifacts
+        run: python3 tools/build-packages.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: elixir-native-coverage-and-packages
+          path: |
+            toggly-elixir/apps/*/cover/
+            toggly-elixir/apps/*/*.tar
+      - name: Analysis scope
+        run: echo 'Native Elixir format, compiler, ExUnit and >90% coverage gates passed. SonarCloud has no native Elixir analyzer; no Sonar verdict is claimed.' >> "$GITHUB_STEP_SUMMARY"

@@ -19,9 +19,9 @@ function computeKidSync(x: string, y: string): string {
   return `${digest}ES256`;
 }
 
-function doubleSha256(payload: string): Buffer {
-  const first = createHash('sha256').update(payload, 'utf8').digest();
-  return createHash('sha256').update(first).digest();
+function sha256ForSigning(payload: string): Buffer {
+  // ECDSA signing adds the second hash, matching the Worker signer.
+  return createHash('sha256').update(payload, 'utf8').digest();
 }
 
 function makeSignedKey() {
@@ -58,7 +58,7 @@ describe('Toggly verifySignatures integration', () => {
     const { privateKey, jwk } = makeSignedKey();
     const defs = '{"FeatureA":true,"FeatureB":false}';
     const timestamp = Math.floor(Date.now() / 1000);
-    const signature = sign(null, doubleSha256(`${defs}|${timestamp}`), {
+    const signature = sign('sha256', sha256ForSigning(`${defs}|${timestamp}`), {
       key: privateKey,
       dsaEncoding: 'ieee-p1363',
     }).toString('base64');
@@ -106,7 +106,7 @@ describe('Toggly verifySignatures integration', () => {
     const { privateKey, jwk } = makeSignedKey();
     const defs = '{"FeatureA":true}';
     const timestamp = Math.floor(Date.now() / 1000);
-    const signature = sign(null, doubleSha256(`${defs}|${timestamp}`), {
+    const signature = sign('sha256', sha256ForSigning(`${defs}|${timestamp}`), {
       key: privateKey,
       dsaEncoding: 'ieee-p1363',
     }).toString('base64');
