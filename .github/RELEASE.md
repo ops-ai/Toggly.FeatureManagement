@@ -133,6 +133,7 @@ skipped. Do not bump unrelated siblings just to satisfy a lockstep check.
 | `sdk-python-release.yml` | `pyproject.toml` | PyPI |
 | `sdk-ruby-release.yml` | `lib/toggly/version.rb` | RubyGems |
 | `sdk-go-release.yml` | `toggly-go/VERSION` | git tag (`toggly-go/v*`) |
+| `sdk-go-mongodb-v2-release.yml` | `toggly-go-mongodb-v2/VERSION` | git tag (`toggly-go-mongodb-v2/v*`) |
 | `sdk-php-release.yml` | `composer.json` | Packagist |
 | `sdk-android-release.yml` | `build.gradle.kts` | Maven Central (git tag skip) |
 | `sdk-java-release.yml` | `pom.xml` | Maven Central |

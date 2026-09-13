@@ -1,0 +1,193 @@
+name: Go MongoDB Driver v2 Adapter - Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
+      bump_type:
+        description: 'Bump type (only used when release_mode is auto_bump)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  SDK_ROOT: toggly-go-mongodb-v2
+  MODULE_PATH: github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2
+  TAG_PREFIX: toggly-go-mongodb-v2/v
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      action: ${{ steps.release.outputs.action }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_ROOT }}/VERSION
+          registry: none
+          package_name: toggly-go-mongodb-v2
+          tag_prefix: ${{ env.TAG_PREFIX }}
+          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+
+  build-and-test:
+    needs: validate
+    if: needs.validate.outputs.action == 'publish'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.24', '1.25']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+          cache-dependency-path: ${{ env.SDK_ROOT }}/go.sum
+
+      - name: Download and verify dependencies
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          go mod download
+          go mod verify
+
+      - name: Check formatting
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          test -z "$(gofmt -l .)"
+
+      - name: Build, test, and vet
+        working-directory: ${{ env.SDK_ROOT }}
+        run: |
+          go build ./...
+          go test -v -race ./...
+          go vet ./...
+
+  release:
+    needs: [build-and-test, validate]
+    if: needs.validate.outputs.action == 'publish'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          fetch-depth: 0
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_tag_gpgsign: true
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+      - name: Commit legacy auto-bump
+        if: needs.validate.outputs.manifest_changed == 'true'
+        run: |
+          git add "${{ env.SDK_ROOT }}/VERSION"
+          git commit -S -m "Bump Go MongoDB Driver v2 adapter to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]"
+          git pull --rebase origin develop
+          git push origin develop
+
+      - name: Create and push signed module tag
+        run: |
+          git tag -s -m "Go MongoDB Driver v2 Adapter v${{ needs.validate.outputs.version }}" "${{ env.TAG_PREFIX }}${{ needs.validate.outputs.version }}"
+          git push origin "${{ env.TAG_PREFIX }}${{ needs.validate.outputs.version }}"
+
+      - name: Request Go module proxy update
+        run: |
+          GOPROXY=https://proxy.golang.org GO111MODULE=on \
+            go list -m "${{ env.MODULE_PATH }}@v${{ needs.validate.outputs.version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.TAG_PREFIX }}${{ needs.validate.outputs.version }}
+          name: Go MongoDB Driver v2 Adapter v${{ needs.validate.outputs.version }}
+          body: |
+            ## Go MongoDB Driver v2 Adapter v${{ needs.validate.outputs.version }}
+
+            ### Installation
+
+            ```bash
+            go get ${{ env.MODULE_PATH }}@v${{ needs.validate.outputs.version }}
+            ```
+
+            ### Requirements
+
+            - Go 1.24+
+            - Toggly Go SDK v0.7.0+
+            - MongoDB Go Driver v2
+
+            ### Links
+
+            - [pkg.go.dev](https://pkg.go.dev/github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2)
+            - [Documentation](https://docs.toggly.io/docs/sdks/go)
+          prerelease: ${{ github.event.inputs.prerelease }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    needs: [release, validate]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Go MongoDB Driver v2 Adapter Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ needs.validate.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ needs.validate.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.validate.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | ${{ env.TAG_PREFIX }}${{ needs.validate.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Module | ${{ env.MODULE_PATH }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-release | ${{ github.event.inputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY

@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - 'toggly-go/**'
+      - 'toggly-go-mongodb-v2/**'
       - '.github/workflows/analysis-go.yml'
   pull_request:
     branches:
@@ -14,6 +15,7 @@ on:
       - main
     paths:
       - 'toggly-go/**'
+      - 'toggly-go-mongodb-v2/**'
       - '.github/workflows/analysis-go.yml'
   workflow_dispatch:
 
@@ -102,6 +104,144 @@ jobs:
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
         run: go test -v -run '^TestSmoke_' ./toggly
+
+  current-runtime:
+    name: Current Go 1.25 Runtime
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: toggly-go
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Go 1.25
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.25.x'
+          cache: true
+          cache-dependency-path: toggly-go/go.sum
+
+      - name: Download and verify dependencies
+        run: |
+          go mod download
+          go mod verify
+
+      - name: Build, vet, and test with the race detector
+        run: |
+          go build ./...
+          go vet ./...
+          go test -v -race -timeout 5m ./...
+
+  mongodb-v2:
+    name: MongoDB Driver v2 (Go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.24.x', '1.25.x']
+    defaults:
+      run:
+        working-directory: toggly-go-mongodb-v2
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+          cache-dependency-path: toggly-go-mongodb-v2/go.sum
+
+      - name: Download and verify dependencies
+        run: |
+          go mod download
+          go mod verify
+
+      - name: Check formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          args: --timeout=5m
+          working-directory: toggly-go-mongodb-v2
+
+      - name: Run tests with the race detector
+        run: go test -v -race -timeout 5m ./...
+
+  mongodb-v2-consumer:
+    name: MongoDB Driver v2 Packed Module Consumer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Go 1.25
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.25.x'
+
+      - name: Build a consumer from the archived module contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          adapter_dir="$RUNNER_TEMP/toggly-go-mongodb-v2"
+          host_dir="$RUNNER_TEMP/toggly-go-mongodb-v2-host"
+          mkdir -p "$adapter_dir" "$host_dir"
+          git archive --format=tar HEAD:toggly-go-mongodb-v2 | tar -xf - -C "$adapter_dir"
+          cat > "$host_dir/go.mod" <<EOF
+          module example.com/toggly-go-mongodb-v2-host
+
+          go 1.25.0
+
+          require github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2 v0.1.0
+
+          replace github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2 => $adapter_dir
+          EOF
+          cat > "$host_dir/main.go" <<'EOF'
+          package main
+
+          import (
+              "context"
+
+              "github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/snapshot"
+              mongodbv2 "github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2"
+              "go.mongodb.org/mongo-driver/v2/mongo"
+              "go.mongodb.org/mongo-driver/v2/mongo/options"
+          )
+
+          func main() {
+              client, err := mongo.Connect(options.Client().ApplyURI("mongodb://localhost:27017"))
+              if err != nil {
+                  panic(err)
+              }
+              defer func() { _ = client.Disconnect(context.Background()) }()
+
+              var provider snapshot.Provider = mongodbv2.NewMongoDBProvider(mongodbv2.MongoDBOptions{
+                  Collection: client.Database("toggly").Collection("snapshots"),
+              })
+              _ = provider
+          }
+          EOF
+          (
+            cd "$host_dir"
+            go mod tidy
+            go mod verify
+            go build ./...
+            go test ./...
+          )
 
   sonar:
     name: SonarQube Analysis
@@ -250,7 +390,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [test, smoke-test, sonar, build, dependency-check]
+    needs: [test, smoke-test, current-runtime, mongodb-v2, mongodb-v2-consumer, sonar, build, dependency-check]
     if: always()
     
     steps:
@@ -261,7 +401,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: test,smoke-test,build
+          required-jobs: test,smoke-test,current-runtime,mongodb-v2,mongodb-v2-consumer,build
 
       - name: Generate summary
         working-directory: .
@@ -276,6 +416,9 @@ jobs:
           echo "- Code formatting checked (gofmt)" >> $GITHUB_STEP_SUMMARY
           echo "- Static analysis completed (golangci-lint)" >> $GITHUB_STEP_SUMMARY
           echo "- Go vet checks passed" >> $GITHUB_STEP_SUMMARY
+          echo "- Go 1.25 current-runtime compatibility verified" >> $GITHUB_STEP_SUMMARY
+          echo "- MongoDB Driver v2 adapter verified on Go 1.24 and 1.25" >> $GITHUB_STEP_SUMMARY
+          echo "- Archived MongoDB Driver v2 module compiled in an external consumer" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Packages Tested" >> $GITHUB_STEP_SUMMARY
           echo "- toggly (core)" >> $GITHUB_STEP_SUMMARY
