@@ -194,6 +194,15 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: ${{ matrix.test-cmd }}
 
+      - name: Verify packed React consumers in Chrome
+        if: matrix.sdk == 'React'
+        working-directory: ${{ matrix.path }}
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: |
+          test -x "$CHROME_BIN"
+          npm run test:consumers
+
       - name: Install Chromium for packed SvelteKit host
         if: matrix.sdk == 'SvelteKit'
         working-directory: ${{ matrix.path }}
