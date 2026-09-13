@@ -55,3 +55,13 @@ await client.isFeatureOn('OrderBadge', order, 'Order')
 ## Issues
 
 Use the [structured issue templates](https://github.com/ops-ai/Toggly.FeatureManagement/issues/new/choose).
+
+## SSR evaluated snapshots
+
+`client.hydrateEvaluatedFeatures({ MyFeature: true })` applies a trusted SSR
+boolean snapshot in remote evaluation mode. It updates actual core state and
+notifies feature-refresh subscribers without fetching or starting timers. It
+leaves `featureDefaults` unchanged; changing identity before initialization
+withholds the previous identity's snapshot. Use `hydrateDefinitions` for local
+raw-definition snapshots. This API trusts its caller and is not a replacement
+for verifying externally downloaded signed definitions.

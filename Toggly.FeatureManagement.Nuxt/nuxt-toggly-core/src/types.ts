@@ -306,6 +306,9 @@ export interface TogglyClient {
   /** Raw definitions map (local mode) */
   getDefinitions(): Map<string, FeatureDefinitionModel>
 
+  /** Apply a trusted SSR boolean snapshot in remote mode without initializing or changing fallback defaults. */
+  hydrateEvaluatedFeatures(features: Record<string, boolean>): FeatureDefinitions
+
   /** Hydrate cached definition models without fetching */
   hydrateDefinitions(defs: FeatureDefinitionModel[]): FeatureDefinitions
 

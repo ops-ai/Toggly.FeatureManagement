@@ -4,13 +4,13 @@ const mocks = vi.hoisted(() => ({ config: {} as any, server: vi.fn(), create: vi
 vi.mock('#app', () => ({ defineNuxtPlugin: (fn: unknown) => fn, useRuntimeConfig: () => ({ public: { toggly: mocks.config } }) }))
 vi.mock('#imports', () => ({ defineNitroPlugin: (fn: unknown) => fn, useRuntimeConfig: () => ({ public: { toggly: mocks.config } }) }))
 vi.mock('#toggly/on-error', () => ({ default: undefined }))
-vi.mock('@ops-ai/nuxt-toggly-server', () => ({ initServerToggly: mocks.server }))
-vi.mock('@ops-ai/nuxt-toggly-client', () => ({ createToggly: mocks.create, provideToggly: vi.fn(), vFeature: {}, vFeatureShow: {}, vFeatureClass: {} }))
+vi.mock('@ops-ai/nuxt-toggly-server', () => ({ initServerToggly: mocks.server, closeServerToggly: vi.fn() }))
+vi.mock('@ops-ai/nuxt-toggly-client', () => ({ createToggly: mocks.create, TOGGLY_INJECTION_KEY: Symbol('toggly'), vFeature: {}, vFeatureShow: {}, vFeatureClass: {} }))
 import clientPlugin from '../src/runtime/plugin.client'
 import serverPlugin from '../src/runtime/plugin.server'
 import { createToggly } from '../../nuxt-toggly-client/src/composables/useToggly'
 
-const app = () => ({ vueApp: { provide: vi.fn(), directive: vi.fn() } })
+const app = () => ({ payload: {}, hook: vi.fn(), vueApp: { provide: vi.fn(), directive: vi.fn() } })
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.config = { appKey: 'app', identity: 'user&123', refreshInterval: 0, enableLiveUpdates: false, persistIdentity: false }
@@ -28,7 +28,7 @@ describe('startup context forwarding', () => {
   ])('forwards configured defaults before initialization: %j', async context => {
     Object.assign(mocks.config, context)
     await (clientPlugin as any)(app())
-    await (serverPlugin as any)()
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
     expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining(context))
     expect(mocks.server).toHaveBeenCalledWith(expect.objectContaining(context))
     expect(mocks.init).toHaveBeenCalledTimes(1)
@@ -45,7 +45,7 @@ describe('startup context forwarding', () => {
     groups.splice(1)
     claims.plan = 'pro'
     mocks.server.mockImplementation(async () => { groups.push('mutated'); claims.plan = 'changed' })
-    await (serverPlugin as any)()
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
     expect(mocks.server.mock.calls[0][0]).toEqual(expect.objectContaining({ groups: ['beta'], claims: { plan: 'pro' } }))
   })
 
@@ -70,7 +70,7 @@ describe('startup context forwarding', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const nuxt = app()
     await (clientPlugin as any)(nuxt)
-    await (serverPlugin as any)()
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
     expect(mocks.init).not.toHaveBeenCalled()
     expect(mocks.server).not.toHaveBeenCalled()
     expect(nuxt.vueApp.directive).not.toHaveBeenCalled()
@@ -81,11 +81,11 @@ describe('startup context forwarding', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
     await (clientPlugin as any)(app())
-    await (serverPlugin as any)()
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
     mocks.init.mockRejectedValue(new Error('offline'))
     mocks.server.mockRejectedValue(new Error('offline'))
     await (clientPlugin as any)(app())
-    await (serverPlugin as any)()
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
     expect(console.error).toHaveBeenCalledTimes(debug ? 2 : 0)
   })
 })

@@ -31,7 +31,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     ...config,
   }
 
-  globalConfig = mergedConfig
+  if (typeof window !== 'undefined') globalConfig = mergedConfig
 
   // Load persisted identity if available
   if (
@@ -72,7 +72,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
 
   // Create client
   const client = createTogglyClient(mergedConfig)
-  globalClient = client
+  if (typeof window !== 'undefined') globalClient = client
   client.subscribeFeaturesRefresh?.(() => {
     features.value = client.state.features as Record<string, boolean>
     error.value = client.state.error

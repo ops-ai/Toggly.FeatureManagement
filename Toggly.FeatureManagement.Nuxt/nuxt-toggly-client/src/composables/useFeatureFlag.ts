@@ -28,7 +28,7 @@ export function useFeatureFlag(featureKey: string | Ref<string>): UseFeatureFlag
   )
 
   const checkFeature = async () => {
-    if (!toggly.isReady.value) {
+    if (!toggly.isReady.value || !toggly.client.state.initialized) {
       // Use local feature state from features ref
       enabled.value = toggly.features.value[key.value] === true
       isLoading.value = false

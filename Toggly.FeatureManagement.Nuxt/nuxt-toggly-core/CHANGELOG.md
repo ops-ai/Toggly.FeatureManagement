@@ -1,3 +1,8 @@
+## 1.12.0 — 2026-09-12
+
+### Added
+- `hydrateEvaluatedFeatures` applies a trusted SSR boolean snapshot to the remote client's actual state and notifies observers, without fetching, initializing, or changing fallback defaults. Vue state and public core checks now agree after Nuxt hydration [OPS-1180].
+
 ## 1.11.0
 
 2026-09-10

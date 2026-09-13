@@ -1,9 +1,10 @@
 import { defineNitroPlugin, useRuntimeConfig } from '#imports'
 import moduleOnError from '#toggly/on-error'
-import { initServerToggly } from '@ops-ai/nuxt-toggly-server'
+import { initServerToggly, closeServerToggly } from '@ops-ai/nuxt-toggly-server'
 import type { ModuleOptions } from '../module/types'
 
-export default defineNitroPlugin(async () => {
+export default defineNitroPlugin(async (nitroApp) => {
+  nitroApp.hooks.hook('close', closeServerToggly)
   const config = useRuntimeConfig().public.toggly as ModuleOptions
 
   if (!config.appKey) {

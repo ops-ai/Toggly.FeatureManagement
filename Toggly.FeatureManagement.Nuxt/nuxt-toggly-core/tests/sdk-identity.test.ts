@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import {
   SDK_ID,
   SDK_VERSION,
@@ -8,6 +9,10 @@ import {
 } from '../src/sdk-identity';
 
 describe('sdk-identity', () => {
+  it('reports the published package version in SDK headers', () => {
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    expect(sdkCustomHeaders()['X-Toggly-Sdk-Version']).toBe(manifest.version);
+  });
   it('sdkUserAgent uses toggly prefix format', () => {
     expect(sdkUserAgent()).toBe(`toggly-${SDK_ID}/${SDK_VERSION}`);
   });

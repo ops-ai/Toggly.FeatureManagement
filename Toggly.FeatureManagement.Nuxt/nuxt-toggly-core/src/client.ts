@@ -119,6 +119,7 @@ export function createTogglyClient(
   let localGates: LocalGate[] = config.localGates ?? []
   let localGateIndex: FlagGateIndex = buildFlagGateIndex(localGates)
   const localGatesListeners = new Set<() => void>()
+  let hasHydratedEvaluatedSnapshot = false
   const featuresRefreshListeners = new Set<() => void>()
 
   function reportError(message: string, error?: unknown): void {
@@ -223,6 +224,14 @@ export function createTogglyClient(
         console.error('[Toggly] Feature refresh listener error:', error)
       }
     })
+  }
+
+  function discardHydratedSnapshotForIdentity(identity: string | undefined): void {
+    if (hasHydratedEvaluatedSnapshot && identity !== config.identity) {
+      state.features = { ...config.featureDefaults }
+      hasHydratedEvaluatedSnapshot = false
+      notifyFeaturesRefresh()
+    }
   }
 
   function isLocalEvaluation(): boolean {
@@ -685,6 +694,7 @@ export function createTogglyClient(
     },
 
     set identity(value: string | undefined) {
+      discardHydratedSnapshotForIdentity(value)
       config.identity = value
     },
 
@@ -695,6 +705,7 @@ export function createTogglyClient(
 
       // Merge new config if provided
       if (newConfig) {
+        if ('identity' in newConfig) discardHydratedSnapshotForIdentity(newConfig.identity)
         Object.assign(config, newConfig)
       }
 
@@ -759,6 +770,7 @@ export function createTogglyClient(
         return state.features
       } finally {
         state.loading = false
+        hasHydratedEvaluatedSnapshot = false
       }
     },
 
@@ -893,6 +905,7 @@ export function createTogglyClient(
       const dataMap = await hookExecutor.executeBeforeIdentify(identity)
 
       if (!state.initialized) {
+        discardHydratedSnapshotForIdentity(identity)
         config.identity = identity
         await hookExecutor.executeAfterIdentify(identity, dataMap)
         return
@@ -922,6 +935,21 @@ export function createTogglyClient(
         notifyFeaturesRefresh()
         throw error
       }
+    },
+
+    hydrateEvaluatedFeatures(features: Record<string, boolean>): FeatureDefinitions {
+      if (destroyed) return { ...state.features }
+      if (isLocalEvaluation()) {
+        throw new Error('[Toggly] Evaluated snapshot hydration requires remote evaluation mode')
+      }
+      if (Object.values(features).some(value => typeof value !== 'boolean')) {
+        throw new TypeError('[Toggly] Evaluated snapshots must contain only booleans')
+      }
+      // Current state only: never promote another identity's snapshot to defaults.
+      state.features = { ...features }
+      hasHydratedEvaluatedSnapshot = true
+      notifyFeaturesRefresh()
+      return { ...state.features }
     },
 
     getDefinitions(): Map<string, FeatureDefinitionModel> {
