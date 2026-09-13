@@ -48,7 +48,7 @@ provider := snapshot.NewRedisProvider(snapshot.RedisOptions{
 - `{prefix}:definitions` - Feature definitions snapshot
 - `{prefix}:jwks` - JWK set for signed definitions
 
-### MongoDB Provider
+### MongoDB Go Driver v1 Provider
 
 Stores snapshots in MongoDB for high availability.
 
@@ -69,6 +69,19 @@ provider := snapshot.NewMongoDBProvider(snapshot.MongoDBOptions{
     JWKSID:        "toggly_jwks",        // Default
 })
 ```
+
+The retained provider uses [MongoDB Go Driver v1](https://pkg.go.dev/go.mongodb.org/mongo-driver).
+Applications using MongoDB Go Driver v2 should install the separate adapter:
+
+```bash
+go get github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2@latest
+```
+
+It has the same snapshot-provider interface and document layout, so existing
+`toggly_definitions` and `toggly_jwks` documents can be read after moving a
+host application to Driver v2. See the
+[MongoDB Driver v2 adapter README](../../../toggly-go-mongodb-v2/README.md)
+for its import and connection example.
 
 **Documents:**
 ```json
@@ -215,8 +228,11 @@ The providers require additional dependencies:
 # Redis
 go get github.com/redis/go-redis/v9
 
-# MongoDB
+# MongoDB Go Driver v1 (retained)
 go get go.mongodb.org/mongo-driver/mongo
+
+# MongoDB Go Driver v2 adapter
+go get github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2
 
 # PostgreSQL
 go get github.com/lib/pq

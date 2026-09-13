@@ -15,6 +15,7 @@ Official Go SDK for [Toggly](https://toggly.io) — local feature-flag evaluatio
 |---------|-------------|---------|
 | Core client | `.../toggly-go/toggly` | `NewClient`, `IsEnabled`, variants, usage/metrics |
 | Snapshot | `.../toggly-go/toggly/snapshot` | Offline / startup cache (memory, file, Redis, SQLite, Postgres, MongoDB) |
+| MongoDB Driver v2 snapshot adapter | `.../toggly-go-mongodb-v2` | Optional snapshot adapter for hosts using MongoDB Go Driver v2 |
 | Session | `.../toggly-go/toggly/session` | Sticky results for percentage rollouts |
 | Live updates | `.../toggly-go/toggly/live` | WebSocket refresh |
 | Context helpers | `.../toggly-go/togglyctx` | Evaluation context helpers |
@@ -92,6 +93,7 @@ Full example: [`examples/basic`](examples/basic).
 - **Product docs**: [docs.toggly.io](https://docs.toggly.io)
 - **API reference**: [pkg.go.dev](https://pkg.go.dev/github.com/ops-ai/Toggly.FeatureManagement/toggly-go)
 - **Snapshot providers**: [`toggly/snapshot/README.md`](toggly/snapshot/README.md)
+- **MongoDB Go Driver v2 adapter**: [`../toggly-go-mongodb-v2/README.md`](../toggly-go-mongodb-v2/README.md)
 - **SDK catalog (monorepo)**: [`../README.md`](../README.md)
 - **Releases**: [`.github/RELEASE.md`](../.github/RELEASE.md) · current version in [`VERSION`](VERSION)
 
