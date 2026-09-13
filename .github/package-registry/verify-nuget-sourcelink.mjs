@@ -177,7 +177,7 @@ export function verifySigningWorkflow(options = {}) {
  * differ due to RFC3161 timestamps.
  *
  * Instead assert:
- * - eleven nupkg + eleven snupkg each run
+ * - one nupkg and snupkg per inventory package each run
  * - identical non-empty repository commit in each nuspec
  * - identical SHA-256 for payload entries under lib/ (and contentFiles/analyzers when present)
  *
@@ -195,6 +195,7 @@ export function verifyDualPackHashes(options = {}) {
     };
   }
 
+  const expectedCount = (options.inventory || loadInventory(options.inventoryPath)).packages.length;
   const sdkRoot = options.sdkRoot || SDK_ROOT;
   const sln = path.join(sdkRoot, 'Toggly.FeatureManagement.sln');
   const errors = [];
@@ -238,16 +239,16 @@ export function verifyDualPackHashes(options = {}) {
     const nupkgsA = fs.readdirSync(dirA).filter((f) => f.endsWith('.nupkg')).sort();
     const nupkgsB = fs.readdirSync(dirB).filter((f) => f.endsWith('.nupkg')).sort();
 
-    if (nupkgsA.length !== 11) {
-      errors.push(`first pack produced ${nupkgsA.length} nupkgs, expected 11`);
+    if (nupkgsA.length !== expectedCount) {
+      errors.push(`first pack produced ${nupkgsA.length} nupkgs, expected ${expectedCount}`);
     }
     if (JSON.stringify(nupkgsA) !== JSON.stringify(nupkgsB)) {
       errors.push(`pack file lists differ:\n  A: ${nupkgsA.join(', ')}\n  B: ${nupkgsB.join(', ')}`);
     }
 
     const snupkgs = fs.readdirSync(dirA).filter((f) => f.endsWith('.snupkg'));
-    if (snupkgs.length !== 11) {
-      errors.push(`first pack produced ${snupkgs.length} snupkgs, expected 11`);
+    if (snupkgs.length !== expectedCount) {
+      errors.push(`first pack produced ${snupkgs.length} snupkgs, expected ${expectedCount}`);
     }
 
     for (const name of nupkgsA) {
@@ -328,7 +329,7 @@ function payloadEntryHashes(nupkgPath) {
 }
 
 /**
- * When NUGET_PACK_DIR is set, require eleven snupkgs alongside nupkgs.
+ * When NUGET_PACK_DIR is set, require inventory-matched snupkgs alongside nupkgs.
  */
 export function verifyPackedSymbols(options = {}) {
   const packDir = options.packDir || process.env.NUGET_PACK_DIR;
@@ -341,15 +342,19 @@ export function verifyPackedSymbols(options = {}) {
 
   const inventory = options.inventory || loadInventory(options.inventoryPath);
   const errors = [];
-  const files = fs.readdirSync(packDir);
+  const expectedCount = inventory.packages.length;
+  const files = fs.readdirSync(packDir).filter((file) => inventory.packages.some((pkg) => {
+    const version = file.slice(pkg.id.length + 1);
+    return file.startsWith(`${pkg.id}.`) && /^\d/.test(version);
+  }));
   const nupkgs = files.filter((f) => f.endsWith('.nupkg') && !f.endsWith('.snupkg'));
   const snupkgs = files.filter((f) => f.endsWith('.snupkg'));
 
-  if (nupkgs.length !== 11) {
-    errors.push(`expected 11 nupkgs in ${packDir}, found ${nupkgs.length}`);
+  if (nupkgs.length !== expectedCount) {
+    errors.push(`expected ${expectedCount} nupkgs in ${packDir}, found ${nupkgs.length}`);
   }
-  if (snupkgs.length !== 11) {
-    errors.push(`expected 11 snupkgs in ${packDir}, found ${snupkgs.length}`);
+  if (snupkgs.length !== expectedCount) {
+    errors.push(`expected ${expectedCount} snupkgs in ${packDir}, found ${snupkgs.length}`);
   }
 
   for (const pkg of inventory.packages) {

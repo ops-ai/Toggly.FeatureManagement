@@ -482,6 +482,11 @@ jobs:
           NUGET_ALL_PACK_DIR: nuget-analysis-pack
         run: node --test .github/package-registry/dotnet-inventory.test.mjs
 
+      - name: Verify server NuGet artifact contract
+        env:
+          NUGET_PACK_DIR: nuget-analysis-pack
+        run: node --test .github/package-registry/verify-nuget-metadata.test.mjs .github/package-registry/verify-nuget-sourcelink.test.mjs
+
       - name: Upload NuGet packages and symbols
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
