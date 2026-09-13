@@ -50,19 +50,19 @@ public sealed class ServerFeatureSession : IFeatureSession
         InitializeAsync(cancellationToken);
 
     public Task SetContextAsync(
-        EvaluationContext value,
+        EvaluationContext context,
         CancellationToken cancellationToken = default
     )
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
         // Custom filters must not be able to mutate a later circuit evaluation.
-        var groups = value.Groups is null ? null : Array.AsReadOnly(value.Groups.ToArray());
-        var claims = value.Claims is null
+        var groups = context.Groups is null ? null : Array.AsReadOnly(context.Groups.ToArray());
+        var claims = context.Claims is null
             ? null
-            : new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(value.Claims));
-        Volatile.Write(ref context, new(value.Identity, groups, claims));
+            : new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(context.Claims));
+        Volatile.Write(ref this.context, new(context.Identity, groups, claims));
         Changed?.Invoke(this, EventArgs.Empty);
         return Task.CompletedTask;
     }

@@ -23,7 +23,10 @@ public sealed class BrowserModule(IJSRuntime js) : IAsyncDisposable
         {
             await (await module).DisposeAsync();
         }
-        catch (JSDisconnectedException) { }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is already gone, so browser-side module cleanup can no longer run.
+        }
     }
 }
 

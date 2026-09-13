@@ -11,6 +11,8 @@ namespace Blazor.Tests;
 
 public class ProviderTests : BlazorTestContext
 {
+    private static readonly string[] PublicKey = ["public"];
+
     [Fact]
     public async Task ServerProviderTracksAuthenticationChangesAndLogoutThenUnsubscribes()
     {
@@ -74,7 +76,7 @@ public class ProviderTests : BlazorTestContext
             new Dictionary<string, bool> { { "public", true }, { "secret", true } }
         );
         var cut = Render<FeatureHydration>(p =>
-            p.Add(x => x.PublicKeys, new[] { "public" })
+            p.Add(x => x.PublicKeys, PublicKey)
                 .AddChildContent<Feature>(f =>
                     f.Add(x => x.Key, "public")
                         .AddChildContent("enabled")

@@ -11,6 +11,10 @@ namespace Blazor.Tests;
 
 public class ComponentTests : BlazorTestContext
 {
+    private static readonly string[] CurrentKey = ["current"];
+    private static readonly string[] PublicKey = ["public"];
+    private static readonly string[] MultipleKeys = ["a", "b"];
+
     [Fact]
     public async Task GateRendersLoadingThenDispatchesLiveChangesAndUnsubscribes()
     {
@@ -137,7 +141,7 @@ public class ComponentTests : BlazorTestContext
         );
         session.Evaluate = () => current.Task;
         cut.Render(p => p.Add(x => x.Key, "current"));
-        Assert.Equal(new[] { "current" }, session.Keys);
+        Assert.Equal(CurrentKey, session.Keys);
         await cut.InvokeAsync(() => old.SetResult(true));
         Assert.Equal("loading", cut.Markup);
         await cut.InvokeAsync(() => current.SetResult(false));
@@ -195,7 +199,7 @@ public class ComponentTests : BlazorTestContext
         Services.AddSingleton<IFeatureSession>(session);
         state.Persist("toggly-public-flags", new Dictionary<string, bool> { ["public"] = true });
         var cut = Render<FeatureHydration>(p =>
-            p.Add(x => x.PublicKeys, new[] { "public" })
+            p.Add(x => x.PublicKeys, PublicKey)
                 .AddChildContent(PairedFeatures(key: "public", loading: "loading"))
         );
         Assert.Equal("enabled", cut.Markup);
@@ -217,7 +221,7 @@ public class ComponentTests : BlazorTestContext
         EntityContext entity
     )
     {
-        Assert.Equal(new[] { "a", "b" }, request.Keys);
+        Assert.Equal(MultipleKeys, request.Keys);
         Assert.Equal(Requirement.Any, request.Requirement);
         Assert.Equal(negate, request.Negate);
         Assert.Same(entity, request.Entity);

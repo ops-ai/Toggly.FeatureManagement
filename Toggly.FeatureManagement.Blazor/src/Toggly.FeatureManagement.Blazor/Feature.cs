@@ -85,13 +85,15 @@ public sealed class Feature : ComponentBase, IDisposable
             });
     }
 
-    protected override void BuildRenderTree(RenderTreeBuilder builder) =>
-        builder.AddContent(
-            0,
-            pending || (!Session.IsReady && !hydrated) ? Loading
-                : enabled ? ChildContent
-                : null
-        );
+    protected override void BuildRenderTree(RenderTreeBuilder builder)
+    {
+        RenderFragment? content = null;
+        if (pending || (!Session.IsReady && !hydrated))
+            content = Loading;
+        else if (enabled)
+            content = ChildContent;
+        builder.AddContent(0, content);
+    }
 
     public void Dispose()
     {

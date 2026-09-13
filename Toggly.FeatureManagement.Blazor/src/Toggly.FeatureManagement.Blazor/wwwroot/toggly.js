@@ -1,6 +1,6 @@
 // No Node, filesystem or trusted server dependencies: this module executes in a browser.
 const decode = (value) =>
-  Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_/g, "/")), (c) =>
+  Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), (c) =>
     c.charCodeAt(0),
   );
 export async function verify(definitions, timestamp, signature, kid, jwksJson) {
