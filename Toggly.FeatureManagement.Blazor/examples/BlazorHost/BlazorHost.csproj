@@ -4,6 +4,6 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Toggly.FeatureManagement.Blazor.Server" Version="0.1.0" />
+    <PackageReference Include="Toggly.FeatureManagement.Blazor.Server" Version="$(Version)" />
   </ItemGroup>
 </Project>

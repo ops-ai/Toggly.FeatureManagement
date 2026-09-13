@@ -7,7 +7,7 @@ Use the [trusted .NET server SDK](https://docs.toggly.io/sdks/dotnet) for backen
 ## Install and initialize
 
 ```sh
-dotnet add package Toggly.FeatureManagement.Client.Desktop --version 0.1.0
+dotnet add package Toggly.FeatureManagement.Client.Desktop --version 3.7.0
 ```
 
 ```csharp

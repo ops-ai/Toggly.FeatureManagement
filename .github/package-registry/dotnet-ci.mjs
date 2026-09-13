@@ -10,6 +10,7 @@ import {
   repoRoot,
 } from "./dotnet-inventory.mjs";
 import { verifyPackedNupkgs } from "./verify-nuget-metadata.mjs";
+import { readCommonVersion, verifyPackageVersions } from "./dotnet-version.mjs";
 const inventory = loadDotnetInventory();
 const packages = validateSources(inventory);
 const command = process.argv[2];
@@ -107,6 +108,13 @@ if (command === "validate") {
   if (!result.ok) {
     throw new Error(result.errors.join("\n"));
   }
+
+  verifyPackageVersions(
+    selected,
+    output,
+    plan?.version ??
+      readCommonVersion(path.join(repoRoot, packages[0].manifest)),
+  );
 
   const artifacts = fs.readdirSync(output);
   for (const pkg of selected) {

@@ -12,12 +12,12 @@ Native Razor feature gates for static SSR, Interactive Server, WebAssembly and I
 | Interactive Auto | Server package in server project; browser package in client project | Each runtime creates its own session |
 
 ```sh
-dotnet add package Toggly.FeatureManagement.Blazor --version 0.1.0
+dotnet add package Toggly.FeatureManagement.Blazor --version 3.7.0
 # Server project only:
-dotnet add package Toggly.FeatureManagement.Blazor.Server --version 0.1.0
+dotnet add package Toggly.FeatureManagement.Blazor.Server --version 3.7.0
 ```
 
-The server package reuses trusted `Toggly.FeatureManagement` 3.6.6. The browser package reuses portable `Toggly.FeatureManagement.Client` 0.1.0 and has no dependency on server evaluation or filesystem storage. The two packages target net8.0; use a compatible ASP.NET Core host and supported .NET runtime.
+The server package reuses trusted `Toggly.FeatureManagement` 3.7.0. The browser package reuses portable `Toggly.FeatureManagement.Client` 3.7.0 and has no dependency on server evaluation or filesystem storage. The two packages target net8.0; use a compatible ASP.NET Core host and supported .NET runtime.
 
 ## Trusted server setup
 

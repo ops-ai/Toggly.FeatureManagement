@@ -17,7 +17,7 @@ args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 feed = args.feed.resolve()
 
-# Obtain each version from the artifact itself; never impose one SDK-wide version.
+# Obtain versions from the artifacts being exercised; shared version consistency is checked during packing.
 packages = {}
 for artifact in feed.glob('*.nupkg'):
     with zipfile.ZipFile(artifact) as archive:

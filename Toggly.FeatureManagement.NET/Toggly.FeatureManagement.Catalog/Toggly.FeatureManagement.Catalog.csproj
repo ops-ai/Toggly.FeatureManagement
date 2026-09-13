@@ -9,7 +9,6 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
-    <Version>0.1.0</Version>
     <PackageId>Toggly.FeatureManagement.Catalog</PackageId>
     <Description>Portable feature catalog contracts, validation, and canonical serialization for Toggly embedded feature management.</Description>
     <AssemblyTitle>Toggly Feature Management Catalog</AssemblyTitle>

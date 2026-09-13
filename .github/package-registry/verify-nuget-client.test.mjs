@@ -15,7 +15,7 @@ const root = path.resolve(
 );
 const inventory = loadInventory();
 const family = inventory.families.find((f) => f.name === "distributed-client");
-test("client packages have manifest versions, changelog and release inventory", () => {
+test("client packages inherit the common version, changelog and release inventory", () => {
   assert.ok(family);
   assert.deepEqual(
     family.packages.map((p) => p.id),
@@ -48,7 +48,7 @@ test("client packages have manifest versions, changelog and release inventory", 
       path.join(root, family.sdkRoot, pkg.project),
       "utf8",
     );
-    assert.match(project, /<Version>\d+\.\d+\.\d+(?:-[^<]+)?<\/Version>/);
+    assert.doesNotMatch(project, /<(?:Version|PackageVersion)>/);
     assert.match(project, /<TargetFramework>net8\.0<\/TargetFramework>/);
     assert.doesNotMatch(project, /Microsoft.AspNetCore/);
   }

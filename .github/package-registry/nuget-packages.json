@@ -200,5 +200,6 @@
       "coverageCheck": "Toggly.FeatureManagement.Blazor/check-coverage.py",
       "browserTests": "Toggly.FeatureManagement.Blazor/test-browser.sh"
     }
-  ]
+  ],
+  "versionManifest": "Toggly.FeatureManagement.NET/Directory.Build.props"
 }

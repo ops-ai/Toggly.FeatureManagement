@@ -11,7 +11,6 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <Description>Provides RavenDB storage for Toggly cloud snapshots and authoritative offline embedded feature catalogs.</Description>
     <AssemblyTitle>Toggly RavenDB Feature Snapshot Provider</AssemblyTitle>
-    <Version>3.7.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

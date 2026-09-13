@@ -33,10 +33,8 @@ export function flattenPackages(inventory) {
       changelog: family.changelog,
       projectPath: path.posix.join(family.sdkRoot, pkg.project),
       manifest:
-        pkg.manifest ??
-        (family.name === "server"
-          ? path.posix.join(family.sdkRoot, "Directory.Build.props")
-          : path.posix.join(family.sdkRoot, pkg.project)),
+        inventory.versionManifest ??
+        path.posix.join(inventory.sdkRoot, "Directory.Build.props"),
       dependencies: pkg.dependencies ?? [],
       aliases: pkg.aliases ?? [],
     })),
@@ -136,6 +134,13 @@ export function validateSources(inventory, root = repoRoot) {
   const byId = new Set(packages.map((pkg) => pkg.id));
   for (const pkg of packages) {
     const source = fs.readFileSync(path.join(root, pkg.projectPath), "utf8");
+    if (
+      /<(?:Version|VersionPrefix|VersionSuffix|PackageVersion)\b/.test(source)
+    ) {
+      throw new Error(
+        `Independent version override in ${pkg.projectPath}; use ${pkg.manifest}`,
+      );
+    }
     const dependencies = new Set(pkg.dependencies);
     for (const match of source.matchAll(
       /<ProjectReference\s+Include="([^"]+)"/g,
