@@ -1,25 +1,19 @@
 import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { sdkUserAgent } from '../sdk-identity.js'
 import { DEFAULT_METRICS_BASE_URL } from './https-client.js'
 
-/**
- * Resolve this module's URL without a static `import.meta` reference so Jest's
- * CJS transform can load the file. Bundled ESM still gets the real module URL
- * via eval; Jest/CJS falls back to `__filename`.
- */
-function resolveThisModuleUrl(): string {
-  try {
-    // eslint-disable-next-line no-eval -- avoid static import.meta for Jest CJS
-    return eval('import.meta.url') as string
-  } catch {
-    return pathToFileURL(__filename).href
-  }
+declare global {
+  var __TOGGLY_MODULE_URL__: string
 }
 
-const thisModuleUrl = resolveThisModuleUrl()
+// Rollup replaces this test seam with the native module URL for each output:
+// `import.meta.url` in ESM and `pathToFileURL(__filename).href` in CommonJS.
+// This lets a packed SDK find its proto files without asking the consuming app
+// to supply a process-global filename.
+const thisModuleUrl = globalThis.__TOGGLY_MODULE_URL__
 const nodeRequire = createRequire(thisModuleUrl)
 
 /**

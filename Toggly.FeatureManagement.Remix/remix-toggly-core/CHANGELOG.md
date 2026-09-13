@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.1
+
+2026-09-12
+
+### Fixed
+- Resolve vendored telemetry protobufs from the native ESM module URL so a
+  configured Remix server starts without a consumer-provided global
+  `__filename`.
+
 ## 1.9.0
 
 2026-09-10

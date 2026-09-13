@@ -21,6 +21,19 @@ const external = [
   'node:crypto',
 ];
 
+function replaceModuleUrl(replacement) {
+  return {
+    name: 'replace-toggly-module-url',
+    transform(code, id) {
+      if (!id.endsWith('/telemetry/grpc-clients.ts')) return null;
+      return {
+        code: code.replace('globalThis.__TOGGLY_MODULE_URL__', replacement),
+        map: null,
+      };
+    },
+  };
+}
+
 function jsBuild(input, esmFile, cjsFile) {
   return [
     {
@@ -31,6 +44,7 @@ function jsBuild(input, esmFile, cjsFile) {
         sourcemap: true,
       },
       plugins: [
+        replaceModuleUrl('import.meta.url'),
         resolve({ preferBuiltins: true }),
         commonjs(),
         typescript({
@@ -50,6 +64,7 @@ function jsBuild(input, esmFile, cjsFile) {
         exports: 'named',
       },
       plugins: [
+        replaceModuleUrl("require('node:url').pathToFileURL(__filename).href"),
         resolve({ preferBuiltins: true }),
         commonjs(),
         typescript({
