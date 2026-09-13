@@ -146,6 +146,26 @@
       "testProject": "Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests",
       "coverageSettings": "Toggly.FeatureManagement.Client/coverage.runsettings",
       "coverageCheck": "Toggly.FeatureManagement.Client/check-coverage.py"
+    },
+    {
+      "name": "blazor",
+      "sdkRoot": "Toggly.FeatureManagement.Blazor",
+      "changelog": "Toggly.FeatureManagement.Blazor/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-dotnet-release.yml",
+      "packages": [
+        {
+          "id": "Toggly.FeatureManagement.Blazor",
+          "project": "src/Toggly.FeatureManagement.Blazor/Toggly.FeatureManagement.Blazor.csproj"
+        },
+        {
+          "id": "Toggly.FeatureManagement.Blazor.Server",
+          "project": "src/Toggly.FeatureManagement.Blazor.Server/Toggly.FeatureManagement.Blazor.Server.csproj"
+        }
+      ],
+      "testProject": "Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests",
+      "coverageSettings": "Toggly.FeatureManagement.Blazor/coverage.runsettings",
+      "coverageCheck": "Toggly.FeatureManagement.Blazor/check-coverage.py",
+      "browserTests": "Toggly.FeatureManagement.Blazor/test-browser.sh"
     }
   ]
 }

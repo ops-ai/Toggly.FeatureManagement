@@ -69,6 +69,7 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 | Platform | Package | Path | Docs |
 |----------|---------|------|------|
 | Elixir / Phoenix / LiveView | `toggly`, `toggly_phoenix`, `toggly_live_view` | [`toggly-elixir`](toggly-elixir/) | [Docs](https://docs.toggly.io/sdks/elixir) |
+| Blazor | `Toggly.FeatureManagement.Blazor` / `.Blazor.Server` | [`Toggly.FeatureManagement.Blazor`](Toggly.FeatureManagement.Blazor) | [Docs](https://docs.toggly.io/sdks/blazor) |
 | .NET | `Toggly.FeatureManagement` (+ Hangfire, storage, NSwag, …) | [`Toggly.FeatureManagement.NET`](Toggly.FeatureManagement.NET) | [Docs](https://docs.toggly.io) |
 | Node.js | `@ops-ai/toggly-node-core`, Express / Fastify / Hono / Koa | [`Toggly.FeatureManagement.Node`](Toggly.FeatureManagement.Node) | [Docs](https://docs.toggly.io) |
 | NestJS 10/11 | `@ops-ai/toggly-nestjs` | [`Toggly.FeatureManagement.NestJS`](Toggly.FeatureManagement.NestJS) | [Docs](https://docs.toggly.io/sdks/nestjs) |

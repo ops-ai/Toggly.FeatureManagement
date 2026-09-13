@@ -173,11 +173,12 @@ The inventory in `package-registry/nuget-packages.json` owns package IDs, projec
 paths, family tests and changelogs. Adding a publishable C# project without an
 inventory record fails validation. Do not create another NuGet release workflow.
 
-Select `all`, an exact family name (`server`, `distributed-client`), package IDs,
-or the existing server aliases such as `Core` and `Web`. Dependencies present in
-the inventory are included automatically and published first. Each package is
-compared to NuGet independently: an already published server version does not
-skip an unpublished client. Each selected family runs tests/coverage before
+Select `all`, an exact family name (`server`, `distributed-client`, `blazor`),
+package IDs, or the existing server aliases such as `Core` and `Web`.
+Dependencies present in the inventory are included automatically and published
+first. Each package is compared to NuGet independently: an already published
+server version does not skip an unpublished client. Each selected family runs
+tests/coverage before
 artifacts are packed and verified; signing and publication use those artifacts.
 
 The default `publish` mode uses every package's manifest version. Legacy
@@ -202,3 +203,16 @@ retries retain earlier assets and notes. Workflow runs are serialized across ref
 to avoid concurrent publication races. Re-run failed jobs to resume the retained
 candidate after a partial registry push. CLI binary releases
 continue through `cli-build-release.yml`; the CLI is not a NuGet SDK package.
+
+### Blazor family
+
+The `blazor` family participates in the same inventory-driven analysis and manual
+release workflow. Its browser package requires published portable Client 0.1.0;
+publish that dependency first when it is absent from this checkout. Once the
+Client family is present, dependency order is derived from actual package/project
+references. The server adapter follows the Blazor browser package.
+
+The Blazor runtime compatibility jobs retain .NET 8/.NET 10 tests, browser crypto
+coverage and packed consumer checks in `analysis-dotnet.yml`. No separate Blazor
+publication workflow is used. Registry publisher permissions still need to cover
+the new package IDs; configuration does not prove first publication.

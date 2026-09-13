@@ -1,0 +1,7 @@
+[*]
+end_of_line = lf
+insert_final_newline = true
+
+[*.cs]
+csharp_preserve_single_line_blocks = false
+csharp_preserve_single_line_statements = false

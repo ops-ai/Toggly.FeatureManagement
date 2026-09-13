@@ -257,3 +257,30 @@ updates:
         applies-to: version-updates
         patterns:
           - "*"
+
+  - package-ecosystem: nuget
+    directory: "/Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
+  - package-ecosystem: nuget
+    directory: "/Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor.Server"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
+  - package-ecosystem: nuget
+    directory: "/Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies

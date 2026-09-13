@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <TargetFramework>net8.0</TargetFramework>
+    <Description>Scoped Blazor feature gates and browser integration for Toggly.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Toggly.FeatureManagement.Client" Version="0.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.31" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="8.0.31" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

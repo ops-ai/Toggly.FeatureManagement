@@ -8,6 +8,7 @@ on:
     paths:
       - 'Toggly.FeatureManagement.NET/**'
       - 'Toggly.CLI/**'
+      - 'Toggly.FeatureManagement.Blazor/**'
       - 'Toggly.FeatureManagement.Client/**'
       - '.github/workflows/analysis-dotnet.yml'
       - '.github/package-registry/**'
@@ -26,6 +27,7 @@ on:
     paths:
       - 'Toggly.FeatureManagement.NET/**'
       - 'Toggly.CLI/**'
+      - 'Toggly.FeatureManagement.Blazor/**'
       - 'Toggly.FeatureManagement.Client/**'
       - '.github/workflows/analysis-dotnet.yml'
       - '.github/package-registry/**'
@@ -494,3 +496,42 @@ jobs:
         env:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
         run: dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj -c Release --logger "trx;LogFileName=smoke-test-results.trx" --blame-hang-timeout 90s --blame-hang-dump-type none
+
+  blazor-runtime:
+    name: Blazor .NET ${{ matrix.sdk }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - sdk: '8.0.x'
+            framework: net8.0
+          - sdk: '10.0.x'
+            framework: net10.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: |
+            8.0.x
+            ${{ matrix.sdk }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - run: dotnet test Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests -c Release -p:TestFramework=${{ matrix.framework }} --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Blazor/coverage.runsettings --results-directory TestResults/blazor
+      - run: python3 Toggly.FeatureManagement.Blazor/check-coverage.py TestResults/blazor
+      - run: bash Toggly.FeatureManagement.Blazor/test-browser.sh
+      - run: |
+          dotnet pack Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
+          dotnet pack Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor.Server -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
+      - run: NUGET_BLAZOR_PACK_DIR=blazor-pack node --test .github/package-registry/verify-nuget-blazor.test.mjs
+      - name: Compile packed artifact consumer
+        run: |
+          dotnet restore Toggly.FeatureManagement.Blazor/examples/BlazorHost --source "${GITHUB_WORKSPACE}/blazor-pack" --source https://api.nuget.org/v3/index.json
+          dotnet build Toggly.FeatureManagement.Blazor/examples/BlazorHost -c Release --no-restore
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: blazor-${{ matrix.sdk }}
+          path: |
+            TestResults/blazor
+            blazor-pack
+            Toggly.FeatureManagement.Blazor/coverage/
