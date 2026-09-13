@@ -365,6 +365,15 @@
       "workflow": ".github/workflows/sdk-nestjs-release.yml",
       "docsUrl": "https://docs.toggly.io/sdks/nestjs",
       "oidcReady": false
+    },
+    {
+      "name": "@ops-ai/toggly-sveltekit",
+      "group": "sveltekit",
+      "manifest": "Toggly.FeatureManagement.SvelteKit/package.json",
+      "changelog": "Toggly.FeatureManagement.SvelteKit/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-sveltekit-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/javascript/sveltekit",
+      "oidcReady": false
     }
   ]
 }
