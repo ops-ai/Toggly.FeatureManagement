@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 - 2026-09-12
+
+### Changed
+- Add packed-host validation and package metadata for Django 5.2, 6.0, and
+  6.1. Django 4.2, 5.0, and 5.1 remain covered by retained regression rows.
+
 ## 0.4.0 - 2026-09-12
 
 ### Added

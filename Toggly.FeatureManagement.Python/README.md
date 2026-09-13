@@ -133,12 +133,21 @@ async def new_feature():
 - **Background refresh** - Automatic background refresh of feature definitions
 - **Offline support** - Snapshot providers for offline/startup resilience
 
-## Requirements
+## Compatibility
 
-- Python 3.8+
-- Django 4.2+ (for toggly-django)
-- Flask 2.0+ (for toggly-flask)
-- FastAPI 0.100+ (for toggly-fastapi)
+The declared floors remain unchanged: core, Django, Flask, and cache packages
+support Python 3.8+; FastAPI supports Python 3.9+. `toggly-django` supports
+Django 4.2+.
+
+The release workflow retains Python 3.8–3.13 regression coverage and adds
+Python 3.14. Its packed-consumer hosts test Django 4.2, 5.0, 5.1, 5.2.17,
+6.0.8, and 6.1.1 using framework-valid Python versions. The Python 3.14 /
+Django 6.1.1 host also validates Flask 3.1.3, FastAPI 0.141.1, redis-py
+8.1.0, and the optional WebSocket and gRPC transports.
+
+Use a Django version that supports the Python version selected for your host.
+The package constraints deliberately remain open above their declared floors;
+the tested rows identify the combinations continuously verified by this repo.
 
 ## Documentation
 

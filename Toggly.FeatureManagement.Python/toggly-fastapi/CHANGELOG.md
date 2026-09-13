@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 - 2026-09-12
+
+### Changed
+- Declare Python 3.14 compatibility and validate the packed middleware with
+  FastAPI 0.141.1. Existing Python 3.9+ support remains unchanged.
+
 ## 0.3.0 - 2026-09-08
 
 ### Added

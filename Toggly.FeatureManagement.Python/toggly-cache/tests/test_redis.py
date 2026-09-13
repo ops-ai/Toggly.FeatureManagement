@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import json
+from importlib.metadata import version
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from toggly import FeatureDefinition
+
+
+def test_exported_version_matches_installed_distribution() -> None:
+    """Keep runtime package identity aligned with the published wheel metadata."""
+    from toggly_cache import __version__
+
+    assert __version__ == version("toggly-cache")
 
 
 class TestRedisSnapshotProvider:
