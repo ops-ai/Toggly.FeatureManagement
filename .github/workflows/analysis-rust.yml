@@ -70,6 +70,12 @@ jobs:
       - name: Run tests
         run: cargo test --all-features --workspace
 
+      - name: Verify current framework package artifacts
+        run: |
+          cargo update -p actix-web --precise 4.15.0
+          cargo test -p toggly-actix -p toggly-axum -p toggly-axum08 -p toggly-rocket
+          cargo package -p toggly-axum08 --allow-dirty --no-verify
+
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest

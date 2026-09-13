@@ -5,6 +5,7 @@ members = [
     "toggly-macros",
     "toggly-actix",
     "toggly-axum",
+    "toggly-axum08",
     "toggly-rocket",
 ]
 
@@ -49,7 +50,7 @@ prost-types = "0.13"
 tower = "0.4"
 
 # Framework integrations
-actix-web = ">=4.4, <4.13"
+actix-web = ">=4.4, <4.16"
 axum = "0.7"
 rocket = "0.5"
 
