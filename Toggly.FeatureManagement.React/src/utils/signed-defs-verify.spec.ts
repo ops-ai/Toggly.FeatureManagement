@@ -427,26 +427,38 @@ describe('signed-defs-verify', () => {
     });
   });
 
-  it('retains the selected Node provider without global WebCrypto', async () => {
-    // Node entry selection is fixed by package resolution, not process.versions.
-    // Browser-only missing-provider behavior is covered by packed browser consumers.
-    const { privateKey, jwk } = makeSignedKey();
-    const defs = '{"a":1}';
-    const timestamp = 1;
-    const signature = signP1363(privateKey, sha256ForSigning(`${defs}|${timestamp}`)).toString('base64');
+  it('throws when WebCrypto is unavailable outside Node', async () => {
+    const originalNode = process.versions.node;
     const originalCrypto = globalThis.crypto;
+    Object.defineProperty(process.versions, 'node', {
+      value: undefined,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
     Object.defineProperty(globalThis, 'crypto', {
       value: undefined,
       configurable: true,
     });
     try {
+      const { jwk } = makeSignedKey();
       await expect(
-        verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, { keys: [jwk] })
-      ).resolves.toBeUndefined();
+        verifySignedDefinitions(
+          '{"a":1}',
+          { signature: Buffer.alloc(64).toString('base64'), timestamp: 1, kid: jwk.kid },
+          { keys: [jwk] }
+        )
+      ).rejects.toThrow(/WebCrypto is required/);
     } finally {
       Object.defineProperty(globalThis, 'crypto', {
         value: originalCrypto,
         configurable: true,
+      });
+      Object.defineProperty(process.versions, 'node', {
+        value: originalNode,
+        configurable: true,
+        enumerable: true,
+        writable: true,
       });
     }
   });
