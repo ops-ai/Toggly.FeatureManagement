@@ -572,7 +572,9 @@ jobs:
       - run: bash Toggly.FeatureManagement.Blazor/test-browser.sh
       - run: |
           # Package internal dependencies from the same source/version before the isolated consumer restore.
-          dotnet pack Toggly.FeatureManagement.NET/Toggly.FeatureManagement -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
+          # Core enables GeneratePackageOnBuild, so pack alone does not build its other target frameworks.
+          dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement -c Release -p:GeneratePackageOnBuild=false -p:ContinuousIntegrationBuild=true
+          dotnet pack Toggly.FeatureManagement.NET/Toggly.FeatureManagement -c Release --no-build -p:ContinuousIntegrationBuild=true -o blazor-pack
           dotnet pack Toggly.FeatureManagement.Client/src/Toggly.FeatureManagement.Client -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
           dotnet pack Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
           dotnet pack Toggly.FeatureManagement.Blazor/src/Toggly.FeatureManagement.Blazor.Server -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
