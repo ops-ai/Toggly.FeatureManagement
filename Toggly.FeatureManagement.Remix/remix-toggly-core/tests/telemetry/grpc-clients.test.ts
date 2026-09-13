@@ -1,3 +1,7 @@
+jest.mock('../../src/telemetry/module-url', () => ({
+  moduleUrl: require('node:url').pathToFileURL(__filename).href,
+}))
+
 import {
   grpcTarget,
   getProtoRoot,

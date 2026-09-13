@@ -1,25 +1,14 @@
 import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
+import { moduleUrl } from './module-url.js'
 import { sdkUserAgent } from '../sdk-identity.js'
 import { DEFAULT_METRICS_BASE_URL } from './https-client.js'
 
-/**
- * Resolve this module's URL without a static `import.meta` reference so Jest's
- * CJS transform can load the file. Bundled ESM still gets the real module URL
- * via eval; Jest/CJS falls back to `__filename`.
- */
-function resolveThisModuleUrl(): string {
-  try {
-    // eslint-disable-next-line no-eval -- avoid static import.meta for Jest CJS
-    return eval('import.meta.url') as string
-  } catch {
-    return pathToFileURL(__filename).href
-  }
-}
-
-const thisModuleUrl = resolveThisModuleUrl()
+// The native ESM module URL lets a packed SDK find its vendored proto files
+// without relying on a consuming application's global `__filename` value.
+const thisModuleUrl = moduleUrl
 const nodeRequire = createRequire(thisModuleUrl)
 
 /**
