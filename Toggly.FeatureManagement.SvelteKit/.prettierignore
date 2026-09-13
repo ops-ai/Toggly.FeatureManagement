@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+build
+.svelte-kit
+package-lock.json
+tests/host/package-lock.json
+*.tgz
