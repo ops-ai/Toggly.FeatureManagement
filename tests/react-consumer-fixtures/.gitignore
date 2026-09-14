@@ -1,0 +1,6 @@
+artifacts/
+react-18/node_modules/
+react-18/dist/
+react-19/node_modules/
+react-19/dist/
+.runner/

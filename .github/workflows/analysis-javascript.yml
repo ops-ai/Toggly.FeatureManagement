@@ -8,6 +8,7 @@ on:
     paths:
       - 'Toggly.FeatureManagement.Angular/**'
       - 'Toggly.FeatureManagement.React/**'
+      - 'tests/react-consumer-fixtures/**'
       - 'Toggly.FeatureManagement.Vue/**'
       - 'Toggly.FeatureManagement.Svelte/**'
       - 'Toggly.FeatureManagement.SvelteKit/**'
@@ -35,6 +36,7 @@ on:
     paths:
       - 'Toggly.FeatureManagement.Angular/**'
       - 'Toggly.FeatureManagement.React/**'
+      - 'tests/react-consumer-fixtures/**'
       - 'Toggly.FeatureManagement.Vue/**'
       - 'Toggly.FeatureManagement.Svelte/**'
       - 'Toggly.FeatureManagement.SvelteKit/**'
@@ -193,6 +195,15 @@ jobs:
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}
         run: ${{ matrix.test-cmd }}
+
+      - name: Verify packed React consumers in Chrome
+        if: matrix.sdk == 'React'
+        working-directory: ${{ matrix.path }}
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: |
+          test -x "$CHROME_BIN"
+          npm run test:consumers
 
       - name: Install Chromium for packed SvelteKit host
         if: matrix.sdk == 'SvelteKit'
@@ -510,12 +521,12 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
             -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-hooks-types,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook
             -Dsonar.exclusions=Toggly.FeatureManagement.SvelteKit/tests/**,Toggly.FeatureManagement.SvelteKit/scripts/**,**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js,Toggly.FeatureManagement.ReactNative/**,Toggly.FeatureManagement.Gatsby/**,Toggly.FeatureManagement.Next/**,Toggly.FeatureManagement.Nuxt/**,Toggly.FeatureManagement.Remix/**,Toggly.FeatureManagement.Css/**,Toggly.FeatureManagement.Wordpress/**,toggly-ruby/**,toggly-rust/**,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**
-            -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**
+            -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**,Toggly.FeatureManagement.React/scripts/build.mjs,Toggly.FeatureManagement.React/jest.webcrypto.setup.cjs,Toggly.FeatureManagement.React/scripts/clean.mjs,Toggly.FeatureManagement.React/scripts/normalize-distribution.mjs,Toggly.FeatureManagement.React/scripts/remove-intermediate-types.mjs
             -Dsonar.cpd.exclusions=**/ws-sync.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
-            -Dsonar.tests=.
-            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**
+            -Dsonar.tests=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-hooks-types,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,tests
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,tests/react-consumer-fixtures/**
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -536,12 +547,12 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
             -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-hooks-types,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook
             -Dsonar.exclusions=Toggly.FeatureManagement.SvelteKit/tests/**,Toggly.FeatureManagement.SvelteKit/scripts/**,**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js,Toggly.FeatureManagement.ReactNative/**,Toggly.FeatureManagement.Gatsby/**,Toggly.FeatureManagement.Next/**,Toggly.FeatureManagement.Nuxt/**,Toggly.FeatureManagement.Remix/**,Toggly.FeatureManagement.Css/**,Toggly.FeatureManagement.Wordpress/**,toggly-ruby/**,toggly-rust/**,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**
-            -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**
+            -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**,Toggly.FeatureManagement.React/scripts/build.mjs,Toggly.FeatureManagement.React/jest.webcrypto.setup.cjs,Toggly.FeatureManagement.React/scripts/clean.mjs,Toggly.FeatureManagement.React/scripts/normalize-distribution.mjs,Toggly.FeatureManagement.React/scripts/remove-intermediate-types.mjs
             -Dsonar.cpd.exclusions=**/ws-sync.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
-            -Dsonar.tests=.
-            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**
+            -Dsonar.tests=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-hooks-types,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,tests
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,tests/react-consumer-fixtures/**
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 

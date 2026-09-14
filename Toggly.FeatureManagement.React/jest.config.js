@@ -1,20 +1,23 @@
 export default {
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'jsdom',
+  setupFiles: ['<rootDir>/jest.webcrypto.setup.cjs'],
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
+    '^.+\\.[tj]sx?$': ['ts-jest', {
       useESM: true,
       tsconfig: {
         jsx: 'react',
         esModuleInterop: true,
         allowSyntheticDefaultImports: true,
+        allowJs: true,
       }
     }]
   },
+  transformIgnorePatterns: ['/node_modules/(?!@ops-ai/toggly-signed-defs/)'],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
@@ -33,8 +36,8 @@ export default {
     },
   },
   testMatch: [
-    '**/src/**/*.spec.ts',
-    '**/src/**/*.spec.tsx',
+    '<rootDir>/src/**/*.spec.ts',
+    '<rootDir>/src/**/*.spec.tsx',
   ],
   testPathIgnorePatterns: ['/node_modules/', '.*smoke.*\\.spec\\.ts$', '.*smoke.*\\.spec\\.tsx$', '.*smoke.*\\.test\\.ts$', '.*smoke.*\\.test\\.tsx$'],
 };
