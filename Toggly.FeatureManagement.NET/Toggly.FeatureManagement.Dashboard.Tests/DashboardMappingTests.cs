@@ -591,13 +591,18 @@ public sealed class DashboardMappingTests
     }
 
     [Fact]
-    public async Task Readonly_mode_disables_turn_feature_off()
+    public async Task Readonly_mode_disables_create_and_turn_feature_off()
     {
         await using var host = await DashboardHost.StartAsync("/features", readOnly: true, catalogExists: true, featureCount: 1);
         var html = await host.Client.GetStringAsync("/features/?expand=Feature01");
         var turnOff = Regex.Match(html, @"<button[^>]*data-turn-off[^>]*>");
         turnOff.Success.Should().BeTrue();
         turnOff.Value.Should().Contain("disabled");
+        html.Should().NotContain("href=\"/features/features/new\"");
+        var create = Regex.Match(html, @"<button[^>]*>\s*Create feature\s*</button>");
+        create.Success.Should().BeTrue();
+        create.Value.Should().Contain("disabled");
+        html.Should().Contain("Editing is unavailable in the current storage or read-only mode.");
     }
 
     [Fact]

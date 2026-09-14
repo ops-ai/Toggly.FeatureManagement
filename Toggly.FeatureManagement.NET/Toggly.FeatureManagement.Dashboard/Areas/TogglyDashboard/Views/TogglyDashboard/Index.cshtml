@@ -14,9 +14,23 @@
         {
             <button type="button" class="button secondary" data-open-copy-csharp>Copy C#</button>
         }
-        @if (Model.CatalogExists && !readOnly) { <a class="button" href="@basePath/features/new">Create feature</a> }
+        @if (Model.CatalogExists)
+        {
+            @if (readOnly)
+            {
+                <button type="button" class="button" disabled aria-describedby="readonly-reason">Create feature</button>
+            }
+            else
+            {
+                <a class="button" href="@basePath/features/new">Create feature</a>
+            }
+        }
     </div>
 </section>
+@if (readOnly && Model.CatalogExists)
+{
+    <p id="readonly-reason" role="status" class="hint">Editing is unavailable in the current storage or read-only mode.</p>
+}
 @if (!Model.CatalogExists)
 {
     <section class="empty-state"><h2>No catalog yet</h2><p>Initialize an empty catalog before creating features.</p>@if (!readOnly) { <form method="post" action="@basePath/initialize"><input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" /><button class="button" type="submit">Initialize catalog</button></form> }</section>
