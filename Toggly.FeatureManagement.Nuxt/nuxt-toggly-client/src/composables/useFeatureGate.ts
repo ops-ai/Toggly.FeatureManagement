@@ -40,7 +40,7 @@ export function useFeatureGate(
   const kind = computed(() => toValue(contextKind))
 
   const checkGate = async () => {
-    if (!toggly.isReady.value) {
+    if (!toggly.isReady.value || !toggly.client.state.initialized) {
       // Use local evaluation (booleans only; entity gates need the client)
       enabled.value = evaluateGate(
         toggly.features.value,

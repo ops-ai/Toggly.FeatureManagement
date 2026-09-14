@@ -1,0 +1,34 @@
+{
+  "kind": "historical-resolution-snapshot-plus-packed-candidate",
+  "node": "18.20.8",
+  "cutoff": "2025-04-15",
+  "frameworkResolutionCommand": "npm install --package-lock-only --before=2025-04-15 --engine-strict --no-audit --no-fund",
+  "frameworkManifest": {
+    "private": true,
+    "type": "module",
+    "dependencies": {
+      "nuxt": "3.16.2",
+      "@nuxt/kit": "3.16.2",
+      "vue": "3.5.13",
+      "typescript": "5.7.3",
+      "vue-tsc": "2.2.4",
+      "playwright": "1.51.1"
+    }
+  },
+  "frameworkLockSha256": "11dba2b5bf7f68b6a23efc511c70c5300628dcebfa500455dd117c8da0e0b9f7",
+  "frameworkPackageEntries": 677,
+  "frameworkVersionChangesWhenAddingSdk": 0,
+  "addedPackageEntries": 30,
+  "sdkSourceCandidate": "421078b2228f66637058cf608c63d7f7ba0e9256",
+  "evidenceBoundary": "Four locally packed candidate SDK siblings; every other dependency resolves from public npm. Preserves the historical framework snapshot; not an original historical application lock or fully published SDK install.",
+  "priorLocalConsumerLockSha256": "b44f1b742ffc26cbb526481de9c275f3b186d75c8bb29b6b79a094028ed28a65",
+  "priorLocalSignerArtifactSha256": "017a33d9e0d751fb6b68b480b3ceb24d72a148180e63bcd9b0f23073e04b5f45",
+  "consumerLockSha256": "55239f5bab7dad9aafa8d4f7b5ed7606a35f664c0e27eb7bcea4c27cc356d860",
+  "registryRefresh": {
+    "dependency": "@ops-ai/toggly-signed-defs",
+    "from": "1.2.6 local artifact",
+    "to": "1.2.7 public npm",
+    "otherPackageVersionChanges": 0,
+    "command": "npm install --package-lock-only --engine-strict --no-audit --no-fund --registry=https://registry.npmjs.org"
+  }
+}

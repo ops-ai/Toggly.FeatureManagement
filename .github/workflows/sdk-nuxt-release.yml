@@ -143,11 +143,6 @@ jobs:
         if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
         run: |
           for pkg in ${{ steps.packages.outputs.list }}; do
-            # nuxt-toggly typecheck runs nuxi against playground; skip in release gate
-            if [ "$pkg" = "nuxt-toggly" ]; then
-              echo "Skipping playground typecheck for $pkg"
-              continue
-            fi
             pnpm --filter "./$pkg" typecheck
           done
 
@@ -157,6 +152,18 @@ jobs:
           for pkg in ${{ steps.packages.outputs.list }}; do
             pnpm --filter "./$pkg" test
           done
+
+      - name: Verify packed Nuxt 3 and Nuxt 4 hosts
+        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
+        run: |
+          LIST=" ${{ steps.packages.outputs.list }} "
+          if [[ "$LIST" != *" nuxt-toggly "* ]]; then
+            echo "nuxt-toggly is not selected; packed module host verification is not required."
+            exit 0
+          fi
+          npx --yes playwright install-deps chromium
+          node tests/hosts/run.mjs 3.21.1 locked
+          node tests/hosts/run.mjs 4.5.2 fresh
 
 
       - name: Verify packed tarballs

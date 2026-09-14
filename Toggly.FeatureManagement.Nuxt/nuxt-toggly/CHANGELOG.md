@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.0 — 2026-09-12
+
+### Added
+- Support Nuxt 4 alongside Nuxt 3 with packed production-host verification.
+- Provide request-isolated Vue SSR flags and evaluated-boolean hydration snapshots.
+
+### Fixed
+- Resolve runtime plugins from the built module directory and write the callback template for Nitro.
+- Register server utilities in Nitro auto-imports and provide the symbol consumed by Vue composables.
+- Close the server client during Nitro shutdown.
+- Apply hydration through the core snapshot API so public core checks and Vue flags agree before network initialization.
+- Keep hydration snapshots separate from fallback defaults when browser identity changes.
+
 ## 1.1.2 — 2026-09-08
 
 ### Fixed

@@ -1,3 +1,9 @@
+## 1.2.2 — 2026-09-12
+
+### Fixed
+- Keep server-created Vue clients out of process-global client state.
+- Render ready hydration snapshots synchronously without changing ordinary uninitialized gate loading behavior.
+
 ## 1.2.1
 
 2026-09-04

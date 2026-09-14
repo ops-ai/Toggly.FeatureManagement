@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-const kit = vi.hoisted(() => ({ addPlugin: vi.fn(), addImports: vi.fn(), addComponent: vi.fn(), addServerPlugin: vi.fn(), addTemplate: vi.fn() }))
+const kit = vi.hoisted(() => ({ addPlugin: vi.fn(), addServerHandler: vi.fn(), addServerImports: vi.fn(), addImports: vi.fn(), addComponent: vi.fn(), addServerPlugin: vi.fn(), addTemplate: vi.fn() }))
 vi.mock('@nuxt/kit', () => ({ ...kit, defineNuxtModule: (value: unknown) => value, createResolver: () => ({ resolve: (s: string) => s }) }))
 import module from '../src/module/module'
 it.each([true, false])('registers module options and callback template, enabled=%s', enabled => {
@@ -21,4 +21,14 @@ it('exports the module and shared public helpers through its package entry', asy
   expect(entry.default).toBe(module)
   expect(entry.createTogglyClient).toBeTypeOf('function')
   expect(Object.keys(await import('../src/module/types'))).toEqual([])
+})
+
+it('registers Nitro imports separately and supplies a Vue server provider on both supported Nuxt majors', () => {
+  vi.clearAllMocks()
+  kit.addTemplate.mockReturnValue({ dst: '/virtual/error.mjs' })
+  const nuxt = { options: { alias: {}, runtimeConfig: { public: {} }, nitro: {} } }
+  ;(module as any).setup({ ssr: true, autoImport: true }, nuxt)
+  expect((module as any).meta.compatibility.nuxt).toContain('^4.0.0')
+  expect(kit.addPlugin).toHaveBeenCalledWith(expect.objectContaining({ mode: 'server' }))
+  expect(kit.addServerImports).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ name: 'useEventToggly' })]))
 })
