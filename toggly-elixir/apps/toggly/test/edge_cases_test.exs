@@ -122,10 +122,12 @@ defmodule Toggly.EdgeCasesTest do
     File.write!(path, "bad")
     on_exit(fn -> File.rm(path) end)
 
+    # This fixture is explicitly stopped below; only ExUnit's outer child is temporary.
     sup =
       start_supervised!(
         {Toggly,
-         name: BadSnapshot, defaults: %{"on" => true}, snapshot_path: path, refresh_interval: 0}
+         name: BadSnapshot, defaults: %{"on" => true}, snapshot_path: path, refresh_interval: 0},
+        restart: :temporary
       )
 
     assert Toggly.enabled?(BadSnapshot, "on")

@@ -56,6 +56,8 @@ defmodule Toggly.NetworkTest do
   end
 
   test "real HTTP status/ETag/usage contract and transport failure", %{script: script, base: base} do
+    # This test calls Toggly.stop/1; ExUnit must not restart that stopped root.
+    # The SDK's own client/socket supervision policy remains unchanged.
     sup =
       start_supervised!(
         {Toggly,
@@ -65,7 +67,8 @@ defmodule Toggly.NetworkTest do
          usage_base_url: base,
          signed: false,
          websocket: false,
-         refresh_interval: 0}
+         refresh_interval: 0},
+        restart: :temporary
       )
 
     assert :ok = Toggly.refresh(HTTPFlags)
@@ -119,6 +122,8 @@ defmodule Toggly.NetworkTest do
     script: script,
     base: base
   } do
+    # This test calls Toggly.stop/1; ExUnit must not restart that stopped root.
+    # The SDK's own client/socket supervision policy remains unchanged.
     sup =
       start_supervised!(
         {Toggly,
@@ -127,7 +132,8 @@ defmodule Toggly.NetworkTest do
          base_url: base,
          signed: false,
          refresh_interval: 50,
-         reconnect_interval: 10}
+         reconnect_interval: 10},
+        restart: :temporary
       )
 
     assert_receive {:socket, socket}, 2000
@@ -149,7 +155,8 @@ defmodule Toggly.NetworkTest do
     assert_receive {:socket, _}, 2000
     assert Process.whereis(WSFlags) != client
     children = Supervisor.which_children(sup) |> Enum.map(&elem(&1, 1))
-    Toggly.stop(sup)
+    assert :ok = Toggly.stop(sup)
+    refute Process.alive?(sup)
     assert Enum.all?(children, &(!Process.alive?(&1)))
     assert :ets.whereis(WSFlags) == :undefined
   end
