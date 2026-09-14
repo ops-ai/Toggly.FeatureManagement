@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-express",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Toggly feature flags middleware for Express.js applications",
   "keywords": [
     "feature-flags",
@@ -51,6 +51,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "test": "vitest run",
+    "test:hosts": "node tests/packed-hosts.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },

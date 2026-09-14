@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+2026-09-12
+
+### Changed
+- Resolve the current `@ops-ai/toggly-node-core` 0.9 line on publication and
+  validate packed ESM/CommonJS consumers against retained Express 4 and
+  current Express 5 hosts [OPS-1175].
+
 
 ## 0.2.0
 

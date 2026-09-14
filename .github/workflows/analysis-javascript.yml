@@ -233,6 +233,15 @@ jobs:
           # Exercise the explicit ECDSA hash contract on the current Node runtime.
           - node-version: '24.x'
             config: { package: Core, dir: toggly-node-core }
+          # Exercise packed current framework hosts on maintained Node lines.
+          - node-version: '24.x'
+            config: { package: Express, dir: toggly-express }
+          - node-version: '24.x'
+            config: { package: Hono, dir: toggly-hono }
+          - node-version: '26.x'
+            config: { package: Express, dir: toggly-express }
+          - node-version: '26.x'
+            config: { package: Hono, dir: toggly-hono }
 
     steps:
       - name: Checkout code
@@ -268,6 +277,11 @@ jobs:
       - name: Run tests with coverage
         working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: pnpm test:coverage
+
+      - name: Run packed host compatibility fixture
+        if: (matrix.node-version == '24.x' || matrix.node-version == '26.x') && (matrix.config.package == 'Express' || matrix.config.package == 'Hono')
+        working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
+        run: pnpm test:hosts
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
@@ -501,7 +515,7 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=.
-            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -527,7 +541,7 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=.
-            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
