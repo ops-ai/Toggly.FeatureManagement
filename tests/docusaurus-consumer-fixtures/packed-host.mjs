@@ -10,6 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const sdk = join(repository, 'toggly-docusaurus-edge-sdk/libs/docusaurus-plugin');
 const currentDocusaurus = '3.10.2';
+const currentReact = '19.3.0';
 const temporary = mkdtempSync(join(tmpdir(), 'toggly-docusaurus-packed-host-'));
 const host = join(temporary, 'host');
 const servers = [];
@@ -105,10 +106,12 @@ try {
   write('package.json', JSON.stringify({ name: 'toggly-docusaurus-packed-host', private: true }));
   run('npm', ['install', '--no-package-lock', '--no-audit', '--no-fund',
     `@docusaurus/core@${currentDocusaurus}`, `@docusaurus/preset-classic@${currentDocusaurus}`,
-    'react@18.3.1', 'react-dom@18.3.1', '@mdx-js/react@3.1.1',
-    'typescript@5.9.3', '@types/react@18.3.28', '@types/react-dom@18.3.7', 'playwright@1.62.1', tarball,
+    `react@${currentReact}`, `react-dom@${currentReact}`, '@mdx-js/react@3.1.1',
+    'typescript@5.9.3', '@types/react@19.3.0', '@types/react-dom@19.3.0', 'playwright@1.62.1', tarball,
   ]);
   assert.equal(JSON.parse(readFileSync(join(host, 'node_modules/@docusaurus/core/package.json'))).version, currentDocusaurus);
+  assert.equal(JSON.parse(readFileSync(join(host, 'node_modules/react/package.json'))).version, currentReact);
+  assert.equal(JSON.parse(readFileSync(join(host, 'node_modules/react-dom/package.json'))).version, currentReact);
   const config = { appKey: 'docusaurus-packed-host', environment: 'Production', baseURI, verifySignatures: true, allowedKeyIds: [kid], featureFlagsRefreshInterval: 60_000, flagDefaults: { flagOn: false, flagOff: false } };
   write('docusaurus.config.js', `module.exports = {
     title: 'Packed Docusaurus', url: 'https://example.test', baseUrl: '/', favicon: undefined,
@@ -136,6 +139,7 @@ export default function Page() {
 }`);
   write('docs/enabled.md', '---\nslug: /enabled\nx-feature: flagOn\n---\n# Enabled page\n\nENABLED_DOC_CONTENT\n');
   write('docs/disabled.md', '---\nslug: /disabled\nx-feature: flagOff\n---\n# Disabled page\n\nDISABLED_DOC_CONTENT\n');
+  write('static/favicon.ico', '');
   write('consumer.mts', `import togglyPlugin, { type TogglyPluginOptions } from '@ops-ai/toggly-docusaurus-plugin';
 import { Feature, useFlag, type FeatureProps } from '@ops-ai/toggly-docusaurus-plugin/client';
 const options: TogglyPluginOptions = { verifySignatures: true, staticGating: true };
@@ -169,7 +173,11 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   browser = await chromium.launch({ headless: true, ...(process.env.CHROME_BIN ? { executablePath: process.env.CHROME_BIN } : { channel: 'chrome' }) });
   const page = await browser.newPage();
   const pageErrors = [];
+  const consoleErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
   const runtimeUrl = await serve(runtimeOutput);
   await page.goto(runtimeUrl);
   await page.locator('#ready').filter({ hasText: 'ready' }).waitFor();
@@ -188,6 +196,7 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   assert.ok(requests.includes('/evaluated-signed/docusaurus-packed-host/Production'));
   assert.ok(requests.includes('/.well-known/jwks'));
   assert.deepEqual(pageErrors, []);
+  assert.deepEqual(consoleErrors, []);
   await page.close();
   console.log('PACKED_DOCUSAURUS_BROWSER_GATES_PASS');
 
@@ -207,6 +216,9 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   const beforeStaticBrowser = requests.length;
   const staticPage = await browser.newPage();
   staticPage.on('pageerror', (error) => pageErrors.push(error.message));
+  staticPage.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
   await staticPage.goto(await serve(staticOutput));
   await staticPage.locator('#ready').filter({ hasText: 'ready' }).waitFor();
   await staticPage.waitForLoadState('networkidle');
@@ -214,8 +226,9 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   assert.equal(await staticPage.locator('#flag-on').count(), 1);
   assert.equal(requests.length, beforeStaticBrowser, 'static gating does not fetch runtime flags');
   assert.deepEqual(pageErrors, []);
+  assert.deepEqual(consoleErrors, []);
   await staticPage.close();
-  console.log(`PACKED_DOCUSAURUS_HOST_PASS ${JSON.stringify({ docusaurus: currentDocusaurus, node: process.version })}`);
+  console.log(`PACKED_DOCUSAURUS_HOST_PASS ${JSON.stringify({ docusaurus: currentDocusaurus, react: currentReact, node: process.version })}`);
 } finally {
   if (browser) await browser.close();
   if (sockets) {

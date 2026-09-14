@@ -192,3 +192,53 @@ describe('initial browser targeting', () => {
     }
   });
 });
+
+describe('provider cleanup', () => {
+  it('closes the live socket and polling timer without scheduling a reconnect on unmount', async () => {
+    class TestWebSocket {
+      static instances: TestWebSocket[] = [];
+      onopen: (() => void) | null = null;
+      onmessage: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onclose: (() => void) | null = null;
+      close = vi.fn(() => this.onclose?.());
+
+      constructor() {
+        TestWebSocket.instances.push(this);
+      }
+    }
+
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    vi.stubGlobal('WebSocket', TestWebSocket);
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ flagA: true }),
+    });
+
+    try {
+      const { unmount } = render(
+        <TogglyProvider config={{ appKey: 'app', fetch, featureFlagsRefreshInterval: 60_000 }}>
+          <Feature flag="flagA">Visible</Feature>
+        </TogglyProvider>,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const socket = TestWebSocket.instances[0];
+      expect(socket).toBeDefined();
+      setTimeoutSpy.mockClear();
+      unmount();
+
+      expect(clearIntervalSpy).toHaveBeenCalled();
+      expect(socket.close).toHaveBeenCalledOnce();
+      expect(socket.onclose).toBeNull();
+      expect(setTimeoutSpy).not.toHaveBeenCalled();
+    } finally {
+      clearIntervalSpy.mockRestore();
+      setTimeoutSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+});

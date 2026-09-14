@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const workflow = readFileSync(new URL('./analysis-javascript.yml', import.meta.url), 'utf8');
+const docusaurusFixture = readFileSync(
+  new URL('../../tests/docusaurus-consumer-fixtures/packed-host.mjs', import.meta.url),
+  'utf8',
+);
 const summary = workflow.slice(workflow.indexOf('\n  summary:'));
 const packedHostHarnesses = [
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs',
@@ -50,4 +54,8 @@ test('requires the packed Docusaurus production host with a locked Node 24 insta
   assert.match(summary.match(/needs: \[([^\]]+)\]/)?.[1] ?? '', /\btest-docusaurus-host\b/);
   assert.match(summary.match(/required-jobs: ([^\n]+)/)?.[1] ?? '', /\btest-docusaurus-host\b/);
   assert.equal((workflow.match(/'tests\/docusaurus-consumer-fixtures\/\*\*'/g) ?? []).length, 2);
+  assert.match(docusaurusFixture, /react@19\.3\.0/);
+  assert.match(docusaurusFixture, /react-dom@19\.3\.0/);
+  assert.match(docusaurusFixture, /page\.on\('console'/);
+  assert.match(docusaurusFixture, /consoleErrors/);
 });
