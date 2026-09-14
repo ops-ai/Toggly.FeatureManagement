@@ -19,6 +19,7 @@ defmodule Toggly.SignedClientTest do
       {:ok, %{status: 200, body: reply, headers: []}}
     end
 
+    # Stopping the online fixture must not create a replacement during cold restore.
     sup =
       start_supervised!(
         {Toggly,
@@ -27,7 +28,8 @@ defmodule Toggly.SignedClientTest do
          transport: transport,
          websocket: false,
          refresh_interval: 0,
-         snapshot_path: path}
+         snapshot_path: path},
+        restart: :temporary
       )
 
     assert :ok = Toggly.refresh(SignedFlags)
