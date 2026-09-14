@@ -148,7 +148,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const card = toggleHit.closest(".feature-card");
             const toggle = card?.querySelector("[data-feature-toggle]");
             const form = card?.querySelector("[data-conditions-form]");
-            if (card && toggle && form && card.dataset.persistedEnabled === "true" && toggle.checked) {
+            const draftOn = form?.querySelector("[data-enabled-field]")?.value === "true";
+            if (card && toggle && form && card.dataset.persistedEnabled === "true" && toggle.checked && draftOn) {
                 event.preventDefault();
                 const open = document.querySelector(".conditions-form.is-open");
                 if (open && open !== form && isDirty(open)) {

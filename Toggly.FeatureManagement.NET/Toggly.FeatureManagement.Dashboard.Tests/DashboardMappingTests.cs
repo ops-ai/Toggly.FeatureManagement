@@ -539,6 +539,9 @@ public sealed class DashboardMappingTests
         var script = await host.Client.GetStringAsync("/features/assets/dashboard.js");
         script.Should().Contain("keydown").And.Contain("Escape").And.Contain("toggly-always-on-rule");
         script.Should().Contain("persistedEnabled === \"true\" && !intended");
+        script.Should().Contain("toggle.checked && draftOn");
+        var css = await host.Client.GetStringAsync("/features/assets/dashboard.css");
+        css.Should().Contain("--primary: #3f52c9").And.Contain("input:focus-visible + .toggle-ui");
     }
 
     [Fact]

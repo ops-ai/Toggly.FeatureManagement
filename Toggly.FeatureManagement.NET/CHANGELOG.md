@@ -17,6 +17,14 @@
   the Copy C# modal.
 - A persisted-on feature toggle expands the conditions draft and stays on;
   only Turn feature off starts the off draft.
+- Turning the draft back on after Turn feature off restores the switch as well
+  as the hidden enabled field.
+- Visible focus ring on the feature toggle track; selected Browse link and
+  12px captions meet AA contrast.
+
+### Changed
+- `DashboardFeatureInput.Enabled` is `bool?` so a conditions POST can require an
+  explicit true or false rather than treating a missing field as false.
 
 ## All .NET SDK packages 3.7.0 - 2026-09-13
 

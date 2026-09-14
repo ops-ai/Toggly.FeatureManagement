@@ -1,5 +1,5 @@
 :root {
-  --primary: #556ee6;
+  --primary: #3f52c9;
   --ink: #28314b;
   --muted: #4a5568;
   --border: #e5e9f2;
@@ -127,6 +127,10 @@ body {
 }
 .toggle input:checked + .toggle-ui { background: var(--primary); }
 .toggle input:checked + .toggle-ui::after { left: 22px; }
+.toggle input:focus-visible + .toggle-ui {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+}
 .conditions-form { border-top: 1px solid var(--border); padding: 18px 20px 20px; }
 .conditions-form.is-collapsed { display: none; }
 .conditions-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
