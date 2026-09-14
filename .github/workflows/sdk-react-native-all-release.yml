@@ -31,6 +31,7 @@ on:
           - react-native
           - storage-async
           - storage-mmkv
+          - storage-mmkv4
 
 permissions:
   contents: write
@@ -147,6 +148,7 @@ jobs:
           publish_pkg react-native @ops-ai/react-native-toggly true
           publish_pkg storage-async @ops-ai/react-native-toggly-storage-async true
           publish_pkg storage-mmkv @ops-ai/react-native-toggly-storage-mmkv true
+          publish_pkg storage-mmkv4 @ops-ai/react-native-toggly-storage-mmkv4 true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

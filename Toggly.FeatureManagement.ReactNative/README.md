@@ -19,7 +19,8 @@ The React Native SDK is modular, allowing you to install only what you need:
 | `@ops-ai/react-native-toggly` | Main SDK with React hooks and components |
 | `@ops-ai/react-native-toggly-core` | Core functionality (automatically installed) |
 | `@ops-ai/react-native-toggly-storage-async` | AsyncStorage adapter for persistent caching |
-| `@ops-ai/react-native-toggly-storage-mmkv` | MMKV adapter for high-performance storage |
+| `@ops-ai/react-native-toggly-storage-mmkv` | MMKV 2/3 adapter for high-performance storage |
+| `@ops-ai/react-native-toggly-storage-mmkv4` | MMKV 4/Nitro adapter for high-performance storage |
 
 ## Installation
 
@@ -40,9 +41,15 @@ For persistent feature flag caching, install a storage adapter:
 npm install @ops-ai/react-native-toggly-storage-async @react-native-async-storage/async-storage
 ```
 
-**MMKV (Recommended for bare React Native - faster):**
+**MMKV 2 or 3 (Recommended for bare React Native - faster):**
 ```bash
 npm install @ops-ai/react-native-toggly-storage-mmkv react-native-mmkv
+cd ios && pod install
+```
+
+**MMKV 4 with Nitro:**
+```bash
+npm install @ops-ai/react-native-toggly-storage-mmkv4 react-native-mmkv react-native-nitro-modules
 cd ios && pod install
 ```
 
@@ -287,25 +294,37 @@ const storage = createAsyncStorageAdapter();
 const storage = createAsyncStorageAdapter({ keyPrefix: 'myapp_' });
 ```
 
-#### MMKV Adapter
+#### MMKV 2 or 3 Adapter
 
 Best for performance-critical applications (bare React Native).
 
 ```tsx
 import { createMMKVStorageAdapter } from '@ops-ai/react-native-toggly-storage-mmkv';
-import { MMKV } from 'react-native-mmkv';
 
 // Default instance
 const storage = createMMKVStorageAdapter();
 
 // With encryption
 const storage = createMMKVStorageAdapter({
+  encrypted: true,
   encryptionKey: 'your-secret-key',
 });
+```
+
+#### MMKV 4 / Nitro Adapter
+
+MMKV 4 uses a different native API. Use a development build for Expo rather
+than Expo Go, and install the Nitro peer dependency.
+
+```tsx
+import { createMMKV4StorageAdapter } from '@ops-ai/react-native-toggly-storage-mmkv4';
+import { createMMKV } from 'react-native-mmkv';
+
+const storage = createMMKV4StorageAdapter();
 
 // With custom MMKV instance
-const mmkv = new MMKV({ id: 'toggly-storage' });
-const storage = createMMKVStorageAdapter({ mmkv });
+const mmkv = createMMKV({ id: 'toggly-storage' });
+const sharedStorage = createMMKV4StorageAdapter({ mmkv });
 ```
 
 ## User Identity and Targeting
@@ -502,7 +521,8 @@ function CheckoutButton() {
 The SDK is fully compatible with Expo. For storage:
 
 1. Install the AsyncStorage adapter (works with Expo out of the box)
-2. If using MMKV, you'll need a development build (not Expo Go)
+2. If using MMKV 2, 3, or 4, you'll need a development build (not Expo Go)
+3. MMKV 4 also requires `react-native-nitro-modules`
 
 ```bash
 # For Expo projects
