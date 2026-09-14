@@ -15,15 +15,24 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    const serialize = (form) => new URLSearchParams(new FormData(form)).toString();
+    const serialize = (form) => {
+        const kept = [];
+        for (const [key, value] of new FormData(form)) {
+            if (key === "newRuleName" || key === "command" || key === "removeRuleIndex" || key === "__RequestVerificationToken" || key === "Key" || key === "ExpectedRevision" || key === "ContextKind") continue;
+            kept.push(`${key}=${value}`);
+        }
+        return kept.join("&");
+    };
     const leaveMessage = "You have unsaved condition changes. Leave this feature and discard them?";
+    const allowUnload = (form) => { form.dataset.allowUnload = "true"; };
 
     document.querySelectorAll("[data-conditions-form]").forEach(form => {
         form._snapshot = form.innerHTML;
         form._baseline = serialize(form);
+        form.addEventListener("submit", () => allowUnload(form));
     });
 
-    const isDirty = (form) => form.dataset.serverDraft === "true" || serialize(form) !== form._baseline;
+    const isDirty = (form) => form.dataset.allowUnload !== "true" && (form.dataset.serverDraft === "true" || serialize(form) !== form._baseline);
 
     const persistToggle = (card) => card.querySelector("[data-feature-toggle]");
 
@@ -48,10 +57,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const toggle = persistToggle(card);
         if (toggle) toggle.checked = card.dataset.persistedEnabled === "true";
         form.dataset.serverDraft = "false";
+        delete form.dataset.allowUnload;
     };
 
     const discard = (form) => {
         if (form.dataset.serverDraft === "true" && form.dataset.listHref) {
+            allowUnload(form);
             window.location.assign(form.dataset.listHref);
             return true;
         }
@@ -166,7 +177,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const open = document.querySelector(".conditions-form.is-open");
             if (open && isDirty(open) && !window.confirm(leaveMessage)) {
                 event.preventDefault();
-            }
+            } else if (open) allowUnload(open);
             return;
         }
 
@@ -201,6 +212,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelector("form.filters")?.addEventListener("submit", event => {
         const open = document.querySelector(".conditions-form.is-open");
         if (open && isDirty(open) && !window.confirm(leaveMessage)) event.preventDefault();
+        else if (open) allowUnload(open);
     });
 
     const modal = document.getElementById("copy-csharp-modal");

@@ -540,6 +540,7 @@ public sealed class DashboardMappingTests
         script.Should().Contain("keydown").And.Contain("Escape").And.Contain("toggly-always-on-rule");
         script.Should().Contain("persistedEnabled === \"true\" && !intended");
         script.Should().Contain("toggle.checked && draftOn");
+        script.Should().Contain("allowUnload").And.Contain("key === \"newRuleName\"");
         var css = await host.Client.GetStringAsync("/features/assets/dashboard.css");
         css.Should().Contain("--primary: #3f52c9").And.Contain("input:focus-visible + .toggle-ui");
     }

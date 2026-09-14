@@ -23,10 +23,14 @@
   12px captions meet AA contrast.
 - Disable Turn feature off in read-only mode, show a disabled Create feature
   control instead of hiding it, and validate category length after trim.
+- Conditions Save no longer raises a native leave prompt, and changing the Add
+  user filter dropdown does not count as a dirty draft.
 
 ### Changed
 - `DashboardFeatureInput.Enabled` is `bool?` so a conditions POST can require an
   explicit true or false rather than treating a missing field as false.
+- List-page enable/disable is `POST …/features/conditions` only; the former
+  `POST …/features/state` route is removed.
 
 ## All .NET SDK packages 3.7.0 - 2026-09-13
 
