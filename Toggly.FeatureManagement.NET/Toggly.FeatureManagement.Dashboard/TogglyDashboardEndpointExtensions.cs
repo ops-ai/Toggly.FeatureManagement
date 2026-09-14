@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Builder;
@@ -40,12 +41,19 @@ public static class TogglyDashboardEndpointExtensions
         MapController(group, "create", "features/create", "Create", HttpMethods.Post);
         MapController(group, "edit", "features/edit", "Edit", HttpMethods.Get);
         MapController(group, "save", "features/save", "Save", HttpMethods.Post);
-        MapController(group, "state", "features/state", "State", HttpMethods.Post);
+        MapController(group, "conditions", "features/conditions", "Conditions", HttpMethods.Post);
         MapController(group, "delete-confirm", "features/delete", "DeleteConfirm", HttpMethods.Get);
         MapController(group, "delete", "features/delete", "Delete", HttpMethods.Post);
         MapController(group, "initialize", "initialize", "Initialize", HttpMethods.Post);
         MapController(group, "contexts", "contexts", "Contexts", HttpMethods.Get);
         MapController(group, "storage", "storage", "Storage", HttpMethods.Get);
+        MapController(group, "lists", "lists", "Lists", HttpMethods.Get);
+        MapController(group, "lists-new", "lists/new", "NewList", HttpMethods.Get);
+        MapController(group, "lists-create", "lists/create", "CreateList", HttpMethods.Post);
+        MapController(group, "lists-edit", "lists/edit", "EditList", HttpMethods.Get);
+        MapController(group, "lists-save", "lists/save", "SaveList", HttpMethods.Post);
+        MapController(group, "lists-delete-confirm", "lists/delete", "DeleteListConfirm", HttpMethods.Get);
+        MapController(group, "lists-delete", "lists/delete", "DeleteList", HttpMethods.Post);
         MapController(group, "export", "export", "Export", HttpMethods.Get);
         MapController(group, "import", "import", "Import", HttpMethods.Get);
         MapController(group, "import-preview", "import/preview", "ImportPreview", HttpMethods.Post);
@@ -71,14 +79,16 @@ public static class TogglyDashboardEndpointExtensions
             new { httpMethod = new HttpMethodRouteConstraint(method) });
     }
 
+    private static readonly SearchValues<char> RouteReserved = SearchValues.Create("{}*?");
+
     private static string NormalizeMount(string pattern)
     {
         if (string.IsNullOrWhiteSpace(pattern)) throw new ArgumentException("Dashboard mount path is required.", nameof(pattern));
         var trimmed = pattern.Trim();
-        if (!trimmed.StartsWith("/", StringComparison.Ordinal)) trimmed = "/" + trimmed;
+        if (!trimmed.StartsWith('/')) trimmed = "/" + trimmed;
         trimmed = trimmed.TrimEnd('/');
         if (trimmed.Length == 0) throw new ArgumentException("The dashboard cannot be mounted at the application root.", nameof(pattern));
-        if (trimmed.IndexOfAny(new[] { '{', '}', '*', '?' }) >= 0) throw new ArgumentException("Dashboard mount paths cannot contain route parameters or wildcards.", nameof(pattern));
+        if (trimmed.AsSpan().IndexOfAny(RouteReserved) >= 0) throw new ArgumentException("Dashboard mount paths cannot contain route parameters or wildcards.", nameof(pattern));
         return trimmed;
     }
 }
@@ -86,10 +96,11 @@ public static class TogglyDashboardEndpointExtensions
 internal static class DashboardAssets
 {
     private static readonly Assembly Assembly = typeof(DashboardAssets).Assembly;
-    private static readonly IReadOnlyDictionary<string, string> Names = new Dictionary<string, string>(StringComparer.Ordinal)
+    private static readonly Dictionary<string, string> Names = new(StringComparer.Ordinal)
     {
         ["dashboard.css"] = "Toggly.FeatureManagement.Dashboard.Assets.dashboard.css",
-        ["dashboard.js"] = "Toggly.FeatureManagement.Dashboard.Assets.dashboard.js"
+        ["dashboard.js"] = "Toggly.FeatureManagement.Dashboard.Assets.dashboard.js",
+        ["logo-light.svg"] = "Toggly.FeatureManagement.Dashboard.Assets.logo-light.svg"
     };
 
     internal static async Task<IResult> GetAsync(string name)
@@ -99,7 +110,14 @@ internal static class DashboardAssets
         if (stream == null) return Results.NotFound();
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory).ConfigureAwait(false);
-        var contentType = name.EndsWith(".css", StringComparison.Ordinal) ? "text/css; charset=utf-8" : "application/javascript; charset=utf-8";
+        var contentType = ContentType(name);
         return Results.File(memory.ToArray(), contentType, enableRangeProcessing: false, lastModified: null, entityTag: null, fileDownloadName: null);
+    }
+
+    private static string ContentType(string name)
+    {
+        if (name.EndsWith(".css", StringComparison.Ordinal)) return "text/css; charset=utf-8";
+        if (name.EndsWith(".svg", StringComparison.Ordinal)) return "image/svg+xml; charset=utf-8";
+        return "application/javascript; charset=utf-8";
     }
 }

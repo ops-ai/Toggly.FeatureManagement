@@ -1,0 +1,48 @@
+@model DashboardListsViewModel
+@{
+    Layout = "_Layout";
+    var mount = (string?)ViewData["DashboardMount"] ?? "";
+    var basePath = $"{Context.Request.PathBase}{mount}";
+    var readOnly = Model.ReadOnly;
+}
+<section class="page-heading">
+    <div><p class="eyebrow">Audience</p><h1>Lists</h1></div>
+    <div class="heading-actions">
+        @if (readOnly)
+        {
+            <button type="button" class="button" disabled aria-describedby="readonly-reason">Create list</button>
+        }
+        else
+        {
+            <a class="button" href="@basePath/lists/new">Create list</a>
+        }
+    </div>
+</section>
+@if (readOnly)
+{
+    <output id="readonly-reason" class="hint">Editing is unavailable in the current storage or read-only mode.</output>
+}
+<div asp-validation-summary="All" class="validation-summary" tabindex="-1" role="alert"></div>
+@if (Model.Lists.Count == 0)
+{
+    <section class="empty-state"><h2>No lists yet</h2><p>Create a list before Targeting can link users or groups.</p></section>
+}
+else
+{
+    <section class="card list-table" aria-label="Lists">
+        @foreach (var list in Model.Lists.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            var usage = Model.Usage.TryGetValue(list.Key, out var count) ? count : 0;
+            <article class="list-row">
+                <div>
+                    <a class="feature-name" href="@basePath/lists/edit?key=@Uri.EscapeDataString(list.Key)">@list.Name</a>
+                    <div class="chips"><span class="key-chip">@list.Key</span><span class="chip">@list.Items.Count identifiers</span><span class="chip">Used by @usage features</span></div>
+                </div>
+                @if (!readOnly)
+                {
+                    <a class="danger-link" href="@basePath/lists/delete?key=@Uri.EscapeDataString(list.Key)">Delete</a>
+                }
+            </article>
+        }
+    </section>
+}

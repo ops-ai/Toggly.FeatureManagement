@@ -3,29 +3,218 @@
     Layout = "_Layout";
     var mount = (string?)ViewData["DashboardMount"] ?? "";
     var basePath = $"{Context.Request.PathBase}{mount}";
+    var readOnly = Model.ReadOnly;
+    ViewData["CatalogLists"] = Model.Lists;
+    string CategoryHref(string value) => $"{basePath}/?search={Uri.EscapeDataString(Model.Search)}&tag={Uri.EscapeDataString(Model.Tag)}&sort={Uri.EscapeDataString(Model.Sort)}&category={Uri.EscapeDataString(value)}";
+    string RailClass(string value) => string.Equals(Model.Category, value, StringComparison.Ordinal) ? "rail-link is-active" : "rail-link";
 }
-<section class="page-heading"><div><p class="eyebrow">Feature management</p><h1>Features</h1></div>@if (Model.CatalogExists && !Model.ReadOnly) { <a class="button" href="@basePath/features/new">Create feature</a> }</section>
+<section class="page-heading">
+    <div><p class="eyebrow">Feature management</p><h1>Features</h1></div>
+    <div class="heading-actions">
+        @if (Model.CatalogExists && Model.AllFeatures.Count > 0)
+        {
+            <button type="button" class="button secondary" data-open-copy-csharp>Copy C#</button>
+        }
+        @if (Model.CatalogExists)
+        {
+            @if (readOnly)
+            {
+                <button type="button" class="button" disabled aria-describedby="readonly-reason">Create feature</button>
+            }
+            else
+            {
+                <a class="button" href="@basePath/features/new">Create feature</a>
+            }
+        }
+    </div>
+</section>
+@if (readOnly && Model.CatalogExists)
+{
+    <output id="readonly-reason" class="hint">Editing is unavailable in the current storage or read-only mode.</output>
+}
 @if (!Model.CatalogExists)
 {
-    <section class="empty-state"><h2>No catalog yet</h2><p>Initialize an empty catalog before creating features.</p>@if (!Model.ReadOnly) { <form method="post" action="@basePath/initialize"><input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" /><button class="button" type="submit">Initialize catalog</button></form> }</section>
+    <section class="empty-state"><h2>No catalog yet</h2><p>Initialize an empty catalog before creating features.</p>@if (!readOnly) { <form method="post" action="@basePath/initialize"><input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" /><button class="button" type="submit">Initialize catalog</button></form> }</section>
 }
-else if (Model.Features.Count == 0)
+else if (Model.AllFeatures.Count == 0)
 {
     <section class="empty-state"><h2>No features yet</h2><p>Create a feature to start managing flags in this application.</p></section>
 }
 else
 {
-    var pageSize = 50;
-    var pageCount = Math.Max(1, (int)Math.Ceiling(Model.Features.Count / (double)pageSize));
-    var currentPage = Math.Min(Model.Page, pageCount);
-    var visibleFeatures = Model.Features.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
-    <form method="get" action="@basePath" class="card filters"><label>Search <input type="search" name="search" value="@Model.Search" /></label><label>State <select name="state"><option value="">All</option><option value="enabled" selected="@(Model.State == "enabled")">Enabled</option><option value="disabled" selected="@(Model.State == "disabled")">Disabled</option></select></label><label>Tag <select name="tag"><option value="">All tags</option>@foreach (var availableTag in Model.Tags) { <option value="@availableTag" selected="@(Model.Tag == availableTag)">@availableTag</option> }</select></label><button type="submit">Filter</button></form>
-    <section class="card feature-list"><table><thead><tr><th>Feature</th><th>Targeting</th><th>Tags</th><th>State</th><th></th></tr></thead><tbody>
-    @foreach (var feature in visibleFeatures)
-    {
-        <tr><td><strong>@feature.Name</strong><code>@feature.Key</code><span>@feature.Description</span></td><td>@(feature.Enabled ? (feature.Rules.Count == 0 ? "Everyone" : $"{feature.Rules.Count} rules") : "Disabled")</td><td>@string.Join(", ", feature.Tags)</td><td><span class="state @(feature.Enabled ? "enabled" : "disabled")">@(feature.Enabled ? "Enabled" : "Disabled")</span></td><td><a href="@basePath/features/edit?key=@Uri.EscapeDataString(feature.Key)">Edit</a>
-        @if (!Model.ReadOnly) { <form method="post" action="@basePath/features/state" class="inline"><input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" /><input type="hidden" name="key" value="@feature.Key" /><input type="hidden" name="expectedRevision" value="@Model.Revision" /><input type="hidden" name="enabled" value="@(!feature.Enabled ? "true" : "false")" /><button type="submit">@(feature.Enabled ? "Disable" : "Enable")</button></form> }</td></tr>
-    }
-    </tbody></table></section>
-    @if (pageCount > 1) { <nav class="pagination" aria-label="Feature pages">@for (var pageNumber = 1; pageNumber <= pageCount; pageNumber++) { <a href="@basePath?search=@Uri.EscapeDataString(Model.Search)&state=@Uri.EscapeDataString(Model.State)&tag=@Uri.EscapeDataString(Model.Tag)&page=@pageNumber" aria-current="@(pageNumber == currentPage ? "page" : null)">@pageNumber</a> }</nav> }
+    <div class="features-shell">
+        <nav class="browse-rail" aria-label="Categories">
+            <h2>Browse</h2>
+            <a class="@RailClass("")" href="@CategoryHref("")">All</a>
+            @foreach (var category in Model.Categories)
+            {
+                <a class="@RailClass(category)" href="@CategoryHref(category)">@category</a>
+            }
+            @if (Model.UncategorizedCount > 0)
+            {
+                <a class="@RailClass("__uncategorized")" href="@CategoryHref("__uncategorized")">Uncategorized</a>
+            }
+        </nav>
+        <div class="features-main">
+            <form method="get" action="@basePath/" class="card filters">
+                <label class="filters-grow" for="search">Search
+                    <input id="search" type="search" name="search" value="@Model.Search" placeholder="search by name or category" />
+                </label>
+                <label class="filters-grow" for="tag">Tags
+                    <select id="tag" name="tag">
+                        <option value="">filter by tags</option>
+                        @foreach (var availableTag in Model.Tags) { <option value="@availableTag" selected="@(Model.Tag == availableTag)">@availableTag</option> }
+                    </select>
+                </label>
+                <label class="filters-sort" for="sort">Sort
+                    <select id="sort" name="sort">
+                        <option value="az" selected="@(Model.Sort != "za")">A–Z</option>
+                        <option value="za" selected="@(Model.Sort == "za")">Z–A</option>
+                    </select>
+                </label>
+                <input type="hidden" name="category" value="@Model.Category" />
+                <button type="submit">Filter</button>
+            </form>
+            @if (Model.Features.Count == 0)
+            {
+                <section class="empty-state"><h2>No matching features</h2><p>Try a different search, tag, or category.</p></section>
+            }
+            else
+            {
+                <section class="feature-list" aria-label="Features">
+                    @foreach (var feature in Model.Features)
+                    {
+                        var draft = Model.ConditionsDraft != null && string.Equals(Model.ConditionsDraft.Key, feature.Key, StringComparison.Ordinal)
+                            ? Model.ConditionsDraft
+                            : DashboardFeatureInput.FromFeature(feature, Model.Revision);
+                        var expanded = string.Equals(Model.Expand, feature.Key, StringComparison.Ordinal);
+                        var serverDraft = Model.ConditionsDraft != null && string.Equals(Model.ConditionsDraft.Key, feature.Key, StringComparison.Ordinal);
+                        var userRules = draft.Rules.Select((rule, index) => (rule, index)).Where(item => !DashboardRuleInput.IsEntityRule(item.rule.Name)).ToList();
+                        var entityRules = draft.Rules.Select((rule, index) => (rule, index)).Where(item => DashboardRuleInput.IsEntityRule(item.rule.Name)).ToList();
+                        var listHref = $"{basePath}/?search={Uri.EscapeDataString(Model.Search)}&tag={Uri.EscapeDataString(Model.Tag)}&sort={Uri.EscapeDataString(Model.Sort)}&category={Uri.EscapeDataString(Model.Category)}";
+                        var categoryLabel = string.IsNullOrEmpty(feature.Category) ? "Uncategorized" : feature.Category;
+                        var filterLines = FeatureFilterSummary.Lines(feature, Model.Lists);
+                        var conditional = FeatureFilterSummary.IsConditional(feature);
+                        <article class="feature-card @(expanded ? "is-expanded" : null) @(conditional ? "is-conditional" : null)" data-feature-key="@feature.Key" data-persisted-enabled="@feature.Enabled.ToString().ToLowerInvariant()" data-persisted-rule-count="@feature.Rules.Count">
+                            <div class="feature-card-header">
+                                <label class="toggle">
+                                    <input type="checkbox" class="feature-toggle" id="toggle-@feature.Key" form="conditions-@feature.Key" name="Enabled" value="true" @(draft.Enabled == true ? "checked" : null) aria-label="Toggle @feature.Name" data-feature-toggle="@feature.Key" />
+                                    <span class="toggle-ui" aria-hidden="true"></span>
+                                </label>
+                                <div class="feature-identity">
+                                    <a class="feature-name" href="@basePath/features/edit?key=@Uri.EscapeDataString(feature.Key)">@feature.Name</a>
+                                    @if (!string.IsNullOrEmpty(feature.Description))
+                                    {
+                                        <p class="feature-description">@feature.Description</p>
+                                    }
+                                    <a class="conditions-link" href="@listHref&amp;expand=@Uri.EscapeDataString(feature.Key)" aria-label="Open conditions for @feature.Name">Conditions</a>
+                                    <code class="key-chip">@feature.Key</code>
+                                    <div class="chips">
+                                        @foreach (var tag in feature.Tags) { <span class="chip">@tag</span> }
+                                        <span class="chip category-chip">@categoryLabel</span>
+                                    </div>
+                                    @if (conditional && filterLines.Count > 0)
+                                    {
+                                        <p class="filter-summary">
+                                            Conditionally enabled
+                                            @foreach (var line in filterLines)
+                                            {
+                                                <span class="filter-summary-line">@line</span>
+                                            }
+                                        </p>
+                                    }
+                                </div>
+                            </div>
+                            <form id="conditions-@feature.Key" method="post" action="@basePath/features/conditions" class="conditions-form @(expanded ? "is-open" : "is-collapsed")" data-conditions-form="@feature.Key" data-server-draft="@(serverDraft ? "true" : "false")" data-list-href="@listHref">
+                                <input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" />
+                                <input type="hidden" name="Key" value="@feature.Key" />
+                                <input type="hidden" name="ExpectedRevision" value="@Model.Revision" />
+                                <input type="hidden" name="ContextKind" value="@feature.ContextKind" />
+                                <input type="hidden" name="Enabled" value="@(draft.Enabled == true ? "true" : "false")" />
+                                <input type="hidden" name="search" value="@Model.Search" />
+                                <input type="hidden" name="tag" value="@Model.Tag" />
+                                <input type="hidden" name="category" value="@Model.Category" />
+                                <input type="hidden" name="sort" value="@Model.Sort" />
+                                <div asp-validation-summary="@(expanded ? Microsoft.AspNetCore.Mvc.Rendering.ValidationSummary.All : Microsoft.AspNetCore.Mvc.Rendering.ValidationSummary.None)" class="validation-summary" tabindex="-1" role="alert"></div>
+                                <div class="conditions-toolbar">
+                                    <h3>Conditions</h3>
+                                    <button type="button" class="icon-button" data-close-conditions aria-label="Cancel">×</button>
+                                </div>
+                                <p class="turn-off-copy @(draft.Enabled == true ? "is-hidden" : null)" data-turn-off-copy>This feature will be turned off. Save to clear all targeting filters, or turn the switch back on to keep editing conditions.</p>
+                                <section class="condition-group" data-user-group>
+                                    <div class="condition-group-header">
+                                        <h4>User filters</h4>
+                                        <fieldset class="match-group @(userRules.Count >= 2 ? null : "is-hidden")" data-match-group="user">
+                                            <legend class="visually-hidden">User filter combination</legend>
+                                            <div role="radiogroup" aria-label="User filter combination" class="match-radios">
+                                                <label><input type="radio" name="RequirementType" value="Any" checked="@(draft.RequirementType != CatalogRequirementType.All)" /> Match any</label>
+                                                <label><input type="radio" name="RequirementType" value="All" checked="@(draft.RequirementType == CatalogRequirementType.All)" /> Match all</label>
+                                            </div>
+                                        </fieldset>
+                                    </div>
+                                    @foreach (var item in userRules)
+                                    {
+                                        <partial name="_RuleFields" model="(item.index, item.rule, userRules.Count >= 2)" />
+                                    }
+                                    <label for="new-user-filter-@feature.Key">Add user filter</label>
+                                    <select id="new-user-filter-@feature.Key" name="newRuleName">
+                                        @foreach (var type in DashboardRuleInput.UserFilterNames)
+                                        {
+                                            <option value="@type.Key">@type.Value</option>
+                                        }
+                                    </select>
+                                    <button type="submit" name="command" value="add-rule" formnovalidate disabled="@readOnly">Add user filter</button>
+                                    <p class="hint">With the built-in HTTP targeting accessor, user IDs come from <code>User.Identity.Name</code> and group IDs come from <code>"group"</code> claims. Keep your host's custom accessor when migrating.</p>
+                                </section>
+                                @if (!string.IsNullOrEmpty(feature.ContextKind))
+                                {
+                                    <section class="condition-group" data-entity-group>
+                                        <div class="condition-group-header">
+                                            <h4>Entity conditions (@feature.ContextKind)</h4>
+                                            <fieldset class="match-group @(entityRules.Count >= 2 ? null : "is-hidden")" data-match-group="entity">
+                                                <legend class="visually-hidden">Entity condition combination</legend>
+                                                <div role="radiogroup" aria-label="Entity condition combination" class="match-radios">
+                                                    <label><input type="radio" name="ContextRequirementType" value="Any" checked="@(draft.ContextRequirementType != CatalogRequirementType.All)" /> Match any</label>
+                                                    <label><input type="radio" name="ContextRequirementType" value="All" checked="@(draft.ContextRequirementType == CatalogRequirementType.All)" /> Match all</label>
+                                                </div>
+                                            </fieldset>
+                                        </div>
+                                        @foreach (var item in entityRules)
+                                        {
+                                            <partial name="_RuleFields" model="(item.index, item.rule, entityRules.Count >= 2)" />
+                                        }
+                                    <button type="submit" name="command" value="add-entity" formnovalidate disabled="@readOnly">Add entity condition</button>
+                                    </section>
+                                }
+                                @if (readOnly) { <output class="hint">Editing is unavailable in the current storage or read-only mode.</output> }
+                                <div class="form-actions">
+                                    <button type="submit" class="button" disabled="@readOnly">Save</button>
+                                    <button type="submit" class="secondary" name="command" value="turn-off" formnovalidate data-turn-off @(draft.Enabled == true ? null : "hidden") disabled="@readOnly">Turn feature off</button>
+                                    <button type="button" class="secondary" data-close-conditions>Cancel</button>
+                                </div>
+                            </form>
+                        </article>
+                    }
+                </section>
+            }
+        </div>
+    </div>
+    <template id="toggly-always-on-rule">
+        <fieldset class="rule-row" data-rule-name="AlwaysOn">
+            <legend>Always On</legend>
+            <input type="hidden" name="Rules[INDEX].Name" value="AlwaysOn" />
+            <p class="hint">This filter matches every request. No extra configuration is required.</p>
+        </fieldset>
+    </template>
+    <div id="copy-csharp-modal" class="modal" hidden>
+        <dialog class="modal-card" open aria-modal="true" aria-labelledby="copy-csharp-title" tabindex="-1">
+            <h2 id="copy-csharp-title">Feature Keys - Copy C#</h2>
+            <pre><code id="copy-csharp-source">@Model.CopyCSharp</code></pre>
+            <p class="copy-status" aria-live="polite"></p>
+            <div class="form-actions">
+                <button type="button" class="secondary" data-close-copy-csharp>Close</button>
+                <button type="button" class="button" data-copy-csharp>Copy C#</button>
+            </div>
+        </dialog>
+    </div>
 }

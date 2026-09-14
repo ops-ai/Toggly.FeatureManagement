@@ -129,13 +129,13 @@ jobs:
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
             /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
-            /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info" \
+            /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
-            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**" \
-            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**" \
-            /d:sonar.test.inclusions="**/*Tests*.cs"
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
+            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
+            /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**"
 
       - name: Build solution
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
@@ -299,14 +299,14 @@ jobs:
               /d:sonar.token="${SONAR_SERVER_TOKEN}" \
               /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
               /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
-              /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info" \
+              /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
               /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
               /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
               /d:sonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
-              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**" \
-              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**" \
-              /d:sonar.test.inclusions="**/*Tests*.cs"; then
+              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
+              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
+              /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**"; then
               break
             fi
 

@@ -2,6 +2,8 @@
     var mount = (string?)ViewData["DashboardMount"] ?? "";
     var basePath = $"{Context.Request.PathBase}{mount}";
     var applicationName = (string?)ViewData["ApplicationName"] ?? "Application";
+    var active = (string?)ViewData["ActiveTab"] ?? "features";
+    string TabClass(string name) => active == name ? "tab is-active" : "tab";
 }
 <!doctype html>
 <html lang="en">
@@ -12,8 +14,23 @@
     <link rel="stylesheet" href="@basePath/assets/dashboard.css" />
 </head>
 <body>
-    <header class="toggly-header"><a href="@basePath" class="brand">Toggly <span>Embedded</span></a><span class="application-name">@applicationName</span><nav><a href="@basePath">Features</a><a href="@basePath/contexts">Contexts</a><a href="@basePath/storage">Storage</a><a href="@basePath/import">Import/Export</a><a href="@basePath/cloud">Move to Toggly Cloud</a></nav></header>
-    <main class="toggly-main">@RenderBody()</main>
+    <a class="skip-link" href="#toggly-main">Skip to content</a>
+    <header class="toggly-header">
+        <a href="@basePath/" class="brand">
+            <img src="@basePath/assets/logo-light.svg" alt="Toggly" width="120" height="32" />
+            <span class="embedded-caption">Embedded</span>
+        </a>
+        <span class="application-name">@applicationName</span>
+        <nav aria-label="Dashboard">
+            <a class="@TabClass("features")" href="@basePath/" @(active == "features" ? "aria-current=page" : null)>Features</a>
+            <a class="@TabClass("lists")" href="@basePath/lists" @(active == "lists" ? "aria-current=page" : null)>Lists</a>
+            <a class="@TabClass("contexts")" href="@basePath/contexts" @(active == "contexts" ? "aria-current=page" : null)>Contexts</a>
+            <a class="@TabClass("storage")" href="@basePath/storage" @(active == "storage" ? "aria-current=page" : null)>Storage</a>
+            <a class="@TabClass("import")" href="@basePath/import" @(active == "import" ? "aria-current=page" : null)>Import/Export</a>
+            <a class="@TabClass("cloud")" href="@basePath/cloud" @(active == "cloud" ? "aria-current=page" : null)>Move to Cloud</a>
+        </nav>
+    </header>
+    <main id="toggly-main" class="toggly-main">@RenderBody()</main>
     <script src="@basePath/assets/dashboard.js"></script>
 </body>
 </html>

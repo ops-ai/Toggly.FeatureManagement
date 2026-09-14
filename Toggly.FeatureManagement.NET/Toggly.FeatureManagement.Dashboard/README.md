@@ -43,8 +43,15 @@ dedicated SQLite sample initializes its own database explicitly. Catalog content
 is initialized separately through the dashboard's Initialize or Import action.
 
 Use `IFeatureManager` and `IFeatureManagerSnapshot` as with the normal SDK. New
-features start disabled. Turning a feature off retains its targeting rules;
-turning it back on restores them. Deleting a feature makes it evaluate false.
+features start disabled. Turn a feature on from the list, add at least one
+filter (Always On is the default Add user filter choice), and save conditions.
+Saving an enabled feature with no filters is rejected. Turning a feature off
+and saving clears its targeting filters. Deleting a feature makes it evaluate
+false.
+
+Manage reusable identifier lists on the Lists tab, then link one list per
+Targeting slot (users, groups, exclusions). The catalog stores list keys;
+evaluation expands them to indexed IDs.
 
 ## Access and deployment
 
@@ -76,8 +83,8 @@ are the host's responsibility. The package adds no cache expiration.
 The dashboard uses Toggly's existing percentage, targeting, schedule, entity,
 browser, language, OS, device, country, and claim filters. Country matching uses
 host request information and makes no GeoIP request. Enter actual SDK filter
-values. User/group lists and tags use one value per line so literal commas are
-preserved.
+values. Create reusable lists on the Lists tab, then link one list per Targeting
+slot. Tags use one value per line so literal commas are preserved.
 
 The built-in HTTP targeting accessor uses `User.Identity.Name` and `"group"`
 claims. Preserve that accessor or your custom accessor when moving to SaaS.
@@ -95,6 +102,8 @@ names, or revision tokens. Treat a catalog backup as application configuration.
 Import validates the complete file and previews adds, identical features, existing
 key conflicts, and context conflicts. New keys are selected by default; updates
 require explicit selection. Imports merge and never delete omitted features.
+Imported lists overlay existing lists by key; lists used only by the target catalog
+are kept.
 Compatible context properties merge additively. Case-only key changes and
 incompatible context types are rejected. Apply revalidates against the previewed
 revision; a concurrent edit requires a new preview.

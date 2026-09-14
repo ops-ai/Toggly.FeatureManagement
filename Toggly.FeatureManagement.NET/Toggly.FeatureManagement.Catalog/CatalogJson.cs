@@ -57,10 +57,6 @@ namespace Toggly.FeatureManagement.Catalog
                 if (document == null) throw new CatalogFormatException("Catalog JSON must contain an object.");
                 return NormalizeOrThrow(document);
             }
-            catch (CatalogFormatException)
-            {
-                throw;
-            }
             catch (JsonException exception)
             {
                 throw new CatalogFormatException(exception.Message, exception);
@@ -121,7 +117,19 @@ namespace Toggly.FeatureManagement.Catalog
                 SchemaVersion = source.SchemaVersion,
                 Environment = source.Environment,
                 Features = source.Features.OrderBy(feature => feature.Key, StringComparer.Ordinal).Select(Canonicalize).ToList(),
-                Contexts = source.Contexts.OrderBy(context => context.Kind, StringComparer.Ordinal).Select(Canonicalize).ToList()
+                Contexts = source.Contexts.OrderBy(context => context.Kind, StringComparer.Ordinal).Select(Canonicalize).ToList(),
+                Lists = source.Lists.OrderBy(list => list.Key, StringComparer.Ordinal).Select(Canonicalize).ToList()
+            };
+        }
+
+        private static CatalogList Canonicalize(CatalogList list)
+        {
+            return new CatalogList
+            {
+                Key = list.Key,
+                Name = list.Name,
+                Description = list.Description,
+                Items = list.Items.ToList()
             };
         }
 
@@ -132,6 +140,7 @@ namespace Toggly.FeatureManagement.Catalog
                 Key = feature.Key,
                 Name = feature.Name,
                 Description = feature.Description,
+                Category = string.IsNullOrEmpty(feature.Category) ? null : feature.Category,
                 Tags = feature.Tags.OrderBy(tag => tag, StringComparer.Ordinal).ToList(),
                 Enabled = feature.Enabled,
                 RequirementType = feature.RequirementType,

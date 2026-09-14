@@ -1,3 +1,5 @@
 @model DashboardFeatureInput
 @{ Layout = "_Layout"; ViewData["Title"] = "Edit feature"; }
-<h1>Edit feature</h1><p>Rules are retained when you change metadata or disable this feature.</p><partial name="_FeatureForm" model="Model" />
+<section class="page-heading"><div><p class="eyebrow">Feature settings</p><h1>@Model.Name</h1></div></section>
+<p class="lede">Saving settings does not change targeting. Turn a feature off from the conditions panel to clear filters.</p>
+<partial name="_FeatureForm" model="Model" />

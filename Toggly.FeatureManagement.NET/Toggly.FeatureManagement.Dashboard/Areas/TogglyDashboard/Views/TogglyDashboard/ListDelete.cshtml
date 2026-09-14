@@ -1,0 +1,13 @@
+@model DashboardListInput
+@{ Layout = "_Layout"; var mount = (string?)ViewData["DashboardMount"] ?? ""; var basePath = $"{Context.Request.PathBase}{mount}"; }
+<section class="card">
+    <h1>Delete @Model.Name?</h1>
+    <p>Features that still link this list cannot be evaluated until they choose another list.</p>
+    <form method="post" action="@basePath/lists/delete">
+        <input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" />
+        <input type="hidden" name="key" value="@Model.Key" />
+        <input type="hidden" asp-for="ExpectedRevision" />
+        <button class="danger" type="submit">Delete list</button>
+        <a href="@basePath/lists/edit?key=@Uri.EscapeDataString(Model.Key)">Cancel</a>
+    </form>
+</section>

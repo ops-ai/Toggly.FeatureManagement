@@ -12,16 +12,17 @@ internal static class EmbeddedCatalogCompiler
         if (!validation.IsValid || validation.Document == null) throw new CatalogValidationException(validation.Errors);
         var models = new Dictionary<string, FeatureDefinitionModel>(StringComparer.Ordinal);
         var definitions = new Dictionary<string, FeatureDefinition>(StringComparer.Ordinal);
+        var lists = ToListLookup(validation.Document.Lists);
         foreach (var feature in validation.Document.Features)
         {
             var model = new FeatureDefinitionModel
             {
                 FeatureKey = feature.Key,
-                Filters = feature.Enabled ? CompileFilters(feature) : new List<FeatureFilter>(),
+                Filters = feature.Enabled ? CompileFilters(feature, lists) : new List<FeatureFilter>(),
                 SecuredFeature = false,
                 RequirementType = feature.RequirementType == CatalogRequirementType.All ? RequirementType.All : RequirementType.Any,
                 ContextKind = feature.ContextKind,
-                ContextRequirementType = feature.ContextRequirementType == null ? null : feature.ContextRequirementType == CatalogRequirementType.All ? RequirementType.All : RequirementType.Any,
+                ContextRequirementType = ContextRequirementType(feature.ContextRequirementType),
                 Metrics = null,
                 Variants = null,
                 Allocation = null
@@ -32,10 +33,24 @@ internal static class EmbeddedCatalogCompiler
         return new EmbeddedCompiledSnapshot(snapshot.Revision, models, definitions);
     }
 
-    private static List<FeatureFilter> CompileFilters(CatalogFeature feature)
+    private static RequirementType? ContextRequirementType(CatalogRequirementType? value)
     {
-        if (feature.Rules.Count == 0) return new List<FeatureFilter> { new AlwaysOnFilter { Name = "AlwaysOn", Parameters = new Dictionary<string, string>() } };
-        return feature.Rules.Select(rule => new FeatureFilter { Name = rule.Name, Parameters = new Dictionary<string, string>(rule.Parameters, StringComparer.Ordinal) }).ToList();
+        if (value == null) return null;
+        return value == CatalogRequirementType.All ? RequirementType.All : RequirementType.Any;
+    }
+
+    private static Dictionary<string, CatalogList> ToListLookup(IEnumerable<CatalogList> lists) =>
+        lists.ToDictionary(list => list.Key, StringComparer.OrdinalIgnoreCase);
+
+    private static List<FeatureFilter> CompileFilters(CatalogFeature feature, IReadOnlyDictionary<string, CatalogList> lists)
+    {
+        return feature.Rules.Select(rule => new FeatureFilter
+        {
+            Name = rule.Name,
+            Parameters = string.Equals(rule.Name, "Targeting", StringComparison.Ordinal)
+                ? CatalogListExpansion.ExpandTargetingParameters(rule.Parameters, lists)
+                : new Dictionary<string, string>(rule.Parameters, StringComparer.Ordinal)
+        }).ToList();
     }
 }
 

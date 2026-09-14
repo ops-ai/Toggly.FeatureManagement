@@ -6,6 +6,10 @@ namespace Toggly.FeatureManagement.Embedded.Tests;
 
 public class EmbeddedImportServiceTests
 {
+    private static readonly string[] MergedContextProperties = ["id", "region", "tier"];
+    private static readonly string[] OverlayListKeys = ["beta", "keep", "staff"];
+    private static readonly string[] OverlayBetaItems = ["bob"];
+    private static readonly string[] OverlayKeepItems = ["local"];
     [Fact]
     public async Task ApplyAsync_ExplicitImportCreatesAnAbsentCatalogOnce()
     {
@@ -39,7 +43,7 @@ public class EmbeddedImportServiceTests
         {
             Features =
             {
-                new CatalogFeature { Key = "Existing", Name = "Changed", Enabled = true },
+                new CatalogFeature { Key = "Existing", Name = "Changed", Enabled = true, Rules = { new CatalogRule { Name = "AlwaysOn" } } },
                 new CatalogFeature { Key = "NewCheckout", Name = "New checkout", Enabled = false }
             }
         });
@@ -79,7 +83,7 @@ public class EmbeddedImportServiceTests
         Assert.Empty(preview.ContextConflictKinds);
         await service.ApplyAsync(new(preview.CanonicalPayload, preview.Fingerprint, preview.ExpectedRevision, [], []));
 
-        Assert.Equal(new[] { "id", "region", "tier" }, store.Current!.Document.Contexts.Single().Properties.Select(p => p.Name).Order());
+        Assert.Equal(MergedContextProperties, store.Current!.Document.Contexts.Single().Properties.Select(p => p.Name).Order());
         Assert.Equal(1, store.WriteCount);
     }
 
@@ -107,6 +111,50 @@ public class EmbeddedImportServiceTests
         await Assert.ThrowsAsync<CatalogValidationException>(() => service.ApplyAsync(new(preview.CanonicalPayload, preview.Fingerprint, preview.ExpectedRevision, ["New"], [])));
         Assert.Empty(store.Current!.Document.Features);
         Assert.Equal(0, store.WriteCount);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_TreatsNullAndEmptyCategoryAsIdentical()
+    {
+        var (service, _) = CreateService(new CatalogDocument { Features = { new CatalogFeature { Key = "Checkout", Name = "Checkout", Category = null } } });
+        var preview = await service.PreviewAsync(CatalogJson.Serialize(new CatalogDocument
+        {
+            Features = { new CatalogFeature { Key = "Checkout", Name = "Checkout", Category = "" } }
+        }));
+
+        Assert.Contains("Checkout", preview.IdenticalKeys);
+        Assert.DoesNotContain("Checkout", preview.ConflictKeys);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_OverlaysImportedListsByKeyAndKeepsTargetOnlyLists()
+    {
+        var target = new CatalogDocument
+        {
+            Lists =
+            {
+                new CatalogList { Key = "beta", Name = "Beta", Description = "", Items = { "alice" } },
+                new CatalogList { Key = "keep", Name = "Keep", Description = "", Items = { "local" } }
+            }
+        };
+        var (service, store) = CreateService(target);
+        var uploaded = CatalogJson.Serialize(new CatalogDocument
+        {
+            Lists =
+            {
+                new CatalogList { Key = "beta", Name = "Beta testers", Description = "", Items = { "bob" } },
+                new CatalogList { Key = "staff", Name = "Staff", Description = "", Items = { "ops" } }
+            }
+        });
+
+        var preview = await service.PreviewAsync(uploaded);
+        await service.ApplyAsync(new(preview.CanonicalPayload, preview.Fingerprint, preview.ExpectedRevision, [], []));
+
+        var lists = store.Current!.Document.Lists.OrderBy(list => list.Key).ToList();
+        Assert.Equal(OverlayListKeys, lists.Select(list => list.Key));
+        Assert.Equal(OverlayBetaItems, lists.Single(list => list.Key == "beta").Items);
+        Assert.Equal("Beta testers", lists.Single(list => list.Key == "beta").Name);
+        Assert.Equal(OverlayKeepItems, lists.Single(list => list.Key == "keep").Items);
     }
 
     private static CatalogContextSchema Context(string property) => new()

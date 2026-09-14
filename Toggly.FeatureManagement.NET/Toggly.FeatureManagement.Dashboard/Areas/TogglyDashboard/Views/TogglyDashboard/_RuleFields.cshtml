@@ -1,0 +1,87 @@
+@model (int Index, DashboardRuleInput Rule, bool CanRemove)
+@{
+    var index = Model.Index;
+    var rule = Model.Rule;
+    var label = DashboardRuleInput.SupportedNames.GetValueOrDefault(rule.Name, rule.Name);
+}
+<fieldset class="rule-row" data-rule-name="@rule.Name">
+    <legend>@label</legend>
+    <input type="hidden" name="Rules[@index].Name" value="@rule.Name" />
+    @if (rule.Name == "AlwaysOn")
+    {
+        <p class="hint">This filter matches every request. No extra configuration is required.</p>
+    }
+    @if (rule.Name == "Targeting")
+    {
+        var lists = (IReadOnlyList<CatalogList>?)ViewData["CatalogLists"] ?? [];
+        var mount = (string?)ViewData["DashboardMount"] ?? "";
+        var listsHref = $"{Context.Request.PathBase}{mount}/lists/new";
+        <p class="hint">Link one list per slot. Manage lists on the Lists tab.</p>
+        @if (lists.Count == 0)
+        {
+            <p class="hint">No lists yet. <a href="@listsHref">Create a list</a> before Targeting can include users or groups.</p>
+        }
+        @foreach (var slot in new (string Field, string Label, string Value)[] { ("Users", "Users", rule.Users ?? ""), ("Groups", "Groups", rule.Groups ?? ""), ("ExclusionUsers", "Excluded users", rule.ExclusionUsers ?? ""), ("ExclusionGroups", "Excluded groups", rule.ExclusionGroups ?? "") })
+        {
+            <label for="rule-@index-@slot.Field">@slot.Label</label>
+            <select id="rule-@index-@slot.Field" name="Rules[@index].@slot.Field" @(lists.Count == 0 ? "disabled" : null)>
+                <option value="">None</option>
+                @foreach (var list in lists.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    <option value="@list.Key" selected="@(string.Equals(slot.Value, list.Key, StringComparison.Ordinal))">@list.Name (@list.Key)</option>
+                }
+            </select>
+        }
+        <label for="rule-@index-IgnoreCase">Ignore case</label>
+        <select id="rule-@index-IgnoreCase" name="Rules[@index].IgnoreCase">
+            <option value="true" selected="@rule.IgnoreCase">Yes</option>
+            <option value="false" selected="@(!rule.IgnoreCase)">No</option>
+        </select>
+    }
+    @if (rule.Name == "TimeWindow")
+    {
+        <p class="hint">Use ISO-8601 dates with a timezone offset, for example 2026-09-12T09:00:00-05:00. Supply start, end, or both.</p>
+        <label for="rule-@index-Start">Start</label>
+        <input id="rule-@index-Start" name="Rules[@index].Start" value="@rule.Start" />
+        <label for="rule-@index-End">End</label>
+        <input id="rule-@index-End" name="Rules[@index].End" value="@rule.End" />
+    }
+    @if (rule.Name == "ContextProperty")
+    {
+        <label for="rule-@index-ContextKind">Context kind</label>
+        <input id="rule-@index-ContextKind" name="Rules[@index].ContextKind" value="@rule.ContextKind" />
+        <label for="rule-@index-Property">Property</label>
+        <input id="rule-@index-Property" name="Rules[@index].Property" value="@rule.Property" />
+        <label for="rule-@index-Operator">Operator</label>
+        <select id="rule-@index-Operator" name="Rules[@index].Operator">
+            @foreach (var op in new[] { "eq", "neq", "gt", "gte", "lt", "lte", "in", "contains" })
+            {
+                <option value="@op" selected="@(rule.Operator == op)">@op</option>
+            }
+        </select>
+        <label for="rule-@index-Value">Value</label>
+        <input id="rule-@index-Value" name="Rules[@index].Value" value="@rule.Value" />
+        <p class="hint">The value type and allowed operators are validated against the context schema.</p>
+    }
+    @if (rule.Name == "UserClaims")
+    {
+        <label for="rule-@index-Claim">Claim</label>
+        <input id="rule-@index-Claim" name="Rules[@index].Claim" value="@rule.Claim" />
+        <label for="rule-@index-Value">Value</label>
+        <input id="rule-@index-Value" name="Rules[@index].Value" value="@rule.Value" />
+    }
+    @if (rule.Name is "BrowserFamily" or "BrowserLanguage" or "OS" or "DeviceType" or "CountryFamily")
+    {
+        <label for="rule-@index-Values">Values (one SDK value per line)</label>
+        <textarea id="rule-@index-Values" name="Rules[@index].Values">@rule.Values</textarea>
+    }
+    @if (rule.Name is not "TimeWindow" and not "ContextProperty" and not "AlwaysOn")
+    {
+        <label for="rule-@index-Percentage">@(rule.Name == "Targeting" ? "Default rollout percentage" : "Percentage")</label>
+        <input id="rule-@index-Percentage" name="Rules[@index].Percentage" value="@rule.Percentage" type="number" min="0" max="100" step="any" />
+    }
+    @if (Model.CanRemove)
+    {
+        <button type="submit" class="icon-button" name="removeRuleIndex" value="@index" formnovalidate aria-label="Remove @label filter">×</button>
+    }
+</fieldset>

@@ -24,7 +24,7 @@ public sealed class EmbeddedCatalogEditorTests
         var store = new Store { LoseResponse = true };
         var (editor, coordinator, provider) = Create(store);
         await coordinator.RefreshAsync(default);
-        var candidate = new CatalogDocument { Features = { new() { Key = "Checkout", Name = "Checkout", Enabled = true } } };
+        var candidate = new CatalogDocument { Features = { new() { Key = "Checkout", Name = "Checkout", Enabled = true, Rules = { new() { Name = "AlwaysOn" } } } } };
 
         var result = await editor.TryWriteAsync(candidate, "one");
 
