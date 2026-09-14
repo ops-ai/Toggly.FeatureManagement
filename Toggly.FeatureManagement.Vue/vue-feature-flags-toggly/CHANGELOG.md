@@ -1,3 +1,12 @@
+## 1.9.7
+
+2026-09-13
+
+### Changed
+
+- Validate packed consumer builds with the declared Vue 3.2.45 minimum and
+  current Vue 3.5.42, and require the current signed-definitions verifier.
+
 ## 1.9.6
 
 2026-09-04

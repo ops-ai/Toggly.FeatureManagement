@@ -1,3 +1,15 @@
+## 1.10.2
+
+2026-09-13
+
+### Fixed
+
+- Ship the Svelte source integration and resolve the Svelte export condition to
+  a file included in the package, so Svelte 4 and 5 hosts can compile the
+  package after installation.
+- Require the current signed-definitions verifier and validate packed Svelte
+  4.0.0, 4.2.20, and 5.57.0 consumer hosts.
+
 ## 1.10.1
 
 2026-09-04

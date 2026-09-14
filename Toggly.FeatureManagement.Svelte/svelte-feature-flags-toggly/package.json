@@ -1,15 +1,15 @@
 {
   "name": "@ops-ai/svelte-feature-flags-toggly",
-  "version": "1.10.1",
+  "version": "1.10.2",
   "description": "Provides feature flags support for Svelte applications allowing you to enable and disable features easily. Can be used with or without Toggly.io.",
   "type": "module",
   "main": "./dist/svelte-feature-flags-toggly.cjs",
   "module": "./dist/svelte-feature-flags-toggly.es.js",
-  "svelte": "./dist/index.js",
+  "svelte": "./src/index.ts",
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
-      "svelte": "./dist/index.js",
+      "svelte": "./src/index.ts",
       "import": "./dist/svelte-feature-flags-toggly.es.js",
       "require": "./dist/svelte-feature-flags-toggly.cjs"
     },
@@ -17,17 +17,23 @@
   },
   "types": "./dist/types/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "src/index.ts",
+    "src/components",
+    "src/services",
+    "src/stores",
+    "src/utils"
   ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build && tsc --emitDeclarationOnly --outDir dist/types",
+    "build": "vite build && tsc --emitDeclarationOnly --outDir dist/types && cp src/components/*.svelte dist/types/components/",
     "prepublishOnly": "npm run build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",
     "test": "vitest run",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:host": "node scripts/test-host.mjs"
   },
   "keywords": [
     "svelte",
@@ -68,7 +74,7 @@
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.4.5",
     "@ops-ai/toggly-local-gates": "^1.0.1",
-    "@ops-ai/toggly-signed-defs": "^1.2.3"
+    "@ops-ai/toggly-signed-defs": "^1.2.7"
   },
   "publishConfig": {
     "access": "public"

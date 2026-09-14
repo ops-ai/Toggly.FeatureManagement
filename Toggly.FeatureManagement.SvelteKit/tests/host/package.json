@@ -11,10 +11,10 @@
     "@ops-ai/toggly-sveltekit": "^0.1.0"
   },
   "devDependencies": {
-    "@sveltejs/adapter-node": "^5.5.4",
-    "@sveltejs/kit": "^2.55.0",
+    "@sveltejs/adapter-node": "5.5.7",
+    "@sveltejs/kit": "2.70.3",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
-    "svelte": "^5.53.0",
+    "svelte": "5.57.0",
     "svelte-check": "^4.4.5",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"

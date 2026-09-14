@@ -23,6 +23,13 @@ Simply install using NPM to install this package.
 $ npm i -s @ops-ai/svelte-feature-flags-toggly
 ```
 
+### Requirements
+
+Supports Svelte `^4.0.0 || ^5.0.0`. Packed consumer builds cover the declared
+Svelte 4.0.0 minimum, retained Svelte 4.2.20, and current Svelte 5.57.0. A
+current Svelte 5 host needs its toolchain's Node `^20.19`, `^22.12`, or
+`>=24` requirement.
+
 ## Basic Usage (with Toggly.io)
 
 ### Initialize Toggly

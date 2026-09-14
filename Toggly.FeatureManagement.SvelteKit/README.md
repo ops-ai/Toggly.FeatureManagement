@@ -1,5 +1,9 @@
 # Toggly SvelteKit SDK
 
+Supports Svelte `^5.0.0` and SvelteKit `^2.0.0` on Node 22.12 or later. The
+current packed host uses Svelte 5.57.0, SvelteKit 2.70.3, and adapter-node
+5.5.7.
+
 Request-scoped server feature flags and signed SSR hydration for SvelteKit. Use with Toggly.io or explicit offline defaults. A feature flag selects an application branch without deploying new code; targeting rules can vary that branch by user, request or entity.
 
 ## Install and requirements
