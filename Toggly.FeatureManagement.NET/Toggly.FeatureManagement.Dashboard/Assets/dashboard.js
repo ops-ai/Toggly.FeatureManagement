@@ -81,9 +81,11 @@ document.addEventListener("DOMContentLoaded", () => {
         return true;
     };
 
+    const enabledValue = (form) => form.querySelector('input[name="Enabled"]:checked')?.value === "true";
     const setEnabled = (form, on) => {
-        const field = form.querySelector("[data-enabled-field]");
-        if (field) field.value = on ? "true" : "false";
+        form.querySelectorAll('input[name="Enabled"]').forEach(radio => {
+            radio.checked = radio.value === (on ? "true" : "false");
+        });
         const copy = form.querySelector("[data-turn-off-copy]");
         const turnOff = form.querySelector("[data-turn-off]");
         copy?.classList.toggle("is-hidden", on);
@@ -159,7 +161,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const card = toggleHit.closest(".feature-card");
             const toggle = card?.querySelector("[data-feature-toggle]");
             const form = card?.querySelector("[data-conditions-form]");
-            const draftOn = form?.querySelector("[data-enabled-field]")?.value === "true";
+            const draftOn = form ? enabledValue(form) : false;
             if (card && toggle && form && card.dataset.persistedEnabled === "true" && toggle.checked && draftOn) {
                 event.preventDefault();
                 const open = document.querySelector(".conditions-form.is-open");
@@ -172,7 +174,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        const leave = event.target.closest(".tab, .rail-link, .feature-name, a.button[href]");
+        const leave = event.target.closest(".tab, .rail-link, .feature-name, .conditions-link, a.button[href]");
         if (leave) {
             const open = document.querySelector(".conditions-form.is-open");
             if (open && isDirty(open) && !window.confirm(leaveMessage)) {

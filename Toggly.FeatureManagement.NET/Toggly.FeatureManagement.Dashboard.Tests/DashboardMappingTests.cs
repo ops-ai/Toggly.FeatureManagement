@@ -535,11 +535,14 @@ public sealed class DashboardMappingTests
         var single = await host.Client.GetStringAsync("/features/?expand=foo_bar");
         single.Should().Contain("data-match-group=\"user\"").And.Contain("is-hidden");
         var list = await host.Client.GetStringAsync("/features/");
-        list.Should().Contain("aria-modal=\"true\"").And.Contain("id=\"toggly-always-on-rule\"");
+        list.Should().Contain("aria-modal=\"true\"").And.Contain("id=\"toggly-always-on-rule\"")
+            .And.Contain("conditions-link").And.Contain("Open conditions for")
+            .And.Contain("name=\"Enabled\" value=\"true\"").And.Contain("name=\"Enabled\" value=\"false\"");
         var script = await host.Client.GetStringAsync("/features/assets/dashboard.js");
         script.Should().Contain("keydown").And.Contain("Escape").And.Contain("toggly-always-on-rule");
         script.Should().Contain("persistedEnabled === \"true\" && !intended");
         script.Should().Contain("toggle.checked && draftOn");
+        script.Should().Contain("input[name=\"Enabled\"]:checked");
         script.Should().Contain("allowUnload").And.Contain("key === \"newRuleName\"");
         var css = await host.Client.GetStringAsync("/features/assets/dashboard.css");
         css.Should().Contain("--primary: #3f52c9").And.Contain("input:focus-visible + .toggle-ui");
@@ -599,6 +602,7 @@ public sealed class DashboardMappingTests
         var turnOff = Regex.Match(html, @"<button[^>]*data-turn-off[^>]*>");
         turnOff.Success.Should().BeTrue();
         turnOff.Value.Should().Contain("disabled");
+        html.Should().Contain("type=\"radio\" name=\"Enabled\"");
         html.Should().NotContain("href=\"/features/features/new\"");
         var create = Regex.Match(html, @"<button[^>]*>\s*Create feature\s*</button>");
         create.Success.Should().BeTrue();

@@ -133,6 +133,8 @@ body {
 }
 .conditions-form { border-top: 1px solid var(--border); padding: 18px 20px 20px; }
 .conditions-form.is-collapsed { display: none; }
+.enabled-state { border: 0; padding: 0; margin: 0 0 12px; display: flex; gap: 16px; align-items: center; }
+.enabled-state legend { font-weight: 650; padding: 0; margin-right: 8px; }
 .conditions-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .condition-group { margin: 16px 0; display: grid; gap: 10px; }
 .match-group { border: 0; padding: 0; }

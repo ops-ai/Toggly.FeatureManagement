@@ -18,7 +18,10 @@
 - A persisted-on feature toggle expands the conditions draft and stays on;
   only Turn feature off starts the off draft.
 - Turning the draft back on after Turn feature off restores the switch as well
-  as the hidden enabled field.
+  as the On/Off enabled state.
+- Uncategorized features round-trip as an empty category instead of null.
+- Conditions can be opened and turned on or off without JavaScript via the
+  Conditions link and Feature state radios.
 - Visible focus ring on the feature toggle track; selected Browse link and
   12px captions meet AA contrast.
 - Disable Turn feature off in read-only mode, show a disabled Create feature

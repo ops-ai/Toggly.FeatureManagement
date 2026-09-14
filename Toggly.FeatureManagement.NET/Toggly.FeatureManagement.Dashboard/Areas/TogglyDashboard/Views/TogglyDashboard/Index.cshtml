@@ -97,6 +97,7 @@ else
                                 </label>
                                 <div class="feature-identity">
                                     <a class="feature-name" href="@basePath/features/edit?key=@Uri.EscapeDataString(feature.Key)">@feature.Name</a>
+                                    <a class="conditions-link" href="@listHref&amp;expand=@Uri.EscapeDataString(feature.Key)" aria-label="Open conditions for @feature.Name">Conditions</a>
                                     <code class="key-chip">@feature.Key</code>
                                     <div class="chips">
                                         @foreach (var tag in feature.Tags) { <span class="chip">@tag</span> }
@@ -108,8 +109,12 @@ else
                                 <input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" />
                                 <input type="hidden" name="Key" value="@feature.Key" />
                                 <input type="hidden" name="ExpectedRevision" value="@Model.Revision" />
-                                <input type="hidden" name="Enabled" value="@(draft.Enabled == true ? "true" : "false")" data-enabled-field />
                                 <input type="hidden" name="ContextKind" value="@feature.ContextKind" />
+                                <fieldset class="enabled-state">
+                                    <legend>Feature state</legend>
+                                    <label><input type="radio" name="Enabled" value="true" @(draft.Enabled == true ? "checked" : null) /> On</label>
+                                    <label><input type="radio" name="Enabled" value="false" @(draft.Enabled == true ? null : "checked") /> Off</label>
+                                </fieldset>
                                 <div asp-validation-summary="@(expanded ? Microsoft.AspNetCore.Mvc.Rendering.ValidationSummary.All : Microsoft.AspNetCore.Mvc.Rendering.ValidationSummary.None)" class="validation-summary" tabindex="-1" role="alert"></div>
                                 <div class="conditions-toolbar">
                                     <h3>Conditions</h3>
