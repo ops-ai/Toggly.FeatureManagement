@@ -57,7 +57,7 @@ rocket = "0.5"
 # Testing
 mockito = "1.2"
 tokio-test = "0.4"
-wiremock = "0.5"
+wiremock = "0.6"
 tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 
