@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { verifyAutomaticStartup } from './automatic-startup.test.mjs'
 
@@ -40,10 +41,23 @@ for (const name of ['core', 'client', 'server', '']) {
 assert(!process.env.TOGGLY_SIGNED_DEFS_ARTIFACT, 'shared dependencies must resolve from the public registry')
 dependencies['@ops-ai/toggly-signed-defs'] = '1.2.7'
 const manifest = { private: true, type: 'module', dependencies }
+const packedSdkDependencies = Object.entries(dependencies).filter(([name]) => name.startsWith('@ops-ai/nuxt-toggly'))
+const artifactPath = spec => spec.replace('file:./', '')
+const artifactIntegrity = async spec => `sha512-${createHash('sha512').update(await readFile(join(work, artifactPath(spec)))).digest('base64')}`
 if (lockMode === 'locked') {
   const lockedManifest = JSON.parse(await readFile(join(lockDir, 'package.json'), 'utf8'))
   assert.deepEqual(lockedManifest, manifest, 'consumer lock must match the packed candidate versions and dependency mode')
-  await cp(join(lockDir, 'package-lock.json'), join(work, 'package-lock.json'))
+  const consumerLock = JSON.parse(await readFile(join(lockDir, 'package-lock.json'), 'utf8'))
+  // The four SDK packages are freshly packed for each host run. Preserve the
+  // committed public-registry graph, then bind its local candidate entries to
+  // these exact artifact bytes so npm ci still verifies their integrity.
+  for (const [name, spec] of packedSdkDependencies) {
+    const artifact = artifactPath(spec)
+    const entry = consumerLock.packages[`node_modules/${name}`]
+    assert.equal(entry?.resolved, `file:${artifact}`, `${name} must remain a packed local candidate`)
+    entry.integrity = await artifactIntegrity(spec)
+  }
+  await writeFile(join(work, 'package-lock.json'), JSON.stringify(consumerLock, null, 2) + '\n')
 }
 await writeFile(join(work, 'package.json'), JSON.stringify(manifest, null, 2) + '\n')
 await writeFile(join(work, 'tsconfig.json'), JSON.stringify({ extends: './.nuxt/tsconfig.json' }))
@@ -59,6 +73,9 @@ await run('npm', [lockMode === 'fresh' ? 'install' : 'ci', '--no-audit', '--no-f
 // Playwright revision that each packed consumer resolved.
 await run('npx', ['playwright', 'install', 'chromium'])
 const consumerLock = JSON.parse(await readFile(join(work, 'package-lock.json'), 'utf8'))
+for (const [name, spec] of packedSdkDependencies) {
+  assert.equal(consumerLock.packages[`node_modules/${name}`]?.integrity, await artifactIntegrity(spec), `${name} integrity must match its packed candidate`)
+}
 for (const [path, pkg] of Object.entries(consumerLock.packages)) {
   if (!path || Object.keys(dependencies).some(name => name.startsWith('@ops-ai/nuxt-toggly') && path === `node_modules/${name}`)) continue
   if (pkg.resolved) assert(pkg.resolved.startsWith('https://registry.npmjs.org/'), `${path} must resolve from public npm`)
