@@ -308,6 +308,7 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/
 
 # Cake - Uncomment if you are using it
 # tools/**
