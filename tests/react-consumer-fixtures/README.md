@@ -25,11 +25,10 @@ provider/context and the documented initial state before effects execute.
 Subscription counters wrap the real public subscription methods in fixture
 code only; evaluation, requests, and notifications use the packed SDK.
 
-After changing published package contents, rebuild and pack into
-`consumer-fixtures/artifacts/toggly-react.tgz`, remove each lock's local
-`node_modules/@ops-ai/react-feature-flags-toggly` entry, and run
-`npm install --package-lock-only --ignore-scripts` per fixture to refresh the
-locked artifact checksum. Do not suppress integrity checks in `npm ci`.
+After changing published package contents, rebuild the SDK and run
+`npm run test:consumers` from the SDK directory. The verifier packs once into
+an OS temporary directory, copies each checked-in fixture there, and preserves
+the committed registry locks. Do not suppress integrity checks in `npm ci`.
 
 When validating an unpublished browser-safe signed-definitions candidate, set
 `TOGGLY_SIGNED_DEFS_TARBALL` to its exact reviewed tarball. The verifier copies

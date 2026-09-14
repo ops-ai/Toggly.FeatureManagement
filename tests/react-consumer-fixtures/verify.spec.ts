@@ -6,7 +6,9 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const sdkDirectory = process.cwd()
-const packageDirectory = join(sdkDirectory, 'consumer-fixtures')
+// Keep independently installed hosts outside the SDK source root. Sonar analyzes
+// that root as production code, while these are executable consumer tests.
+const packageDirectory = join(sdkDirectory, '..', 'tests', 'react-consumer-fixtures')
 const runnerDirectory = join(fileURLToPath(new URL('.', import.meta.url)))
 const packageManifest = JSON.parse(
   readFileSync(join(sdkDirectory, 'package.json'), 'utf8'),
