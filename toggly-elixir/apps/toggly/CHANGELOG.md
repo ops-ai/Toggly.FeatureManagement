@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 — 2026-09-14
+
+### Fixed
+- Accept optional filter parameters serialized as `null`, normalizing them to an
+  empty map only after signature verification. Preserve original signed bytes
+  for cold offline restoration, and keep malformed arrays/scalars rejected
+  without replacing accepted definitions or persisted snapshots [OPS-1224].
+
 ## 0.1.0 — 2026-09-12
 
 ### Added

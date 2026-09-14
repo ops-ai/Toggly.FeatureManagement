@@ -184,7 +184,7 @@ defmodule Toggly.Client do
 
     with {:ok, definitions, timestamp} when is_list(definitions) <- result,
          true <- Enum.all?(definitions, &valid_definition?/1),
-         mapped <- Map.new(definitions, &{&1["featureKey"], &1}),
+         mapped <- Map.new(definitions, &{&1["featureKey"], normalize_parameters(&1)}),
          true <- map_size(mapped) == length(definitions) do
       # Only public verification fields cross the persistence boundary.
       jwks =
@@ -212,11 +212,24 @@ defmodule Toggly.Client do
        when is_binary(key) and key != "" and is_list(filters) do
     Enum.all?(filters, fn filter ->
       is_map(filter) and is_binary(filter["name"]) and
-        is_map(Map.get(filter, "parameters", %{}))
+        (is_nil(filter["parameters"]) or is_map(filter["parameters"]))
     end)
   end
 
   defp valid_definition?(_), do: false
+
+  defp normalize_parameters(definition) do
+    # The service may serialize absent optional parameters as null. Normalize the
+    # verified evaluation model only; persistence retains the original signed body.
+    Map.update!(definition, "filters", fn filters ->
+      Enum.map(filters, fn filter ->
+        Map.update(filter, "parameters", %{}, fn
+          nil -> %{}
+          parameters -> parameters
+        end)
+      end)
+    end)
+  end
 
   defp publish(state) do
     # Readers receive an atomic view; subscribers and verification material stay
