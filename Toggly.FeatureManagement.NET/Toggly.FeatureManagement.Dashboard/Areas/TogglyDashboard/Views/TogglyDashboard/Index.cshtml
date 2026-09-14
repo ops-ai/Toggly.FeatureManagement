@@ -70,8 +70,10 @@ else
                             ? Model.ConditionsDraft
                             : DashboardFeatureInput.FromFeature(feature, Model.Revision);
                         var expanded = string.Equals(Model.Expand, feature.Key, StringComparison.Ordinal);
+                        var serverDraft = Model.ConditionsDraft != null && string.Equals(Model.ConditionsDraft.Key, feature.Key, StringComparison.Ordinal);
                         var userRules = draft.Rules.Select((rule, index) => (rule, index)).Where(item => !DashboardRuleInput.IsEntityRule(item.rule.Name)).ToList();
                         var entityRules = draft.Rules.Select((rule, index) => (rule, index)).Where(item => DashboardRuleInput.IsEntityRule(item.rule.Name)).ToList();
+                        var listHref = $"{basePath}/?search={Uri.EscapeDataString(Model.Search)}&tag={Uri.EscapeDataString(Model.Tag)}&sort={Uri.EscapeDataString(Model.Sort)}&category={Uri.EscapeDataString(Model.Category)}";
                         var categoryLabel = string.IsNullOrEmpty(feature.Category) ? "Uncategorized" : feature.Category;
                         <article class="feature-card @(expanded ? "is-expanded" : null)" data-feature-key="@feature.Key" data-persisted-enabled="@feature.Enabled.ToString().ToLowerInvariant()" data-persisted-rule-count="@feature.Rules.Count">
                             <div class="feature-card-header">
@@ -88,7 +90,7 @@ else
                                     </div>
                                 </div>
                             </div>
-                            <form method="post" action="@basePath/features/conditions" class="conditions-form @(expanded ? "is-open" : "is-collapsed")" data-conditions-form="@feature.Key" data-unsaved-warning>
+                            <form method="post" action="@basePath/features/conditions" class="conditions-form @(expanded ? "is-open" : "is-collapsed")" data-conditions-form="@feature.Key" data-server-draft="@(serverDraft ? "true" : "false")" data-list-href="@listHref">
                                 <input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" />
                                 <input type="hidden" name="Key" value="@feature.Key" />
                                 <input type="hidden" name="ExpectedRevision" value="@Model.Revision" />
@@ -111,7 +113,7 @@ else
                                     </fieldset>
                                     @foreach (var item in userRules)
                                     {
-                                        <partial name="_RuleFields" model="(item.index, item.rule)" />
+                                        <partial name="_RuleFields" model="(item.index, item.rule, userRules.Count >= 2)" />
                                     }
                                     <label for="new-user-filter-@feature.Key">Add user filter</label>
                                     <select id="new-user-filter-@feature.Key" name="newRuleName">
@@ -136,7 +138,7 @@ else
                                         </fieldset>
                                         @foreach (var item in entityRules)
                                         {
-                                            <partial name="_RuleFields" model="(item.index, item.rule)" />
+                                            <partial name="_RuleFields" model="(item.index, item.rule, entityRules.Count >= 2)" />
                                         }
                                     <button type="submit" name="command" value="add-entity" formnovalidate disabled="@readOnly">Add entity condition</button>
                                     </section>
@@ -154,8 +156,15 @@ else
             }
         </div>
     </div>
+    <template id="toggly-always-on-rule">
+        <fieldset class="rule-row" data-rule-name="AlwaysOn">
+            <legend>Always On</legend>
+            <input type="hidden" name="Rules[INDEX].Name" value="AlwaysOn" />
+            <p class="hint">This filter matches every request. No extra configuration is required.</p>
+        </fieldset>
+    </template>
     <div id="copy-csharp-modal" class="modal" hidden>
-        <div class="modal-card" role="dialog" aria-labelledby="copy-csharp-title">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="copy-csharp-title" tabindex="-1">
             <h2 id="copy-csharp-title">Feature Keys - Copy C#</h2>
             <pre><code id="copy-csharp-source">@Model.CopyCSharp</code></pre>
             <p class="copy-status" aria-live="polite"></p>

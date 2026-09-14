@@ -10,6 +10,12 @@
   conditions panel. Settings save metadata only; turning a feature off and
   saving clears targeting filters.
 
+### Fixed
+- Copy C# enum members stay unique when sanitized keys collide with later keys.
+- Conditions drafts restore on Cancel, insert an Always On row when turning on
+  an empty feature, hide Remove for a group's sole condition, and trap focus in
+  the Copy C# modal.
+
 ## All .NET SDK packages 3.7.0 - 2026-09-13
 
 ### Changed

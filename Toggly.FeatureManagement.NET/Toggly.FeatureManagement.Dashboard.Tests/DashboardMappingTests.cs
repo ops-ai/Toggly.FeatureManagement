@@ -534,6 +534,56 @@ public sealed class DashboardMappingTests
         expanded.Should().Contain("Match any").And.Contain("Match all");
         var single = await host.Client.GetStringAsync("/features/?expand=foo_bar");
         single.Should().Contain("data-match-group=\"user\"").And.Contain("is-hidden");
+        var list = await host.Client.GetStringAsync("/features/");
+        list.Should().Contain("aria-modal=\"true\"").And.Contain("id=\"toggly-always-on-rule\"");
+        var script = await host.Client.GetStringAsync("/features/assets/dashboard.js");
+        script.Should().Contain("keydown").And.Contain("Escape").And.Contain("toggly-always-on-rule");
+    }
+
+    [Fact]
+    public async Task Remove_filter_is_shown_only_when_a_group_has_two_or_more_conditions()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        (await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Solo", ["Name"] = "Solo"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        (await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "Solo", ["Enabled"] = "true", ["Rules[0].Name"] = "AlwaysOn"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        var one = await host.Client.GetStringAsync("/features/?expand=Solo");
+        one.Should().Contain("data-rule-name=\"AlwaysOn\"").And.NotContain("name=\"removeRuleIndex\"");
+        var added = await PostForm(host, "/features/?expand=Solo", "/features/features/conditions", new()
+        {
+            ["Key"] = "Solo", ["Enabled"] = "true", ["Rules[0].Name"] = "AlwaysOn", ["command"] = "add-rule", ["newRuleName"] = "Percentage"
+        });
+        added.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await added.Content.ReadAsStringAsync();
+        html.Should().Contain("name=\"removeRuleIndex\"").And.Contain("Match any");
+    }
+
+    [Fact]
+    public async Task Copy_csharp_assigns_unique_members_when_sanitized_names_collide()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        foreach (var key in new[] { "a-b", "a_b", "a_b__2" })
+        {
+            (await PostForm(host, "/features/features/new", "/features/features/create", new()
+            {
+                ["Key"] = key, ["Name"] = key
+            })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        }
+
+        var html = WebUtility.HtmlDecode(await host.Client.GetStringAsync("/features/"));
+        var members = Regex.Match(html, @"public enum FeatureFlags\s*\{(?<body>.*?)\}", RegexOptions.Singleline)
+            .Groups["body"].Value
+            .Split([',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(member => member.Trim().TrimEnd(','))
+            .Where(member => member.Length > 0)
+            .ToArray();
+
+        members.Should().Equal("a_b", "a_b__2", "a_b__2__2");
     }
 
     [Fact]

@@ -200,18 +200,18 @@ internal static class FeatureFlagsEnum
 
     internal static string Generate(IEnumerable<CatalogFeature> features)
     {
-        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        var used = new HashSet<string>(StringComparer.Ordinal);
         var members = new List<string>();
         foreach (var key in features.Select(feature => feature.Key).OrderBy(key => key, StringComparer.Ordinal))
         {
-            var member = Sanitize(key);
-            if (seen.TryGetValue(member, out var count))
+            var stem = Sanitize(key);
+            var member = stem;
+            var suffix = 2;
+            while (!used.Add(member))
             {
-                count++;
-                seen[member] = count;
-                member += "__" + count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                member = stem + "__" + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                suffix++;
             }
-            else seen[member] = 1;
             members.Add(member);
         }
 

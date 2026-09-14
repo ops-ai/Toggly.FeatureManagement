@@ -1,4 +1,4 @@
-@model (int Index, DashboardRuleInput Rule)
+@model (int Index, DashboardRuleInput Rule, bool CanRemove)
 @{
     var index = Model.Index;
     var rule = Model.Rule;
@@ -70,5 +70,8 @@
         <label for="rule-@index-Percentage">@(rule.Name == "Targeting" ? "Default rollout percentage" : "Percentage")</label>
         <input id="rule-@index-Percentage" name="Rules[@index].Percentage" value="@rule.Percentage" type="number" min="0" max="100" step="any" />
     }
-    <button type="submit" class="icon-button" name="removeRuleIndex" value="@index" formnovalidate aria-label="Remove @label filter">×</button>
+    @if (Model.CanRemove)
+    {
+        <button type="submit" class="icon-button" name="removeRuleIndex" value="@index" formnovalidate aria-label="Remove @label filter">×</button>
+    }
 </fieldset>
