@@ -133,9 +133,9 @@ jobs:
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
-            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Dashboard.BrowserTests/**" \
-            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Dashboard.BrowserTests/**" \
-            /d:sonar.test.inclusions="**/*Tests*.cs,**/Dashboard.BrowserTests/**"
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
+            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
+            /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**"
 
       - name: Build solution
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
@@ -304,9 +304,9 @@ jobs:
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
               /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
               /d:sonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
-              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Dashboard.BrowserTests/**" \
-              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Dashboard.BrowserTests/**" \
-              /d:sonar.test.inclusions="**/*Tests*.cs,**/Dashboard.BrowserTests/**"; then
+              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
+              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
+              /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**"; then
               break
             fi
 

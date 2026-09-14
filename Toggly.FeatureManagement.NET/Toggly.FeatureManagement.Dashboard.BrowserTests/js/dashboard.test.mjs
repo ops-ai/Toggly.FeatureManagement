@@ -7,6 +7,12 @@ const dashboardScript = new URL(
     import.meta.url
 );
 
+const alwaysOnTemplateInner = `
+  <fieldset class="rule-row" data-rule-name="AlwaysOn">
+    <legend>Always On</legend>
+    <input type="hidden" name="Rules[INDEX].Name" value="AlwaysOn" />
+  </fieldset>`;
+
 const fixture = `<!doctype html>
 <html>
 <body>
@@ -78,12 +84,7 @@ const fixture = `<!doctype html>
     <button type="button" data-close-conditions>Cancel</button>
   </form>
 </article>
-<template id="toggly-always-on-rule">
-  <fieldset class="rule-row" data-rule-name="AlwaysOn">
-    <legend>Always On</legend>
-    <input type="hidden" name="Rules[INDEX].Name" value="AlwaysOn" />
-  </fieldset>
-</template>
+<template id="toggly-always-on-rule">${alwaysOnTemplateInner}</template>
 <div id="copy-csharp-modal" class="modal" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" tabindex="-1">
     <pre><code id="copy-csharp-source">public enum FeatureFlags { NewCheckout }</code></pre>
@@ -164,6 +165,13 @@ describe("dashboard.js", { concurrency: false }, () => {
         document.querySelector('[data-feature-toggle="NewCheckout"]').checked = false;
         document.querySelector('[data-feature-toggle="Search"]').checked = true;
         document.querySelector('[data-feature-toggle="Orphan"]').checked = false;
+        let template = document.getElementById("toggly-always-on-rule");
+        if (!template) {
+            template = document.createElement("template");
+            template.id = "toggly-always-on-rule";
+            document.body.append(template);
+        }
+        template.innerHTML = alwaysOnTemplateInner;
     });
 
     test("focuses the validation summary on load", () => {
@@ -412,10 +420,6 @@ describe("dashboard.js", { concurrency: false }, () => {
         toggle.checked = true;
         change(window, toggle);
         assert.equal(form.querySelector('[data-rule-name="AlwaysOn"]'), null);
-        const restored = document.createElement("template");
-        restored.id = "toggly-always-on-rule";
-        restored.innerHTML = `<fieldset class="rule-row" data-rule-name="AlwaysOn"><legend>Always On</legend></fieldset>`;
-        document.body.append(restored);
     });
 
     test("warns on unload when open conditions are dirty", () => {
