@@ -46,7 +46,7 @@ prometheus = "0.14"
 # Optional Toggly usage/metrics gRPC export (`telemetry` feature)
 tonic = { version = "0.12", features = ["tls", "tls-roots"] }
 prost = "0.13"
-prost-types = "0.13"
+prost-types = "0.14"
 tower = "0.4"
 
 # Framework integrations
