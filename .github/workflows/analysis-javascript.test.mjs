@@ -29,3 +29,11 @@ test('does not count packed Vue and Svelte host harnesses as production source',
     for (const harness of packedHostHarnesses) assert.ok(exclusions.includes(harness));
   }
 });
+
+test('runs the Fastify 4 and 5 packed-host fixture on its valid Node 20 row', () => {
+  const packedHostStep = workflow.match(/- name: Run packed host compatibility fixture\n\s+if: ([^\n]+)/)?.[1];
+
+  assert.ok(packedHostStep, 'the packed-host fixture must keep an explicit matrix guard');
+  assert.match(packedHostStep, /matrix\.config\.package == 'Fastify'/);
+  assert.match(packedHostStep, /matrix\.node-version == '20\.x'/);
+});

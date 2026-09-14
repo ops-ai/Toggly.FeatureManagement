@@ -51,7 +51,7 @@ describe('togglyPlugin', () => {
   it('should initialize client and attach toggly to request', async () => {
     await app.register(togglyPlugin, { appKey: 'test-app' })
 
-    app.get('/test', async (request, reply) => {
+    app.get('/test', async request => {
       expect(request.toggly).toBeDefined()
       expect(request.toggly!.features).toBeDefined()
       expect(request.toggly!.isFeatureOn).toBeDefined()
@@ -71,7 +71,7 @@ describe('togglyPlugin', () => {
   it('should extract identity from header', async () => {
     await app.register(togglyPlugin, { appKey: 'test-app' })
 
-    app.get('/test', async (request, reply) => {
+    app.get('/test', async request => {
       expect(request.toggly!.identity).toBe('user-123')
       return { success: true }
     })
@@ -109,7 +109,7 @@ describe('togglyPlugin', () => {
       getIdentity: (request) => request.headers['x-user-id'] as string,
     })
 
-    app.get('/test', async (request, reply) => {
+    app.get('/test', async request => {
       expect(request.toggly!.identity).toBe('custom-user-456')
       return { success: true }
     })
@@ -124,14 +124,14 @@ describe('togglyPlugin', () => {
   it('should use custom context extractor', async () => {
     await app.register(togglyPlugin, {
       appKey: 'test-app',
-      getContext: (request) => ({
+      getContext: () => ({
         identity: 'ctx-user',
         groups: ['admin'],
         traits: { custom: 'value' },
       }),
     })
 
-    app.get('/test', async (request, reply) => {
+    app.get('/test', async request => {
       expect(request.toggly!.context.identity).toBe('ctx-user')
       expect(request.toggly!.context.groups).toEqual(['admin'])
       expect(request.toggly!.context.traits?.custom).toBe('value')
@@ -247,7 +247,7 @@ describe('togglyPlugin', () => {
   it('should provide feature checking functions', async () => {
     await app.register(togglyPlugin, { appKey: 'test-app' })
 
-    app.get('/test', async (request, reply) => {
+    app.get('/test', async request => {
       expect(await request.toggly!.isFeatureOn('feature-a')).toBe(true)
       expect(await request.toggly!.isFeatureOn('feature-b')).toBe(false)
       expect(await request.toggly!.isFeatureOff('feature-a')).toBe(false)
@@ -264,7 +264,7 @@ describe('togglyPlugin', () => {
   it('should provide evaluateFeatureGate function', async () => {
     await app.register(togglyPlugin, { appKey: 'test-app' })
 
-    app.get('/test', async (request, reply) => {
+    app.get('/test', async request => {
       const toggly = request.toggly!
       expect(await toggly.evaluateFeatureGate(['feature-a'], 'all')).toBe(true)
       expect(await toggly.evaluateFeatureGate(['feature-a', 'feature-b'], 'all')).toBe(false)
@@ -283,7 +283,7 @@ describe('togglyPlugin', () => {
 
     await app.register(togglyPlugin, { appKey: 'test-app' })
 
-    app.get('/test', async (request, reply) => {
+    app.get('/test', async request => {
       // Client should be attached with default/empty features
       expect(request.toggly).toBeDefined()
       expect(request.toggly!.features).toBeDefined()

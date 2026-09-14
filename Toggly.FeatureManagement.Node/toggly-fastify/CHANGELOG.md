@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1
+
+2026-09-12
+
+### Added
+- Verify the packed ESM, CommonJS, and TypeScript artifact in real Fastify
+  4.29.1 / Node 18.20.8 and Fastify 5.12.4 / Node 20.19.6 hosts, including
+  request context isolation, local gates, refresh, invalid responses, unsigned
+  signed-definition rejection, and shutdown [OPS-1200].
+
 ## 0.3.0
 
 2026-09-04
