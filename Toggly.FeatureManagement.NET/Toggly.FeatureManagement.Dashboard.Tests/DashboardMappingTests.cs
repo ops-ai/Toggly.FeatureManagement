@@ -538,6 +538,7 @@ public sealed class DashboardMappingTests
         list.Should().Contain("aria-modal=\"true\"").And.Contain("id=\"toggly-always-on-rule\"");
         var script = await host.Client.GetStringAsync("/features/assets/dashboard.js");
         script.Should().Contain("keydown").And.Contain("Escape").And.Contain("toggly-always-on-rule");
+        script.Should().Contain("persistedEnabled === \"true\" && !intended");
     }
 
     [Fact]

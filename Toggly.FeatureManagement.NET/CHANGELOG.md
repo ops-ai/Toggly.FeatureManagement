@@ -15,6 +15,8 @@
 - Conditions drafts restore on Cancel, insert an Always On row when turning on
   an empty feature, hide Remove for a group's sole condition, and trap focus in
   the Copy C# modal.
+- A persisted-on feature toggle expands the conditions draft and stays on;
+  only Turn feature off starts the off draft.
 
 ## All .NET SDK packages 3.7.0 - 2026-09-13
 

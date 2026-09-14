@@ -133,11 +133,33 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
         } else if (open && open !== form) collapse(open);
+        if (card.dataset.persistedEnabled === "true" && !intended) {
+            toggle.checked = true;
+            applyDraftOn(card, form, toggle);
+            return;
+        }
         if (intended) applyDraftOn(card, form, toggle);
         else applyDraftOff(card, form, toggle);
     });
 
     document.addEventListener("click", event => {
+        const toggleHit = event.target.closest("label.toggle, [data-feature-toggle]");
+        if (toggleHit) {
+            const card = toggleHit.closest(".feature-card");
+            const toggle = card?.querySelector("[data-feature-toggle]");
+            const form = card?.querySelector("[data-conditions-form]");
+            if (card && toggle && form && card.dataset.persistedEnabled === "true" && toggle.checked) {
+                event.preventDefault();
+                const open = document.querySelector(".conditions-form.is-open");
+                if (open && open !== form && isDirty(open)) {
+                    if (!window.confirm(leaveMessage)) return;
+                    if (discard(open)) return;
+                } else if (open && open !== form) collapse(open);
+                applyDraftOn(card, form, toggle);
+                return;
+            }
+        }
+
         const leave = event.target.closest(".tab, .rail-link, .feature-name, a.button[href]");
         if (leave) {
             const open = document.querySelector(".conditions-form.is-open");
