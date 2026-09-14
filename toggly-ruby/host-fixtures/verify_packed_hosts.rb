@@ -3,12 +3,14 @@
 require "fileutils"
 require "open3"
 require "rbconfig"
+require "rubygems/package"
 require "tmpdir"
 
 SDK_ROOT = File.expand_path("..", __dir__)
 RAILS_VERSION = ENV.fetch("RAILS_VERSION")
 REDIS_VERSION = ENV.fetch("REDIS_VERSION")
 REDIS_URL = ENV.fetch("REDIS_URL", "redis://127.0.0.1:6379")
+INDEX_GENERATOR_VERSION = "1.2.0"
 
 def run!(*command, chdir:, env: {})
   output, status = Open3.capture2e(env, *command, chdir:)
@@ -25,39 +27,90 @@ def build_gem(package, gemspec, expected_file, destination)
   files = run!("gem", "specification", gem_path, "files", chdir: package_directory)
   raise "#{package} package omitted #{expected_file}" unless files.include?(expected_file)
 
-  gem_path
+  specification = Gem::Package.new(gem_path).spec
+  indexed_gem_path = File.join(destination, "#{specification.name}-#{specification.version}.gem")
+  FileUtils.mv(gem_path, indexed_gem_path)
+
+  { name: specification.name, version: specification.version.to_s }
 end
 
-def ruby_host!(gem_environment, script)
-  run!(RbConfig.ruby, "-e", script, chdir: SDK_ROOT, env: gem_environment)
+def generate_repository_index!(repository, tool_gem_home)
+  tool_environment = { "GEM_HOME" => tool_gem_home, "GEM_PATH" => tool_gem_home }
+  install_directory = ["--install-dir", tool_gem_home, "--no-document"]
+
+  run!(
+    "gem", "install", *install_directory, "rubygems-generate_index", "-v", INDEX_GENERATOR_VERSION,
+    chdir: SDK_ROOT,
+    env: tool_environment
+  )
+  run!("gem", "generate_index", "--directory", repository, chdir: SDK_ROOT, env: tool_environment)
+end
+
+def write_host_gemfile(host_directory, repository, packed_gems)
+  # A repository of the built archives makes Bundler resolve the candidate gems,
+  # Rails and Redis together without using a source-tree path dependency.
+  gemfile = <<~RUBY
+    source "https://rubygems.org"
+
+    source "file://#{repository}" do
+  RUBY
+
+  packed_gems.each do |gem|
+    gemfile << "  gem #{gem[:name].inspect}, #{gem[:version].inspect}\n"
+  end
+
+  gemfile << <<~RUBY
+    end
+
+    gem "rails", #{RAILS_VERSION.inspect}
+    gem "redis", #{REDIS_VERSION.inspect}
+  RUBY
+  File.write(File.join(host_directory, "Gemfile"), gemfile)
+end
+
+def verify_packed_repository!(host_directory, repository, packed_gems)
+  lockfile = File.read(File.join(host_directory, "Gemfile.lock"))
+  expected_source = "remote: file://#{repository}/"
+  raise "packed gems did not resolve from the artifact repository" unless lockfile.include?(expected_source)
+
+  packed_gems.each do |gem|
+    specification = "    #{gem[:name]} (#{gem[:version]})"
+    raise "packed artifact #{gem[:name]} was not locked" unless lockfile.include?(specification)
+  end
+end
+
+def ruby_host!(host_directory, bundle_environment, script)
+  run!("bundle", "exec", RbConfig.ruby, "-e", script, chdir: host_directory, env: bundle_environment)
 end
 
 Dir.mktmpdir("toggly-ruby-packed-hosts-") do |temporary_directory|
-  artifacts = File.join(temporary_directory, "artifacts")
-  gem_home = File.join(temporary_directory, "gems")
+  repository = File.join(temporary_directory, "repository")
+  artifacts = File.join(repository, "gems")
+  host_directory = File.join(temporary_directory, "host")
+  tool_gem_home = File.join(temporary_directory, "index-generator")
   FileUtils.mkdir_p(artifacts)
-  FileUtils.mkdir_p(gem_home)
+  FileUtils.mkdir_p(host_directory)
 
   core_gem = build_gem("toggly", "toggly.gemspec", "lib/toggly.rb", artifacts)
   rails_gem = build_gem("toggly-rails", "toggly-rails.gemspec", "lib/toggly-rails.rb", artifacts)
   cache_gem = build_gem("toggly-cache", "toggly-cache.gemspec", "lib/toggly-cache.rb", artifacts)
+  generate_repository_index!(repository, tool_gem_home)
+  write_host_gemfile(host_directory, repository, [core_gem, rails_gem, cache_gem])
 
-  gem_environment = {
-    "GEM_HOME" => gem_home,
-    "GEM_PATH" => gem_home,
+  bundle_environment = {
+    "BUNDLE_APP_CONFIG" => File.join(host_directory, ".bundle"),
+    "BUNDLE_DISABLE_SHARED_GEMS" => "true",
+    "BUNDLE_GEMFILE" => File.join(host_directory, "Gemfile"),
+    "BUNDLE_PATH" => File.join(host_directory, "bundle"),
     "PACKED_HOST_RAILS_VERSION" => RAILS_VERSION,
     "PACKED_HOST_REDIS_VERSION" => REDIS_VERSION,
     "PACKED_HOST_REDIS_URL" => REDIS_URL
   }
-  install_directory = ["--install-dir", gem_home, "--no-document"]
 
-  run!("gem", "install", *install_directory, core_gem, chdir: SDK_ROOT, env: gem_environment)
-  run!("gem", "install", *install_directory, "rails", "-v", RAILS_VERSION, chdir: SDK_ROOT, env: gem_environment)
-  run!("gem", "install", *install_directory, "redis", "-v", REDIS_VERSION, chdir: SDK_ROOT, env: gem_environment)
-  run!("gem", "install", *install_directory, rails_gem, chdir: SDK_ROOT, env: gem_environment)
-  run!("gem", "install", *install_directory, cache_gem, chdir: SDK_ROOT, env: gem_environment)
+  run!("bundle", "install", "--jobs", "4", chdir: host_directory, env: bundle_environment)
+  verify_packed_repository!(host_directory, repository, [core_gem, rails_gem, cache_gem])
 
-  host_output = ruby_host!(gem_environment, <<~'RUBY')
+  host_output = ruby_host!(host_directory, bundle_environment, <<~'RUBY')
     require "rails"
     require "redis"
     require "toggly-rails"
