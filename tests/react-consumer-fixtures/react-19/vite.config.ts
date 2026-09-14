@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite'
 
-// Keep JSX behavior explicit for this packed host without using tsconfig.json.
-// Sonar discovers every file named tsconfig.json below SDK source roots and
-// otherwise reclassifies the fixture's test-only program as production code.
+// Keep JSX behavior explicit for this packed host.
+// Its conventional tsconfig.json lets static analysis recognize this
+// independent test project outside SDK production source roots.
 export default defineConfig({
   esbuild: {
     jsx: 'automatic',

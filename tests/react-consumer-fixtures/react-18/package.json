@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --project tsconfig.consumer.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
     "build": "vite build",
     "verify": "vite build --ssr src/verify.spec.tsx --outDir dist-ssr && node dist-ssr/verify.spec.js"
   },

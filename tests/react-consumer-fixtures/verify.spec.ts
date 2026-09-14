@@ -97,7 +97,7 @@ try {
       env: npmEnvironment,
       stdio: 'inherit',
     })
-    runCommand('node', [join(fixtureDirectory, 'node_modules/typescript/bin/tsc'), '--project', 'tsconfig.consumer.json', '--noEmit'], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
+    runCommand('node', [join(fixtureDirectory, 'node_modules/typescript/bin/tsc'), '--project', 'tsconfig.json', '--noEmit'], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
     runCommand('node', [join(fixtureDirectory, 'node_modules/vite/bin/vite.js'), 'build'], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
     runCommand('node', [join(runnerDirectory, 'browser-check.spec.js')], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
     runCommand('node', [join(fixtureDirectory, 'node_modules/vite/bin/vite.js'), 'build', '--ssr', 'src/verify.spec.tsx', '--outDir', 'dist-ssr'], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
