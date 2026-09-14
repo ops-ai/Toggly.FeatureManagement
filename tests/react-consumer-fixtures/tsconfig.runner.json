@@ -12,5 +12,5 @@
     "types": ["node"],
     "noEmitOnError": true
   },
-  "include": ["verify.spec.ts", "browser-check.spec.ts"]
+  "include": ["verify-consumers.ts", "browser-check.ts"]
 }
