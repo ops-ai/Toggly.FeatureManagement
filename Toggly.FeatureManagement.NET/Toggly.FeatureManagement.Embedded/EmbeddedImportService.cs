@@ -125,7 +125,7 @@ public sealed class EmbeddedImportService
     private static string[] Select(IEnumerable<string>? selected, IReadOnlyList<string> allowed, string field)
     {
         var values = (selected ?? []).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        foreach (var value in values.Where(value => string.IsNullOrEmpty(value) || !allowed.Contains(value, StringComparer.OrdinalIgnoreCase)))
+        if (values.Any(value => string.IsNullOrEmpty(value) || !allowed.Contains(value, StringComparer.OrdinalIgnoreCase)))
             throw Validation(field, "A selected key was not available in the import preview.");
         return values;
     }

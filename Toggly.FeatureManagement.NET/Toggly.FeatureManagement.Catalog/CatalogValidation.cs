@@ -68,6 +68,7 @@ namespace Toggly.FeatureManagement.Catalog
         private const string ParamValue = "Value";
         private const string ParamContextKind = "ContextKind";
         private const string ParamProperty = "Property";
+        private const string ParamOperator = "Operator";
         private const string FilterAlwaysOn = "AlwaysOn";
         private const string FilterTargeting = "Targeting";
         private const string FilterTimeWindow = "TimeWindow";
@@ -562,7 +563,7 @@ namespace Toggly.FeatureManagement.Catalog
             string path,
             ICollection<CatalogValidationError> errors)
         {
-            ValidateExactParameters(parameters, new[] { ParamContextKind, ParamProperty, "Operator", ParamValue, "ValueType" }, new[] { ParamProperty, "Operator", ParamValue }, path, errors);
+            ValidateExactParameters(parameters, new[] { ParamContextKind, ParamProperty, ParamOperator, ParamValue, "ValueType" }, new[] { ParamProperty, ParamOperator, ParamValue }, path, errors);
             var contextKind = GetRequiredParameter(parameters, ParamContextKind) ?? feature.ContextKind;
             if (string.IsNullOrWhiteSpace(contextKind) || !contexts.TryGetValue(contextKind, out var context))
             {
@@ -584,10 +585,10 @@ namespace Toggly.FeatureManagement.Catalog
             }
 
             var valueType = NormalizeContextType(property.Type);
-            var op = GetRequiredParameter(parameters, "Operator");
+            var op = GetRequiredParameter(parameters, ParamOperator);
             if (!IsOperatorAllowed(property.Type, op))
             {
-                errors.Add(new CatalogValidationError(path + PathParametersPrefix + "Operator", "Operator is not supported for this context property type."));
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + ParamOperator, "Operator is not supported for this context property type."));
             }
 
             if (parameters.TryGetValue(ParamValue, out var value))

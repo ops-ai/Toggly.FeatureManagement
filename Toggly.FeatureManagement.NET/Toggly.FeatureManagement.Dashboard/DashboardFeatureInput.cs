@@ -9,7 +9,7 @@ namespace Toggly.FeatureManagement.Dashboard;
 public sealed class DashboardFeatureInput
 {
     [Required]
-    public bool IsNew { get; set; }
+    public required bool IsNew { get; set; }
     [Required, StringLength(128)]
     public string Key { get; set; } = string.Empty;
 
@@ -323,11 +323,19 @@ internal sealed class DashboardListsViewModel
     internal string? BlockedKey { get; init; }
 }
 
+public sealed class DashboardFeatureListFilter
+{
+    public string? Search { get; set; }
+    public string? Tag { get; set; }
+    public string? Category { get; set; }
+    public string? Sort { get; set; }
+}
+
 /// <summary>Form fields for a reusable catalog identifier list.</summary>
 public sealed class DashboardListInput
 {
     [Required]
-    public bool IsNew { get; set; }
+    public required bool IsNew { get; set; }
     [Required, StringLength(128)]
     public string Key { get; set; } = string.Empty;
     [Required, StringLength(200)]

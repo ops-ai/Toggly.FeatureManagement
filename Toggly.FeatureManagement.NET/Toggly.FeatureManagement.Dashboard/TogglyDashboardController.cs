@@ -35,7 +35,7 @@ public sealed class TogglyDashboardController : Controller
     private const string IndexView = "Index";
     private const string EditView = "Edit";
 
-    private IActionResult CatalogUnavailable() =>
+    private ObjectResult CatalogUnavailable() =>
         StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
 
     /// <summary>Lists the catalog features.</summary>
@@ -117,7 +117,7 @@ public sealed class TogglyDashboardController : Controller
 
     /// <summary>Persists the expanded conditions draft for one feature.</summary>
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Conditions(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName, string? search, string? tag, string? category, string? sort)
+    public async Task<IActionResult> Conditions(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName, [Bind(Prefix = "")] DashboardFeatureListFilter filter)
     {
         input.IsNew = false;
         CatalogSnapshot? snapshot;
@@ -134,15 +134,15 @@ public sealed class TogglyDashboardController : Controller
         ModelState.Remove(nameof(DashboardFeatureInput.Tags));
         if (ApplyRuleEditorCommand(input, command, removeRuleIndex, newRuleName))
             return Response.StatusCode == StatusCodes.Status400BadRequest
-                ? ConditionsView(snapshot, input, search, tag, category, sort)
-                : View(IndexView, BuildList(snapshot, search, tag, category, sort, input.Key, input));
+                ? ConditionsView(snapshot, input, filter)
+                : View(IndexView, BuildList(snapshot, filter.Search, filter.Tag, filter.Category, filter.Sort, input.Key, input));
         if (input.Enabled == null)
             return BadRequest("A feature key, expected revision, and explicit true or false enabled state are required.");
-        if (!ModelState.IsValid) return ConditionsView(snapshot, input, search, tag, category, sort);
+        if (!ModelState.IsValid) return ConditionsView(snapshot, input, filter);
         if (input.Enabled == true && input.Rules.Count == 0)
         {
             ModelState.AddModelError(nameof(input.Rules), "Add at least one user filter or entity condition before saving an enabled feature.");
-            return ConditionsView(snapshot, input, search, tag, category, sort);
+            return ConditionsView(snapshot, input, filter);
         }
         input.ApplyConditions(existing);
         return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, IndexView, input).ConfigureAwait(false);
@@ -370,7 +370,7 @@ public sealed class TogglyDashboardController : Controller
             if (result.Status == CatalogWriteStatus.Conflict)
             {
                 Response.StatusCode = StatusCodes.Status409Conflict;
-                return View("Conflict", new DashboardFeatureInput { ExpectedRevision = expectedRevision ?? string.Empty });
+                return View("Conflict", new DashboardFeatureInput { IsNew = false, ExpectedRevision = expectedRevision ?? string.Empty });
             }
             var mount = HttpContext.GetEndpoint()?.Metadata.GetMetadata<TogglyDashboardEndpointMetadata>()?.MountPath ?? string.Empty;
             Response.StatusCode = StatusCodes.Status303SeeOther;
@@ -424,7 +424,7 @@ public sealed class TogglyDashboardController : Controller
                 return RedirectAfterWrite(successAction, input);
             Response.StatusCode = StatusCodes.Status409Conflict;
             ViewData["CurrentFeature"] = result.Snapshot?.Document.Features.FirstOrDefault(feature => string.Equals(feature.Key, input?.Key, StringComparison.OrdinalIgnoreCase));
-            return View("Conflict", input ?? new DashboardFeatureInput { ExpectedRevision = revision ?? string.Empty });
+            return View("Conflict", input ?? new DashboardFeatureInput { IsNew = false, ExpectedRevision = revision ?? string.Empty });
         }
         catch (CatalogValidationException exception)
         {
@@ -455,7 +455,7 @@ public sealed class TogglyDashboardController : Controller
                 return new EmptyResult();
             }
             Response.StatusCode = StatusCodes.Status409Conflict;
-            return View("Conflict", new DashboardFeatureInput { ExpectedRevision = revision ?? string.Empty });
+            return View("Conflict", new DashboardFeatureInput { IsNew = false, ExpectedRevision = revision ?? string.Empty });
         }
         catch (CatalogValidationException exception)
         {
@@ -531,6 +531,9 @@ public sealed class TogglyDashboardController : Controller
         if (input.IsNew) return View("New", input);
         return View(EditView, input);
     }
+
+    private ViewResult ConditionsView(CatalogSnapshot snapshot, DashboardFeatureInput input, DashboardFeatureListFilter filter) =>
+        ConditionsView(snapshot, input, filter.Search, filter.Tag, filter.Category, filter.Sort);
 
     private ViewResult ConditionsView(CatalogSnapshot snapshot, DashboardFeatureInput input, string? search = null, string? tag = null, string? category = null, string? sort = null)
     {
