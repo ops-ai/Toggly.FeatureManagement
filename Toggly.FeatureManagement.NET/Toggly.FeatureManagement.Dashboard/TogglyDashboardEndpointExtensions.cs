@@ -46,6 +46,13 @@ public static class TogglyDashboardEndpointExtensions
         MapController(group, "initialize", "initialize", "Initialize", HttpMethods.Post);
         MapController(group, "contexts", "contexts", "Contexts", HttpMethods.Get);
         MapController(group, "storage", "storage", "Storage", HttpMethods.Get);
+        MapController(group, "lists", "lists", "Lists", HttpMethods.Get);
+        MapController(group, "lists-new", "lists/new", "NewList", HttpMethods.Get);
+        MapController(group, "lists-create", "lists/create", "CreateList", HttpMethods.Post);
+        MapController(group, "lists-edit", "lists/edit", "EditList", HttpMethods.Get);
+        MapController(group, "lists-save", "lists/save", "SaveList", HttpMethods.Post);
+        MapController(group, "lists-delete-confirm", "lists/delete", "DeleteListConfirm", HttpMethods.Get);
+        MapController(group, "lists-delete", "lists/delete", "DeleteList", HttpMethods.Post);
         MapController(group, "export", "export", "Export", HttpMethods.Get);
         MapController(group, "import", "import", "Import", HttpMethods.Get);
         MapController(group, "import-preview", "import/preview", "ImportPreview", HttpMethods.Post);

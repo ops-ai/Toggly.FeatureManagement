@@ -121,7 +121,19 @@ namespace Toggly.FeatureManagement.Catalog
                 SchemaVersion = source.SchemaVersion,
                 Environment = source.Environment,
                 Features = source.Features.OrderBy(feature => feature.Key, StringComparer.Ordinal).Select(Canonicalize).ToList(),
-                Contexts = source.Contexts.OrderBy(context => context.Kind, StringComparer.Ordinal).Select(Canonicalize).ToList()
+                Contexts = source.Contexts.OrderBy(context => context.Kind, StringComparer.Ordinal).Select(Canonicalize).ToList(),
+                Lists = source.Lists.OrderBy(list => list.Key, StringComparer.Ordinal).Select(Canonicalize).ToList()
+            };
+        }
+
+        private static CatalogList Canonicalize(CatalogList list)
+        {
+            return new CatalogList
+            {
+                Key = list.Key,
+                Name = list.Name,
+                Description = list.Description,
+                Items = list.Items.ToList()
             };
         }
 

@@ -1,0 +1,40 @@
+@model DashboardListInput
+@{
+    Layout = "_Layout";
+    var mount = (string?)ViewData["DashboardMount"] ?? "";
+    var basePath = $"{Context.Request.PathBase}{mount}";
+    var readOnly = ViewData["ReadOnly"] as bool? ?? false;
+    var isNew = Model.IsNew;
+}
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Audience</p>
+        <h1>@(isNew ? "Create list" : Model.Name)</h1>
+    </div>
+</section>
+<form method="post" action="@(isNew ? basePath + "/lists/create" : basePath + "/lists/save")" class="card form-card" data-unsaved-warning>
+    <input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" />
+    <div asp-validation-summary="All" class="validation-summary" tabindex="-1" role="alert"></div>
+    <input type="hidden" asp-for="ExpectedRevision" />
+    <input type="hidden" asp-for="IsNew" />
+    <label for="Key">List key</label>
+    <input asp-for="Key" id="Key" autocomplete="off" readonly="@(!isNew)" />
+    <span asp-validation-for="Key"></span>
+    <label for="Name">Name</label>
+    <input asp-for="Name" id="Name" autocomplete="off" />
+    <span asp-validation-for="Name"></span>
+    <label for="Description">Description</label>
+    <textarea asp-for="Description" id="Description" rows="3"></textarea>
+    <label for="Items">Identifiers</label>
+    <textarea asp-for="Items" id="Items" rows="10"></textarea>
+    <p class="hint">One identifier per line. Users versus groups is which Targeting slot links this list.</p>
+    @if (readOnly) { <p role="status">Editing is unavailable in the current storage or read-only mode.</p> }
+    <div class="form-actions">
+        <button type="submit" class="button" disabled="@readOnly">Save</button>
+        <a href="@basePath/lists">Cancel</a>
+        @if (!isNew && !readOnly)
+        {
+            <a class="danger-link" href="@basePath/lists/delete?key=@Uri.EscapeDataString(Model.Key)">Delete</a>
+        }
+    </div>
+</form>

@@ -101,6 +101,40 @@ public sealed class CatalogJsonTests
     }
 
     [Fact]
+    public void Parse_treats_omitted_lists_as_empty_and_round_trips_named_lists()
+    {
+        const string omitted = "{\"schemaVersion\":1,\"environment\":\"Production\",\"features\":[{\"key\":\"Checkout\",\"name\":\"Checkout\",\"description\":\"\",\"tags\":[],\"enabled\":false,\"requirementType\":\"Any\",\"contextKind\":null,\"contextRequirementType\":null,\"rules\":[]}],\"contexts\":[]}";
+
+        CatalogJson.Parse(omitted).Lists.Should().BeEmpty();
+
+        var document = CatalogJson.Parse(omitted);
+        document.Lists =
+        [
+            new CatalogList
+            {
+                Key = "zeta",
+                Name = "Zeta",
+                Description = "",
+                Items = ["bob"]
+            },
+            new CatalogList
+            {
+                Key = "beta",
+                Name = "Beta",
+                Description = "Testers",
+                Items = ["alice"]
+            }
+        ];
+
+        var serialized = CatalogJson.Serialize(document);
+        serialized.Should().Contain("\"lists\":[{\"key\":\"beta\"");
+        var roundTripped = CatalogJson.Parse(serialized);
+        roundTripped.Lists.Select(list => list.Key).Should().Equal("beta", "zeta");
+        roundTripped.Lists[0].Items.Should().Equal("alice");
+        roundTripped.Lists[0].Name.Should().Be("Beta");
+    }
+
+    [Fact]
     public void Parse_rejects_unknown_portable_fields()
     {
         const string json = "{\"schemaVersion\":1,\"environment\":\"Production\",\"features\":[],\"contexts\":[],\"cloudApiKey\":\"not-allowed\"}";

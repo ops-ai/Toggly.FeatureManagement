@@ -13,15 +13,25 @@
     }
     @if (rule.Name == "Targeting")
     {
-        <p class="hint">Enter one literal identifier per line. No reusable SaaS lists are used.</p>
-        <label for="rule-@index-Users">Users</label>
-        <textarea id="rule-@index-Users" name="Rules[@index].Users">@rule.Users</textarea>
-        <label for="rule-@index-Groups">Groups</label>
-        <textarea id="rule-@index-Groups" name="Rules[@index].Groups">@rule.Groups</textarea>
-        <label for="rule-@index-ExclusionUsers">Excluded users</label>
-        <textarea id="rule-@index-ExclusionUsers" name="Rules[@index].ExclusionUsers">@rule.ExclusionUsers</textarea>
-        <label for="rule-@index-ExclusionGroups">Excluded groups</label>
-        <textarea id="rule-@index-ExclusionGroups" name="Rules[@index].ExclusionGroups">@rule.ExclusionGroups</textarea>
+        var lists = (IReadOnlyList<CatalogList>?)ViewData["CatalogLists"] ?? [];
+        var mount = (string?)ViewData["DashboardMount"] ?? "";
+        var listsHref = $"{Context.Request.PathBase}{mount}/lists/new";
+        <p class="hint">Link one list per slot. Manage lists on the Lists tab.</p>
+        @if (lists.Count == 0)
+        {
+            <p class="hint">No lists yet. <a href="@listsHref">Create a list</a> before Targeting can include users or groups.</p>
+        }
+        @foreach (var slot in new (string Field, string Label, string Value)[] { ("Users", "Users", rule.Users ?? ""), ("Groups", "Groups", rule.Groups ?? ""), ("ExclusionUsers", "Excluded users", rule.ExclusionUsers ?? ""), ("ExclusionGroups", "Excluded groups", rule.ExclusionGroups ?? "") })
+        {
+            <label for="rule-@index-@slot.Field">@slot.Label</label>
+            <select id="rule-@index-@slot.Field" name="Rules[@index].@slot.Field" @(lists.Count == 0 ? "disabled" : null)>
+                <option value="">None</option>
+                @foreach (var list in lists.OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    <option value="@list.Key" selected="@(string.Equals(slot.Value, list.Key, StringComparison.Ordinal))">@list.Name (@list.Key)</option>
+                }
+            </select>
+        }
         <label for="rule-@index-IgnoreCase">Ignore case</label>
         <select id="rule-@index-IgnoreCase" name="Rules[@index].IgnoreCase">
             <option value="true" selected="@rule.IgnoreCase">Yes</option>

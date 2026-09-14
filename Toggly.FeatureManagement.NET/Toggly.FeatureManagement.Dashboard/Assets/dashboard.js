@@ -81,37 +81,21 @@ document.addEventListener("DOMContentLoaded", () => {
         return true;
     };
 
-    const enabledValue = (form) => form.querySelector('input[name="Enabled"]:checked')?.value === "true";
+    const enabledValue = (form) => persistToggle(form.closest(".feature-card"))?.checked === true;
     const setEnabled = (form, on) => {
-        form.querySelectorAll('input[name="Enabled"]').forEach(radio => {
-            radio.checked = radio.value === (on ? "true" : "false");
-        });
+        const toggle = persistToggle(form.closest(".feature-card"));
+        if (toggle) toggle.checked = on;
+        const field = form.querySelector('input[type="hidden"][name="Enabled"]');
+        if (field) field.value = on ? "true" : "false";
         const copy = form.querySelector("[data-turn-off-copy]");
         const turnOff = form.querySelector("[data-turn-off]");
         copy?.classList.toggle("is-hidden", on);
         if (turnOff) turnOff.hidden = !on;
     };
 
-    const ensureAlwaysOn = (form) => {
-        if (form.querySelector('[data-rule-name="AlwaysOn"]')) return;
-        const template = document.getElementById("toggly-always-on-rule");
-        const userGroup = form.querySelector("[data-user-group]");
-        if (!template || !userGroup) return;
-        const index = form.querySelectorAll(".rule-row").length;
-        const holder = document.createElement("div");
-        holder.innerHTML = template.innerHTML.replaceAll("INDEX", String(index));
-        const row = holder.firstElementChild;
-        const label = userGroup.querySelector('label[for^="new-user-filter-"]');
-        if (label) label.before(row);
-        else userGroup.append(row);
-    };
-
     const applyDraftOn = (card, form, toggle) => {
         setEnabled(form, true);
         toggle.checked = true;
-        const persistedOn = card.dataset.persistedEnabled === "true";
-        const ruleCount = Number(card.dataset.persistedRuleCount || "0");
-        if (!persistedOn && ruleCount === 0) ensureAlwaysOn(form);
         expand(card);
     };
 
@@ -193,6 +177,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const turnOff = event.target.closest("[data-turn-off]");
         if (turnOff) {
+            event.preventDefault();
             if (turnOff instanceof HTMLButtonElement && turnOff.disabled) return;
             const form = turnOff.closest("[data-conditions-form]");
             const card = form?.closest(".feature-card");

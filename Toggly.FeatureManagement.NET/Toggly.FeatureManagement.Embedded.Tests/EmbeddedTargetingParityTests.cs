@@ -10,19 +10,45 @@ namespace Toggly.FeatureManagement.Embedded.Tests;
 public sealed class EmbeddedTargetingParityTests
 {
     [Theory]
-    [InlineData("Audience.Exclusion.Users:0", "alice")]
-    [InlineData("Audience.Exclusion.Groups:0", "staff")]
-    public async Task CompiledTargeting_ExclusionsOverrideInclusion(string exclusionKey, string value)
+    [InlineData("Audience.Exclusion.Users", "blocked-users")]
+    [InlineData("Audience.Exclusion.Groups", "blocked-groups")]
+    public async Task CompiledTargeting_ExclusionsOverrideInclusion(string exclusionSlot, string exclusionList)
     {
         var snapshot = new CatalogSnapshot
         {
             CatalogName = "Test", Revision = "one",
-            Document = new() { Features = { new() { Key = "Checkout", Name = "Checkout", Enabled = true,
-                Rules = { new() { Name = "Targeting", Parameters = new()
+            Document = new()
+            {
+                Lists =
                 {
-                    ["Audience.Users:0"] = "alice", ["Audience.Groups:0"] = "staff",
-                    ["Audience.DefaultRolloutPercentage"] = "100", ["IgnoreCase"] = "true", [exclusionKey] = value
-                } } } } } }
+                    new() { Key = "users", Name = "Users", Items = { "alice" } },
+                    new() { Key = "staff", Name = "Staff", Items = { "staff" } },
+                    new() { Key = "blocked-users", Name = "Blocked users", Items = { "alice" } },
+                    new() { Key = "blocked-groups", Name = "Blocked groups", Items = { "staff" } }
+                },
+                Features =
+                {
+                    new()
+                    {
+                        Key = "Checkout", Name = "Checkout", Enabled = true,
+                        Rules =
+                        {
+                            new()
+                            {
+                                Name = "Targeting",
+                                Parameters = new()
+                                {
+                                    ["Audience.Users"] = "users",
+                                    ["Audience.Groups"] = "staff",
+                                    ["Audience.DefaultRolloutPercentage"] = "100",
+                                    ["IgnoreCase"] = "true",
+                                    [exclusionSlot] = exclusionList
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         };
         var provider = new EmbeddedFeatureProvider();
         provider.Publish(EmbeddedCatalogCompiler.Compile(snapshot));

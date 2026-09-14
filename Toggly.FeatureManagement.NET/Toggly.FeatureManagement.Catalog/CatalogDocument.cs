@@ -32,6 +32,30 @@ namespace Toggly.FeatureManagement.Catalog
         /// </summary>
         [JsonPropertyName("contexts")]
         public List<CatalogContextSchema> Contexts { get; set; } = new List<CatalogContextSchema>();
+
+        /// <summary>
+        /// Gets or sets reusable identifier lists that Targeting rules may link by key.
+        /// </summary>
+        [JsonPropertyName("lists")]
+        public List<CatalogList> Lists { get; set; } = new List<CatalogList>();
+    }
+
+    /// <summary>
+    /// A reusable bag of identifiers that Targeting slots can link by key.
+    /// </summary>
+    public sealed class CatalogList
+    {
+        [JsonPropertyName("key")]
+        public string Key { get; set; } = string.Empty;
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("description")]
+        public string Description { get; set; } = string.Empty;
+
+        [JsonPropertyName("items")]
+        public List<string> Items { get; set; } = new List<string>();
     }
 
     /// <summary>

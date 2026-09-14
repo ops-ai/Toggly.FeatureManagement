@@ -132,6 +132,11 @@ public sealed class TogglyDashboardController : Controller
         if (input.Enabled == null)
             return BadRequest("A feature key, expected revision, and explicit true or false enabled state are required.");
         if (!ModelState.IsValid) return ConditionsView(snapshot, input);
+        if (input.Enabled == true && input.Rules.Count == 0)
+        {
+            ModelState.AddModelError(nameof(input.Rules), "Add at least one user filter or entity condition before saving an enabled feature.");
+            return ConditionsView(snapshot, input);
+        }
         input.ApplyConditions(existing);
         return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, "Index", input).ConfigureAwait(false);
     }
@@ -194,6 +199,125 @@ public sealed class TogglyDashboardController : Controller
             return snapshot == null ? NotFound() : File(System.Text.Encoding.UTF8.GetBytes(CatalogJson.Serialize(snapshot.Document)), "application/json", "toggly-catalog.json");
         }
         catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+    }
+
+    /// <summary>Lists reusable identifier bags for Targeting slots.</summary>
+    public async Task<IActionResult> Lists()
+    {
+        try
+        {
+            var snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+            return snapshot == null ? NotFound() : View(ListIndex(snapshot, null));
+        }
+        catch (Exception)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+        }
+    }
+
+    /// <summary>Shows a create-list form.</summary>
+    public async Task<IActionResult> NewList()
+    {
+        try
+        {
+            var snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+            return snapshot == null ? NotFound() : View("ListEdit", new DashboardListInput { IsNew = true, ExpectedRevision = snapshot.Revision });
+        }
+        catch (Exception)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+        }
+    }
+
+    /// <summary>Creates a named identifier list.</summary>
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateList(DashboardListInput input)
+    {
+        input.IsNew = true;
+        CatalogSnapshot? snapshot;
+        try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
+        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        if (snapshot == null) return NotFound();
+        if (!ModelState.IsValid) return ListValidation(input);
+        if (snapshot.Document.Lists.Any(list => string.Equals(list.Key, input.Key.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            ModelState.AddModelError(nameof(input.Key), "A list with this key already exists.");
+            return ListValidation(input);
+        }
+
+        snapshot.Document.Lists.Add(input.ToList());
+        return await WriteListOrConflictAsync(snapshot.Document, input.ExpectedRevision, input).ConfigureAwait(false);
+    }
+
+    /// <summary>Shows an edit-list form.</summary>
+    public async Task<IActionResult> EditList(string key)
+    {
+        try
+        {
+            var snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+            var list = snapshot?.Document.Lists.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
+            return snapshot == null || list == null ? NotFound() : View("ListEdit", DashboardListInput.FromList(list, snapshot.Revision));
+        }
+        catch (Exception)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+        }
+    }
+
+    /// <summary>Saves list metadata and identifiers.</summary>
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveList(DashboardListInput input)
+    {
+        input.IsNew = false;
+        CatalogSnapshot? snapshot;
+        try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
+        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        var existing = snapshot?.Document.Lists.SingleOrDefault(candidate => string.Equals(candidate.Key, input.Key, StringComparison.Ordinal));
+        if (snapshot == null || existing == null) return NotFound();
+        if (!ModelState.IsValid) return ListValidation(input);
+        input.Apply(existing);
+        return await WriteListOrConflictAsync(snapshot.Document, input.ExpectedRevision, input).ConfigureAwait(false);
+    }
+
+    /// <summary>Shows a destructive-action confirmation page for a list.</summary>
+    public async Task<IActionResult> DeleteListConfirm(string key)
+    {
+        CatalogSnapshot? snapshot;
+        try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
+        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        var list = snapshot?.Document.Lists.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
+        if (snapshot == null || list == null) return NotFound();
+        var users = FeaturesUsingList(snapshot.Document, list.Key);
+        if (users.Count > 0)
+        {
+            ModelState.AddModelError("key", "This list is used by " + string.Join(", ", users.Select(feature => feature.Name + " (" + feature.Key + ")")) + ".");
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            return View("Lists", ListIndex(snapshot, list.Key));
+        }
+
+        return View("ListDelete", DashboardListInput.FromList(list, snapshot.Revision));
+    }
+
+    /// <summary>Deletes a list after confirmation when no Targeting slot references it.</summary>
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteList(string key, string expectedRevision)
+    {
+        CatalogSnapshot? snapshot;
+        try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
+        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        if (snapshot == null) return NotFound();
+        var list = snapshot.Document.Lists.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
+        if (list == null) return NotFound();
+        var users = FeaturesUsingList(snapshot.Document, list.Key);
+        if (users.Count > 0)
+        {
+            ModelState.AddModelError("key", "This list is used by " + string.Join(", ", users.Select(feature => feature.Name + " (" + feature.Key + ")")) + ".");
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            return View("Lists", ListIndex(snapshot, key));
+        }
+
+        snapshot.Document.Lists.Remove(list);
+        return await WriteListOrConflictAsync(snapshot.Document, expectedRevision, DashboardListInput.FromList(list, expectedRevision)).ConfigureAwait(false);
     }
 
     /// <summary>Shows the local catalog import entry point.</summary>
@@ -265,6 +389,7 @@ public sealed class TogglyDashboardController : Controller
         {
             "Contexts" => "contexts",
             "Storage" => "storage",
+            "Lists" or "NewList" or "EditList" or "DeleteListConfirm" => "lists",
             "Import" or "ImportPreview" or "ImportApply" => "import",
             "Cloud" => "cloud",
             _ => "features"
@@ -323,6 +448,63 @@ public sealed class TogglyDashboardController : Controller
         }
     }
 
+    private async Task<IActionResult> WriteListOrConflictAsync(CatalogDocument document, string? revision, DashboardListInput input)
+    {
+        try
+        {
+            var result = await _editor.TryWriteAsync(document, revision, HttpContext.RequestAborted).ConfigureAwait(false);
+            if (result.Status == CatalogWriteStatus.Written)
+            {
+                var mount = HttpContext.GetEndpoint()?.Metadata.GetMetadata<TogglyDashboardEndpointMetadata>()?.MountPath ?? string.Empty;
+                Response.StatusCode = StatusCodes.Status303SeeOther;
+                Response.Headers.Location = $"{HttpContext.Request.PathBase}{mount}/lists";
+                return new EmptyResult();
+            }
+            Response.StatusCode = StatusCodes.Status409Conflict;
+            return View("Conflict", new DashboardFeatureInput { ExpectedRevision = revision ?? string.Empty });
+        }
+        catch (CatalogValidationException exception)
+        {
+            foreach (var error in exception.Errors) ModelState.AddModelError(error.Path, error.Message);
+            return ListValidation(input);
+        }
+        catch (InvalidOperationException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable for writes.");
+        }
+        catch (Exception)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+        }
+    }
+
+    private static readonly string[] TargetingListSlots =
+        ["Audience.Users", "Audience.Groups", "Audience.Exclusion.Users", "Audience.Exclusion.Groups"];
+
+    private static List<CatalogFeature> FeaturesUsingList(CatalogDocument document, string key) =>
+        document.Features.Where(feature => feature.Rules.Any(rule =>
+            string.Equals(rule.Name, "Targeting", StringComparison.Ordinal) &&
+            TargetingListSlots.Any(slot => rule.Parameters.TryGetValue(slot, out var linked) &&
+                string.Equals(linked, key, StringComparison.OrdinalIgnoreCase)))).ToList();
+
+    private DashboardListsViewModel ListIndex(CatalogSnapshot snapshot, string? blockedKey) => new()
+    {
+        Revision = snapshot.Revision,
+        ReadOnly = WritesUnavailable,
+        BlockedKey = blockedKey,
+        Lists = snapshot.Document.Lists,
+        Usage = snapshot.Document.Lists.ToDictionary(
+            list => list.Key,
+            list => FeaturesUsingList(snapshot.Document, list.Key).Count,
+            StringComparer.Ordinal)
+    };
+
+    private ViewResult ListValidation(DashboardListInput input)
+    {
+        Response.StatusCode = StatusCodes.Status400BadRequest;
+        return View("ListEdit", input);
+    }
+
     private ViewResult ImportValidation(string message, IEnumerable<CatalogValidationError>? errors = null)
     {
         if (errors == null) ModelState.AddModelError("catalog", message);
@@ -356,7 +538,8 @@ public sealed class TogglyDashboardController : Controller
             Categories = all.Select(feature => feature.Category).Where(value => !string.IsNullOrEmpty(value)).Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).Cast<string>().ToList(),
             UncategorizedCount = all.Count(feature => string.IsNullOrEmpty(feature.Category)),
             CopyCSharp = FeatureFlagsEnum.Generate(all),
-            ConditionsDraft = draft
+            ConditionsDraft = draft,
+            Lists = snapshot?.Document.Lists ?? []
         };
     }
 
@@ -392,6 +575,12 @@ public sealed class TogglyDashboardController : Controller
         if (string.Equals(command, "add-entity", StringComparison.Ordinal))
         {
             input.Rules.Add(new DashboardRuleInput { Name = "ContextProperty", ContextKind = input.ContextKind ?? string.Empty });
+            ModelState.Clear();
+            return true;
+        }
+        if (string.Equals(command, "turn-off", StringComparison.Ordinal))
+        {
+            input.Enabled = false;
             ModelState.Clear();
             return true;
         }

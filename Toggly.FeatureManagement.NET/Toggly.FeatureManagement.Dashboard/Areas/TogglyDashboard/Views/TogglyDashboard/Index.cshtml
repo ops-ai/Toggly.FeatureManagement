@@ -4,6 +4,7 @@
     var mount = (string?)ViewData["DashboardMount"] ?? "";
     var basePath = $"{Context.Request.PathBase}{mount}";
     var readOnly = Model.ReadOnly;
+    ViewData["CatalogLists"] = Model.Lists;
     string CategoryHref(string value) => $"{basePath}/?search={Uri.EscapeDataString(Model.Search)}&tag={Uri.EscapeDataString(Model.Tag)}&sort={Uri.EscapeDataString(Model.Sort)}&category={Uri.EscapeDataString(value)}";
     string RailClass(string value) => string.Equals(Model.Category, value, StringComparison.Ordinal) ? "rail-link is-active" : "rail-link";
 }
@@ -56,18 +57,21 @@ else
         </nav>
         <div class="features-main">
             <form method="get" action="@basePath/" class="card filters">
-                <label for="search">Search</label>
-                <input id="search" type="search" name="search" value="@Model.Search" />
-                <label for="tag">Tags</label>
-                <select id="tag" name="tag">
-                    <option value="">All tags</option>
-                    @foreach (var availableTag in Model.Tags) { <option value="@availableTag" selected="@(Model.Tag == availableTag)">@availableTag</option> }
-                </select>
-                <label for="sort">Sort</label>
-                <select id="sort" name="sort">
-                    <option value="az" selected="@(Model.Sort != "za")">A–Z</option>
-                    <option value="za" selected="@(Model.Sort == "za")">Z–A</option>
-                </select>
+                <label class="filters-grow" for="search">Search
+                    <input id="search" type="search" name="search" value="@Model.Search" placeholder="search by name or category" />
+                </label>
+                <label class="filters-grow" for="tag">Tags
+                    <select id="tag" name="tag">
+                        <option value="">filter by tags</option>
+                        @foreach (var availableTag in Model.Tags) { <option value="@availableTag" selected="@(Model.Tag == availableTag)">@availableTag</option> }
+                    </select>
+                </label>
+                <label class="filters-sort" for="sort">Sort
+                    <select id="sort" name="sort">
+                        <option value="az" selected="@(Model.Sort != "za")">A–Z</option>
+                        <option value="za" selected="@(Model.Sort == "za")">Z–A</option>
+                    </select>
+                </label>
                 <input type="hidden" name="category" value="@Model.Category" />
                 <button type="submit">Filter</button>
             </form>
@@ -89,32 +93,44 @@ else
                         var entityRules = draft.Rules.Select((rule, index) => (rule, index)).Where(item => DashboardRuleInput.IsEntityRule(item.rule.Name)).ToList();
                         var listHref = $"{basePath}/?search={Uri.EscapeDataString(Model.Search)}&tag={Uri.EscapeDataString(Model.Tag)}&sort={Uri.EscapeDataString(Model.Sort)}&category={Uri.EscapeDataString(Model.Category)}";
                         var categoryLabel = string.IsNullOrEmpty(feature.Category) ? "Uncategorized" : feature.Category;
-                        <article class="feature-card @(expanded ? "is-expanded" : null)" data-feature-key="@feature.Key" data-persisted-enabled="@feature.Enabled.ToString().ToLowerInvariant()" data-persisted-rule-count="@feature.Rules.Count">
+                        var filterLines = FeatureFilterSummary.Lines(feature, Model.Lists);
+                        var conditional = FeatureFilterSummary.IsConditional(feature);
+                        <article class="feature-card @(expanded ? "is-expanded" : null) @(conditional ? "is-conditional" : null)" data-feature-key="@feature.Key" data-persisted-enabled="@feature.Enabled.ToString().ToLowerInvariant()" data-persisted-rule-count="@feature.Rules.Count">
                             <div class="feature-card-header">
                                 <label class="toggle">
-                                    <input type="checkbox" class="feature-toggle" @(draft.Enabled == true ? "checked" : null) aria-label="Toggle @feature.Name" data-feature-toggle="@feature.Key" />
+                                    <input type="checkbox" class="feature-toggle" id="toggle-@feature.Key" form="conditions-@feature.Key" name="Enabled" value="true" @(draft.Enabled == true ? "checked" : null) aria-label="Toggle @feature.Name" data-feature-toggle="@feature.Key" />
                                     <span class="toggle-ui" aria-hidden="true"></span>
                                 </label>
                                 <div class="feature-identity">
                                     <a class="feature-name" href="@basePath/features/edit?key=@Uri.EscapeDataString(feature.Key)">@feature.Name</a>
+                                    @if (!string.IsNullOrEmpty(feature.Description))
+                                    {
+                                        <p class="feature-description">@feature.Description</p>
+                                    }
                                     <a class="conditions-link" href="@listHref&amp;expand=@Uri.EscapeDataString(feature.Key)" aria-label="Open conditions for @feature.Name">Conditions</a>
                                     <code class="key-chip">@feature.Key</code>
                                     <div class="chips">
                                         @foreach (var tag in feature.Tags) { <span class="chip">@tag</span> }
                                         <span class="chip category-chip">@categoryLabel</span>
                                     </div>
+                                    @if (conditional && filterLines.Count > 0)
+                                    {
+                                        <p class="filter-summary">
+                                            Conditionally enabled
+                                            @foreach (var line in filterLines)
+                                            {
+                                                <span class="filter-summary-line">@line</span>
+                                            }
+                                        </p>
+                                    }
                                 </div>
                             </div>
-                            <form method="post" action="@basePath/features/conditions" class="conditions-form @(expanded ? "is-open" : "is-collapsed")" data-conditions-form="@feature.Key" data-server-draft="@(serverDraft ? "true" : "false")" data-list-href="@listHref">
+                            <form id="conditions-@feature.Key" method="post" action="@basePath/features/conditions" class="conditions-form @(expanded ? "is-open" : "is-collapsed")" data-conditions-form="@feature.Key" data-server-draft="@(serverDraft ? "true" : "false")" data-list-href="@listHref">
                                 <input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" />
                                 <input type="hidden" name="Key" value="@feature.Key" />
                                 <input type="hidden" name="ExpectedRevision" value="@Model.Revision" />
                                 <input type="hidden" name="ContextKind" value="@feature.ContextKind" />
-                                <fieldset class="enabled-state">
-                                    <legend>Feature state</legend>
-                                    <label><input type="radio" name="Enabled" value="true" @(draft.Enabled == true ? "checked" : null) /> On</label>
-                                    <label><input type="radio" name="Enabled" value="false" @(draft.Enabled == true ? null : "checked") /> Off</label>
-                                </fieldset>
+                                <input type="hidden" name="Enabled" value="@(draft.Enabled == true ? "true" : "false")" />
                                 <div asp-validation-summary="@(expanded ? Microsoft.AspNetCore.Mvc.Rendering.ValidationSummary.All : Microsoft.AspNetCore.Mvc.Rendering.ValidationSummary.None)" class="validation-summary" tabindex="-1" role="alert"></div>
                                 <div class="conditions-toolbar">
                                     <h3>Conditions</h3>
@@ -122,14 +138,16 @@ else
                                 </div>
                                 <p class="turn-off-copy @(draft.Enabled == true ? "is-hidden" : null)" data-turn-off-copy>This feature will be turned off. Save to clear all targeting filters, or turn the switch back on to keep editing conditions.</p>
                                 <section class="condition-group" data-user-group>
-                                    <h4>User filters</h4>
-                                    <fieldset class="match-group @(userRules.Count >= 2 ? null : "is-hidden")" data-match-group="user">
-                                        <legend>Match</legend>
-                                        <div role="radiogroup" aria-label="User filter combination">
-                                            <label><input type="radio" name="RequirementType" value="Any" checked="@(draft.RequirementType != CatalogRequirementType.All)" /> Match any</label>
-                                            <label><input type="radio" name="RequirementType" value="All" checked="@(draft.RequirementType == CatalogRequirementType.All)" /> Match all</label>
-                                        </div>
-                                    </fieldset>
+                                    <div class="condition-group-header">
+                                        <h4>User filters</h4>
+                                        <fieldset class="match-group @(userRules.Count >= 2 ? null : "is-hidden")" data-match-group="user">
+                                            <legend class="visually-hidden">User filter combination</legend>
+                                            <div role="radiogroup" aria-label="User filter combination" class="match-radios">
+                                                <label><input type="radio" name="RequirementType" value="Any" checked="@(draft.RequirementType != CatalogRequirementType.All)" /> Match any</label>
+                                                <label><input type="radio" name="RequirementType" value="All" checked="@(draft.RequirementType == CatalogRequirementType.All)" /> Match all</label>
+                                            </div>
+                                        </fieldset>
+                                    </div>
                                     @foreach (var item in userRules)
                                     {
                                         <partial name="_RuleFields" model="(item.index, item.rule, userRules.Count >= 2)" />
@@ -147,14 +165,16 @@ else
                                 @if (!string.IsNullOrEmpty(feature.ContextKind))
                                 {
                                     <section class="condition-group" data-entity-group>
-                                        <h4>Entity conditions (@feature.ContextKind)</h4>
-                                        <fieldset class="match-group @(entityRules.Count >= 2 ? null : "is-hidden")" data-match-group="entity">
-                                            <legend>Match</legend>
-                                            <div role="radiogroup" aria-label="Entity condition combination">
-                                                <label><input type="radio" name="ContextRequirementType" value="Any" checked="@(draft.ContextRequirementType != CatalogRequirementType.All)" /> Match any</label>
-                                                <label><input type="radio" name="ContextRequirementType" value="All" checked="@(draft.ContextRequirementType == CatalogRequirementType.All)" /> Match all</label>
-                                            </div>
-                                        </fieldset>
+                                        <div class="condition-group-header">
+                                            <h4>Entity conditions (@feature.ContextKind)</h4>
+                                            <fieldset class="match-group @(entityRules.Count >= 2 ? null : "is-hidden")" data-match-group="entity">
+                                                <legend class="visually-hidden">Entity condition combination</legend>
+                                                <div role="radiogroup" aria-label="Entity condition combination" class="match-radios">
+                                                    <label><input type="radio" name="ContextRequirementType" value="Any" checked="@(draft.ContextRequirementType != CatalogRequirementType.All)" /> Match any</label>
+                                                    <label><input type="radio" name="ContextRequirementType" value="All" checked="@(draft.ContextRequirementType == CatalogRequirementType.All)" /> Match all</label>
+                                                </div>
+                                            </fieldset>
+                                        </div>
                                         @foreach (var item in entityRules)
                                         {
                                             <partial name="_RuleFields" model="(item.index, item.rule, entityRules.Count >= 2)" />
@@ -165,7 +185,7 @@ else
                                 @if (readOnly) { <p role="status">Editing is unavailable in the current storage or read-only mode.</p> }
                                 <div class="form-actions">
                                     <button type="submit" class="button" disabled="@readOnly">Save</button>
-                                    <button type="button" class="secondary" data-turn-off @(draft.Enabled == true ? null : "hidden") disabled="@readOnly">Turn feature off</button>
+                                    <button type="submit" class="secondary" name="command" value="turn-off" formnovalidate data-turn-off @(draft.Enabled == true ? null : "hidden") disabled="@readOnly">Turn feature off</button>
                                     <button type="button" class="secondary" data-close-conditions>Cancel</button>
                                 </div>
                             </form>

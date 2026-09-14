@@ -128,9 +128,79 @@ namespace Toggly.FeatureManagement.Catalog
                 return new CatalogValidationResult(normalize ? document : null, errors);
             }
 
+            var lists = document.Lists ?? new List<CatalogList>();
+            var listLookup = ValidateLists(lists, errors);
             var contexts = ValidateContexts(document.Contexts, errors);
-            ValidateFeatures(document.Features, contexts, errors);
+            ValidateFeatures(document.Features, contexts, listLookup, errors);
             return new CatalogValidationResult(errors.Count == 0 && normalize ? document : null, errors);
+        }
+
+        private static Dictionary<string, CatalogList> ValidateLists(
+            IList<CatalogList> lists,
+            ICollection<CatalogValidationError> errors)
+        {
+            var result = new Dictionary<string, CatalogList>(StringComparer.OrdinalIgnoreCase);
+            if (lists.Count > 500)
+            {
+                errors.Add(new CatalogValidationError("lists", "A catalog may contain at most 500 lists."));
+            }
+
+            for (var index = 0; index < lists.Count; index++)
+            {
+                var list = lists[index];
+                var path = "lists[" + index.ToString(CultureInfo.InvariantCulture) + "]";
+                if (list == null)
+                {
+                    errors.Add(new CatalogValidationError(path, "List must not be null."));
+                    continue;
+                }
+
+                ValidateIdentifier(list.Key, path + ".key", "List key", errors);
+                if (!string.IsNullOrEmpty(list.Key) && !result.TryAdd(list.Key, list))
+                {
+                    errors.Add(new CatalogValidationError(path + ".key", "List key duplicates an existing key."));
+                }
+
+                if (string.IsNullOrWhiteSpace(list.Name) || list.Name.Trim().Length > 200)
+                {
+                    errors.Add(new CatalogValidationError(path + ".name", "List name is required and must be at most 200 characters."));
+                }
+
+                if (list.Description == null || list.Description.Length > 8000)
+                {
+                    errors.Add(new CatalogValidationError(path + ".description", "Description must be plain text and at most 8,000 characters."));
+                }
+
+                if (list.Items == null)
+                {
+                    errors.Add(new CatalogValidationError(path + ".items", "Item collection must not be null."));
+                    continue;
+                }
+
+                if (list.Items.Count > 10000)
+                {
+                    errors.Add(new CatalogValidationError(path + ".items", "A list may contain at most 10,000 identifiers."));
+                }
+
+                var items = new HashSet<string>(StringComparer.Ordinal);
+                for (var itemIndex = 0; itemIndex < list.Items.Count; itemIndex++)
+                {
+                    var item = list.Items[itemIndex];
+                    var itemPath = path + ".items[" + itemIndex.ToString(CultureInfo.InvariantCulture) + "]";
+                    if (item == null || string.IsNullOrWhiteSpace(item) || item.Trim().Length > 256)
+                    {
+                        errors.Add(new CatalogValidationError(itemPath, "List item must be 1-256 characters."));
+                        continue;
+                    }
+
+                    if (!items.Add(item.Trim()))
+                    {
+                        errors.Add(new CatalogValidationError(itemPath, "List item duplicates an existing identifier."));
+                    }
+                }
+            }
+
+            return result;
         }
 
         private static Dictionary<string, CatalogContextSchema> ValidateContexts(
@@ -217,6 +287,7 @@ namespace Toggly.FeatureManagement.Catalog
         private static void ValidateFeatures(
             IList<CatalogFeature> features,
             IReadOnlyDictionary<string, CatalogContextSchema> contexts,
+            IReadOnlyDictionary<string, CatalogList> lists,
             ICollection<CatalogValidationError> errors)
         {
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -277,9 +348,14 @@ namespace Toggly.FeatureManagement.Catalog
                     continue;
                 }
 
+                if (feature.Enabled && feature.Rules.Count == 0)
+                {
+                    errors.Add(new CatalogValidationError(path + ".rules", "At least one filter is required when the feature is enabled."));
+                }
+
                 for (var ruleIndex = 0; ruleIndex < feature.Rules.Count; ruleIndex++)
                 {
-                    ValidateRule(feature, feature.Rules[ruleIndex], contexts, path + ".rules[" + ruleIndex.ToString(CultureInfo.InvariantCulture) + "]", errors);
+                    ValidateRule(feature, feature.Rules[ruleIndex], contexts, lists, path + ".rules[" + ruleIndex.ToString(CultureInfo.InvariantCulture) + "]", errors);
                 }
             }
         }
@@ -311,6 +387,7 @@ namespace Toggly.FeatureManagement.Catalog
             CatalogFeature feature,
             CatalogRule rule,
             IReadOnlyDictionary<string, CatalogContextSchema> contexts,
+            IReadOnlyDictionary<string, CatalogList> lists,
             string path,
             ICollection<CatalogValidationError> errors)
         {
@@ -342,7 +419,7 @@ namespace Toggly.FeatureManagement.Catalog
             }
             else if (rule.Name == "Targeting")
             {
-                ValidateTargeting(rule.Parameters, path, errors);
+                ValidateTargeting(rule.Parameters, lists, path, errors);
             }
             else if (rule.Name == "TimeWindow")
             {
@@ -367,22 +444,39 @@ namespace Toggly.FeatureManagement.Catalog
             }
         }
 
-        private static void ValidateTargeting(Dictionary<string, string> parameters, string path, ICollection<CatalogValidationError> errors)
+        private static readonly string[] TargetingListSlots =
+        {
+            "Audience.Users", "Audience.Groups", "Audience.Exclusion.Users", "Audience.Exclusion.Groups"
+        };
+
+        private static void ValidateTargeting(
+            Dictionary<string, string> parameters,
+            IReadOnlyDictionary<string, CatalogList> lists,
+            string path,
+            ICollection<CatalogValidationError> errors)
         {
             foreach (var key in parameters.Keys)
             {
                 if (key != "Audience.DefaultRolloutPercentage" && key != "IgnoreCase" &&
-                    !IsIndexedKey(key, "Audience.Users:") && !IsIndexedKey(key, "Audience.Groups:") &&
-                    !IsIndexedKey(key, "Audience.Exclusion.Users:") && !IsIndexedKey(key, "Audience.Exclusion.Groups:"))
+                    Array.IndexOf(TargetingListSlots, key) < 0)
                 {
                     errors.Add(new CatalogValidationError(path + ".parameters." + key, "Unknown Targeting parameter."));
                 }
             }
 
-            ValidateIndexedParameters(parameters, "Audience.Users:", path, errors);
-            ValidateIndexedParameters(parameters, "Audience.Groups:", path, errors);
-            ValidateIndexedParameters(parameters, "Audience.Exclusion.Users:", path, errors);
-            ValidateIndexedParameters(parameters, "Audience.Exclusion.Groups:", path, errors);
+            foreach (var slot in TargetingListSlots)
+            {
+                if (!parameters.TryGetValue(slot, out var listKey) || string.IsNullOrWhiteSpace(listKey))
+                {
+                    continue;
+                }
+
+                if (!lists.ContainsKey(listKey.Trim()))
+                {
+                    errors.Add(new CatalogValidationError(path + ".parameters." + slot, "Targeting list '" + listKey.Trim() + "' is not defined in this catalog."));
+                }
+            }
+
             ValidatePercentage(parameters, path, errors, "Audience.DefaultRolloutPercentage");
             if (parameters.TryGetValue("IgnoreCase", out var ignoreCase) && !bool.TryParse(ignoreCase, out _))
             {
@@ -639,7 +733,8 @@ namespace Toggly.FeatureManagement.Catalog
                 SchemaVersion = source.SchemaVersion,
                 Environment = source.Environment == null ? string.Empty : source.Environment.Trim(),
                 Features = source.Features == null ? null! : new List<CatalogFeature>(),
-                Contexts = source.Contexts == null ? null! : new List<CatalogContextSchema>()
+                Contexts = source.Contexts == null ? null! : new List<CatalogContextSchema>(),
+                Lists = source.Lists == null ? new List<CatalogList>() : new List<CatalogList>()
             };
 
             if (source.Features != null)
@@ -701,6 +796,26 @@ namespace Toggly.FeatureManagement.Catalog
                 }
             }
 
+            if (source.Lists != null)
+            {
+                foreach (var sourceList in source.Lists)
+                {
+                    if (sourceList == null)
+                    {
+                        document.Lists.Add(null!);
+                        continue;
+                    }
+
+                    document.Lists.Add(new CatalogList
+                    {
+                        Key = sourceList.Key == null ? string.Empty : sourceList.Key.Trim(),
+                        Name = sourceList.Name == null ? string.Empty : sourceList.Name.Trim(),
+                        Description = sourceList.Description == null ? string.Empty : sourceList.Description.Trim(),
+                        Items = NormalizeListItems(sourceList.Items)
+                    });
+                }
+            }
+
             return document;
         }
 
@@ -734,6 +849,12 @@ namespace Toggly.FeatureManagement.Catalog
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(tag => tag, StringComparer.Ordinal)
                 .ToList();
+        }
+
+        private static List<string> NormalizeListItems(List<string>? items)
+        {
+            if (items == null) return null!;
+            return items.Where(item => !string.IsNullOrWhiteSpace(item)).Select(item => item.Trim()).ToList();
         }
 
         private static List<CatalogRule> CloneRules(List<CatalogRule>? rules)

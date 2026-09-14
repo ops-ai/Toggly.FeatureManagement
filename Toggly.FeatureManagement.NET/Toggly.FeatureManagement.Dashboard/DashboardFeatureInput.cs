@@ -86,10 +86,7 @@ public sealed class DashboardFeatureInput
             return;
         }
 
-        var rules = Rules.Select(rule => rule.ToRule()).ToList();
-        if (rules.Count == 0)
-            rules.Add(new CatalogRule { Name = "AlwaysOn", Parameters = new Dictionary<string, string>(StringComparer.Ordinal) });
-        existing.Rules = rules;
+        existing.Rules = Rules.Select(rule => rule.ToRule()).ToList();
     }
 
     private List<string> SplitTags() =>
@@ -140,10 +137,10 @@ public sealed class DashboardRuleInput
         else if (Name == "Percentage") parameters["Value"] = Percentage;
         else if (Name == "Targeting")
         {
-            AddIndexed(parameters, "Audience.Users", Users);
-            AddIndexed(parameters, "Audience.Groups", Groups);
-            AddIndexed(parameters, "Audience.Exclusion.Users", ExclusionUsers);
-            AddIndexed(parameters, "Audience.Exclusion.Groups", ExclusionGroups);
+            AddListKey(parameters, "Audience.Users", Users);
+            AddListKey(parameters, "Audience.Groups", Groups);
+            AddListKey(parameters, "Audience.Exclusion.Users", ExclusionUsers);
+            AddListKey(parameters, "Audience.Exclusion.Groups", ExclusionGroups);
             parameters["Audience.DefaultRolloutPercentage"] = Percentage;
             parameters["IgnoreCase"] = IgnoreCase ? "true" : "false";
         }
@@ -180,8 +177,8 @@ public sealed class DashboardRuleInput
         input.Percentage = rule.Name == "Percentage" ? Get(rule, "Value", "100")
             : rule.Name == "Targeting" ? Get(rule, "Audience.DefaultRolloutPercentage", "0")
             : Get(rule, "Percentage", "100");
-        input.Users = Indexed(rule, "Audience.Users"); input.Groups = Indexed(rule, "Audience.Groups");
-        input.ExclusionUsers = Indexed(rule, "Audience.Exclusion.Users"); input.ExclusionGroups = Indexed(rule, "Audience.Exclusion.Groups");
+        input.Users = Get(rule, "Audience.Users", ""); input.Groups = Get(rule, "Audience.Groups", "");
+        input.ExclusionUsers = Get(rule, "Audience.Exclusion.Users", ""); input.ExclusionGroups = Get(rule, "Audience.Exclusion.Groups", "");
         input.IgnoreCase = !string.Equals(Get(rule, "IgnoreCase", "true"), "false", StringComparison.OrdinalIgnoreCase);
         input.Start = Get(rule, "Start", ""); input.End = Get(rule, "End", ""); input.Claim = Get(rule, "Claim", ""); input.Value = Get(rule, "Value", "");
         input.ContextKind = Get(rule, "ContextKind", ""); input.Property = Get(rule, "Property", ""); input.Operator = Get(rule, "Operator", "eq"); input.ValueType = Get(rule, "ValueType", "string");
@@ -193,6 +190,10 @@ public sealed class DashboardRuleInput
     internal static bool IsEntityRule(string name) => string.Equals(name, "ContextProperty", StringComparison.Ordinal);
 
     private static string Get(CatalogRule rule, string key, string fallback) => rule.Parameters.TryGetValue(key, out var value) ? value : fallback;
+    private static void AddListKey(IDictionary<string, string> parameters, string key, string? listKey)
+    {
+        if (!string.IsNullOrWhiteSpace(listKey)) parameters[key] = listKey.Trim();
+    }
     private static void AddIndexed(IDictionary<string, string> parameters, string prefix, string? values)
     {
         foreach (var value in (values ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select((value, index) => new { value, index })) parameters[$"{prefix}:{value.index}"] = value.value;
@@ -260,6 +261,7 @@ internal sealed class DashboardFeatureListViewModel
     internal int UncategorizedCount { get; init; }
     internal string CopyCSharp { get; init; } = string.Empty;
     internal DashboardFeatureInput? ConditionsDraft { get; init; }
+    internal IReadOnlyList<CatalogList> Lists { get; init; } = [];
 }
 
 internal sealed class DashboardContextsViewModel
@@ -277,4 +279,56 @@ internal sealed class DashboardImportPreviewViewModel
     internal required IReadOnlyList<string> IdenticalKeys { get; init; }
     internal required IReadOnlyList<string> ConflictKeys { get; init; }
     internal required IReadOnlyList<string> ContextConflictKinds { get; init; }
+}
+
+internal sealed class DashboardListsViewModel
+{
+    internal required string Revision { get; init; }
+    internal required IReadOnlyList<CatalogList> Lists { get; init; }
+    internal required IReadOnlyDictionary<string, int> Usage { get; init; }
+    internal bool ReadOnly { get; init; }
+    internal string? BlockedKey { get; init; }
+}
+
+/// <summary>Form fields for a reusable catalog identifier list.</summary>
+public sealed class DashboardListInput
+{
+    public bool IsNew { get; set; }
+    [Required, StringLength(128)]
+    public string Key { get; set; } = string.Empty;
+    [Required, StringLength(200)]
+    public string Name { get; set; } = string.Empty;
+    [StringLength(8000)]
+    public string? Description { get; set; }
+    public string? Items { get; set; }
+    [Required]
+    public string ExpectedRevision { get; set; } = string.Empty;
+
+    internal static DashboardListInput FromList(CatalogList list, string revision) => new()
+    {
+        IsNew = false,
+        Key = list.Key,
+        Name = list.Name,
+        Description = list.Description,
+        Items = string.Join("\n", list.Items),
+        ExpectedRevision = revision
+    };
+
+    internal CatalogList ToList() => new()
+    {
+        Key = Key.Trim(),
+        Name = Name.Trim(),
+        Description = Description?.Trim() ?? string.Empty,
+        Items = SplitItems()
+    };
+
+    internal void Apply(CatalogList existing)
+    {
+        existing.Name = Name.Trim();
+        existing.Description = Description?.Trim() ?? string.Empty;
+        existing.Items = SplitItems();
+    }
+
+    private List<string> SplitItems() =>
+        (Items ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
 }

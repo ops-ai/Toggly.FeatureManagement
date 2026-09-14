@@ -67,6 +67,12 @@ public sealed class EmbeddedImportService
                 throw Validation("selectedUpdateKeys", $"'{key}' differs only in casing from an existing immutable key.");
             candidate.Features[candidate.Features.IndexOf(current[key])] = uploaded[key];
         }
+        foreach (var list in document.Lists)
+        {
+            var retained = candidate.Lists.SingleOrDefault(item => string.Equals(item.Key, list.Key, StringComparison.OrdinalIgnoreCase));
+            if (retained == null) candidate.Lists.Add(list);
+            else candidate.Lists[candidate.Lists.IndexOf(retained)] = list;
+        }
         foreach (var context in document.Contexts)
         {
             var retained = candidate.Contexts.SingleOrDefault(item => string.Equals(item.Kind, context.Kind, StringComparison.OrdinalIgnoreCase));

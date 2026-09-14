@@ -9,19 +9,23 @@
   feature cards, category browse, Copy C# `FeatureFlags` enum, and an inline
   conditions panel. Settings save metadata only; turning a feature off and
   saving clears targeting filters.
+- Reusable catalog `lists` (named identifier bags) and a Lists tab. Targeting
+  slots link one list key; evaluation expands keys to indexed IDs.
+- Collapsed feature cards show SaaS-style “Conditionally enabled” copy for
+  non-Always On filters, including linked list names.
 
 ### Fixed
 - Copy C# enum members stay unique when sanitized keys collide with later keys.
-- Conditions drafts restore on Cancel, insert an Always On row when turning on
-  an empty feature, hide Remove for a group's sole condition, and trap focus in
-  the Copy C# modal.
+- Conditions drafts restore on Cancel, hide Remove for a group's sole
+  condition, and trap focus in the Copy C# modal.
 - A persisted-on feature toggle expands the conditions draft and stays on;
   only Turn feature off starts the off draft.
 - Turning the draft back on after Turn feature off restores the switch as well
   as the On/Off enabled state.
 - Uncategorized features round-trip as an empty category instead of null.
-- Conditions can be opened and turned on or off without JavaScript via the
-  Conditions link and Feature state radios.
+- Conditions can be opened without JavaScript via the Conditions link.
+  The card toggle and Turn feature off set on/off; there is no Feature state
+  radio group.
 - Import preview treats a missing category and an empty category as the same
   uncategorized feature.
 - Visible focus ring on the feature toggle track; selected Browse link and
@@ -36,6 +40,9 @@
   explicit true or false rather than treating a missing field as false.
 - List-page enable/disable is `POST …/features/conditions` only; the former
   `POST …/features/state` route is removed.
+- Targeting catalog parameters store list keys instead of indexed identifier
+  literals. Empty enabled Save is rejected; Always On is added only when the
+  operator chooses it.
 
 ## All .NET SDK packages 3.7.0 - 2026-09-13
 

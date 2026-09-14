@@ -31,6 +31,18 @@ public class EmbeddedEvaluationSnapshotTests
     private static CatalogSnapshot Snapshot(string revision, bool enabled) => new()
     {
         CatalogName = "Orders", Revision = revision, UpdatedAtUtc = DateTimeOffset.UtcNow,
-        Document = new CatalogDocument { Features = { new CatalogFeature { Key = "Feature", Name = "Feature", Enabled = enabled } } }
+        Document = new CatalogDocument
+        {
+            Features =
+            {
+                new CatalogFeature
+                {
+                    Key = "Feature",
+                    Name = "Feature",
+                    Enabled = enabled,
+                    Rules = enabled ? [new CatalogRule { Name = "AlwaysOn" }] : []
+                }
+            }
+        }
     };
 }

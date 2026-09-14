@@ -192,7 +192,7 @@ public sealed class CatalogValidatorTests
                 Tags = [],
                 Enabled = true,
                 RequirementType = CatalogRequirementType.Any,
-                Rules = []
+                Rules = [new CatalogRule { Name = "AlwaysOn", Parameters = new Dictionary<string, string>(StringComparer.Ordinal) }]
             }
         ],
         Contexts = []

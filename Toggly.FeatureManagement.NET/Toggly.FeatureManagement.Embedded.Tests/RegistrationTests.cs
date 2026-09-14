@@ -103,7 +103,7 @@ public class RegistrationTests
         var store = new RecordingStore(new CatalogSnapshot
         {
             CatalogName = "Orders", Revision = "one", UpdatedAtUtc = DateTimeOffset.UtcNow,
-            Document = new CatalogDocument { Features = { new CatalogFeature { Key = "Checkout", Name = "Checkout", Enabled = true } } }
+            Document = new CatalogDocument { Features = { new CatalogFeature { Key = "Checkout", Name = "Checkout", Enabled = true, Rules = { new CatalogRule { Name = "AlwaysOn" } } } } }
         });
         services.AddSingleton<ITogglyCatalogStore>(store);
         services.AddTogglyEmbedded(options => options.CatalogName = "Orders");

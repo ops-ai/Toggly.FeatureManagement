@@ -28,18 +28,17 @@ const fixture = `<!doctype html>
 <article class="feature-card" data-feature-key="NewCheckout" data-persisted-enabled="false" data-persisted-rule-count="0">
   <div class="feature-card-header">
     <label class="toggle">
-      <input type="checkbox" data-feature-toggle="NewCheckout" aria-label="Toggle New checkout" />
+      <input type="checkbox" data-feature-toggle="NewCheckout" aria-label="Toggle New checkout" name="Enabled" value="true" form="conditions-NewCheckout" />
     </label>
     <a class="feature-name" href="#edit-NewCheckout">New checkout</a>
     <a class="conditions-link" href="#expand-NewCheckout">Conditions</a>
   </div>
-  <form method="post" class="conditions-form is-collapsed" data-conditions-form="NewCheckout" data-server-draft="false" data-list-href="/features">
+  <form id="conditions-NewCheckout" method="post" class="conditions-form is-collapsed" data-conditions-form="NewCheckout" data-server-draft="false" data-list-href="/features">
     <input type="hidden" name="__RequestVerificationToken" value="token" />
     <input type="hidden" name="Key" value="NewCheckout" />
     <input type="hidden" name="ExpectedRevision" value="1" />
     <input type="hidden" name="ContextKind" value="" />
-    <input type="radio" name="Enabled" value="true" />
-    <input type="radio" name="Enabled" value="false" checked />
+    <input type="hidden" name="Enabled" value="false" />
     <p class="turn-off-copy" data-turn-off-copy>This feature will be turned off.</p>
     <section data-user-group>
       <label for="new-user-filter-NewCheckout">Add user filter</label>
@@ -47,22 +46,21 @@ const fixture = `<!doctype html>
       <button type="submit" name="command" value="add-rule">Add user filter</button>
     </section>
     <button type="submit">Save</button>
-    <button type="button" data-turn-off hidden>Turn feature off</button>
+    <button type="submit" name="command" value="turn-off" data-turn-off hidden>Turn feature off</button>
     <button type="button" data-close-conditions>Cancel</button>
   </form>
 </article>
 <article class="feature-card" data-feature-key="Search" data-persisted-enabled="true" data-persisted-rule-count="1">
   <div class="feature-card-header">
     <label class="toggle">
-      <input type="checkbox" data-feature-toggle="Search" aria-label="Toggle Search" checked />
+      <input type="checkbox" data-feature-toggle="Search" aria-label="Toggle Search" name="Enabled" value="true" form="conditions-Search" checked />
     </label>
     <a class="feature-name" href="#edit-Search">Search</a>
     <a class="tab" href="#contexts">Contexts</a>
     <a class="button" href="#export">Export</a>
   </div>
-  <form method="post" class="conditions-form is-collapsed" data-conditions-form="Search" data-server-draft="false" data-list-href="/features">
-    <input type="radio" name="Enabled" value="true" checked />
-    <input type="radio" name="Enabled" value="false" />
+  <form id="conditions-Search" method="post" class="conditions-form is-collapsed" data-conditions-form="Search" data-server-draft="false" data-list-href="/features">
+    <input type="hidden" name="Enabled" value="true" />
     <p class="turn-off-copy is-hidden" data-turn-off-copy>This feature will be turned off.</p>
     <section data-user-group>
       <fieldset class="rule-row" data-rule-name="AlwaysOn"><legend>Always On</legend></fieldset>
@@ -70,16 +68,15 @@ const fixture = `<!doctype html>
       <select id="new-user-filter-Search" name="newRuleName"><option value="AlwaysOn">Always On</option></select>
     </section>
     <button type="submit">Save</button>
-    <button type="button" data-turn-off>Turn feature off</button>
+    <button type="submit" name="command" value="turn-off" data-turn-off>Turn feature off</button>
     <button type="button" data-close-conditions>Cancel</button>
-    <button type="button" data-turn-off disabled>Disabled off</button>
+    <button type="submit" name="command" value="turn-off" data-turn-off disabled>Disabled off</button>
   </form>
 </article>
 <article class="feature-card" data-feature-key="Orphan" data-persisted-enabled="false" data-persisted-rule-count="0">
-  <label class="toggle"><input type="checkbox" data-feature-toggle="Orphan" /></label>
-  <form method="post" class="conditions-form is-collapsed" data-conditions-form="Orphan" data-server-draft="true" data-list-href="#discard-orphan">
-    <input type="radio" name="Enabled" value="true" />
-    <input type="radio" name="Enabled" value="false" checked />
+  <label class="toggle"><input type="checkbox" data-feature-toggle="Orphan" name="Enabled" value="true" form="conditions-Orphan" /></label>
+  <form id="conditions-Orphan" method="post" class="conditions-form is-collapsed" data-conditions-form="Orphan" data-server-draft="true" data-list-href="#discard-orphan">
+    <input type="hidden" name="Enabled" value="false" />
     <section data-user-group></section>
     <button type="button" data-close-conditions>Cancel</button>
   </form>
@@ -190,15 +187,15 @@ describe("dashboard.js", { concurrency: false }, () => {
         assert.equal(clean.defaultPrevented, false);
     });
 
-    test("turns an empty persisted-off feature on with Always On", () => {
+    test("turns an empty persisted-off feature on without inserting Always On", () => {
         const card = document.querySelector('[data-feature-key="NewCheckout"]');
         const toggle = card.querySelector("[data-feature-toggle]");
         const form = card.querySelector("[data-conditions-form]");
         toggle.checked = true;
         change(window, toggle);
         assert.equal(form.classList.contains("is-open"), true);
-        assert.ok(form.querySelector('[data-rule-name="AlwaysOn"]'));
-        assert.equal(form.querySelector('input[name="Enabled"]:checked').value, "true");
+        assert.equal(form.querySelector('[data-rule-name="AlwaysOn"]'), null);
+        assert.equal(toggle.checked, true);
         assert.equal(form.querySelector("[data-turn-off]").hidden, false);
         assert.equal(form.querySelector("[data-turn-off-copy]").classList.contains("is-hidden"), true);
     });
@@ -221,7 +218,7 @@ describe("dashboard.js", { concurrency: false }, () => {
         change(window, toggle);
         assert.equal(toggle.checked, true);
         assert.equal(form.classList.contains("is-open"), true);
-        assert.equal(form.querySelector('input[name="Enabled"]:checked').value, "true");
+        assert.equal(toggle.checked, true);
     });
 
     test("applies a draft-off for a persisted-off feature", () => {
@@ -232,7 +229,7 @@ describe("dashboard.js", { concurrency: false }, () => {
         change(window, toggle);
         assert.equal(toggle.checked, false);
         assert.equal(form.classList.contains("is-open"), true);
-        assert.equal(form.querySelector('input[name="Enabled"]:checked').value, "false");
+        assert.equal(toggle.checked, false);
         assert.equal(form.querySelector("[data-turn-off]").hidden, true);
         assert.equal(form.querySelector("[data-turn-off-copy]").classList.contains("is-hidden"), false);
     });
@@ -267,8 +264,7 @@ describe("dashboard.js", { concurrency: false }, () => {
         const toggle = card.querySelector("[data-feature-toggle]");
         toggle.checked = true;
         change(window, toggle);
-        form.querySelector('input[name="Enabled"][value="false"]').checked = true;
-        form.querySelector('input[name="Enabled"][value="true"]').checked = false;
+        click(window, form.querySelector("[data-turn-off]"));
         window.confirm = () => false;
         const link = card.querySelector(".feature-name");
         const event = new window.MouseEvent("click", { bubbles: true, cancelable: true });
@@ -283,8 +279,7 @@ describe("dashboard.js", { concurrency: false }, () => {
         const toggle = card.querySelector("[data-feature-toggle]");
         toggle.checked = true;
         change(window, toggle);
-        form.querySelector('input[name="Enabled"][value="false"]').checked = true;
-        form.querySelector('input[name="Enabled"][value="true"]').checked = false;
+        click(window, form.querySelector("[data-turn-off]"));
         window.confirm = () => true;
         click(window, card.querySelector(".tab"));
         assert.equal(form.dataset.allowUnload, "true");
@@ -296,8 +291,7 @@ describe("dashboard.js", { concurrency: false }, () => {
         const toggle = card.querySelector("[data-feature-toggle]");
         toggle.checked = true;
         change(window, toggle);
-        form.querySelector('input[name="Enabled"][value="false"]').checked = true;
-        form.querySelector('input[name="Enabled"][value="true"]').checked = false;
+        click(window, form.querySelector("[data-turn-off]"));
         window.confirm = () => false;
         const submit = new window.Event("submit", { bubbles: true, cancelable: true });
         document.querySelector("form.filters").dispatchEvent(submit);
@@ -342,8 +336,8 @@ describe("dashboard.js", { concurrency: false }, () => {
         const searchForm = search.querySelector("[data-conditions-form]");
         searchToggle.checked = true;
         change(window, searchToggle);
-        searchForm.querySelector('input[name="Enabled"][value="false"]').checked = true;
-        searchForm.querySelector('input[name="Enabled"][value="true"]').checked = false;
+        searchForm.querySelector('input[type="hidden"][name="Enabled"]').value = "false";
+        searchToggle.checked = false;
         window.confirm = () => false;
         const checkoutToggle = document.querySelector('[data-feature-toggle="NewCheckout"]');
         checkoutToggle.checked = true;
@@ -386,7 +380,7 @@ describe("dashboard.js", { concurrency: false }, () => {
         change(window, toggle);
         click(window, form.querySelector("[data-turn-off]"));
         assert.equal(toggle.checked, false);
-        assert.equal(form.querySelector('input[name="Enabled"]:checked').value, "false");
+        assert.equal(toggle.checked, false);
     });
 
     test("ignores a disabled turn-off control", () => {
@@ -397,17 +391,17 @@ describe("dashboard.js", { concurrency: false }, () => {
         change(window, toggle);
         const disabled = [...form.querySelectorAll("[data-turn-off]")].find(button => button.disabled);
         click(window, disabled);
-        assert.equal(form.querySelector('input[name="Enabled"]:checked').value, "true");
+        assert.equal(toggle.checked, true);
         assert.equal(toggle.checked, true);
     });
 
-    test("appends Always On when the user-group label is missing", () => {
+    test("does not insert Always On when the user-group label is missing", () => {
         const card = document.querySelector('[data-feature-key="Orphan"]');
         const toggle = card.querySelector("[data-feature-toggle]");
         const form = card.querySelector("[data-conditions-form]");
         toggle.checked = true;
         change(window, toggle);
-        assert.ok(form.querySelector('[data-rule-name="AlwaysOn"]'));
+        assert.equal(form.querySelector('[data-rule-name="AlwaysOn"]'), null);
     });
 
     test("skips Always On when the template is missing", () => {
@@ -428,8 +422,7 @@ describe("dashboard.js", { concurrency: false }, () => {
         const toggle = card.querySelector("[data-feature-toggle]");
         toggle.checked = true;
         change(window, toggle);
-        form.querySelector('input[name="Enabled"][value="false"]').checked = true;
-        form.querySelector('input[name="Enabled"][value="true"]').checked = false;
+        click(window, form.querySelector("[data-turn-off]"));
         const unload = new window.Event("beforeunload", { cancelable: true });
         window.dispatchEvent(unload);
         assert.equal(unload.defaultPrevented, true);

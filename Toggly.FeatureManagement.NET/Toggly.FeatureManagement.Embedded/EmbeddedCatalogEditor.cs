@@ -98,7 +98,7 @@ public sealed class EmbeddedCatalogEditor
                 };
             }
         }
-        return new CatalogDocument { SchemaVersion = document.SchemaVersion, Environment = document.Environment, Features = document.Features, Contexts = contexts };
+        return new CatalogDocument { SchemaVersion = document.SchemaVersion, Environment = document.Environment, Features = document.Features, Contexts = contexts, Lists = document.Lists };
     }
 
     private static CatalogSnapshot CloneSnapshot(CatalogSnapshot snapshot) => new()

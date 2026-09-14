@@ -23,6 +23,7 @@
         <span class="application-name">@applicationName</span>
         <nav aria-label="Dashboard">
             <a class="@TabClass("features")" href="@basePath/" @(active == "features" ? "aria-current=page" : null)>Features</a>
+            <a class="@TabClass("lists")" href="@basePath/lists" @(active == "lists" ? "aria-current=page" : null)>Lists</a>
             <a class="@TabClass("contexts")" href="@basePath/contexts" @(active == "contexts" ? "aria-current=page" : null)>Contexts</a>
             <a class="@TabClass("storage")" href="@basePath/storage" @(active == "storage" ? "aria-current=page" : null)>Storage</a>
             <a class="@TabClass("import")" href="@basePath/import" @(active == "import" ? "aria-current=page" : null)>Import/Export</a>

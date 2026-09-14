@@ -24,7 +24,7 @@ public class EmbeddedCatalogCoordinatorTests
             UpdatedAtUtc = DateTimeOffset.UtcNow,
             Document = new CatalogDocument
             {
-                Features = { new CatalogFeature { Key = "NewCheckout", Name = "New checkout", Enabled = true } }
+                Features = { new CatalogFeature { Key = "NewCheckout", Name = "New checkout", Enabled = true, Rules = { new CatalogRule { Name = "AlwaysOn" } } } }
             }
         });
         var provider = new EmbeddedFeatureProvider();
@@ -53,7 +53,7 @@ public class EmbeddedCatalogCoordinatorTests
         var store = new TestStore(new CatalogSnapshot
         {
             CatalogName = "Orders", Revision = "one", UpdatedAtUtc = DateTimeOffset.UtcNow,
-            Document = new CatalogDocument { Features = { new CatalogFeature { Key = "Enabled", Name = "Enabled", Enabled = true } } }
+            Document = new CatalogDocument { Features = { new CatalogFeature { Key = "Enabled", Name = "Enabled", Enabled = true, Rules = { new CatalogRule { Name = "AlwaysOn" } } } } }
         });
         var provider = new EmbeddedFeatureProvider();
         var coordinator = new EmbeddedCatalogCoordinator(store, provider, new TogglyEmbeddedOptions { CatalogName = "Orders" });
@@ -126,7 +126,7 @@ public class EmbeddedCatalogCoordinatorTests
     private static CatalogSnapshot EnabledSnapshot(string revision, string key) => new()
     {
         CatalogName = "Orders", Revision = revision, UpdatedAtUtc = DateTimeOffset.UtcNow,
-        Document = new CatalogDocument { Features = { new CatalogFeature { Key = key, Name = key, Enabled = true } } }
+        Document = new CatalogDocument { Features = { new CatalogFeature { Key = key, Name = key, Enabled = true, Rules = { new CatalogRule { Name = "AlwaysOn" } } } } }
     };
 
     private sealed class TestStore : ITogglyCatalogStore

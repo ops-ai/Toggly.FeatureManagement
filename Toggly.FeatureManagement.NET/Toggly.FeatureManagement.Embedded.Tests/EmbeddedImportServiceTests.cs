@@ -39,7 +39,7 @@ public class EmbeddedImportServiceTests
         {
             Features =
             {
-                new CatalogFeature { Key = "Existing", Name = "Changed", Enabled = true },
+                new CatalogFeature { Key = "Existing", Name = "Changed", Enabled = true, Rules = { new CatalogRule { Name = "AlwaysOn" } } },
                 new CatalogFeature { Key = "NewCheckout", Name = "New checkout", Enabled = false }
             }
         });
@@ -120,6 +120,37 @@ public class EmbeddedImportServiceTests
 
         Assert.Contains("Checkout", preview.IdenticalKeys);
         Assert.DoesNotContain("Checkout", preview.ConflictKeys);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_OverlaysImportedListsByKeyAndKeepsTargetOnlyLists()
+    {
+        var target = new CatalogDocument
+        {
+            Lists =
+            {
+                new CatalogList { Key = "beta", Name = "Beta", Description = "", Items = { "alice" } },
+                new CatalogList { Key = "keep", Name = "Keep", Description = "", Items = { "local" } }
+            }
+        };
+        var (service, store) = CreateService(target);
+        var uploaded = CatalogJson.Serialize(new CatalogDocument
+        {
+            Lists =
+            {
+                new CatalogList { Key = "beta", Name = "Beta testers", Description = "", Items = { "bob" } },
+                new CatalogList { Key = "staff", Name = "Staff", Description = "", Items = { "ops" } }
+            }
+        });
+
+        var preview = await service.PreviewAsync(uploaded);
+        await service.ApplyAsync(new(preview.CanonicalPayload, preview.Fingerprint, preview.ExpectedRevision, [], []));
+
+        var lists = store.Current!.Document.Lists.OrderBy(list => list.Key).ToList();
+        Assert.Equal(new[] { "beta", "keep", "staff" }, lists.Select(list => list.Key));
+        Assert.Equal(new[] { "bob" }, lists.Single(list => list.Key == "beta").Items);
+        Assert.Equal("Beta testers", lists.Single(list => list.Key == "beta").Name);
+        Assert.Equal(new[] { "local" }, lists.Single(list => list.Key == "keep").Items);
     }
 
     private static CatalogContextSchema Context(string property) => new()
