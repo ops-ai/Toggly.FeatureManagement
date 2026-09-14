@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import {
   InMemoryJwksCache,
@@ -22,8 +23,7 @@ function jsonResponse(
     status,
     statusText: status === 304 ? 'Not Modified' : 'OK',
     headers: {
-      get: (name: string) =>
-        headerMap[name] ?? headerMap[name.toLowerCase()] ?? null,
+      get: (name: string) => headerMap[name] ?? headerMap[name.toLowerCase()] ?? null,
     },
     text: async () => JSON.stringify(body),
     json: async () => body,
@@ -46,9 +46,7 @@ describe('signed-response helpers', () => {
   })
 
   it('rejects error envelopes without defs or features', () => {
-    expect(() => rejectEvaluatedErrorEnvelope({ error: 'boom' })).toThrow(
-      /error envelope/i,
-    )
+    expect(() => rejectEvaluatedErrorEnvelope({ error: 'boom' })).toThrow(/error envelope/i)
     expect(() => unwrapDefsPayload({ error: 'boom' })).toThrow(/error envelope/i)
     expect(() => asVariantDefsRecord({ error: 'boom' })).toThrow(/error envelope/i)
   })
@@ -235,12 +233,81 @@ describe('resolveEvaluatedFetchErrorState', () => {
         readFlags: () => ({ Cached: true }),
         defaults: {},
         variantsToFlags: () => ({}),
-      }),
+      })
     ).toBeNull()
   })
 })
 
 describe('fetchEvaluatedSignedDefinitions', () => {
+  const fixture = JSON.parse(
+    readFileSync(new URL('../testdata/webcrypto-fixture.json', import.meta.url), 'utf8')
+  )
+  // Preserve the original JSON bytes: the signature covers this exact defs text.
+  const signedBody = `{"defs":${fixture.defs},"timestamp":${fixture.timestamp},"signature":"${fixture.signature}","kid":"${fixture.kid}"}`
+  const identity = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.2.0' }
+
+  it.each([
+    ['record', () => ({ ...identity })],
+    ['Headers', () => new Headers(identity)],
+    ['tuples', () => Object.entries(identity)],
+  ] as const)('keeps %s definition headers off the public JWKS request', async (_, makeHeaders) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/.well-known/jwks')) {
+        expect([...new Headers(init?.headers)]).toEqual([])
+        expect(init?.method).toBe('GET')
+        return new Response(JSON.stringify(fixture.jwks))
+      }
+      const headers = new Headers(init?.headers)
+      expect(headers.get('X-Toggly-Sdk')).toBe('solidjs')
+      expect(headers.get('X-Toggly-Sdk-Version')).toBe('0.2.0')
+      expect(headers.get('If-None-Match')).toBe('previous-revision')
+      return new Response(signedBody, { headers: { 'X-Definitions-Revision': 'next-revision' } })
+    })
+    const cache = new InMemoryJwksCache()
+    const result = await fetchEvaluatedSignedDefinitions(
+      'https://example.test/evaluated-signed/app/Production',
+      cache,
+      { verifySignatures: true, baseURI: 'https://example.test', fetchImpl },
+      { headers: makeHeaders(), revision: 'previous-revision' }
+    )
+    expect(result).toEqual({
+      notModified: false,
+      defs: JSON.parse(fixture.defs),
+      revision: 'next-revision',
+    })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    await cache.get({ baseURI: 'https://example.test', fetchImpl })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('preserves explicitly configured low-level JWKS headers and providers', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify(fixture.jwks)))
+    expect(
+      await parseEvaluatedResponseBody(signedBody, {
+        verifySignatures: true,
+        baseURI: 'https://custom-jwks.example.test',
+        headers: { 'X-Custom-Jwks-Header': 'configured' },
+        fetchImpl,
+      })
+    ).toEqual(JSON.parse(fixture.defs))
+    expect(new Headers(fetchImpl.mock.calls[0]?.[1]?.headers).get('X-Custom-Jwks-Header')).toBe(
+      'configured'
+    )
+
+    const getJwks = vi.fn().mockResolvedValue(fixture.jwks)
+    expect(
+      await parseEvaluatedResponseBody(signedBody, {
+        verifySignatures: true,
+        getJwks,
+        fetchImpl,
+      })
+    ).toEqual(JSON.parse(fixture.defs))
+    expect(getJwks).toHaveBeenCalledTimes(1)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
   it('returns notModified on HTTP 304', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, 304, { ETag: '"rev-1"' }))
     const result = await fetchEvaluatedSignedDefinitions(
@@ -250,10 +317,9 @@ describe('fetchEvaluatedSignedDefinitions', () => {
       { revision: 'rev-0' }
     )
     expect(result).toEqual({ notModified: true, revision: '"rev-1"' })
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'https://example.test/evaluated-signed/app/Production',
-      { headers: { 'If-None-Match': 'rev-0' } }
-    )
+    expect(fetchImpl).toHaveBeenCalledWith('https://example.test/evaluated-signed/app/Production', {
+      headers: { 'If-None-Match': 'rev-0' },
+    })
   })
 
   it('parses defs and returns the revision header', async () => {
@@ -271,15 +337,13 @@ describe('fetchEvaluatedSignedDefinitions', () => {
   })
 
   it('rejects a 2xx error envelope', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ error: 'boom' }, 200))
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ error: 'boom' }, 200))
     await expect(
       fetchEvaluatedSignedDefinitions(
         'https://example.test/evaluated-signed/app/Production',
         new InMemoryJwksCache(),
-        { verifySignatures: false, fetchImpl: fetchImpl as unknown as typeof fetch },
-      ),
+        { verifySignatures: false, fetchImpl: fetchImpl as unknown as typeof fetch }
+      )
     ).rejects.toThrow(/error envelope/i)
   })
 })

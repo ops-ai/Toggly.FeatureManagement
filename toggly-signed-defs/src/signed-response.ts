@@ -235,7 +235,9 @@ export async function fetchEvaluatedSignedDefinitions(
   if (!response.ok) {
     throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`)
   }
-  const defs = await readAndParseEvaluatedResponseCached(response, jwks, config, request.headers)
+  // Definition request headers belong to that endpoint. Forwarding SDK identity
+  // headers to public JWKS would require an otherwise unnecessary CORS preflight.
+  const defs = await readAndParseEvaluatedResponseCached(response, jwks, config)
   return { notModified: false, defs, revision }
 }
 
