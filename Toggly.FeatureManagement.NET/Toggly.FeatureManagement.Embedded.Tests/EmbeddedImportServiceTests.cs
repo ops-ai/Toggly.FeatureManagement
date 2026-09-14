@@ -6,6 +6,10 @@ namespace Toggly.FeatureManagement.Embedded.Tests;
 
 public class EmbeddedImportServiceTests
 {
+    private static readonly string[] MergedContextProperties = ["id", "region", "tier"];
+    private static readonly string[] OverlayListKeys = ["beta", "keep", "staff"];
+    private static readonly string[] OverlayBetaItems = ["bob"];
+    private static readonly string[] OverlayKeepItems = ["local"];
     [Fact]
     public async Task ApplyAsync_ExplicitImportCreatesAnAbsentCatalogOnce()
     {
@@ -79,7 +83,7 @@ public class EmbeddedImportServiceTests
         Assert.Empty(preview.ContextConflictKinds);
         await service.ApplyAsync(new(preview.CanonicalPayload, preview.Fingerprint, preview.ExpectedRevision, [], []));
 
-        Assert.Equal(new[] { "id", "region", "tier" }, store.Current!.Document.Contexts.Single().Properties.Select(p => p.Name).Order());
+        Assert.Equal(MergedContextProperties, store.Current!.Document.Contexts.Single().Properties.Select(p => p.Name).Order());
         Assert.Equal(1, store.WriteCount);
     }
 
@@ -147,10 +151,10 @@ public class EmbeddedImportServiceTests
         await service.ApplyAsync(new(preview.CanonicalPayload, preview.Fingerprint, preview.ExpectedRevision, [], []));
 
         var lists = store.Current!.Document.Lists.OrderBy(list => list.Key).ToList();
-        Assert.Equal(new[] { "beta", "keep", "staff" }, lists.Select(list => list.Key));
-        Assert.Equal(new[] { "bob" }, lists.Single(list => list.Key == "beta").Items);
+        Assert.Equal(OverlayListKeys, lists.Select(list => list.Key));
+        Assert.Equal(OverlayBetaItems, lists.Single(list => list.Key == "beta").Items);
         Assert.Equal("Beta testers", lists.Single(list => list.Key == "beta").Name);
-        Assert.Equal(new[] { "local" }, lists.Single(list => list.Key == "keep").Items);
+        Assert.Equal(OverlayKeepItems, lists.Single(list => list.Key == "keep").Items);
     }
 
     private static CatalogContextSchema Context(string property) => new()

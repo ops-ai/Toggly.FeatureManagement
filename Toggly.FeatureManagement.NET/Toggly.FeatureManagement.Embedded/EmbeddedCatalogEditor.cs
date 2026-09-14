@@ -81,25 +81,37 @@ public sealed class EmbeddedCatalogEditor
         if (_contextSchemas == null || document.Features == null || document.Contexts == null) return document;
         var contexts = document.Contexts.ToList();
         foreach (var schema in _contextSchemas.GetRegisteredSchemas())
-        {
-            if (!document.Features.Any(feature => feature != null && string.Equals(feature.ContextKind, schema.Kind, StringComparison.OrdinalIgnoreCase))) continue;
-            var retained = contexts.SingleOrDefault(context => context != null && string.Equals(context.Kind, schema.Kind, StringComparison.OrdinalIgnoreCase));
-            if (retained == null) contexts.Add(schema);
-            else
-            {
-                if (!string.Equals(retained.KeyPropertyName, schema.KeyPropertyName, StringComparison.Ordinal) ||
-                    schema.Properties.Any(property => retained.Properties.Any(existing => string.Equals(existing.Name, property.Name, StringComparison.OrdinalIgnoreCase) &&
-                        (!string.Equals(existing.Name, property.Name, StringComparison.Ordinal) || existing.Type != property.Type))))
-                    throw new CatalogValidationException([new CatalogValidationError("contexts", $"Registered context '{schema.Kind}' conflicts with its retained schema.")]);
-                contexts[contexts.IndexOf(retained)] = new CatalogContextSchema
-                {
-                    Kind = retained.Kind, KeyPropertyName = retained.KeyPropertyName,
-                    Properties = retained.Properties.Concat(schema.Properties.Where(property => !retained.Properties.Any(existing => string.Equals(existing.Name, property.Name, StringComparison.OrdinalIgnoreCase)))).ToList()
-                };
-            }
-        }
+            MergeRegisteredSchema(document, contexts, schema);
         return new CatalogDocument { SchemaVersion = document.SchemaVersion, Environment = document.Environment, Features = document.Features, Contexts = contexts, Lists = document.Lists };
     }
+
+    private static void MergeRegisteredSchema(CatalogDocument document, List<CatalogContextSchema> contexts, CatalogContextSchema schema)
+    {
+        if (!document.Features.Any(feature => feature != null && string.Equals(feature.ContextKind, schema.Kind, StringComparison.OrdinalIgnoreCase))) return;
+        var retained = contexts.SingleOrDefault(context => context != null && string.Equals(context.Kind, schema.Kind, StringComparison.OrdinalIgnoreCase));
+        if (retained == null)
+        {
+            contexts.Add(schema);
+            return;
+        }
+        if (RegisteredSchemaConflicts(retained, schema))
+            throw new CatalogValidationException([new CatalogValidationError("contexts", $"Registered context '{schema.Kind}' conflicts with its retained schema.")]);
+        contexts[contexts.IndexOf(retained)] = CombinedSchema(retained, schema);
+    }
+
+    private static bool RegisteredSchemaConflicts(CatalogContextSchema retained, CatalogContextSchema schema) =>
+        !string.Equals(retained.KeyPropertyName, schema.KeyPropertyName, StringComparison.Ordinal) ||
+        schema.Properties.Any(property => retained.Properties.Any(existing =>
+            string.Equals(existing.Name, property.Name, StringComparison.OrdinalIgnoreCase) &&
+            (!string.Equals(existing.Name, property.Name, StringComparison.Ordinal) || existing.Type != property.Type)));
+
+    private static CatalogContextSchema CombinedSchema(CatalogContextSchema retained, CatalogContextSchema schema) => new()
+    {
+        Kind = retained.Kind,
+        KeyPropertyName = retained.KeyPropertyName,
+        Properties = retained.Properties.Concat(schema.Properties.Where(property =>
+            !retained.Properties.Any(existing => string.Equals(existing.Name, property.Name, StringComparison.OrdinalIgnoreCase)))).ToList()
+    };
 
     private static CatalogSnapshot CloneSnapshot(CatalogSnapshot snapshot) => new()
     {

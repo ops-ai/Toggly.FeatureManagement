@@ -35,9 +35,9 @@ public sealed class EmbeddedImportService
             Fingerprint: Fingerprint(CatalogJson.Serialize(document)),
             ExpectedRevision: target?.Revision,
             AddKeys: document.Features.Where(feature => !existing.ContainsKey(feature.Key)).Select(feature => feature.Key).OrderBy(key => key, StringComparer.Ordinal).ToArray(),
-            IdenticalKeys: document.Features.Where(feature => existing.TryGetValue(feature.Key, out var current) && FeaturesEqual(current, feature)).Select(feature => feature.Key).OrderBy(key => key, StringComparer.Ordinal).ToArray(),
-            ConflictKeys: document.Features.Where(feature => existing.TryGetValue(feature.Key, out var current) && !FeaturesEqual(current, feature)).Select(feature => feature.Key).OrderBy(key => key, StringComparer.Ordinal).ToArray(),
-            ContextConflictKinds: document.Contexts.Where(context => targetDocument.Contexts.Any(current => string.Equals(current.Kind, context.Kind, StringComparison.OrdinalIgnoreCase) && ContextsConflict(current, context))).Select(context => context.Kind).OrderBy(kind => kind, StringComparer.Ordinal).ToArray());
+            IdenticalKeys: MatchingKeys(document.Features, existing, identical: true),
+            ConflictKeys: MatchingKeys(document.Features, existing, identical: false),
+            ContextConflictKinds: ContextConflictKinds(document, targetDocument));
     }
 
     /// <summary>Revalidates a preview and performs exactly one optimistic-concurrency write.</summary>
@@ -61,28 +61,56 @@ public sealed class EmbeddedImportService
         var candidate = target == null ? new CatalogDocument() : CatalogJson.Parse(CatalogJson.Serialize(target.Document));
         var current = candidate.Features.ToDictionary(feature => feature.Key, StringComparer.OrdinalIgnoreCase);
         candidate.Features.AddRange(selectedAdds.Select(key => uploaded[key]));
+        OverlaySelectedUpdates(candidate, current, uploaded, selectedUpdates);
+        OverlayLists(candidate, document);
+        OverlayContexts(candidate, document);
+
+        var write = await _editor.TryWriteAsync(candidate, request.ExpectedRevision, cancellationToken).ConfigureAwait(false);
+        return new EmbeddedImportApplyResult(write.Status, write.Snapshot, write.Status == CatalogWriteStatus.Written ? candidate : null);
+    }
+
+    private static void OverlaySelectedUpdates(CatalogDocument candidate, Dictionary<string, CatalogFeature> current, Dictionary<string, CatalogFeature> uploaded, string[] selectedUpdates)
+    {
         foreach (var key in selectedUpdates)
         {
             if (!string.Equals(current[key].Key, uploaded[key].Key, StringComparison.Ordinal))
                 throw Validation("selectedUpdateKeys", $"'{key}' differs only in casing from an existing immutable key.");
             candidate.Features[candidate.Features.IndexOf(current[key])] = uploaded[key];
         }
+    }
+
+    private static void OverlayLists(CatalogDocument candidate, CatalogDocument document)
+    {
         foreach (var list in document.Lists)
         {
             var retained = candidate.Lists.SingleOrDefault(item => string.Equals(item.Key, list.Key, StringComparison.OrdinalIgnoreCase));
             if (retained == null) candidate.Lists.Add(list);
             else candidate.Lists[candidate.Lists.IndexOf(retained)] = list;
         }
+    }
+
+    private static void OverlayContexts(CatalogDocument candidate, CatalogDocument document)
+    {
         foreach (var context in document.Contexts)
         {
             var retained = candidate.Contexts.SingleOrDefault(item => string.Equals(item.Kind, context.Kind, StringComparison.OrdinalIgnoreCase));
             if (retained == null) candidate.Contexts.Add(context);
             else retained.Properties.AddRange(context.Properties.Where(property => !retained.Properties.Any(item => string.Equals(item.Name, property.Name, StringComparison.OrdinalIgnoreCase))));
         }
-
-        var write = await _editor.TryWriteAsync(candidate, request.ExpectedRevision, cancellationToken).ConfigureAwait(false);
-        return new EmbeddedImportApplyResult(write.Status, write.Snapshot, write.Status == CatalogWriteStatus.Written ? candidate : null);
     }
+
+    private static string[] MatchingKeys(IEnumerable<CatalogFeature> features, Dictionary<string, CatalogFeature> existing, bool identical) =>
+        features.Where(feature => existing.TryGetValue(feature.Key, out var current) && FeaturesEqual(current, feature) == identical)
+            .Select(feature => feature.Key)
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToArray();
+
+    private static string[] ContextConflictKinds(CatalogDocument document, CatalogDocument target) =>
+        document.Contexts.Where(context => target.Contexts.Any(current =>
+                string.Equals(current.Kind, context.Kind, StringComparison.OrdinalIgnoreCase) && ContextsConflict(current, context)))
+            .Select(context => context.Kind)
+            .OrderBy(kind => kind, StringComparer.Ordinal)
+            .ToArray();
 
     private CatalogDocument ParseCanonical(string payload)
     {
@@ -94,12 +122,11 @@ public sealed class EmbeddedImportService
         return document;
     }
 
-    private static IReadOnlyList<string> Select(IEnumerable<string>? selected, IReadOnlyList<string> allowed, string field)
+    private static string[] Select(IEnumerable<string>? selected, IReadOnlyList<string> allowed, string field)
     {
         var values = (selected ?? []).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        foreach (var value in values)
-            if (string.IsNullOrEmpty(value) || !allowed.Contains(value, StringComparer.OrdinalIgnoreCase))
-                throw Validation(field, "A selected key was not available in the import preview.");
+        foreach (var value in values.Where(value => string.IsNullOrEmpty(value) || !allowed.Contains(value, StringComparer.OrdinalIgnoreCase)))
+            throw Validation(field, "A selected key was not available in the import preview.");
         return values;
     }
 

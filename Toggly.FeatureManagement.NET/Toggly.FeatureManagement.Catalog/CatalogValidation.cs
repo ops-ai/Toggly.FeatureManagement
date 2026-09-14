@@ -61,15 +61,33 @@ namespace Toggly.FeatureManagement.Catalog
     {
         private static readonly Regex FeatureKeyPattern = new Regex("^[A-Za-z_][A-Za-z0-9_.:-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(250));
         private static readonly Regex ContextNamePattern = new Regex("^[A-Za-z][A-Za-z0-9_]{0,99}$", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(250));
+        private const string TypeString = "string";
+        private const string TypeNumber = "number";
+        private const string TypeStringArray = "string[]";
+        private const string FilterPercentage = "Percentage";
+        private const string ParamValue = "Value";
+        private const string ParamContextKind = "ContextKind";
+        private const string ParamProperty = "Property";
+        private const string FilterAlwaysOn = "AlwaysOn";
+        private const string FilterTargeting = "Targeting";
+        private const string FilterTimeWindow = "TimeWindow";
+        private const string FilterContextProperty = "ContextProperty";
+        private const string FilterBrowserFamily = "BrowserFamily";
+        private const string FilterBrowserLanguage = "BrowserLanguage";
+        private const string FilterUserClaims = "UserClaims";
+        private const string PathName = ".name";
+        private const string PathParameters = ".parameters";
+        private const string PathParametersPrefix = ".parameters.";
+
         private static readonly HashSet<string> ContextTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "string", "number", "boolean", "datetime", "string[]"
+            TypeString, TypeNumber, "boolean", "datetime", TypeStringArray
         };
 
         private static readonly HashSet<string> KnownFilters = new HashSet<string>(StringComparer.Ordinal)
         {
-            "AlwaysOn", "Percentage", "Targeting", "TimeWindow", "ContextProperty", "BrowserFamily", "BrowserLanguage",
-            "OS", "DeviceType", "CountryFamily", "UserClaims"
+            FilterAlwaysOn, FilterPercentage, FilterTargeting, FilterTimeWindow, FilterContextProperty, FilterBrowserFamily, FilterBrowserLanguage,
+            "OS", "DeviceType", "CountryFamily", FilterUserClaims
         };
 
         /// <summary>
@@ -163,7 +181,7 @@ namespace Toggly.FeatureManagement.Catalog
 
                 if (string.IsNullOrWhiteSpace(list.Name) || list.Name.Trim().Length > 200)
                 {
-                    errors.Add(new CatalogValidationError(path + ".name", "List name is required and must be at most 200 characters."));
+                    errors.Add(new CatalogValidationError(path + PathName, "List name is required and must be at most 200 characters."));
                 }
 
                 if (list.Description == null || list.Description.Length > 8000)
@@ -171,36 +189,41 @@ namespace Toggly.FeatureManagement.Catalog
                     errors.Add(new CatalogValidationError(path + ".description", "Description must be plain text and at most 8,000 characters."));
                 }
 
-                if (list.Items == null)
-                {
-                    errors.Add(new CatalogValidationError(path + ".items", "Item collection must not be null."));
-                    continue;
-                }
-
-                if (list.Items.Count > 10000)
-                {
-                    errors.Add(new CatalogValidationError(path + ".items", "A list may contain at most 10,000 identifiers."));
-                }
-
-                var items = new HashSet<string>(StringComparer.Ordinal);
-                for (var itemIndex = 0; itemIndex < list.Items.Count; itemIndex++)
-                {
-                    var item = list.Items[itemIndex];
-                    var itemPath = path + ".items[" + itemIndex.ToString(CultureInfo.InvariantCulture) + "]";
-                    if (item == null || string.IsNullOrWhiteSpace(item) || item.Trim().Length > 256)
-                    {
-                        errors.Add(new CatalogValidationError(itemPath, "List item must be 1-256 characters."));
-                        continue;
-                    }
-
-                    if (!items.Add(item.Trim()))
-                    {
-                        errors.Add(new CatalogValidationError(itemPath, "List item duplicates an existing identifier."));
-                    }
-                }
+                ValidateListItems(list, path, errors);
             }
 
             return result;
+        }
+
+        private static void ValidateListItems(CatalogList list, string path, ICollection<CatalogValidationError> errors)
+        {
+            if (list.Items == null)
+            {
+                errors.Add(new CatalogValidationError(path + ".items", "Item collection must not be null."));
+                return;
+            }
+
+            if (list.Items.Count > 10000)
+            {
+                errors.Add(new CatalogValidationError(path + ".items", "A list may contain at most 10,000 identifiers."));
+            }
+
+            var items = new HashSet<string>(StringComparer.Ordinal);
+            for (var itemIndex = 0; itemIndex < list.Items.Count; itemIndex++)
+            {
+                var item = list.Items[itemIndex];
+                var itemPath = path + ".items[" + itemIndex.ToString(CultureInfo.InvariantCulture) + "]";
+                if (item == null || string.IsNullOrWhiteSpace(item) || item.Trim().Length > 256)
+                {
+                    errors.Add(new CatalogValidationError(itemPath, "List item must be 1-256 characters."));
+                    continue;
+                }
+
+                if (!items.Add(item.Trim()))
+                {
+                    errors.Add(new CatalogValidationError(itemPath, "List item duplicates an existing identifier."));
+                }
+            }
         }
 
         private static Dictionary<string, CatalogContextSchema> ValidateContexts(
@@ -239,49 +262,54 @@ namespace Toggly.FeatureManagement.Catalog
                     continue;
                 }
 
-                if (context.Properties.Count == 0)
-                {
-                    errors.Add(new CatalogValidationError(path + ".properties", "At least one context property is required."));
-                }
-                else if (context.Properties.Count > 100)
-                {
-                    errors.Add(new CatalogValidationError(path + ".properties", "A context may contain at most 100 properties."));
-                }
-
-                var propertyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                for (var propertyIndex = 0; propertyIndex < context.Properties.Count; propertyIndex++)
-                {
-                    var property = context.Properties[propertyIndex];
-                    var propertyPath = path + ".properties[" + propertyIndex.ToString(CultureInfo.InvariantCulture) + "]";
-                    if (property == null)
-                    {
-                        errors.Add(new CatalogValidationError(propertyPath, "Context property must not be null."));
-                        continue;
-                    }
-
-                    ValidateContextName(property.Name, propertyPath + ".name", "Context property name", errors);
-                    if (!ContextTypes.Contains(property.Type ?? string.Empty))
-                    {
-                        errors.Add(new CatalogValidationError(propertyPath + ".type", "Unsupported context property type."));
-                    }
-
-                    if (!string.IsNullOrEmpty(property.Name) && !propertyNames.Add(property.Name))
-                    {
-                        errors.Add(new CatalogValidationError(propertyPath + ".name", "Context property duplicates an existing property."));
-                    }
-                }
-
-                if (string.IsNullOrWhiteSpace(context.KeyPropertyName))
-                {
-                    errors.Add(new CatalogValidationError(path + ".keyPropertyName", "Context key property name is required."));
-                }
-                else if (!context.Properties.Any(property => property != null && string.Equals(property.Name, context.KeyPropertyName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    errors.Add(new CatalogValidationError(path + ".keyPropertyName", "Context key property name must name a declared context property."));
-                }
+                ValidateContextProperties(context, path, errors);
             }
 
             return result;
+        }
+
+        private static void ValidateContextProperties(CatalogContextSchema context, string path, ICollection<CatalogValidationError> errors)
+        {
+            if (context.Properties.Count == 0)
+            {
+                errors.Add(new CatalogValidationError(path + ".properties", "At least one context property is required."));
+            }
+            else if (context.Properties.Count > 100)
+            {
+                errors.Add(new CatalogValidationError(path + ".properties", "A context may contain at most 100 properties."));
+            }
+
+            var propertyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var propertyIndex = 0; propertyIndex < context.Properties.Count; propertyIndex++)
+            {
+                var property = context.Properties[propertyIndex];
+                var propertyPath = path + ".properties[" + propertyIndex.ToString(CultureInfo.InvariantCulture) + "]";
+                if (property == null)
+                {
+                    errors.Add(new CatalogValidationError(propertyPath, "Context property must not be null."));
+                    continue;
+                }
+
+                ValidateContextName(property.Name, propertyPath + PathName, "Context property name", errors);
+                if (!ContextTypes.Contains(property.Type ?? string.Empty))
+                {
+                    errors.Add(new CatalogValidationError(propertyPath + ".type", "Unsupported context property type."));
+                }
+
+                if (!string.IsNullOrEmpty(property.Name) && !propertyNames.Add(property.Name))
+                {
+                    errors.Add(new CatalogValidationError(propertyPath + PathName, "Context property duplicates an existing property."));
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(context.KeyPropertyName))
+            {
+                errors.Add(new CatalogValidationError(path + ".keyPropertyName", "Context key property name is required."));
+            }
+            else if (!context.Properties.Any(property => property != null && string.Equals(property.Name, context.KeyPropertyName, StringComparison.OrdinalIgnoreCase)))
+            {
+                errors.Add(new CatalogValidationError(path + ".keyPropertyName", "Context key property name must name a declared context property."));
+            }
         }
 
         private static void ValidateFeatures(
@@ -293,70 +321,95 @@ namespace Toggly.FeatureManagement.Catalog
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var index = 0; index < features.Count; index++)
             {
-                var feature = features[index];
-                var path = "features[" + index.ToString(CultureInfo.InvariantCulture) + "]";
-                if (feature == null)
-                {
-                    errors.Add(new CatalogValidationError(path, "Feature must not be null."));
-                    continue;
-                }
+                ValidateFeature(features[index], "features[" + index.ToString(CultureInfo.InvariantCulture) + "]", keys, contexts, lists, errors);
+            }
+        }
 
-                ValidateIdentifier(feature.Key, path + ".key", "Feature key", errors);
-                if (!string.IsNullOrEmpty(feature.Key) && !keys.Add(feature.Key))
-                {
-                    errors.Add(new CatalogValidationError(path + ".key", "Feature key duplicates an existing key."));
-                }
+        private static void ValidateFeature(
+            CatalogFeature feature,
+            string path,
+            HashSet<string> keys,
+            IReadOnlyDictionary<string, CatalogContextSchema> contexts,
+            IReadOnlyDictionary<string, CatalogList> lists,
+            ICollection<CatalogValidationError> errors)
+        {
+            if (feature == null)
+            {
+                errors.Add(new CatalogValidationError(path, "Feature must not be null."));
+                return;
+            }
 
-                if (string.IsNullOrWhiteSpace(feature.Name) || feature.Name.Trim().Length > 200)
-                {
-                    errors.Add(new CatalogValidationError(path + ".name", "Feature name is required and must be at most 200 characters."));
-                }
+            ValidateIdentifier(feature.Key, path + ".key", "Feature key", errors);
+            if (!string.IsNullOrEmpty(feature.Key) && !keys.Add(feature.Key))
+            {
+                errors.Add(new CatalogValidationError(path + ".key", "Feature key duplicates an existing key."));
+            }
 
-                if (feature.Category != null && feature.Category.Trim().Length > 200)
-                {
-                    errors.Add(new CatalogValidationError(path + ".category", "Feature category must be at most 200 characters."));
-                }
+            ValidateFeatureMetadata(feature, path, contexts, errors);
+            ValidateTags(feature.Tags, path + ".tags", errors);
+            ValidateFeatureRules(feature, contexts, lists, path, errors);
+        }
 
-                if (feature.Description == null || feature.Description.Length > 8000)
-                {
-                    errors.Add(new CatalogValidationError(path + ".description", "Description must be plain text and at most 8,000 characters."));
-                }
+        private static void ValidateFeatureMetadata(
+            CatalogFeature feature,
+            string path,
+            IReadOnlyDictionary<string, CatalogContextSchema> contexts,
+            ICollection<CatalogValidationError> errors)
+        {
+            if (string.IsNullOrWhiteSpace(feature.Name) || feature.Name.Trim().Length > 200)
+            {
+                errors.Add(new CatalogValidationError(path + PathName, "Feature name is required and must be at most 200 characters."));
+            }
 
-                if (!Enum.IsDefined(typeof(CatalogRequirementType), feature.RequirementType))
-                {
-                    errors.Add(new CatalogValidationError(path + ".requirementType", "Requirement type must be Any or All."));
-                }
+            if (feature.Category != null && feature.Category.Trim().Length > 200)
+            {
+                errors.Add(new CatalogValidationError(path + ".category", "Feature category must be at most 200 characters."));
+            }
 
-                if (feature.ContextRequirementType.HasValue && !Enum.IsDefined(typeof(CatalogRequirementType), feature.ContextRequirementType.Value))
-                {
-                    errors.Add(new CatalogValidationError(path + ".contextRequirementType", "Context requirement type must be Any or All."));
-                }
+            if (feature.Description == null || feature.Description.Length > 8000)
+            {
+                errors.Add(new CatalogValidationError(path + ".description", "Description must be plain text and at most 8,000 characters."));
+            }
 
-                if (feature.ContextKind != null)
-                {
-                    ValidateContextName(feature.ContextKind, path + ".contextKind", "Context kind", errors);
-                    if (!contexts.ContainsKey(feature.ContextKind))
-                    {
-                        errors.Add(new CatalogValidationError(path + ".contextKind", "Context kind is not defined in this catalog."));
-                    }
-                }
+            if (!Enum.IsDefined(typeof(CatalogRequirementType), feature.RequirementType))
+            {
+                errors.Add(new CatalogValidationError(path + ".requirementType", "Requirement type must be Any or All."));
+            }
 
-                ValidateTags(feature.Tags, path + ".tags", errors);
-                if (feature.Rules == null)
-                {
-                    errors.Add(new CatalogValidationError(path + ".rules", "Rule collection must not be null."));
-                    continue;
-                }
+            if (feature.ContextRequirementType.HasValue && !Enum.IsDefined(typeof(CatalogRequirementType), feature.ContextRequirementType.Value))
+            {
+                errors.Add(new CatalogValidationError(path + ".contextRequirementType", "Context requirement type must be Any or All."));
+            }
 
-                if (feature.Enabled && feature.Rules.Count == 0)
-                {
-                    errors.Add(new CatalogValidationError(path + ".rules", "At least one filter is required when the feature is enabled."));
-                }
+            if (feature.ContextKind == null) return;
+            ValidateContextName(feature.ContextKind, path + ".contextKind", "Context kind", errors);
+            if (!contexts.ContainsKey(feature.ContextKind))
+            {
+                errors.Add(new CatalogValidationError(path + ".contextKind", "Context kind is not defined in this catalog."));
+            }
+        }
 
-                for (var ruleIndex = 0; ruleIndex < feature.Rules.Count; ruleIndex++)
-                {
-                    ValidateRule(feature, feature.Rules[ruleIndex], contexts, lists, path + ".rules[" + ruleIndex.ToString(CultureInfo.InvariantCulture) + "]", errors);
-                }
+        private static void ValidateFeatureRules(
+            CatalogFeature feature,
+            IReadOnlyDictionary<string, CatalogContextSchema> contexts,
+            IReadOnlyDictionary<string, CatalogList> lists,
+            string path,
+            ICollection<CatalogValidationError> errors)
+        {
+            if (feature.Rules == null)
+            {
+                errors.Add(new CatalogValidationError(path + ".rules", "Rule collection must not be null."));
+                return;
+            }
+
+            if (feature.Enabled && feature.Rules.Count == 0)
+            {
+                errors.Add(new CatalogValidationError(path + ".rules", "At least one filter is required when the feature is enabled."));
+            }
+
+            for (var ruleIndex = 0; ruleIndex < feature.Rules.Count; ruleIndex++)
+            {
+                ValidateRule(feature, feature.Rules[ruleIndex], contexts, lists, path + ".rules[" + ruleIndex.ToString(CultureInfo.InvariantCulture) + "]", errors);
             }
         }
 
@@ -399,49 +452,54 @@ namespace Toggly.FeatureManagement.Catalog
 
             if (!KnownFilters.Contains(rule.Name ?? string.Empty))
             {
-                errors.Add(new CatalogValidationError(path + ".name", "Unknown filter."));
+                errors.Add(new CatalogValidationError(path + PathName, "Unknown filter."));
                 return;
             }
 
             if (rule.Parameters == null)
             {
-                errors.Add(new CatalogValidationError(path + ".parameters", "Rule parameters must not be null."));
+                errors.Add(new CatalogValidationError(path + PathParameters, "Rule parameters must not be null."));
                 return;
             }
 
-            if (rule.Name == "AlwaysOn")
+            if (rule.Name == FilterAlwaysOn)
             {
                 ValidateExactParameters(rule.Parameters, Array.Empty<string>(), Array.Empty<string>(), path, errors);
             }
-            else if (rule.Name == "Percentage")
+            else if (rule.Name == FilterPercentage)
             {
-                ValidatePercentage(rule.Parameters, path, errors, "Value");
+                ValidatePercentage(rule.Parameters, path, errors, ParamValue);
             }
-            else if (rule.Name == "Targeting")
+            else if (rule.Name == FilterTargeting)
             {
                 ValidateTargeting(rule.Parameters, lists, path, errors);
             }
-            else if (rule.Name == "TimeWindow")
+            else if (rule.Name == FilterTimeWindow)
             {
                 ValidateTimeWindow(rule.Parameters, path, errors);
             }
-            else if (rule.Name == "ContextProperty")
+            else if (rule.Name == FilterContextProperty)
             {
                 ValidateContextProperty(feature, rule.Parameters, contexts, path, errors);
             }
-            else if (rule.Name == "UserClaims")
+            else if (rule.Name == FilterUserClaims)
             {
-                ValidateExactParameters(rule.Parameters, new[] { "Claim", "Value", "Percentage" }, new[] { "Claim", "Value", "Percentage" }, path, errors);
-                ValidatePercentage(rule.Parameters, path, errors, "Percentage");
+                ValidateExactParameters(rule.Parameters, new[] { "Claim", ParamValue, FilterPercentage }, new[] { "Claim", ParamValue, FilterPercentage }, path, errors);
+                ValidatePercentage(rule.Parameters, path, errors, FilterPercentage);
             }
             else
             {
-                var prefix = rule.Name == "BrowserFamily" ? "BrowserFamily:" :
-                    rule.Name == "BrowserLanguage" ? "BrowserLanguage:" :
-                    rule.Name == "OS" ? "OperatingSystem:" :
-                    rule.Name == "DeviceType" ? "DeviceType:" : "Country:";
-                ValidateIndexedAndPercentage(rule.Parameters, prefix, path, errors);
+                ValidateIndexedAndPercentage(rule.Parameters, IndexedPrefix(rule.Name ?? string.Empty), path, errors);
             }
+        }
+
+        private static string IndexedPrefix(string name)
+        {
+            if (name == FilterBrowserFamily) return "BrowserFamily:";
+            if (name == FilterBrowserLanguage) return "BrowserLanguage:";
+            if (name == "OS") return "OperatingSystem:";
+            if (name == "DeviceType") return "DeviceType:";
+            return "Country:";
         }
 
         private static readonly string[] TargetingListSlots =
@@ -455,13 +513,11 @@ namespace Toggly.FeatureManagement.Catalog
             string path,
             ICollection<CatalogValidationError> errors)
         {
-            foreach (var key in parameters.Keys)
+            foreach (var key in parameters.Keys.Where(key =>
+                key != "Audience.DefaultRolloutPercentage" && key != "IgnoreCase" &&
+                Array.IndexOf(TargetingListSlots, key) < 0))
             {
-                if (key != "Audience.DefaultRolloutPercentage" && key != "IgnoreCase" &&
-                    Array.IndexOf(TargetingListSlots, key) < 0)
-                {
-                    errors.Add(new CatalogValidationError(path + ".parameters." + key, "Unknown Targeting parameter."));
-                }
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + key, "Unknown Targeting parameter."));
             }
 
             foreach (var slot in TargetingListSlots)
@@ -473,14 +529,14 @@ namespace Toggly.FeatureManagement.Catalog
 
                 if (!lists.ContainsKey(listKey.Trim()))
                 {
-                    errors.Add(new CatalogValidationError(path + ".parameters." + slot, "Targeting list '" + listKey.Trim() + "' is not defined in this catalog."));
+                    errors.Add(new CatalogValidationError(path + PathParametersPrefix + slot, "Targeting list '" + listKey.Trim() + "' is not defined in this catalog."));
                 }
             }
 
             ValidatePercentage(parameters, path, errors, "Audience.DefaultRolloutPercentage");
             if (parameters.TryGetValue("IgnoreCase", out var ignoreCase) && !bool.TryParse(ignoreCase, out _))
             {
-                errors.Add(new CatalogValidationError(path + ".parameters.IgnoreCase", "IgnoreCase must be true or false."));
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + "IgnoreCase", "IgnoreCase must be true or false."));
             }
         }
 
@@ -491,11 +547,11 @@ namespace Toggly.FeatureManagement.Catalog
             var hasEnd = TryGetDate(parameters, "End", path, errors, out var end);
             if (!hasStart && !hasEnd)
             {
-                errors.Add(new CatalogValidationError(path + ".parameters", "TimeWindow must specify Start, End, or both."));
+                errors.Add(new CatalogValidationError(path + PathParameters, "TimeWindow must specify Start, End, or both."));
             }
             else if (hasStart && hasEnd && start >= end)
             {
-                errors.Add(new CatalogValidationError(path + ".parameters", "TimeWindow Start must precede End."));
+                errors.Add(new CatalogValidationError(path + PathParameters, "TimeWindow Start must precede End."));
             }
         }
 
@@ -506,24 +562,24 @@ namespace Toggly.FeatureManagement.Catalog
             string path,
             ICollection<CatalogValidationError> errors)
         {
-            ValidateExactParameters(parameters, new[] { "ContextKind", "Property", "Operator", "Value", "ValueType" }, new[] { "Property", "Operator", "Value" }, path, errors);
-            var contextKind = GetRequiredParameter(parameters, "ContextKind") ?? feature.ContextKind;
+            ValidateExactParameters(parameters, new[] { ParamContextKind, ParamProperty, "Operator", ParamValue, "ValueType" }, new[] { ParamProperty, "Operator", ParamValue }, path, errors);
+            var contextKind = GetRequiredParameter(parameters, ParamContextKind) ?? feature.ContextKind;
             if (string.IsNullOrWhiteSpace(contextKind) || !contexts.TryGetValue(contextKind, out var context))
             {
-                errors.Add(new CatalogValidationError(path + ".parameters.ContextKind", "ContextKind must identify a defined context."));
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + ParamContextKind, "ContextKind must identify a defined context."));
                 return;
             }
 
             if (feature.ContextKind == null || !string.Equals(feature.ContextKind, contextKind, StringComparison.OrdinalIgnoreCase))
             {
-                errors.Add(new CatalogValidationError(path + ".parameters.ContextKind", "ContextProperty rule must match the feature context kind."));
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + ParamContextKind, "ContextProperty rule must match the feature context kind."));
             }
 
-            var propertyName = GetRequiredParameter(parameters, "Property");
+            var propertyName = GetRequiredParameter(parameters, ParamProperty);
             var property = context.Properties == null ? null : context.Properties.FirstOrDefault(candidate => string.Equals(candidate.Name, propertyName, StringComparison.OrdinalIgnoreCase));
             if (property == null)
             {
-                errors.Add(new CatalogValidationError(path + ".parameters.Property", "Property must identify a property in the context schema."));
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + ParamProperty, "Property must identify a property in the context schema."));
                 return;
             }
 
@@ -531,12 +587,12 @@ namespace Toggly.FeatureManagement.Catalog
             var op = GetRequiredParameter(parameters, "Operator");
             if (!IsOperatorAllowed(property.Type, op))
             {
-                errors.Add(new CatalogValidationError(path + ".parameters.Operator", "Operator is not supported for this context property type."));
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + "Operator", "Operator is not supported for this context property type."));
             }
 
-            if (parameters.TryGetValue("Value", out var value))
+            if (parameters.TryGetValue(ParamValue, out var value))
             {
-                ValidateContextValue(valueType, value, op, path + ".parameters.Value", errors);
+                ValidateContextValue(valueType, value, op, path + PathParametersPrefix + ParamValue, errors);
             }
         }
 
@@ -545,9 +601,9 @@ namespace Toggly.FeatureManagement.Catalog
             op = op == null ? string.Empty : op.ToLowerInvariant();
             type = NormalizeContextType(type);
             if (op == "eq" || op == "neq") return true;
-            if ((type == "number" || type == "datetime") && (op == "gt" || op == "gte" || op == "lt" || op == "lte")) return true;
-            if ((type == "string" || type == "number" || type == "string[]") && op == "in") return true;
-            return (type == "string" || type == "string[]") && op == "contains";
+            if ((type == TypeNumber || type == "datetime") && (op == "gt" || op == "gte" || op == "lt" || op == "lte")) return true;
+            if ((type == TypeString || type == TypeNumber || type == TypeStringArray) && op == "in") return true;
+            return (type == TypeString || type == TypeStringArray) && op == "contains";
         }
 
         private static void ValidateContextValue(string type, string value, string? op, string path, ICollection<CatalogValidationError> errors)
@@ -568,7 +624,7 @@ namespace Toggly.FeatureManagement.Catalog
                     .Select(part => part.Trim())
                     .Where(part => part.Length > 0)
                     .ToList();
-                return parts.Count > 0 && parts.All(part => IsSingleContextValueCompatible(part, normalizedType == "string[]" ? "string" : normalizedType));
+                return parts.Count > 0 && parts.All(part => IsSingleContextValueCompatible(part, normalizedType == TypeStringArray ? TypeString : normalizedType));
             }
 
             return IsSingleContextValueCompatible(value, normalizedType);
@@ -578,15 +634,15 @@ namespace Toggly.FeatureManagement.Catalog
         {
             switch (valueType)
             {
-                case "number":
+                case TypeNumber:
                     return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
                 case "boolean":
                     return bool.TryParse(value, out _);
                 case "datetime":
                     return DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out _) ||
                         DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out _);
-                case "string":
-                case "string[]":
+                case TypeString:
+                case TypeStringArray:
                     return value.Length > 0;
                 default:
                     return false;
@@ -595,34 +651,28 @@ namespace Toggly.FeatureManagement.Catalog
 
         private static void ValidateIndexedAndPercentage(Dictionary<string, string> parameters, string prefix, string path, ICollection<CatalogValidationError> errors)
         {
-            foreach (var key in parameters.Keys)
+            foreach (var key in parameters.Keys.Where(key => key != FilterPercentage && !IsIndexedKey(key, prefix)))
             {
-                if (key != "Percentage" && !IsIndexedKey(key, prefix))
-                {
-                    errors.Add(new CatalogValidationError(path + ".parameters." + key, "Unknown filter parameter."));
-                }
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + key, "Unknown filter parameter."));
             }
 
             ValidateIndexedParameters(parameters, prefix, path, errors);
-            ValidatePercentage(parameters, path, errors, "Percentage");
+            ValidatePercentage(parameters, path, errors, FilterPercentage);
         }
 
         private static void ValidateExactParameters(Dictionary<string, string> parameters, IEnumerable<string> allowed, IEnumerable<string> required, string path, ICollection<CatalogValidationError> errors)
         {
             var allowedKeys = new HashSet<string>(allowed, StringComparer.Ordinal);
-            foreach (var key in parameters.Keys)
+            foreach (var key in parameters.Keys.Where(key => !allowedKeys.Contains(key)))
             {
-                if (!allowedKeys.Contains(key))
-                {
-                    errors.Add(new CatalogValidationError(path + ".parameters." + key, "Unknown filter parameter."));
-                }
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + key, "Unknown filter parameter."));
             }
 
             foreach (var key in required)
             {
                 if (!parameters.TryGetValue(key, out var value) || value == null)
                 {
-                    errors.Add(new CatalogValidationError(path + ".parameters." + key, "Required filter parameter is missing."));
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + key, "Required filter parameter is missing."));
                 }
             }
         }
@@ -633,7 +683,7 @@ namespace Toggly.FeatureManagement.Catalog
                 !decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var percentage) ||
                 percentage < 0m || percentage > 100m)
             {
-                errors.Add(new CatalogValidationError(path + ".parameters." + key, "Percentage must be between 0 and 100."));
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + key, "Percentage must be between 0 and 100."));
             }
         }
 
@@ -644,7 +694,7 @@ namespace Toggly.FeatureManagement.Catalog
             {
                 if (!int.TryParse(key.Substring(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out var index) || index < 0)
                 {
-                    errors.Add(new CatalogValidationError(path + ".parameters." + key, "Indexed parameter must use a non-negative integer index."));
+                    errors.Add(new CatalogValidationError(path + PathParametersPrefix + key, "Indexed parameter must use a non-negative integer index."));
                 }
                 else
                 {
@@ -657,7 +707,7 @@ namespace Toggly.FeatureManagement.Catalog
             {
                 if (indexes[index] != index)
                 {
-                    errors.Add(new CatalogValidationError(path + ".parameters", "Indexed parameters must be contiguous and zero-based."));
+                    errors.Add(new CatalogValidationError(path + PathParameters, "Indexed parameters must be contiguous and zero-based."));
                     break;
                 }
             }
@@ -679,7 +729,7 @@ namespace Toggly.FeatureManagement.Catalog
 
             if (!IsExplicitOffsetDate(text) || !DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out value))
             {
-                errors.Add(new CatalogValidationError(path + ".parameters." + key, "Date must be ISO-8601 with an explicit offset."));
+                errors.Add(new CatalogValidationError(path + PathParametersPrefix + key, "Date must be ISO-8601 with an explicit offset."));
                 return false;
             }
 
@@ -702,7 +752,7 @@ namespace Toggly.FeatureManagement.Catalog
 
         private static string NormalizeContextType(string type)
         {
-            return string.Equals(type, "string[]", StringComparison.OrdinalIgnoreCase) ? "string[]" : (type ?? string.Empty).ToLowerInvariant();
+            return string.Equals(type, TypeStringArray, StringComparison.OrdinalIgnoreCase) ? TypeStringArray : (type ?? string.Empty).ToLowerInvariant();
         }
 
         private static void ValidateIdentifier(string value, string path, string displayName, ICollection<CatalogValidationError> errors)
@@ -731,92 +781,88 @@ namespace Toggly.FeatureManagement.Catalog
             var document = new CatalogDocument
             {
                 SchemaVersion = source.SchemaVersion,
-                Environment = source.Environment == null ? string.Empty : source.Environment.Trim(),
+                Environment = TrimOrEmpty(source.Environment),
                 Features = source.Features == null ? null! : new List<CatalogFeature>(),
                 Contexts = source.Contexts == null ? null! : new List<CatalogContextSchema>(),
-                Lists = source.Lists == null ? new List<CatalogList>() : new List<CatalogList>()
+                Lists = new List<CatalogList>()
             };
 
             if (source.Features != null)
             {
                 foreach (var sourceFeature in source.Features)
-                {
-                    if (sourceFeature == null)
-                    {
-                        document.Features.Add(null!);
-                        continue;
-                    }
-
-                    var feature = new CatalogFeature
-                    {
-                        Key = sourceFeature.Key == null ? string.Empty : sourceFeature.Key.Trim(),
-                        Name = sourceFeature.Name == null ? string.Empty : sourceFeature.Name.Trim(),
-                        Description = sourceFeature.Description == null ? null! : sourceFeature.Description.Trim(),
-                        Category = string.IsNullOrWhiteSpace(sourceFeature.Category) ? string.Empty : sourceFeature.Category.Trim(),
-                        Tags = NormalizeTags(sourceFeature.Tags),
-                        Enabled = sourceFeature.Enabled,
-                        RequirementType = sourceFeature.RequirementType,
-                        ContextKind = string.IsNullOrWhiteSpace(sourceFeature.ContextKind) ? null : sourceFeature.ContextKind.Trim(),
-                        ContextRequirementType = sourceFeature.ContextRequirementType,
-                        Rules = CloneRules(sourceFeature.Rules)
-                    };
-                    document.Features.Add(feature);
-                }
+                    document.Features.Add(CloneFeature(sourceFeature));
             }
 
             if (source.Contexts != null)
             {
                 foreach (var sourceContext in source.Contexts)
-                {
-                    if (sourceContext == null)
-                    {
-                        document.Contexts.Add(null!);
-                        continue;
-                    }
-
-                    var context = new CatalogContextSchema
-                    {
-                        Kind = sourceContext.Kind == null ? string.Empty : sourceContext.Kind.Trim(),
-                        KeyPropertyName = sourceContext.KeyPropertyName == null ? string.Empty : sourceContext.KeyPropertyName.Trim(),
-                        Properties = sourceContext.Properties == null ? null! : new List<CatalogContextProperty>()
-                    };
-                    if (sourceContext.Properties != null)
-                    {
-                        foreach (var sourceProperty in sourceContext.Properties)
-                        {
-                            context.Properties.Add(sourceProperty == null ? null! : new CatalogContextProperty
-                            {
-                                Name = sourceProperty.Name == null ? string.Empty : sourceProperty.Name.Trim(),
-                                Type = sourceProperty.Type == null ? string.Empty : NormalizeContextType(sourceProperty.Type.Trim())
-                            });
-                        }
-                    }
-
-                    document.Contexts.Add(context);
-                }
+                    document.Contexts.Add(CloneContext(sourceContext));
             }
 
             if (source.Lists != null)
             {
                 foreach (var sourceList in source.Lists)
-                {
-                    if (sourceList == null)
-                    {
-                        document.Lists.Add(null!);
-                        continue;
-                    }
-
-                    document.Lists.Add(new CatalogList
-                    {
-                        Key = sourceList.Key == null ? string.Empty : sourceList.Key.Trim(),
-                        Name = sourceList.Name == null ? string.Empty : sourceList.Name.Trim(),
-                        Description = sourceList.Description == null ? string.Empty : sourceList.Description.Trim(),
-                        Items = NormalizeListItems(sourceList.Items)
-                    });
-                }
+                    document.Lists.Add(CloneList(sourceList));
             }
 
             return document;
+        }
+
+        private static string TrimOrEmpty(string? value) => value == null ? string.Empty : value.Trim();
+
+        private static CatalogFeature CloneFeature(CatalogFeature sourceFeature)
+        {
+            if (sourceFeature == null) return null!;
+            return new CatalogFeature
+            {
+                Key = TrimOrEmpty(sourceFeature.Key),
+                Name = TrimOrEmpty(sourceFeature.Name),
+                Description = sourceFeature.Description == null ? null! : sourceFeature.Description.Trim(),
+                Category = string.IsNullOrWhiteSpace(sourceFeature.Category) ? string.Empty : sourceFeature.Category.Trim(),
+                Tags = NormalizeTags(sourceFeature.Tags),
+                Enabled = sourceFeature.Enabled,
+                RequirementType = sourceFeature.RequirementType,
+                ContextKind = string.IsNullOrWhiteSpace(sourceFeature.ContextKind) ? null : sourceFeature.ContextKind.Trim(),
+                ContextRequirementType = sourceFeature.ContextRequirementType,
+                Rules = CloneRules(sourceFeature.Rules)
+            };
+        }
+
+        private static CatalogContextSchema CloneContext(CatalogContextSchema sourceContext)
+        {
+            if (sourceContext == null) return null!;
+            var context = new CatalogContextSchema
+            {
+                Kind = TrimOrEmpty(sourceContext.Kind),
+                KeyPropertyName = TrimOrEmpty(sourceContext.KeyPropertyName),
+                Properties = sourceContext.Properties == null ? null! : new List<CatalogContextProperty>()
+            };
+            if (sourceContext.Properties == null) return context;
+            foreach (var sourceProperty in sourceContext.Properties)
+                context.Properties.Add(CloneProperty(sourceProperty));
+            return context;
+        }
+
+        private static CatalogContextProperty CloneProperty(CatalogContextProperty sourceProperty)
+        {
+            if (sourceProperty == null) return null!;
+            return new CatalogContextProperty
+            {
+                Name = TrimOrEmpty(sourceProperty.Name),
+                Type = sourceProperty.Type == null ? string.Empty : NormalizeContextType(sourceProperty.Type.Trim())
+            };
+        }
+
+        private static CatalogList CloneList(CatalogList sourceList)
+        {
+            if (sourceList == null) return null!;
+            return new CatalogList
+            {
+                Key = TrimOrEmpty(sourceList.Key),
+                Name = TrimOrEmpty(sourceList.Name),
+                Description = TrimOrEmpty(sourceList.Description),
+                Items = NormalizeListItems(sourceList.Items)
+            };
         }
 
         private static void StampContextPropertyRules(CatalogDocument document)
@@ -824,21 +870,29 @@ namespace Toggly.FeatureManagement.Catalog
             if (document.Features == null || document.Contexts == null) return;
             foreach (var feature in document.Features.Where(feature => feature != null && feature.Rules != null))
             {
-                foreach (var rule in feature.Rules.Where(rule => rule != null && string.Equals(rule.Name, "ContextProperty", StringComparison.OrdinalIgnoreCase) && rule.Parameters != null))
+                foreach (var rule in feature.Rules.Where(rule =>
+                    rule != null &&
+                    string.Equals(rule.Name, FilterContextProperty, StringComparison.OrdinalIgnoreCase) &&
+                    rule.Parameters != null))
                 {
-                    var kind = GetRequiredParameter(rule.Parameters, "ContextKind") ?? feature.ContextKind;
-                    if (string.IsNullOrWhiteSpace(kind)) continue;
-                    var context = document.Contexts.FirstOrDefault(candidate => candidate != null && string.Equals(candidate.Kind, kind, StringComparison.OrdinalIgnoreCase));
-                    if (context == null || context.Properties == null) continue;
-                    var propertyName = GetRequiredParameter(rule.Parameters, "Property");
-                    var property = context.Properties.FirstOrDefault(candidate => candidate != null && string.Equals(candidate.Name, propertyName, StringComparison.OrdinalIgnoreCase));
-                    if (property == null) continue;
-
-                    rule.Parameters["ContextKind"] = context.Kind;
-                    rule.Parameters["Property"] = property.Name;
-                    rule.Parameters["ValueType"] = NormalizeContextType(property.Type);
+                    StampContextPropertyRule(document, feature, rule);
                 }
             }
+        }
+
+        private static void StampContextPropertyRule(CatalogDocument document, CatalogFeature feature, CatalogRule rule)
+        {
+            var kind = GetRequiredParameter(rule.Parameters, ParamContextKind) ?? feature.ContextKind;
+            if (string.IsNullOrWhiteSpace(kind)) return;
+            var context = document.Contexts.FirstOrDefault(candidate => candidate != null && string.Equals(candidate.Kind, kind, StringComparison.OrdinalIgnoreCase));
+            if (context == null || context.Properties == null) return;
+            var propertyName = GetRequiredParameter(rule.Parameters, ParamProperty);
+            var property = context.Properties.FirstOrDefault(candidate => candidate != null && string.Equals(candidate.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+            if (property == null) return;
+
+            rule.Parameters[ParamContextKind] = context.Kind;
+            rule.Parameters[ParamProperty] = property.Name;
+            rule.Parameters["ValueType"] = NormalizeContextType(property.Type);
         }
 
         private static List<string> NormalizeTags(List<string>? tags)
@@ -860,11 +914,17 @@ namespace Toggly.FeatureManagement.Catalog
         private static List<CatalogRule> CloneRules(List<CatalogRule>? rules)
         {
             if (rules == null) return null!;
-            return rules.Select(rule => rule == null ? null! : new CatalogRule
+            return rules.Select(CloneRule).ToList();
+        }
+
+        private static CatalogRule CloneRule(CatalogRule rule)
+        {
+            if (rule == null) return null!;
+            return new CatalogRule
             {
-                Name = rule.Name == null ? string.Empty : rule.Name.Trim(),
+                Name = TrimOrEmpty(rule.Name),
                 Parameters = rule.Parameters == null ? null! : new Dictionary<string, string>(rule.Parameters, StringComparer.Ordinal)
-            }).ToList();
+            };
         }
     }
 }

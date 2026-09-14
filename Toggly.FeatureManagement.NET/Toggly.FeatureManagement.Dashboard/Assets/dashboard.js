@@ -1,4 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
+    const promptUnload = (event) => { event.preventDefault(); };
     const summary = document.querySelector(".validation-summary-errors");
     if (summary) summary.focus();
 
@@ -8,16 +9,14 @@ document.addEventListener("DOMContentLoaded", () => {
         form.addEventListener("change", () => { dirty = true; });
         form.addEventListener("submit", () => { dirty = false; });
         window.addEventListener("beforeunload", event => {
-            if (dirty) {
-                event.preventDefault();
-                event.returnValue = "";
-            }
+            if (dirty) promptUnload(event);
         });
     });
 
     const serialize = (form) => {
         const kept = [];
         for (const [key, value] of new FormData(form)) {
+            if (typeof value !== "string") continue;
             if (key === "newRuleName" || key === "command" || key === "removeRuleIndex" || key === "__RequestVerificationToken" || key === "Key" || key === "ExpectedRevision" || key === "ContextKind") continue;
             kept.push(`${key}=${value}`);
         }
@@ -105,12 +104,23 @@ document.addEventListener("DOMContentLoaded", () => {
         expand(card);
     };
 
+    const leaveOpenForm = (form) => {
+        const open = document.querySelector(".conditions-form.is-open");
+        if (!open || open === form) return false;
+        if (!isDirty(open)) {
+            collapse(open);
+            return false;
+        }
+        if (!window.confirm(leaveMessage)) return true;
+        return discard(open);
+    };
+
+    const holdsEnabledToggle = (card, toggle, form) =>
+        card.dataset.persistedEnabled === "true" && toggle.checked && enabledValue(form);
+
     window.addEventListener("beforeunload", event => {
         const open = document.querySelector(".conditions-form.is-open");
-        if (open && isDirty(open)) {
-            event.preventDefault();
-            event.returnValue = "";
-        }
+        if (open && isDirty(open)) promptUnload(event);
     });
 
     document.addEventListener("change", event => {
@@ -120,17 +130,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const form = card?.querySelector("[data-conditions-form]");
         if (!card || !form) return;
         const intended = toggle.checked;
-        const open = document.querySelector(".conditions-form.is-open");
-        if (open && open !== form && isDirty(open)) {
-            if (!window.confirm(leaveMessage)) {
-                toggle.checked = card.dataset.persistedEnabled === "true";
-                return;
-            }
-            if (discard(open)) {
-                toggle.checked = card.dataset.persistedEnabled === "true";
-                return;
-            }
-        } else if (open && open !== form) collapse(open);
+        if (leaveOpenForm(form)) {
+            toggle.checked = card.dataset.persistedEnabled === "true";
+            return;
+        }
         if (card.dataset.persistedEnabled === "true" && !intended) {
             toggle.checked = true;
             applyDraftOn(card, form, toggle);
@@ -140,61 +143,65 @@ document.addEventListener("DOMContentLoaded", () => {
         else applyDraftOff(card, form, toggle);
     });
 
-    document.addEventListener("click", event => {
+    const handleToggleHit = (event) => {
         const toggleHit = event.target.closest("label.toggle, [data-feature-toggle]");
-        if (toggleHit) {
-            const card = toggleHit.closest(".feature-card");
-            const toggle = card?.querySelector("[data-feature-toggle]");
-            const form = card?.querySelector("[data-conditions-form]");
-            const draftOn = form ? enabledValue(form) : false;
-            if (card && toggle && form && card.dataset.persistedEnabled === "true" && toggle.checked && draftOn) {
-                event.preventDefault();
-                const open = document.querySelector(".conditions-form.is-open");
-                if (open && open !== form && isDirty(open)) {
-                    if (!window.confirm(leaveMessage)) return;
-                    if (discard(open)) return;
-                } else if (open && open !== form) collapse(open);
-                applyDraftOn(card, form, toggle);
-                return;
-            }
-        }
+        if (!toggleHit) return false;
+        const card = toggleHit.closest(".feature-card");
+        const toggle = card?.querySelector("[data-feature-toggle]");
+        const form = card?.querySelector("[data-conditions-form]");
+        if (!card || !toggle || !form || !holdsEnabledToggle(card, toggle, form)) return false;
+        event.preventDefault();
+        if (leaveOpenForm(form)) return true;
+        applyDraftOn(card, form, toggle);
+        return true;
+    };
 
+    const handleLeave = (event) => {
         const leave = event.target.closest(".tab, .rail-link, .feature-name, .conditions-link, a.button[href]");
-        if (leave) {
-            const open = document.querySelector(".conditions-form.is-open");
-            if (open && isDirty(open) && !window.confirm(leaveMessage)) {
-                event.preventDefault();
-            } else if (open) allowUnload(open);
-            return;
-        }
+        if (!leave) return false;
+        const open = document.querySelector(".conditions-form.is-open");
+        if (open && isDirty(open) && !window.confirm(leaveMessage)) event.preventDefault();
+        else if (open) allowUnload(open);
+        return true;
+    };
 
+    const handleClose = (event) => {
         const close = event.target.closest("[data-close-conditions]");
-        if (close) {
-            const form = close.closest("[data-conditions-form]");
-            if (form) discard(form);
-            return;
-        }
+        if (!close) return false;
+        const form = close.closest("[data-conditions-form]");
+        if (form) discard(form);
+        return true;
+    };
 
+    const handleTurnOff = (event) => {
         const turnOff = event.target.closest("[data-turn-off]");
-        if (turnOff) {
-            event.preventDefault();
-            if (turnOff instanceof HTMLButtonElement && turnOff.disabled) return;
-            const form = turnOff.closest("[data-conditions-form]");
-            const card = form?.closest(".feature-card");
-            if (form && card) applyDraftOff(card, form, persistToggle(card));
-            return;
-        }
+        if (!turnOff) return false;
+        event.preventDefault();
+        if (turnOff instanceof HTMLButtonElement && turnOff.disabled) return true;
+        const form = turnOff.closest("[data-conditions-form]");
+        const card = form?.closest(".feature-card");
+        if (form && card) applyDraftOff(card, form, persistToggle(card));
+        return true;
+    };
 
+    const handleCardExpand = (event) => {
         const card = event.target.closest(".feature-card");
-        if (card && !event.target.closest("a, button, input, select, textarea, label.toggle, .conditions-form")) {
-            const form = card.querySelector("[data-conditions-form]");
-            if (!form || form.classList.contains("is-open")) return;
-            if (card.dataset.persistedEnabled !== "true") return;
-            confirmIfDirty(() => {
-                persistToggle(card).checked = true;
-                applyDraftOn(card, form, persistToggle(card));
-            });
-        }
+        if (!card || event.target.closest("a, button, input, select, textarea, label.toggle, .conditions-form")) return;
+        const form = card.querySelector("[data-conditions-form]");
+        if (!form || form.classList.contains("is-open")) return;
+        if (card.dataset.persistedEnabled !== "true") return;
+        confirmIfDirty(() => {
+            persistToggle(card).checked = true;
+            applyDraftOn(card, form, persistToggle(card));
+        });
+    };
+
+    document.addEventListener("click", event => {
+        if (handleToggleHit(event)) return;
+        if (handleLeave(event)) return;
+        if (handleClose(event)) return;
+        if (handleTurnOff(event)) return;
+        handleCardExpand(event);
     });
 
     document.querySelector("form.filters")?.addEventListener("submit", event => {

@@ -8,6 +8,7 @@ namespace Toggly.FeatureManagement.Dashboard;
 /// <summary>Form fields for the editable feature metadata supported by the first dashboard release.</summary>
 public sealed class DashboardFeatureInput
 {
+    [Required]
     public bool IsNew { get; set; }
     [Required, StringLength(128)]
     public string Key { get; set; } = string.Empty;
@@ -72,7 +73,7 @@ public sealed class DashboardFeatureInput
         var previousKind = existing.ContextKind;
         existing.ContextKind = string.IsNullOrWhiteSpace(ContextKind) ? null : ContextKind.Trim();
         if (!string.Equals(previousKind, existing.ContextKind, StringComparison.OrdinalIgnoreCase))
-            existing.Rules.RemoveAll(rule => string.Equals(rule.Name, "ContextProperty", StringComparison.Ordinal));
+            existing.Rules.RemoveAll(rule => string.Equals(rule.Name, DashboardRuleInput.ContextProperty, StringComparison.Ordinal));
     }
 
     internal void ApplyConditions(CatalogFeature existing)
@@ -102,18 +103,31 @@ internal sealed class TrimmedStringLengthAttribute(int maximumLength) : StringLe
 /// <summary>A dashboard row for a built-in Toggly targeting filter.</summary>
 public sealed class DashboardRuleInput
 {
+    internal const string AlwaysOn = "AlwaysOn";
+    internal const string FilterPercentage = "Percentage";
+    internal const string Targeting = "Targeting";
+    internal const string TimeWindow = "TimeWindow";
+    internal const string ContextProperty = "ContextProperty";
+    internal const string BrowserFamily = "BrowserFamily";
+    internal const string BrowserLanguage = "BrowserLanguage";
+    internal const string DeviceType = "DeviceType";
+    internal const string UserClaims = "UserClaims";
+    internal const string OperatingSystem = "OS";
+    internal const string CountryFamily = "CountryFamily";
+    internal const string ParamValue = "Value";
+
     internal static IReadOnlyDictionary<string, string> SupportedNames { get; } = new Dictionary<string, string>
     {
-        ["AlwaysOn"] = "Always On", ["Percentage"] = "Percentage", ["Targeting"] = "Users/groups", ["TimeWindow"] = "Schedule",
-        ["ContextProperty"] = "Entity property", ["BrowserFamily"] = "Browser", ["BrowserLanguage"] = "Language",
-        ["OS"] = "Operating system", ["DeviceType"] = "Device", ["CountryFamily"] = "Country", ["UserClaims"] = "Claim"
+        [AlwaysOn] = "Always On", [FilterPercentage] = "Percentage", [Targeting] = "Users/groups", [TimeWindow] = "Schedule",
+        [ContextProperty] = "Entity property", [BrowserFamily] = "Browser", [BrowserLanguage] = "Language",
+        [OperatingSystem] = "Operating system", [DeviceType] = "Device", [CountryFamily] = "Country", [UserClaims] = "Claim"
     };
 
     internal static IReadOnlyDictionary<string, string> UserFilterNames { get; } = SupportedNames
-        .Where(pair => pair.Key != "ContextProperty")
+        .Where(pair => pair.Key != ContextProperty)
         .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
 
-    public string Name { get; set; } = "Percentage";
+    public string Name { get; set; } = FilterPercentage;
     public string? Values { get; set; } = string.Empty;
     public string? Users { get; set; } = string.Empty;
     public string? Groups { get; set; } = string.Empty;
@@ -133,77 +147,96 @@ public sealed class DashboardRuleInput
     internal CatalogRule ToRule()
     {
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (Name == "AlwaysOn") { }
-        else if (Name == "Percentage") parameters["Value"] = Percentage;
-        else if (Name == "Targeting")
-        {
-            AddListKey(parameters, "Audience.Users", Users);
-            AddListKey(parameters, "Audience.Groups", Groups);
-            AddListKey(parameters, "Audience.Exclusion.Users", ExclusionUsers);
-            AddListKey(parameters, "Audience.Exclusion.Groups", ExclusionGroups);
-            parameters["Audience.DefaultRolloutPercentage"] = Percentage;
-            parameters["IgnoreCase"] = IgnoreCase ? "true" : "false";
-        }
-        else if (Name == "TimeWindow")
-        {
-            if (!string.IsNullOrWhiteSpace(Start)) parameters["Start"] = Start;
-            if (!string.IsNullOrWhiteSpace(End)) parameters["End"] = End;
-        }
-        else if (Name == "ContextProperty")
-        {
-            parameters["ContextKind"] = ContextKind ?? string.Empty;
-            parameters["Property"] = Property ?? string.Empty;
-            parameters["Operator"] = Operator;
-            parameters["Value"] = Value ?? string.Empty;
-            parameters["ValueType"] = ValueType;
-        }
-        else if (Name == "UserClaims")
+        if (Name == FilterPercentage) parameters[ParamValue] = Percentage;
+        else if (Name == Targeting) AddTargeting(parameters);
+        else if (Name == TimeWindow) AddTimeWindow(parameters);
+        else if (Name == ContextProperty) AddContextProperty(parameters);
+        else if (Name == UserClaims)
         {
             parameters["Claim"] = Claim ?? string.Empty;
-            parameters["Value"] = Value ?? string.Empty;
-            parameters["Percentage"] = Percentage;
+            parameters[ParamValue] = Value ?? string.Empty;
+            parameters[FilterPercentage] = Percentage;
         }
-        else
+        else if (Name != AlwaysOn)
         {
-            AddIndexed(parameters, Name == "BrowserFamily" ? "BrowserFamily" : Name == "BrowserLanguage" ? "BrowserLanguage" : Name == "OS" ? "OperatingSystem" : Name == "DeviceType" ? "DeviceType" : "Country", Values);
-            parameters["Percentage"] = Percentage;
+            AddIndexed(parameters, IndexedPrefix(Name), Values);
+            parameters[FilterPercentage] = Percentage;
         }
         return new CatalogRule { Name = Name, Parameters = parameters };
+    }
+
+    private void AddTargeting(Dictionary<string, string> parameters)
+    {
+        AddListKey(parameters, "Audience.Users", Users);
+        AddListKey(parameters, "Audience.Groups", Groups);
+        AddListKey(parameters, "Audience.Exclusion.Users", ExclusionUsers);
+        AddListKey(parameters, "Audience.Exclusion.Groups", ExclusionGroups);
+        parameters["Audience.DefaultRolloutPercentage"] = Percentage;
+        parameters["IgnoreCase"] = IgnoreCase ? "true" : "false";
+    }
+
+    private void AddTimeWindow(Dictionary<string, string> parameters)
+    {
+        if (!string.IsNullOrWhiteSpace(Start)) parameters["Start"] = Start;
+        if (!string.IsNullOrWhiteSpace(End)) parameters["End"] = End;
+    }
+
+    private void AddContextProperty(Dictionary<string, string> parameters)
+    {
+        parameters["ContextKind"] = ContextKind ?? string.Empty;
+        parameters["Property"] = Property ?? string.Empty;
+        parameters["Operator"] = Operator;
+        parameters[ParamValue] = Value ?? string.Empty;
+        parameters["ValueType"] = ValueType;
     }
 
     internal static DashboardRuleInput FromRule(CatalogRule rule)
     {
         var input = new DashboardRuleInput { Name = rule.Name };
-        input.Percentage = rule.Name == "Percentage" ? Get(rule, "Value", "100")
-            : rule.Name == "Targeting" ? Get(rule, "Audience.DefaultRolloutPercentage", "0")
-            : Get(rule, "Percentage", "100");
+        input.Percentage = PercentageValue(rule);
         input.Users = Get(rule, "Audience.Users", ""); input.Groups = Get(rule, "Audience.Groups", "");
         input.ExclusionUsers = Get(rule, "Audience.Exclusion.Users", ""); input.ExclusionGroups = Get(rule, "Audience.Exclusion.Groups", "");
         input.IgnoreCase = !string.Equals(Get(rule, "IgnoreCase", "true"), "false", StringComparison.OrdinalIgnoreCase);
-        input.Start = Get(rule, "Start", ""); input.End = Get(rule, "End", ""); input.Claim = Get(rule, "Claim", ""); input.Value = Get(rule, "Value", "");
+        input.Start = Get(rule, "Start", ""); input.End = Get(rule, "End", ""); input.Claim = Get(rule, "Claim", ""); input.Value = Get(rule, ParamValue, "");
         input.ContextKind = Get(rule, "ContextKind", ""); input.Property = Get(rule, "Property", ""); input.Operator = Get(rule, "Operator", "eq"); input.ValueType = Get(rule, "ValueType", "string");
-        var prefix = rule.Name == "BrowserFamily" ? "BrowserFamily" : rule.Name == "BrowserLanguage" ? "BrowserLanguage" : rule.Name == "OS" ? "OperatingSystem" : rule.Name == "DeviceType" ? "DeviceType" : "Country";
-        input.Values = Indexed(rule, prefix);
+        input.Values = Indexed(rule, IndexedPrefix(rule.Name));
         return input;
     }
 
-    internal static bool IsEntityRule(string name) => string.Equals(name, "ContextProperty", StringComparison.Ordinal);
+    private static string PercentageValue(CatalogRule rule)
+    {
+        if (rule.Name == FilterPercentage) return Get(rule, ParamValue, "100");
+        if (rule.Name == Targeting) return Get(rule, "Audience.DefaultRolloutPercentage", "0");
+        return Get(rule, FilterPercentage, "100");
+    }
+
+    internal static bool IsEntityRule(string name) => string.Equals(name, ContextProperty, StringComparison.Ordinal);
+
+    private static string IndexedPrefix(string name)
+    {
+        if (name == BrowserFamily) return BrowserFamily;
+        if (name == BrowserLanguage) return BrowserLanguage;
+        if (name == OperatingSystem) return "OperatingSystem";
+        if (name == DeviceType) return DeviceType;
+        return "Country";
+    }
 
     private static string Get(CatalogRule rule, string key, string fallback) => rule.Parameters.TryGetValue(key, out var value) ? value : fallback;
-    private static void AddListKey(IDictionary<string, string> parameters, string key, string? listKey)
+    private static void AddListKey(Dictionary<string, string> parameters, string key, string? listKey)
     {
         if (!string.IsNullOrWhiteSpace(listKey)) parameters[key] = listKey.Trim();
     }
-    private static void AddIndexed(IDictionary<string, string> parameters, string prefix, string? values)
+    private static void AddIndexed(Dictionary<string, string> parameters, string prefix, string? values)
     {
         foreach (var value in (values ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select((value, index) => new { value, index })) parameters[$"{prefix}:{value.index}"] = value.value;
     }
     private static string Indexed(CatalogRule rule, string prefix) => string.Join("\n", rule.Parameters.Where(pair => pair.Key.StartsWith(prefix + ":", StringComparison.Ordinal)).OrderBy(pair => int.Parse(pair.Key[(prefix.Length + 1)..], System.Globalization.CultureInfo.InvariantCulture)).Select(pair => pair.Value));
 }
 
-internal static class FeatureFlagsEnum
+internal static partial class FeatureFlagsEnum
 {
-    private static readonly Regex ValidMember = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant | RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
+    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 250)]
+    private static partial Regex ValidMember();
 
     internal static string Generate(IEnumerable<CatalogFeature> features)
     {
@@ -237,7 +270,7 @@ internal static class FeatureFlagsEnum
 
     internal static string Sanitize(string key)
     {
-        if (ValidMember.IsMatch(key)) return key;
+        if (ValidMember().IsMatch(key)) return key;
         var sanitized = key.Replace('.', '_').Replace(':', '_').Replace('-', '_');
         if (sanitized.Length == 0 || char.IsDigit(sanitized[0])) sanitized = "_" + sanitized;
         return sanitized;
@@ -293,6 +326,7 @@ internal sealed class DashboardListsViewModel
 /// <summary>Form fields for a reusable catalog identifier list.</summary>
 public sealed class DashboardListInput
 {
+    [Required]
     public bool IsNew { get; set; }
     [Required, StringLength(128)]
     public string Key { get; set; } = string.Empty;

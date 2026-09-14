@@ -17,7 +17,7 @@ using Xunit;
 
 namespace Toggly.FeatureManagement.Dashboard.Tests;
 
-public sealed class DashboardMappingTests
+public sealed partial class DashboardMappingTests
 {
     [Fact]
     public async Task Dashboard_area_does_not_collide_with_a_host_controller_of_the_same_name()
@@ -187,7 +187,7 @@ public sealed class DashboardMappingTests
         await using var host = await DashboardHost.StartAsync("/features", allowWrites: true);
         var form = await host.Client.GetAsync("/features/import");
         var html = await form.Content.ReadAsStringAsync();
-        var token = WebUtility.HtmlDecode(Regex.Match(html, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value);
+        var token = WebUtility.HtmlDecode(AntiforgeryTokenRegex().Match(html).Groups[1].Value);
         var cookie = form.Headers.GetValues("Set-Cookie").Single(value => value.StartsWith(".AspNetCore.Antiforgery.", StringComparison.Ordinal)).Split(';')[0];
         using var upload = new MultipartFormDataContent();
         upload.Add(new StringContent(token), "__RequestVerificationToken");
@@ -318,10 +318,10 @@ public sealed class DashboardMappingTests
         var html = await form.Content.ReadAsStringAsync();
         if (!values.ContainsKey("ExpectedRevision"))
         {
-            var revision = Regex.Match(html, "name=\"ExpectedRevision\" value=\"([^\"]+)\"");
+            var revision = ExpectedRevisionRegex().Match(html);
             if (revision.Success) values["ExpectedRevision"] = WebUtility.HtmlDecode(revision.Groups[1].Value);
         }
-        values["__RequestVerificationToken"] = WebUtility.HtmlDecode(Regex.Match(html, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value);
+        values["__RequestVerificationToken"] = WebUtility.HtmlDecode(AntiforgeryTokenRegex().Match(html).Groups[1].Value);
         var request = new HttpRequestMessage(HttpMethod.Post, action) { Content = new FormUrlEncodedContent(values) };
         request.Headers.Add("Cookie", form.Headers.GetValues("Set-Cookie").Single(value => value.StartsWith(".AspNetCore.Antiforgery.", StringComparison.Ordinal)).Split(';')[0]);
         return await host.Client.SendAsync(request);
@@ -411,7 +411,7 @@ public sealed class DashboardMappingTests
         await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
         var formResponse = await host.Client.GetAsync("/features/features/new");
         var form = await formResponse.Content.ReadAsStringAsync();
-        var antiforgery = Regex.Match(form, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value;
+        var antiforgery = AntiforgeryTokenRegex().Match(form).Groups[1].Value;
         var cookie = formResponse.Headers.GetValues("Set-Cookie").Single(value => value.StartsWith(".AspNetCore.Antiforgery.", StringComparison.Ordinal)).Split(';')[0];
 
         var request = new HttpRequestMessage(HttpMethod.Post, "/features/features/create")
@@ -590,7 +590,7 @@ public sealed class DashboardMappingTests
         var script = await host.Client.GetStringAsync("/features/assets/dashboard.js");
         script.Should().Contain("keydown").And.Contain("Escape").And.Contain("isSameNode");
         script.Should().Contain("persistedEnabled === \"true\" && !intended");
-        script.Should().Contain("toggle.checked && draftOn");
+        script.Should().Contain("holdsEnabledToggle").And.Contain("leaveOpenForm");
         script.Should().Contain("persistToggle").And.Contain("input[type=\"hidden\"][name=\"Enabled\"]");
         script.Should().Contain("allowUnload").And.Contain("key === \"newRuleName\"");
         var css = await host.Client.GetStringAsync("/features/assets/dashboard.css");
@@ -633,7 +633,7 @@ public sealed class DashboardMappingTests
         }
 
         var html = WebUtility.HtmlDecode(await host.Client.GetStringAsync("/features/"));
-        var members = Regex.Match(html, @"public enum FeatureFlags\s*\{(?<body>.*?)\}", RegexOptions.Singleline)
+        var members = FeatureFlagsEnumRegex().Match(html)
             .Groups["body"].Value
             .Split([',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(member => member.Trim().TrimEnd(','))
@@ -648,12 +648,12 @@ public sealed class DashboardMappingTests
     {
         await using var host = await DashboardHost.StartAsync("/features", readOnly: true, catalogExists: true, featureCount: 1);
         var html = await host.Client.GetStringAsync("/features/?expand=Feature01");
-        var turnOff = Regex.Match(html, @"<button[^>]*data-turn-off[^>]*>");
+        var turnOff = TurnOffButtonRegex().Match(html);
         turnOff.Success.Should().BeTrue();
         turnOff.Value.Should().Contain("disabled");
         html.Should().Contain("name=\"Enabled\"");
         html.Should().NotContain("href=\"/features/features/new\"");
-        var create = Regex.Match(html, @"<button[^>]*>\s*Create feature\s*</button>");
+        var create = CreateFeatureButtonRegex().Match(html);
         create.Success.Should().BeTrue();
         create.Value.Should().Contain("disabled");
         html.Should().Contain("Editing is unavailable in the current storage or read-only mode.");
@@ -686,6 +686,21 @@ public sealed class DashboardMappingTests
 
         response.StatusCode.Should().BeOneOf(HttpStatusCode.BadRequest, HttpStatusCode.Forbidden);
     }
+
+    [GeneratedRegex("name=\"__RequestVerificationToken\" value=\"([^\"]+)\"")]
+    private static partial Regex AntiforgeryTokenRegex();
+
+    [GeneratedRegex("name=\"ExpectedRevision\" value=\"([^\"]+)\"")]
+    private static partial Regex ExpectedRevisionRegex();
+
+    [GeneratedRegex(@"public enum FeatureFlags\s*\{(?<body>.*?)\}", RegexOptions.Singleline)]
+    private static partial Regex FeatureFlagsEnumRegex();
+
+    [GeneratedRegex(@"<button[^>]*data-turn-off[^>]*>")]
+    private static partial Regex TurnOffButtonRegex();
+
+    [GeneratedRegex(@"<button[^>]*>\s*Create feature\s*</button>")]
+    private static partial Regex CreateFeatureButtonRegex();
 }
 
 internal sealed class DashboardHost : IAsyncDisposable
@@ -703,7 +718,7 @@ internal sealed class DashboardHost : IAsyncDisposable
         if (usePolicy)
         {
             builder.Services.AddAuthentication("Test").AddScheme<AuthenticationSchemeOptions, DashboardTestAuthentication>("Test", _ => { });
-            builder.Services.AddAuthorization(options => options.AddPolicy("FeatureAdmins", policy => policy.RequireClaim("feature-admin", "true")));
+            builder.Services.AddAuthorizationBuilder().AddPolicy("FeatureAdmins", policy => policy.RequireClaim("feature-admin", "true"));
         }
         var store = new TestCatalogStore(catalogExists, featureCount, allowWrites);
         store.Capabilities.IsReadOnly = storeReadOnly;

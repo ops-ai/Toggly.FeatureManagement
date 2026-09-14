@@ -20,7 +20,7 @@
 </section>
 @if (readOnly)
 {
-    <p id="readonly-reason" role="status" class="hint">Editing is unavailable in the current storage or read-only mode.</p>
+    <output id="readonly-reason" class="hint">Editing is unavailable in the current storage or read-only mode.</output>
 }
 <div asp-validation-summary="All" class="validation-summary" tabindex="-1" role="alert"></div>
 @if (Model.Lists.Count == 0)

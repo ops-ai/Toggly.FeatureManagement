@@ -50,7 +50,7 @@ test('SQLite dashboard creates, targets, exports, evaluates and deletes a featur
   await expect(page.getByLabel('Default rollout percentage')).toHaveValue('0');
   await page.getByLabel('Users', { exact: true }).selectOption('checkout-users');
   await page.getByLabel('Excluded users', { exact: true }).selectOption('blocked-users');
-  await page.getByRole('checkbox', { name: 'Toggle New checkout' }).check({ force: true });
+  await page.locator('label.toggle', { has: page.getByRole('checkbox', { name: 'Toggle New checkout' }) }).click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${mount}/?$`));
   await expect(page.getByRole('checkbox', { name: 'Toggle New checkout' })).toBeChecked();

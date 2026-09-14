@@ -22,7 +22,7 @@ internal static class EmbeddedCatalogCompiler
                 SecuredFeature = false,
                 RequirementType = feature.RequirementType == CatalogRequirementType.All ? RequirementType.All : RequirementType.Any,
                 ContextKind = feature.ContextKind,
-                ContextRequirementType = feature.ContextRequirementType == null ? null : feature.ContextRequirementType == CatalogRequirementType.All ? RequirementType.All : RequirementType.Any,
+                ContextRequirementType = ContextRequirementType(feature.ContextRequirementType),
                 Metrics = null,
                 Variants = null,
                 Allocation = null
@@ -31,6 +31,12 @@ internal static class EmbeddedCatalogCompiler
             definitions.Add(model.FeatureKey, TogglyFeatureProvider.BuildFeatureDefinition(model));
         }
         return new EmbeddedCompiledSnapshot(snapshot.Revision, models, definitions);
+    }
+
+    private static RequirementType? ContextRequirementType(CatalogRequirementType? value)
+    {
+        if (value == null) return null;
+        return value == CatalogRequirementType.All ? RequirementType.All : RequirementType.Any;
     }
 
     private static Dictionary<string, CatalogList> ToListLookup(IEnumerable<CatalogList> lists) =>

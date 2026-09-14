@@ -7,32 +7,29 @@ namespace Toggly.FeatureManagement.Dashboard;
 internal static class FeatureFilterSummary
 {
     public static bool IsConditional(CatalogFeature feature) =>
-        feature.Enabled && feature.Rules.Any(rule => !string.Equals(rule.Name, "AlwaysOn", StringComparison.Ordinal));
+        feature.Enabled && feature.Rules.Any(rule => !string.Equals(rule.Name, DashboardRuleInput.AlwaysOn, StringComparison.Ordinal));
 
     public static IReadOnlyList<string> Lines(CatalogFeature feature, IReadOnlyList<CatalogList> lists) =>
         feature.Rules
-            .Where(rule => !string.Equals(rule.Name, "AlwaysOn", StringComparison.Ordinal))
+            .Where(rule => !string.Equals(rule.Name, DashboardRuleInput.AlwaysOn, StringComparison.Ordinal))
             .Select(rule => Line(rule, lists))
             .Where(line => line.Length > 0)
             .ToList();
 
-    private static string Line(CatalogRule rule, IReadOnlyList<CatalogList> lists) => rule.Name switch
+    private static string Line(CatalogRule rule, IReadOnlyList<CatalogList> lists)
     {
-        "Percentage" => ForPercentage(Get(rule, "Value")),
-        "Targeting" => Targeting(rule, lists),
-        "TimeWindow" => TimeWindow(rule),
-        "ContextProperty" => ContextProperty(rule),
-        "UserClaims" => Join(
-            ForString(Get(rule, "Claim"), "Claim"),
-            ForString(Get(rule, "Value"), "Value"),
-            string.IsNullOrEmpty(Get(rule, "Percentage")) ? "" : ForPercentage(Get(rule, "Percentage"))),
-        "BrowserFamily" => ForIndexed(rule, "BrowserFamily", "browsers"),
-        "BrowserLanguage" => ForIndexed(rule, "BrowserLanguage", "languages"),
-        "OS" => ForIndexed(rule, "OperatingSystem", "operating systems"),
-        "DeviceType" => ForIndexed(rule, "DeviceType", "devices"),
-        "CountryFamily" => ForIndexed(rule, "Country", "countries"),
-        _ => DashboardRuleInput.SupportedNames.GetValueOrDefault(rule.Name, rule.Name)
-    };
+        if (rule.Name == DashboardRuleInput.FilterPercentage) return ForPercentage(Get(rule, DashboardRuleInput.ParamValue));
+        if (rule.Name == DashboardRuleInput.Targeting) return Targeting(rule, lists);
+        if (rule.Name == DashboardRuleInput.TimeWindow) return TimeWindow(rule);
+        if (rule.Name == DashboardRuleInput.ContextProperty) return ContextProperty(rule);
+        if (rule.Name == DashboardRuleInput.UserClaims) return UserClaims(rule);
+        if (rule.Name == DashboardRuleInput.BrowserFamily) return ForIndexed(rule, DashboardRuleInput.BrowserFamily, "browsers");
+        if (rule.Name == DashboardRuleInput.BrowserLanguage) return ForIndexed(rule, DashboardRuleInput.BrowserLanguage, "languages");
+        if (rule.Name == DashboardRuleInput.OperatingSystem) return ForIndexed(rule, "OperatingSystem", "operating systems");
+        if (rule.Name == DashboardRuleInput.DeviceType) return ForIndexed(rule, DashboardRuleInput.DeviceType, "devices");
+        if (rule.Name == DashboardRuleInput.CountryFamily) return ForIndexed(rule, "Country", "countries");
+        return DashboardRuleInput.SupportedNames.GetValueOrDefault(rule.Name, rule.Name);
+    }
 
     private static string Targeting(CatalogRule rule, IReadOnlyList<CatalogList> lists) => Join(
         ForList(rule, lists, "Audience.Users", "Users"),
@@ -44,12 +41,17 @@ internal static class FeatureFilterSummary
         ForDate(Get(rule, "Start"), "Start"),
         ForDate(Get(rule, "End"), "End"));
 
+    private static string UserClaims(CatalogRule rule) => Join(
+        ForString(Get(rule, "Claim"), "Claim"),
+        ForString(Get(rule, DashboardRuleInput.ParamValue), DashboardRuleInput.ParamValue),
+        string.IsNullOrEmpty(Get(rule, DashboardRuleInput.FilterPercentage)) ? "" : ForPercentage(Get(rule, DashboardRuleInput.FilterPercentage)));
+
     private static string ContextProperty(CatalogRule rule)
     {
         var kind = Get(rule, "ContextKind");
         var property = Get(rule, "Property");
         var op = Get(rule, "Operator");
-        var value = Get(rule, "Value");
+        var value = Get(rule, DashboardRuleInput.ParamValue);
         var valueType = Get(rule, "ValueType");
         if (kind.Length == 0 && property.Length == 0) return "";
         var subject = kind.Length == 0 ? "Entity" : kind;

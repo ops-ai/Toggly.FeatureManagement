@@ -57,10 +57,6 @@ namespace Toggly.FeatureManagement.Catalog
                 if (document == null) throw new CatalogFormatException("Catalog JSON must contain an object.");
                 return NormalizeOrThrow(document);
             }
-            catch (CatalogFormatException)
-            {
-                throw;
-            }
             catch (JsonException exception)
             {
                 throw new CatalogFormatException(exception.Message, exception);

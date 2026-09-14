@@ -83,12 +83,12 @@ const fixture = `<!doctype html>
 </article>
 <template id="toggly-always-on-rule">${alwaysOnTemplateInner}</template>
 <div id="copy-csharp-modal" class="modal" hidden>
-  <div class="modal-card" role="dialog" aria-modal="true" tabindex="-1">
+  <dialog class="modal-card" open aria-modal="true" tabindex="-1">
     <pre><code id="copy-csharp-source">public enum FeatureFlags { NewCheckout }</code></pre>
     <p class="copy-status"></p>
     <button type="button" data-close-copy-csharp>Close</button>
     <button type="button" data-copy-csharp>Copy C#</button>
-  </div>
+  </dialog>
 </div>
 <button type="button" data-open-copy-csharp>Copy C#</button>
 </body>

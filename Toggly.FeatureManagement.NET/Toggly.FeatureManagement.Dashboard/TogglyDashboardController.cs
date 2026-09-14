@@ -32,6 +32,12 @@ public sealed class TogglyDashboardController : Controller
         _importService = importService;
     }
 
+    private const string IndexView = "Index";
+    private const string EditView = "Edit";
+
+    private IActionResult CatalogUnavailable() =>
+        StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+
     /// <summary>Lists the catalog features.</summary>
     public async Task<IActionResult> Index(string? search, string? tag, string? category, string? sort, string? expand)
     {
@@ -42,7 +48,7 @@ public sealed class TogglyDashboardController : Controller
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+            return CatalogUnavailable();
         }
     }
 
@@ -57,7 +63,7 @@ public sealed class TogglyDashboardController : Controller
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+            return CatalogUnavailable();
         }
     }
 
@@ -69,7 +75,7 @@ public sealed class TogglyDashboardController : Controller
         input.Enabled = false;
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
         if (snapshot == null) return NotFound();
         if (!ModelState.IsValid) return ValidationView("New", input);
         if (snapshot.Document.Features.Any(feature => string.Equals(feature.Key, input.Key.Trim(), StringComparison.OrdinalIgnoreCase)))
@@ -79,7 +85,7 @@ public sealed class TogglyDashboardController : Controller
         }
 
         snapshot.Document.Features.Add(input.ToNewFeature());
-        return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, "Index", input).ConfigureAwait(false);
+        return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, IndexView, input).ConfigureAwait(false);
     }
 
     /// <summary>Shows the editor for an existing feature.</summary>
@@ -87,10 +93,11 @@ public sealed class TogglyDashboardController : Controller
     {
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
         var feature = snapshot?.Document.Features.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
         SetContextKinds(snapshot);
-        return feature == null || snapshot == null ? NotFound() : View(DashboardFeatureInput.FromFeature(feature, snapshot.Revision));
+        if (feature == null) return NotFound();
+        return View(DashboardFeatureInput.FromFeature(feature, snapshot!.Revision));
     }
 
     /// <summary>Saves editable metadata while preserving retained targeting rules.</summary>
@@ -98,24 +105,24 @@ public sealed class TogglyDashboardController : Controller
     public async Task<IActionResult> Save(DashboardFeatureInput input)
     {
         input.IsNew = false;
-        if (!ModelState.IsValid) return ValidationView("Edit", input);
+        if (!ModelState.IsValid) return ValidationView(EditView, input);
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
         var existing = snapshot?.Document.Features.SingleOrDefault(candidate => string.Equals(candidate.Key, input.Key, StringComparison.Ordinal));
         if (snapshot == null || existing == null) return NotFound();
         input.ApplyMetadata(existing);
-        return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, "Edit", input).ConfigureAwait(false);
+        return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, EditView, input).ConfigureAwait(false);
     }
 
     /// <summary>Persists the expanded conditions draft for one feature.</summary>
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Conditions(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName)
+    public async Task<IActionResult> Conditions(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName, string? search, string? tag, string? category, string? sort)
     {
         input.IsNew = false;
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
         var existing = snapshot?.Document.Features.SingleOrDefault(candidate => string.Equals(candidate.Key, input.Key, StringComparison.Ordinal));
         if (snapshot == null || existing == null) return NotFound();
         SetContextKinds(snapshot);
@@ -127,18 +134,18 @@ public sealed class TogglyDashboardController : Controller
         ModelState.Remove(nameof(DashboardFeatureInput.Tags));
         if (ApplyRuleEditorCommand(input, command, removeRuleIndex, newRuleName))
             return Response.StatusCode == StatusCodes.Status400BadRequest
-                ? ConditionsView(snapshot, input)
-                : View("Index", BuildList(snapshot, Request.Query["search"], Request.Query["tag"], Request.Query["category"], Request.Query["sort"], input.Key, input));
+                ? ConditionsView(snapshot, input, search, tag, category, sort)
+                : View(IndexView, BuildList(snapshot, search, tag, category, sort, input.Key, input));
         if (input.Enabled == null)
             return BadRequest("A feature key, expected revision, and explicit true or false enabled state are required.");
-        if (!ModelState.IsValid) return ConditionsView(snapshot, input);
+        if (!ModelState.IsValid) return ConditionsView(snapshot, input, search, tag, category, sort);
         if (input.Enabled == true && input.Rules.Count == 0)
         {
             ModelState.AddModelError(nameof(input.Rules), "Add at least one user filter or entity condition before saving an enabled feature.");
-            return ConditionsView(snapshot, input);
+            return ConditionsView(snapshot, input, search, tag, category, sort);
         }
         input.ApplyConditions(existing);
-        return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, "Index", input).ConfigureAwait(false);
+        return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, IndexView, input).ConfigureAwait(false);
     }
 
     /// <summary>Shows a destructive-action confirmation page.</summary>
@@ -146,7 +153,7 @@ public sealed class TogglyDashboardController : Controller
     {
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
         var feature = snapshot?.Document.Features.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
         if (snapshot == null || feature == null) return NotFound();
         return View(DashboardFeatureInput.FromFeature(feature, snapshot.Revision));
@@ -158,19 +165,19 @@ public sealed class TogglyDashboardController : Controller
     {
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
         if (snapshot == null) return NotFound();
         var feature = snapshot.Document.Features.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
         if (feature == null) return NotFound();
         snapshot.Document.Features.Remove(feature);
-        return await WriteOrConflictAsync(snapshot.Document, expectedRevision, "Index", null).ConfigureAwait(false);
+        return await WriteOrConflictAsync(snapshot.Document, expectedRevision, IndexView, null).ConfigureAwait(false);
     }
 
     /// <summary>Explicitly creates the initially empty catalog if it is absent.</summary>
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Initialize()
     {
-        return await WriteOrConflictAsync(new CatalogDocument(), null, "Index", null).ConfigureAwait(false);
+        return await WriteOrConflictAsync(new CatalogDocument(), null, IndexView, null).ConfigureAwait(false);
     }
 
     /// <summary>Shows host registered and catalog retained context schemas.</summary>
@@ -183,7 +190,7 @@ public sealed class TogglyDashboardController : Controller
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+            return CatalogUnavailable();
         }
     }
 
@@ -198,7 +205,7 @@ public sealed class TogglyDashboardController : Controller
             var snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
             return snapshot == null ? NotFound() : File(System.Text.Encoding.UTF8.GetBytes(CatalogJson.Serialize(snapshot.Document)), "application/json", "toggly-catalog.json");
         }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
     }
 
     /// <summary>Lists reusable identifier bags for Targeting slots.</summary>
@@ -211,7 +218,7 @@ public sealed class TogglyDashboardController : Controller
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+            return CatalogUnavailable();
         }
     }
 
@@ -225,7 +232,7 @@ public sealed class TogglyDashboardController : Controller
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+            return CatalogUnavailable();
         }
     }
 
@@ -236,7 +243,7 @@ public sealed class TogglyDashboardController : Controller
         input.IsNew = true;
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
         if (snapshot == null) return NotFound();
         if (!ModelState.IsValid) return ListValidation(input);
         if (snapshot.Document.Lists.Any(list => string.Equals(list.Key, input.Key.Trim(), StringComparison.OrdinalIgnoreCase)))
@@ -260,7 +267,7 @@ public sealed class TogglyDashboardController : Controller
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+            return CatalogUnavailable();
         }
     }
 
@@ -271,7 +278,7 @@ public sealed class TogglyDashboardController : Controller
         input.IsNew = false;
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
         var existing = snapshot?.Document.Lists.SingleOrDefault(candidate => string.Equals(candidate.Key, input.Key, StringComparison.Ordinal));
         if (snapshot == null || existing == null) return NotFound();
         if (!ModelState.IsValid) return ListValidation(input);
@@ -284,7 +291,7 @@ public sealed class TogglyDashboardController : Controller
     {
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
         var list = snapshot?.Document.Lists.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
         if (snapshot == null || list == null) return NotFound();
         var users = FeaturesUsingList(snapshot.Document, list.Key);
@@ -304,7 +311,7 @@ public sealed class TogglyDashboardController : Controller
     {
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
         if (snapshot == null) return NotFound();
         var list = snapshot.Document.Lists.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
         if (list == null) return NotFound();
@@ -346,7 +353,7 @@ public sealed class TogglyDashboardController : Controller
         }
         catch (CatalogFormatException exception) { return ImportValidation(exception.Message); }
         catch (CatalogValidationException exception) { return ImportValidation(exception.Message, exception.Errors); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
     }
 
     /// <summary>Applies the additive selections shown in a validated import preview.</summary>
@@ -373,7 +380,7 @@ public sealed class TogglyDashboardController : Controller
         catch (FormatException) { return ImportValidation("The import preview payload is invalid. Create a new preview."); }
         catch (CatalogFormatException exception) { return ImportValidation(exception.Message); }
         catch (CatalogValidationException exception) { return ImportValidation(exception.Message, exception.Errors); }
-        catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
+        catch (Exception) { return CatalogUnavailable(); }
     }
 
     /// <summary>Shows cloud migration instructions without making network requests.</summary>
@@ -414,15 +421,7 @@ public sealed class TogglyDashboardController : Controller
         {
             var result = await _editor.TryWriteAsync(document, revision, HttpContext.RequestAborted).ConfigureAwait(false);
             if (result.Status == CatalogWriteStatus.Written)
-            {
-                var mount = HttpContext.GetEndpoint()?.Metadata.GetMetadata<TogglyDashboardEndpointMetadata>()?.MountPath ?? string.Empty;
-                var target = successAction == "Edit" && input != null
-                    ? $"{HttpContext.Request.PathBase}{mount}/features/edit?key={Uri.EscapeDataString(input.Key)}"
-                    : $"{HttpContext.Request.PathBase}{mount}/";
-                Response.StatusCode = StatusCodes.Status303SeeOther;
-                Response.Headers.Location = target;
-                return new EmptyResult();
-            }
+                return RedirectAfterWrite(successAction, input);
             Response.StatusCode = StatusCodes.Status409Conflict;
             ViewData["CurrentFeature"] = result.Snapshot?.Document.Features.FirstOrDefault(feature => string.Equals(feature.Key, input?.Key, StringComparison.OrdinalIgnoreCase));
             return View("Conflict", input ?? new DashboardFeatureInput { ExpectedRevision = revision ?? string.Empty });
@@ -431,12 +430,7 @@ public sealed class TogglyDashboardController : Controller
         {
             foreach (var error in exception.Errors) ModelState.AddModelError(error.Path, error.Message);
             Response.StatusCode = StatusCodes.Status400BadRequest;
-            if (successAction == "Index" && input != null && !input.IsNew)
-            {
-                var snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
-                return snapshot == null ? View("Validation", input) : ConditionsView(snapshot, input);
-            }
-            return View(input == null ? "Validation" : input.IsNew ? "New" : "Edit", input);
+            return await WriteValidationViewAsync(successAction, input).ConfigureAwait(false);
         }
         catch (InvalidOperationException)
         {
@@ -444,7 +438,7 @@ public sealed class TogglyDashboardController : Controller
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+            return CatalogUnavailable();
         }
     }
 
@@ -474,7 +468,7 @@ public sealed class TogglyDashboardController : Controller
         }
         catch (Exception)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable.");
+            return CatalogUnavailable();
         }
     }
 
@@ -483,7 +477,7 @@ public sealed class TogglyDashboardController : Controller
 
     private static List<CatalogFeature> FeaturesUsingList(CatalogDocument document, string key) =>
         document.Features.Where(feature => feature.Rules.Any(rule =>
-            string.Equals(rule.Name, "Targeting", StringComparison.Ordinal) &&
+            string.Equals(rule.Name, DashboardRuleInput.Targeting, StringComparison.Ordinal) &&
             TargetingListSlots.Any(slot => rule.Parameters.TryGetValue(slot, out var linked) &&
                 string.Equals(linked, key, StringComparison.OrdinalIgnoreCase)))).ToList();
 
@@ -513,10 +507,35 @@ public sealed class TogglyDashboardController : Controller
         return View("Import");
     }
 
-    private ViewResult ConditionsView(CatalogSnapshot snapshot, DashboardFeatureInput input)
+    private EmptyResult RedirectAfterWrite(string successAction, DashboardFeatureInput? input)
+    {
+        var mount = HttpContext.GetEndpoint()?.Metadata.GetMetadata<TogglyDashboardEndpointMetadata>()?.MountPath ?? string.Empty;
+        string target;
+        if (successAction == EditView && input != null)
+            target = $"{HttpContext.Request.PathBase}{mount}/features/edit?key={Uri.EscapeDataString(input.Key)}";
+        else
+            target = $"{HttpContext.Request.PathBase}{mount}/";
+        Response.StatusCode = StatusCodes.Status303SeeOther;
+        Response.Headers.Location = target;
+        return new EmptyResult();
+    }
+
+    private async Task<IActionResult> WriteValidationViewAsync(string successAction, DashboardFeatureInput? input)
+    {
+        if (successAction == IndexView && input != null && !input.IsNew)
+        {
+            var snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+            return snapshot == null ? View("Validation", input) : ConditionsView(snapshot, input);
+        }
+        if (input == null) return View("Validation", input);
+        if (input.IsNew) return View("New", input);
+        return View(EditView, input);
+    }
+
+    private ViewResult ConditionsView(CatalogSnapshot snapshot, DashboardFeatureInput input, string? search = null, string? tag = null, string? category = null, string? sort = null)
     {
         Response.StatusCode = StatusCodes.Status400BadRequest;
-        return View("Index", BuildList(snapshot, Request.Query["search"], Request.Query["tag"], Request.Query["category"], Request.Query["sort"], input.Key, input));
+        return View(IndexView, BuildList(snapshot, search, tag, category, sort, input.Key, input));
     }
 
     private DashboardFeatureListViewModel BuildList(CatalogSnapshot? snapshot, string? search, string? tag, string? category, string? sort, string? expand, DashboardFeatureInput? draft)
@@ -549,7 +568,7 @@ public sealed class TogglyDashboardController : Controller
         return View(viewName, input);
     }
 
-    private static IReadOnlyList<CatalogFeature> FilterFeatures(IReadOnlyList<CatalogFeature> features, string? search, string? tag, string? category, string? sort)
+    private static List<CatalogFeature> FilterFeatures(IReadOnlyList<CatalogFeature> features, string? search, string? tag, string? category, string? sort)
     {
         IEnumerable<CatalogFeature> query = features;
         if (!string.IsNullOrWhiteSpace(search))
@@ -574,7 +593,7 @@ public sealed class TogglyDashboardController : Controller
     {
         if (string.Equals(command, "add-entity", StringComparison.Ordinal))
         {
-            input.Rules.Add(new DashboardRuleInput { Name = "ContextProperty", ContextKind = input.ContextKind ?? string.Empty });
+            input.Rules.Add(new DashboardRuleInput { Name = DashboardRuleInput.ContextProperty, ContextKind = input.ContextKind ?? string.Empty });
             ModelState.Clear();
             return true;
         }
@@ -592,7 +611,7 @@ public sealed class TogglyDashboardController : Controller
                 Response.StatusCode = StatusCodes.Status400BadRequest;
                 return true;
             }
-            input.Rules.Add(new DashboardRuleInput { Name = newRuleName, Percentage = newRuleName == "Targeting" ? "0" : "100", ContextKind = input.ContextKind ?? string.Empty });
+            input.Rules.Add(new DashboardRuleInput { Name = newRuleName, Percentage = newRuleName == DashboardRuleInput.Targeting ? "0" : "100", ContextKind = input.ContextKind ?? string.Empty });
             ModelState.Clear();
             return true;
         }

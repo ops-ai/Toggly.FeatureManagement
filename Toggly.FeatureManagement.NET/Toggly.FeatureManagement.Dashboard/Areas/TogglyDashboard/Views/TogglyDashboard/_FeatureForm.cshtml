@@ -34,7 +34,7 @@
             <option value="@kind">@kind</option>
         }
     </select>
-    @if (readOnly) { <p role="status">Editing is unavailable in the current storage or read-only mode.</p> }
+    @if (readOnly) { <output class="hint">Editing is unavailable in the current storage or read-only mode.</output> }
     <div class="form-actions">
         <button type="submit" class="button" disabled="@readOnly">Save</button>
         <a href="@basePath/">Cancel</a>

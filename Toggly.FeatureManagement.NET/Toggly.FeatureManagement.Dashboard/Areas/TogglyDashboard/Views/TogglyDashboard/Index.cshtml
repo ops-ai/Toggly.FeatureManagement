@@ -30,7 +30,7 @@
 </section>
 @if (readOnly && Model.CatalogExists)
 {
-    <p id="readonly-reason" role="status" class="hint">Editing is unavailable in the current storage or read-only mode.</p>
+    <output id="readonly-reason" class="hint">Editing is unavailable in the current storage or read-only mode.</output>
 }
 @if (!Model.CatalogExists)
 {
@@ -131,6 +131,10 @@ else
                                 <input type="hidden" name="ExpectedRevision" value="@Model.Revision" />
                                 <input type="hidden" name="ContextKind" value="@feature.ContextKind" />
                                 <input type="hidden" name="Enabled" value="@(draft.Enabled == true ? "true" : "false")" />
+                                <input type="hidden" name="search" value="@Model.Search" />
+                                <input type="hidden" name="tag" value="@Model.Tag" />
+                                <input type="hidden" name="category" value="@Model.Category" />
+                                <input type="hidden" name="sort" value="@Model.Sort" />
                                 <div asp-validation-summary="@(expanded ? Microsoft.AspNetCore.Mvc.Rendering.ValidationSummary.All : Microsoft.AspNetCore.Mvc.Rendering.ValidationSummary.None)" class="validation-summary" tabindex="-1" role="alert"></div>
                                 <div class="conditions-toolbar">
                                     <h3>Conditions</h3>
@@ -182,7 +186,7 @@ else
                                     <button type="submit" name="command" value="add-entity" formnovalidate disabled="@readOnly">Add entity condition</button>
                                     </section>
                                 }
-                                @if (readOnly) { <p role="status">Editing is unavailable in the current storage or read-only mode.</p> }
+                                @if (readOnly) { <output class="hint">Editing is unavailable in the current storage or read-only mode.</output> }
                                 <div class="form-actions">
                                     <button type="submit" class="button" disabled="@readOnly">Save</button>
                                     <button type="submit" class="secondary" name="command" value="turn-off" formnovalidate data-turn-off @(draft.Enabled == true ? null : "hidden") disabled="@readOnly">Turn feature off</button>
@@ -203,7 +207,7 @@ else
         </fieldset>
     </template>
     <div id="copy-csharp-modal" class="modal" hidden>
-        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="copy-csharp-title" tabindex="-1">
+        <dialog class="modal-card" open aria-modal="true" aria-labelledby="copy-csharp-title" tabindex="-1">
             <h2 id="copy-csharp-title">Feature Keys - Copy C#</h2>
             <pre><code id="copy-csharp-source">@Model.CopyCSharp</code></pre>
             <p class="copy-status" aria-live="polite"></p>
@@ -211,6 +215,6 @@ else
                 <button type="button" class="secondary" data-close-copy-csharp>Close</button>
                 <button type="button" class="button" data-copy-csharp>Copy C#</button>
             </div>
-        </div>
+        </dialog>
     </div>
 }

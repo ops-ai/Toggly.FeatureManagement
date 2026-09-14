@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Builder;
@@ -78,14 +79,16 @@ public static class TogglyDashboardEndpointExtensions
             new { httpMethod = new HttpMethodRouteConstraint(method) });
     }
 
+    private static readonly SearchValues<char> RouteReserved = SearchValues.Create("{}*?");
+
     private static string NormalizeMount(string pattern)
     {
         if (string.IsNullOrWhiteSpace(pattern)) throw new ArgumentException("Dashboard mount path is required.", nameof(pattern));
         var trimmed = pattern.Trim();
-        if (!trimmed.StartsWith("/", StringComparison.Ordinal)) trimmed = "/" + trimmed;
+        if (!trimmed.StartsWith('/')) trimmed = "/" + trimmed;
         trimmed = trimmed.TrimEnd('/');
         if (trimmed.Length == 0) throw new ArgumentException("The dashboard cannot be mounted at the application root.", nameof(pattern));
-        if (trimmed.IndexOfAny(new[] { '{', '}', '*', '?' }) >= 0) throw new ArgumentException("Dashboard mount paths cannot contain route parameters or wildcards.", nameof(pattern));
+        if (trimmed.AsSpan().IndexOfAny(RouteReserved) >= 0) throw new ArgumentException("Dashboard mount paths cannot contain route parameters or wildcards.", nameof(pattern));
         return trimmed;
     }
 }
@@ -93,7 +96,7 @@ public static class TogglyDashboardEndpointExtensions
 internal static class DashboardAssets
 {
     private static readonly Assembly Assembly = typeof(DashboardAssets).Assembly;
-    private static readonly IReadOnlyDictionary<string, string> Names = new Dictionary<string, string>(StringComparer.Ordinal)
+    private static readonly Dictionary<string, string> Names = new(StringComparer.Ordinal)
     {
         ["dashboard.css"] = "Toggly.FeatureManagement.Dashboard.Assets.dashboard.css",
         ["dashboard.js"] = "Toggly.FeatureManagement.Dashboard.Assets.dashboard.js",
@@ -107,9 +110,14 @@ internal static class DashboardAssets
         if (stream == null) return Results.NotFound();
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory).ConfigureAwait(false);
-        var contentType = name.EndsWith(".css", StringComparison.Ordinal) ? "text/css; charset=utf-8"
-            : name.EndsWith(".svg", StringComparison.Ordinal) ? "image/svg+xml; charset=utf-8"
-            : "application/javascript; charset=utf-8";
+        var contentType = ContentType(name);
         return Results.File(memory.ToArray(), contentType, enableRangeProcessing: false, lastModified: null, entityTag: null, fileDownloadName: null);
+    }
+
+    private static string ContentType(string name)
+    {
+        if (name.EndsWith(".css", StringComparison.Ordinal)) return "text/css; charset=utf-8";
+        if (name.EndsWith(".svg", StringComparison.Ordinal)) return "image/svg+xml; charset=utf-8";
+        return "application/javascript; charset=utf-8";
     }
 }

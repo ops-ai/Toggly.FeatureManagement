@@ -24,4 +24,7 @@
     <EmbeddedResource Include="Assets\dashboard.js" />
     <EmbeddedResource Include="Assets\logo-light.svg" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Toggly.FeatureManagement.Dashboard.Tests" />
+  </ItemGroup>
 </Project>
