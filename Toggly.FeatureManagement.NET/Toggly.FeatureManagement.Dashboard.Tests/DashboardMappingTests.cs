@@ -27,17 +27,21 @@ public sealed class DashboardMappingTests
         (await host.Client.GetStringAsync("/TogglyDashboard/Index")).Should().Be("host controller");
     }
     [Fact]
-    public async Task Invalid_rule_returns_the_create_form_with_field_errors()
+    public async Task Invalid_rule_returns_the_conditions_form_with_field_errors()
     {
         await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
-        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        (await PostForm(host, "/features/features/new", "/features/features/create", new()
         {
-            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Invalid", ["Name"] = "Keep my name",
-            ["Rules[0].Name"] = "Percentage", ["Rules[0].Percentage"] = "101"
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Invalid", ["Name"] = "Keep my name"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        var response = await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "Invalid", ["Enabled"] = "true", ["Rules[0].Name"] = "Percentage", ["Rules[0].Percentage"] = "101"
         });
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await response.Content.ReadAsStringAsync()).Should().Contain("<h1>Create feature</h1>").And.Contain("Keep my name").And.Contain("validation-summary-errors");
-        host.Feature("Invalid").Should().BeNull();
+        (await response.Content.ReadAsStringAsync()).Should().Contain("Keep my name").And.Contain("validation-summary-errors");
+        host.Feature("Invalid")!.Enabled.Should().BeFalse();
+        host.Feature("Invalid")!.Rules.Should().BeEmpty();
     }
 
     [Fact]
@@ -64,12 +68,12 @@ public sealed class DashboardMappingTests
     [Theory]
     [InlineData(null)]
     [InlineData("invalid")]
-    public async Task State_changes_require_an_explicit_valid_boolean(string? value)
+    public async Task Condition_saves_require_an_explicit_valid_boolean(string? value)
     {
         await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, featureCount: 1, allowWrites: true);
-        var fields = new Dictionary<string, string> { ["key"] = "Feature01", ["expectedRevision"] = "current" };
-        if (value != null) fields["enabled"] = value;
-        var response = await PostForm(host, "/features/features/edit?key=Feature01", "/features/features/state", fields);
+        var fields = new Dictionary<string, string> { ["Key"] = "Feature01", ["ExpectedRevision"] = "current" };
+        if (value != null) fields["Enabled"] = value;
+        var response = await PostForm(host, "/features/", "/features/features/conditions", fields);
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         host.Feature("Feature01")!.Enabled.Should().BeTrue();
     }
@@ -80,11 +84,15 @@ public sealed class DashboardMappingTests
         await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
         var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
         {
-            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Pro", ["Name"] = "Pro",
-            ["Rules[0].Name"] = "UserClaims", ["Rules[0].Claim"] = "plan", ["Rules[0].Value"] = "pro", ["Rules[0].Percentage"] = "25"
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Pro", ["Name"] = "Pro"
         });
         response.StatusCode.Should().Be(HttpStatusCode.SeeOther);
-        var html = await host.Client.GetStringAsync("/features/features/edit?key=Pro");
+        response = await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "Pro", ["Enabled"] = "true", ["Rules[0].Name"] = "UserClaims", ["Rules[0].Claim"] = "plan", ["Rules[0].Value"] = "pro", ["Rules[0].Percentage"] = "25"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        var html = await host.Client.GetStringAsync("/features/?expand=Pro");
         html.Should().Contain("name=\"Rules[0].Percentage\" value=\"25\"").And.Contain("name=\"Rules[0].Value\" value=\"pro\"");
     }
 
@@ -130,12 +138,16 @@ public sealed class DashboardMappingTests
         await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
         var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
         {
-            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "LargeOrder", ["Name"] = "Large order", ["ContextKind"] = "Order",
-            ["Rules[0].Name"] = "ContextProperty", ["Rules[0].ContextKind"] = "Order", ["Rules[0].Property"] = "Total", ["Rules[0].Operator"] = "gte", ["Rules[0].Value"] = "100"
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "LargeOrder", ["Name"] = "Large order", ["ContextKind"] = "Order"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
+        response = await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "LargeOrder", ["Enabled"] = "true", ["Rules[0].Name"] = "ContextProperty", ["Rules[0].ContextKind"] = "Order", ["Rules[0].Property"] = "Total", ["Rules[0].Operator"] = "gte", ["Rules[0].Value"] = "100"
         });
         response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
         host.Feature("LargeOrder")!.Rules.Single().Parameters["ValueType"].Should().Be("number");
-        var form = await host.Client.GetStringAsync("/features/features/edit?key=LargeOrder");
+        var form = await host.Client.GetStringAsync("/features/?expand=LargeOrder");
         form.Should().Contain("value=\"gte\" selected=\"selected\"");
         var export = CatalogJson.Parse(await host.Client.GetStringAsync("/features/export"));
         export.Contexts.Should().ContainSingle().Which.Kind.Should().Be("Order");
@@ -224,8 +236,12 @@ public sealed class DashboardMappingTests
         await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
         var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
         {
-            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Rollout", ["Name"] = "Rollout",
-            ["Rules[0].Name"] = "Percentage", ["Rules[0].Percentage"] = "100"
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Rollout", ["Name"] = "Rollout"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
+        response = await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "Rollout", ["Enabled"] = "true", ["Rules[0].Name"] = "Percentage", ["Rules[0].Percentage"] = "100"
         });
         response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
         host.Feature("Rollout")!.Rules.Should().ContainSingle().Which.Parameters["Value"].Should().Be("100");
@@ -237,14 +253,18 @@ public sealed class DashboardMappingTests
         await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
         var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
         {
-            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Target", ["Name"] = "Target",
-            ["Rules[0].Name"] = "Targeting", ["Rules[0].Percentage"] = "0", ["Rules[0].Users"] = "Alice",
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Target", ["Name"] = "Target"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
+        response = await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "Target", ["Enabled"] = "true", ["Rules[0].Name"] = "Targeting", ["Rules[0].Percentage"] = "0", ["Rules[0].Users"] = "Alice",
             ["Rules[0].ExclusionUsers"] = "Bob", ["Rules[0].ExclusionGroups"] = "blocked", ["Rules[0].IgnoreCase"] = "false"
         });
         response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
         var rule = host.Feature("Target")!.Rules.Single();
         rule.Parameters.Should().Contain("Audience.Exclusion.Users:0", "Bob").And.Contain("Audience.Exclusion.Groups:0", "blocked").And.Contain("IgnoreCase", "false");
-        var form = await host.Client.GetStringAsync("/features/features/edit?key=Target");
+        var form = await host.Client.GetStringAsync("/features/?expand=Target");
         form.Should().Contain("name=\"Rules[0].ExclusionUsers\">Bob</textarea>").And.Contain("name=\"Rules[0].ExclusionGroups\">blocked</textarea>");
     }
 
@@ -252,23 +272,32 @@ public sealed class DashboardMappingTests
     public async Task Adding_a_targeting_rule_without_javascript_defaults_to_zero_rollout()
     {
         await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
-        var response = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        (await PostForm(host, "/features/features/new", "/features/features/create", new()
         {
-            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Target", ["Name"] = "Target",
-            ["command"] = "add-rule", ["newRuleName"] = "Targeting"
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Target", ["Name"] = "Target"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        var response = await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "Target", ["Enabled"] = "true", ["command"] = "add-rule", ["newRuleName"] = "Targeting"
         });
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();
         html.Should().Contain("name=\"Rules[0].Name\" value=\"Targeting\"")
             .And.Contain("name=\"Rules[0].Percentage\" value=\"0\"")
             .And.Contain("User.Identity.Name");
-        host.Feature("Target").Should().BeNull();
+        host.Feature("Target")!.Enabled.Should().BeFalse();
+        host.Feature("Target")!.Rules.Should().BeEmpty();
     }
 
     private static async Task<HttpResponseMessage> PostForm(DashboardHost host, string formPath, string action, Dictionary<string, string> values)
     {
         var form = await host.Client.GetAsync(formPath);
         var html = await form.Content.ReadAsStringAsync();
+        if (!values.ContainsKey("ExpectedRevision"))
+        {
+            var revision = Regex.Match(html, "name=\"ExpectedRevision\" value=\"([^\"]+)\"");
+            if (revision.Success) values["ExpectedRevision"] = WebUtility.HtmlDecode(revision.Groups[1].Value);
+        }
         values["__RequestVerificationToken"] = WebUtility.HtmlDecode(Regex.Match(html, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value);
         var request = new HttpRequestMessage(HttpMethod.Post, action) { Content = new FormUrlEncodedContent(values) };
         request.Headers.Add("Cookie", form.Headers.GetValues("Set-Cookie").Single(value => value.StartsWith(".AspNetCore.Antiforgery.", StringComparison.Ordinal)).Split(';')[0]);
@@ -407,17 +436,104 @@ public sealed class DashboardMappingTests
     }
 
     [Fact]
-    public async Task Feature_list_filters_and_paginates_on_the_server_and_uses_the_configured_application_name()
+    public async Task Feature_list_filters_the_full_catalog_and_uses_the_configured_application_name()
     {
         await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, featureCount: 51, applicationName: "Orders");
 
-        var firstPage = await host.Client.GetStringAsync("/features/?state=enabled&page=1");
-        var secondPage = await host.Client.GetStringAsync("/features/?state=enabled&page=2");
+        var list = await host.Client.GetStringAsync("/features/");
         var filtered = await host.Client.GetStringAsync("/features/?search=Feature%2051");
 
-        firstPage.Should().Contain("Orders").And.Contain("Feature 01").And.NotContain("Feature 51");
-        secondPage.Should().Contain("Feature 51").And.NotContain("Feature 01");
+        list.Should().Contain("Orders").And.Contain("Feature 01").And.Contain("Feature 51").And.Contain("logo-light.svg").And.Contain("Copy C#");
         filtered.Should().Contain("Feature 51").And.NotContain("Feature 50");
+    }
+
+    [Fact]
+    public async Task Saving_an_empty_on_draft_inserts_AlwaysOn()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        (await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Checkout", ["Name"] = "Checkout"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        var response = await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "Checkout", ["Enabled"] = "true"
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.SeeOther, await response.Content.ReadAsStringAsync());
+        host.Feature("Checkout")!.Enabled.Should().BeTrue();
+        host.Feature("Checkout")!.Rules.Should().ContainSingle().Which.Name.Should().Be("AlwaysOn");
+        host.Feature("Checkout")!.Rules[0].Parameters.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Entity_only_conditions_do_not_inject_AlwaysOn()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        (await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "LargeOrder", ["Name"] = "Large order", ["ContextKind"] = "Order"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        (await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "LargeOrder", ["Enabled"] = "true", ["Rules[0].Name"] = "ContextProperty", ["Rules[0].ContextKind"] = "Order",
+            ["Rules[0].Property"] = "Total", ["Rules[0].Operator"] = "gte", ["Rules[0].Value"] = "100"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        host.Feature("LargeOrder")!.Rules.Select(rule => rule.Name).Should().Equal("ContextProperty");
+    }
+
+    [Fact]
+    public async Task Turning_a_feature_off_clears_filters_and_settings_preserve_them()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        (await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Checkout", ["Name"] = "Checkout", ["Category"] = "Commerce"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        (await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "Checkout", ["Enabled"] = "true", ["Rules[0].Name"] = "Percentage", ["Rules[0].Percentage"] = "10"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        (await PostForm(host, "/features/features/edit?key=Checkout", "/features/features/save", new()
+        {
+            ["Key"] = "Checkout", ["Name"] = "Checkout renamed", ["Category"] = "Commerce"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        host.Feature("Checkout")!.Name.Should().Be("Checkout renamed");
+        host.Feature("Checkout")!.Enabled.Should().BeTrue();
+        host.Feature("Checkout")!.Rules.Should().ContainSingle().Which.Name.Should().Be("Percentage");
+        (await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "Checkout", ["Enabled"] = "false"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        host.Feature("Checkout")!.Enabled.Should().BeFalse();
+        host.Feature("Checkout")!.Rules.Should().BeEmpty();
+        host.Feature("Checkout")!.Category.Should().Be("Commerce");
+    }
+
+    [Fact]
+    public async Task Category_search_and_copy_csharp_cover_the_catalog()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        (await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "foo.bar", ["Name"] = "Dotted", ["Category"] = "Commerce"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        (await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["Key"] = "foo_bar", ["Name"] = "Underscore", ["Category"] = "Commerce"
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        var html = await host.Client.GetStringAsync("/features/?category=Commerce");
+        html.Should().Contain("Dotted").And.Contain("Underscore").And.Contain("public enum FeatureFlags").And.Contain("foo_bar__2");
+        var search = await host.Client.GetStringAsync("/features/?search=foo.bar");
+        search.Should().Contain("Dotted").And.NotContain("Underscore");
+        var two = await PostForm(host, "/features/", "/features/features/conditions", new()
+        {
+            ["Key"] = "foo.bar", ["Enabled"] = "true", ["Rules[0].Name"] = "AlwaysOn", ["Rules[1].Name"] = "Percentage", ["Rules[1].Percentage"] = "10"
+        });
+        two.StatusCode.Should().Be(HttpStatusCode.SeeOther, await two.Content.ReadAsStringAsync());
+        var expanded = await host.Client.GetStringAsync("/features/?expand=foo.bar");
+        expanded.Should().Contain("Match any").And.Contain("Match all");
+        var single = await host.Client.GetStringAsync("/features/?expand=foo_bar");
+        single.Should().Contain("data-match-group=\"user\"").And.Contain("is-hidden");
     }
 
     [Fact]

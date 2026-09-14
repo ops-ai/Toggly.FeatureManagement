@@ -33,23 +33,12 @@ public sealed class TogglyDashboardController : Controller
     }
 
     /// <summary>Lists the catalog features.</summary>
-    public async Task<IActionResult> Index(string? search, string? state, string? tag, int page = 1)
+    public async Task<IActionResult> Index(string? search, string? tag, string? category, string? sort, string? expand)
     {
         try
         {
             var snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
-            return View(new DashboardFeatureListViewModel
-            {
-                CatalogExists = snapshot != null,
-                Revision = snapshot?.Revision ?? string.Empty,
-                Features = FilterFeatures(snapshot?.Document.Features ?? [], search, state, tag),
-                ReadOnly = WritesUnavailable,
-                Search = search ?? string.Empty,
-                State = state ?? string.Empty,
-                Tag = tag ?? string.Empty,
-                Page = Math.Max(page, 1),
-                Tags = snapshot?.Document.Features.SelectMany(feature => feature.Tags).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList() ?? []
-            });
+            return View(BuildList(snapshot, search, tag, category, sort, expand, null));
         }
         catch (Exception)
         {
@@ -74,10 +63,9 @@ public sealed class TogglyDashboardController : Controller
 
     /// <summary>Creates a disabled feature when the catalog has not changed.</summary>
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName)
+    public async Task<IActionResult> Create(DashboardFeatureInput input)
     {
         input.IsNew = true;
-        if (ApplyRuleEditorCommand(input, command, removeRuleIndex, newRuleName)) return View("New", input);
         input.Enabled = false;
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
@@ -90,7 +78,7 @@ public sealed class TogglyDashboardController : Controller
             return ValidationView("New", input);
         }
 
-        snapshot.Document.Features.Add(input.ToFeature());
+        snapshot.Document.Features.Add(input.ToNewFeature());
         return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, "Index", input).ConfigureAwait(false);
     }
 
@@ -107,33 +95,45 @@ public sealed class TogglyDashboardController : Controller
 
     /// <summary>Saves editable metadata while preserving retained targeting rules.</summary>
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Save(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName)
+    public async Task<IActionResult> Save(DashboardFeatureInput input)
     {
         input.IsNew = false;
-        if (ApplyRuleEditorCommand(input, command, removeRuleIndex, newRuleName)) return View("Edit", input);
         if (!ModelState.IsValid) return ValidationView("Edit", input);
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
         catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
         var existing = snapshot?.Document.Features.SingleOrDefault(candidate => string.Equals(candidate.Key, input.Key, StringComparison.Ordinal));
         if (snapshot == null || existing == null) return NotFound();
-        snapshot.Document.Features[snapshot.Document.Features.IndexOf(existing)] = input.ToFeature(existing);
+        input.ApplyMetadata(existing);
         return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, "Edit", input).ConfigureAwait(false);
     }
 
-    /// <summary>Sets an explicit enabled state without deleting rules.</summary>
+    /// <summary>Persists the expanded conditions draft for one feature.</summary>
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> State(string key, bool? enabled, string expectedRevision)
+    public async Task<IActionResult> Conditions(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName)
     {
-        if (!ModelState.IsValid || enabled == null || string.IsNullOrEmpty(key) || string.IsNullOrEmpty(expectedRevision))
-            return BadRequest("A feature key, expected revision, and explicit true or false enabled state are required.");
+        input.IsNew = false;
         CatalogSnapshot? snapshot;
         try { snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false); }
         catch (Exception) { return StatusCode(StatusCodes.Status503ServiceUnavailable, "Catalog storage is unavailable."); }
-        var feature = snapshot?.Document.Features.SingleOrDefault(candidate => string.Equals(candidate.Key, key, StringComparison.Ordinal));
-        if (snapshot == null || feature == null) return NotFound();
-        feature.Enabled = enabled.Value;
-        return await WriteOrConflictAsync(snapshot.Document, expectedRevision, "Index", null).ConfigureAwait(false);
+        var existing = snapshot?.Document.Features.SingleOrDefault(candidate => string.Equals(candidate.Key, input.Key, StringComparison.Ordinal));
+        if (snapshot == null || existing == null) return NotFound();
+        SetContextKinds(snapshot);
+        input.Name = existing.Name;
+        input.ContextKind = existing.ContextKind;
+        ModelState.Remove(nameof(DashboardFeatureInput.Name));
+        ModelState.Remove(nameof(DashboardFeatureInput.Description));
+        ModelState.Remove(nameof(DashboardFeatureInput.Category));
+        ModelState.Remove(nameof(DashboardFeatureInput.Tags));
+        if (ApplyRuleEditorCommand(input, command, removeRuleIndex, newRuleName))
+            return Response.StatusCode == StatusCodes.Status400BadRequest
+                ? ConditionsView(snapshot, input)
+                : View("Index", BuildList(snapshot, Request.Query["search"], Request.Query["tag"], Request.Query["category"], Request.Query["sort"], input.Key, input));
+        if (input.Enabled == null)
+            return BadRequest("A feature key, expected revision, and explicit true or false enabled state are required.");
+        if (!ModelState.IsValid) return ConditionsView(snapshot, input);
+        input.ApplyConditions(existing);
+        return await WriteOrConflictAsync(snapshot.Document, input.ExpectedRevision, "Index", input).ConfigureAwait(false);
     }
 
     /// <summary>Shows a destructive-action confirmation page.</summary>
@@ -261,6 +261,14 @@ public sealed class TogglyDashboardController : Controller
         ViewData["DashboardMount"] = metadata?.MountPath ?? string.Empty;
         ViewData["ApplicationName"] = metadata?.ApplicationName ?? "Application";
         ViewData["ReadOnly"] = WritesUnavailable;
+        ViewData["ActiveTab"] = context.RouteData.Values["action"]?.ToString() switch
+        {
+            "Contexts" => "contexts",
+            "Storage" => "storage",
+            "Import" or "ImportPreview" or "ImportApply" => "import",
+            "Cloud" => "cloud",
+            _ => "features"
+        };
         SetContextKinds(null);
         ViewData["AntiforgeryToken"] = _antiforgery.GetAndStoreTokens(context.HttpContext).RequestToken ?? string.Empty;
         context.HttpContext.Response.Headers.CacheControl = "private, no-store";
@@ -298,6 +306,11 @@ public sealed class TogglyDashboardController : Controller
         {
             foreach (var error in exception.Errors) ModelState.AddModelError(error.Path, error.Message);
             Response.StatusCode = StatusCodes.Status400BadRequest;
+            if (successAction == "Index" && input != null && !input.IsNew)
+            {
+                var snapshot = await _editor.ReadAsync(HttpContext.RequestAborted).ConfigureAwait(false);
+                return snapshot == null ? View("Validation", input) : ConditionsView(snapshot, input);
+            }
             return View(input == null ? "Validation" : input.IsNew ? "New" : "Edit", input);
         }
         catch (InvalidOperationException)
@@ -318,30 +331,73 @@ public sealed class TogglyDashboardController : Controller
         return View("Import");
     }
 
+    private ViewResult ConditionsView(CatalogSnapshot snapshot, DashboardFeatureInput input)
+    {
+        Response.StatusCode = StatusCodes.Status400BadRequest;
+        return View("Index", BuildList(snapshot, Request.Query["search"], Request.Query["tag"], Request.Query["category"], Request.Query["sort"], input.Key, input));
+    }
+
+    private DashboardFeatureListViewModel BuildList(CatalogSnapshot? snapshot, string? search, string? tag, string? category, string? sort, string? expand, DashboardFeatureInput? draft)
+    {
+        var all = snapshot?.Document.Features ?? [];
+        return new DashboardFeatureListViewModel
+        {
+            CatalogExists = snapshot != null,
+            Revision = snapshot?.Revision ?? string.Empty,
+            Features = FilterFeatures(all, search, tag, category, sort),
+            AllFeatures = all,
+            ReadOnly = WritesUnavailable,
+            Search = search ?? string.Empty,
+            Tag = tag ?? string.Empty,
+            Category = category ?? string.Empty,
+            Sort = string.Equals(sort, "za", StringComparison.OrdinalIgnoreCase) ? "za" : "az",
+            Expand = expand ?? string.Empty,
+            Tags = all.SelectMany(feature => feature.Tags).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+            Categories = all.Select(feature => feature.Category).Where(value => !string.IsNullOrEmpty(value)).Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).Cast<string>().ToList(),
+            UncategorizedCount = all.Count(feature => string.IsNullOrEmpty(feature.Category)),
+            CopyCSharp = FeatureFlagsEnum.Generate(all),
+            ConditionsDraft = draft
+        };
+    }
+
     private ViewResult ValidationView(string viewName, DashboardFeatureInput input)
     {
         Response.StatusCode = StatusCodes.Status400BadRequest;
         return View(viewName, input);
     }
 
-    private static IReadOnlyList<CatalogFeature> FilterFeatures(IReadOnlyList<CatalogFeature> features, string? search, string? state, string? tag)
+    private static IReadOnlyList<CatalogFeature> FilterFeatures(IReadOnlyList<CatalogFeature> features, string? search, string? tag, string? category, string? sort)
     {
         IEnumerable<CatalogFeature> query = features;
         if (!string.IsNullOrWhiteSpace(search))
         {
-            query = query.Where(feature => feature.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || feature.Key.Contains(search, StringComparison.OrdinalIgnoreCase) || feature.Description.Contains(search, StringComparison.OrdinalIgnoreCase) || feature.Tags.Any(value => value.Contains(search, StringComparison.OrdinalIgnoreCase)));
+            query = query.Where(feature =>
+                feature.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                feature.Key.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (feature.Category ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase));
         }
-        if (string.Equals(state, "enabled", StringComparison.OrdinalIgnoreCase)) query = query.Where(feature => feature.Enabled);
-        if (string.Equals(state, "disabled", StringComparison.OrdinalIgnoreCase)) query = query.Where(feature => !feature.Enabled);
         if (!string.IsNullOrWhiteSpace(tag)) query = query.Where(feature => feature.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase));
-        return query.OrderBy(feature => feature.Name, StringComparer.OrdinalIgnoreCase).ThenBy(feature => feature.Key, StringComparer.Ordinal).ToList();
+        if (string.Equals(category, "__uncategorized", StringComparison.Ordinal))
+            query = query.Where(feature => string.IsNullOrEmpty(feature.Category));
+        else if (!string.IsNullOrWhiteSpace(category))
+            query = query.Where(feature => string.Equals(feature.Category, category, StringComparison.Ordinal));
+        var ordered = string.Equals(sort, "za", StringComparison.OrdinalIgnoreCase)
+            ? query.OrderByDescending(feature => feature.Name, StringComparer.OrdinalIgnoreCase)
+            : query.OrderBy(feature => feature.Name, StringComparer.OrdinalIgnoreCase);
+        return ordered.ThenBy(feature => feature.Key, StringComparer.Ordinal).ToList();
     }
 
     private bool ApplyRuleEditorCommand(DashboardFeatureInput input, string? command, int? removeRuleIndex, string? newRuleName)
     {
+        if (string.Equals(command, "add-entity", StringComparison.Ordinal))
+        {
+            input.Rules.Add(new DashboardRuleInput { Name = "ContextProperty", ContextKind = input.ContextKind ?? string.Empty });
+            ModelState.Clear();
+            return true;
+        }
         if (string.Equals(command, "add-rule", StringComparison.Ordinal))
         {
-            if (newRuleName == null || !DashboardRuleInput.SupportedNames.ContainsKey(newRuleName))
+            if (newRuleName == null || !DashboardRuleInput.UserFilterNames.ContainsKey(newRuleName))
             {
                 ModelState.AddModelError("newRuleName", "Select a supported rule type.");
                 Response.StatusCode = StatusCodes.Status400BadRequest;

@@ -132,6 +132,7 @@ namespace Toggly.FeatureManagement.Catalog
                 Key = feature.Key,
                 Name = feature.Name,
                 Description = feature.Description,
+                Category = string.IsNullOrEmpty(feature.Category) ? null : feature.Category,
                 Tags = feature.Tags.OrderBy(tag => tag, StringComparer.Ordinal).ToList(),
                 Enabled = feature.Enabled,
                 RequirementType = feature.RequirementType,

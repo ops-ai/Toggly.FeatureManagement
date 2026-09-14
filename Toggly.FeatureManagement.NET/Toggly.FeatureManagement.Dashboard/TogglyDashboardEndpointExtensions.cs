@@ -40,7 +40,7 @@ public static class TogglyDashboardEndpointExtensions
         MapController(group, "create", "features/create", "Create", HttpMethods.Post);
         MapController(group, "edit", "features/edit", "Edit", HttpMethods.Get);
         MapController(group, "save", "features/save", "Save", HttpMethods.Post);
-        MapController(group, "state", "features/state", "State", HttpMethods.Post);
+        MapController(group, "conditions", "features/conditions", "Conditions", HttpMethods.Post);
         MapController(group, "delete-confirm", "features/delete", "DeleteConfirm", HttpMethods.Get);
         MapController(group, "delete", "features/delete", "Delete", HttpMethods.Post);
         MapController(group, "initialize", "initialize", "Initialize", HttpMethods.Post);
@@ -89,7 +89,8 @@ internal static class DashboardAssets
     private static readonly IReadOnlyDictionary<string, string> Names = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["dashboard.css"] = "Toggly.FeatureManagement.Dashboard.Assets.dashboard.css",
-        ["dashboard.js"] = "Toggly.FeatureManagement.Dashboard.Assets.dashboard.js"
+        ["dashboard.js"] = "Toggly.FeatureManagement.Dashboard.Assets.dashboard.js",
+        ["logo-light.svg"] = "Toggly.FeatureManagement.Dashboard.Assets.logo-light.svg"
     };
 
     internal static async Task<IResult> GetAsync(string name)
@@ -99,7 +100,9 @@ internal static class DashboardAssets
         if (stream == null) return Results.NotFound();
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory).ConfigureAwait(false);
-        var contentType = name.EndsWith(".css", StringComparison.Ordinal) ? "text/css; charset=utf-8" : "application/javascript; charset=utf-8";
+        var contentType = name.EndsWith(".css", StringComparison.Ordinal) ? "text/css; charset=utf-8"
+            : name.EndsWith(".svg", StringComparison.Ordinal) ? "image/svg+xml; charset=utf-8"
+            : "application/javascript; charset=utf-8";
         return Results.File(memory.ToArray(), contentType, enableRangeProcessing: false, lastModified: null, entityTag: null, fileDownloadName: null);
     }
 }

@@ -48,6 +48,10 @@ namespace Toggly.FeatureManagement.Catalog
         [JsonPropertyName("description")]
         public string Description { get; set; } = string.Empty;
 
+        [JsonPropertyName("category")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Category { get; set; }
+
         [JsonPropertyName("tags")]
         public List<string> Tags { get; set; } = new List<string>();
 

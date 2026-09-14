@@ -43,8 +43,9 @@ dedicated SQLite sample initializes its own database explicitly. Catalog content
 is initialized separately through the dashboard's Initialize or Import action.
 
 Use `IFeatureManager` and `IFeatureManagerSnapshot` as with the normal SDK. New
-features start disabled. Turning a feature off retains its targeting rules;
-turning it back on restores them. Deleting a feature makes it evaluate false.
+features start disabled. Turn a feature on from the list and save conditions to
+persist targeting. Turning a feature off and saving clears its targeting filters.
+Deleting a feature makes it evaluate false.
 
 ## Access and deployment
 

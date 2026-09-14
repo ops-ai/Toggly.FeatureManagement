@@ -1,3 +1,5 @@
 @model DashboardFeatureInput
 @{ Layout = "_Layout"; ViewData["Title"] = "Create feature"; }
-<h1>Create feature</h1><p>New features start disabled.</p><partial name="_FeatureForm" model="Model" />
+<section class="page-heading"><div><p class="eyebrow">Feature settings</p><h1>Create feature</h1></div></section>
+<p class="lede">New features start disabled with no targeting filters. Add conditions from the features list after you save.</p>
+<partial name="_FeatureForm" model="Model" />

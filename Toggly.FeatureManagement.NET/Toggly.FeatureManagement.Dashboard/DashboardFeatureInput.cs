@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text;
+using System.Text.RegularExpressions;
 using Toggly.FeatureManagement.Catalog;
 
 namespace Toggly.FeatureManagement.Dashboard;
@@ -16,9 +18,12 @@ public sealed class DashboardFeatureInput
     [StringLength(8000)]
     public string? Description { get; set; }
 
+    [StringLength(200)]
+    public string? Category { get; set; }
+
     public string? Tags { get; set; }
 
-    public bool Enabled { get; set; }
+    public bool? Enabled { get; set; }
 
     [Required]
     public string ExpectedRevision { get; set; } = string.Empty;
@@ -34,6 +39,7 @@ public sealed class DashboardFeatureInput
         Key = feature.Key,
         Name = feature.Name,
         Description = feature.Description,
+        Category = feature.Category,
         Tags = string.Join("\n", feature.Tags),
         Enabled = feature.Enabled,
         ExpectedRevision = revision,
@@ -43,18 +49,51 @@ public sealed class DashboardFeatureInput
         Rules = feature.Rules.Select(DashboardRuleInput.FromRule).ToList()
     };
 
-    internal CatalogFeature ToFeature(CatalogFeature? existing = null) => new()
+    internal CatalogFeature ToNewFeature() => new()
     {
         Key = Key.Trim(),
         Name = Name.Trim(),
         Description = Description?.Trim() ?? string.Empty,
-        Tags = (Tags ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList(),
-        Enabled = Enabled,
-        RequirementType = RequirementType,
-        ContextKind = ContextKind,
+        Category = Category?.Trim() ?? string.Empty,
+        Tags = SplitTags(),
+        Enabled = false,
+        RequirementType = CatalogRequirementType.Any,
+        ContextKind = string.IsNullOrWhiteSpace(ContextKind) ? null : ContextKind,
         ContextRequirementType = ContextRequirementType,
-        Rules = Rules.Select(rule => rule.ToRule()).ToList()
+        Rules = []
     };
+
+    internal void ApplyMetadata(CatalogFeature existing)
+    {
+        existing.Name = Name.Trim();
+        existing.Description = Description?.Trim() ?? string.Empty;
+        existing.Category = Category?.Trim() ?? string.Empty;
+        existing.Tags = SplitTags();
+        var previousKind = existing.ContextKind;
+        existing.ContextKind = string.IsNullOrWhiteSpace(ContextKind) ? null : ContextKind.Trim();
+        if (!string.Equals(previousKind, existing.ContextKind, StringComparison.OrdinalIgnoreCase))
+            existing.Rules.RemoveAll(rule => string.Equals(rule.Name, "ContextProperty", StringComparison.Ordinal));
+    }
+
+    internal void ApplyConditions(CatalogFeature existing)
+    {
+        existing.Enabled = Enabled.GetValueOrDefault();
+        existing.RequirementType = RequirementType;
+        existing.ContextRequirementType = ContextRequirementType;
+        if (!existing.Enabled)
+        {
+            existing.Rules = [];
+            return;
+        }
+
+        var rules = Rules.Select(rule => rule.ToRule()).ToList();
+        if (rules.Count == 0)
+            rules.Add(new CatalogRule { Name = "AlwaysOn", Parameters = new Dictionary<string, string>(StringComparer.Ordinal) });
+        existing.Rules = rules;
+    }
+
+    private List<string> SplitTags() =>
+        (Tags ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
 }
 
 /// <summary>A dashboard row for a built-in Toggly targeting filter.</summary>
@@ -62,10 +101,15 @@ public sealed class DashboardRuleInput
 {
     internal static IReadOnlyDictionary<string, string> SupportedNames { get; } = new Dictionary<string, string>
     {
-        ["Percentage"] = "Percentage", ["Targeting"] = "Users/groups", ["TimeWindow"] = "Schedule",
+        ["AlwaysOn"] = "Always On", ["Percentage"] = "Percentage", ["Targeting"] = "Users/groups", ["TimeWindow"] = "Schedule",
         ["ContextProperty"] = "Entity property", ["BrowserFamily"] = "Browser", ["BrowserLanguage"] = "Language",
         ["OS"] = "Operating system", ["DeviceType"] = "Device", ["CountryFamily"] = "Country", ["UserClaims"] = "Claim"
     };
+
+    internal static IReadOnlyDictionary<string, string> UserFilterNames { get; } = SupportedNames
+        .Where(pair => pair.Key != "ContextProperty")
+        .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+
     public string Name { get; set; } = "Percentage";
     public string? Values { get; set; } = string.Empty;
     public string? Users { get; set; } = string.Empty;
@@ -86,7 +130,8 @@ public sealed class DashboardRuleInput
     internal CatalogRule ToRule()
     {
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (Name == "Percentage") parameters["Value"] = Percentage;
+        if (Name == "AlwaysOn") { }
+        else if (Name == "Percentage") parameters["Value"] = Percentage;
         else if (Name == "Targeting")
         {
             AddIndexed(parameters, "Audience.Users", Users);
@@ -139,25 +184,76 @@ public sealed class DashboardRuleInput
         return input;
     }
 
+    internal static bool IsEntityRule(string name) => string.Equals(name, "ContextProperty", StringComparison.Ordinal);
+
     private static string Get(CatalogRule rule, string key, string fallback) => rule.Parameters.TryGetValue(key, out var value) ? value : fallback;
     private static void AddIndexed(IDictionary<string, string> parameters, string prefix, string? values)
     {
-        foreach (var value in (values ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select((value, index) => new { value, index })) parameters[$"{prefix}:{value.index}"] = value.value;
+        foreach (var value in (values ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select((value, index) => new { value, index })) parameters[$"{prefix}:{value.index}"] = value.value;
     }
     private static string Indexed(CatalogRule rule, string prefix) => string.Join("\n", rule.Parameters.Where(pair => pair.Key.StartsWith(prefix + ":", StringComparison.Ordinal)).OrderBy(pair => int.Parse(pair.Key[(prefix.Length + 1)..], System.Globalization.CultureInfo.InvariantCulture)).Select(pair => pair.Value));
+}
+
+internal static class FeatureFlagsEnum
+{
+    private static readonly Regex ValidMember = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    internal static string Generate(IEnumerable<CatalogFeature> features)
+    {
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        var members = new List<string>();
+        foreach (var key in features.Select(feature => feature.Key).OrderBy(key => key, StringComparer.Ordinal))
+        {
+            var member = Sanitize(key);
+            if (seen.TryGetValue(member, out var count))
+            {
+                count++;
+                seen[member] = count;
+                member += "__" + count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            else seen[member] = 1;
+            members.Add(member);
+        }
+
+        var builder = new StringBuilder();
+        builder.AppendLine("public enum FeatureFlags");
+        builder.AppendLine("{");
+        for (var index = 0; index < members.Count; index++)
+        {
+            builder.Append("    ");
+            builder.Append(members[index]);
+            builder.AppendLine(index == members.Count - 1 ? "" : ",");
+        }
+        builder.Append('}');
+        return builder.ToString();
+    }
+
+    internal static string Sanitize(string key)
+    {
+        if (ValidMember.IsMatch(key)) return key;
+        var sanitized = key.Replace('.', '_').Replace(':', '_').Replace('-', '_');
+        if (sanitized.Length == 0 || char.IsDigit(sanitized[0])) sanitized = "_" + sanitized;
+        return sanitized;
+    }
 }
 
 internal sealed class DashboardFeatureListViewModel
 {
     internal required string Revision { get; init; }
     internal required IReadOnlyList<CatalogFeature> Features { get; init; }
+    internal required IReadOnlyList<CatalogFeature> AllFeatures { get; init; }
     internal bool CatalogExists { get; init; }
     internal bool ReadOnly { get; init; }
     internal string Search { get; init; } = string.Empty;
-    internal string State { get; init; } = string.Empty;
+    internal string Category { get; init; } = string.Empty;
     internal string Tag { get; init; } = string.Empty;
-    internal int Page { get; init; }
+    internal string Sort { get; init; } = "az";
+    internal string Expand { get; init; } = string.Empty;
     internal IReadOnlyList<string> Tags { get; init; } = [];
+    internal IReadOnlyList<string> Categories { get; init; } = [];
+    internal int UncategorizedCount { get; init; }
+    internal string CopyCSharp { get; init; } = string.Empty;
+    internal DashboardFeatureInput? ConditionsDraft { get; init; }
 }
 
 internal sealed class DashboardContextsViewModel

@@ -5,92 +5,42 @@
     var isNew = Model.IsNew;
     var readOnly = ViewData["ReadOnly"] as bool? ?? false;
 }
-<form method="post" action="@(isNew ? basePath + "/features/create" : basePath + "/features/save")" class="card form-card" data-unsaved-warning>
+<form method="post" action="@(isNew ? basePath + "/features/create" : basePath + "/features/save")" class="card form-card settings-card" data-unsaved-warning>
     <input type="hidden" name="__RequestVerificationToken" value="@ViewData["AntiforgeryToken"]" />
     <div asp-validation-summary="All" class="validation-summary" tabindex="-1" role="alert"></div>
     <input type="hidden" asp-for="ExpectedRevision" />
     <input type="hidden" asp-for="IsNew" />
-    <label>Name<input asp-for="Name" autocomplete="off" /></label><span asp-validation-for="Name"></span>
-    <label>Key<input asp-for="Key" autocomplete="off" readonly="@(!isNew)" /></label><span asp-validation-for="Key"></span>
-    <label asp-for="Description"></label><textarea asp-for="Description" rows="4"></textarea><span asp-validation-for="Description"></span>
-    <label asp-for="Tags">Tags (one per line)</label><textarea asp-for="Tags" rows="2"></textarea>
-    <label>User rule combination <select asp-for="RequirementType"><option value="Any">Any rule matches</option><option value="All">All rules match</option></select></label>
-    <label>Entity context kind <select asp-for="ContextKind"><option value="">No entity context</option>
+    <h2>Basic Information</h2>
+    <label for="Key">Feature Key</label>
+    <input asp-for="Key" id="Key" autocomplete="off" readonly="@(!isNew)" />
+    <span asp-validation-for="Key"></span>
+    <label for="Name">Feature Name</label>
+    <input asp-for="Name" id="Name" autocomplete="off" />
+    <span asp-validation-for="Name"></span>
+    <label for="Description">Description</label>
+    <textarea asp-for="Description" id="Description" rows="4"></textarea>
+    <span asp-validation-for="Description"></span>
+    <label for="Category">Category</label>
+    <input asp-for="Category" id="Category" autocomplete="off" />
+    <span asp-validation-for="Category"></span>
+    <label for="Tags">Tags</label>
+    <textarea asp-for="Tags" id="Tags" rows="2"></textarea>
+    <p class="hint">One tag per line. Literal commas are preserved.</p>
+    <label for="ContextKind">Entity context kind</label>
+    <select asp-for="ContextKind" id="ContextKind">
+        <option value="">No entity context</option>
         @foreach (var kind in ((IEnumerable<string>?)ViewData["ContextKinds"] ?? []).Append(Model.ContextKind ?? "").Where(kind => kind.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             <option value="@kind">@kind</option>
         }
-    </select></label>
-    <label>Entity rule combination <select asp-for="ContextRequirementType"><option value="">Use user combination</option><option value="Any">Any rule matches</option><option value="All">All rules match</option></select></label>
-    <fieldset><legend>Targeting rules</legend>
-    <p>User and web rules use the user combination above. Entity rules use the entity combination.
-       When both groups are present, both groups must match.</p>
-    <p>With the built-in HTTP targeting accessor, user IDs come from <code>User.Identity.Name</code>
-       and group IDs come from <code>"group"</code> claims. Keep your host's custom accessor when migrating.</p>
-    @for (var index = 0; index < Model.Rules.Count; index++)
-    {
-        var rule = Model.Rules[index];
-        <fieldset class="rule-row">
-            <legend>@(DashboardRuleInput.SupportedNames.GetValueOrDefault(rule.Name, rule.Name)) rule @(index + 1)</legend>
-            <input type="hidden" name="Rules[@index].Name" value="@rule.Name" />
-            @if (rule.Name == "Targeting")
-            {
-                <p>Enter one literal identifier per line. No reusable SaaS lists are used.</p>
-                <label for="rule-@index-Users">Users</label><textarea id="rule-@index-Users" name="Rules[@index].Users">@rule.Users</textarea>
-                <label for="rule-@index-Groups">Groups</label><textarea id="rule-@index-Groups" name="Rules[@index].Groups">@rule.Groups</textarea>
-                <label for="rule-@index-ExclusionUsers">Excluded users</label><textarea id="rule-@index-ExclusionUsers" name="Rules[@index].ExclusionUsers">@rule.ExclusionUsers</textarea>
-                <label for="rule-@index-ExclusionGroups">Excluded groups</label><textarea id="rule-@index-ExclusionGroups" name="Rules[@index].ExclusionGroups">@rule.ExclusionGroups</textarea>
-                <label>Ignore case<select name="Rules[@index].IgnoreCase">
-                    <option value="true" selected="@rule.IgnoreCase">Yes</option>
-                    <option value="false" selected="@(!rule.IgnoreCase)">No</option>
-                </select></label>
-            }
-            @if (rule.Name == "TimeWindow")
-            {
-                <p>Use ISO-8601 dates with a timezone offset, for example 2026-09-12T09:00:00-05:00. Supply start, end, or both.</p>
-                <label>Start<input name="Rules[@index].Start" value="@rule.Start" /></label>
-                <label>End<input name="Rules[@index].End" value="@rule.End" /></label>
-            }
-            @if (rule.Name == "ContextProperty")
-            {
-                <label>Context kind<input name="Rules[@index].ContextKind" value="@rule.ContextKind" /></label>
-                <label>Property<input name="Rules[@index].Property" value="@rule.Property" /></label>
-                <label>Operator<select name="Rules[@index].Operator">
-                    @foreach (var op in new[] { "eq", "neq", "gt", "gte", "lt", "lte", "in", "contains" })
-                    {
-                        <option value="@op" selected="@(rule.Operator == op)">@op</option>
-                    }
-                </select></label>
-                <label>Value<input name="Rules[@index].Value" value="@rule.Value" /></label>
-                <p>The value type and allowed operators are validated against the context schema.</p>
-            }
-            @if (rule.Name == "UserClaims")
-            {
-                <label>Claim<input name="Rules[@index].Claim" value="@rule.Claim" /></label>
-                <label>Value<input name="Rules[@index].Value" value="@rule.Value" /></label>
-            }
-            @if (rule.Name is "BrowserFamily" or "BrowserLanguage" or "OS" or "DeviceType" or "CountryFamily")
-            {
-                <label for="rule-@index-Values">Values (one SDK value per line)</label><textarea id="rule-@index-Values" name="Rules[@index].Values">@rule.Values</textarea>
-            }
-            @if (rule.Name is not "TimeWindow" and not "ContextProperty")
-            {
-                <label>@(rule.Name == "Targeting" ? "Default rollout percentage" : "Percentage")
-                    <input name="Rules[@index].Percentage" value="@rule.Percentage" type="number" min="0" max="100" step="any" />
-                </label>
-            }
-            <button type="submit" name="removeRuleIndex" value="@index" formnovalidate>Remove rule</button>
-        </fieldset>
-    }
-    <label>New rule type<select name="newRuleName">
-        @foreach (var type in DashboardRuleInput.SupportedNames)
-        {
-            <option value="@type.Key">@type.Value</option>
-        }
-    </select></label>
-    <button type="submit" name="command" value="add-rule" formnovalidate disabled="@readOnly">Add rule</button>
-    </fieldset>
-    @if (!isNew) { <label class="checkbox"><input asp-for="Enabled" /> Enabled</label> }
+    </select>
     @if (readOnly) { <p role="status">Editing is unavailable in the current storage or read-only mode.</p> }
-    <div class="form-actions"><button type="submit" class="button" disabled="@readOnly">Save</button><a href="@basePath">Cancel</a></div>
+    <div class="form-actions">
+        <button type="submit" class="button" disabled="@readOnly">Save</button>
+        <a href="@basePath/">Cancel</a>
+        @if (!isNew)
+        {
+            <a class="danger-link" href="@basePath/features/delete?key=@Uri.EscapeDataString(Model.Key)">Delete</a>
+        }
+    </div>
 </form>

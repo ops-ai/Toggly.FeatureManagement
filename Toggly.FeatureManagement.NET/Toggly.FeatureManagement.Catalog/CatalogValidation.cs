@@ -68,7 +68,7 @@ namespace Toggly.FeatureManagement.Catalog
 
         private static readonly HashSet<string> KnownFilters = new HashSet<string>(StringComparer.Ordinal)
         {
-            "Percentage", "Targeting", "TimeWindow", "ContextProperty", "BrowserFamily", "BrowserLanguage",
+            "AlwaysOn", "Percentage", "Targeting", "TimeWindow", "ContextProperty", "BrowserFamily", "BrowserLanguage",
             "OS", "DeviceType", "CountryFamily", "UserClaims"
         };
 
@@ -241,6 +241,11 @@ namespace Toggly.FeatureManagement.Catalog
                     errors.Add(new CatalogValidationError(path + ".name", "Feature name is required and must be at most 200 characters."));
                 }
 
+                if (feature.Category != null && feature.Category.Trim().Length > 200)
+                {
+                    errors.Add(new CatalogValidationError(path + ".category", "Feature category must be at most 200 characters."));
+                }
+
                 if (feature.Description == null || feature.Description.Length > 8000)
                 {
                     errors.Add(new CatalogValidationError(path + ".description", "Description must be plain text and at most 8,000 characters."));
@@ -327,7 +332,11 @@ namespace Toggly.FeatureManagement.Catalog
                 return;
             }
 
-            if (rule.Name == "Percentage")
+            if (rule.Name == "AlwaysOn")
+            {
+                ValidateExactParameters(rule.Parameters, Array.Empty<string>(), Array.Empty<string>(), path, errors);
+            }
+            else if (rule.Name == "Percentage")
             {
                 ValidatePercentage(rule.Parameters, path, errors, "Value");
             }
@@ -648,6 +657,7 @@ namespace Toggly.FeatureManagement.Catalog
                         Key = sourceFeature.Key == null ? string.Empty : sourceFeature.Key.Trim(),
                         Name = sourceFeature.Name == null ? string.Empty : sourceFeature.Name.Trim(),
                         Description = sourceFeature.Description == null ? null! : sourceFeature.Description.Trim(),
+                        Category = string.IsNullOrWhiteSpace(sourceFeature.Category) ? string.Empty : sourceFeature.Category.Trim(),
                         Tags = NormalizeTags(sourceFeature.Tags),
                         Enabled = sourceFeature.Enabled,
                         RequirementType = sourceFeature.RequirementType,

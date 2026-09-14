@@ -1,5 +1,15 @@
 # Changelog
 
+## All .NET SDK packages 3.8.0 - 2026-09-14
+
+### Added
+- Optional feature `category` on the portable catalog, and `AlwaysOn` as a
+  known empty targeting filter.
+- SaaS-aligned embedded dashboard: official wordmark, pill header tabs,
+  feature cards, category browse, Copy C# `FeatureFlags` enum, and an inline
+  conditions panel. Settings save metadata only; turning a feature off and
+  saving clears targeting filters.
+
 ## All .NET SDK packages 3.7.0 - 2026-09-13
 
 ### Changed

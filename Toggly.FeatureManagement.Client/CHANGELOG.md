@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.8.0 — 2026-09-14
+
+### Changed
+- Align package and assembly versions with the shared .NET SDK version.
+
 ## 3.7.0 — 2026-09-13
 
 ### Changed

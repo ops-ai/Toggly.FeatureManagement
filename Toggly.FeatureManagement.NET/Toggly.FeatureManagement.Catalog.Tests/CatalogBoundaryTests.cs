@@ -20,6 +20,7 @@ public sealed class CatalogBoundaryTests
         yield return Case(d => d.Features[0].Rules = [null!], "features[0].rules[0]");
         yield return Case(d => d.Features[0].Rules = [new() { Name = "Percentage", Parameters = null! }], "features[0].rules[0].parameters");
         yield return Case(d => d.Features[0].Name = new string('x', 201), "features[0].name");
+        yield return Case(d => d.Features[0].Category = new string('x', 201), "features[0].category");
         yield return Case(d => d.Features[0].Description = new string('x', 8001), "features[0].description");
         yield return Case(d => d.Features[0].RequirementType = (CatalogRequirementType)99, "features[0].requirementType");
         yield return Case(d => d.Features[0].ContextRequirementType = (CatalogRequirementType)99, "features[0].contextRequirementType");

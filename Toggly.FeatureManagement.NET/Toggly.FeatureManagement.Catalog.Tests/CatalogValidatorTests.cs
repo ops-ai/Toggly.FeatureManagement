@@ -73,6 +73,37 @@ public sealed class CatalogValidatorTests
         result.Document!.Features[0].Key.Should().Be("Checkout");
         result.Document.Features[0].Name.Should().Be("Checkout");
         result.Document.Features[0].Tags.Should().Equal("alpha", "beta");
+        result.Document.Features[0].Category.Should().Be(string.Empty);
+    }
+
+    [Fact]
+    public void NormalizeAndValidate_trims_category_and_treats_whitespace_as_uncategorized()
+    {
+        var document = ValidDocument();
+        document.Features[0].Category = "  Checkout  ";
+
+        var trimmed = CatalogValidator.NormalizeAndValidate(document);
+        trimmed.IsValid.Should().BeTrue();
+        trimmed.Document!.Features[0].Category.Should().Be("Checkout");
+
+        document.Features[0].Category = "   ";
+        var empty = CatalogValidator.NormalizeAndValidate(document);
+        empty.IsValid.Should().BeTrue();
+        empty.Document!.Features[0].Category.Should().Be(string.Empty);
+    }
+
+    [Fact]
+    public void Validate_accepts_AlwaysOn_with_empty_parameters_and_rejects_unknown_parameters()
+    {
+        var document = ValidDocument();
+        document.Features[0].Rules = [new CatalogRule { Name = "AlwaysOn", Parameters = new Dictionary<string, string>() }];
+
+        CatalogValidator.Validate(document).IsValid.Should().BeTrue();
+
+        document.Features[0].Rules[0].Parameters["Value"] = "1";
+        var result = CatalogValidator.Validate(document);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(error => error.Path == "features[0].rules[0].parameters.Value");
     }
 
     [Fact]

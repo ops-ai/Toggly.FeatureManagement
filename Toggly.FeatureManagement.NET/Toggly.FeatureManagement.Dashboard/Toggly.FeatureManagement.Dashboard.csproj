@@ -22,5 +22,6 @@
     <None Update="README.md" Pack="true" PackagePath="" />
     <EmbeddedResource Include="Assets\dashboard.css" />
     <EmbeddedResource Include="Assets\dashboard.js" />
+    <EmbeddedResource Include="Assets\logo-light.svg" />
   </ItemGroup>
 </Project>
