@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `toggly-axum08` 0.1.0, a separate Axum 0.8 adapter. `toggly-axum` remains
+  the Axum 0.7 adapter, so existing applications keep their dependency types
+  and imports.
+
+### Changed
+- Expanded `toggly-actix`'s supported Actix-web 4.x range through 4.15 while
+  preserving the existing 4.4 floor. Current host validation also retains
+  Rocket 0.5.
+
 ## 0.6.0
 
 2026-09-08

@@ -1,0 +1,78 @@
+name: Rust Axum 0.8 SDK - Build & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_mode:
+        description: 'publish = use the package manifest version'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  SDK_ROOT: toggly-rust
+  PACKAGE: toggly-axum08
+  MANIFEST: toggly-rust/toggly-axum08/Cargo.toml
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.release.outputs.action }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.MANIFEST }}
+          registry: crates
+          package_name: toggly-axum08
+          release_mode: publish
+
+  build-and-test:
+    needs: validate
+    if: needs.validate.outputs.action == 'publish'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: toggly-rust
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy -p toggly-axum08 --all-targets -- -D warnings
+      - run: cargo test -p toggly-axum08
+      - run: cargo package -p toggly-axum08 --allow-dirty --no-verify
+      - name: Run the packaged Axum 0.8 host
+        run: |
+          archive="target/package/toggly-axum08-0.1.0.crate"
+          unpacked="$RUNNER_TEMP/toggly-axum08-package"
+          mkdir -p "$unpacked"
+          tar -xf "$archive" -C "$unpacked"
+          cargo run --manifest-path "$unpacked/toggly-axum08-0.1.0/Cargo.toml" \
+            --example current_host
+
+  release:
+    needs: [validate, build-and-test]
+    if: needs.validate.outputs.action == 'publish'
+    runs-on: ubuntu-latest
+    environment: crates-publish
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: crates_auth
+      - name: Publish Axum 0.8 adapter
+        working-directory: toggly-rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates_auth.outputs.token }}
+        run: cargo publish -p toggly-axum08

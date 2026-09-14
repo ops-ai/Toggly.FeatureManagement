@@ -31,6 +31,7 @@ High-performance Rust SDK for [Toggly](https://toggly.io) feature flags and expe
 | `toggly-macros` | Procedural macros for feature flags | [![crates.io](https://img.shields.io/crates/v/toggly-macros.svg)](https://crates.io/crates/toggly-macros) |
 | `toggly-actix` | Actix-web integration | [![crates.io](https://img.shields.io/crates/v/toggly-actix.svg)](https://crates.io/crates/toggly-actix) |
 | `toggly-axum` | Axum integration | [![crates.io](https://img.shields.io/crates/v/toggly-axum.svg)](https://crates.io/crates/toggly-axum) |
+| `toggly-axum08` | Axum 0.8 integration | [![crates.io](https://img.shields.io/crates/v/toggly-axum08.svg)](https://crates.io/crates/toggly-axum08) |
 | `toggly-rocket` | Rocket integration | [![crates.io](https://img.shields.io/crates/v/toggly-rocket.svg)](https://crates.io/crates/toggly-rocket) |
 
 ## Installation
@@ -53,6 +54,9 @@ toggly-actix = "0.1"
 
 # Axum
 toggly-axum = "0.1"
+
+# Axum 0.8 (keep `toggly-axum` for Axum 0.7)
+toggly-axum08 = "0.1"
 
 # Rocket
 toggly-rocket = "0.1"
