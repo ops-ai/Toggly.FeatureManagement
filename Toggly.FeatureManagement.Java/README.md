@@ -30,7 +30,7 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-core</artifactId>
-    <version>1.5.1</version>
+    <version>1.6.0</version>
 </dependency>
 
 <!-- Optional: send usage/metrics over gRPC -->
@@ -59,41 +59,48 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-boot-starter</artifactId>
-    <version>1.5.1</version>
+    <version>1.6.0</version>
 </dependency>
 
 <!-- Spring MVC -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-mvc</artifactId>
-    <version>1.5.1</version>
+    <version>1.6.0</version>
 </dependency>
 
 <!-- Spring WebFlux -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-webflux</artifactId>
-    <version>1.5.1</version>
+    <version>1.6.0</version>
 </dependency>
 
 <!-- Servlet -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-servlet</artifactId>
-    <version>1.5.1</version>
+    <version>1.6.0</version>
 </dependency>
 
 <!-- Caching (optional) -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-caffeine</artifactId>
-    <version>1.5.1</version>
+    <version>1.6.0</version>
 </dependency>
 
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-redis</artifactId>
-    <version>1.5.1</version>
+    <version>1.6.0</version>
+</dependency>
+
+<!-- Redis with Jedis 8.x (choose this instead of toggly-cache-redis) -->
+<dependency>
+    <groupId>io.toggly</groupId>
+    <artifactId>toggly-cache-redis-jedis8</artifactId>
+    <version>1.6.0</version>
 </dependency>
 ```
 
@@ -101,10 +108,10 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 
 ```kotlin
 // Core
-implementation("io.toggly:toggly-core:1.5.1")
+implementation("io.toggly:toggly-core:1.6.0")
 
 // Spring Boot
-implementation("io.toggly:toggly-spring-boot-starter:1.5.1")
+implementation("io.toggly:toggly-spring-boot-starter:1.6.0")
 ```
 
 ## Quick Start
@@ -246,6 +253,20 @@ public class ReactiveController {
 ```
 
 ## Caching
+
+### Supported runtime and cache lines
+
+The SDK is compiled for Java 17 and is tested on Java 17, 21, and 25.
+
+- `toggly-cache-caffeine` uses Caffeine 3.2.4.
+- `toggly-cache-redis` retains the Jedis 5.1 line (currently 5.1.5) and its
+  existing `io.toggly.cache.redis` imports.
+- `toggly-cache-redis-jedis8` resolves Jedis 8.0.1. Import
+  `io.toggly.cache.redis.jedis8.RedisCachingSnapshotProvider` when using it.
+
+Choose one Redis adapter artifact per application. Both use the same cache key
+format and serialized snapshot data, so changing the selected adapter does not
+delete or rewrite existing Redis entries.
 
 ### Caffeine (In-Memory)
 

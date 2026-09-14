@@ -252,6 +252,7 @@ jobs:
             | `toggly-servlet` | Servlet filter integration |
             | `toggly-cache-caffeine` | Caffeine cache adapter |
             | `toggly-cache-redis` | Redis cache adapter |
+            | `toggly-cache-redis-jedis8` | Redis cache adapter for Jedis 8 |
 
             ### Requirements
 
@@ -290,3 +291,4 @@ jobs:
           echo "- io.toggly:toggly-servlet:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- io.toggly:toggly-cache-caffeine:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- io.toggly:toggly-cache-redis:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- io.toggly:toggly-cache-redis-jedis8:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
