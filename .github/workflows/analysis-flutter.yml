@@ -403,6 +403,39 @@ jobs:
             -Dsonar.dart.lcov.reportPaths=coverage/lcov.info
         continue-on-error: true
 
+  secure-storage-version-matrix:
+    name: Secure Storage Plugin ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['9.0.0', '9.2.4', '10.3.3', '11.1.1']
+
+    defaults:
+      run:
+        working-directory: Toggly.FeatureManagement.Flutter/toggly_secure_storage
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve the selected plugin major
+        run: |
+          cp pubspec_overrides.yaml.example pubspec_overrides.yaml
+          printf '  flutter_secure_storage: %s\n' '${{ matrix.version }}' >> pubspec_overrides.yaml
+          flutter pub get
+
+      - name: Analyze and test the selected plugin major
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test --test-randomize-ordering-seed random
+
   dependency-check-providers:
     name: OWASP Dependency Check (${{ matrix.dir }})
     runs-on: ubuntu-latest
@@ -464,7 +497,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [analyze, sonar, build-platforms, smoke-test, dependency-check, analyze-providers, dependency-check-providers]
+    needs: [analyze, sonar, build-platforms, smoke-test, dependency-check, analyze-providers, secure-storage-version-matrix, dependency-check-providers]
     if: always()
     
     steps:
@@ -475,7 +508,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: analyze,build-platforms,smoke-test,analyze-providers
+          required-jobs: analyze,build-platforms,smoke-test,analyze-providers,secure-storage-version-matrix
 
       - name: Generate summary
         working-directory: .

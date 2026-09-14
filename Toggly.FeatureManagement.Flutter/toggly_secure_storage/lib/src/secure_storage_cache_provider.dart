@@ -6,8 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// [TogglyCacheProvider] backed by `flutter_secure_storage`.
 ///
 /// Persists feature flags, variant definitions, and JWKS in the platform
-/// secure store (Keychain on iOS/macOS, Keystore-backed `EncryptedSharedPreferences`
-/// on Android, etc.). Pass an instance via
+/// secure store (Keychain on iOS/macOS, Keystore-backed encrypted storage on
+/// Android, etc.). Pass an instance via
 /// `TogglyConfig(cacheProvider: SecureStorageCacheProvider())` to enable
 /// offline restart.
 class SecureStorageCacheProvider implements TogglyRevisionCacheProvider {

@@ -1,3 +1,18 @@
+## 0.5.0
+
+2026-09-14
+
+### Added
+- Support `flutter_secure_storage` 11 alongside retained 9 and 10 through the
+  shared read/write/delete API. Stored Toggly keys and injected storage
+  instances remain unchanged.
+- Compatibility probes for a pre-v10 durable Toggly store, signature metadata,
+  JWKS, LRU data, revision keys, and secure-store failure propagation.
+
+### Changed
+- Document the required Android migration through a v10 application release
+  before a v11 host reads encrypted data created before v10.
+
 ## 0.4.0
 
 2026-07-11
