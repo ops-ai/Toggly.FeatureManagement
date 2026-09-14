@@ -21,6 +21,8 @@
   as the hidden enabled field.
 - Visible focus ring on the feature toggle track; selected Browse link and
   12px captions meet AA contrast.
+- Disable Turn feature off in read-only mode, and validate category length after
+  trim.
 
 ### Changed
 - `DashboardFeatureInput.Enabled` is `bool?` so a conditions POST can require an

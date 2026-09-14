@@ -591,6 +591,34 @@ public sealed class DashboardMappingTests
     }
 
     [Fact]
+    public async Task Readonly_mode_disables_turn_feature_off()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", readOnly: true, catalogExists: true, featureCount: 1);
+        var html = await host.Client.GetStringAsync("/features/?expand=Feature01");
+        var turnOff = Regex.Match(html, @"<button[^>]*data-turn-off[^>]*>");
+        turnOff.Success.Should().BeTrue();
+        turnOff.Value.Should().Contain("disabled");
+    }
+
+    [Fact]
+    public async Task Category_length_is_validated_after_trim()
+    {
+        await using var host = await DashboardHost.StartAsync("/features", catalogExists: true, allowWrites: true);
+        (await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["ExpectedRevision"] = "current", ["IsNew"] = "true", ["Key"] = "Padded", ["Name"] = "Padded",
+            ["Category"] = new string('c', 200) + "   "
+        })).StatusCode.Should().Be(HttpStatusCode.SeeOther);
+        host.Feature("Padded")!.Category.Should().Be(new string('c', 200));
+        var tooLong = await PostForm(host, "/features/features/new", "/features/features/create", new()
+        {
+            ["Key"] = "TooLong", ["Name"] = "TooLong", ["Category"] = new string('c', 201)
+        });
+        tooLong.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        host.Feature("TooLong").Should().BeNull();
+    }
+
+    [Fact]
     public async Task Mutations_require_antiforgery_and_readonly_hosts_reject_writes()
     {
         await using var host = await DashboardHost.StartAsync("/features", readOnly: true);

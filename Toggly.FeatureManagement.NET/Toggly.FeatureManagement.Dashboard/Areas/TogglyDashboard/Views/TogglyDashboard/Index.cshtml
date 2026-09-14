@@ -146,7 +146,7 @@ else
                                 @if (readOnly) { <p role="status">Editing is unavailable in the current storage or read-only mode.</p> }
                                 <div class="form-actions">
                                     <button type="submit" class="button" disabled="@readOnly">Save</button>
-                                    <button type="button" class="secondary" data-turn-off @(draft.Enabled == true ? null : "hidden")>Turn feature off</button>
+                                    <button type="button" class="secondary" data-turn-off @(draft.Enabled == true ? null : "hidden") disabled="@readOnly">Turn feature off</button>
                                     <button type="button" class="secondary" data-close-conditions>Cancel</button>
                                 </div>
                             </form>

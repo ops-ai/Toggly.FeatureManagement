@@ -179,6 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const turnOff = event.target.closest("[data-turn-off]");
         if (turnOff) {
+            if (turnOff instanceof HTMLButtonElement && turnOff.disabled) return;
             const form = turnOff.closest("[data-conditions-form]");
             const card = form?.closest(".feature-card");
             if (form && card) applyDraftOff(card, form, persistToggle(card));

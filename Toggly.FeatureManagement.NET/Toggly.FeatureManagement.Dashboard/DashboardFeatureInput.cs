@@ -18,7 +18,7 @@ public sealed class DashboardFeatureInput
     [StringLength(8000)]
     public string? Description { get; set; }
 
-    [StringLength(200)]
+    [TrimmedStringLength(200)]
     public string? Category { get; set; }
 
     public string? Tags { get; set; }
@@ -94,6 +94,12 @@ public sealed class DashboardFeatureInput
 
     private List<string> SplitTags() =>
         (Tags ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+}
+
+[AttributeUsage(AttributeTargets.Property)]
+internal sealed class TrimmedStringLengthAttribute(int maximumLength) : StringLengthAttribute(maximumLength)
+{
+    public override bool IsValid(object? value) => value is not string text || base.IsValid(text.Trim());
 }
 
 /// <summary>A dashboard row for a built-in Toggly targeting filter.</summary>
