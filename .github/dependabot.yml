@@ -96,6 +96,10 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # grpc-go 1.83+ requires Go 1.25. Declared SDK floor is Go 1.24 (OPS-1011).
+      - dependency-name: google.golang.org/grpc
+        versions: [">=1.83.0"]
 
   - package-ecosystem: maven
     directories:
@@ -118,6 +122,12 @@ updates:
       # groupIds. The narrower org.springframework:* misses the Boot starter.
       - dependency-name: "org.springframework*"
         update-types: ["version-update:semver-major"]
+      # Protobuf Java 3.x is in maintenance until 31 Mar 2027. 4.x is a
+      # product decision (OPS-1011). grpc-java 1.84 still pins 3.25.x.
+      - dependency-name: "com.google.protobuf:protobuf-java"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.google.protobuf:protoc"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: bundler
     directories:
@@ -134,6 +144,11 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # json 3 dropped quirks_mode. Rails 7.0–8.0 ActiveSupport still passes
+      # it; rubocop 1.91 pulls json 3 into the lockfile (OPS-1011).
+      - dependency-name: json
+        versions: [">=3.0.0"]
 
   - package-ecosystem: pip
     directories:
@@ -193,6 +208,27 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # tonic-build 0.14 is not compatible with tonic 0.12 / prost 0.13.
+      # Move the gRPC stack together (OPS-1011). Cargo 0.x minors are majors.
+      - dependency-name: tonic
+        update-types: ["version-update:semver-major"]
+      - dependency-name: tonic-build
+        update-types: ["version-update:semver-major"]
+      - dependency-name: prost
+        update-types: ["version-update:semver-major"]
+      - dependency-name: prost-types
+        update-types: ["version-update:semver-major"]
+      # 0.30 pulls rustls 0.23, which needs an explicit CryptoProvider.
+      - dependency-name: tokio-tungstenite
+        update-types: ["version-update:semver-major"]
+      # Isolated 0.x majors that leave sibling crates behind (OPS-1011).
+      - dependency-name: syn
+        update-types: ["version-update:semver-major"]
+      - dependency-name: ecdsa
+        update-types: ["version-update:semver-major"]
+      - dependency-name: sha1
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: gradle
     directories:
@@ -213,7 +249,9 @@ updates:
           - patch
     ignore:
       # Android toolchain floor: AGP 8.7 / Gradle 8.10 / Kotlin 2.0 (OPS-872).
-      # Kotlin 2.1+, AGP 8.13+/9, Gradle 9, and maven-publish 0.35+ are deliberate upgrades.
+      # Kotlin 2.1+, AGP 8.13+/9, Gradle 9, and maven-publish 0.31+ are
+      # deliberate upgrades. 0.34 already removed SonatypeHost.CENTRAL_PORTAL
+      # (OPS-1011).
       - dependency-name: "com.android.application"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "com.android.library"
@@ -223,7 +261,10 @@ updates:
       - dependency-name: "com.google.devtools.ksp"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "com.vanniktech.maven.publish"
-        versions: [">=0.35.0"]
+        versions: [">=0.31.0"]
+      # Compose BOM 2026.09.00 ships Compose 1.12, which requires AGP 9.1.
+      - dependency-name: "androidx.compose:compose-bom"
+        versions: [">=2026.01.00"]
       # androidx.core 1.19+ requires AGP 9.1 / compileSdk 37
       - dependency-name: "androidx.core:core-ktx"
         versions: [">=1.19.0"]
