@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.8
+
+2026-09-14
+
+### Fixed
+- Keep definition request headers off automatic public JWKS fetches so browser
+  signature verification does not fail an unnecessary CORS preflight. Preserve
+  explicitly configured low-level JWKS headers and providers [OPS-1223].
+
 ## 1.2.7
 
 2026-09-12

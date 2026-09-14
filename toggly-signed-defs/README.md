@@ -24,6 +24,18 @@ platform WebCrypto and do not import Node modules.
 Legacy browser bundlers that use `main` or `module` also select platform
 WebCrypto through browser metadata shipped inside each compiled module tree.
 
+## Request headers
+
+`fetchEvaluatedSignedDefinitions` applies `request.headers` only to the evaluated
+definitions request. Its automatic public JWKS request is a simple GET without
+those headers, avoiding unnecessary browser CORS preflights. Definition SDK
+identity headers and revision validators remain on the definitions request.
+
+Custom JWKS endpoints can still receive explicitly configured
+`VerifySignatureOptions.headers` through the lower-level parsing/cache helpers,
+or use an explicit `getJwks` provider. Cross-origin custom headers require the
+JWKS server to allow those headers through CORS.
+
 ## Entity context
 
 Evaluated-signed `defs` may mix booleans and `EntityGate` objects (`EvaluatedDefinitions`). This package parses and verifies the envelope; it does not evaluate gates. Consumers resolve gates with `@ops-ai/toggly-hooks-types` (or an SDK wrapper) and per-eval entity context.
@@ -64,3 +76,11 @@ Node runtime. It also builds the packed package with webpack through conditional
 legacy module, legacy CommonJS, and dist-only overlay resolution, then verifies
 signatures in each bundle without Node globals. These checks do not replace a
 browser-host test.
+
+## Browser CORS regression
+
+After `npm ci` and `npm run build`, set `PLAYWRIGHT_MODULE_PATH` to an installed
+Playwright `index.mjs` and run `npm run test:browser`. The test uses two local HTTP
+origins and real Chromium CORS enforcement to verify a signed response, public
+JWKS cache reuse and rejection of a corrupted signature. The existing JavaScript
+analysis workflow installs the browser tool and runs this regression.

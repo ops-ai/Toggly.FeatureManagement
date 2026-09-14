@@ -73,6 +73,24 @@ jobs:
         with:
           packages: hooks-types,signed-defs,eval
 
+      - name: Verify shared signed definitions and consumers
+        working-directory: toggly-signed-defs
+        run: |
+          npm run test:coverage
+          npm run typecheck
+          npm run test:consumer
+
+      - name: Install browser for JWKS CORS regression
+        run: |
+          npm install --prefix "$RUNNER_TEMP/toggly-jwks-browser" --no-save --ignore-scripts playwright@1.62.1
+          "$RUNNER_TEMP/toggly-jwks-browser/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Verify signed JWKS requests with real browser CORS
+        working-directory: toggly-signed-defs
+        env:
+          PLAYWRIGHT_MODULE_PATH: ${{ runner.temp }}/toggly-jwks-browser/node_modules/playwright/index.mjs
+        run: npm run test:browser
+
       - name: Upload shared package dist artifacts
         uses: ./.github/actions/upload-shared-js-deps
 
