@@ -202,7 +202,7 @@ public sealed class DashboardRuleInput
 
 internal static class FeatureFlagsEnum
 {
-    private static readonly Regex ValidMember = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex ValidMember = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant | RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
 
     internal static string Generate(IEnumerable<CatalogFeature> features)
     {

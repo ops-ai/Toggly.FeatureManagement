@@ -102,7 +102,8 @@ document.addEventListener("DOMContentLoaded", () => {
         holder.innerHTML = template.innerHTML.replaceAll("INDEX", String(index));
         const row = holder.firstElementChild;
         const label = userGroup.querySelector('label[for^="new-user-filter-"]');
-        userGroup.insertBefore(row, label);
+        if (label) label.before(row);
+        else userGroup.append(row);
     };
 
     const applyDraftOn = (card, form, toggle) => {
@@ -263,11 +264,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const nodes = focusables();
         if (nodes.length === 0) return;
         const first = nodes[0];
-        const last = nodes[nodes.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
+        const last = nodes.at(-1);
+        if (event.shiftKey && first.isSameNode(document.activeElement)) {
             event.preventDefault();
             last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
+        } else if (!event.shiftKey && last.isSameNode(document.activeElement)) {
             event.preventDefault();
             first.focus();
         }

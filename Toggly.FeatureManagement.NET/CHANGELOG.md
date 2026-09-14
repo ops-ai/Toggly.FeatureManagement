@@ -22,6 +22,8 @@
 - Uncategorized features round-trip as an empty category instead of null.
 - Conditions can be opened and turned on or off without JavaScript via the
   Conditions link and Feature state radios.
+- Import preview treats a missing category and an empty category as the same
+  uncategorized feature.
 - Visible focus ring on the feature toggle track; selected Browse link and
   12px captions meet AA contrast.
 - Disable Turn feature off in read-only mode, show a disabled Create feature

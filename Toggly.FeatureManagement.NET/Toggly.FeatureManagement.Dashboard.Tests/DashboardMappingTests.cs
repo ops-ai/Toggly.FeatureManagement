@@ -543,6 +543,7 @@ public sealed class DashboardMappingTests
         script.Should().Contain("persistedEnabled === \"true\" && !intended");
         script.Should().Contain("toggle.checked && draftOn");
         script.Should().Contain("input[name=\"Enabled\"]:checked");
+        script.Should().Contain("isSameNode").And.Contain("label.before(row)");
         script.Should().Contain("allowUnload").And.Contain("key === \"newRuleName\"");
         var css = await host.Client.GetStringAsync("/features/assets/dashboard.css");
         css.Should().Contain("--primary: #3f52c9").And.Contain("input:focus-visible + .toggle-ui");

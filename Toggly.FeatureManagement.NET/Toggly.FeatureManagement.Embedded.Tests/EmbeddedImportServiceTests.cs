@@ -109,6 +109,19 @@ public class EmbeddedImportServiceTests
         Assert.Equal(0, store.WriteCount);
     }
 
+    [Fact]
+    public async Task PreviewAsync_TreatsNullAndEmptyCategoryAsIdentical()
+    {
+        var (service, _) = CreateService(new CatalogDocument { Features = { new CatalogFeature { Key = "Checkout", Name = "Checkout", Category = null } } });
+        var preview = await service.PreviewAsync(CatalogJson.Serialize(new CatalogDocument
+        {
+            Features = { new CatalogFeature { Key = "Checkout", Name = "Checkout", Category = "" } }
+        }));
+
+        Assert.Contains("Checkout", preview.IdenticalKeys);
+        Assert.DoesNotContain("Checkout", preview.ConflictKeys);
+    }
+
     private static CatalogContextSchema Context(string property) => new()
     {
         Kind = "Account", KeyPropertyName = "id",
