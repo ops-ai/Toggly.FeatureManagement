@@ -18,7 +18,7 @@ test('Directory.Build.props centralizes deterministic + SourceLink properties', 
   );
 });
 
-test('all eleven packable projects inherit SourceLink (no per-csproj duplicates)', () => {
+test('all inventory packable projects inherit SourceLink (no per-csproj duplicates)', () => {
   const result = verifyPackableProjectsInheritSourceLink();
   assert.equal(
     result.ok,

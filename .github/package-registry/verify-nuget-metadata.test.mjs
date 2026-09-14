@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   loadInventory,
   parseReleaseWorkflowProjects,
@@ -9,11 +12,10 @@ import {
   verifyPackedNupkgs,
 } from './verify-nuget-metadata.mjs';
 
-test('inventory lists exactly fourteen unique NuGet package ids', () => {
+test('inventory lists unique NuGet package ids including embedded packages', () => {
   const inventory = loadInventory();
   const ids = inventory.packages.map((p) => p.id);
-  assert.equal(ids.length, 14);
-  assert.equal(new Set(ids).size, 14);
+  assert.equal(new Set(ids).size, ids.length);
   for (const suffix of ['Catalog', 'Embedded', 'Dashboard']) {
     assert.ok(ids.includes(`Toggly.FeatureManagement.${suffix}`));
   }
@@ -26,6 +28,30 @@ test('inventory projects exist and release workflow folders match', () => {
     true,
     result.errors.length ? result.errors.join('\n') : 'unexpected failure',
   );
+});
+
+test('source validation follows a changed inventory and still rejects omissions', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nuget-inventory-'));
+  const inventory = { sdkRoot: 'server', workflow: 'release.yml', packages: [
+    { id: 'Example.Core', project: 'Core/Core.csproj' },
+  ] };
+  try {
+    fs.mkdirSync(path.join(directory, 'server/Core'), { recursive: true });
+    fs.mkdirSync(path.join(directory, 'server/assets'), { recursive: true });
+    fs.writeFileSync(path.join(directory, 'server/Core/Core.csproj'), '<Project />');
+    fs.writeFileSync(path.join(directory, 'server/assets/toggly-package-icon.png'), 'test icon');
+    fs.writeFileSync(path.join(directory, 'release.yml'), '          - project: Core\n');
+    assert.equal(verifyNugetInventory({ inventory, repoRoot: directory }).ok, true);
+    fs.writeFileSync(path.join(directory, 'release.yml'), '          - project: Core\n          - project: Missing\n');
+    assert.equal(verifyNugetInventory({ inventory, repoRoot: directory }).ok, false);
+    const empty = verifyNugetInventory({ inventory: { ...inventory, packages: [] }, repoRoot: directory });
+    assert.equal(empty.ok, false);
+    assert.ok(empty.errors.includes('NuGet inventory must contain at least one package'));
+    const duplicate = verifyNugetInventory({ inventory: { ...inventory, packages: [...inventory.packages, ...inventory.packages] }, repoRoot: directory });
+    assert.ok(duplicate.errors.includes('duplicate package ids in inventory'));
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('workflow project folders map to inventory PackageIds', () => {
@@ -78,5 +104,5 @@ test('packed nupkg contract runs when NUGET_PACK_DIR is set', () => {
     true,
     result.errors.length ? result.errors.join('\n') : 'unexpected pack failure',
   );
-  assert.equal(result.foundIds.length, 11);
+  assert.deepEqual(result.foundIds, loadInventory().packages.map((entry) => entry.id).sort());
 });

@@ -54,8 +54,8 @@ export function verifyNugetInventory(options = {}) {
   const errors = [];
 
   const packages = inventory.packages || [];
-  if (packages.length !== 14) {
-    errors.push(`expected 14 packages, found ${packages.length}`);
+  if (packages.length === 0) {
+    errors.push('NuGet inventory must contain at least one package');
   }
 
   const ids = packages.map((p) => p.id);
