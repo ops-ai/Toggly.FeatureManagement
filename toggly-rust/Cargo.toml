@@ -23,7 +23,7 @@ categories = ["web-programming", "development-tools"]
 
 [workspace.dependencies]
 # Pinned transitive dep: time >=0.3.46 uses edition 2024 and requires Rust 1.88+
-time = ">=0.3.7, <0.3.46"
+time = ">=0.3.7, <0.3.56"
 
 # Core dependencies
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "sync", "time"] }
