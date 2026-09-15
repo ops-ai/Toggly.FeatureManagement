@@ -61,6 +61,78 @@ void main() {
       final provider = SecureStorageCacheProvider();
       expect(await provider.readFlags('user-1'), isNull);
     });
+
+    test('reads a pre-v10 store fixture without changing durable keys',
+        () async {
+      const identity = 'stable-user';
+      const revisionKey = 'toggly.revision.app:Production:stable-user';
+      store.addAll({
+        'toggly.flags.$identity':
+            '{"identity":"stable-user","flags":"{\\"FeatureA\\":true}","timestamp":1000,"signature":"sig","keyId":"kid"}',
+        'toggly.variants.$identity':
+            '{"identity":"stable-user","variants":"{\\"FeatureA\\":{\\"enabled\\":true}}","timestamp":1001,"signature":"variant-sig","keyId":"variant-kid"}',
+        'toggly.jwks': '{"keys":[]}',
+        'toggly.cache-lru': '["stable-user"]',
+        revisionKey: 'rev-1',
+        'host.unrelated': 'retain-me',
+      });
+
+      final provider = SecureStorageCacheProvider();
+
+      final flags = await provider.readFlags(identity);
+      final variants = await provider.readVariants(identity);
+      expect(flags?.flags, '{"FeatureA":true}');
+      expect(flags?.signature, 'sig');
+      expect(flags?.timestamp, 1000);
+      expect(flags?.keyId, 'kid');
+      expect(variants?.variants, '{"FeatureA":{"enabled":true}}');
+      expect(variants?.signature, 'variant-sig');
+      expect(variants?.timestamp, 1001);
+      expect(variants?.keyId, 'variant-kid');
+      expect(await provider.readJwks(), '{"keys":[]}');
+      expect(await provider.readCacheLruIndex(), '["stable-user"]');
+      expect(
+        await provider.readDefinitionsRevision('app', 'Production', identity),
+        'rev-1',
+      );
+      expect(
+        store,
+        containsPair('host.unrelated', 'retain-me'),
+      );
+      expect(
+          store.keys,
+          containsAll(<String>[
+            'toggly.flags.$identity',
+            'toggly.variants.$identity',
+            'toggly.jwks',
+            'toggly.cache-lru',
+            revisionKey,
+          ]));
+    });
+
+    test('propagates secure-store failures without clearing stored values',
+        () async {
+      store['toggly.jwks'] = 'existing-data';
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        throw PlatformException(
+          code: 'decrypt-failed',
+          message: 'Retain the encrypted store',
+        );
+      });
+
+      await expectLater(
+        SecureStorageCacheProvider().readJwks(),
+        throwsA(
+          isA<PlatformException>().having(
+            (error) => error.code,
+            'code',
+            'decrypt-failed',
+          ),
+        ),
+      );
+      expect(store['toggly.jwks'], 'existing-data');
+    });
   });
 
   group('definitions revision', () {

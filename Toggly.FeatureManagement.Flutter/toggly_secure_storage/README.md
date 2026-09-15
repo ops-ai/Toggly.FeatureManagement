@@ -16,8 +16,8 @@ restarts and remain available offline.
 
 ```yaml
 dependencies:
-  feature_flags_toggly: ^1.2.0
-  feature_flags_toggly_secure_storage: ^0.1.0
+  feature_flags_toggly: ^1.9.0
+  feature_flags_toggly_secure_storage: ^0.5.0
 ```
 
 ## Usage
@@ -42,10 +42,40 @@ Android/iOS options):
 ```dart
 SecureStorageCacheProvider(
   storage: const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    aOptions: AndroidOptions(resetOnError: false),
   ),
 );
 ```
+
+The provider uses an injected instance unchanged. Its platform options,
+namespace, accessibility, and errors remain controlled by the application;
+Toggly never resets a failing secure store.
+
+## Supported plugin versions and Android migration
+
+This package supports `flutter_secure_storage` 9, 10, and 11 through their
+shared `read`, `write`, and `delete` APIs. Each plugin major has its own
+Flutter, Dart, Android, and platform requirements, so applications must use a
+Flutter SDK and host configuration supported by the selected plugin release.
+
+For Android data created before plugin v10, ship and run an intermediate v10
+application release before upgrading the host to v11. Keep the same application
+ID, installed app data, storage namespace/options, and stable Toggly identity.
+Do not uninstall the application or clear storage during that migration. A
+dependency-range update cannot migrate native encrypted data on its own.
+
+Verify the existing values and restart the v10 application before moving to
+v11. Keep the stored Toggly keys unchanged:
+
+- `toggly.flags.<identity>` and `toggly.variants.<identity>`
+- `toggly.jwks` and `toggly.cache-lru`
+- `toggly.revision.<appKey>:<environment>:<identity>`
+
+The adapter's legacy revision-key migration is separate from the native
+plugin's encryption migration. Test customized secure-storage options in the
+application that owns them, and consult the
+[flutter_secure_storage migration guidance](https://pub.dev/packages/flutter_secure_storage/changelog)
+before changing plugin majors.
 
 ## Other backends
 
