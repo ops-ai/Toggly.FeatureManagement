@@ -17,6 +17,8 @@
     "build:types": "tsc --project tsconfig.types.json",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
+    "prepare:linked-core-test-host": "node scripts/prepare-linked-core-test-host.mjs",
+    "pretest": "npm run prepare:linked-core-test-host",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit",
