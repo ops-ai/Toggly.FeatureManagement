@@ -37,3 +37,15 @@ test('runs the Fastify 4 and 5 packed-host fixture on its valid Node 20 row', ()
   assert.match(packedHostStep, /matrix\.config\.package == 'Fastify'/);
   assert.match(packedHostStep, /matrix\.node-version == '20\.x'/);
 });
+
+test('runs the current Gatsby packed host on Node 24', () => {
+  assert.match(workflow, /'Toggly\.FeatureManagement\.Gatsby\/\*\*'/);
+  assert.match(
+    workflow,
+    /- sdk: Gatsby\s+path: Toggly\.FeatureManagement\.Gatsby\s+test-cmd: npm run test:coverage && node tests\/packed-host\.mjs\s+node-version: '24\.x'/,
+  );
+  assert.match(
+    workflow,
+    /- name: Install locked Gatsby dependencies\s+if: matrix\.sdk == 'Gatsby'\s+working-directory: \$\{\{ matrix\.path \}\}\s+run: npm ci/,
+  );
+});
