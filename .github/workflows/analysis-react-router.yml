@@ -279,7 +279,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [build-and-test, packed-host, sonar, dependency-check]
+    needs: [build-shared-js-deps, build-and-test, packed-host, sonar, dependency-check]
     if: always()
 
     steps:
@@ -290,7 +290,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: build-and-test,packed-host
+          required-jobs: build-shared-js-deps,build-and-test,packed-host
 
       - name: Generate summary
         run: |

@@ -1,12 +1,14 @@
 name: Build shared JS deps
 description: >-
-  Install and build in-repo shared JS packages (hooks-types, signed-defs, eval)
-  once so SDK CI jobs can restore dist/ via artifact instead of rebuilding per cell.
+  Install and build in-repo shared JS packages (hooks-types, signed-defs, eval,
+  local-gates) once so SDK CI jobs can restore dist/ via artifact instead of
+  rebuilding per cell.
 
 inputs:
   packages:
     description: >-
-      Comma-separated package keys among hooks-types, signed-defs, eval
+      Comma-separated package keys among hooks-types, signed-defs, eval,
+      local-gates
     required: false
     default: 'hooks-types,signed-defs,eval'
   node-version:
@@ -50,8 +52,14 @@ runs:
               echo "::endgroup::"
               built=$((built + 1))
               ;;
+            local-gates)
+              echo "::group::Build toggly-local-gates"
+              (cd toggly-local-gates && (npm ci || npm install) && npm run build)
+              echo "::endgroup::"
+              built=$((built + 1))
+              ;;
             *)
-              echo "Unknown shared package key: '$pkg' (expected hooks-types, signed-defs, eval)" >&2
+              echo "Unknown shared package key: '$pkg' (expected hooks-types, signed-defs, eval, local-gates)" >&2
               exit 1
               ;;
           esac

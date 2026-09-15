@@ -20,7 +20,7 @@ runs:
       run: |
         set -euo pipefail
         found=0
-        for d in toggly-hooks-types/dist toggly-signed-defs/dist toggly-eval/dist; do
+        for d in toggly-hooks-types/dist toggly-signed-defs/dist toggly-eval/dist toggly-local-gates/dist; do
           if [[ -d "$d" ]]; then
             echo "Found $d"
             found=1
@@ -39,5 +39,6 @@ runs:
           toggly-hooks-types/dist
           toggly-signed-defs/dist
           toggly-eval/dist
+          toggly-local-gates/dist
         retention-days: ${{ inputs.retention-days }}
         if-no-files-found: ignore
