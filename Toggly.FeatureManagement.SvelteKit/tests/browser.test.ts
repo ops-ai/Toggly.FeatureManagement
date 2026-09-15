@@ -243,12 +243,36 @@ it('uses verified conditional polling, ignores unchanged sync, pins only new rev
     (call) => new URL(call[0]).searchParams.get('rev') === 'r2',
   )!;
   expect(new Headers(pinned[1]?.headers).get('if-none-match')).toBeNull();
+  // Pin refresh must finish adopting the HTTP revision before later steps race it.
+  await settled();
+  await vi.advanceTimersByTimeAsync(150);
+  await vi.waitFor(() =>
+    expect(
+      fetcher.mock.calls.some(
+        (call) =>
+          !String(call[0]).endsWith('/.well-known/jwks') &&
+          new Headers(call[1]?.headers).get('if-none-match') === 'r2',
+      ),
+    ).toBe(true),
+  );
   const jwksCalls = () =>
     fetcher.mock.calls.filter((call) => String(call[0]).endsWith('/.well-known/jwks')).length;
   const before = jwksCalls();
   Socket.all[0].onmessage({ data: '{"type":"signing-key-updated"}' });
   await vi.advanceTimersByTimeAsync(350);
   await vi.waitFor(() => expect(jwksCalls()).toBeGreaterThan(before));
+  // Key-rotation refresh assigns revision only after JWKS + verify; wait for that.
+  await settled();
+  await vi.advanceTimersByTimeAsync(150);
+  await vi.waitFor(() =>
+    expect(
+      fetcher.mock.calls.some(
+        (call) =>
+          !String(call[0]).endsWith('/.well-known/jwks') &&
+          new Headers(call[1]?.headers).get('if-none-match') === 'r2',
+      ),
+    ).toBe(true),
+  );
   Socket.all[0].onclose();
   await vi.advanceTimersByTimeAsync(5000);
   expect(Socket.all).toHaveLength(2);
