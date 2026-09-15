@@ -51,7 +51,7 @@ tower = "0.4"
 
 # Framework integrations
 actix-web = ">=4.4, <4.16"
-axum = "0.7"
+axum = "0.8"
 rocket = "0.5"
 
 # Testing
