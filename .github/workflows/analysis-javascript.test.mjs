@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const workflow = readFileSync(new URL('./analysis-javascript.yml', import.meta.url), 'utf8');
+const docusaurusFixture = readFileSync(
+  new URL('../../tests/docusaurus-consumer-fixtures/packed-host.mjs', import.meta.url),
+  'utf8',
+);
 const summary = workflow.slice(workflow.indexOf('\n  summary:'));
 const packedHostHarnesses = [
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs',
@@ -36,6 +40,24 @@ test('runs the Fastify 4 and 5 packed-host fixture on its valid Node 20 row', ()
   assert.ok(packedHostStep, 'the packed-host fixture must keep an explicit matrix guard');
   assert.match(packedHostStep, /matrix\.config\.package == 'Fastify'/);
   assert.match(packedHostStep, /matrix\.node-version == '20\.x'/);
+});
+
+test('requires the packed Docusaurus production host with a locked Node 24 install', () => {
+  const hostJob = workflow.match(/\n  test-docusaurus-host:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0];
+  assert.ok(hostJob, 'the current Docusaurus host must run in CI');
+  assert.match(hostJob, /node-version: '24\.x'/);
+  assert.match(hostJob, /run: npm ci/);
+  assert.match(hostJob, /run: npm run typecheck && npm run test:coverage/);
+  assert.match(hostJob, /CHROME_BIN: \/usr\/bin\/google-chrome/);
+  assert.match(hostJob, /run: node tests\/docusaurus-consumer-fixtures\/packed-host\.mjs/);
+  assert.doesNotMatch(hostJob, /overlay-shared-js-deps|continue-on-error|npm ci \|\|/);
+  assert.match(summary.match(/needs: \[([^\]]+)\]/)?.[1] ?? '', /\btest-docusaurus-host\b/);
+  assert.match(summary.match(/required-jobs: ([^\n]+)/)?.[1] ?? '', /\btest-docusaurus-host\b/);
+  assert.equal((workflow.match(/'tests\/docusaurus-consumer-fixtures\/\*\*'/g) ?? []).length, 2);
+  assert.match(docusaurusFixture, /react@19\.3\.0/);
+  assert.match(docusaurusFixture, /react-dom@19\.3\.0/);
+  assert.match(docusaurusFixture, /page\.on\('console'/);
+  assert.match(docusaurusFixture, /consoleErrors/);
 });
 
 test('runs the current Gatsby packed host on Node 24', () => {
