@@ -11,6 +11,9 @@
   ],
   "excludeFromInventory": [
     "@ops-ai/nextjs-toggly-monorepo",
+    "@ops-ai/remix-toggly-client",
+    "@ops-ai/remix-toggly-core",
+    "@ops-ai/remix-toggly-server",
     "@ops-ai/toggly-cloudflare-pages-function",
     "@ops-ai/toggly-cloudflare-worker"
   ],
@@ -178,30 +181,12 @@
       "oidcReady": false
     },
     {
-      "name": "@ops-ai/remix-toggly-client",
-      "group": "remix",
-      "manifest": "Toggly.FeatureManagement.Remix/remix-toggly-client/package.json",
-      "changelog": "Toggly.FeatureManagement.Remix/remix-toggly-client/CHANGELOG.md",
-      "workflow": ".github/workflows/sdk-remix-release.yml",
-      "docsUrl": "https://docs.toggly.io/sdks/remix/client",
-      "oidcReady": false
-    },
-    {
-      "name": "@ops-ai/remix-toggly-core",
-      "group": "remix",
-      "manifest": "Toggly.FeatureManagement.Remix/remix-toggly-core/package.json",
-      "changelog": "Toggly.FeatureManagement.Remix/remix-toggly-core/CHANGELOG.md",
-      "workflow": ".github/workflows/sdk-remix-release.yml",
-      "docsUrl": "https://docs.toggly.io/sdks/remix",
-      "oidcReady": false
-    },
-    {
-      "name": "@ops-ai/remix-toggly-server",
-      "group": "remix",
-      "manifest": "Toggly.FeatureManagement.Remix/remix-toggly-server/package.json",
-      "changelog": "Toggly.FeatureManagement.Remix/remix-toggly-server/CHANGELOG.md",
-      "workflow": ".github/workflows/sdk-remix-release.yml",
-      "docsUrl": "https://docs.toggly.io/sdks/remix/server",
+      "name": "@ops-ai/react-router-toggly",
+      "group": "react-router",
+      "manifest": "Toggly.FeatureManagement.ReactRouter/react-router-toggly/package.json",
+      "changelog": "Toggly.FeatureManagement.ReactRouter/react-router-toggly/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-react-router-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/react-router",
       "oidcReady": false
     },
     {

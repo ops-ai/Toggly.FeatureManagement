@@ -1,42 +1,11 @@
 {
   "name": "@ops-ai/remix-toggly-server",
   "version": "1.10.0",
-  "description": "Server-side utilities for Toggly Remix SDK - loaders, actions, and server utilities",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "type": "module",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "tsup",
-    "test": "jest",
-    "test:coverage": "jest --coverage",
-    "test:watch": "jest --watch",
-    "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit",
-    "clean": "rm -rf dist coverage"
-  },
-  "keywords": [
-    "remix",
-    "feature-flags",
-    "feature-toggles",
-    "toggly",
-    "server",
-    "loader",
-    "action",
-    "feature-management"
-  ],
-  "author": "Toggly <support@toggly.io>",
+  "description": "DEPRECATED — use @ops-ai/react-router-toggly instead. This package is no longer maintained.",
+  "private": false,
   "license": "MIT",
+  "author": "Toggly <support@toggly.io>",
+  "homepage": "https://docs.toggly.io/sdks/react-router",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
@@ -45,52 +14,18 @@
   "bugs": {
     "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
   },
-  "homepage": "https://docs.toggly.io/sdks/remix/server",
-  "dependencies": {
-    "@ops-ai/remix-toggly-core": "^1.9.0",
-    "@ops-ai/toggly-local-gates": "^1.0.1",
-    "@ops-ai/toggly-signed-defs": "^1.2.3",
-    "ws": "^8.0.0"
-  },
-  "optionalDependencies": {
-    "@grpc/grpc-js": "^1.12.6",
-    "@grpc/proto-loader": "^0.7.13"
-  },
-  "peerDependencies": {
-    "@remix-run/node": ">=2.0.0",
-    "@remix-run/server-runtime": ">=2.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@remix-run/node": {
-      "optional": true
-    },
-    "@remix-run/server-runtime": {
-      "optional": true
-    }
-  },
-  "devDependencies": {
-    "@grpc/grpc-js": "^1.12.6",
-    "@grpc/proto-loader": "^0.7.13",
-    "@remix-run/node": "^2.0.0",
-    "@remix-run/server-runtime": "^2.0.0",
-    "@rollup/plugin-commonjs": "^25.0.0",
-    "@rollup/plugin-node-resolve": "^15.0.0",
-    "@rollup/plugin-typescript": "^11.0.0",
-    "@types/jest": "^29.0.0",
-    "@types/ws": "^8.0.0",
-    "jest": "^29.0.0",
-    "rollup": "^4.0.0",
-    "rollup-plugin-dts": "^6.0.0",
-    "ts-jest": "^29.0.0",
-    "tslib": "^2.6.0",
-    "tsup": "^8.5.1",
-    "typescript": "^5.0.0",
-    "ws": "^8.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
+  "keywords": [
+    "toggly",
+    "feature-flags",
+    "feature-management",
+    "deprecated",
+    "remix"
+  ],
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "scripts": {
+    "prepublishOnly": "node -e \"console.error('DEPRECATED: publish @ops-ai/react-router-toggly instead'); process.exit(1)\""
+  },
+  "deprecated": "Use @ops-ai/react-router-toggly (./client and ./server). Remix adapters are no longer maintained."
 }

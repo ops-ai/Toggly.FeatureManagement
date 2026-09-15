@@ -1,5 +1,13 @@
 # Changelog
 
+## Deprecated
+
+This package is **deprecated**. Use `@ops-ai/react-router-toggly` instead.
+No further Remix releases are planned. Last published version: `1.9.1`.
+
+---
+
+
 ## 1.9.1
 
 2026-09-12

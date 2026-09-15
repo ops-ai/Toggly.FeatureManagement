@@ -1,5 +1,7 @@
 name: Verify required jobs passed
-description: Fail when any required upstream job failed or was cancelled.
+description: >-
+  Fail when any required upstream job failed, was cancelled, or was skipped
+  (skipped usually means an upstream dependency failed).
 
 inputs:
   needs-json:
@@ -26,13 +28,13 @@ runs:
 
         const failed = required.filter((job) => {
           const result = needs[job]?.result;
-          return result === 'failure' || result === 'cancelled';
+          return result !== 'success';
         });
 
         if (failed.length) {
-          console.error('Required jobs failed or were cancelled:');
+          console.error('Required jobs did not succeed:');
           for (const job of failed) {
-            console.error(`  ${job}: ${needs[job]?.result}`);
+            console.error(`  ${job}: ${needs[job]?.result ?? 'missing'}`);
           }
           process.exit(1);
         }
