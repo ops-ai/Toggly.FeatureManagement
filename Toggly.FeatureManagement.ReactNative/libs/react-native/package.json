@@ -62,6 +62,7 @@
     "@babel/preset-env": "^7.24.0",
     "@babel/preset-react": "^7.24.0",
     "@babel/preset-typescript": "^7.24.0",
+    "@ops-ai/toggly-signed-defs": "file:../../../toggly-signed-defs",
     "@react-native-community/netinfo": "^11.0.0",
     "@testing-library/react": "^16.0.0",
     "@testing-library/react-native": "^12.0.0",
