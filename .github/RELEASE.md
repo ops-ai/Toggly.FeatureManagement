@@ -5,9 +5,21 @@ Manifest-first release policy for all Toggly SDK packages in this repository.
 ## Policy
 
 1. **Bump version and CHANGELOG in your PR/commit** when you change a publishable package.
-2. **Merge to `develop`.**
-3. **Run the release workflow** with defaults (`release_mode: publish`).
-4. The workflow **publishes the manifest version** — it does not bump by default.
+2. **Merge to `develop`.** Path-filtered `sdk-*-release.yml` workflows start automatically.
+3. The release **re-runs that family’s required analysis gates**, then **publishes the manifest version** when it is ahead of the registry (skip if equal, fail if behind). It does not bump by default.
+4. **Manual `workflow_dispatch`** remains for retries, Flutter tag re-publish, and legacy `release_mode: auto_bump`.
+
+See [OPS-1243 design](https://github.com/ops-ai/Toggly.wiki/blob/wikiMaster/Home/Engineering/Plans/2026-09-15-SDK-Auto-Publish-On-Develop-Design.md) for the full contract.
+
+## Automatic develop publish
+
+After a human merges to `develop`, each path-filtered `sdk-*-release.yml` workflow:
+
+1. **Resolves** the manifest against the registry (`publish` / `skip` / `fail`). Push events always use `release_mode: publish` (no auto-bump).
+2. **Re-runs required analysis gates** via `workflow_call` into the matching `analysis-*.yml` (`run_reporting: false` skips Sonar/OWASP). Multi-package JS analysis accepts an `sdks` filter (e.g. `Vue`) so one package does not re-test the whole matrix.
+3. **Publishes** only from a job that uses the registry environment (`npm-publish`, `nuget-publish`, …). Resolve and gates do not use that environment.
+
+Analysis workflows remain the **PR** merge gate (`pull_request` + `workflow_dispatch`). They no longer run on push to `develop`/`main`; the release path owns post-merge verification.
 
 ## npm public packages (`@ops-ai/*`)
 
@@ -52,9 +64,9 @@ The shared action [`.github/actions/resolve-release-version`](actions/resolve-re
 ```text
 1. Implement change
 2. Bump version + CHANGELOG in the same commit
-3. Merge to develop
-4. Actions → Run release workflow → leave defaults
-5. Confirm summary shows action=publish
+3. Merge to develop (release workflow starts on path match)
+4. Confirm Actions run: resolve → gates → publish (or action=skip)
+5. For retries / auto_bump only: Actions → Run workflow manually
 ```
 
 ## Troubleshooting

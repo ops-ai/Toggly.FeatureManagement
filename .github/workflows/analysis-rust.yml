@@ -1,13 +1,6 @@
 name: Rust SDKs - Tests & Analysis
 
 on:
-  push:
-    branches:
-      - develop
-      - main
-    paths:
-      - 'toggly-rust/**'
-      - '.github/workflows/analysis-rust.yml'
   pull_request:
     branches:
       - develop
@@ -16,6 +9,12 @@ on:
       - 'toggly-rust/**'
       - '.github/workflows/analysis-rust.yml'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      run_reporting:
+        description: 'When false, skip Sonar and OWASP reporting jobs'
+        type: boolean
+        default: true
 
 env:
   SDK_ROOT: toggly-rust
@@ -203,7 +202,7 @@ jobs:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [coverage, dependency-check]
-    if: always()
+    if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
 
     steps:
       - name: Checkout code
@@ -306,6 +305,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
 
     steps:
       - name: Checkout code

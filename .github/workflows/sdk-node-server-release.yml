@@ -1,6 +1,17 @@
 name: Node.js Server SDKs - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.Node/**'
+      - '.github/workflows/sdk-node-server-release.yml'
+      - '.github/workflows/analysis-javascript.yml'
+      - '.github/package-registry/analysis-js-filter.mjs'
+      - '.github/package-registry/node-release-selection.mjs'
+      - '.github/actions/resolve-release-version/**'
+      - '.github/actions/verify-package-tarball/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -30,6 +41,10 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: node-server-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_ROOT: Toggly.FeatureManagement.Node
 
@@ -48,51 +63,20 @@ jobs:
           RELEASE_PACKAGES: ${{ github.event.inputs.packages || 'all' }}
         run: node .github/package-registry/node-release-selection.mjs matrix
 
-  build-and-test:
-    name: Build & Test (Node ${{ matrix.node-version }})
-    runs-on: ubuntu-latest
+  # Node.js server SDKs are covered by analysis-javascript.yml's node-server
+  # special filter (test-node-server + smoke-test-node-server), which runs a
+  # broader compatibility matrix than the release workflow's own build/test.
+  gates:
     needs: prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: ['18.x', '20.x', '22.x']
-    defaults:
-      run:
-        working-directory: ${{ env.SDK_ROOT }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      # Install pnpm before setup-node so action-setup uses the runner Node,
-      # not matrix Node 18 (pnpm/action-setup@v6 @pnpm/exe breaks on 18).
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node-version }}
-          registry-url: 'https://registry.npmjs.org'
-          cache: 'pnpm'
-          cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build all packages
-        run: pnpm -r build
-
-      - name: Run selected package tests
-        run: node "$GITHUB_WORKSPACE/.github/package-registry/node-release-selection.mjs" test
-        env:
-          RELEASE_PACKAGES: ${{ github.event.inputs.packages || 'all' }}
+    uses: ./.github/workflows/analysis-javascript.yml
+    with:
+      sdks: node-server
+      run_reporting: false
+    secrets: inherit
 
   publish:
     runs-on: ubuntu-latest
-    needs: [prepare, build-and-test]
+    needs: [prepare, gates]
     environment: npm-publish
     strategy:
       fail-fast: false
@@ -150,8 +134,8 @@ jobs:
           manifest_path: ${{ env.SDK_ROOT }}/${{ matrix.package }}/package.json
           registry: npm
           package_name: ${{ steps.pkg.outputs.name }}
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
 
 
       - name: Verify packed tarball

@@ -1,6 +1,14 @@
 name: PHP SDK - Release
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.PHP/**'
+      - '.github/workflows/sdk-php-release.yml'
+      - '.github/workflows/analysis-php.yml'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -28,6 +36,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: php-sdk-release
+  cancel-in-progress: false
 
 env:
   SDK_ROOT: Toggly.FeatureManagement.PHP
@@ -64,45 +76,21 @@ jobs:
           manifest_path: ${{ env.SDK_ROOT }}/composer.json
           registry: packagist
           package_name: toggly/feature-management-php
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
 
-  build-and-test:
+  # PHP SDK is covered by analysis-php.yml's PHP 7.4-8.3 test matrix.
+  gates:
     needs: validate
     if: needs.validate.outputs.action == 'publish'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        php-version: ['7.4', '8.0', '8.1', '8.2', '8.3']
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Setup PHP ${{ matrix.php-version }}
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ matrix.php-version }}
-          extensions: json, mbstring
-          coverage: xdebug
-
-      - name: Validate composer.json
-        working-directory: ${{ env.SDK_ROOT }}
-        run: composer validate --strict
-
-      - name: Install dependencies
-        working-directory: ${{ env.SDK_ROOT }}
-        run: composer install --prefer-dist --no-progress
-
-      - name: Run tests
-        working-directory: ${{ env.SDK_ROOT }}
-        run: vendor/bin/phpunit
-        continue-on-error: true
+    uses: ./.github/workflows/analysis-php.yml
+    with:
+      run_reporting: false
+    secrets: inherit
 
   release:
-    needs: [build-and-test, validate]
-    if: needs.validate.outputs.action == 'publish'
+    needs: [validate, gates]
+    if: needs.validate.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

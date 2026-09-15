@@ -1,6 +1,15 @@
 name: Electron SDK - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.Electron/**'
+      - '.github/workflows/sdk-electron-release.yml'
+      - '.github/workflows/analysis-electron.yml'
+      - '.github/actions/resolve-release-version/**'
+      - '.github/actions/verify-package-tarball/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -25,12 +34,65 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: electron-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_DIR: Toggly.FeatureManagement.Electron
   NPM_PACKAGE: '@ops-ai/electron-feature-flags-toggly'
 
 jobs:
-  build-and-publish:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.release.outputs.action }}
+      version: ${{ steps.release.outputs.version }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_DIR }}/package.json
+          registry: npm
+          package_name: ${{ env.NPM_PACKAGE }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
+
+      - name: Resolve summary
+        if: always()
+        run: |
+          echo "## Electron SDK resolve" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | ${{ steps.release.outputs.action }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | ${{ steps.release.outputs.version }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  gates:
+    needs: resolve
+    if: needs.resolve.outputs.action == 'publish'
+    uses: ./.github/workflows/analysis-electron.yml
+    with:
+      run_reporting: false
+    secrets: inherit
+
+  publish:
+    needs: [resolve, gates]
+    if: needs.resolve.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: npm-publish
     defaults:
@@ -58,51 +120,31 @@ jobs:
           node-version: 'lts/*'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Resolve release version
-        id: release
-        uses: ./.github/actions/resolve-release-version
-        with:
-          manifest_path: ${{ env.SDK_DIR }}/package.json
-          registry: npm
-          package_name: ${{ env.NPM_PACKAGE }}
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
-
       - name: Install dependencies
-        if: steps.release.outputs.action == 'publish'
         run: npm install
 
       - name: Build
-        if: steps.release.outputs.action == 'publish'
         run: npm run build
 
-      - name: Run tests
-        if: steps.release.outputs.action == 'publish'
-        # The runtime fixture creates a real BrowserWindow. Linux release
-        # runners therefore need a display server just like the analysis job.
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm test
-
       - name: Verify packed tarball
-        if: steps.release.outputs.action == 'publish'
         uses: ./.github/actions/verify-package-tarball
         with:
           package_dir: ${{ env.SDK_DIR }}
           skip_import: 'false'
 
       - name: Publish to npm
-        if: steps.release.outputs.action == 'publish'
         run: npm publish --provenance --access public || npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
-        if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
+        if: needs.resolve.outputs.manifest_changed == 'true'
         run: |
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add ${{ env.SDK_DIR }}/package.json ${{ env.SDK_DIR }}/package-lock.json ${{ env.SDK_DIR }}/CHANGELOG.md || true
-          git commit -S -m "Bump ${{ env.NPM_PACKAGE }} to ${{ steps.release.outputs.version }} [skip ci]" || true
+          git commit -S -m "Bump ${{ env.NPM_PACKAGE }} to ${{ needs.resolve.outputs.version }} [skip ci]" || true
           git push || (
             git pull --rebase origin HEAD &&
             git push

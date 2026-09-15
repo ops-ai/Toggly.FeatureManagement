@@ -1,6 +1,15 @@
 name: React Native SDK - Build & Publish All Packages
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.ReactNative/**'
+      - '.github/workflows/sdk-react-native-all-release.yml'
+      - '.github/workflows/analysis-react-native.yml'
+      - '.github/actions/resolve-release-version/**'
+      - '.github/actions/verify-package-tarball/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -37,6 +46,10 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: react-native-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_ROOT: Toggly.FeatureManagement.ReactNative/libs
   CORE_MANIFEST: Toggly.FeatureManagement.ReactNative/libs/core/package.json
@@ -60,8 +73,8 @@ jobs:
           manifest_path: ${{ env.CORE_MANIFEST }}
           registry: npm
           package_name: '@ops-ai/react-native-toggly-core'
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
 
       - name: Sync monorepo package versions
         if: steps.release.outputs.manifest_changed == 'true'
@@ -72,10 +85,20 @@ jobs:
             npm version "$TARGET" --no-git-tag-version --allow-same-version
           done
 
-  publish:
+  # React Native SDKs are covered by analysis-react-native.yml's full test matrix
+  # (core, react-native, storage-async, storage-mmkv) plus its smoke test.
+  gates:
     needs: validate
-    # Core may already be on npm (action=skip) while siblings still need publish.
     if: needs.validate.outputs.action != 'fail'
+    uses: ./.github/workflows/analysis-react-native.yml
+    with:
+      run_reporting: false
+    secrets: inherit
+
+  publish:
+    needs: [validate, gates]
+    # Core may already be on npm (action=skip) while siblings still need publish.
+    if: needs.validate.outputs.action != 'fail' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: npm-publish
 
@@ -103,7 +126,7 @@ jobs:
       - name: Publish selected packages
         run: |
           set -euo pipefail
-          SELECTION="${{ github.event.inputs.packages || 'all' }}"
+          SELECTION="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.packages || 'all' }}"
           TARGET="${{ needs.validate.outputs.version }}"
 
           publish_pkg() {
@@ -133,7 +156,6 @@ jobs:
 
             npm ci || npm install
             npm run build
-            npm test
 
             if npm view "${npm_name}@${VER}" version >/dev/null 2>&1; then
               echo "Skipping ${npm_name}@${VER} (already published)"
@@ -167,7 +189,7 @@ jobs:
 
   summary:
     if: always()
-    needs: [validate, publish]
+    needs: [validate, gates, publish]
     runs-on: ubuntu-latest
     steps:
       - name: Summary

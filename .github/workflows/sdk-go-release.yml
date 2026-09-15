@@ -1,6 +1,14 @@
 name: Go SDK - Release
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'toggly-go/**'
+      - '.github/workflows/sdk-go-release.yml'
+      - '.github/workflows/analysis-go.yml'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -29,6 +37,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: go-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_ROOT: toggly-go
 
@@ -56,52 +68,22 @@ jobs:
           registry: none
           package_name: toggly-go
           tag_prefix: toggly-go/v
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
 
-  build-and-test:
+  # Go SDK is covered by analysis-go.yml's shared test/lint job for toggly-go
+  # and toggly-go-mongodb-v2.
+  gates:
     needs: validate
     if: needs.validate.outputs.action == 'publish'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go-version: ['1.24', '1.25']
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ matrix.go-version }}
-
-      - name: Download dependencies
-        working-directory: ${{ env.SDK_ROOT }}
-        run: go mod download
-
-      - name: Verify dependencies
-        working-directory: ${{ env.SDK_ROOT }}
-        run: go mod verify
-
-      - name: Build
-        working-directory: ${{ env.SDK_ROOT }}
-        run: go build ./...
-
-      - name: Run tests
-        working-directory: ${{ env.SDK_ROOT }}
-        run: go test -v -race ./...
-        continue-on-error: true
-
-      - name: Vet
-        working-directory: ${{ env.SDK_ROOT }}
-        run: go vet ./...
-        continue-on-error: true
+    uses: ./.github/workflows/analysis-go.yml
+    with:
+      run_reporting: false
+    secrets: inherit
 
   release:
-    needs: [build-and-test, validate]
-    if: needs.validate.outputs.action == 'publish'
+    needs: [validate, gates]
+    if: needs.validate.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
