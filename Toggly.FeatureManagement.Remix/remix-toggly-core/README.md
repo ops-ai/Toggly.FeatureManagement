@@ -1,54 +1,20 @@
-# @ops-ai/remix-toggly-core
+# @ops-ai/remix-toggly-core (deprecated)
 
-Core types and utilities for Toggly Remix SDK - shared between server and client packages
+> **Deprecated.** Use [`@ops-ai/react-router-toggly`](../../Toggly.FeatureManagement.ReactRouter/react-router-toggly) instead.
 
-## Install
+React Router 7/8 framework mode is the supported host. This Remix package family
+is no longer maintained. Last published npm versions remain installable but will
+not receive features or fixes.
+
+## Migration
 
 ```bash
-npm install @ops-ai/remix-toggly-core
+npm uninstall @ops-ai/remix-toggly-core
+npm install @ops-ai/react-router-toggly
 ```
 
-## Documentation
+Import from `@ops-ai/react-router-toggly/client` and
+`@ops-ai/react-router-toggly/server`. Rename `RemixTogglyProvider` to
+`RouterTogglyProvider`.
 
-- [docs.toggly.io](https://docs.toggly.io)
-- SDK catalog: [root README](../../README.md)
-
-## Telemetry
-
-Core exports usage/metrics batchers and an HTTPS client. Optional native gRPC
-lives on a separate subpath so edge-safe consumers never import Node gRPC:
-
-```ts
-import {
-  TelemetryRuntime,
-  resolveTelemetryEnableFlag,
-} from '@ops-ai/remix-toggly-core'
-import { createGrpcClients } from '@ops-ai/remix-toggly-core/telemetry/grpc'
-```
-
-Set `TOGGLY_DISABLE_TELEMETRY=1` to force telemetry off. Prefer
-`@ops-ai/remix-toggly-server` for automatic wiring on Node.
-
-Browser `@ops-ai/remix-toggly-client` does not send Usage/Metrics telemetry.
-
-## Entity context
-
-`isFeatureEnabled` / gate helpers accept optional entity context. User identity (`IdentityContext`) is separate from page-entity context. Register mappers with `registerContext` locally — this client does not PUT entity schemas.
-
-Entity gates fail closed without context. See [Entity & page context](https://docs.toggly.io/docs/core-concepts/entity-context).
-
-```ts
-registerContext('Order', (order) => ({
-  kind: 'Order',
-  key: String(order.id),
-  attributes: { Status: order.status },
-}))
-```
-
-## License
-
-[MIT](LICENSE) — see also the [repository LICENSE](https://github.com/ops-ai/Toggly.FeatureManagement/blob/develop/LICENSE).
-
-## Issues
-
-Use the [structured issue templates](https://github.com/ops-ai/Toggly.FeatureManagement/issues/new/choose).
+See the [React Router SDK README](../../Toggly.FeatureManagement.ReactRouter/react-router-toggly/README.md).

@@ -1,0 +1,107 @@
+{
+  "name": "@ops-ai/react-router-toggly",
+  "version": "1.0.0",
+  "description": "Toggly feature flags for React Router 7/8 framework mode (client + server)",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js",
+      "require": "./dist/client.cjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "proto",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "npm run build && jest && npm run test:package",
+    "test:coverage": "npm run build && jest --coverage && npm run test:package",
+    "test:watch": "jest --watch",
+    "test:package": "node tests/core/telemetry/grpc-package-smoke.test.mjs",
+    "test:hosts": "node fixtures/run.mjs"
+  },
+  "dependencies": {
+    "@ops-ai/toggly-eval": "^2.0.0",
+    "@ops-ai/toggly-hooks-types": "^1.4.3",
+    "@ops-ai/toggly-local-gates": "^1.0.1",
+    "@ops-ai/toggly-signed-defs": "^1.2.3",
+    "ws": "^8.0.0"
+  },
+  "optionalDependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@grpc/proto-loader": "^0.7.13"
+  },
+  "peerDependencies": {
+    "@react-router/node": "^7.0.0 || ^8.0.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "react-router": "^7.0.0 || ^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@react-router/node": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@grpc/grpc-js": "^1.12.6",
+    "@grpc/proto-loader": "^0.7.13",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.2.1",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.13.1",
+    "@types/react": "^18.2.64",
+    "@types/react-dom": "^18.2.21",
+    "@types/ws": "^8.0.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router": "^7.18.3",
+    "ts-jest": "^29.1.2",
+    "tslib": "^2.8.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.4.2",
+    "ws": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "toggly",
+    "feature-flags",
+    "feature-toggles",
+    "feature-management",
+    "react",
+    "react-router",
+    "ssr",
+    "hydration"
+  ],
+  "homepage": "https://docs.toggly.io/sdks/react-router",
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "Toggly.FeatureManagement.ReactRouter/react-router-toggly"
+  },
+  "license": "MIT",
+  "author": "Toggly <support@toggly.io>",
+  "publishConfig": {
+    "access": "public"
+  }
+}

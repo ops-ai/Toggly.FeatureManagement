@@ -49,7 +49,8 @@ This monorepo contains the **official Toggly SDKs** across web, mobile, and back
 | Gatsby | `@ops-ai/gatsby-feature-flags-toggly` | [`Toggly.FeatureManagement.Gatsby`](Toggly.FeatureManagement.Gatsby) | [Docs](https://docs.toggly.io) |
 | Next.js | `@ops-ai/nextjs-toggly-*` | [`Toggly.FeatureManagement.Next`](Toggly.FeatureManagement.Next) | [Docs](https://docs.toggly.io) |
 | Nuxt | `@ops-ai/nuxt-toggly-*` | [`Toggly.FeatureManagement.Nuxt`](Toggly.FeatureManagement.Nuxt) | [Docs](https://docs.toggly.io) |
-| Remix | `@ops-ai/remix-toggly-*` | [`Toggly.FeatureManagement.Remix`](Toggly.FeatureManagement.Remix) | [Docs](https://docs.toggly.io) |
+| React Router | `@ops-ai/react-router-toggly` | [`Toggly.FeatureManagement.ReactRouter`](Toggly.FeatureManagement.ReactRouter) | [Docs](https://docs.toggly.io/sdks/react-router) |
+| Remix (deprecated) | `@ops-ai/remix-toggly-*` | [`Toggly.FeatureManagement.Remix`](Toggly.FeatureManagement.Remix) | Use React Router SDK |
 | HTML / CSS | CSS helpers | [`Toggly.FeatureManagement.Css`](Toggly.FeatureManagement.Css) | [Docs](https://docs.toggly.io/sdks/css) |
 | WordPress | WordPress plugin | [`Toggly.FeatureManagement.Wordpress`](Toggly.FeatureManagement.Wordpress) | [Docs](https://docs.toggly.io) |
 | .NET client / desktop | `Toggly.FeatureManagement.Client`, `Toggly.FeatureManagement.Client.Desktop` | [`Toggly.FeatureManagement.Client`](Toggly.FeatureManagement.Client) | [Docs](https://docs.toggly.io/sdks/dotnet-client) |
