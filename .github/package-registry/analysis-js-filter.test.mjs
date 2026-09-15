@@ -8,7 +8,15 @@ test('all includes default required jobs and full matrix', () => {
   assert.ok(r.testMatrix.length >= 10);
   assert.ok(r.requiredJobs.includes('test'));
   assert.ok(r.requiredJobs.includes('solidstart-host'));
+  assert.ok(r.requiredJobs.includes('test-astro-hosts'));
   assert.equal(r.runTestAstroHosts, true);
+  assert.equal(r.needSharedDeps, true);
+});
+
+test('SolidJS-only skips shared deps artifact', () => {
+  const r = filterAnalysisJs('SolidJS');
+  assert.equal(r.needSharedDeps, false);
+  assert.equal(r.runTest, true);
 });
 
 test('Vue filter limits matrix and requires browser hosts', () => {

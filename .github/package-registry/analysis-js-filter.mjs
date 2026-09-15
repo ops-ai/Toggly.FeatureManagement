@@ -137,6 +137,7 @@ const ALL_REQUIRED_DEFAULT = [
   'solidstart-host',
   'test-current-browser-hosts',
   'test-docusaurus-host',
+  'test-astro-hosts',
 ];
 
 const BROWSER_HOSTS = [

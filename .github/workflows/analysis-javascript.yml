@@ -132,6 +132,7 @@ jobs:
           cache-dependency-path: ${{ matrix.path }}/package*.json
 
       - name: Restore shared JS deps
+        if: needs.prepare.outputs.need_shared_deps == 'true'
         uses: ./.github/actions/download-shared-js-deps
 
       - name: Install locked SolidJS or SvelteKit dependencies
@@ -155,7 +156,10 @@ jobs:
           fi
 
       - name: Overlay shared JS deps into node_modules
-        if: matrix.sdk != 'SolidJS' && matrix.sdk != 'SvelteKit'
+        if: >
+          needs.prepare.outputs.need_shared_deps == 'true' &&
+          matrix.sdk != 'SolidJS' &&
+          matrix.sdk != 'SvelteKit'
         uses: ./.github/actions/overlay-shared-js-deps
         with:
           package-dir: ${{ matrix.path }}
