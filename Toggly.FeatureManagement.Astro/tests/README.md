@@ -1,16 +1,19 @@
 # Packed Astro host verification
 
 Run `npm ci`, `npm run test:coverage`, `npm run build`, and
-`npm run test:package` in the SDK package first. Then run `npm run test:host`
-with `ASTRO_MAJOR=5-min`, `5-locked`, `5`, `6`, or `7`. The manifest in the
+`npm run test:package` in the SDK package first. Then run either
+`npm run test:hosts` (Astro 5.18.2, 6.4.8, and 7.3.2 on Node 24) or
+`ASTRO_MAJOR=5|6|7 npm run test:host` for one major. Optional retained
+profiles use `ASTRO_MAJOR=5-min` or `5-locked`. The manifest in the
 runner pins each direct host dependency; npm installs with strict engine and
 peer resolution. No `--force`, ignored peer conflicts, source alias, or SDK
 source copy is used. `HOST_WORKDIR` optionally preserves an evidence directory;
 otherwise each run gets a new temporary directory. SDK tarballs have content
 hashes in their filenames to prevent reuse of a stale same-version artifact.
 
-Use Node 20.19.6 for 5-min/5-locked, Node 22.23.2 for 5/6, and Node 24.18.0 for
-7. Current Node adapter 9.5.5 resolves undici 8, which requires Node 22.19 or
+Use Node 20.19.6 for 5-min/5-locked, Node 22.23.2 for current Astro 5/6 when
+exercising those pairings locally, and Node 24.18.0 for the CI matrix (5/6/7).
+Current Node adapter 9.5.5 resolves undici 8, which requires Node 22.19 or
 newer; older retained Astro 5 hosts exercise compatible adapter versions on
 Node 20. Framework engines govern other valid pairings.
 

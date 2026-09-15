@@ -55,7 +55,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:package": "node --test tests/packed-exports.test.mjs",
-    "test:host": "node tests/run-packed-host.mjs"
+    "test:host": "node tests/run-packed-host.mjs",
+    "test:hosts": "ASTRO_MAJOR=5 node tests/run-packed-host.mjs && ASTRO_MAJOR=6 node tests/run-packed-host.mjs && ASTRO_MAJOR=7 node tests/run-packed-host.mjs"
   },
   "keywords": [
     "astro",

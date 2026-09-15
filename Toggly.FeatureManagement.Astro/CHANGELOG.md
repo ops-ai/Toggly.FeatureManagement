@@ -6,6 +6,8 @@
 - Astro 6 and 7 compatibility alongside retained Astro 5, including packed
   SSR/SSG hosts, middleware, page gates, and React/Vue/Svelte island checks.
 - Compatibility with Nano Stores React 2 while retaining version 1.
+- Vite `x-feature` transform handles query/hash-suffixed module ids from
+  Vite 7/8 (Astro 6/7) while still matching bare `.astro` paths.
 
 ### Fixed
 - Keep SDK definition-request headers off public JWKS lookups so signed

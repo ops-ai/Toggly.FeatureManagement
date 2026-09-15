@@ -282,6 +282,43 @@ jobs:
           CHROME_BIN: /usr/bin/google-chrome
         run: node tests/docusaurus-consumer-fixtures/packed-host.mjs
 
+  test-astro-hosts:
+    name: Astro ${{ matrix.astro-major }} packed host (Node 24)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        astro-major: ['5', '6', '7']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.x'
+          cache: npm
+          cache-dependency-path: Toggly.FeatureManagement.Astro/package-lock.json
+
+      - name: Install locked Astro SDK dependencies
+        working-directory: Toggly.FeatureManagement.Astro
+        run: npm ci
+
+      - name: Build Astro SDK
+        working-directory: Toggly.FeatureManagement.Astro
+        run: npm run build
+
+      - name: Install Chromium for packed Astro host
+        working-directory: Toggly.FeatureManagement.Astro
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify packed Astro ${{ matrix.astro-major }} host
+        working-directory: Toggly.FeatureManagement.Astro
+        env:
+          ASTRO_MAJOR: ${{ matrix.astro-major }}
+        run: npm run test:host
+
   test-current-browser-hosts:
     name: Current ${{ matrix.host.sdk }} packed host (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
