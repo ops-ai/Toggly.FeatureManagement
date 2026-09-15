@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.3
+
+2026-09-14
+
+### Fixed
+
+- Limit the legacy adapter's `react-native-mmkv` peer to the MMKV 2 and 3
+  API generations it uses. MMKV 4 uses the separate
+  `@ops-ai/react-native-toggly-storage-mmkv4` package because its Nitro API
+  replaces the constructor and delete methods used here.
+
 
 ## 1.1.2
 

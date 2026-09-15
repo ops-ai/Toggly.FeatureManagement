@@ -181,6 +181,15 @@
       "oidcReady": false
     },
     {
+      "name": "@ops-ai/react-native-toggly-storage-mmkv4",
+      "group": "react-native",
+      "manifest": "Toggly.FeatureManagement.ReactNative/libs/storage-mmkv4/package.json",
+      "changelog": "Toggly.FeatureManagement.ReactNative/libs/storage-mmkv4/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-react-native-all-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks/react-native/storage",
+      "oidcReady": false
+    },
+    {
       "name": "@ops-ai/react-router-toggly",
       "group": "react-router",
       "manifest": "Toggly.FeatureManagement.ReactRouter/react-router-toggly/package.json",

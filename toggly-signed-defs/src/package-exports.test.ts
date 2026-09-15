@@ -16,12 +16,16 @@ describe('published ESM artifact', () => {
     })
   }, 35000)
 
-  it('publishes a browser condition before Node import and require conditions', () => {
+  it('directs CommonJS browser-condition consumers to the browser-mapped CommonJS artifact', () => {
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
       exports?: Record<string, Record<string, unknown>>
     }
 
     expect(manifest.exports?.['.']?.browser).toEqual({
+      require: {
+        types: './dist/index.d.ts',
+        default: './dist/index.js',
+      },
       types: './dist/browser/index.d.ts',
       default: './dist/browser/index.js',
     })

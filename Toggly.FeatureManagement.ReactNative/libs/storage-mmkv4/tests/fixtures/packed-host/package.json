@@ -1,0 +1,17 @@
+{
+  "name": "toggly-mmkv4-packed-host",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "verify": "jest --runInBand verify.test.js"
+  },
+  "dependencies": {
+    "@types/react": "^19.1.1",
+    "jest": "^29.7.0",
+    "react": "^19.2.3",
+    "react-native": "0.87.1",
+    "react-native-mmkv": "4.3.2",
+    "react-native-nitro-modules": "0.37.1",
+    "typescript": "^5.9.3"
+  }
+}

@@ -4,17 +4,18 @@ const mockSetItem = jest.fn();
 const mockRemoveItem = jest.fn();
 const mockGetAllKeys = jest.fn();
 const mockMultiRemove = jest.fn();
+const mockAsyncStorage = {
+  getItem: (...args: any[]) => mockGetItem(...args),
+  setItem: (...args: any[]) => mockSetItem(...args),
+  removeItem: (...args: any[]) => mockRemoveItem(...args),
+  getAllKeys: (...args: any[]) => mockGetAllKeys(...args),
+  multiRemove: (...args: any[]) => mockMultiRemove(...args),
+};
 
 // Mock AsyncStorage module with the mock functions
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
-  default: {
-    getItem: (...args: any[]) => mockGetItem(...args),
-    setItem: (...args: any[]) => mockSetItem(...args),
-    removeItem: (...args: any[]) => mockRemoveItem(...args),
-    getAllKeys: (...args: any[]) => mockGetAllKeys(...args),
-    multiRemove: (...args: any[]) => mockMultiRemove(...args),
-  },
+  default: mockAsyncStorage,
 }));
 
 import { TogglyService } from '@ops-ai/react-native-toggly-core';
@@ -29,6 +30,7 @@ describe('AsyncStorageAdapter', () => {
     mockRemoveItem.mockReset();
     mockGetAllKeys.mockReset();
     mockMultiRemove.mockReset();
+    mockAsyncStorage.multiRemove = (...args: any[]) => mockMultiRemove(...args);
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -174,6 +176,19 @@ describe('AsyncStorageAdapter', () => {
       await adapter.clear();
 
       expect(mockMultiRemove).toHaveBeenCalledWith([]);
+    });
+
+    it('uses removeItem when AsyncStorage does not expose the legacy multiRemove helper', async () => {
+      mockGetAllKeys.mockResolvedValue(['@toggly:feature1', '@toggly:feature2', '@other:data']);
+      mockRemoveItem.mockResolvedValue(undefined);
+      delete (mockAsyncStorage as { multiRemove?: unknown }).multiRemove;
+
+      const adapter = new AsyncStorageAdapter();
+      await adapter.clear();
+
+      expect(mockRemoveItem).toHaveBeenCalledWith('@toggly:feature1');
+      expect(mockRemoveItem).toHaveBeenCalledWith('@toggly:feature2');
+      expect(mockMultiRemove).not.toHaveBeenCalled();
     });
 
     it('propagates storage errors on failure', async () => {

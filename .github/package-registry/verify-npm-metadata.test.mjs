@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   buildWorkspaceIndex,
   discoverPublicOpsAiManifests,
@@ -39,6 +40,20 @@ test('every inventory workflow, changelog, and metadata contract passes', () => 
     result.ok,
     true,
     result.errors.length ? result.errors.join('\n') : 'unexpected failure',
+  );
+});
+
+test('React Native release synchronizes and stages the MMKV4 public package', () => {
+  const workflow = new URL('../workflows/sdk-react-native-all-release.yml', import.meta.url);
+  const source = readFileSync(workflow, 'utf8');
+
+  assert.match(
+    source,
+    /for pkg in react-native storage-async storage-mmkv storage-mmkv4; do/,
+  );
+  assert.match(
+    source,
+    /for pkg in core react-native storage-async storage-mmkv storage-mmkv4; do/,
   );
 });
 

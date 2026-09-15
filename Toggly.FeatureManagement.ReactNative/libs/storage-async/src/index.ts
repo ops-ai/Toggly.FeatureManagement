@@ -92,7 +92,15 @@ export class AsyncStorageAdapter implements TogglyStorage {
     try {
       const allKeys = await AsyncStorage.getAllKeys();
       const togglyKeys = allKeys.filter((key) => key.startsWith(this.keyPrefix));
-      await AsyncStorage.multiRemove(togglyKeys);
+      const legacyStorage = AsyncStorage as typeof AsyncStorage & {
+        multiRemove?: (keys: string[]) => Promise<void>;
+      };
+
+      if (legacyStorage.multiRemove) {
+        await legacyStorage.multiRemove(togglyKeys);
+      } else {
+        await Promise.all(togglyKeys.map((key) => AsyncStorage.removeItem(key)));
+      }
     } catch (error) {
       console.error('[Toggly] AsyncStorage clear error:', error);
       throw error;

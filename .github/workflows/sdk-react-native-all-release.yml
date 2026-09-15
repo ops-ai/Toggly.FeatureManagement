@@ -31,6 +31,7 @@ on:
           - react-native
           - storage-async
           - storage-mmkv
+          - storage-mmkv4
 
 permissions:
   contents: write
@@ -66,7 +67,7 @@ jobs:
         if: steps.release.outputs.manifest_changed == 'true'
         run: |
           TARGET="${{ steps.release.outputs.version }}"
-          for pkg in react-native storage-async storage-mmkv; do
+          for pkg in react-native storage-async storage-mmkv storage-mmkv4; do
             cd "${{ env.SDK_ROOT }}/$pkg"
             npm version "$TARGET" --no-git-tag-version --allow-same-version
           done
@@ -147,6 +148,7 @@ jobs:
           publish_pkg react-native @ops-ai/react-native-toggly true
           publish_pkg storage-async @ops-ai/react-native-toggly-storage-async true
           publish_pkg storage-mmkv @ops-ai/react-native-toggly-storage-mmkv true
+          publish_pkg storage-mmkv4 @ops-ai/react-native-toggly-storage-mmkv4 true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -156,7 +158,7 @@ jobs:
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
-          for pkg in core react-native storage-async storage-mmkv; do
+          for pkg in core react-native storage-async storage-mmkv storage-mmkv4; do
             git add ${{ env.SDK_ROOT }}/$pkg/package.json
             git add ${{ env.SDK_ROOT }}/$pkg/package-lock.json 2>/dev/null || true
           done

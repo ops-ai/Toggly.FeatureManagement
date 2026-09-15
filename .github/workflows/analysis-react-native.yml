@@ -36,7 +36,10 @@ jobs:
             test-cmd: npm run typecheck
           - sdk: Storage-MMKV
             path: Toggly.FeatureManagement.ReactNative/libs/storage-mmkv
-            test-cmd: npm run typecheck
+            test-cmd: npm test
+          - sdk: Storage-MMKV4
+            path: Toggly.FeatureManagement.ReactNative/libs/storage-mmkv4
+            test-cmd: npm test
 
     steps:
       - name: Checkout code
@@ -119,6 +122,7 @@ jobs:
           npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/react-native || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/react-native
           npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/storage-async || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/storage-async
           npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/storage-mmkv || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/storage-mmkv
+          npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/storage-mmkv4 || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/storage-mmkv4
         continue-on-error: true
 
       - name: Organize coverage files
@@ -129,6 +133,7 @@ jobs:
             ["React-Native"]="Toggly.FeatureManagement.ReactNative/libs/react-native"
             ["Storage-Async"]="Toggly.FeatureManagement.ReactNative/libs/storage-async"
             ["Storage-MMKV"]="Toggly.FeatureManagement.ReactNative/libs/storage-mmkv"
+            ["Storage-MMKV4"]="Toggly.FeatureManagement.ReactNative/libs/storage-mmkv4"
           )
           find coverage-artifacts -name "lcov.info" -type f | while read file; do
             sdk_name=$(echo "$file" | sed 's|coverage-artifacts/coverage-||' | sed 's|/.*||')
@@ -290,5 +295,6 @@ jobs:
           echo "- @ops-ai/react-native-toggly" >> $GITHUB_STEP_SUMMARY
           echo "- @ops-ai/react-native-toggly-storage-async" >> $GITHUB_STEP_SUMMARY
           echo "- @ops-ai/react-native-toggly-storage-mmkv" >> $GITHUB_STEP_SUMMARY
+          echo "- @ops-ai/react-native-toggly-storage-mmkv4" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-react-native" >> $GITHUB_STEP_SUMMARY
