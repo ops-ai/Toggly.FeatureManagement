@@ -99,9 +99,12 @@ updates:
           - minor
           - patch
     ignore:
-      # grpc-go 1.83+ requires Go 1.25. Declared SDK floor is Go 1.24 (OPS-1011).
+      # grpc-go 1.82+ rewrites go.mod to 1.25. Declared SDK floor is Go 1.24
+      # (OPS-1011). 1.82.2 slipped under the previous >=1.83 ignore (#513).
       - dependency-name: google.golang.org/grpc
-        versions: [">=1.83.0"]
+        versions: [">=1.82.0"]
+      - dependency-name: go.mongodb.org/mongo-driver/v2
+        versions: [">=2.9.0"]
 
   - package-ecosystem: maven
     directories:
@@ -151,6 +154,9 @@ updates:
       # it; rubocop 1.91 pulls json 3 into the lockfile (OPS-1011).
       - dependency-name: json
         versions: [">=3.0.0"]
+      # json ignore does not stop this transitive (#516 / #486).
+      - dependency-name: rubocop
+        versions: [">=1.91.0"]
 
   - package-ecosystem: pip
     directories:
@@ -211,16 +217,16 @@ updates:
           - minor
           - patch
     ignore:
-      # tonic-build 0.14 is not compatible with tonic 0.12 / prost 0.13.
-      # Move the gRPC stack together (OPS-1011). Cargo 0.x minors are majors.
+      # Move the gRPC stack together (OPS-1011). Cargo 0.x 0.12→0.14 was
+      # treated as a minor, so semver-major misses it (#512 / #514).
       - dependency-name: tonic
-        update-types: ["version-update:semver-major"]
+        versions: [">=0.13.0"]
       - dependency-name: tonic-build
-        update-types: ["version-update:semver-major"]
+        versions: [">=0.13.0"]
       - dependency-name: prost
-        update-types: ["version-update:semver-major"]
+        versions: [">=0.14.0"]
       - dependency-name: prost-types
-        update-types: ["version-update:semver-major"]
+        versions: [">=0.14.0"]
       # 0.30 pulls rustls 0.23, which needs an explicit CryptoProvider.
       - dependency-name: tokio-tungstenite
         update-types: ["version-update:semver-major"]
@@ -231,6 +237,9 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: sha1
         update-types: ["version-update:semver-major"]
+      # toggly-axum is 0.7; toggly-axum08 already covers 0.8 (#517).
+      - dependency-name: axum
+        versions: [">=0.8.0"]
 
   - package-ecosystem: gradle
     directories:
@@ -277,6 +286,16 @@ updates:
         versions: [">=1.11.0"]
       - dependency-name: "org.jetbrains.kotlinx:kotlinx-serialization-*"
         versions: [">=1.8.0"]
+      # mockk 1.14 / Hilt 2.60 / Room 2.8 pull Kotlin 2.2 metadata while the
+      # SDK compiles with Kotlin 2.0 (#519).
+      - dependency-name: "io.mockk:mockk"
+        versions: [">=1.14.0"]
+      - dependency-name: "com.google.dagger:hilt-android"
+        versions: [">=2.54.0"]
+      - dependency-name: "com.google.dagger.hilt.android"
+        versions: [">=2.54.0"]
+      - dependency-name: "androidx.room:*"
+        versions: [">=2.7.0"]
 
   - package-ecosystem: swift
     directory: "/Toggly.FeatureManagement.iOS"
