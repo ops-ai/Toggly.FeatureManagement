@@ -16,6 +16,14 @@ function run(command: string, args: string[], cwd: string): string {
 }
 
 describe('packed MMKV 4 host', () => {
+  it('requires the Nitro line that supports the current React Native JSI hook', () => {
+    const manifest = require('../package.json') as {
+      peerDependencies: Record<string, string>;
+    };
+
+    expect(manifest.peerDependencies['react-native-nitro-modules']).toBe('^0.37.1');
+  });
+
   it('installs, typechecks, and uses the packed adapter with MMKV 4 and Nitro', () => {
     const temporaryDirectory = mkdtempSync(join(tmpdir(), 'toggly-mmkv4-host-'));
     let tarball: string | undefined;

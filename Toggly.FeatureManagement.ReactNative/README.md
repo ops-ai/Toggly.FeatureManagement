@@ -49,7 +49,7 @@ cd ios && pod install
 
 **MMKV 4 with Nitro:**
 ```bash
-npm install @ops-ai/react-native-toggly-storage-mmkv4 react-native-mmkv react-native-nitro-modules
+npm install @ops-ai/react-native-toggly-storage-mmkv4 react-native-mmkv react-native-nitro-modules@^0.37.1
 cd ios && pod install
 ```
 
@@ -314,7 +314,8 @@ const storage = createMMKVStorageAdapter({
 #### MMKV 4 / Nitro Adapter
 
 MMKV 4 uses a different native API. Use a development build for Expo rather
-than Expo Go, and install the Nitro peer dependency.
+than Expo Go. React Native 0.87 current hosts require the 0.37.1 Nitro line;
+installing the prior 0.35 line leaves the JSI hook uninstalled.
 
 ```tsx
 import { createMMKV4StorageAdapter } from '@ops-ai/react-native-toggly-storage-mmkv4';
@@ -522,7 +523,8 @@ The SDK is fully compatible with Expo. For storage:
 
 1. Install the AsyncStorage adapter (works with Expo out of the box)
 2. If using MMKV 2, 3, or 4, you'll need a development build (not Expo Go)
-3. MMKV 4 also requires `react-native-nitro-modules`
+3. MMKV 4 also requires `react-native-nitro-modules` 0.37.1 or later in that
+   minor line for current React Native JSI hooks.
 
 ```bash
 # For Expo projects

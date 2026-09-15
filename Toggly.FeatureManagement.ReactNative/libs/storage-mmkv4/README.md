@@ -4,10 +4,12 @@ MMKV 4 and Nitro storage adapter for the React Native Toggly SDK.
 
 ## Install
 
-Install this package with MMKV 4 and Nitro modules:
+Install this package with MMKV 4 and Nitro modules. Current React Native hosts
+need `react-native-nitro-modules` 0.37.1 or later in that minor line; earlier
+Nitro releases do not install the current React Native JSI hook:
 
 ```bash
-npm install @ops-ai/react-native-toggly-storage-mmkv4 react-native-mmkv react-native-nitro-modules
+npm install @ops-ai/react-native-toggly-storage-mmkv4 react-native-mmkv react-native-nitro-modules@^0.37.1
 ```
 
 MMKV 4 needs a native build. For bare React Native applications, install
