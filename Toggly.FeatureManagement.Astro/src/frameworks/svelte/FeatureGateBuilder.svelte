@@ -5,7 +5,7 @@
  * Always renders its slot and exposes the resolved gate boolean for conditional UI.
  */
 
-import { $gate, $isReady, $flags, $localGatesRevision } from '../../client/store.js';
+import { $gate as createGate, $isReady as ready } from '../../client/store.js';
 
 export let flag: string | undefined = undefined;
 export let flags: string[] | undefined = undefined;
@@ -21,16 +21,9 @@ $: flagKeys = (() => {
   return keys;
 })();
 
-$: gateAtom = $gate(flagKeys, requirement, negate, context, contextKind);
+$: gateAtom = createGate(flagKeys, requirement, negate, context, contextKind);
 
-$: enabled = (() => {
-  if (!$isReady) {
-    return false;
-  }
-  void $flags;
-  void $localGatesRevision;
-  return gateAtom.get();
-})();
+$: enabled = $ready && $gateAtom;
 </script>
 
 <slot {enabled} />

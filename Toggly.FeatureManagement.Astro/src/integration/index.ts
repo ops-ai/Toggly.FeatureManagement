@@ -60,6 +60,9 @@ export default function togglyIntegration(
         // Add Vite plugin to strip x-feature directives before Astro's compiler
         updateConfig({
           vite: {
+            // Source Vue/Svelte components import the same store as client setup.
+            // Prebundling only the JS entry points creates a second store in dev.
+            optimizeDeps: { exclude: ['@ops-ai/astro-feature-flags-toggly'] },
             ssr: {
               noExternal: ['@ops-ai/astro-feature-flags-toggly'],
             },
@@ -68,10 +71,12 @@ export default function togglyIntegration(
                 name: 'toggly-x-feature-transform',
                 enforce: 'pre' as const,
                 load(id: string) {
-                  // Only process .astro files
-                  if (!id.endsWith('.astro')) return null;
+                  // Vite 7/8 may append query/hash (e.g. file.astro?astro&type=script).
+                  const filePath = id.split('?', 1)[0].split('#', 1)[0];
+                  if (!filePath.endsWith('.astro')) return null;
+                  if (!fs.existsSync(filePath)) return null;
 
-                  const code = fs.readFileSync(id, 'utf-8');
+                  const code = fs.readFileSync(filePath, 'utf-8');
 
                   // Check if frontmatter contains x-feature:
                   const frontmatterMatch = code.match(/^(---\s*\n)([\s\S]*?)(\n---)/);

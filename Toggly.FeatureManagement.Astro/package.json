@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/astro-feature-flags-toggly",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "description": "Toggly feature flags SDK for Astro with SSR, SSG, and framework support",
   "type": "module",
   "main": "./dist/index.js",
@@ -53,7 +53,10 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:package": "node --test tests/packed-exports.test.mjs",
+    "test:host": "node tests/run-packed-host.mjs",
+    "test:hosts": "ASTRO_MAJOR=5 node tests/run-packed-host.mjs && ASTRO_MAJOR=6 node tests/run-packed-host.mjs && ASTRO_MAJOR=7 node tests/run-packed-host.mjs"
   },
   "keywords": [
     "astro",
@@ -75,7 +78,7 @@
     "@ops-ai/toggly-eval": "^2.0.0",
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1",
-    "@ops-ai/toggly-signed-defs": "^1.2.3",
+    "@ops-ai/toggly-signed-defs": "^1.2.8",
     "glob": "^10.3.10"
   },
   "devDependencies": {
@@ -94,13 +97,16 @@
     "typescript": "^5.3.3",
     "vitest": "^4.0.18",
     "vue": "^3.5.26",
-    "ws": "^8.0.0"
+    "ws": "^8.0.0",
+    "semver": "^7.7.3",
+    "react-dom": "^19.2.3",
+    "@types/react-dom": "^19.2.3"
   },
   "peerDependencies": {
-    "@nanostores/react": "^1.0.0",
+    "@nanostores/react": "^1.0.0 || ^2.0.0",
     "@nanostores/svelte": "^0.10.0",
     "@nanostores/vue": "^1.0.0",
-    "astro": "^5.0.0",
+    "astro": "^5.0.0 || ^6.0.0 || ^7.0.0",
     "nanostores": "^1.0.0",
     "react": ">=18.0.0",
     "svelte": ">=4.0.0",

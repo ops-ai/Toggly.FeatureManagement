@@ -292,7 +292,7 @@ class TogglyClientInstance {
         baseURI: this.config.baseURI!,
         allowedKeyIds: this.config.allowedKeyIds,
         maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
-        headers: buildDefinitionFetchHeaders({ Accept: 'application/json' }),
+        // Public JWKS does not need SDK definition-request headers.
       });
       let flags: Flags;
       let variantDefs: Record<string, EvaluatedVariantDef> | null;

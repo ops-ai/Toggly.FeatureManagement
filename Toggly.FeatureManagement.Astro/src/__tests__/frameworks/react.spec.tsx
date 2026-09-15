@@ -13,6 +13,7 @@ vi.mock('react', async (importOriginal) => {
   return {
     ...actual,
     useMemo: <T,>(factory: () => T) => factory(),
+    useSyncExternalStore: <T,>(_subscribe: unknown, getSnapshot: () => T) => getSnapshot(),
   };
 });
 

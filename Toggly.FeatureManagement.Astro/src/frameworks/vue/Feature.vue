@@ -10,7 +10,8 @@
 
 import { computed } from 'vue';
 import { useStore } from '@nanostores/vue';
-import { $flags, $gate, $isReady, $localGatesRevision } from '../../client/store.js';
+import { useTogglyReady } from './composables.js';
+import { $flags, $gate, $localGatesRevision } from '../../client/store.js';
 import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 
 export interface FeatureProps {
@@ -34,7 +35,7 @@ const props = withDefaults(defineProps<FeatureProps>(), {
   context: null,
 });
 
-const isReady = useStore($isReady);
+const isReady = useTogglyReady();
 const flags = useStore($flags);
 const localGatesRevision = useStore($localGatesRevision);
 

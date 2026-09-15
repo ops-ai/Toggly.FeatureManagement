@@ -119,6 +119,19 @@ describe('Toggly Integration', () => {
       );
     });
 
+    it('keeps client setup and source components on one store in development', async () => {
+      const integration = togglyIntegration();
+      const updateConfig = vi.fn();
+      await (integration.hooks['astro:config:setup'] as any)({
+        config: { srcDir: { pathname: '/tmp/src/' } },
+        injectScript: vi.fn(),
+        updateConfig,
+      });
+      expect(updateConfig.mock.calls[0][0].vite.optimizeDeps?.exclude).toContain(
+        '@ops-ai/astro-feature-flags-toggly'
+      );
+    });
+
     it('should configure SSR noExternal', async () => {
       const integration = togglyIntegration();
       const updateConfig = vi.fn();
@@ -157,6 +170,7 @@ layout: ../layouts/Main.astro
 ---
 <h1>Hello</h1>`;
 
+      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue(mockContent);
 
       const result = plugin.load('/path/to/page.astro');
@@ -181,6 +195,50 @@ layout: ../layouts/Main.astro
       expect(result).toBeNull();
     });
 
+    it('should strip x-feature when Vite appends a query suffix to the id', async () => {
+      const integration = togglyIntegration();
+      const updateConfig = vi.fn();
+
+      await (integration.hooks['astro:config:setup'] as any)({
+        config: { srcDir: { pathname: '/tmp/src/' } },
+        injectScript: vi.fn(),
+        updateConfig,
+      });
+
+      const plugin = updateConfig.mock.calls[0][0].vite.plugins[0];
+      const mockContent = `---
+title: "Queried"
+x-feature: QueriedFeature
+---
+<p>ok</p>`;
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(mockContent);
+
+      const result = plugin.load('/path/to/page.astro?astro&type=script&lang.ts');
+      expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/page.astro', 'utf-8');
+      expect(result).toBeDefined();
+      expect(result).not.toContain('x-feature:');
+      expect(result).toContain('title: "Queried"');
+    });
+
+    it('should return null for query-suffixed ids when the file is missing', async () => {
+      const integration = togglyIntegration();
+      const updateConfig = vi.fn();
+
+      await (integration.hooks['astro:config:setup'] as any)({
+        config: { srcDir: { pathname: '/tmp/src/' } },
+        injectScript: vi.fn(),
+        updateConfig,
+      });
+
+      const plugin = updateConfig.mock.calls[0][0].vite.plugins[0];
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      expect(plugin.load('/missing/page.astro?astro')).toBeNull();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
     it('should ignore .astro files without frontmatter', async () => {
       const integration = togglyIntegration();
       const updateConfig = vi.fn();
@@ -192,6 +250,7 @@ layout: ../layouts/Main.astro
       });
 
       const plugin = updateConfig.mock.calls[0][0].vite.plugins[0];
+      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('<h1>No frontmatter</h1>');
 
       const result = plugin.load('/path/to/page.astro');
@@ -210,6 +269,7 @@ layout: ../layouts/Main.astro
 
       const plugin = updateConfig.mock.calls[0][0].vite.plugins[0];
 
+      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue(`---
 title: "My Page"
 layout: ../layouts/Main.astro

@@ -6,7 +6,7 @@
  * Use `negate` for the off path (same as .NET `<feature negate>`).
  */
 
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { useStore } from '@nanostores/react';
 import { $flag, $gate, $isReady, $variants } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
@@ -32,6 +32,16 @@ export interface FeatureProps {
   loading?: ReactNode;
   /** Render prop for conditional styling; always invoked with resolved gate boolean */
   render?: (enabled: boolean) => ReactNode;
+}
+
+// Islands render the loading state on the server. Keep that snapshot during
+// hydration even when the injected client has already fetched its flags.
+const subscribeReady = (onChange: () => void) => $isReady.listen(onChange);
+const getReadySnapshot = () => $isReady.get();
+const getServerReadySnapshot = () => false;
+
+function useReady(): boolean {
+  return useSyncExternalStore(subscribeReady, getReadySnapshot, getServerReadySnapshot);
 }
 
 function buildFlagKeys(flag?: string, flags?: string[]): string[] {
@@ -76,7 +86,7 @@ export function Feature({
   loading = null,
   render,
 }: FeatureProps) {
-  const isReady = useStore($isReady);
+  const isReady = useReady();
   const isEnabled = useGateEnabled(flag, flags, requirement, negate, context, contextKind);
 
   if (render) {
@@ -107,7 +117,7 @@ export function useFeatureFlag(
     [flagKey, defaultValue, context, contextKind],
   );
   const enabled = useStore(flagAtom);
-  const isReady = useStore($isReady);
+  const isReady = useReady();
 
   return { enabled, isReady };
 }
@@ -128,7 +138,7 @@ export function useFeatureGate(
     [keysKey, requirement, negate, context, contextKind],
   );
   const enabled = useStore(gateAtom);
-  const isReady = useStore($isReady);
+  const isReady = useReady();
 
   return { enabled, isReady };
 }

@@ -26,6 +26,46 @@ Feature flag management for Astro applications with support for SSR, SSG, and cl
 npm install @ops-ai/astro-feature-flags-toggly
 ```
 
+## Supported hosts
+
+Astro 5, 6, and 7 are supported. Choose the Node runtime required by Astro and
+its official framework/SSR adapters; the SDK does not raise the retained
+Astro 5 runtime requirement. These packed-package hosts exercise production
+SSR and SSG, middleware, page feature manifests, signed refresh, and hydrated
+React, Vue, and Svelte islands:
+
+| Astro | Node tested | Node adapter | React / Vue / Svelte integrations |
+| --- | --- | --- | --- |
+| 5.0.0 | 20.19.6 | 9.0.0 | 4.4.2 / 5.1.4 / 7.2.5 |
+| 5.16.6 | 20.19.6 | 9.4.6 | 4.4.2 / 5.1.4 / 7.2.5 |
+| 5.18.2 | 22.23.2 | 9.5.5 | 4.4.2 / 5.1.4 / 7.2.5 |
+| 6.4.8 | 22.23.2 | 10.1.4 | 5.0.7 / 6.0.1 / 8.1.2 |
+| 7.3.2 | 24.18.0 | 11.1.5 | 6.0.5 / 7.0.2 / 9.0.1 |
+
+The React wrapper accepts `@nanostores/react` 1 and 2. Use version 1 for
+Node 20 hosts; version 2 requires a compatible Node 22 or newer runtime.
+The Vue wrapper uses `@nanostores/vue` 1. Svelte uses its native store
+subscription contract directly with Nano Stores. Install the optional
+framework and wrapper only when using that framework:
+
+```bash
+# React islands (use @nanostores/react@1 for Node 20)
+npm install react react-dom @nanostores/react
+# Vue islands
+npm install vue @nanostores/vue
+# Svelte islands
+npm install svelte
+```
+
+The current Astro 7 React/Vue Vite plugins have a known mixed-development
+[React Fast Refresh issue](https://github.com/vitejs/vite-plugin-vue/issues/798).
+Combined production islands are verified; development on Astro 7 is verified
+in separate React, Vue, and Svelte hosts until that upstream issue is fixed.
+
+Pair each framework with its matching official Astro integration. The SDK's
+`/react`, `/vue`, and `/svelte` entry points expose the framework helpers;
+`.astro`, `.vue`, and `.svelte` components are compiled by the consuming host.
+
 ## Quick Start
 
 ### 1. Add the Integration
