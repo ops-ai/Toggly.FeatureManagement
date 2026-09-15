@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.0
+
+2026-09-14
+
+### Added
+- `toggly-cache-redis-jedis8`, an opt-in Redis cache artifact for Jedis 8.0.1.
+  It preserves the existing Redis key and snapshot serialization format while
+  excluding the retained Jedis 5 dependency from Jedis 8 hosts.
+- Packed Maven consumer fixtures for Servlet, Caffeine, retained Jedis 5.1.5,
+  and Jedis 8.0.1, run on Java 17, 21, and 25.
+
+### Changed
+- `toggly-cache-redis` now uses the current Jedis 5.1.5 patch while retaining
+  its public imports and constructors.
+- Java 25 joins Java 17 and 21 in the SDK CI matrix. The Java 17 compiler
+  target remains unchanged.
+
 ## 1.5.1
 
 2026-09-10

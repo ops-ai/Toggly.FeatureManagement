@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java-version: [17, 21]
+        java-version: [17, 21, 25]
 
     steps:
       - name: Checkout code
@@ -63,6 +63,43 @@ jobs:
             ${{ env.SDK_ROOT }}/**/target/failsafe-reports/*.xml
           retention-days: 7
           if-no-files-found: ignore
+
+  current-hosts:
+    name: Packed Host Fixtures (JDK ${{ matrix.java-version }})
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        java-version: [17, 21, 25]
+    services:
+      redis:
+        image: redis:7.4.11-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v6
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build release JARs and run isolated hosts
+        env:
+          MAVEN_REPO_LOCAL: ${{ runner.temp }}/toggly-java-hosts-m2
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: '6379'
+        run: bash host-fixtures/run-current-hosts.sh
 
   smoke-test:
     name: Smoke Test
@@ -178,7 +215,7 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - Java" \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.token="${SONAR_TOKEN}" \
-            -Dsonar.exclusions="**/target/**,**/test/**" \
+            -Dsonar.exclusions="**/target/**,**/test/**,**/host-fixtures/**" \
             -Dsonar.test.inclusions="**/test/**" \
             --file pom.xml || true
         continue-on-error: true
@@ -200,7 +237,7 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - Java" \
             -Dsonar.host.url="${SONAR_HOST_URL}" \
             -Dsonar.token="${SONAR_SERVER_TOKEN}" \
-            -Dsonar.exclusions="**/target/**,**/test/**" \
+            -Dsonar.exclusions="**/target/**,**/test/**,**/host-fixtures/**" \
             -Dsonar.test.inclusions="**/test/**" \
             -Dsonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
             --file pom.xml || true
@@ -258,7 +295,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [build, smoke-test, code-quality, coverage, sonar, dependency-check]
+    needs: [build, current-hosts, smoke-test, code-quality, coverage, sonar, dependency-check]
     if: always()
     defaults:
       run:
@@ -272,7 +309,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: build,smoke-test,code-quality,coverage
+          required-jobs: build,current-hosts,smoke-test,code-quality,coverage
 
       - name: Generate summary
         run: |
@@ -283,6 +320,7 @@ jobs:
           echo "### JDK Versions Tested" >> $GITHUB_STEP_SUMMARY
           echo "- JDK 17" >> $GITHUB_STEP_SUMMARY
           echo "- JDK 21" >> $GITHUB_STEP_SUMMARY
+          echo "- JDK 25" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Analysis Results" >> $GITHUB_STEP_SUMMARY
           echo "- Maven build and tests" >> $GITHUB_STEP_SUMMARY

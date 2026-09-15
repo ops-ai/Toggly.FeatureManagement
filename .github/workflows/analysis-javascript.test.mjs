@@ -59,3 +59,15 @@ test('requires the packed Docusaurus production host with a locked Node 24 insta
   assert.match(docusaurusFixture, /page\.on\('console'/);
   assert.match(docusaurusFixture, /consoleErrors/);
 });
+
+test('runs the current Gatsby packed host on Node 24', () => {
+  assert.match(workflow, /'Toggly\.FeatureManagement\.Gatsby\/\*\*'/);
+  assert.match(
+    workflow,
+    /- sdk: Gatsby\s+path: Toggly\.FeatureManagement\.Gatsby\s+test-cmd: npm run test:coverage && node tests\/packed-host\.mjs\s+node-version: '24\.x'/,
+  );
+  assert.match(
+    workflow,
+    /- name: Install locked Gatsby dependencies\s+if: matrix\.sdk == 'Gatsby'\s+working-directory: \$\{\{ matrix\.path \}\}\s+run: npm ci/,
+  );
+});
