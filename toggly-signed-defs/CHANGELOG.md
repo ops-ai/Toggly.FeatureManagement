@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.9
+
+- Route CommonJS consumers that select the browser condition to the browser-mapped CommonJS artifact while preserving browser ESM imports and signed-definition verification behavior.
+
 ## 1.2.8
 
 2026-09-14
