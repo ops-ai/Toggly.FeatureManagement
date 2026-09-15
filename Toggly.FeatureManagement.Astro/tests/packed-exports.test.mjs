@@ -26,3 +26,11 @@ for (const version of ['1.0.0', '1.1.0', '2.0.1']) {
     assert.ok(semver.satisfies(version, manifest.peerDependencies['@nanostores/react']));
   });
 }
+
+test('signed consumers cannot resolve a verifier without canonical browser/JWKS fixes', () => {
+  const range = manifest.dependencies['@ops-ai/toggly-signed-defs'];
+  assert.ok(semver.satisfies('1.2.8', range));
+  for (const broken of ['1.2.5', '1.2.6', '1.2.7']) {
+    assert.equal(semver.satisfies(broken, range), false, `${broken} lacks required signed host fixes`);
+  }
+});

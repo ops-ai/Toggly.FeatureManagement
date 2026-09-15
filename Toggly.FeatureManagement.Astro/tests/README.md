@@ -43,3 +43,22 @@ during build, but Astro's separate language checker reports that syntax
 before Vite transforms it. This existing limitation is not hidden with a
 checker suppression or presented as supported typechecked syntax. Existing
 source integration tests retain the `.astro` transform coverage.
+
+## Public registry verification
+
+Set `SDK_REGISTRY_VERSION` to an exact published Astro SDK version to skip
+packing entirely and install that version from public npm. This mode rejects
+`SIGNED_DEFS_ARTIFACT` overrides. The runner records resolved Toggly package
+versions, registry URLs, and integrities in `registry-evidence.json`, asserts
+that all dependencies use registry sources, and repeats installation with
+`npm ci` before building or running the host. For example:
+
+```sh
+SDK_REGISTRY_VERSION=1.14.0 ASTRO_MAJOR=5 npm run test:host
+```
+
+A failed published-version control is evidence of its limitation, not a reason
+to weaken peer resolution. Leave `SDK_REGISTRY_VERSION` unset to test a new
+packed SDK candidate with public registry dependencies. These are separate
+evidence modes; passing the candidate does not publish it. The SDK requires
+`@ops-ai/toggly-signed-defs` 1.2.8 or newer for the shared signature and JWKS fixes.

@@ -1,6 +1,6 @@
 ## 1.15.0
 
-2026-09-12
+2026-09-15
 
 ### Added
 - Astro 6 and 7 compatibility alongside retained Astro 5, including packed
@@ -8,6 +8,8 @@
 - Compatibility with Nano Stores React 2 while retaining version 1.
 
 ### Fixed
+- Keep SDK definition-request headers off public JWKS lookups so signed
+  browser evaluation does not trigger an unnecessary CORS preflight.
 - Include the advertised Vue and Svelte public entry points and declarations
   in the published artifact so island helpers resolve in consuming builds.
 - Compile both Svelte gate components with valid import aliases and native
@@ -22,6 +24,8 @@
   when signed flags finish loading before hydration starts.
 
 ### Changed
+- Require published signed-defs 1.2.8 or newer so canonical Node/browser
+  signatures and public JWKS requests use the corrected shared verifier.
 - Synchronize SDK identity and User-Agent with package version 1.15.0.
 
 ## 1.14.0

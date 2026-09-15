@@ -32,15 +32,26 @@ async function run(args, cwd = root, extraEnv = {}) {
     child.once('exit', code => code === 0 ? resolve() : reject(new Error(`${args.join(' ')} exited ${code}`)));
   });
 }
-await run([npm, 'pack', '--pack-destination', root], packageDir);
-const sourceManifest = JSON.parse(await readFile(path.join(packageDir, 'package.json')));
-const tarball = await readFile(path.join(root, `ops-ai-astro-feature-flags-toggly-${sourceManifest.version}.tgz`));
-const artifactHash = createHash('sha256').update(tarball).digest('hex');
-const artifact = `toggly-${artifactHash}.tgz`;
-await writeFile(path.join(root, artifact), tarball);
-console.log(`Packed artifact SHA256 ${artifactHash}`);
+const registryVersion = process.env.SDK_REGISTRY_VERSION;
+let sdkDependency;
+let artifactHash;
+if (registryVersion) {
+  assert.match(registryVersion, /^\d+\.\d+\.\d+$/, 'SDK_REGISTRY_VERSION must be an exact stable version');
+  assert.equal(process.env.SIGNED_DEFS_ARTIFACT, undefined, 'Registry verification must not override a shared dependency');
+  sdkDependency = registryVersion;
+  console.log(`Installing Astro SDK ${registryVersion} entirely from the public registry`);
+} else {
+  await run([npm, 'pack', '--pack-destination', root], packageDir);
+  const sourceManifest = JSON.parse(await readFile(path.join(packageDir, 'package.json')));
+  const tarball = await readFile(path.join(root, `ops-ai-astro-feature-flags-toggly-${sourceManifest.version}.tgz`));
+  artifactHash = createHash('sha256').update(tarball).digest('hex');
+  const artifact = `toggly-${artifactHash}.tgz`;
+  await writeFile(path.join(root, artifact), tarball);
+  sdkDependency = `file:./${artifact}`;
+  console.log(`Packed artifact SHA256 ${artifactHash}`);
+}
 const dependencies = {
-  ...selected, '@ops-ai/astro-feature-flags-toggly': `file:./${artifact}`,
+  ...selected, '@ops-ai/astro-feature-flags-toggly': sdkDependency,
   react: process.env.ASTRO_MAJOR === '5-min' ? '18.3.1' : '19.2.4',
   'react-dom': process.env.ASTRO_MAJOR === '5-min' ? '18.3.1' : '19.2.4',
   '@types/react': process.env.ASTRO_MAJOR === '5-min' ? '18.3.27' : '19.2.14',
@@ -56,7 +67,25 @@ if (process.env.SIGNED_DEFS_ARTIFACT) {
 }
 await writeFile(path.join(root, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 await run([npm, 'install', '--no-audit', '--no-fund', '--engine-strict']);
+await run([npm, 'ci', '--no-audit', '--no-fund', '--engine-strict']);
 await run([npm, 'ls', '--depth=0']);
+const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json')));
+const localPackages = new Set(registryVersion ? [] : ['node_modules/@ops-ai/astro-feature-flags-toggly']);
+if (process.env.SIGNED_DEFS_ARTIFACT) localPackages.add('node_modules/@ops-ai/toggly-signed-defs');
+for (const [name, entry] of Object.entries(lock.packages)) {
+  if (!name || localPackages.has(name)) continue;
+  assert.equal(entry.link, undefined, `${name} must not use a linked dependency`);
+  assert.ok(entry.resolved?.startsWith('https://registry.npmjs.org/'), `${name} must resolve from public npm`);
+  assert.ok(entry.integrity, `${name} must have registry integrity`);
+}
+const evidence = {
+  node: process.version, astro: selected.astro,
+  mode: registryVersion ? 'registry-sdk-and-dependencies' : process.env.SIGNED_DEFS_ARTIFACT ? 'packed-sdk-with-local-dependency-override' : 'packed-sdk-with-registry-dependencies',
+  artifactHash,
+  packages: Object.fromEntries(Object.entries(lock.packages).filter(([name]) => name.includes('/@ops-ai/'))),
+};
+await writeFile(path.join(root, 'registry-evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`);
+console.log(JSON.stringify(evidence));
 // Independent Worker-compatible signer: SHA256 payload, then ECDSA SHA256.
 // Keys exist only in this test process; no Toggly account or production key is used.
 const keys = await webcrypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
@@ -72,12 +101,16 @@ async function signed(defs) {
 let remoteEnabled = true;
 let tampered = false;
 let fetchCount = 0;
+let jwksPreflights = 0;
 const definitions = createServer(async (request, response) => {
   fetchCount++;
   response.setHeader('Access-Control-Allow-Origin', '*');
-  response.setHeader('Access-Control-Allow-Headers', '*');
+  if (request.url !== '/.well-known/jwks') response.setHeader('Access-Control-Allow-Headers', '*');
   response.setHeader('Content-Type', 'application/json');
-  if (request.method === 'OPTIONS') { response.end(); return; }
+  if (request.method === 'OPTIONS') {
+    if (request.url === '/.well-known/jwks') { jwksPreflights++; response.statusCode = 403; }
+    response.end(); return;
+  }
   if (request.url === '/.well-known/jwks') { response.end(JSON.stringify({ keys: [publicKey] })); return; }
   const flags = { Visible: remoteEnabled, Hidden: false };
   const body = request.url.startsWith('/definitions-signed/')
@@ -107,6 +140,7 @@ try {
   const astroManifest = JSON.parse(await readFile(path.join(root, 'node_modules/astro/package.json')));
   const astro = path.join(root, 'node_modules/astro', astroManifest.bin.astro);
   await run([astro, 'check']);
+  await run([path.join(root, 'node_modules/typescript/bin/tsc'), '--noEmit']);
   await run([astro, 'build'], root, { HOST_OUTPUT: 'static' });
   const html = await readFile(path.join(root, 'dist/index.html'), 'utf8');
   assert.match(html, /id="server-visible"/);
@@ -201,7 +235,8 @@ try {
     await page.close();
     await stopHost();
   }
-  console.log(`PASS Astro ${selected.astro}: packed exports/types, SSG, SSR, middleware, page manifest/gates, React/Vue/Svelte hydration, local gates, signed remote refresh/rejection, request context isolation and dev hooks`);
+  assert.equal(jwksPreflights, 0, 'public JWKS must not require CORS preflight');
+  console.log(`PASS ${evidence.mode} Astro ${selected.astro}: packed exports/types, SSG, SSR, middleware, page manifest/gates, React/Vue/Svelte hydration, local gates, signed remote refresh/rejection, request context isolation and dev hooks`);
 } finally {
   await browser?.close();
   await stopHost();
