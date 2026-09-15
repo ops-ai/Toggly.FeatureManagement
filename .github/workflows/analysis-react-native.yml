@@ -33,7 +33,7 @@ jobs:
             test-cmd: npm test
           - sdk: Storage-Async
             path: Toggly.FeatureManagement.ReactNative/libs/storage-async
-            test-cmd: npm run typecheck
+            test-cmd: npm test
           - sdk: Storage-MMKV
             path: Toggly.FeatureManagement.ReactNative/libs/storage-mmkv
             test-cmd: npm test
