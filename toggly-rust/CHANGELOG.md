@@ -7,10 +7,16 @@
   the Axum 0.7 adapter, so existing applications keep their dependency types
   and imports.
 
+## 0.6.1
+
+2026-09-16
+
 ### Changed
 - Expanded `toggly-actix`'s supported Actix-web 4.x range through 4.15 while
   preserving the existing 4.4 floor. Current host validation also retains
   Rocket 0.5.
+- Workspace package version bumped to 0.6.1; path dependency pins updated.
+- User-Agent is `toggly-rust/0.6.1`.
 
 ## 0.6.0
 
