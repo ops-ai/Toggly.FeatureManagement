@@ -1,6 +1,16 @@
 name: React Router SDK - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.ReactRouter/**'
+      - '.github/workflows/sdk-react-router-release.yml'
+      - '.github/workflows/analysis-react-router.yml'
+      - '.github/actions/resolve-release-version/**'
+      - '.github/actions/verify-package-tarball/**'
+      - '.github/actions/build-shared-js-deps/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -25,12 +35,65 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: react-router-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_DIR: Toggly.FeatureManagement.ReactRouter/react-router-toggly
   NPM_PACKAGE: '@ops-ai/react-router-toggly'
 
 jobs:
-  build-and-publish:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.release.outputs.action }}
+      version: ${{ steps.release.outputs.version }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_DIR }}/package.json
+          registry: npm
+          package_name: ${{ env.NPM_PACKAGE }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
+
+      - name: Resolve summary
+        if: always()
+        run: |
+          echo "## React Router SDK resolve" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | ${{ steps.release.outputs.action }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | ${{ steps.release.outputs.version }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  gates:
+    needs: resolve
+    if: needs.resolve.outputs.action == 'publish'
+    uses: ./.github/workflows/analysis-react-router.yml
+    with:
+      run_reporting: false
+    secrets: inherit
+
+  publish:
+    needs: [resolve, gates]
+    if: needs.resolve.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: npm-publish
     defaults:
@@ -58,54 +121,32 @@ jobs:
           node-version: 'lts/*'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Resolve release version
-        id: release
-        uses: ./.github/actions/resolve-release-version
-        with:
-          manifest_path: ${{ env.SDK_DIR }}/package.json
-          registry: npm
-          package_name: ${{ env.NPM_PACKAGE }}
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
-
       - name: Install dependencies
-        if: steps.release.outputs.action == 'publish'
-        run: npm install
-
-      - name: Type check
-        if: steps.release.outputs.action == 'publish'
-        run: npm run typecheck
+        run: npm ci || npm install
 
       - name: Build
-        if: steps.release.outputs.action == 'publish'
         run: npm run build
 
-      - name: Run tests
-        if: steps.release.outputs.action == 'publish'
-        run: npm test
-
       - name: Verify packed tarball
-        if: steps.release.outputs.action == 'publish'
         uses: ./.github/actions/verify-package-tarball
         with:
           package_dir: ${{ env.SDK_DIR }}
           skip_import: 'true'
 
       - name: Publish to npm
-        if: steps.release.outputs.action == 'publish'
         run: npm publish --provenance --access public || npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
-        if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
+        if: needs.resolve.outputs.manifest_changed == 'true'
         working-directory: ${{ github.workspace }}
         run: |
           git config user.name "${{ steps.import_gpg.outputs.name }}"
           git config user.email "${{ steps.import_gpg.outputs.email }}"
           git add ${{ env.SDK_DIR }}/package.json
           git add ${{ env.SDK_DIR }}/package-lock.json 2>/dev/null || true
-          git commit -S -m "Bumped React Router SDK to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
+          git commit -S -m "Bumped React Router SDK to v${{ needs.resolve.outputs.version }} (auto_bump) [skip ci]"
           MAX_RETRIES=3
           RETRY_COUNT=0
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
@@ -121,7 +162,8 @@ jobs:
       - name: Publish summary
         if: always()
         run: |
-          echo "## React Router SDK Release" >> $GITHUB_STEP_SUMMARY
-          echo "| Action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "## React Router SDK Release" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | ${{ needs.resolve.outputs.action }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | ${{ needs.resolve.outputs.version }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reason | ${{ needs.resolve.outputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Package**: ${{ env.NPM_PACKAGE }}" >> "$GITHUB_STEP_SUMMARY"

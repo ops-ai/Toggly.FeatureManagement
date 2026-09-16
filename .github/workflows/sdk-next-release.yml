@@ -1,6 +1,18 @@
 name: Next.js SDK - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.Next/**'
+      - '.github/workflows/sdk-next-release.yml'
+      - '.github/workflows/analysis-next.yml'
+      - '.github/actions/build-shared-js-deps/**'
+      - '.github/actions/upload-shared-js-deps/**'
+      - '.github/actions/download-shared-js-deps/**'
+      - '.github/actions/resolve-release-version/**'
+      - '.github/actions/verify-package-tarball/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -30,13 +42,66 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: next-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_ROOT: Toggly.FeatureManagement.Next
   CORE_MANIFEST: Toggly.FeatureManagement.Next/nextjs-toggly-core/package.json
   ALL_PACKAGES: nextjs-toggly-core nextjs-toggly-server nextjs-toggly-client nextjs-toggly-edge
 
 jobs:
-  build-and-publish:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.release.outputs.action }}
+      version: ${{ steps.release.outputs.version }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.CORE_MANIFEST }}
+          registry: npm
+          package_name: '@ops-ai/nextjs-toggly-core'
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
+
+      - name: Resolve summary
+        if: always()
+        run: |
+          echo "## Next.js SDK resolve" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Core action | ${{ steps.release.outputs.action }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Core version | ${{ steps.release.outputs.version }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  gates:
+    needs: resolve
+    if: needs.resolve.outputs.action != 'fail'
+    uses: ./.github/workflows/analysis-next.yml
+    with:
+      run_reporting: false
+    secrets: inherit
+
+  publish:
+    needs: [resolve, gates]
+    if: needs.resolve.outputs.action != 'fail' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: npm-publish
     defaults:
@@ -69,47 +134,32 @@ jobs:
         with:
           version: 9
 
-      - name: Resolve release version
-        id: release
-        uses: ./.github/actions/resolve-release-version
-        with:
-          manifest_path: ${{ env.CORE_MANIFEST }}
-          registry: npm
-          package_name: '@ops-ai/nextjs-toggly-core'
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
-
       - name: Sync monorepo package versions
-        if: steps.release.outputs.manifest_changed == 'true'
+        if: needs.resolve.outputs.manifest_changed == 'true'
         run: |
-          TARGET="${{ steps.release.outputs.version }}"
+          TARGET="${{ needs.resolve.outputs.version }}"
           for pkg in nextjs-toggly-server nextjs-toggly-client nextjs-toggly-edge; do
             cd "$pkg"
             npm version "$TARGET" --no-git-tag-version --allow-same-version
             cd ..
           done
 
-      # Core may already be on npm (action=skip) while sibling packages still need
-      # a version bump publish. Gate only on fail; package-level checks decide work.
       - name: Note independent package versions
-        if: steps.release.outputs.action != 'fail'
         run: |
-          TARGET="${{ steps.release.outputs.version }}"
-          echo "Core resolved version: $TARGET (action=${{ steps.release.outputs.action }})"
+          TARGET="${{ needs.resolve.outputs.version }}"
+          echo "Core resolved version: $TARGET (action=${{ needs.resolve.outputs.action }})"
           for pkg in ${{ env.ALL_PACKAGES }}; do
             VER=$(node -p "require('./$pkg/package.json').version")
             echo "$pkg@$VER"
           done
 
       - name: Install dependencies
-        if: steps.release.outputs.action != 'fail'
         run: pnpm install --frozen-lockfile
 
       - name: Determine unpublished packages
-        if: steps.release.outputs.action != 'fail'
         id: packages
         run: |
-          INPUT="${{ github.event.inputs.packages || 'all' }}"
+          INPUT="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.packages || 'all' }}"
           if [ "$INPUT" == "all" ]; then
             CANDIDATES="${{ env.ALL_PACKAGES }}"
           else
@@ -129,27 +179,15 @@ jobs:
           echo "list=$LIST" >> $GITHUB_OUTPUT
           echo "Unpublished: ${LIST:-none}"
 
-      # Build the whole workspace before type checking: dependent packages resolve
+      # Build the whole workspace: dependent packages resolve
       # @ops-ai/nextjs-toggly-core through its dist declarations, and a filtered
       # build would skip a dependency that is already published.
       - name: Build all packages
-        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
+        if: steps.packages.outputs.list != ''
         run: pnpm build
 
-      - name: Type check
-        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
-        run: pnpm typecheck
-
-      - name: Run tests
-        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
-        run: pnpm test
-
-      # pnpm publish rewrites workspace:* to concrete versions. npm publish does not,
-      # and would ship uninstallable packages (see OPS-777). Wait for core on the
-      # registry before publishing dependents that resolve to an exact core version.
-
       - name: Verify packed tarballs
-        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
+        if: steps.packages.outputs.list != ''
         working-directory: ${{ github.workspace }}
         run: |
           for pkg in ${{ steps.packages.outputs.list }}; do
@@ -157,8 +195,12 @@ jobs:
             PACKAGE_DIR="${{ env.SDK_ROOT }}/$pkg" SKIP_IMPORT=true \
               node .github/actions/verify-package-tarball/verify.mjs
           done
+
+      # pnpm publish rewrites workspace:* to concrete versions. npm publish does not,
+      # and would ship uninstallable packages (see OPS-777). Wait for core on the
+      # registry before publishing dependents that resolve to an exact core version.
       - name: Publish packages to npm
-        if: steps.release.outputs.action != 'fail' && steps.packages.outputs.list != ''
+        if: steps.packages.outputs.list != ''
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           ROOT="${GITHUB_WORKSPACE}/${{ env.SDK_ROOT }}"
@@ -194,7 +236,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
-        if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
+        if: needs.resolve.outputs.action == 'publish' && needs.resolve.outputs.manifest_changed == 'true'
         run: |
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
@@ -204,7 +246,7 @@ jobs:
             git add ${{ env.SDK_ROOT }}/$pkg/package.json
           done
 
-          git commit -S -m "Bumped Next.js SDK to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
+          git commit -S -m "Bumped Next.js SDK to v${{ needs.resolve.outputs.version }} (auto_bump) [skip ci]"
 
           MAX_RETRIES=3
           RETRY_COUNT=0
@@ -222,7 +264,7 @@ jobs:
         if: always()
         run: |
           echo "## Next.js SDK Release" >> $GITHUB_STEP_SUMMARY
-          echo "| Core action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Core version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core action | ${{ needs.resolve.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Core version | ${{ needs.resolve.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.resolve.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Packages published | ${{ steps.packages.outputs.list || 'none' }} |" >> $GITHUB_STEP_SUMMARY

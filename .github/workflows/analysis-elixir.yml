@@ -1,12 +1,15 @@
 name: Elixir SDK family - native analysis
 on:
-  push:
-    branches: [develop, main]
-    paths: ['toggly-elixir/**', 'docs/filter-parity/**', '.github/workflows/analysis-elixir.yml']
   pull_request:
     branches: [develop, main]
     paths: ['toggly-elixir/**', 'docs/filter-parity/**', '.github/workflows/analysis-elixir.yml']
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      run_reporting:
+        description: 'When false, skip Sonar and OWASP reporting jobs'
+        type: boolean
+        default: true
 permissions:
   contents: read
 jobs:

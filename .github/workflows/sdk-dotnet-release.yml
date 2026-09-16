@@ -1,6 +1,23 @@
 name: .NET SDKs - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.NET/**'
+      - 'Toggly.CLI/**'
+      - 'Toggly.FeatureManagement.Blazor/**'
+      - 'Toggly.FeatureManagement.Client/**'
+      - '.github/workflows/sdk-dotnet-release.yml'
+      - '.github/package-registry/**'
+      - '**/*.cs'
+      - '**/*.csproj'
+      - '**/*.razor'
+      - '**/wwwroot/*.js'
+      - '**/*.runsettings'
+      - '**/Directory.Build.props'
+      - '**/.editorconfig'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -55,9 +72,10 @@ jobs:
       - name: Resolve the shared version for selected packages
         id: plan
         env:
-          PACKAGES: ${{ inputs.packages }}
-          RELEASE_MODE: ${{ inputs.release_mode }}
-          BUMP_TYPE: ${{ inputs.bump_type }}
+          # Push forces a full publish plan across every package; only workflow_dispatch may auto_bump or scope packages.
+          PACKAGES: ${{ github.event_name == 'workflow_dispatch' && inputs.packages || 'all' }}
+          RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_mode || 'publish' }}
+          BUMP_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.bump_type || 'patch' }}
         run: node .github/package-registry/dotnet-release-plan.mjs
       - name: Build, test and check family coverage
         if: steps.plan.outputs.publish == 'true'

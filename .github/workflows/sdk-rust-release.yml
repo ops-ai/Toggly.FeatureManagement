@@ -1,6 +1,14 @@
 name: Rust SDK - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'toggly-rust/**'
+      - '.github/workflows/sdk-rust-release.yml'
+      - '.github/workflows/analysis-rust.yml'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -35,6 +43,10 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: rust-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_ROOT: toggly-rust
   # Publish order matters: macros first, then core, then framework integrations
@@ -64,8 +76,8 @@ jobs:
           manifest_path: ${{ env.SDK_ROOT }}/Cargo.toml
           registry: crates
           package_name: toggly
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
 
       - name: Sync workspace path dependency versions
         if: steps.release.outputs.manifest_changed == 'true'
@@ -77,62 +89,25 @@ jobs:
       - name: Determine crates to publish
         id: crates
         run: |
-          INPUT="${{ github.event.inputs.packages || 'all' }}"
+          INPUT="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.packages || 'all' }}"
           if [ "$INPUT" == "all" ]; then
             echo "list=${{ env.ALL_CRATES }}" >> $GITHUB_OUTPUT
           else
             echo "list=$(echo "$INPUT" | tr ',' ' ')" >> $GITHUB_OUTPUT
           fi
 
-  build-and-test:
+  # Rust SDK is covered by analysis-rust.yml's stable/beta/MSRV test matrix.
+  gates:
     needs: validate
     if: needs.validate.outputs.action == 'publish'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        rust-version: ['stable', 'beta']
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Setup Rust ${{ matrix.rust-version }}
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust-version }}
-          components: clippy, rustfmt
-
-      - name: Cache cargo registry and build
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ${{ env.SDK_ROOT }}/target
-          key: ${{ runner.os }}-cargo-${{ matrix.rust-version }}-${{ hashFiles('toggly-rust/**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.rust-version }}-
-
-      - name: Check formatting
-        working-directory: ${{ env.SDK_ROOT }}
-        run: cargo fmt --all -- --check
-
-      - name: Build workspace
-        working-directory: ${{ env.SDK_ROOT }}
-        run: cargo build --workspace
-
-      - name: Run clippy
-        working-directory: ${{ env.SDK_ROOT }}
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Run tests
-        working-directory: ${{ env.SDK_ROOT }}
-        run: cargo test --workspace
+    uses: ./.github/workflows/analysis-rust.yml
+    with:
+      run_reporting: false
+    secrets: inherit
 
   release:
-    needs: [build-and-test, validate]
-    if: needs.validate.outputs.action == 'publish'
+    needs: [validate, gates]
+    if: needs.validate.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: crates-publish
     permissions:
