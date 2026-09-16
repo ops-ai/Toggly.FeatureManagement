@@ -72,14 +72,17 @@ defmodule Toggly.NetworkTest do
       )
 
     assert :ok = Toggly.refresh(HTTPFlags)
-    assert_receive {:http, "GET", "/definitions/test/Production", _, ""}
+    assert_receive {:http, "GET", "/definitions/test/Production", get_headers, ""}
+    assert {"user-agent", "toggly-elixir/#{Toggly.version()}"} in get_headers
     assert Toggly.enabled?(HTTPFlags, "live")
     Toggly.record_usage(HTTPFlags, "live")
     Toggly.record_view(HTTPFlags, "live", false)
     assert :ok = Toggly.flush(HTTPFlags)
-    assert_receive {:http, "POST", "/api/usage/stats", _, body}
+    assert_receive {:http, "POST", "/api/usage/stats", post_headers, body}
     packet = Jason.decode!(body)
     assert packet["appKey"] == "test"
+    assert {"user-agent", "toggly-elixir/#{Toggly.version()}"} in post_headers
+    assert packet["definitionCacheMisses"] == 1
 
     assert [
              %{

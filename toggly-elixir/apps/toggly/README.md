@@ -6,11 +6,11 @@ A feature flag is a named decision in your application. The environment's defini
 
 ## Install and supervise
 
-Requires Elixir **1.20+** and Erlang/OTP **29+**. Verified on Elixir 1.20.4 / OTP 29. Use `toggly` **0.1.1+**; the compatible `toggly_phoenix` and `toggly_live_view` adapters start at **0.1.0**.
+Requires Elixir **1.20+** and Erlang/OTP **29+**. Verified on Elixir 1.20.4 / OTP 29. Use `toggly` **0.2.0+**; the compatible `toggly_phoenix` and `toggly_live_view` adapters start at **0.1.0**.
 
 ```elixir
 # mix.exs
-{:toggly, "~> 0.1.1"}
+{:toggly, "~> 0.2.0"}
 
 # Application.start/2 child list; create one named client per application/environment.
 {Toggly,
@@ -118,7 +118,7 @@ Each subscription is monitored; process death removes it. Definitions are immuta
 
 Evaluations emit `[:toggly, :evaluation, :start | :stop | :exception]` via `:telemetry.span/3`. Stop metadata contains the boolean result. Metadata includes client and feature keys, never identity or claims. Set `track: false` for an evaluation that should not count toward usage.
 
-Checks and explicit `Toggly.record_usage(client, key, enabled)` / `record_view` calls batch `variantStats` counters (`enabled` / `disabled`) to **POST /api/usage/stats**. Batches retry after errors and never include identity/claims or unique-user hashes. Unknown keys are excluded to bound cardinality. `Toggly.flush/1` explicitly uploads a batch; flush before graceful shutdown if final counts matter. Counters are memory-only; a process crash can lose an unsent batch.
+Checks and explicit `Toggly.record_usage(client, key, enabled)` / `record_view` calls batch `variantStats` counters (`enabled` / `disabled`) to **POST /api/usage/stats**. Definition-refresh outcomes add `definitionCacheHits` / `definitionCacheMisses` when greater than zero; cache counters alone still flush. Batches retry after errors and never include identity/claims or unique-user hashes. Unknown keys are excluded to bound cardinality. `Toggly.flush/1` explicitly uploads a batch; flush before graceful shutdown if final counts matter. Counters are memory-only; a process crash can lose an unsent batch.
 
 `Toggly.metric(client, :counter | :measurement | :observation, key, value, metadata)` emits `[:toggly, :metric, kind]`. Attach your own Telemetry exporter. This version does **not** upload custom metrics through Toggly's gRPC metric service. Use metadata without personal data. Ecto/cache-specific adapters and automatic gRPC metrics export are separate integration extensions; built-in ETS reads/file snapshots need neither Ecto nor a cache service.
 

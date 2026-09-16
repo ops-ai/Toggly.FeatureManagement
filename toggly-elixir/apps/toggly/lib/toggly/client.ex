@@ -19,6 +19,8 @@ defmodule Toggly.Client do
       opts: opts,
       subscribers: %{},
       usage: %{},
+      definition_cache_hits: 0,
+      definition_cache_misses: 0,
       revision: nil,
       timestamp: 0,
       invalidation_pending: false,
@@ -34,7 +36,7 @@ defmodule Toggly.Client do
       with {:ok, stored} <- Snapshot.read(opts[:snapshot_path]),
            {:ok, body, jwks} <- Snapshot.decode(stored, opts),
            {:ok, loaded} <- activate(body, %{state | jwks: jwks}, nil, :snapshot) do
-        loaded
+        record_cache_hit(loaded)
       else
         _ -> state
       end
@@ -135,14 +137,14 @@ defmodule Toggly.Client do
 
       case result do
         {:ok, %{status: 304}} ->
-          {:ok, state}
+          {:ok, record_cache_hit(state)}
 
         {:ok, %{status: 200, body: body, headers: headers}} ->
+          etag = header(headers, "etag")
           keys = if signed and is_nil(opts[:jwks]), do: fetch_keys(state), else: {:ok, state.jwks}
 
           with {:ok, jwks} <- keys,
-               {:ok, updated} <-
-                 activate(body, %{state | jwks: jwks}, header(headers, "etag"), :remote) do
+               {:ok, updated} <- activate(body, %{state | jwks: jwks}, etag, :remote) do
             publish(updated)
             # Cache IO is best effort: verified live definitions remain active
             # even when this host cannot persist a file.
@@ -152,16 +154,16 @@ defmodule Toggly.Client do
               send(pid, {:toggly_updated, state.name, updated.revision})
             end)
 
-            {:ok, updated}
+            {:ok, record_revision(updated, state.revision, etag)}
           else
-            error -> {error, state}
+            error -> {error, keep_cached(state)}
           end
 
         {:ok, %{status: status}} ->
-          {{:error, {:http, status}}, state}
+          {{:error, {:http, status}}, keep_cached(state)}
 
         error ->
-          {error, state}
+          {error, keep_cached(state)}
       end
     end
   end
@@ -265,7 +267,7 @@ defmodule Toggly.Client do
     req = %{
       method: method,
       url: Transport.url(base, path),
-      headers: [{"user-agent", "toggly-elixir/0.1.0"} | headers],
+      headers: [{"user-agent", "toggly-elixir/#{Toggly.version()}"} | headers],
       timeout: Keyword.get(state.opts, :timeout, 5_000)
     }
 
@@ -279,8 +281,11 @@ defmodule Toggly.Client do
     do: Enum.find_value(headers, fn {k, v} -> if String.downcase(k) == key, do: v end)
 
   defp flush(state) do
-    if map_size(state.usage) == 0 or state.opts[:app_key] in [nil, ""] or
-         not Keyword.get(state.opts, :usage, true) do
+    hits = state.definition_cache_hits
+    misses = state.definition_cache_misses
+
+    if (map_size(state.usage) == 0 and hits == 0 and misses == 0) or
+         state.opts[:app_key] in [nil, ""] or not Keyword.get(state.opts, :usage, true) do
       {:ok, %{state | usage: %{}}}
     else
       stats =
@@ -303,6 +308,9 @@ defmodule Toggly.Client do
         "stats" => stats
       }
 
+      packet = if hits > 0, do: Map.put(packet, "definitionCacheHits", hits), else: packet
+      packet = if misses > 0, do: Map.put(packet, "definitionCacheMisses", misses), else: packet
+
       case request(
              state,
              :post,
@@ -310,9 +318,29 @@ defmodule Toggly.Client do
              [{"content-type", "application/json"}],
              IO.iodata_to_binary(:json.encode(packet))
            ) do
-        {:ok, %{status: status}} when status in 200..299 -> {:ok, %{state | usage: %{}}}
-        _ -> {{:error, :usage_upload}, state}
+        {:ok, %{status: status}} when status in 200..299 ->
+          {:ok, %{state | usage: %{}, definition_cache_hits: 0, definition_cache_misses: 0}}
+
+        _ ->
+          {{:error, :usage_upload}, state}
       end
     end
   end
+
+  # GenServer handle_call serializes refresh; there is no in-flight skip to count.
+  defp record_revision(state, previous, etag) when is_binary(etag) and etag == previous,
+    do: record_cache_hit(state)
+
+  defp record_revision(state, _, _), do: record_cache_miss(state)
+
+  defp keep_cached(%{source: source} = state) when source in [:remote, :snapshot],
+    do: record_cache_hit(state)
+
+  defp keep_cached(state), do: state
+
+  defp record_cache_hit(state),
+    do: %{state | definition_cache_hits: state.definition_cache_hits + 1}
+
+  defp record_cache_miss(state),
+    do: %{state | definition_cache_misses: state.definition_cache_misses + 1}
 end
