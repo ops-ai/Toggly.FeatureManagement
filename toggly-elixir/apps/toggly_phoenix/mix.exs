@@ -4,7 +4,7 @@ defmodule TogglyPhoenix.MixProject do
   def project do
     [
       app: :toggly_phoenix,
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.20",
       description: "Toggly feature flags for toggly phoenix",
       package: [
@@ -22,7 +22,7 @@ defmodule TogglyPhoenix.MixProject do
   def application, do: [extra_applications: [:logger, :crypto, :public_key]]
 
   defp local_dependency(app),
-    do: if(umbrella?(), do: {app, "~> 0.1.0", in_umbrella: true}, else: {app, "~> 0.1.0"})
+    do: if(umbrella?(), do: {app, "~> 0.1", in_umbrella: true}, else: {app, "~> 0.1"})
 
   defp umbrella?,
     do:

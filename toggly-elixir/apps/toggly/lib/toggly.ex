@@ -2,6 +2,10 @@ defmodule Toggly do
   @moduledoc "Supervised local feature evaluation with explicit per-call context."
 
   @type client :: atom()
+  @version Mix.Project.config()[:version]
+
+  @doc false
+  def version, do: @version
 
   @doc """
   Starts a supervised client for one backend application and environment.

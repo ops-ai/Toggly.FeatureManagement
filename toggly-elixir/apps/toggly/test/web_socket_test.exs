@@ -28,6 +28,7 @@ defmodule Toggly.WebSocketTest do
              base_url: "https://definitions.toggly.io/",
              app_key: "a/b",
              environment: "A B"
-           ) == "wss://definitions.toggly.io/a%2Fb/A%20B/ws?sdk=elixir&sdkVersion=0.1.0"
+           ) ==
+             "wss://definitions.toggly.io/a%2Fb/A%20B/ws?sdk=elixir&sdkVersion=#{Toggly.version()}"
   end
 end

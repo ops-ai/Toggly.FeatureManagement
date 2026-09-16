@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 — 2026-09-16
+
+### Changed
+- Accept `toggly` 0.2.x (`~> 0.1`) so Hex installs pick up definition-cache
+  usage fields [OPS-1248].
+
 ## 0.1.0 — 2026-09-12
 
 ### Added

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — 2026-09-16
+
+### Added
+- Report definition-refresh cache hits and misses (`definitionCacheHits` /
+  `definitionCacheMisses`) on `POST /api/usage/stats`. Counts one outcome per
+  refresh attempt, including 304, same-revision 200, snapshot restore, and
+  last-good network errors. Cache counters alone still flush.
+
+### Fixed
+- Send `User-Agent: toggly-elixir/{mix version}` on definition and usage
+  requests instead of a stale `0.1.0` literal.
+
 ## 0.1.1 — 2026-09-14
 
 ### Fixed

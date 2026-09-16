@@ -28,7 +28,7 @@ defmodule Toggly.WebSocket do
       Toggly.Transport.segment(opts[:app_key]) <>
         "/" <>
         Toggly.Transport.segment(Keyword.get(opts, :environment, "Production")) <>
-        "/ws?sdk=elixir&sdkVersion=0.1.0"
+        "/ws?sdk=elixir&sdkVersion=#{Toggly.version()}"
 
     Toggly.Transport.url(base, path)
   end
