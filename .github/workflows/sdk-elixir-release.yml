@@ -1,24 +1,44 @@
-name: Elixir SDK - manual Hex release
+name: Elixir SDK - Hex release
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'toggly-elixir/**'
+      - '.github/workflows/sdk-elixir-release.yml'
+      - '.github/workflows/analysis-elixir.yml'
   workflow_dispatch:
     inputs:
       package:
-        description: 'Publish core before Phoenix, and Phoenix before LiveView'
-        required: true
+        description: 'Package to publish (all = publish every ahead package, core before Phoenix before LiveView)'
+        required: false
         type: choice
-        options: [toggly, toggly_phoenix, toggly_live_view]
+        default: all
+        options: [all, toggly, toggly_phoenix, toggly_live_view]
       dry_run:
         description: 'Build and compare manifest version without publication'
         type: boolean
         default: true
+
 permissions:
   contents: read
+
+concurrency:
+  group: elixir-sdk-release
+  cancel-in-progress: false
+
 jobs:
+  # Elixir family is covered by analysis-elixir.yml's native compile/format/audit/test gate.
+  gates:
+    uses: ./.github/workflows/analysis-elixir.yml
+    with:
+      run_reporting: false
+    secrets: inherit
+
   publish:
+    needs: gates
     runs-on: ubuntu-latest
     environment: hex-publish
-    env:
-      PACKAGE: ${{ inputs.package }}
     defaults:
       run:
         working-directory: toggly-elixir
@@ -29,42 +49,63 @@ jobs:
           otp-version: '29'
           elixir-version: '1.20.4'
       - run: mix deps.get --check-locked
-      - run: mix hex.audit
-      - run: mix format --check-formatted
       - run: mix compile --warnings-as-errors
-      - run: mix test --cover
-      - id: version
-        run: mix run --no-start tools/release-check.exs "$PACKAGE"
       - run: python3 tools/build-packages.py
-      - name: Validate standalone publication dependencies
-        if: steps.version.outputs.action == 'publish'
-        working-directory: toggly-elixir/apps/${{ inputs.package }}
-        env:
-          TOGGLY_HEX_BUILD: '1'
-        run: |
-          # Hex publishing loads dependencies from the standalone package paths.
-          # Seed the tested lock, allowing only newly published sibling entries.
-          cp ../../mix.lock mix.lock
-          mix deps.get
-          elixir -e '
-            {umbrella, _} = Code.eval_file("../../mix.lock")
-            {standalone, _} = Code.eval_file("mix.lock")
-            unless Map.take(standalone, Map.keys(umbrella)) == umbrella do
-              raise "Standalone dependency resolution changed the validated umbrella lock"
-            end
-            added = Map.keys(standalone) -- Map.keys(umbrella)
-            unexpected = added -- [:toggly, :toggly_phoenix]
-            unless unexpected == [] do
-              raise "Standalone dependency resolution added unexpected dependencies: #{inspect(unexpected)}"
-            end
-          '
-          mix deps.get --check-locked
-          # Exercise the dependency check used by hex.publish without credentials.
-          mix deps.loadpaths --no-compile --no-listeners
-      - name: Publish manifest version
-        if: inputs.dry_run == false && steps.version.outputs.action == 'publish'
-        working-directory: toggly-elixir/apps/${{ inputs.package }}
+
+      - name: Publish ahead packages in dependency order (core, Phoenix, LiveView)
         env:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+          # Push always publishes for real; only workflow_dispatch may dry-run.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          SELECTED_PACKAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.package || 'all' }}
           TOGGLY_HEX_BUILD: '1'
-        run: mix hex.publish package --yes
+        run: |
+          set -euo pipefail
+          PACKAGES="toggly toggly_phoenix toggly_live_view"
+          if [ "$SELECTED_PACKAGE" != "all" ] && [ -n "$SELECTED_PACKAGE" ]; then
+            PACKAGES="$SELECTED_PACKAGE"
+          fi
+
+          for pkg in $PACKAGES; do
+            echo "=== Checking $pkg ==="
+            OUTPUT=$(mix run --no-start tools/release-check.exs "$pkg")
+            echo "$OUTPUT"
+            LINE=$(echo "$OUTPUT" | grep -E "^${pkg} [0-9]" | tail -1)
+            ACTION=$(echo "$LINE" | awk '{print $3}')
+
+            if [ "$ACTION" != "publish" ]; then
+              echo "Skipping $pkg (hex.pm action: ${ACTION:-unknown})"
+              continue
+            fi
+
+            echo "=== Validating standalone publication dependencies for $pkg ==="
+            (
+              cd "apps/$pkg"
+              # Hex publishing loads dependencies from the standalone package paths.
+              # Seed the tested lock, allowing only newly published sibling entries.
+              cp ../../mix.lock mix.lock
+              mix deps.get
+              elixir -e '
+                {umbrella, _} = Code.eval_file("../../mix.lock")
+                {standalone, _} = Code.eval_file("mix.lock")
+                unless Map.take(standalone, Map.keys(umbrella)) == umbrella do
+                  raise "Standalone dependency resolution changed the validated umbrella lock"
+                end
+                added = Map.keys(standalone) -- Map.keys(umbrella)
+                unexpected = added -- [:toggly, :toggly_phoenix]
+                unless unexpected == [] do
+                  raise "Standalone dependency resolution added unexpected dependencies: #{inspect(unexpected)}"
+                end
+              '
+              mix deps.get --check-locked
+              # Exercise the dependency check used by hex.publish without credentials.
+              mix deps.loadpaths --no-compile --no-listeners
+            )
+
+            if [ "$DRY_RUN" = "false" ]; then
+              echo "=== Publishing $pkg to Hex ==="
+              (cd "apps/$pkg" && mix hex.publish package --yes)
+            else
+              echo "Dry run: would publish $pkg"
+            fi
+          done

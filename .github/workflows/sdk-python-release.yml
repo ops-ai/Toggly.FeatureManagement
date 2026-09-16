@@ -1,6 +1,14 @@
 name: Python SDK - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.Python/**'
+      - '.github/workflows/sdk-python-release.yml'
+      - '.github/workflows/analysis-python.yml'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -35,6 +43,10 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: python-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_ROOT: Toggly.FeatureManagement.Python
   ALL_PACKAGES: toggly toggly-django toggly-flask toggly-fastapi toggly-cache
@@ -63,8 +75,8 @@ jobs:
           manifest_path: ${{ env.SDK_ROOT }}/toggly/pyproject.toml
           registry: pypi
           package_name: toggly
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
 
       - name: Sync monorepo package versions
         if: steps.release.outputs.manifest_changed == 'true'
@@ -80,52 +92,26 @@ jobs:
       - name: Determine packages to publish
         id: packages
         run: |
-          INPUT="${{ github.event.inputs.packages || 'all' }}"
+          INPUT="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.packages || 'all' }}"
           if [ "$INPUT" == "all" ]; then
             echo "list=${{ env.ALL_PACKAGES }}" >> $GITHUB_OUTPUT
           else
             echo "list=$(echo "$INPUT" | tr ',' ' ')" >> $GITHUB_OUTPUT
           fi
 
-  build-and-test:
+  # Python SDKs are covered by analysis-python.yml's full test matrix
+  # (lint, type-check, core/django/flask/fastapi/cache, packed-host, smoke).
+  gates:
     needs: validate
     if: needs.validate.outputs.action == 'publish'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Setup Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v7
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install build tools
-        run: pip install build setuptools wheel
-
-      - name: Build and test core package
-        working-directory: ${{ env.SDK_ROOT }}/toggly
-        run: |
-          pip install -e ".[dev]"
-          python -m pytest
-
-      - name: Build integration packages
-        run: |
-          for pkg in toggly-django toggly-flask toggly-fastapi toggly-cache; do
-            echo "Building $pkg..."
-            cd ${{ env.SDK_ROOT }}/$pkg
-            pip install -e ".[dev]" 2>/dev/null || pip install -e "." || true
-            cd $GITHUB_WORKSPACE
-          done
+    uses: ./.github/workflows/analysis-python.yml
+    with:
+      run_reporting: false
+    secrets: inherit
 
   publish:
-    needs: [build-and-test, validate]
-    if: needs.validate.outputs.action == 'publish'
+    needs: [validate, gates]
+    if: needs.validate.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: pypi-publish
     steps:

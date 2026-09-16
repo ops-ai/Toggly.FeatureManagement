@@ -1,6 +1,14 @@
 name: Android SDK - Release
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.Android/**'
+      - '.github/workflows/sdk-android-release.yml'
+      - '.github/workflows/analysis-android.yml'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -28,6 +36,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: android-sdk-release
+  cancel-in-progress: false
 
 env:
   SDK_ROOT: Toggly.FeatureManagement.Android
@@ -57,41 +69,21 @@ jobs:
           registry: none
           package_name: io.toggly:toggly-android-core
           tag_prefix: android-sdk-v
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
 
-  build-and-test:
+  # Android SDK is covered by analysis-android.yml's JDK 17/21 build-and-test matrix.
+  gates:
     needs: validate
     if: needs.validate.outputs.action == 'publish'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v6
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Grant execute permission for gradlew
-        working-directory: ${{ env.SDK_ROOT }}
-        run: chmod +x gradlew
-
-      - name: Build release
-        working-directory: ${{ env.SDK_ROOT }}
-        run: ./gradlew build -x test
-
-      - name: Run tests
-        working-directory: ${{ env.SDK_ROOT }}
-        run: ./gradlew test
+    uses: ./.github/workflows/analysis-android.yml
+    with:
+      run_reporting: false
+    secrets: inherit
 
   publish:
-    needs: [build-and-test, validate]
-    if: needs.validate.outputs.action == 'publish'
+    needs: [validate, gates]
+    if: needs.validate.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

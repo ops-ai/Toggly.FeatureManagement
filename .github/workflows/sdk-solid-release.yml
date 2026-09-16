@@ -1,39 +1,173 @@
 name: SolidJS SDK - Build & Publish
+
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.Solid/**'
+      - '.github/workflows/sdk-solid-release.yml'
+      - '.github/workflows/analysis-javascript.yml'
+      - '.github/package-registry/analysis-js-filter.mjs'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
+    inputs:
+      release_mode:
+        description: 'publish = use manifest version; auto_bump = legacy CI bump'
+        required: false
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - auto_bump
+      bump_type:
+        description: 'Bump type (only used when release_mode is auto_bump)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
 permissions:
-  contents: read
+  contents: write
   id-token: write
+
+concurrency:
+  group: solid-sdk-release
+  cancel-in-progress: false
+
+env:
+  SDK_DIR: Toggly.FeatureManagement.Solid
+  NPM_PACKAGE: '@ops-ai/solid-feature-flags-toggly'
+
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.release.outputs.action }}
+      version: ${{ steps.release.outputs.version }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_DIR }}/package.json
+          registry: npm
+          package_name: ${{ env.NPM_PACKAGE }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
+
+      - name: Resolve summary
+        if: always()
+        run: |
+          echo "## SolidJS SDK resolve" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | ${{ steps.release.outputs.action }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | ${{ steps.release.outputs.version }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  gates:
+    needs: resolve
+    if: needs.resolve.outputs.action == 'publish'
+    uses: ./.github/workflows/analysis-javascript.yml
+    with:
+      sdks: SolidJS
+      run_reporting: false
+    secrets: inherit
+
   publish:
+    needs: [resolve, gates]
+    if: needs.resolve.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: npm-publish
     defaults:
       run:
-        working-directory: Toggly.FeatureManagement.Solid
+        working-directory: ${{ env.SDK_DIR }}
+
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
-      - uses: ./.github/actions/resolve-release-version
-        id: release
-        with:
-          manifest_path: Toggly.FeatureManagement.Solid/package.json
-          registry: npm
-          package_name: '@ops-ai/solid-feature-flags-toggly'
-          release_mode: publish
+
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run test:coverage
       - run: npm run build
       - run: npm pack --dry-run
-      - run: node tests/install-host.mjs
-      - run: npx --prefix tests/host playwright install --with-deps chromium
-      - run: cd tests/host && node verify.mjs
+
       - name: Publish manifest version with provenance
-        if: steps.release.outputs.action == 'publish'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Commit version bump
+        if: needs.resolve.outputs.manifest_changed == 'true'
+        run: |
+          cd $GITHUB_WORKSPACE
+          git config user.name "${{ steps.import_gpg.outputs.name }}"
+          git config user.email "${{ steps.import_gpg.outputs.email }}"
+
+          git add ${{ env.SDK_DIR }}/package.json
+          git add ${{ env.SDK_DIR }}/package-lock.json 2>/dev/null || true
+
+          git commit -S -m "Bumped SolidJS SDK to v${{ needs.resolve.outputs.version }} (auto_bump) [skip ci]"
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git pull --rebase --autostash origin develop; then
+              if git push origin develop; then
+                echo "Successfully pushed version bump"
+                exit 0
+              fi
+            else
+              git rebase --abort 2>/dev/null || true
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              sleep 2
+            fi
+          done
+
+          echo "Failed to push after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo "## SolidJS SDK Release" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ needs.resolve.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.resolve.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.resolve.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY

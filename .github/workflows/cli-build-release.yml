@@ -1,6 +1,13 @@
 name: Build and Release CLI
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.CLI/**'
+      - '.github/workflows/cli-build-release.yml'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -20,6 +27,10 @@ on:
           - patch
           - minor
           - major
+
+concurrency:
+  group: cli-build-release
+  cancel-in-progress: false
 
 jobs:
   validate:
@@ -43,9 +54,11 @@ jobs:
           registry: none
           package_name: toggly-cli
           tag_prefix: cli-v
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
 
+  # CLI wraps Toggly.CLI.csproj; validate keeps this workflow's own build+publish
+  # matrix as the gate (no separate analysis-*.yml exists for the CLI family).
   build:
     needs: validate
     if: needs.validate.outputs.action == 'publish'

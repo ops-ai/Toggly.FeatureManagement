@@ -1,6 +1,14 @@
 name: Client Core Package - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'toggly-docusaurus-edge-sdk/libs/core/**'
+      - '.github/workflows/sdk-client-core-release.yml'
+      - '.github/actions/resolve-release-version/**'
+      - '.github/actions/verify-package-tarball/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -25,12 +33,88 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: client-core-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_DIR: toggly-docusaurus-edge-sdk/libs/core
   NPM_PACKAGE: '@ops-ai/toggly-client-core'
 
 jobs:
-  build-and-publish:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.release.outputs.action }}
+      version: ${{ steps.release.outputs.version }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_DIR }}/package.json
+          registry: npm
+          package_name: ${{ env.NPM_PACKAGE }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
+
+      - name: Resolve summary
+        if: always()
+        run: |
+          echo "## Client Core resolve" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | ${{ steps.release.outputs.action }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | ${{ steps.release.outputs.version }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  # toggly-client-core is not in the analysis-javascript.yml matrix, so its
+  # existing install/typecheck/build/test commands are preserved here as a
+  # standalone gate (no environment) instead of a reusable workflow call.
+  gates:
+    needs: resolve
+    if: needs.resolve.outputs.action == 'publish'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.SDK_DIR }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+  publish:
+    needs: [resolve, gates]
+    if: needs.resolve.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: npm-publish
     defaults:
@@ -58,34 +142,13 @@ jobs:
           node-version: 'lts/*'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Resolve release version
-        id: release
-        uses: ./.github/actions/resolve-release-version
-        with:
-          manifest_path: ${{ env.SDK_DIR }}/package.json
-          registry: npm
-          package_name: ${{ env.NPM_PACKAGE }}
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
-
       - name: Install dependencies
-        if: steps.release.outputs.action == 'publish'
         run: npm install
 
-      - name: Type check
-        if: steps.release.outputs.action == 'publish'
-        run: npm run typecheck
-
       - name: Build
-        if: steps.release.outputs.action == 'publish'
         run: npm run build
 
-      - name: Run tests
-        if: steps.release.outputs.action == 'publish'
-        run: npm test
-
       - name: Verify packed tarball
-        if: steps.release.outputs.action == 'publish'
         uses: ./.github/actions/verify-package-tarball
         with:
           package_dir: ${{ env.SDK_DIR }}
@@ -94,13 +157,12 @@ jobs:
       # Auth: npm Trusted Publisher (OIDC + provenance). secrets.NPM_TOKEN is unset;
       # NODE_AUTH_TOKEN stays empty so OIDC is used (same pattern as Angular).
       - name: Publish to npm
-        if: steps.release.outputs.action == 'publish'
         run: npm publish --provenance --access public || npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
-        if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
+        if: needs.resolve.outputs.manifest_changed == 'true'
         run: |
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
@@ -109,7 +171,7 @@ jobs:
           git add ${{ env.SDK_DIR }}/package.json
           git add ${{ env.SDK_DIR }}/package-lock.json 2>/dev/null || true
 
-          git commit -S -m "Bumped client core package to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
+          git commit -S -m "Bumped client core package to v${{ needs.resolve.outputs.version }} (auto_bump) [skip ci]"
 
           MAX_RETRIES=3
           RETRY_COUNT=0
@@ -139,12 +201,11 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Manifest | ${{ steps.release.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Registry latest | ${{ steps.release.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ needs.resolve.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.resolve.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ needs.resolve.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry latest | ${{ needs.resolve.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.resolve.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Package**: ${{ env.NPM_PACKAGE }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

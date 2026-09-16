@@ -1,6 +1,14 @@
 name: Ruby SDK - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'toggly-ruby/**'
+      - '.github/workflows/sdk-ruby-release.yml'
+      - '.github/workflows/analysis-ruby.yml'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -34,6 +42,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ruby-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_ROOT: toggly-ruby
   ALL_GEMS: toggly toggly-rails toggly-cache
@@ -63,8 +75,8 @@ jobs:
           manifest_type: ruby_version
           registry: rubygems
           package_name: toggly
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
 
       - name: Sync gem version files
         if: steps.release.outputs.manifest_changed == 'true'
@@ -79,51 +91,26 @@ jobs:
       - name: Determine gems to publish
         id: gems
         run: |
-          INPUT="${{ github.event.inputs.packages || 'all' }}"
+          INPUT="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.packages || 'all' }}"
           if [ "$INPUT" == "all" ]; then
             echo "list=${{ env.ALL_GEMS }}" >> $GITHUB_OUTPUT
           else
             echo "list=$(echo "$INPUT" | tr ',' ' ')" >> $GITHUB_OUTPUT
           fi
 
-  build-and-test:
+  # Ruby gems are covered by analysis-ruby.yml's full test matrix across Ruby
+  # versions plus its smoke test.
+  gates:
     needs: validate
     if: needs.validate.outputs.action == 'publish'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        ruby-version: ['3.2', '3.3', '3.4']
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Setup Ruby ${{ matrix.ruby-version }}
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.ruby-version }}
-
-      - name: Install core gem dependencies
-        working-directory: ${{ env.SDK_ROOT }}/toggly
-        run: |
-          # Use a fresh resolution per Ruby version in CI.
-          # The committed lockfile may contain gems/bundler versions that are
-          # valid on newer Rubies but incompatible with older matrix targets.
-          rm -f Gemfile.lock
-          bundle install
-
-      - name: Run core tests
-        working-directory: ${{ env.SDK_ROOT }}/toggly
-        run: bundle exec rspec
-
-      - name: Build core gem
-        working-directory: ${{ env.SDK_ROOT }}/toggly
-        run: gem build toggly.gemspec
+    uses: ./.github/workflows/analysis-ruby.yml
+    with:
+      run_reporting: false
+    secrets: inherit
 
   release:
-    needs: [build-and-test, validate]
-    if: needs.validate.outputs.action == 'publish'
+    needs: [validate, gates]
+    if: needs.validate.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: rubygems-publish
     permissions:

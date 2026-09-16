@@ -1,6 +1,14 @@
 name: iOS SDK - Release
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.iOS/**'
+      - '.github/workflows/sdk-ios-release.yml'
+      - '.github/workflows/analysis-ios.yml'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -28,6 +36,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: ios-sdk-release
+  cancel-in-progress: false
 
 env:
   SDK_ROOT: Toggly.FeatureManagement.iOS
@@ -57,8 +69,8 @@ jobs:
           registry: none
           package_name: TogglyCore
           tag_prefix: ios-sdk-v
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
 
       - name: Sync package version constants
         if: steps.release.outputs.manifest_changed == 'true'
@@ -71,37 +83,18 @@ jobs:
           sed -i "s/public let togglyCombineVersion = \".*\"/public let togglyCombineVersion = \"$NEW_VERSION\"/" \
             ${{ env.SDK_ROOT }}/TogglyCombine/Sources/TogglyCombine.swift
 
-  build-and-test:
+  # iOS SDK is covered by analysis-ios.yml's Xcode 16.1/16.2 build-and-test matrix.
+  gates:
     needs: validate
     if: needs.validate.outputs.action == 'publish'
-    runs-on: macos-15
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.1.app
-
-      - name: Show versions
-        run: |
-          xcodebuild -version
-          swift --version
-
-      - name: Resolve dependencies
-        working-directory: ${{ env.SDK_ROOT }}
-        run: swift package resolve
-
-      - name: Build
-        working-directory: ${{ env.SDK_ROOT }}
-        run: swift build -c release
-
-      - name: Run tests
-        working-directory: ${{ env.SDK_ROOT }}
-        run: swift test
+    uses: ./.github/workflows/analysis-ios.yml
+    with:
+      run_reporting: false
+    secrets: inherit
 
   release:
-    needs: [build-and-test, validate]
-    if: needs.validate.outputs.action == 'publish'
+    needs: [validate, gates]
+    if: needs.validate.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

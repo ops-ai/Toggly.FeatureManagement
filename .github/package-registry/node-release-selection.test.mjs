@@ -12,10 +12,10 @@ const workflow = fs.readFileSync(
   path.join(repository, ".github/workflows/sdk-node-server-release.yml"),
   "utf8",
 );
-const command = workflow.match(
-  /- name: Run (?:all tests|selected package tests)\n\s+run: (.+)/,
-)?.[1];
-assert.ok(command, "Release test command must exist");
+const selectionScript = path.join(
+  repository,
+  ".github/package-registry/node-release-selection.mjs",
+);
 const packages = fs
   .readdirSync(workspace)
   .filter((name) => name.startsWith("toggly-"));
@@ -70,17 +70,21 @@ function execute(selection, failPackage) {
         `import fs from 'node:fs';\nfs.appendFileSync(process.env.EXECUTED, JSON.stringify(${JSON.stringify(original.name)})+'\\n');\nif(process.env.FAIL_PACKAGE===${JSON.stringify(original.name)}) process.exit(7);\n`,
       );
     }
-    const result = spawnSync("bash", ["-e", "-c", command], {
-      cwd: temporary,
-      env: {
-        ...process.env,
-        GITHUB_WORKSPACE: repository,
-        RELEASE_PACKAGES: selection,
-        EXECUTED: output,
-        FAIL_PACKAGE: failPackage ?? "",
+    const result = spawnSync(
+      "node",
+      [selectionScript, "test"],
+      {
+        cwd: temporary,
+        env: {
+          ...process.env,
+          GITHUB_WORKSPACE: repository,
+          RELEASE_PACKAGES: selection,
+          EXECUTED: output,
+          FAIL_PACKAGE: failPackage ?? "",
+        },
+        encoding: "utf8",
       },
-      encoding: "utf8",
-    });
+    );
     assert.ifError(result.error);
     const executed = fs.existsSync(output)
       ? fs.readFileSync(output, "utf8").trim().split("\n").map(JSON.parse)
@@ -131,11 +135,20 @@ test("selected suite failures fail the release command", () => {
     "@ops-ai/toggly-hono",
   ]);
 });
-test("release retains all-package build and supported Node matrix", () => {
-  assert.match(workflow, /name: Build all packages\n\s+run: pnpm -r build/);
+test("release workflow uses analysis gates and retains Node publish matrix", () => {
   assert.match(
     workflow,
-    /name: Run selected package tests[\s\S]*?RELEASE_PACKAGES: \$\{\{ github.event.inputs.packages \|\| 'all' \}\}/,
+    /uses: \.\/\.github\/workflows\/analysis-javascript\.yml/,
   );
-  assert.match(workflow, /node-version: \['18.x', '20.x', '22.x'\]/);
+  assert.match(workflow, /sdks: node-server/);
+  assert.match(
+    workflow,
+    /RELEASE_PACKAGES: \$\{\{ github\.event\.inputs\.packages \|\| 'all' \}\}/,
+  );
+  assert.match(workflow, /name: Build all packages\n\s+run: pnpm -r build/);
+  const analysis = fs.readFileSync(
+    path.join(repository, ".github/workflows/analysis-javascript.yml"),
+    "utf8",
+  );
+  assert.match(analysis, /node-version: \['18\.x', '20\.x', '22\.x'\]/);
 });

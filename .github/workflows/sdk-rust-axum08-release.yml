@@ -1,6 +1,14 @@
 name: Rust Axum 0.8 SDK - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'toggly-rust/toggly-axum08/**'
+      - '.github/workflows/sdk-rust-axum08-release.yml'
+      - '.github/workflows/analysis-rust.yml'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -14,6 +22,10 @@ on:
 permissions:
   contents: write
   id-token: write
+
+concurrency:
+  group: rust-axum08-sdk-release
+  cancel-in-progress: false
 
 env:
   SDK_ROOT: toggly-rust
@@ -35,35 +47,18 @@ jobs:
           package_name: toggly-axum08
           release_mode: publish
 
-  build-and-test:
+  # toggly-axum08 is covered by analysis-rust.yml's shared workspace test job.
+  gates:
     needs: validate
     if: needs.validate.outputs.action == 'publish'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: toggly-rust
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: clippy, rustfmt
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy -p toggly-axum08 --all-targets -- -D warnings
-      - run: cargo test -p toggly-axum08
-      - run: cargo package -p toggly-axum08 --allow-dirty --no-verify
-      - name: Run the packaged Axum 0.8 host
-        run: |
-          archive="target/package/toggly-axum08-0.1.0.crate"
-          unpacked="$RUNNER_TEMP/toggly-axum08-package"
-          mkdir -p "$unpacked"
-          tar -xf "$archive" -C "$unpacked"
-          cargo run --manifest-path "$unpacked/toggly-axum08-0.1.0/Cargo.toml" \
-            --example current_host
+    uses: ./.github/workflows/analysis-rust.yml
+    with:
+      run_reporting: false
+    secrets: inherit
 
   release:
-    needs: [validate, build-and-test]
-    if: needs.validate.outputs.action == 'publish'
+    needs: [validate, gates]
+    if: needs.validate.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: crates-publish
     steps:

@@ -1,6 +1,13 @@
 name: Eval Package - Build & Publish
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'toggly-eval/**'
+      - '.github/workflows/sdk-eval-release.yml'
+      - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -25,12 +32,93 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: eval-sdk-release
+  cancel-in-progress: false
+
 env:
   SDK_DIR: toggly-eval
   NPM_PACKAGE: '@ops-ai/toggly-eval'
 
 jobs:
-  build-and-publish:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.release.outputs.action }}
+      version: ${{ steps.release.outputs.version }}
+      reason: ${{ steps.release.outputs.reason }}
+      manifest_version: ${{ steps.release.outputs.manifest_version }}
+      registry_latest: ${{ steps.release.outputs.registry_latest }}
+      manifest_changed: ${{ steps.release.outputs.manifest_changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve release version
+        id: release
+        uses: ./.github/actions/resolve-release-version
+        with:
+          manifest_path: ${{ env.SDK_DIR }}/package.json
+          registry: npm
+          package_name: ${{ env.NPM_PACKAGE }}
+          release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
+          bump_type: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump_type || 'patch' }}
+
+      - name: Resolve summary
+        if: always()
+        run: |
+          echo "## Eval Package resolve" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | ${{ steps.release.outputs.action }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | ${{ steps.release.outputs.version }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  # toggly-eval is not in the analysis-javascript.yml matrix, so its existing
+  # install/typecheck/build/verify commands are preserved here as a
+  # standalone gate (no environment) instead of a reusable workflow call.
+  gates:
+    needs: resolve
+    if: needs.resolve.outputs.action == 'publish'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.SDK_DIR }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run type check
+        run: npm run typecheck
+
+      - name: Build package
+        run: npm run build
+
+      - name: Verify build outputs
+        run: |
+          if [ ! -f "dist/index.js" ] || [ ! -f "dist/index.d.ts" ]; then
+            echo "Build verification failed - missing output files"
+            exit 1
+          fi
+          echo "Build outputs verified"
+
+  publish:
+    needs: [resolve, gates]
+    if: needs.resolve.outputs.action == 'publish' && needs.gates.result == 'success'
     runs-on: ubuntu-latest
     environment: npm-publish
     defaults:
@@ -58,51 +146,24 @@ jobs:
           node-version: 'lts/*'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Resolve release version
-        id: release
-        uses: ./.github/actions/resolve-release-version
-        with:
-          manifest_path: ${{ env.SDK_DIR }}/package.json
-          registry: npm
-          package_name: ${{ env.NPM_PACKAGE }}
-          release_mode: ${{ github.event.inputs.release_mode || 'publish' }}
-          bump_type: ${{ github.event.inputs.bump_type || 'patch' }}
-
       - name: Install dependencies
-        if: steps.release.outputs.action == 'publish'
         run: npm install
 
-      - name: Run type check
-        if: steps.release.outputs.action == 'publish'
-        run: npm run typecheck
-
       - name: Build package
-        if: steps.release.outputs.action == 'publish'
         run: npm run build
 
-      - name: Verify build outputs
-        if: steps.release.outputs.action == 'publish'
-        run: |
-          if [ ! -f "dist/index.js" ] || [ ! -f "dist/index.d.ts" ]; then
-            echo "Build verification failed - missing output files"
-            exit 1
-          fi
-          echo "Build outputs verified"
-
       - name: Verify package contents
-        if: steps.release.outputs.action == 'publish'
         run: |
           npm pack --dry-run
           echo "Package contents verified"
 
       - name: Publish to npm
-        if: steps.release.outputs.action == 'publish'
         run: npm publish --provenance --access public || npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
-        if: steps.release.outputs.action == 'publish' && steps.release.outputs.manifest_changed == 'true'
+        if: needs.resolve.outputs.manifest_changed == 'true'
         run: |
           cd $GITHUB_WORKSPACE
           git config user.name "${{ steps.import_gpg.outputs.name }}"
@@ -111,7 +172,7 @@ jobs:
           git add ${{ env.SDK_DIR }}/package.json
           git add ${{ env.SDK_DIR }}/package-lock.json 2>/dev/null || true
 
-          git commit -S -m "Bumped eval package to v${{ steps.release.outputs.version }} (auto_bump) [skip ci]"
+          git commit -S -m "Bumped eval package to v${{ needs.resolve.outputs.version }} (auto_bump) [skip ci]"
 
           MAX_RETRIES=3
           RETRY_COUNT=0
@@ -135,13 +196,12 @@ jobs:
           exit 1
 
       - name: Create GitHub Release
-        if: steps.release.outputs.action == 'publish'
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: v${{ steps.release.outputs.version }}
-          name: Hooks Types v${{ steps.release.outputs.version }}
+          tag_name: v${{ needs.resolve.outputs.version }}
+          name: Hooks Types v${{ needs.resolve.outputs.version }}
           body: |
-            ## @ops-ai/toggly-eval ${{ steps.release.outputs.version }}
+            ## @ops-ai/toggly-eval ${{ needs.resolve.outputs.version }}
 
             TypeScript types for Toggly SDK hooks
 
@@ -167,12 +227,11 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Action | ${{ steps.release.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ steps.release.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Manifest | ${{ steps.release.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Registry latest | ${{ steps.release.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Release mode | ${{ github.event.inputs.release_mode || 'publish' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Reason | ${{ steps.release.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ needs.resolve.outputs.action }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.resolve.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ needs.resolve.outputs.manifest_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry latest | ${{ needs.resolve.outputs.registry_latest || 'none' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ needs.resolve.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Package**: ${{ env.NPM_PACKAGE }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
