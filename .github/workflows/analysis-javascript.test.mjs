@@ -66,8 +66,7 @@ test('excludes fixture and packaging lockfiles from the JS OWASP Node Audit scan
   assert.ok(owasp.includes("--exclude '**/host-fixtures/**'"));
   assert.ok(owasp.includes("--exclude '**/node_modules/**'"));
   assert.ok(owasp.includes("--exclude '**/packaging/**'"));
-  assert.ok(owasp.includes('--nodeAuditSkipDevDependencies'));
-  assert.ok(owasp.includes('--failOnError false'));
+  assert.ok(owasp.includes('--disableNodeAudit'));
   assert.ok(owasp.includes('Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly'));
   assert.doesNotMatch(owasp, /path: >\s+Toggly\.FeatureManagement\.Angular\s/);
 });

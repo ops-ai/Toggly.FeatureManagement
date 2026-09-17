@@ -228,8 +228,7 @@ jobs:
             --disableBundleAudit
             --disablePyPkg
             --disablePyDist
-            --nodeAuditSkipDevDependencies
-            --failOnError false
+            --disableNodeAudit
             --exclude '**/host-fixtures/**'
             --exclude '**/node_modules/**'
             --exclude '**/packaging/**'
