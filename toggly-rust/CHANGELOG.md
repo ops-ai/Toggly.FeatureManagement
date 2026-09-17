@@ -12,13 +12,8 @@
 2026-09-16
 
 ### Changed
-- Expanded `toggly-actix`'s supported Actix-web 4.x range through 4.15 while
-  preserving the existing 4.4 floor. Current host validation also retains
-  Rocket 0.5.
-- Workspace package version bumped to 0.6.1. Path pins stay on published
-  0.6.0 until this version is on crates.io, so adapter `cargo package`
-  checks can still resolve.
-- User-Agent is `toggly-rust/0.6.1`.
+- `toggly-actix` now accepts Actix-web 4.15. The supported range is
+  `actix-web >=4.4, <4.16` (0.6.0 stopped at `<4.13`).
 
 ## 0.6.0
 
