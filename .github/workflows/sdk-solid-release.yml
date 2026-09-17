@@ -33,6 +33,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  security-events: write
 
 concurrency:
   group: solid-sdk-release

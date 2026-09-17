@@ -16,6 +16,10 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   check-sdk:
     name: Check PHP SDK present
@@ -88,7 +92,6 @@ jobs:
           else
             echo "PHP_CodeSniffer not installed, skipping code style check"
           fi
-        continue-on-error: true
       
       - name: Run PHPUnit tests with coverage
         working-directory: Toggly.FeatureManagement.PHP
@@ -253,7 +256,6 @@ jobs:
             --disableNodeAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7
@@ -285,7 +287,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: test,smoke-test
+          required-jobs: test,smoke-test,dependency-check
 
       - name: Generate summary
         run: |

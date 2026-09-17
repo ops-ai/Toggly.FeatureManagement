@@ -45,6 +45,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  security-events: write
 
 concurrency:
   group: react-native-sdk-release

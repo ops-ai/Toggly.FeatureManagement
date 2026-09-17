@@ -101,7 +101,7 @@ public final class MetricStatPayload {
             this.time = time;
             this.metric = metric;
             this.feature = feature;
-            this.variantValues = variantValues;
+            this.variantValues = variantValues != null ? Map.copyOf(variantValues) : Map.of();
         }
 
         public Instant getTime() {
@@ -117,7 +117,7 @@ public final class MetricStatPayload {
         }
 
         public Map<String, Double> getVariantValues() {
-            return variantValues;
+            return Map.copyOf(variantValues);
         }
     }
 }

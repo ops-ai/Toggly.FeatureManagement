@@ -23,6 +23,10 @@ defaults:
   run:
     working-directory: Toggly.FeatureManagement.Java
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   build:
     name: Build & Test (JDK ${{ matrix.java-version }})
@@ -50,7 +54,6 @@ jobs:
 
       - name: Run tests
         run: mvn -B test --file pom.xml
-        continue-on-error: true
 
       - name: Upload test results
         uses: actions/upload-artifact@v7
@@ -140,11 +143,9 @@ jobs:
 
       - name: Run SpotBugs
         run: mvn -B compile spotbugs:check --file pom.xml
-        continue-on-error: true
 
       - name: Run Checkstyle
         run: mvn -B compile checkstyle:check --file pom.xml
-        continue-on-error: true
 
   coverage:
     name: Coverage
@@ -274,7 +275,6 @@ jobs:
             --disableNodeAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7
@@ -309,7 +309,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: build,current-hosts,smoke-test,code-quality,coverage
+          required-jobs: build,current-hosts,smoke-test,code-quality,coverage,dependency-check
 
       - name: Generate summary
         run: |

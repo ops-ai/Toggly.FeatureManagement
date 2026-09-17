@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- protoc output: encapsulation and serialization findings are not actionable. -->
+    <Match>
+        <Class name="~io\.toggly\.core\.telemetry\.pb\..*"/>
+    </Match>
+    <!-- Injected collaborators, not leaked mutable collections. -->
+    <Match>
+        <Class name="io.toggly.core.TogglyClient"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="io.toggly.spring.boot.FeatureAspect"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="io.toggly.spring.boot.actuator.TogglyEndpoint"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="io.toggly.spring.boot.actuator.TogglyHealthIndicator"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="~io\.toggly\.spring\.mvc\..*"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="~io\.toggly\.spring\.webflux\..*"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="~io\.toggly\.servlet\..*"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="~io\.toggly\.cache\..*"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    <!-- Intentional same simple name in the Jedis 8 package. -->
+    <Match>
+        <Class name="io.toggly.cache.redis.jedis8.RedisCachingSnapshotProvider"/>
+        <Bug pattern="NM_SAME_SIMPLE_NAME_AS_SUPERCLASS"/>
+    </Match>
+    <!-- Spring binds ConfigurationProperties by mutating the live map. -->
+    <Match>
+        <Class name="io.toggly.spring.boot.TogglyProperties"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>

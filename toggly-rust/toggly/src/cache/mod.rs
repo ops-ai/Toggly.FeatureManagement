@@ -175,7 +175,7 @@ mod tests {
         let cache: Cache<i32> = Cache::new(Duration::from_secs(60), 10);
 
         for i in 0..20 {
-            cache.insert(format!("key{}", i), i);
+            cache.insert(format!("key{i}"), i);
         }
 
         // Cache should have evicted some entries

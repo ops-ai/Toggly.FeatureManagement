@@ -1,7 +1,8 @@
 name: Verify required jobs passed
 description: >-
-  Fail when any required upstream job failed, was cancelled, or was skipped
-  (skipped usually means an upstream dependency failed).
+  Fail when any required upstream job failed, was cancelled, or is missing.
+  Intentionally skipped reporting jobs (OWASP when run_reporting is false)
+  may be listed in allow-skipped.
 
 inputs:
   needs-json:
@@ -10,6 +11,12 @@ inputs:
   required-jobs:
     description: Comma-separated job IDs that must succeed (e.g. test,smoke-test)
     required: true
+  allow-skipped:
+    description: >-
+      Comma-separated job IDs that may be skipped (default: OWASP jobs that
+      release workflows omit via run_reporting: false)
+    required: false
+    default: dependency-check,dependency-check-providers
 
 runs:
   using: composite
@@ -19,25 +26,5 @@ runs:
       env:
         NEEDS_JSON: ${{ inputs.needs-json }}
         REQUIRED_JOBS: ${{ inputs.required-jobs }}
-      run: |
-        node <<'EOF'
-        const needs = JSON.parse(process.env.NEEDS_JSON);
-        const required = process.env.REQUIRED_JOBS.split(',')
-          .map((job) => job.trim())
-          .filter(Boolean);
-
-        const failed = required.filter((job) => {
-          const result = needs[job]?.result;
-          return result !== 'success';
-        });
-
-        if (failed.length) {
-          console.error('Required jobs did not succeed:');
-          for (const job of failed) {
-            console.error(`  ${job}: ${needs[job]?.result ?? 'missing'}`);
-          }
-          process.exit(1);
-        }
-
-        console.log('All required jobs passed:', required.join(', '));
-        EOF
+        ALLOW_SKIPPED: ${{ inputs.allow-skipped }}
+      run: node "${GITHUB_ACTION_PATH}/verify-required-jobs.mjs"

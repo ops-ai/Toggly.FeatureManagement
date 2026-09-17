@@ -320,7 +320,7 @@ impl TogglyClient {
     fn cache_key(&self, feature_key: &str, context: &EvalContext) -> String {
         let identity = context.identity.as_deref().unwrap_or("");
         let groups = context.groups.join(",");
-        format!("{}:{}:{}", feature_key, identity, groups)
+        format!("{feature_key}:{identity}:{groups}")
     }
 }
 

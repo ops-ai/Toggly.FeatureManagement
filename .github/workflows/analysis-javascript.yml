@@ -43,6 +43,10 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   prepare:
     name: Prepare analysis filter
@@ -176,7 +180,6 @@ jobs:
         if: matrix.has-lint == true
         working-directory: ${{ matrix.path }}
         run: npm run lint
-        continue-on-error: true
 
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}
@@ -677,7 +680,7 @@ jobs:
         with:
           project: 'toggly-sdks-javascript'
           path: >
-            Toggly.FeatureManagement.Angular
+            Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly
             Toggly.FeatureManagement.React
             Toggly.FeatureManagement.Vue
             Toggly.FeatureManagement.Svelte
@@ -701,7 +704,10 @@ jobs:
             --disableBundleAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
+            --disableNodeAudit
+            --exclude '**/host-fixtures/**'
+            --exclude '**/node_modules/**'
+            --exclude '**/packaging/**'
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7

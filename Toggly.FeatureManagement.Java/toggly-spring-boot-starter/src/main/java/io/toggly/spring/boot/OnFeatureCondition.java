@@ -29,10 +29,14 @@ public class OnFeatureCondition implements Condition {
             return true;
         }
 
-        // Try to get TogglyClient from context
+        var beanFactory = context.getBeanFactory();
+        if (beanFactory == null) {
+            return evaluateFromProperties(context, featureKeys, matchAll, matchIfDisabled);
+        }
+
         TogglyClient client;
         try {
-            client = context.getBeanFactory().getBean(TogglyClient.class);
+            client = beanFactory.getBean(TogglyClient.class);
         } catch (Exception e) {
             // Client not available yet, check properties for defaults
             return evaluateFromProperties(context, featureKeys, matchAll, matchIfDisabled);

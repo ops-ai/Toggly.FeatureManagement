@@ -16,6 +16,10 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   analyze:
     name: Test & Analyze
@@ -271,7 +275,6 @@ jobs:
             --disableNodeAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7
@@ -477,7 +480,6 @@ jobs:
             --disableNodeAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7
@@ -509,7 +511,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: analyze,build-platforms,smoke-test,analyze-providers,secure-storage-version-matrix
+          required-jobs: analyze,build-platforms,smoke-test,analyze-providers,secure-storage-version-matrix,dependency-check,dependency-check-providers
 
       - name: Generate summary
         working-directory: .
