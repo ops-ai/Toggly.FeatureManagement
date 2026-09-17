@@ -39,16 +39,16 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::Config(msg) => write!(f, "configuration error: {}", msg),
-            Error::Http(err) => write!(f, "HTTP error: {}", err),
-            Error::Json(err) => write!(f, "JSON error: {}", err),
-            Error::FeatureNotFound(key) => write!(f, "feature not found: {}", key),
-            Error::Evaluation(msg) => write!(f, "evaluation error: {}", msg),
-            Error::Provider(msg) => write!(f, "provider error: {}", msg),
-            Error::Cache(msg) => write!(f, "cache error: {}", msg),
-            Error::Timeout(msg) => write!(f, "timeout: {}", msg),
-            Error::Internal(msg) => write!(f, "internal error: {}", msg),
-            Error::Signature(msg) => write!(f, "signature error: {}", msg),
+            Error::Config(msg) => write!(f, "configuration error: {msg}"),
+            Error::Http(err) => write!(f, "HTTP error: {err}"),
+            Error::Json(err) => write!(f, "JSON error: {err}"),
+            Error::FeatureNotFound(key) => write!(f, "feature not found: {key}"),
+            Error::Evaluation(msg) => write!(f, "evaluation error: {msg}"),
+            Error::Provider(msg) => write!(f, "provider error: {msg}"),
+            Error::Cache(msg) => write!(f, "cache error: {msg}"),
+            Error::Timeout(msg) => write!(f, "timeout: {msg}"),
+            Error::Internal(msg) => write!(f, "internal error: {msg}"),
+            Error::Signature(msg) => write!(f, "signature error: {msg}"),
         }
     }
 }
