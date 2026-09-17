@@ -12,7 +12,9 @@ module Toggly
                     :refresh_interval, :http_timeout,
                     :enable_undefined_in_dev, :disable_background_refresh,
                     :app_version, :instance_name, :defaults,
-                    :snapshot_provider, :use_signed_definitions, :allowed_key_ids
+                    :snapshot_provider, :use_signed_definitions, :allowed_key_ids,
+                    :enable_usage_tracking, :enable_metrics,
+                    :usage_flush_interval, :metrics_flush_interval
 
       # Rails-specific options
 
@@ -75,6 +77,10 @@ module Toggly
         config.defaults = defaults
         config.use_signed_definitions = use_signed_definitions
         config.allowed_key_ids = allowed_key_ids
+        config.enable_usage_tracking = enable_usage_tracking unless enable_usage_tracking.nil?
+        config.enable_metrics = enable_metrics unless enable_metrics.nil?
+        config.usage_flush_interval = usage_flush_interval unless usage_flush_interval.nil?
+        config.metrics_flush_interval = metrics_flush_interval unless metrics_flush_interval.nil?
 
         # Set up snapshot provider
         config.snapshot_provider = build_snapshot_provider

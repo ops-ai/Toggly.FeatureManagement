@@ -106,10 +106,11 @@ module Toggly
       @allowed_key_ids = options[:allowed_key_ids] || []
       @logger = options[:logger]
 
-      telemetry_default = options.key?(:app_key) && !options[:app_key].to_s.empty? &&
-                          ENV["TOGGLY_DISABLE_TELEMETRY"] != "1"
-      @enable_usage_tracking = options.fetch(:enable_usage_tracking, telemetry_default)
-      @enable_metrics = options.fetch(:enable_metrics, telemetry_default)
+      @usage_tracking_explicit = options.key?(:enable_usage_tracking)
+      @metrics_explicit = options.key?(:enable_metrics)
+      @enable_usage_tracking = options[:enable_usage_tracking] if @usage_tracking_explicit
+      @enable_metrics = options[:enable_metrics] if @metrics_explicit
+      apply_telemetry_defaults!
       @metrics_base_url = normalize_url(options[:metrics_base_url] || DEFAULT_METRICS_BASE_URL)
       @usage_flush_interval = options.fetch(:usage_flush_interval, DEFAULT_TELEMETRY_FLUSH_SECONDS)
       @metrics_flush_interval = options.fetch(:metrics_flush_interval, DEFAULT_TELEMETRY_FLUSH_SECONDS)
@@ -134,6 +135,34 @@ module Toggly
 
       raise ConfigError, "app_key is required" if @app_key.nil? || @app_key.empty?
       raise ConfigError, "environment is required" if @environment.nil? || @environment.empty?
+    end
+
+    def app_key=(value)
+      @app_key = value
+      apply_telemetry_defaults!
+    end
+
+    def enable_usage_tracking=(value)
+      @usage_tracking_explicit = true
+      @enable_usage_tracking = value
+    end
+
+    def enable_metrics=(value)
+      @metrics_explicit = true
+      @enable_metrics = value
+    end
+
+    # Apply usage/metrics defaults from the current +app_key+ and
+    # +TOGGLY_DISABLE_TELEMETRY+. Explicit +enable_usage_tracking+ /
+    # +enable_metrics+ assignments still win. Call after a configure block
+    # so +Config.new+ without options does not leave usage stuck off.
+    #
+    # @return [self]
+    def apply_telemetry_defaults!
+      default = telemetry_enabled_by_default?
+      @enable_usage_tracking = default unless @usage_tracking_explicit
+      @enable_metrics = default unless @metrics_explicit
+      self
     end
 
     # Check if running in offline mode (defaults only)
@@ -169,6 +198,10 @@ module Toggly
     end
 
     private
+
+    def telemetry_enabled_by_default?
+      !@app_key.to_s.empty? && ENV["TOGGLY_DISABLE_TELEMETRY"] != "1"
+    end
 
     def normalize_url(url)
       return url if url.nil?
