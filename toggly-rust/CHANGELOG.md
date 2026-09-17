@@ -7,10 +7,13 @@
   the Axum 0.7 adapter, so existing applications keep their dependency types
   and imports.
 
+## 0.6.1
+
+2026-09-16
+
 ### Changed
-- Expanded `toggly-actix`'s supported Actix-web 4.x range through 4.15 while
-  preserving the existing 4.4 floor. Current host validation also retains
-  Rocket 0.5.
+- `toggly-actix` now accepts Actix-web 4.15. The supported range is
+  `actix-web >=4.4, <4.16` (0.6.0 stopped at `<4.13`).
 
 ## 0.6.0
 
