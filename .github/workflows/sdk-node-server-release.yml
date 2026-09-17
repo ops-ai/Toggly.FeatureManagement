@@ -40,6 +40,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  security-events: write
 
 concurrency:
   group: node-server-sdk-release

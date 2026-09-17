@@ -30,7 +30,7 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-core</artifactId>
-    <version>1.6.0</version>
+    <version>1.6.1</version>
 </dependency>
 
 <!-- Optional: send usage/metrics over gRPC -->
@@ -59,48 +59,48 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-boot-starter</artifactId>
-    <version>1.6.0</version>
+    <version>1.6.1</version>
 </dependency>
 
 <!-- Spring MVC -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-mvc</artifactId>
-    <version>1.6.0</version>
+    <version>1.6.1</version>
 </dependency>
 
 <!-- Spring WebFlux -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-webflux</artifactId>
-    <version>1.6.0</version>
+    <version>1.6.1</version>
 </dependency>
 
 <!-- Servlet -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-servlet</artifactId>
-    <version>1.6.0</version>
+    <version>1.6.1</version>
 </dependency>
 
 <!-- Caching (optional) -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-caffeine</artifactId>
-    <version>1.6.0</version>
+    <version>1.6.1</version>
 </dependency>
 
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-redis</artifactId>
-    <version>1.6.0</version>
+    <version>1.6.1</version>
 </dependency>
 
 <!-- Redis with Jedis 8.x (choose this instead of toggly-cache-redis) -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-redis-jedis8</artifactId>
-    <version>1.6.0</version>
+    <version>1.6.1</version>
 </dependency>
 ```
 
@@ -108,10 +108,10 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 
 ```kotlin
 // Core
-implementation("io.toggly:toggly-core:1.6.0")
+implementation("io.toggly:toggly-core:1.6.1")
 
 // Spring Boot
-implementation("io.toggly:toggly-spring-boot-starter:1.6.0")
+implementation("io.toggly:toggly-spring-boot-starter:1.6.1")
 ```
 
 ## Quick Start

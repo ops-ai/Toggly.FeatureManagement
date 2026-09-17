@@ -27,6 +27,10 @@ env:
   SDK_ROOT: Toggly.FeatureManagement.ReactRouter
   PKG: react-router-toggly
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   build-shared-js-deps:
     name: Build shared JS deps
@@ -251,7 +255,10 @@ jobs:
             --disableBundleAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
+            --disableNodeAudit
+            --exclude '**/host-fixtures/**'
+            --exclude '**/node_modules/**'
+            --exclude '**/packaging/**'
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7
@@ -283,7 +290,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: build-shared-js-deps,build-and-test,packed-host
+          required-jobs: build-shared-js-deps,build-and-test,packed-host,dependency-check
 
       - name: Generate summary
         run: |

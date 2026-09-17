@@ -80,19 +80,25 @@ public final class MetricsBatcher {
             }
 
             List<MetricStatPayload.ObservationMessage> observationMessages = new ArrayList<>();
-            Map<String, MetricStatPayload.ObservationMessage> groups = new LinkedHashMap<>();
+            Map<String, Map<String, Double>> currentValues = new LinkedHashMap<>();
+            List<Map<String, Double>> orderedValues = new ArrayList<>();
+            List<Observation> orderedMeta = new ArrayList<>();
             for (Observation obs : observations) {
                 String groupKey = obs.time.toString() + '\0' + obs.metric + '\0'
                         + (obs.feature != null ? obs.feature : "");
-                MetricStatPayload.ObservationMessage group = groups.get(groupKey);
-                if (group == null || group.getVariantValues().containsKey(obs.variant)) {
-                    Map<String, Double> values = new LinkedHashMap<>();
-                    group = new MetricStatPayload.ObservationMessage(
-                            obs.time, obs.metric, obs.feature, values);
-                    groups.put(groupKey, group);
-                    observationMessages.add(group);
+                Map<String, Double> values = currentValues.get(groupKey);
+                if (values == null || values.containsKey(obs.variant)) {
+                    values = new LinkedHashMap<>();
+                    currentValues.put(groupKey, values);
+                    orderedValues.add(values);
+                    orderedMeta.add(obs);
                 }
-                group.getVariantValues().put(obs.variant, obs.value);
+                values.put(obs.variant, obs.value);
+            }
+            for (int i = 0; i < orderedValues.size(); i++) {
+                Observation meta = orderedMeta.get(i);
+                observationMessages.add(new MetricStatPayload.ObservationMessage(
+                        meta.time, meta.metric, meta.feature, orderedValues.get(i)));
             }
             observations = new ArrayList<>();
 

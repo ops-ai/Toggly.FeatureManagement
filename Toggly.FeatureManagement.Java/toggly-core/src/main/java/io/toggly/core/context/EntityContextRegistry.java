@@ -146,6 +146,10 @@ public final class EntityContextRegistry {
             String displayName,
             List<EntityContextPropertySchema> properties) {
 
+        public EntityContextSchemaRegistration {
+            properties = properties != null ? List.copyOf(properties) : List.of();
+        }
+
         public EntityContextSchemaRegistration withKind(String newKind) {
             return new EntityContextSchemaRegistration(
                     newKind,

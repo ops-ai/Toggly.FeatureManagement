@@ -182,7 +182,7 @@ impl TogglyConfig {
         } else {
             format!("{}/", self.definitions_url)
         };
-        format!("{}.well-known/jwks", base)
+        format!("{base}.well-known/jwks")
     }
 
     pub(crate) fn report_error(&self, err: &Error) {

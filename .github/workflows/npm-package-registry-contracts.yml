@@ -9,6 +9,9 @@ on:
       - '.github/package-registry/**'
       - '.github/workflows/sdk-*-release.yml'
       - '.github/workflows/npm-package-registry-contracts.yml'
+      - '.github/workflows/analysis-*.yml'
+      - '.github/workflows/analysis-rust.test.mjs'
+      - '.github/workflows/analysis-security-events.test.mjs'
       - '**/package.json'
       - '**/CHANGELOG.md'
       - 'Toggly.FeatureManagement.Blazor/**'
@@ -24,6 +27,9 @@ on:
       - '.github/package-registry/**'
       - '.github/workflows/sdk-*-release.yml'
       - '.github/workflows/npm-package-registry-contracts.yml'
+      - '.github/workflows/analysis-*.yml'
+      - '.github/workflows/analysis-rust.test.mjs'
+      - '.github/workflows/analysis-security-events.test.mjs'
       - '**/package.json'
       - '**/CHANGELOG.md'
       - 'Toggly.FeatureManagement.Blazor/**'
@@ -81,3 +87,9 @@ jobs:
 
       - name: Verify Blazor NuGet family
         run: node --test .github/package-registry/verify-nuget-blazor.test.mjs
+
+      - name: Verify fail-closed Rust and Java analysis quality gates
+        run: node --test .github/workflows/analysis-rust.test.mjs
+
+      - name: Verify analysis/release workflows grant security-events write
+        run: node --test .github/workflows/analysis-security-events.test.mjs

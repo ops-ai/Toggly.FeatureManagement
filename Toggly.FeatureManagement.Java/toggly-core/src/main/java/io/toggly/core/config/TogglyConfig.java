@@ -214,7 +214,7 @@ public final class TogglyConfig {
      * @return allowed key ids
      */
     public Set<String> getAllowedKeyIds() {
-        return allowedKeyIds;
+        return Set.copyOf(allowedKeyIds);
     }
 
     /**

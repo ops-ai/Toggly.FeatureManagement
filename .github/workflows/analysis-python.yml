@@ -20,6 +20,10 @@ env:
   PYTHON_VERSION: "3.11"
   SDK_ROOT: Toggly.FeatureManagement.Python
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   lint:
     name: Lint
@@ -613,7 +617,6 @@ jobs:
             --disableBundleAudit
             --disableNodeJS
             --disableNodeAudit
-        continue-on-error: true
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7
@@ -645,7 +648,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: lint,type-check,test-core,test-django,test-flask,test-fastapi,test-cache,test-packed-host,integration,smoke-test,build
+          required-jobs: lint,type-check,test-core,test-django,test-flask,test-fastapi,test-cache,test-packed-host,integration,smoke-test,build,dependency-check
 
       - name: Generate summary
         working-directory: .

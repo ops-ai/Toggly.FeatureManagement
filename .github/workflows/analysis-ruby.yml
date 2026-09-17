@@ -19,6 +19,10 @@ on:
 env:
   SDK_ROOT: toggly-ruby
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   test-core:
     name: Test toggly (Ruby ${{ matrix.ruby }})
@@ -388,7 +392,6 @@ jobs:
             --disableNodeAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7
@@ -420,7 +423,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: test-core,test-rails,test-cache,test-packed-hosts,smoke-test
+          required-jobs: test-core,test-rails,test-cache,test-packed-hosts,smoke-test,lint,dependency-check
 
       - name: Generate summary
         run: |
