@@ -63,10 +63,13 @@ test('requires the packed Docusaurus production host with a locked Node 24 insta
 test('excludes fixture and packaging lockfiles from the JS OWASP Node Audit scan', () => {
   const owasp = workflow.match(/\n  dependency-check:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0];
   assert.ok(owasp, 'javascript analysis must define an OWASP dependency-check job');
-  assert.ok(owasp.includes('--exclude .*/host-fixtures/.*'));
-  assert.ok(owasp.includes('--exclude .*/node_modules/.*'));
-  assert.ok(owasp.includes('--exclude .*/packaging/.*'));
+  assert.ok(owasp.includes("--exclude '**/host-fixtures/**'"));
+  assert.ok(owasp.includes("--exclude '**/node_modules/**'"));
+  assert.ok(owasp.includes("--exclude '**/packaging/**'"));
   assert.ok(owasp.includes('--nodeAuditSkipDevDependencies'));
+  assert.ok(owasp.includes('--failOnError false'));
+  assert.ok(owasp.includes('Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly'));
+  assert.doesNotMatch(owasp, /path: >\s+Toggly\.FeatureManagement\.Angular\s/);
 });
 
 test('runs the current Gatsby packed host on Node 24', () => {

@@ -94,7 +94,7 @@ public class SecurityContextResolver implements ContextResolver {
                         }
                     }
                 }
-            } catch (Exception e) {
+            } catch (ReflectiveOperationException | LinkageError e) {
                 // Spring Security not available or incompatible version
             }
             return roles;

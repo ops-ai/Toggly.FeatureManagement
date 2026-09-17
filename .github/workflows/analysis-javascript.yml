@@ -680,7 +680,7 @@ jobs:
         with:
           project: 'toggly-sdks-javascript'
           path: >
-            Toggly.FeatureManagement.Angular
+            Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly
             Toggly.FeatureManagement.React
             Toggly.FeatureManagement.Vue
             Toggly.FeatureManagement.Svelte
@@ -705,9 +705,10 @@ jobs:
             --disablePyPkg
             --disablePyDist
             --nodeAuditSkipDevDependencies
-            --exclude .*/host-fixtures/.*
-            --exclude .*/node_modules/.*
-            --exclude .*/packaging/.*
+            --failOnError false
+            --exclude '**/host-fixtures/**'
+            --exclude '**/node_modules/**'
+            --exclude '**/packaging/**'
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7

@@ -80,7 +80,7 @@ public class SecurityReactiveContextResolver implements ReactiveContextResolver 
                         }
                     }
                 }
-            } catch (Exception e) {
+            } catch (ReflectiveOperationException | LinkageError e) {
                 // Spring Security not available
             }
             return roles;

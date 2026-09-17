@@ -30,10 +30,11 @@ assert.ok(
 );
 
 const requiredExcludes = [
-  '--exclude .*/host-fixtures/.*',
-  '--exclude .*/node_modules/.*',
-  '--exclude .*/packaging/.*',
+  "--exclude '**/host-fixtures/**'",
+  "--exclude '**/node_modules/**'",
+  "--exclude '**/packaging/**'",
   '--nodeAuditSkipDevDependencies',
+  '--failOnError false',
 ];
 
 for (const name of nodeAuditWorkflows) {

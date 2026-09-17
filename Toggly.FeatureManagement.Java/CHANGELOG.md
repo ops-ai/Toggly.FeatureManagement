@@ -11,6 +11,10 @@
   grouping fills a local map, then constructs the immutable payload.
 - SpotBugs skips generated protobuf clients; those findings are not
   actionable on `protoc` output.
+- `@ConditionalOnFeature` no longer dereferences a null Spring
+  `BeanFactory` when the client is not in the context yet.
+- Spring Security role reflection catches only reflective and linkage
+  failures, not every `Exception`.
 
 ## 1.6.0
 
