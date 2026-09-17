@@ -79,6 +79,7 @@ module Toggly
     def configure
       config = Config.new
       yield(config) if block_given?
+      config.apply_telemetry_defaults!
       @client = Client.new(config)
     end
 

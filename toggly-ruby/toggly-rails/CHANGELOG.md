@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-09-16
+
+### Fixed
+
+- Forward telemetry options (`enable_usage_tracking`, `enable_metrics`,
+  flush intervals) onto core `Toggly::Config`. A live `app_key` with no
+  `TOGGLY_DISABLE_TELEMETRY=1` now enables usage with the core ~60s flush.
+
 ## [0.3.0] - 2026-09-12
 
 ### Added

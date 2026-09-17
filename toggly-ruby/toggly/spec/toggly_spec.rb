@@ -21,6 +21,29 @@ RSpec.describe Toggly do
 
       expect(Toggly.client).to be_a(Toggly::Client)
     end
+
+    it "enables usage when the configure block sets app_key after construct" do
+      previous = ENV.fetch("TOGGLY_DISABLE_TELEMETRY", nil)
+      ENV.delete("TOGGLY_DISABLE_TELEMETRY")
+      stub_definitions_api(
+        app_key: "test-key",
+        environment: "Production",
+        features: []
+      )
+
+      Toggly.configure do |config|
+        config.app_key = "test-key"
+        config.environment = "Production"
+        config.disable_background_refresh = true
+        config.enable_live_updates = false
+      end
+
+      expect(Toggly.client.config.enable_usage_tracking).to be true
+      expect(Toggly.client.config.enable_metrics).to be true
+      expect(Toggly.client.config.usage_flush_interval).to eq(Toggly::Config::DEFAULT_TELEMETRY_FLUSH_SECONDS)
+    ensure
+      ENV["TOGGLY_DISABLE_TELEMETRY"] = previous.nil? ? "1" : previous
+    end
   end
 
   describe ".enabled?" do
