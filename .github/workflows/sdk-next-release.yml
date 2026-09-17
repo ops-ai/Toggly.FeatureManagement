@@ -41,6 +41,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  security-events: write
 
 concurrency:
   group: next-sdk-release

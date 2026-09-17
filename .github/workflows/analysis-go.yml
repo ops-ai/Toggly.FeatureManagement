@@ -17,6 +17,10 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   test:
     name: Test & Lint
@@ -368,7 +372,6 @@ jobs:
             --disableNodeAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7
@@ -400,7 +403,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: test,smoke-test,current-runtime,mongodb-v2,mongodb-v2-consumer,build
+          required-jobs: test,smoke-test,current-runtime,mongodb-v2,mongodb-v2-consumer,build,dependency-check
 
       - name: Generate summary
         working-directory: .

@@ -36,6 +36,7 @@ on:
 
 permissions:
   contents: write
+  security-events: write
 
 concurrency:
   group: ios-sdk-release

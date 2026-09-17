@@ -138,6 +138,7 @@ const ALL_REQUIRED_DEFAULT = [
   'test-current-browser-hosts',
   'test-docusaurus-host',
   'test-astro-hosts',
+  'dependency-check',
 ];
 
 const BROWSER_HOSTS = [
@@ -203,6 +204,9 @@ export function filterAnalysisJs(sdksInput = 'all') {
   }
 
   const jobSet = new Set();
+  // OWASP Dependency Check always runs (it is not gated by the sdks filter),
+  // scanning the whole JS/TS dependency tree, so it must always be required.
+  jobSet.add('dependency-check');
   if (testMatrix.length) {
     jobSet.add('test');
   }

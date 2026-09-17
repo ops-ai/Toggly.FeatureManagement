@@ -41,6 +41,7 @@ on:
 
 permissions:
   contents: write
+  security-events: write
 
 concurrency:
   group: ruby-sdk-release

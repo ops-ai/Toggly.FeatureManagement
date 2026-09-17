@@ -28,6 +28,10 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   analyze:
     name: Build, Test & Analyze
@@ -397,7 +401,6 @@ jobs:
             --disableNodeAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -583,3 +586,19 @@ jobs:
             TestResults/blazor
             blazor-pack
             Toggly.FeatureManagement.Blazor/coverage/
+
+  summary:
+    name: Analysis Summary
+    runs-on: ubuntu-latest
+    needs: [analyze, dependency-check, build-cli, pack-packages, embedded-consumer, smoke-test, blazor-runtime]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Verify required jobs passed
+        uses: ./.github/actions/verify-required-jobs
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          required-jobs: analyze,dependency-check,build-cli,pack-packages,embedded-consumer,smoke-test,blazor-runtime

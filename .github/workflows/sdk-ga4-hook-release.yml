@@ -33,6 +33,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  security-events: write
 
 concurrency:
   group: ga4-hook-sdk-release

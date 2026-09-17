@@ -16,6 +16,10 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+  security-events: write
+
 env:
   SDK_ROOT: toggly-rust
   CARGO_TERM_COLOR: always
@@ -61,7 +65,6 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-        continue-on-error: true
 
       - name: Build
         run: cargo build --all-targets --all-features
@@ -192,11 +195,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked --version 0.21.2
+        run: cargo install cargo-audit --locked --version 0.22.2
 
       - name: Run security audit
         run: cargo audit
-        continue-on-error: true
 
   sonar:
     name: SonarQube Analysis
@@ -335,7 +337,6 @@ jobs:
             --disableNodeAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7
@@ -367,7 +368,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: test,smoke-test,coverage,docs,msrv,security
+          required-jobs: test,smoke-test,coverage,docs,msrv,security,dependency-check
 
       - name: Generate summary
         working-directory: .

@@ -24,6 +24,10 @@ on:
 env:
   SDK_ROOT: Toggly.FeatureManagement.Next
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   build-shared-js-deps:
     name: Build shared JS deps
@@ -122,7 +126,6 @@ jobs:
       - name: Run lint
         working-directory: ${{ env.SDK_ROOT }}
         run: pnpm lint
-        continue-on-error: true
 
   coverage:
     name: Coverage
@@ -346,7 +349,6 @@ jobs:
             --disableBundleAudit
             --disablePyPkg
             --disablePyDist
-        continue-on-error: true
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7
@@ -378,7 +380,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: build-and-test,coverage,smoke-test
+          required-jobs: build-and-test,lint,coverage,smoke-test,dependency-check
 
       - name: Generate summary
         run: |
