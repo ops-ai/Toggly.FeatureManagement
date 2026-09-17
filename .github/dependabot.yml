@@ -103,10 +103,11 @@ updates:
           - minor
           - patch
     ignore:
-      # grpc-go 1.82+ rewrites go.mod to 1.25. Declared SDK floor is Go 1.24
-      # (OPS-1011). 1.82.2 slipped under the previous >=1.83 ignore (#513).
+      # grpc-go 1.81+ rewrites consumer go.mod files to 1.25.
+      # toggly-go-mongodb-v2 still declares Go 1.24 (OPS-1011 / OPS-1263).
+      # 1.81.1 slipped under the previous >=1.82 ignore (#524).
       - dependency-name: google.golang.org/grpc
-        versions: [">=1.82.0"]
+        versions: [">=1.81.0"]
       - dependency-name: go.mongodb.org/mongo-driver/v2
         versions: [">=2.9.0"]
 
