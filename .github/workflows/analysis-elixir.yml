@@ -12,6 +12,7 @@ on:
         default: true
 permissions:
   contents: read
+  security-events: write
 jobs:
   native-analysis:
     runs-on: ubuntu-latest
