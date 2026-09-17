@@ -4,11 +4,11 @@ go 1.25.0
 
 require (
 	github.com/lib/pq v1.12.3
-	github.com/mattn/go-sqlite3 v1.14.50
+	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/mileusna/useragent v1.3.5
 	github.com/redis/go-redis/v9 v9.22.0
-	go.mongodb.org/mongo-driver v1.17.9
-	google.golang.org/grpc v1.80.0
+	go.mongodb.org/mongo-driver v1.17.10
+	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.12
 	nhooyr.io/websocket v1.8.17
 )
@@ -28,5 +28,5 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 )
