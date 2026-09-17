@@ -4,10 +4,10 @@ go 1.25.0
 
 require (
 	github.com/lib/pq v1.12.3
-	github.com/mattn/go-sqlite3 v1.14.50
+	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/mileusna/useragent v1.3.5
 	github.com/redis/go-redis/v9 v9.22.0
-	go.mongodb.org/mongo-driver v1.17.9
+	go.mongodb.org/mongo-driver v1.17.10
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.12
 	nhooyr.io/websocket v1.8.17
