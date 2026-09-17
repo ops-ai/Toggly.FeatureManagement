@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.1
+
+2026-09-16
+
+### Changed
+- Requires Go 1.25. Applications can compile with current
+  `golang.org/x/crypto` and `golang.org/x/net`, including `x/crypto` 0.52
+  and `x/net` 0.55 or later. 0.7.0 failed to compile when `x/crypto` 0.52
+  selected `x/net` 0.54.
+- User-Agent is `toggly-go/0.7.1`.
+
 ## 0.7.0
 
 2026-09-08
