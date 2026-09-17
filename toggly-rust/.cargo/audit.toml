@@ -1,0 +1,23 @@
+# cargo-audit configuration for the toggly-rust workspace.
+# https://docs.rs/cargo-audit/latest/cargo_audit/config/
+#
+# `cargo audit` is invoked with no flags from `analysis-rust.yml`'s
+# `security` job (working-directory: toggly-rust), which auto-discovers
+# this file. Ignored advisories must have a documented reason, owner, and
+# review date — do not add to this list without both. See OPS-1258.
+
+[advisories]
+ignore = [
+    # RUSTSEC-2026-0258: h2 <0.4.16 unbounded empty DATA frames (low
+    # severity DoS). No patched 0.3.x release exists (patched line is
+    # ">=0.4.16" only) — h2 0.3.27 is pulled in transitively by
+    # actix-http v3.13.6 (-> toggly-actix) and by hyper v0.14.32 via
+    # rocket_http v0.5.1 (-> toggly-rocket), which are the latest
+    # published actix-web 4.x / rocket 0.5.x releases as of 2026-09-17.
+    # Neither framework has shipped a hyper 1.x / h2 0.4+ migration yet.
+    # toggly's own HTTP client dependency (reqwest) was bumped off the
+    # vulnerable h2 line in the same change that added this ignore.
+    # Owner: alex@ops.ai. Review by: 2026-12-17 (re-check actix-web/rocket
+    # for a release that drops h2 0.3, or re-evaluate reachability).
+    "RUSTSEC-2026-0258",
+]

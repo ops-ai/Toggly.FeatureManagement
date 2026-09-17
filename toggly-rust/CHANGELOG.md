@@ -7,6 +7,25 @@
   the Axum 0.7 adapter, so existing applications keep their dependency types
   and imports.
 
+## 0.6.2
+
+2026-09-17
+
+### Changed
+- `reqwest` bumped from 0.11 to 0.12 and `tokio-tungstenite` from 0.21 to
+  0.24, moving both off `rustls` 0.21/0.22 and their vulnerable
+  `rustls-webpki` 0.101.7 / 0.102.8 (RUSTSEC-2026-0049, -0098, -0099,
+  -0104) onto `rustls-webpki` 0.103.15. `cargo-audit` 0.22.2 (which, unlike
+  0.21.2, can parse the current advisory DB) now flags these correctly;
+  `reqwest::Client` and `tokio_tungstenite::connect_async` usage in the
+  definitions provider is unchanged (no public API impact).
+- `.cargo/audit.toml` now documents one remaining, deliberately-ignored
+  advisory (`RUSTSEC-2026-0258` for `h2` 0.3.27). That `h2` line is
+  unrelated to `reqwest`/`tokio-tungstenite` — it comes from
+  `actix-http`/`rocket_http`'s `hyper` 0.14 dependency in `toggly-actix` /
+  `toggly-rocket`, and no patched `h2` 0.3.x release exists upstream
+  [OPS-1258].
+
 ## 0.6.1
 
 2026-09-16

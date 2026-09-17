@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Toggly <support@toggly.io>"]
 edition = "2021"
 rust-version = "1.88"
@@ -27,7 +27,7 @@ time = ">=0.3.7, <0.3.56"
 
 # Core dependencies
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "sync", "time"] }
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["raw_value"] }
 thiserror = "2.0"
@@ -58,10 +58,11 @@ rocket = "0.5"
 mockito = "1.2"
 tokio-test = "0.4"
 wiremock = "0.6"
-tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 
-# Workspace crates — keep path pins in sync with workspace.package.version
-# so sibling crates resolve against the bumped package (CI / frozen installs).
-toggly = { version = "0.6.0", path = "toggly" }
-toggly-macros = { version = "0.6.0", path = "toggly-macros" }
+# Workspace crates — pin to the latest *published* version (0.6.1 is on
+# crates.io; 0.6.2 is not yet), so cargo package/publish checks resolve
+# toggly/toggly-macros from crates.io ahead of this release landing there.
+toggly = { version = "0.6.1", path = "toggly" }
+toggly-macros = { version = "0.6.1", path = "toggly-macros" }
