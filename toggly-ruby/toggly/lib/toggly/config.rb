@@ -10,7 +10,7 @@ module Toggly
   #   )
   class Config
     # @return [String] Application key from Toggly dashboard
-    attr_accessor :app_key
+    attr_reader :app_key
 
     # @return [String] Environment name (e.g., "Production", "Staging")
     attr_accessor :environment
@@ -59,10 +59,10 @@ module Toggly
     attr_accessor :logger
 
     # @return [Boolean] Enable feature usage tracking (Usage.SendStats)
-    attr_accessor :enable_usage_tracking
+    attr_reader :enable_usage_tracking
 
     # @return [Boolean] Enable business metrics (Metrics.SendMetrics)
-    attr_accessor :enable_metrics
+    attr_reader :enable_metrics
 
     # @return [String] Base URL for usage/metrics gRPC (default app.toggly.io)
     attr_accessor :metrics_base_url
