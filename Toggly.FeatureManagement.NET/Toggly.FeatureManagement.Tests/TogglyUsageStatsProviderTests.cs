@@ -812,7 +812,7 @@ public class TogglyUsageStatsProviderTests : IDisposable
 
         // Assert
         var debugInfo = _provider.GetDebugInfo();
-        debugInfo.BaseUrl.Should().Be("https://app.toggly.io/");
+        debugInfo.BaseUrl.Should().Be("https://metrics.toggly.io/");
     }
 
     #endregion

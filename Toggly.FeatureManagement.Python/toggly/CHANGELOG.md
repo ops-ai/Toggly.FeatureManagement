@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.2 - 2026-09-17
+
+### Fixed
+- Default usage/metrics gRPC host is `https://metrics.toggly.io`.
+
 ## 0.7.1 - 2026-09-12
 
 ### Changed

@@ -261,7 +261,7 @@ defmodule Toggly.Client do
   defp request(state, method, path, headers, body \\ nil) do
     base =
       if method == :post,
-        do: Keyword.get(state.opts, :usage_base_url, "https://app.toggly.io"),
+        do: Keyword.get(state.opts, :usage_base_url, "https://metrics.toggly.io"),
         else: Keyword.get(state.opts, :base_url, "https://definitions.toggly.io")
 
     req = %{

@@ -71,7 +71,7 @@ pub struct TogglyConfig {
     /// optional Prometheus Cargo feature. `None` uses the same default as usage.
     pub enable_metrics: Option<bool>,
 
-    /// gRPC base URL for usage/metrics (default `https://app.toggly.io/`).
+    /// gRPC base URL for usage/metrics (default `https://metrics.toggly.io/`).
     pub metrics_base_url: Option<String>,
 
     /// Usage flush interval (default 60s).
@@ -315,7 +315,7 @@ impl TogglyConfigBuilder {
         self
     }
 
-    /// Set the gRPC base URL for usage/metrics (default `https://app.toggly.io/`).
+    /// Set the gRPC base URL for usage/metrics (default `https://metrics.toggly.io/`).
     pub fn metrics_base_url(mut self, url: impl Into<String>) -> Self {
         self.config.metrics_base_url = Some(url.into());
         self

@@ -366,7 +366,7 @@ describe('config helpers', () => {
     expect(parseBoolEnv(undefined, true)).toBe(true);
     expect(parseBoolEnv('false', true)).toBe(false);
     expect(parseBoolEnv('1', false)).toBe(true);
-    expect(resolveMetricsBaseUrl(undefined)).toBe('https://app.toggly.io/');
+    expect(resolveMetricsBaseUrl(undefined)).toBe('https://metrics.toggly.io/');
     expect(resolveMetricsBaseUrl('https://custom.example')).toBe(
       'https://custom.example/'
     );

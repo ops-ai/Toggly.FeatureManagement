@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1
+
+2026-09-17
+
+### Fixed
+- Usage and metrics gRPC dial `https://metrics.toggly.io/` by default via
+  `Config.MetricsURL`. Product API / context registration stay on `BaseURL`.
+
 ## 0.8.0
 
 2026-09-17

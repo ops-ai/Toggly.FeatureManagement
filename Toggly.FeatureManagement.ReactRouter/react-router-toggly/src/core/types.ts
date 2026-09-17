@@ -71,7 +71,7 @@ export interface TogglyConfig {
   /** Custom claims for targeting */
   claims?: Record<string, string>;
   /**
-   * Base URL for usage/metrics transport (default: https://app.toggly.io/).
+   * Base URL for usage/metrics transport (default: https://metrics.toggly.io/).
    * Separate from `baseUrl`, which is for definitions/JWKS.
    */
   metricsBaseUrl?: string;

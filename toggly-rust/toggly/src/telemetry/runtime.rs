@@ -20,7 +20,7 @@ pub struct TelemetryRuntimeConfig {
     pub app_key: String,
     /// Environment name.
     pub environment: String,
-    /// gRPC base URL (default `https://app.toggly.io/`).
+    /// gRPC base URL (default `https://metrics.toggly.io/`).
     pub metrics_base_url: String,
     /// Explicit usage opt-in/out; `None` uses default when recording is allowed.
     pub enable_usage_tracking: Option<bool>,

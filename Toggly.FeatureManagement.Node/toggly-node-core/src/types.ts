@@ -88,7 +88,7 @@ export interface TogglyServerConfig extends TogglyConfig {
   /** Register entity context schemas with Toggly on startup (default: true) */
   registerContextsOnStartup?: boolean
   /**
-   * Base URL for usage/metrics gRPC (default: https://app.toggly.io/).
+   * Base URL for usage/metrics gRPC (default: https://metrics.toggly.io/).
    * Separate from `baseUrl`, which is for definitions/JWKS.
    */
   metricsBaseUrl?: string

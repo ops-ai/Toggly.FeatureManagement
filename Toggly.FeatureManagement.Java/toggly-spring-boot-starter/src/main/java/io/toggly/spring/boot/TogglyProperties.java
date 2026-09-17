@@ -21,7 +21,7 @@ import java.util.Map;
  *     my-feature: true
  *   enable-usage-tracking: true
  *   enable-metrics: true
- *   metrics-base-url: https://app.toggly.io/
+ *   metrics-base-url: https://metrics.toggly.io/
  *   usage-flush-interval: 1m
  *   metrics-flush-interval: 1m
  *   instance-name: api-1
@@ -87,9 +87,9 @@ public class TogglyProperties {
     private boolean enableMetrics = true;
 
     /**
-     * Base URL for usage/metrics gRPC (default {@code https://app.toggly.io/}).
+     * Base URL for usage/metrics gRPC (default {@code https://metrics.toggly.io/}).
      */
-    private String metricsBaseUrl = "https://app.toggly.io/";
+    private String metricsBaseUrl = "https://metrics.toggly.io/";
 
     /**
      * How often usage stats are flushed (default 1 minute). Bind as {@code 1m}, {@code 60s}, etc.

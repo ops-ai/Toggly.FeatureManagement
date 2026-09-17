@@ -50,7 +50,7 @@ func NewClient(cfg Config) (*Client, error) {
 		if cfg.UsageClient != nil {
 			c.usage = cfg.UsageClient
 		} else {
-			u, err := usage.Dial(cfg.BaseURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, cfg.AppVersion, ua)
+			u, err := usage.Dial(cfg.MetricsURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, cfg.AppVersion, ua)
 			if err != nil {
 				return nil, err
 			}
@@ -64,7 +64,7 @@ func NewClient(cfg Config) (*Client, error) {
 		if cfg.MetricsClient != nil {
 			c.metrics = cfg.MetricsClient
 		} else {
-			m, err := metrics.Dial(cfg.BaseURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, ua)
+			m, err := metrics.Dial(cfg.MetricsURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, ua)
 			if err != nil {
 				return nil, err
 			}

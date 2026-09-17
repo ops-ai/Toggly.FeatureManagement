@@ -1,5 +1,11 @@
 # Changelog
 
+## All .NET SDK packages 3.8.1 - 2026-09-17
+
+### Fixed
+- Usage and metrics ingest default to `https://metrics.toggly.io/`. Product
+  API calls stay on `https://app.toggly.io/`. Set `MetricsBaseUrl` to override.
+
 ## All .NET SDK packages 3.8.0 - 2026-09-14
 
 ### Added

@@ -31,7 +31,7 @@ import java.util.logging.Logger;
  */
 public final class GrpcClientFactory {
 
-    public static final String DEFAULT_METRICS_BASE_URL = "https://app.toggly.io/";
+    public static final String DEFAULT_METRICS_BASE_URL = "https://metrics.toggly.io/";
 
     private static final Logger LOGGER = Logger.getLogger(GrpcClientFactory.class.getName());
     private static final Metadata.Key<String> UA_KEY =

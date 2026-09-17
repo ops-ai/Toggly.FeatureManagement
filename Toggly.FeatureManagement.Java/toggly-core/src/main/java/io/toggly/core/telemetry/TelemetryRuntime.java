@@ -78,7 +78,7 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
             Class<?> factory = Class.forName(GRPC_FACTORY);
             return (String) factory.getField("DEFAULT_METRICS_BASE_URL").get(null);
         } catch (ReflectiveOperationException | LinkageError e) {
-            return "https://app.toggly.io/";
+            return "https://metrics.toggly.io/";
         }
     }
 

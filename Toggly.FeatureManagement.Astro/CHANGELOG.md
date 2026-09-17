@@ -1,3 +1,10 @@
+## 1.15.1
+
+2026-09-17
+
+### Fixed
+- Default usage/metrics HTTPS host is `https://metrics.toggly.io/`.
+
 ## 1.15.0
 
 2026-09-15

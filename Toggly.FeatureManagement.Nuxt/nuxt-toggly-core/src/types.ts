@@ -80,7 +80,7 @@ export interface TogglyConfig {
   /** Optional SDK error callback for reporting fetch/evaluation failures. */
   onError?: (message: string, error?: unknown) => void
   /**
-   * Base URL for usage/metrics transport (default: https://app.toggly.io/).
+   * Base URL for usage/metrics transport (default: https://metrics.toggly.io/).
    * Separate from `baseUri`, which is for definitions/JWKS.
    */
   metricsBaseUrl?: string

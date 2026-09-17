@@ -116,7 +116,7 @@ public final class TogglyConfig {
     }
 
     /**
-     * Base URL for usage/metrics gRPC (defaults to {@code https://app.toggly.io/}).
+     * Base URL for usage/metrics gRPC (defaults to {@code https://metrics.toggly.io/}).
      */
     public String getMetricsBaseUrl() {
         return metricsBaseUrl;
@@ -281,7 +281,7 @@ public final class TogglyConfig {
         private String appKey = "";
         private String environment = "Production";
         private String baseUrl = "https://definitions.toggly.io";
-        private String metricsBaseUrl = "https://app.toggly.io/";
+        private String metricsBaseUrl = "https://metrics.toggly.io/";
         private Duration refreshInterval = Duration.ofMinutes(3);
         private Duration connectTimeout = Duration.ofSeconds(10);
         private Duration readTimeout = Duration.ofSeconds(30);
@@ -338,13 +338,13 @@ public final class TogglyConfig {
         }
 
         /**
-         * Sets the metrics/usage gRPC base URL (default {@code https://app.toggly.io/}).
+         * Sets the metrics/usage gRPC base URL (default {@code https://metrics.toggly.io/}).
          *
          * @param metricsBaseUrl the metrics endpoint base URL
          * @return this builder
          */
         public Builder metricsBaseUrl(String metricsBaseUrl) {
-            this.metricsBaseUrl = metricsBaseUrl != null ? metricsBaseUrl : "https://app.toggly.io/";
+            this.metricsBaseUrl = metricsBaseUrl != null ? metricsBaseUrl : "https://metrics.toggly.io/";
             return this;
         }
 

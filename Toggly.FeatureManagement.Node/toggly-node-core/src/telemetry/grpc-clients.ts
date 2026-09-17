@@ -34,7 +34,7 @@ export function resolveProtoRoot(moduleUrl: string = import.meta.url): string {
 
 const protoRoot = resolveProtoRoot()
 
-export const DEFAULT_METRICS_BASE_URL = 'https://app.toggly.io/'
+export const DEFAULT_METRICS_BASE_URL = 'https://metrics.toggly.io/'
 export const DEFAULT_TELEMETRY_FLUSH_MS = 60_000
 
 /**

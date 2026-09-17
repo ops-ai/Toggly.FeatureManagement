@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/react-router-toggly",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Toggly feature flags for React Router 7/8 framework mode (client + server)",
   "type": "module",
   "sideEffects": false,

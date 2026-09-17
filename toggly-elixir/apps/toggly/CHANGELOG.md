@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 — 2026-09-17
+
+### Fixed
+- Default `usage_base_url` for `POST /api/usage/stats` is `https://metrics.toggly.io`.
+
 ## 0.2.0 — 2026-09-16
 
 ### Added
