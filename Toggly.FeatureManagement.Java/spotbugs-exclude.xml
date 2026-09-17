@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- protoc output: encapsulation and serialization findings are not actionable. -->
+    <Match>
+        <Class name="~io\.toggly\.core\.telemetry\.pb\..*"/>
+    </Match>
+    <!-- Injected collaborator, not a leaked mutable collection. -->
+    <Match>
+        <Class name="io.toggly.core.TogglyClient"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>

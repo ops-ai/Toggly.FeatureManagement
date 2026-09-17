@@ -109,7 +109,7 @@ public final class FeatureDefinition {
         }
 
         public Builder metrics(List<MetricDefinition> metrics) {
-            this.metrics = metrics;
+            this.metrics = metrics != null ? List.copyOf(metrics) : null;
             return this;
         }
 

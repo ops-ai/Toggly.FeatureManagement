@@ -704,6 +704,10 @@ jobs:
             --disableBundleAudit
             --disablePyPkg
             --disablePyDist
+            --nodeAuditSkipDevDependencies
+            --exclude .*/host-fixtures/.*
+            --exclude .*/node_modules/.*
+            --exclude .*/packaging/.*
 
       - name: Upload Dependency Check report
         uses: actions/upload-artifact@v7

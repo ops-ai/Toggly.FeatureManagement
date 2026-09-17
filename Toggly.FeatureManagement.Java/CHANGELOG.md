@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.1
+
+2026-09-17
+
+### Changed
+- Config, context-schema, feature-definition, and metrics payloads now copy
+  collections on store and return so callers cannot mutate SDK internals
+  (SpotBugs `EI_EXPOSE_REP` / `EI_EXPOSE_REP2`). Metrics observation
+  grouping fills a local map, then constructs the immutable payload.
+- SpotBugs skips generated protobuf clients; those findings are not
+  actionable on `protoc` output.
+
 ## 1.6.0
 
 2026-09-14
