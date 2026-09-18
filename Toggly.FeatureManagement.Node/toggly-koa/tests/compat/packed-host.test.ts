@@ -27,8 +27,11 @@ function installAndVerify(koaVersion: string) {
     cpSync(fixturesDirectory, temporaryDirectory, { recursive: true })
     const packagesDirectory = join(temporaryDirectory, 'packages')
     const koaPackagesDirectory = join(packagesDirectory, 'koa')
+    const corePackagesDirectory = join(packagesDirectory, 'core')
     mkdirSync(koaPackagesDirectory, { recursive: true })
+    mkdirSync(corePackagesDirectory, { recursive: true })
     const koaTarball = pack(packageDirectory, koaPackagesDirectory)
+    const coreTarball = pack(resolve(packageDirectory, '../toggly-node-core'), corePackagesDirectory)
 
     const packageJsonPath = join(temporaryDirectory, 'package.json')
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
@@ -44,7 +47,7 @@ function installAndVerify(koaVersion: string) {
         '--no-audit',
         '--no-fund',
         '--package-lock=false',
-        '@ops-ai/toggly-node-core@0.9.0',
+        coreTarball,
         koaTarball,
       ],
       temporaryDirectory

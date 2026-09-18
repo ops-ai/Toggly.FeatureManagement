@@ -1080,7 +1080,7 @@ describe('TogglyProvider', () => {
       await act(async () => {});
 
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/test-key/ws?sdk=react-router&sdkVersion=1.0.0');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/test-key/ws?sdk=react-router&sdkVersion=1.0.1');
     });
 
     it('should build ws:// URL from http:// baseUrl', async () => {
@@ -1092,7 +1092,7 @@ describe('TogglyProvider', () => {
 
       await act(async () => {});
 
-      expect(MockWebSocket.instances[0].url).toBe('ws://localhost:3000/test-key/ws?sdk=react-router&sdkVersion=1.0.0');
+      expect(MockWebSocket.instances[0].url).toBe('ws://localhost:3000/test-key/ws?sdk=react-router&sdkVersion=1.0.1');
     });
 
     it('should not connect when no appKey provided', async () => {

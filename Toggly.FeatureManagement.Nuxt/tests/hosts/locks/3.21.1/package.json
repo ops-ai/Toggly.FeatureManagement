@@ -7,7 +7,7 @@
     "playwright": "1.58.2",
     "typescript": "5.9.3",
     "vue-tsc": "3.2.4",
-    "@ops-ai/nuxt-toggly-core": "file:./artifacts/ops-ai-nuxt-toggly-core-1.12.0.tgz",
+    "@ops-ai/nuxt-toggly-core": "file:./artifacts/ops-ai-nuxt-toggly-core-1.12.1.tgz",
     "@ops-ai/nuxt-toggly-client": "file:./artifacts/ops-ai-nuxt-toggly-client-1.2.2.tgz",
     "@ops-ai/nuxt-toggly-server": "file:./artifacts/ops-ai-nuxt-toggly-server-1.7.0.tgz",
     "@ops-ai/nuxt-toggly": "file:./artifacts/ops-ai-nuxt-toggly-1.2.0.tgz",
