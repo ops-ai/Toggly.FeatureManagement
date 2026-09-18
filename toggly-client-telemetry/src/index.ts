@@ -36,6 +36,10 @@ async function nativeGzip(json: string): Promise<ArrayBuffer | undefined> {
   return new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
 }
 function validName(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
+function validVariant(value: unknown): value is string {
+  // An end-anchor alone can accept a final newline in JavaScript regexes.
+  return typeof value === 'string' && value.length > 0 && value.length <= 64 && !/[^A-Za-z0-9_-]/.test(value);
+}
 
 /** Create one owner per client instance. Importing this package starts no work. */
 export function createTelemetryReporter(options: TelemetryOptions): TelemetryReporter {
@@ -55,8 +59,10 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
   let url = '';
   try {
     const parsed = new URL(base);
-    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) throw new Error();
-    url = base.replace(/\/+$/, '') + '/api/frontend/telemetry';
+    // URL.search/hash omit empty delimiters, so reject them in the input too.
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || /[?#]/.test(base)) throw new Error();
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '') + '/api/frontend/telemetry';
+    url = parsed.href;
   } catch { if (enabled) diagnostic('invalid-option'); }
   const configured = options.telemetryFlushIntervalMs ?? 45000;
   const interval = Number.isFinite(configured) && configured >= 30000 && configured <= 60000 ? configured : 45000;
@@ -104,7 +110,7 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
   }
   function feature(featureKey: string, variant: string, index: number): void {
     if (!enabled || disposed) return;
-    if (!validName(featureKey) || !validName(variant)) { diagnostic('invalid-event'); return; }
+    if (!validName(featureKey) || !validVariant(variant)) { diagnostic('invalid-event'); return; }
     const values = [0, 0, 0]; values[index] = 1;
     accept({ key: featureKey, variant, kind: 'feature', values });
   }

@@ -33,7 +33,11 @@ detach();
 reporter.dispose(); // Synchronous; initiates one bounded best-effort final flush.
 ```
 
-`recordUsage` and `recordView` default to variant `enabled`.
+`recordUsage` and `recordView` default to variant `enabled`. Variant names must
+contain 1 through 64 ASCII letters, digits, underscores or hyphens. Unsupported
+names are rejected with a bounded diagnostic; they never change accepted events
+or get remapped to another variant.
+
 `incrementCounter` defaults to one. Counter inputs must be nonnegative integers
 at most 1,000,000; gauges must be finite numbers from zero through 1,000,000.
 Counters sum and gauges retain their latest value. Accumulated counters split
@@ -51,8 +55,9 @@ produce no listeners, timers, queues or requests.
 The default interval is 45 seconds. Configure a base interval from 30 through
 60 seconds; each schedule is jittered by ±20%. Invalid intervals fall back to
 45 seconds. A custom metrics base URL must be absolute HTTP(S), without
-credentials, query or fragment; invalid endpoints disable telemetry. A base
-path is preserved when appending `/api/frontend/telemetry`. Requests omit
+credentials, query or fragment (even an empty `?` or `#` delimiter); invalid
+endpoints disable telemetry. Routes are constructed from the parsed URL, and its
+normalized base path is preserved when appending `/api/frontend/telemetry`. Requests omit
 credentials and SDK authentication/context headers. A custom `fetch` can be
 provided through the portable `TelemetryFetch` interface.
 

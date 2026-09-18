@@ -190,3 +190,25 @@ test('missing fetch and unreadable retry headers never reject flush', async () =
   const fetch = jest.fn().mockResolvedValueOnce({ status:503, headers:{get:() => {throw new Error('not exposed');}} }).mockResolvedValue({status:202});
   const { reporter } = setup({fetch}); reporter.recordUsage('flag'); const done=reporter.flush(); await jest.advanceTimersByTimeAsync(30000); await done; expect(fetch).toHaveBeenCalledTimes(2); reporter.dispose();
 });
+for (const scenario of contract.endpointScenarios) {
+  test(`shared endpoint: ${scenario.name}`, async () => {
+    const diagnostics: string[] = [];
+    const { reporter, calls } = setup({ metricsBaseUrl: scenario.metricsBaseUrl, onDiagnostic: (d: string) => diagnostics.push(d) });
+    reporter.recordUsage('flag'); await reporter.flush();
+    expect(calls.map(c => c.url)).toEqual(scenario.expectedUrl === null ? [] : [scenario.expectedUrl]);
+    if (scenario.expectedUrl === null) {
+      expect(diagnostics).toEqual(['invalid-option']);
+      expect(jest.getTimerCount()).toBe(0);
+    } else expect(diagnostics).toEqual([]);
+    reporter.dispose();
+  });
+}
+test('invalid variants have bounded diagnostics without changing valid queued observations', async () => {
+  const diagnostics: string[] = [];
+  const { reporter, bodies } = setup({ onDiagnostic: (d: string) => diagnostics.push(d) });
+  reporter.recordCheck('flag', 'enabled');
+  for (let i = 0; i < 100; i++) { reporter.recordCheck('flag', 'trial 1'); reporter.recordUsage('flag', 'café'); reporter.recordView('flag', 'x'.repeat(65)); }
+  reporter.recordUsage('flag', 'enabled'); await reporter.flush();
+  expect(bodies()).toEqual([{ k:'test-app', e:'Production', f:{flag:{enabled:[1,1]}} }]);
+  expect(diagnostics).toEqual(Array(10).fill('invalid-event')); reporter.dispose();
+});
