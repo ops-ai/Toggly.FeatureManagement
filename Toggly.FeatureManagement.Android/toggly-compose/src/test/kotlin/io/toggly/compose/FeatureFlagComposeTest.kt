@@ -49,7 +49,7 @@ class FeatureFlagComposeTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = "test-key",
                 featureDefaults = flags,
                 storage = MemoryStorage()

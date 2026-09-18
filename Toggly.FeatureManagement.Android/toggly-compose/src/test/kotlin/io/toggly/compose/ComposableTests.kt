@@ -84,7 +84,7 @@ class ComposableTests {
 
     @Test
     fun `real service can be created for integration tests`() = runTest {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             featureDefaults = mapOf("feature1" to true, "feature2" to false),
             storage = MemoryStorage()
@@ -97,7 +97,7 @@ class ComposableTests {
 
     @Test
     fun `service identity can be set`() = runTest {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             storage = MemoryStorage()
         )
@@ -109,7 +109,7 @@ class ComposableTests {
 
     @Test
     fun `service debug info is accessible`() {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             environment = "staging",
             storage = MemoryStorage()
@@ -133,7 +133,7 @@ class ComposableTests {
 
     @Test
     fun `feature gate evaluation with ALL requirement`() = runTest {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             featureDefaults = mapOf("f1" to true, "f2" to true, "f3" to false),
             storage = MemoryStorage()
@@ -149,7 +149,7 @@ class ComposableTests {
 
     @Test
     fun `feature gate evaluation with ANY requirement`() = runTest {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             featureDefaults = mapOf("f1" to false, "f2" to true, "f3" to false),
             storage = MemoryStorage()
@@ -165,7 +165,7 @@ class ComposableTests {
 
     @Test
     fun `feature gate with negate inverts result`() = runTest {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             featureDefaults = mapOf("f1" to true),
             storage = MemoryStorage()
@@ -178,7 +178,7 @@ class ComposableTests {
 
     @Test
     fun `Feature off path uses negate via evaluateFeatureGate`() = runTest {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             featureDefaults = mapOf("maintenance" to false, "banner" to true),
             storage = MemoryStorage()
@@ -204,7 +204,7 @@ class ComposableTests {
 
     @Test
     fun `Feature entity context is evaluated through the service`() = runTest {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             featureDefaults = mapOf("plain" to true),
             storage = MemoryStorage()

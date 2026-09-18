@@ -29,6 +29,10 @@ class TogglyService(
 ) {
     private val storage: TogglyStorage = config.storage ?: MemoryStorage()
     private val mutex = Mutex()
+    private val telemetry = if (config.enableTelemetry && !config.appKey.isNullOrBlank()) TelemetryReporter(
+        appKey = config.appKey, environment = config.environment, metricsBaseUrl = config.metricsBaseUrl,
+        telemetryFlushIntervalMs = config.telemetryFlushIntervalMs, onDiagnostic = config.onTelemetryDiagnostic
+    ) else null
     // Snapshot caller-owned collections before storage reads or background work.
     private val groups = config.groups.map { it.trim() }.filter { it.isNotEmpty() }
     private val claims = config.claims.toMap().filter { (key, value) ->
@@ -241,12 +245,13 @@ class TogglyService(
     ): Boolean {
         ensureFeaturesLoaded()
         val defs = definitions ?: fromBooleanDefaults(features ?: config.featureDefaults)
-        return evaluateEvaluatedGate(
+        return evaluateEvaluatedGateWithChecks(
             defs,
             featureKeys,
             requirement == FeatureRequirement.ALL,
             negate,
-            normalizeEntityContext(context, kind)
+            normalizeEntityContext(context, kind),
+            onCheck = ::recordCachedCheck
         )
     }
 
@@ -258,7 +263,7 @@ class TogglyService(
      */
     fun featureFlagFlow(featureKey: String): Flow<Boolean> {
         return featureFlags.map { flags ->
-            flags[featureKey] ?: config.featureDefaults[featureKey] ?: false
+            (flags[featureKey] ?: config.featureDefaults[featureKey] ?: false).also { recordCachedCheck(featureKey, it) }
         }.distinctUntilChanged()
     }
 
@@ -281,9 +286,10 @@ class TogglyService(
             val defaults = config.featureDefaults
             val mergedFlags = defaults + flags
 
+            fun evaluate(key: String): Boolean = (mergedFlags[key] == true).also { recordCachedCheck(key, it) }
             val isEnabled = when (requirement) {
-                FeatureRequirement.ANY -> featureKeys.any { mergedFlags[it] == true }
-                FeatureRequirement.ALL -> featureKeys.all { mergedFlags[it] == true }
+                FeatureRequirement.ANY -> featureKeys.any(::evaluate)
+                FeatureRequirement.ALL -> featureKeys.all(::evaluate)
             }
 
             if (negate) !isEnabled else isEnabled
@@ -366,6 +372,7 @@ class TogglyService(
         val wasBackground = appState == AppStateType.BACKGROUND
         appState = state
         emitEvent(TogglyEvent.AppStateChanged(state))
+        if (state == AppStateType.BACKGROUND) telemetry?.requestFlush()
 
         // Refresh when coming to foreground
         if (wasBackground && state == AppStateType.ACTIVE) {
@@ -416,12 +423,28 @@ class TogglyService(
      * Dispose the service and clean up resources.
      */
     fun dispose() {
+        telemetry?.dispose()
         stopWebSocket()
         stopRefreshTimer()
         stateChangeHandlers.clear()
         features = null
         definitions = null
         isInitialized = false
+    }
+
+    /** Record explicit use; this does not evaluate the flag again. */
+    fun recordUsage(featureKey: String, variant: String = "enabled") { telemetry?.recordUsage(featureKey, variant) }
+    /** Record an explicit feature view. */
+    fun recordView(featureKey: String, variant: String = "enabled") { telemetry?.recordView(featureKey, variant) }
+    /** Increment an app-level counter by an integer in 0..1,000,000. */
+    fun incrementCounter(metricKey: String, value: Double = 1.0) { telemetry?.incrementCounter(metricKey, value) }
+    /** Set the latest finite app-level gauge in 0..1,000,000. */
+    fun setGauge(metricKey: String, value: Double) { telemetry?.setGauge(metricKey, value) }
+    /** Await the current best-effort telemetry drain. */
+    suspend fun flushTelemetry() { telemetry?.flushTelemetry() }
+    /** Adapter hook for a cached value actually evaluated by the UI; excludes aggregate negation. */
+    fun recordCachedCheck(featureKey: String, enabled: Boolean) {
+        telemetry?.recordCheck(featureKey, if (enabled) "enabled" else "disabled")
     }
 
     // Private methods
