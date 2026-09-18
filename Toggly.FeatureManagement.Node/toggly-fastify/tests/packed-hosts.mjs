@@ -11,6 +11,14 @@ const workspaceDirectory = dirname(adapterDirectory)
 const node18 = process.env.TOGGLY_FASTIFY_NODE18 ?? process.execPath
 const node20 = process.env.TOGGLY_FASTIFY_NODE20 ?? process.execPath
 
+function runPnpm(args, options = {}) {
+  const execPath = process.env.npm_execpath
+  if (execPath) {
+    return run(process.execPath, [execPath, ...args], options)
+  }
+  return run('pnpm', args, options)
+}
+
 function run(command, args, options = {}) {
   return execFileSync(command, args, {
     cwd: options.cwd ?? workspaceDirectory,
@@ -28,7 +36,7 @@ function run(command, args, options = {}) {
 
 function packAdapter() {
   const destination = mkdtempSync(join(tmpdir(), 'toggly-fastify-pack-'))
-  run('pnpm', ['pack', '--pack-destination', destination], { cwd: adapterDirectory })
+  runPnpm(['pack', '--pack-destination', destination], { cwd: adapterDirectory })
   const [filename] = readdirSync(destination).filter(name => name.endsWith('.tgz'))
   assert.ok(filename, 'pnpm pack produced an adapter tarball')
   return { destination, tarball: join(destination, filename) }
@@ -181,7 +189,7 @@ function verifyPackedFile(tarball) {
 
 function packCore() {
   const destination = mkdtempSync(join(tmpdir(), 'toggly-node-core-pack-'))
-  run('pnpm', ['pack', '--pack-destination', destination], { cwd: join(workspaceDirectory, '..', 'toggly-node-core') })
+  runPnpm(['pack', '--pack-destination', destination], { cwd: join(workspaceDirectory, 'toggly-node-core') })
   const [filename] = readdirSync(destination).filter((name) => name.endsWith('.tgz'))
   assert.ok(filename, 'pnpm pack produced a core tarball')
   return { destination, tarball: join(destination, filename) }
