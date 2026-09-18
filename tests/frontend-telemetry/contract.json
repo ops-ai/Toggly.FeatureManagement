@@ -153,7 +153,17 @@
         [
           "incrementCounter",
           "orders",
-          2000001
+          1000000
+        ],
+        [
+          "incrementCounter",
+          "orders",
+          1000000
+        ],
+        [
+          "incrementCounter",
+          "orders",
+          1
         ]
       ],
       "envelopes": [
@@ -217,6 +227,11 @@
           "recordCheck",
           "",
           "enabled"
+        ],
+        [
+          "incrementCounter",
+          "huge",
+          9007199254740991
         ]
       ],
       "envelopes": [
@@ -393,6 +408,20 @@
         "Compression failure falls back to JSON before request",
         "Ambiguous request is not retried as plain",
         "Exit request uses uncompressed keepalive where supported"
+      ]
+    },
+    {
+      "name": "bounded-delta-splitting",
+      "actions": [
+        "Increment counter with 1000000 repeatedly",
+        "Attempt single increment 9007199254740991",
+        "Flush accepted deltas"
+      ],
+      "expected": [
+        "Oversized single increment rejected",
+        "Accumulated deltas split into values <=1000000",
+        "Admission accounts for eventual chunks within 2000 entries and 262144 bytes",
+        "No unbounded packet arrays or synchronous split loops"
       ]
     }
   ]
