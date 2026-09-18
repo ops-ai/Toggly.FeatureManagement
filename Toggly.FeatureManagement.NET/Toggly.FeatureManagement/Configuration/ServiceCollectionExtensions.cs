@@ -62,6 +62,8 @@ namespace Toggly.FeatureManagement.Configuration
                     options.BaseUrl = !string.IsNullOrEmpty(togglyOptions.BaseUrl)
                         ? togglyOptions.BaseUrl
                         : "https://app.toggly.io/";
+                    if (!string.IsNullOrEmpty(togglyOptions.MetricsBaseUrl))
+                        options.MetricsBaseUrl = togglyOptions.MetricsBaseUrl;
                     if (!string.IsNullOrEmpty(togglyOptions.DefinitionsBaseUrl))
                         options.DefinitionsBaseUrl = togglyOptions.DefinitionsBaseUrl;
                     if (!string.IsNullOrEmpty(togglyOptions.Environment))
@@ -164,14 +166,14 @@ namespace Toggly.FeatureManagement.Configuration
             };
             services.AddGrpcClient<Metrics.MetricsClient>((sp, options) =>
             {
-                var baseUrl = sp.GetRequiredService<IOptions<TogglySettings>>().Value.BaseUrl;
-                options.Address = new Uri(baseUrl ?? "https://app.toggly.io");
+                var metricsUrl = sp.GetRequiredService<IOptions<TogglySettings>>().Value.ResolveMetricsBaseUrl();
+                options.Address = new Uri(metricsUrl);
                 options.ChannelOptionsActions.Add(opt => opt.ServiceConfig = new ServiceConfig { MethodConfigs = { defaultMethodConfig } });
             }).ConfigurePrimaryHttpMessageHandler(() => new GrpcWebHandler(new HttpClientHandler()));
             services.AddGrpcClient<Usage.UsageClient>((sp, options) =>
             {
-                var baseUrl = sp.GetRequiredService<IOptions<TogglySettings>>().Value.BaseUrl;
-                options.Address = new Uri(baseUrl ?? "https://app.toggly.io");
+                var metricsUrl = sp.GetRequiredService<IOptions<TogglySettings>>().Value.ResolveMetricsBaseUrl();
+                options.Address = new Uri(metricsUrl);
                 options.ChannelOptionsActions.Add(opt => opt.ServiceConfig = new ServiceConfig { MethodConfigs = { defaultMethodConfig } });
 
             }).ConfigurePrimaryHttpMessageHandler(() => new GrpcWebHandler(new HttpClientHandler()));

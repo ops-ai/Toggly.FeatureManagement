@@ -12,7 +12,7 @@ from toggly.version import __version__
 
 logger = logging.getLogger("toggly.telemetry")
 
-DEFAULT_METRICS_BASE_URL = "https://app.toggly.io/"
+DEFAULT_METRICS_BASE_URL = "https://metrics.toggly.io/"
 DEFAULT_TELEMETRY_FLUSH_SECONDS = 60.0
 
 # HTTP/2 metadata is case-insensitive; .NET/Go/Node send ``UA``.

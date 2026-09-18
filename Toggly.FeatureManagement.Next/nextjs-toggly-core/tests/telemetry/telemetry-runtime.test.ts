@@ -363,7 +363,7 @@ describe('HttpsTelemetryClient', () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true })
     const client = new HttpsTelemetryClient({
       metricsBaseUrl: 'https://app.toggly.io/',
-      userAgent: 'toggly-next/1.10.0',
+      userAgent: 'toggly-next/1.11.1',
       fetchImpl: fetchImpl as unknown as typeof fetch,
     })
 
@@ -375,7 +375,7 @@ describe('HttpsTelemetryClient', () => {
 
     await client.sendUsageStats(bundle.payload)
     expect(fetchImpl.mock.calls[0][0]).toBe('https://app.toggly.io/api/usage/stats')
-    expect(fetchImpl.mock.calls[0][1].headers['User-Agent']).toBe('toggly-next/1.10.0')
+    expect(fetchImpl.mock.calls[0][1].headers['User-Agent']).toBe('toggly-next/1.11.1')
     const body = JSON.parse(fetchImpl.mock.calls[0][1].body as string)
     expect(typeof body.time).toBe('string')
     expect(body.stats[0].variantStats.enabled.checkCount).toBe(1)

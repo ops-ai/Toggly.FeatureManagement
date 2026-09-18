@@ -3,7 +3,7 @@ import { protobufTimestampToIso } from './hash.js'
 import type { FeatureStatPayload } from './usage-batcher.js'
 import type { MetricStatPayload } from './metrics-batcher.js'
 
-export const DEFAULT_METRICS_BASE_URL = 'https://app.toggly.io/'
+export const DEFAULT_METRICS_BASE_URL = 'https://metrics.toggly.io/'
 export const DEFAULT_TELEMETRY_FLUSH_MS = 60_000
 
 export interface HttpsTelemetryClientOptions {

@@ -1,6 +1,6 @@
 import { WORKER_USER_AGENT } from './version';
 
-export const DEFAULT_METRICS_BASE_URL = 'https://app.toggly.io/';
+export const DEFAULT_METRICS_BASE_URL = 'https://metrics.toggly.io/';
 
 export interface HttpsTelemetryClientOptions {
   metricsBaseUrl?: string;

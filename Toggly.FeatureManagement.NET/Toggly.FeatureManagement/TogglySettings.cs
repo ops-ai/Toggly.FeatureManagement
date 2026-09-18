@@ -22,10 +22,16 @@ namespace Toggly.FeatureManagement
         public bool UseSignedDefinitions { get; set; }
 
         /// <summary>
-        /// Base URL for metrics/usage gRPC (trusted configuration). Defaults to https://app.toggly.io/.
-        /// Only override for self-hosted or private deployments you control.
+        /// Product API base URL (entity context registration and other app RPCs).
+        /// Defaults to https://app.toggly.io/. Only override for deployments you control.
         /// </summary>
         public string? BaseUrl { get; set; }
+
+        /// <summary>
+        /// Usage/metrics ingest base URL (trusted configuration).
+        /// Defaults to https://metrics.toggly.io/. Only override for self-hosted ingest.
+        /// </summary>
+        public string? MetricsBaseUrl { get; set; }
 
         /// <summary>
         /// Base URL for definitions, WebSocket, and JWKS (trusted configuration).
@@ -75,5 +81,29 @@ namespace Toggly.FeatureManagement
         /// Failures are logged and do not block application startup.
         /// </summary>
         public bool RegisterContextsOnStartup { get; set; } = true;
+
+        /// <summary>
+        /// Usage/metrics ingest URL. Explicit <see cref="MetricsBaseUrl"/> wins.
+        /// A custom <see cref="BaseUrl"/> (not app.toggly.io) is used for self-host dual-run.
+        /// Otherwise defaults to https://metrics.toggly.io/.
+        /// </summary>
+        public string ResolveMetricsBaseUrl()
+        {
+            if (!string.IsNullOrWhiteSpace(MetricsBaseUrl))
+                return MetricsBaseUrl;
+
+            if (!string.IsNullOrWhiteSpace(BaseUrl) && !IsProductApiHost(BaseUrl))
+                return BaseUrl;
+
+            return "https://metrics.toggly.io/";
+        }
+
+        private static bool IsProductApiHost(string url)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                return false;
+
+            return uri.Host.Equals("app.toggly.io", StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

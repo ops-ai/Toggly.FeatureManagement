@@ -17,6 +17,7 @@ type Config struct {
 	AppKey         string
 	Environment    string
 	BaseURL        string
+	MetricsURL     string
 	DefinitionsURL string
 
 	UseSignedDefinitions bool
@@ -97,6 +98,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.BaseURL != "" && c.BaseURL[len(c.BaseURL)-1] != '/' {
 		c.BaseURL += "/"
+	}
+	if c.MetricsURL == "" {
+		c.MetricsURL = "https://metrics.toggly.io/"
+	}
+	if c.MetricsURL != "" && c.MetricsURL[len(c.MetricsURL)-1] != '/' {
+		c.MetricsURL += "/"
 	}
 	if c.DefinitionsURL == "" {
 		c.DefinitionsURL = "https://definitions.toggly.io/"

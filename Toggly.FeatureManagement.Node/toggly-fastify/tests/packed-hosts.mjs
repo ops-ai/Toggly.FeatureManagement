@@ -11,6 +11,14 @@ const workspaceDirectory = dirname(adapterDirectory)
 const node18 = process.env.TOGGLY_FASTIFY_NODE18 ?? process.execPath
 const node20 = process.env.TOGGLY_FASTIFY_NODE20 ?? process.execPath
 
+function runPnpm(args, options = {}) {
+  const execPath = process.env.npm_execpath
+  if (execPath) {
+    return run(process.execPath, [execPath, ...args], options)
+  }
+  return run('pnpm', args, options)
+}
+
 function run(command, args, options = {}) {
   return execFileSync(command, args, {
     cwd: options.cwd ?? workspaceDirectory,
@@ -28,7 +36,7 @@ function run(command, args, options = {}) {
 
 function packAdapter() {
   const destination = mkdtempSync(join(tmpdir(), 'toggly-fastify-pack-'))
-  run('pnpm', ['pack', '--pack-destination', destination], { cwd: adapterDirectory })
+  runPnpm(['pack', '--pack-destination', destination], { cwd: adapterDirectory })
   const [filename] = readdirSync(destination).filter(name => name.endsWith('.tgz'))
   assert.ok(filename, 'pnpm pack produced an adapter tarball')
   return { destination, tarball: join(destination, filename) }
@@ -176,7 +184,15 @@ function verifyPackedFile(tarball) {
     assert.ok(contents.includes(expected), `packed adapter contains ${expected}`)
   }
   const manifest = JSON.parse(run('tar', ['-xOf', tarball, 'package/package.json']))
-  assert.equal(manifest.dependencies['@ops-ai/toggly-node-core'], '^0.9.1')
+  assert.equal(manifest.dependencies['@ops-ai/toggly-node-core'], '^0.9.2')
+}
+
+function packCore() {
+  const destination = mkdtempSync(join(tmpdir(), 'toggly-node-core-pack-'))
+  runPnpm(['pack', '--pack-destination', destination], { cwd: join(workspaceDirectory, 'toggly-node-core') })
+  const [filename] = readdirSync(destination).filter((name) => name.endsWith('.tgz'))
+  assert.ok(filename, 'pnpm pack produced a core tarball')
+  return { destination, tarball: join(destination, filename) }
 }
 
 function nodeMajor(node) {
@@ -184,6 +200,7 @@ function nodeMajor(node) {
 }
 
 const packed = packAdapter()
+const packedCore = packCore()
 const { tarball } = packed
 const hostDirectory = mkdtempSync(join(tmpdir(), 'toggly-fastify-host-'))
 try {
@@ -203,6 +220,7 @@ try {
       `fastify@${host.fastify}`,
       'typescript@5.9.3',
       '@types/node@22.19.11',
+      packedCore.tarball,
       tarball,
     ], { cwd: hostDirectory })
     run(join(hostDirectory, 'node_modules', '.bin', 'tsc'), ['--noEmit'], { cwd: hostDirectory })
@@ -217,4 +235,5 @@ try {
 } finally {
   rmSync(hostDirectory, { recursive: true, force: true })
   rmSync(packed.destination, { recursive: true, force: true })
+  rmSync(packedCore.destination, { recursive: true, force: true })
 }

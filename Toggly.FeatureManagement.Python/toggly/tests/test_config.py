@@ -195,7 +195,7 @@ class TestTogglyConfig:
     def test_config_metrics_base_url_default(self) -> None:
         """Test metrics base URL defaults to app.toggly.io."""
         config = TogglyConfig(app_key="key")
-        assert config.metrics_base_url == "https://app.toggly.io"
+        assert config.metrics_base_url == "https://metrics.toggly.io"
 
     def test_config_flush_intervals_default(self) -> None:
         """Test telemetry flush intervals default to 60 seconds."""

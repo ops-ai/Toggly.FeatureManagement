@@ -2,7 +2,7 @@ import { sdkUserAgent } from '../sdk-identity.js'
 import { protobufTimestampToIso } from './hash.js'
 import type { FeatureStatPayload } from './usage-batcher.js'
 
-export const DEFAULT_METRICS_BASE_URL = 'https://app.toggly.io/'
+export const DEFAULT_METRICS_BASE_URL = 'https://metrics.toggly.io/'
 export const DEFAULT_TELEMETRY_FLUSH_MS = 60_000
 /** Default AbortSignal timeout for usage HTTPS posts (aligns with connectTimeout). */
 export const DEFAULT_TELEMETRY_FETCH_TIMEOUT_MS = 5_000

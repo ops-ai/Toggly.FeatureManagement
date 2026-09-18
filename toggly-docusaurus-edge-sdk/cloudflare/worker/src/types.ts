@@ -19,7 +19,7 @@ export interface Env {
   WORKER_PUBLIC_HOST?: string;
   /**
    * Metrics/usage gateway base URL (HTTPS JSON).
-   * Defaults to https://app.toggly.io/ when unset.
+   * Defaults to https://metrics.toggly.io/ when unset.
    */
   TOGGLY_METRICS_BASE_URL?: string;
   /**

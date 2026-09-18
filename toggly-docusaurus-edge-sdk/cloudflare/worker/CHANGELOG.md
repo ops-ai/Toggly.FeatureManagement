@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+2026-09-17
+
+### Fixed
+- Default usage/metrics host is `https://metrics.toggly.io/`.
+
 ## 0.4.0
 
 2026-09-09

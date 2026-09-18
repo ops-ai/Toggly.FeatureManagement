@@ -105,4 +105,66 @@ public class TogglySettingsTests
         // Assert
         settings.AllowedKeyIds.Should().HaveCount(2);
     }
+
+    [Fact]
+    public void ResolveMetricsBaseUrl_DefaultsToMetricsHost()
+    {
+        var settings = new TogglySettings();
+
+        settings.ResolveMetricsBaseUrl().Should().Be("https://metrics.toggly.io/");
+    }
+
+    [Fact]
+    public void ResolveMetricsBaseUrl_UsesExplicitMetricsBaseUrl()
+    {
+        var settings = new TogglySettings
+        {
+            BaseUrl = "https://self-host.example/",
+            MetricsBaseUrl = "https://metrics.example/"
+        };
+
+        settings.ResolveMetricsBaseUrl().Should().Be("https://metrics.example/");
+    }
+
+    [Fact]
+    public void ResolveMetricsBaseUrl_UsesCustomBaseUrlWhenMetricsUnset()
+    {
+        var settings = new TogglySettings { BaseUrl = "https://self-host.example/" };
+
+        settings.ResolveMetricsBaseUrl().Should().Be("https://self-host.example/");
+    }
+
+    [Theory]
+    [InlineData("https://app.toggly.io/")]
+    [InlineData("https://app.toggly.io")]
+    [InlineData("https://APP.toggly.io/api")]
+    public void ResolveMetricsBaseUrl_IgnoresProductApiHost(string baseUrl)
+    {
+        var settings = new TogglySettings { BaseUrl = baseUrl };
+
+        settings.ResolveMetricsBaseUrl().Should().Be("https://metrics.toggly.io/");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveMetricsBaseUrl_IgnoresBlankMetricsOverride(string? metricsBaseUrl)
+    {
+        var settings = new TogglySettings
+        {
+            BaseUrl = "https://app.toggly.io/",
+            MetricsBaseUrl = metricsBaseUrl
+        };
+
+        settings.ResolveMetricsBaseUrl().Should().Be("https://metrics.toggly.io/");
+    }
+
+    [Fact]
+    public void ResolveMetricsBaseUrl_KeepsNonProductCustomBaseUrlEvenIfNotAbsolute()
+    {
+        var settings = new TogglySettings { BaseUrl = "not-a-url" };
+
+        settings.ResolveMetricsBaseUrl().Should().Be("not-a-url");
+    }
 }

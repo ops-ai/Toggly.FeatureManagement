@@ -84,7 +84,7 @@ module Toggly
     DEFAULT_REFRESH_INTERVAL = 300 # 5 minutes
     DEFAULT_HTTP_TIMEOUT = 10 # seconds
     DEFAULT_ENVIRONMENT = "Production"
-    DEFAULT_METRICS_BASE_URL = "https://app.toggly.io/"
+    DEFAULT_METRICS_BASE_URL = "https://metrics.toggly.io/"
     DEFAULT_TELEMETRY_FLUSH_SECONDS = 60.0
 
     def initialize(**options)

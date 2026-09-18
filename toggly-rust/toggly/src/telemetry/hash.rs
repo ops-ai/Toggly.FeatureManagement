@@ -1,7 +1,7 @@
 //! FNV-1a identity hashing and timestamp helpers for telemetry payloads.
 
 /// Default gRPC metrics/usage base URL (matches .NET / Go / Ruby).
-pub const DEFAULT_METRICS_BASE_URL: &str = "https://app.toggly.io/";
+pub const DEFAULT_METRICS_BASE_URL: &str = "https://metrics.toggly.io/";
 
 /// Default flush interval in seconds (~1 minute, matching .NET).
 pub const DEFAULT_TELEMETRY_FLUSH_SECS: u64 = 60;
@@ -64,7 +64,7 @@ pub fn grpc_target(base_url: &str) -> String {
         });
     let host = host.trim_end_matches('/').to_string();
     if host.is_empty() {
-        return "app.toggly.io:443".to_string();
+        return "metrics.toggly.io:443".to_string();
     }
     if host.contains(':') {
         host

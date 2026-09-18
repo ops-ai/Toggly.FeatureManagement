@@ -4,6 +4,10 @@
 
 2026-09-17
 
+### Fixed
+- Usage and metrics gRPC dial `https://metrics.toggly.io/` by default via
+  `Config.MetricsURL`. Product API / context registration stay on `BaseURL`.
+
 ### Changed
 - `go-sqlite3` 1.14.52 and MongoDB Go Driver v1 1.17.10 (CVE-2026-88031).
   grpc stays at 1.80.0 so Dependabot cannot raise the Go 1.24 floor on

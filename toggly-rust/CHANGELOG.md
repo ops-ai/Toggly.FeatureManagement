@@ -7,6 +7,13 @@
   the Axum 0.7 adapter, so existing applications keep their dependency types
   and imports.
 
+## 0.6.3
+
+2026-09-17
+
+### Fixed
+- Default usage/metrics gRPC host is `https://metrics.toggly.io/`.
+
 ## 0.6.2
 
 2026-09-17

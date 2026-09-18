@@ -71,7 +71,7 @@ export interface TogglyConfig {
    * `TOGGLY_DISABLE_TELEMETRY=1` always wins over an explicit `true`.
    */
   enableUsageTracking?: boolean;
-  /** Gateway base URL for usage flush (default: `https://app.toggly.io/`). */
+  /** Gateway base URL for usage flush (default: `https://metrics.toggly.io/`). */
   metricsBaseUrl?: string;
   /** Usage flush interval in ms (default: 60000). Set `0` to disable the timer. */
   usageFlushInterval?: number;

@@ -136,7 +136,7 @@ public class TogglyMetricsServiceTests : IDisposable
         var debugInfo = _service.GetDebugInfo();
 
         // Assert
-        debugInfo.BaseUrl.Should().Be("https://app.toggly.io/");
+        debugInfo.BaseUrl.Should().Be("https://metrics.toggly.io/");
     }
 
     #endregion

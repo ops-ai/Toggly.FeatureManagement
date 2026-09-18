@@ -72,7 +72,7 @@ class TogglyConfig:
     enable_metrics: bool = True
     """Whether to collect business metrics via Metrics.SendMetrics."""
 
-    metrics_base_url: str = "https://app.toggly.io"
+    metrics_base_url: str = "https://metrics.toggly.io"
     """Base URL for usage/metrics gRPC (separate from definitions ``base_url``)."""
 
     usage_flush_interval: float = 60.0
