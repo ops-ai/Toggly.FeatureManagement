@@ -50,3 +50,10 @@ test('node-server special filter', () => {
 test('unknown SDK throws', () => {
   assert.throws(() => filterAnalysisJs('Nope'), /Unknown analysis SDK/);
 });
+
+test('Client-Telemetry runs coverage and packed consumers without shared dependency artifacts', () => {
+  const result = filterAnalysisJs('Client-Telemetry');
+  assert.equal(result.needSharedDeps, false);
+  assert.deepEqual(result.testMatrix, [{ sdk: 'Client-Telemetry', path: 'toggly-client-telemetry', 'test-cmd': 'npm run test:coverage && npm run test:packed', 'has-lint': false }]);
+  assert.ok(result.requiredJobs.split(',').includes('test'));
+});
