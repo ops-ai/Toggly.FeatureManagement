@@ -142,7 +142,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.24.x', '1.25.x']
+        go-version: ['1.25.x', '1.27.x']
     defaults:
       run:
         working-directory: toggly-go-mongodb-v2
@@ -190,10 +190,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Setup Go 1.25
+      - name: Setup Go 1.27
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25.x'
+          go-version: '1.27.x'
 
       - name: Build a consumer from the archived module contents
         shell: bash
@@ -206,9 +206,9 @@ jobs:
           cat > "$host_dir/go.mod" <<EOF
           module example.com/toggly-go-mongodb-v2-host
 
-          go 1.25.0
+          go 1.27.0
 
-          require github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2 v0.1.0
+          require github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2 v0.2.0
 
           replace github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2 => $adapter_dir
           EOF
@@ -239,6 +239,8 @@ jobs:
           EOF
           (
             cd "$host_dir"
+            go get github.com/ops-ai/Toggly.FeatureManagement/toggly-go@v0.8.1
+            go get golang.org/x/crypto@latest golang.org/x/net@latest
             go mod tidy
             go mod verify
             go build ./...
@@ -471,8 +473,8 @@ jobs:
           echo "- Go vet checks passed" >> $GITHUB_STEP_SUMMARY
           echo "- Go 1.27 current-runtime compatibility verified" >> $GITHUB_STEP_SUMMARY
           echo "- Archived toggly-go module compiled with latest x/crypto and x/net" >> $GITHUB_STEP_SUMMARY
-          echo "- MongoDB Driver v2 adapter verified on Go 1.24 and 1.25" >> $GITHUB_STEP_SUMMARY
-          echo "- Archived MongoDB Driver v2 module compiled in an external consumer" >> $GITHUB_STEP_SUMMARY
+          echo "- MongoDB Driver v2 adapter verified on Go 1.25 and 1.27" >> $GITHUB_STEP_SUMMARY
+          echo "- Archived MongoDB Driver v2 module compiled with latest x/crypto and x/net" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Packages Tested" >> $GITHUB_STEP_SUMMARY
           echo "- toggly (core)" >> $GITHUB_STEP_SUMMARY

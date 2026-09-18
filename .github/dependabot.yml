@@ -103,9 +103,8 @@ updates:
           - minor
           - patch
     ignore:
-      # grpc-go 1.81+ rewrites consumer go.mod files to 1.25.
-      # toggly-go-mongodb-v2 still declares Go 1.24 (OPS-1011 / OPS-1263).
-      # 1.81.1 slipped under the previous >=1.82 ignore (#524).
+      # grpc-go 1.81+ rewrites consumer go.mod files to 1.25+. Keep grpc
+      # 1.80 until a coordinated bump. 1.81.1 slipped under >=1.82 (#524).
       - dependency-name: google.golang.org/grpc
         versions: [">=1.81.0"]
       - dependency-name: go.mongodb.org/mongo-driver/v2
