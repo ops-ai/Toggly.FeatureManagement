@@ -59,7 +59,6 @@ jobs:
           # Push always publishes for real; only workflow_dispatch may dry-run.
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
           SELECTED_PACKAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.package || 'all' }}
-          TOGGLY_HEX_BUILD: '1'
         run: |
           set -euo pipefail
           PACKAGES="toggly toggly_phoenix toggly_live_view"
@@ -69,6 +68,8 @@ jobs:
 
           for pkg in $PACKAGES; do
             echo "=== Checking $pkg ==="
+            # Umbrella Mix must not see TOGGLY_HEX_BUILD=1: that swaps path
+            # siblings for Hex deps and fails with an unlocked mix.lock.
             OUTPUT=$(mix run --no-start tools/release-check.exs "$pkg")
             echo "$OUTPUT"
             LINE=$(echo "$OUTPUT" | grep -E "^${pkg} [0-9]" | tail -1)
@@ -82,6 +83,7 @@ jobs:
             echo "=== Validating standalone publication dependencies for $pkg ==="
             (
               cd "apps/$pkg"
+              export TOGGLY_HEX_BUILD=1
               # Hex publishing loads dependencies from the standalone package paths.
               # Seed the tested lock, allowing only newly published sibling entries.
               cp ../../mix.lock mix.lock
@@ -105,7 +107,7 @@ jobs:
 
             if [ "$DRY_RUN" = "false" ]; then
               echo "=== Publishing $pkg to Hex ==="
-              (cd "apps/$pkg" && mix hex.publish package --yes)
+              (cd "apps/$pkg" && TOGGLY_HEX_BUILD=1 mix hex.publish package --yes)
             else
               echo "Dry run: would publish $pkg"
             fi
