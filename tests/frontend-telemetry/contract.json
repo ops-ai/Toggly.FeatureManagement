@@ -34,7 +34,8 @@
       403,
       413,
       500
-    ]
+    ],
+    "variantPattern": "^[A-Za-z0-9_-]{1,64}$"
   },
   "scenarios": [
     {
@@ -269,6 +270,237 @@
         ]
       ],
       "envelopes": []
+    },
+    {
+      "name": "variant-ascii-boundaries",
+      "events": [
+        [
+          "recordCheck",
+          "flag",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ],
+        [
+          "recordView",
+          "flag",
+          "Az09_-"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "f": {
+            "flag": {
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": [
+                1
+              ],
+              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": [
+                0,
+                1
+              ],
+              "Az09_-": [
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-variants-preserve-valid-queue",
+      "events": [
+        [
+          "recordCheck",
+          "flag",
+          "enabled"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          ""
+        ],
+        [
+          "recordUsage",
+          "flag",
+          ""
+        ],
+        [
+          "recordView",
+          "flag",
+          ""
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        ],
+        [
+          "recordView",
+          "flag",
+          "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "trial 1"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "trial 1"
+        ],
+        [
+          "recordView",
+          "flag",
+          "trial 1"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "café"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "café"
+        ],
+        [
+          "recordView",
+          "flag",
+          "café"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "試験"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "試験"
+        ],
+        [
+          "recordView",
+          "flag",
+          "試験"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "emoji-🌍"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "emoji-🌍"
+        ],
+        [
+          "recordView",
+          "flag",
+          "emoji-🌍"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "trial.one"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "trial.one"
+        ],
+        [
+          "recordView",
+          "flag",
+          "trial.one"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "trial/one"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "trial/one"
+        ],
+        [
+          "recordView",
+          "flag",
+          "trial/one"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "trial:one"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "trial:one"
+        ],
+        [
+          "recordView",
+          "flag",
+          "trial:one"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "trial\n"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "trial\n"
+        ],
+        [
+          "recordView",
+          "flag",
+          "trial\n"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "enabled"
+        ],
+        [
+          "recordView",
+          "flag",
+          "experiment-a"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "f": {
+            "flag": {
+              "enabled": [
+                1,
+                1
+              ],
+              "experiment-a": [
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
     }
   ],
   "transportScenarios": [
@@ -423,6 +655,88 @@
         "Admission accounts for eventual chunks within 2000 entries and 262144 bytes",
         "No unbounded packet arrays or synchronous split loops"
       ]
+    }
+  ],
+  "endpointScenarios": [
+    {
+      "name": "bare-query",
+      "metricsBaseUrl": "https://collector.example/?",
+      "expectedUrl": null
+    },
+    {
+      "name": "bare-fragment",
+      "metricsBaseUrl": "https://collector.example/#",
+      "expectedUrl": null
+    },
+    {
+      "name": "bare-query-no-slash",
+      "metricsBaseUrl": "https://collector.example?",
+      "expectedUrl": null
+    },
+    {
+      "name": "bare-fragment-no-slash",
+      "metricsBaseUrl": "https://collector.example#",
+      "expectedUrl": null
+    },
+    {
+      "name": "base-path-bare-query",
+      "metricsBaseUrl": "https://collector.example/base/?",
+      "expectedUrl": null
+    },
+    {
+      "name": "base-path-bare-fragment",
+      "metricsBaseUrl": "https://collector.example/base/#",
+      "expectedUrl": null
+    },
+    {
+      "name": "nonempty-query",
+      "metricsBaseUrl": "https://collector.example/base?context=secret",
+      "expectedUrl": null
+    },
+    {
+      "name": "nonempty-fragment",
+      "metricsBaseUrl": "https://collector.example/base#fragment",
+      "expectedUrl": null
+    },
+    {
+      "name": "embedded-credentials",
+      "metricsBaseUrl": "https://user:pass@collector.example/base",
+      "expectedUrl": null
+    },
+    {
+      "name": "non-http-scheme",
+      "metricsBaseUrl": "ftp://collector.example/base",
+      "expectedUrl": null
+    },
+    {
+      "name": "relative-base",
+      "metricsBaseUrl": "/base",
+      "expectedUrl": null
+    },
+    {
+      "name": "default-root",
+      "metricsBaseUrl": "https://collector.example",
+      "expectedUrl": "https://collector.example/api/frontend/telemetry"
+    },
+    {
+      "name": "explicit-base-path",
+      "metricsBaseUrl": "https://collector.example/base///",
+      "expectedUrl": "https://collector.example/base/api/frontend/telemetry"
+    },
+    {
+      "name": "canonical-authority-and-path",
+      "metricsBaseUrl": "https://COLLECTOR.EXAMPLE:443/base/./inner/../v1///",
+      "expectedUrl": "https://collector.example/base/v1/api/frontend/telemetry"
+    },
+    {
+      "name": "encoded-delimiters-remain-path-data",
+      "metricsBaseUrl": "https://collector.example/base%3Fpart%23anchor/",
+      "expectedUrl": "https://collector.example/base%3Fpart%23anchor/api/frontend/telemetry"
+    },
+    {
+      "name": "preserve-leading-path-slashes",
+      "metricsBaseUrl": "https://collector.example//base/",
+      "expectedUrl": "https://collector.example//base/api/frontend/telemetry"
     }
   ]
 }

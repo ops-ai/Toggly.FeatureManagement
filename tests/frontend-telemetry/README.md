@@ -16,6 +16,19 @@ repository; do not maintain independently edited copies.
   by every response when supplied. Compare relative `attemptTimesMs` after
   advancing the monotonic test clock by 310000 ms. There must be no additional
   attempts. A timeout transport never resolves; a network transport rejects.
+- `endpointScenarios`: create a reporter with `options` plus the scenario's
+  `metricsBaseUrl`, call `recordUsage("flag")`, then flush. A string
+  `expectedUrl` requires exactly one request to that normalized URL; `null`
+  requires no requests, no periodic timer/listener and an `invalid-option`
+  diagnostic. Query/fragment delimiters are rejected even when their contents
+  are empty. Percent-encoded delimiters are path data and remain encoded.
+  Construct the route from the parsed URL and preserve its normalized base
+  path; do not concatenate the route onto the unparsed input.
+- `policy.variantPattern`: admitted variants contain only ASCII letters,
+  digits, underscore and hyphen, with length 1 through 64. Invalid variants
+  produce a bounded `invalid-event` diagnostic and must not alter previously
+  accepted events or be remapped to `enabled`. Variant boundary and rejection
+  cases are ordinary `scenarios` and apply to checks, usage and views.
 - `policy`: binding bounds used for generated boundary cases, not permission
   to weaken native platform tests.
 - `invariants`: additional common scenarios with explicit actions and outcomes
