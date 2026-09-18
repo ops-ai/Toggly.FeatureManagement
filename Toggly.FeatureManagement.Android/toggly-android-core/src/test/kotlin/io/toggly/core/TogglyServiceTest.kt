@@ -35,7 +35,7 @@ class TogglyServiceTest {
         featureDefaults: FeatureFlags = emptyMap(),
         refreshInterval: Long = 0
     ): TogglyService {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = appKey,
             environment = environment,
             featureDefaults = featureDefaults,

@@ -91,8 +91,8 @@ fun rememberFeatureGate(
     val featureFlags = LocalFeatureFlags.current
 
     if (context == null && contextKind == null) {
-        return remember(featureFlags, featureKeys, requirement, negate) {
-            evaluateSnapshotFeatureGate(featureFlags, featureKeys, requirement, negate)
+        return remember(service, featureFlags, featureKeys, requirement, negate) {
+            evaluateSnapshotFeatureGate(featureFlags, featureKeys, requirement, negate, service::recordCachedCheck)
         }
     }
 

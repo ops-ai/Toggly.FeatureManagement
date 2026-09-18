@@ -78,6 +78,7 @@ object Toggly {
      * @param config The Toggly configuration
      */
     fun configure(config: TogglyConfig) {
+        service?.dispose()
         this.config = config
         this.service = TogglyService(config)
     }
@@ -233,6 +234,17 @@ object Toggly {
     fun getDebugInfo(): TogglyDebugInfo {
         return shared.getDebugInfo()
     }
+
+    /** Record explicit feature use without evaluation. */
+    fun recordUsage(featureKey: String, variant: String = "enabled") = shared.recordUsage(featureKey, variant)
+    /** Record an explicit feature view. */
+    fun recordView(featureKey: String, variant: String = "enabled") = shared.recordView(featureKey, variant)
+    /** Increment an app-level counter. */
+    fun incrementCounter(metricKey: String, value: Double = 1.0) = shared.incrementCounter(metricKey, value)
+    /** Set the latest app-level gauge. */
+    fun setGauge(metricKey: String, value: Double) = shared.setGauge(metricKey, value)
+    /** Await the current best-effort telemetry drain. */
+    suspend fun flushTelemetry() = shared.flushTelemetry()
 
     /**
      * Dispose and reset the global instance.

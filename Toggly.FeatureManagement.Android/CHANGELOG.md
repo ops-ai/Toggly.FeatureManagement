@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.0
+
+2026-09-18
+
+### Added
+- Anonymous frontend telemetry enabled for clients with an application key, with explicit opt-out and configurable metrics endpoint and flush interval.
+- `recordUsage`, `recordView`, `incrementCounter`, `setGauge`, and suspend `flushTelemetry` on Core, the global facade, Compose hooks, and Views models.
+- Automatic check counts for actual direct, Flow, Compose snapshot/entity, and Views evaluations, preserving short circuits and gate negation.
+
+### Changed
+- Background transitions start a telemetry flush; reconfiguration disposes the old owner without relabeling buffered events.
+- Telemetry uses private, bounded in-memory batches, native gzip, explicit rate-limit retries, and a bounded final flush on disposal. Targeting context and definition request headers are excluded.
+
 ## 1.5.0
 
 2026-09-12

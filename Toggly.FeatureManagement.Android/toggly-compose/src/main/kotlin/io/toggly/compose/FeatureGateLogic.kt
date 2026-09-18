@@ -15,14 +15,16 @@ internal fun evaluateSnapshotFeatureGate(
     featureKeys: List<String>,
     requirement: FeatureRequirement,
     negate: Boolean,
+    onCheck: ((String, Boolean) -> Unit)? = null,
 ): Boolean {
     if (featureKeys.isEmpty()) {
         return true
     }
 
+    fun evaluate(key: String): Boolean = (featureFlags[key] == true).also { onCheck?.invoke(key, it) }
     val isEnabled = when (requirement) {
-        FeatureRequirement.ANY -> featureKeys.any { featureFlags[it] == true }
-        FeatureRequirement.ALL -> featureKeys.all { featureFlags[it] == true }
+        FeatureRequirement.ANY -> featureKeys.any(::evaluate)
+        FeatureRequirement.ALL -> featureKeys.all(::evaluate)
     }
 
     return if (negate) !isEnabled else isEnabled

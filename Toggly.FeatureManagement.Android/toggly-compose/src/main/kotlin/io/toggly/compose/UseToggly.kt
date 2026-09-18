@@ -75,6 +75,17 @@ class UseTogglyResult internal constructor(
         return service.featureGateFlow(featureKeys, requirement, negate)
     }
 
+    /** Record explicit feature use without evaluating it. */
+    fun recordUsage(featureKey: String, variant: String = "enabled") = service.recordUsage(featureKey, variant)
+    /** Record an explicit feature view. */
+    fun recordView(featureKey: String, variant: String = "enabled") = service.recordView(featureKey, variant)
+    /** Increment an app-level counter. */
+    fun incrementCounter(metricKey: String, value: Double = 1.0) = service.incrementCounter(metricKey, value)
+    /** Set the latest app-level gauge. */
+    fun setGauge(metricKey: String, value: Double) = service.setGauge(metricKey, value)
+    /** Await the current best-effort telemetry drain. */
+    suspend fun flushTelemetry() = service.flushTelemetry()
+
     /**
      * Set user identity for targeting.
      */

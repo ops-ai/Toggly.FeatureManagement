@@ -9,6 +9,32 @@
 
 Native Android SDK for [Toggly.io](https://toggly.io) feature flags with Kotlin, coroutines, Jetpack Compose, and traditional Views support.
 
+## Frontend telemetry (1.6.0)
+
+Telemetry is enabled when an application key is configured. Set `enableTelemetry = false` to opt out. Core, Flow, Compose snapshot/entity evaluations, and Views count the feature leaves actually evaluated before aggregate negation; skipped gate keys and internal snapshot projections do not count. Feature use and views remain explicit.
+
+```kotlin
+val service = TogglyService(TogglyConfig(
+    appKey = "YOUR_APP_KEY",
+    enableTelemetry = true,
+    metricsBaseUrl = "https://metrics.toggly.io",
+    telemetryFlushIntervalMs = 45_000L
+))
+service.recordUsage("checkout")
+service.recordView("checkout", variant = "experiment-a")
+service.incrementCounter("orders", 2.0)
+service.setGauge("cart_total", 12.5)
+service.flushTelemetry() // suspend; await the current best-effort drain
+
+// Forward host lifecycle transitions; background starts a best-effort flush.
+service.setAppState(AppStateType.BACKGROUND)
+service.dispose() // synchronous; at most one final envelope within five seconds
+```
+
+The same explicit APIs are available through `Toggly`, `UseTogglyResult`, `TogglyState`, and `FeatureFlagViewModel`. Telemetry contains only the public app key, environment, aggregate feature counts and app-level metric values. Identity, claims, groups, entity data, and definitions authentication are excluded. Metrics use a separate HTTP client and are never persisted by storage adapters.
+
+Flush intervals outside 30–60 seconds use 45 seconds; each interval has ±20% jitter. Invalid metrics URLs disable telemetry without affecting flag checks. Supply an absolute HTTP(S) base URL without credentials, query or fragment. Ordinary flushes use gzip, with plain JSON fallback only for compression failure before sending. HTTP 202 acknowledges; only explicit 429/503 responses are retried, twice, within five minutes. Ambiguous failures are dropped. Buffers include inflight data and stay within 2,000 entries and 256 KiB, with 48 KiB envelopes. Variant names must be 1–64 ASCII letters, digits, underscores or hyphens. `onTelemetryDiagnostic` receives bounded status codes without event payloads.
+
 ## Initial targeting context
 
 These config fields require `io.toggly:toggly-android-core:1.5.0`.
@@ -65,15 +91,15 @@ Add the dependencies to your `build.gradle.kts`:
 ```kotlin
 dependencies {
     // Core module (required)
-    implementation("io.toggly:toggly-android-core:1.5.0")
+    implementation("io.toggly:toggly-android-core:1.6.0")
 
     // UI modules (pick what you need)
-    implementation("io.toggly:toggly-compose:1.5.0")  // Jetpack Compose
-    implementation("io.toggly:toggly-views:1.5.0")    // Android Views
+    implementation("io.toggly:toggly-compose:1.6.0")  // Jetpack Compose
+    implementation("io.toggly:toggly-views:1.6.0")    // Android Views
 
     // Storage modules (pick one, or use built-in SharedPreferences)
-    implementation("io.toggly:toggly-room:1.5.0")      // Room database
-    implementation("io.toggly:toggly-datastore:1.5.0") // DataStore
+    implementation("io.toggly:toggly-room:1.6.0")      // Room database
+    implementation("io.toggly:toggly-datastore:1.6.0") // DataStore
 }
 ```
 
