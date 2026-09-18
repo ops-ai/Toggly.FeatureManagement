@@ -85,7 +85,8 @@ receives at most ten payload-free diagnostic codes per reporter; callback
 exceptions are swallowed.
 
 Both ESM and CommonJS entry points include declarations that work without
-`lib.dom`, including TypeScript 4.8 and 4.9 consumers.
+`lib.dom`, including TypeScript 4.8 and 4.9 consumers using classic Node or Node16 module
+resolution for the root and browser entry points.
 
 ## Development
 

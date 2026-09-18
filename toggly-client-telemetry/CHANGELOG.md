@@ -10,4 +10,5 @@
 - Validation of ingest-compatible variant names and metrics URLs, including
   empty query/fragment delimiters, before accepting events.
 - Optional browser lifecycle adapter with automatic listener cleanup.
-- Dependency-free ESM and CommonJS builds with portable TypeScript declarations.
+- Dependency-free ESM and CommonJS builds with portable TypeScript declarations,
+  including browser subpath resolution in classic Node TypeScript configurations.
