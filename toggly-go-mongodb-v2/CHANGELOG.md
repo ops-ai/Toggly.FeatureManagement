@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+2026-09-17
+
+### Changed
+- Requires Go 1.25 and `toggly-go` 0.8.1. Applications can compile with
+  current `golang.org/x/crypto` and `golang.org/x/net`, including
+  `x/crypto` 0.52 and `x/net` 0.55 or later. 0.1.1 required `toggly-go`
+  0.7.0, which failed to compile on Go 1.27 when `x/crypto` 0.52 selected
+  `x/net` 0.54.
+
 ## 0.1.1
 
 2026-09-17

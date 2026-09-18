@@ -20,7 +20,7 @@ Documented runtime floors must match package metadata and CI. Prefer raising doc
 |-----|---------|-----------------|
 | Java | Java **17+**; Spring Boot **3.2+** for Spring modules | `Toggly.FeatureManagement.Java/pom.xml`, analysis-java JDK 17/21 |
 | Rust | Rust **1.88+** (MSRV) | `toggly-rust/Cargo.toml` `rust-version`, analysis-rust MSRV job |
-| Go | Go **1.25+** (toggly-go), Go **1.24+** (toggly-go-mongodb-v2); current runtime Go **1.27** | `toggly-go/go.mod`, `toggly-go-mongodb-v2/go.mod`, analysis-go |
+| Go | Go **1.25+** (toggly-go and toggly-go-mongodb-v2); current runtime Go **1.27** | `toggly-go/go.mod`, `toggly-go-mongodb-v2/go.mod`, analysis-go |
 | Ruby | Ruby **3.2+**; Rails **7.0+** | gemspecs; analysis-ruby + sdk-ruby-release matrices |
 | Python | Python **3.8+** (FastAPI package **3.9+**) | `pyproject.toml`; analysis-python + sdk-python-release |
 | Node / Next / Nuxt / Remix | Node **18+** | `engines.node`; analysis matrices 18/20/22 |
