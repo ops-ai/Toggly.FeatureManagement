@@ -125,3 +125,39 @@ test('discard aborts a final disposal request that has already started',async()=
   const {reporter,discard,requests}=setup({fetch:()=>new Promise(()=>{})});reporter.incrementCounter('final');reporter.dispose();const done=reporter.flush();await tick();
   expect(requests).toHaveLength(1);expect(requests[0].init.keepalive).toBe(true);discard();expect(requests[0].init.signal.aborted).toBe(true);await done;expect(jest.getTimerCount()).toBe(0);
 });
+test('captured evaluation checks keep their owner context across reentrant changes without restoring old context',async()=>{
+  const {reporter,change,bodies}=setup({identity:'alice'});reporter.recordUsage('Before');
+  const check=reporter.captureCheck();
+  // A host callback changes attribution and admits a gauge and check before returning.
+  change({identity:'bob'});reporter.setGauge('cart',2);reporter.recordCheck('Current','enabled');
+  check('Evaluated','disabled');reporter.recordView('After');await reporter.flush();
+  expect(bodies()).toEqual([
+    {k:'test-app',e:'Production',u:'alice',f:{Before:{enabled:[0,1]}}},
+    {k:'test-app',e:'Production',u:'bob',m:{cart:2},f:{Current:{enabled:[1]}}},
+    {k:'test-app',e:'Production',u:'alice',f:{Evaluated:{disabled:[1]}}},
+    {k:'test-app',e:'Production',u:'bob',f:{After:{enabled:[0,0,1]}}},
+  ]);reporter.dispose();
+});
+test('captured check recorders are silent after default or discard disposal and cannot inject into a replacement',async()=>{
+  for(const flush of [true,false]) {
+    const old=setup({identity:'old'});const check=old.reporter.captureCheck();old.reporter.dispose({flush});
+    const current=setup({identity:'current'});check.call(current.reporter,'Old','enabled');current.reporter.recordCheck('Current','enabled');
+    await Promise.all([old.reporter.flush(),current.reporter.flush()]);expect(old.requests).toHaveLength(0);
+    expect(current.bodies()).toEqual([{k:'test-app',e:'Production',u:'current',f:{Current:{enabled:[1]}}}]);current.discard();
+  }
+});
+test('captured checks share the global entry budget and rejected admission does not disturb accepted contexts',async()=>{
+  const diagnostics:string[]=[];const {reporter,change,bodies}=setup({identity:'alice',onDiagnostic:(d:string)=>diagnostics.push(d)});
+  const check=reporter.captureCheck();change({identity:'bob'});
+  for(let i=0;i<1999;i++)reporter.incrementCounter('orders',1000000);
+  check('Admitted','enabled');check('Overflow','enabled');await reporter.flush();
+  expect(bodies()).toHaveLength(2000);expect(bodies()[1999]).toEqual({k:'test-app',e:'Production',u:'alice',f:{Admitted:{enabled:[1]}}});
+  expect(diagnostics).toEqual(['buffer-full']);reporter.dispose();
+});
+test('capturing without recording allocates no queued history, validates checks, and preserves keyless silence',async()=>{
+  const {reporter,change,bodies}=setup();let check!:(key:string,variant:string)=>void;
+  for(let i=0;i<10000;i++){check=reporter.captureCheck();change({identity:'empty-'+i});}
+  check('invalid','bad variant');reporter.recordCheck('Current','enabled');await reporter.flush();
+  expect(bodies()).toEqual([{k:'test-app',e:'Production',u:'empty-9999',f:{Current:{enabled:[1]}}}]);reporter.dispose();
+  const keyless=setup({appKey:''});const silent=keyless.reporter.captureCheck();keyless.change({appKey:'valid'});silent('NoKey','enabled');await keyless.reporter.flush();expect(keyless.requests).toHaveLength(0);keyless.discard();
+});

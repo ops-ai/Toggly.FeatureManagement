@@ -49,6 +49,10 @@ function captureContext(options: TelemetryContext): Context {
   return context;
 }
 
+function sameContext(a: Context, b: Context): boolean {
+  return a.k === b.k && a.e === b.e && a.i === b.i && a.u === b.u;
+}
+
 /** Create one owner per client instance. Importing this package starts no work. */
 export function createTelemetryReporter(options: TelemetryOptions): TelemetryReporter {
   const optedOut = options.enableTelemetry === false;
@@ -100,9 +104,10 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
   function allEntries(): Entry[] { return [...(snapshot?.values() ?? []), ...sealed.flatMap(partition => [...partition.values()]), ...pending.values()]; }
   const hasQueued = (): boolean => sealed.length > 0 || pending.size > 0;
   function accept(entry: Entry): void {
-    if (!enabled() || disposed || !url) return;
+    if (optedOut || disposed || !validName(entry.context.k) || !url) return;
     const id = JSON.stringify([entry.kind === 'feature' ? 'f' : 'm', entry.key, entry.variant]);
-    const old = pending.get(id);
+    const current = sameContext(entry.context, context);
+    const old = current ? pending.get(id) : undefined;
     const entries = allEntries();
     if (entries.some(e => e.key === entry.key && e.kind !== 'feature' && entry.kind !== 'feature' && e.kind !== entry.kind)) { diagnostic('metric-kind-conflict'); return; }
     if (entry.kind === 'feature') {
@@ -118,13 +123,20 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
       const used = cost(existing); count += used.count; size += used.size;
     }
     if (count > MAX_ENTRIES || size > MAX_BUFFER) { diagnostic('buffer-full'); return; }
-    pending.set(id, entry);
+    if (current) pending.set(id, entry);
+    else {
+      // A check evaluated before a host callback can be admitted afterward.
+      // Preserve admission order without restoring the owner's current context.
+      if (pending.size) { sealed.push(pending); pending = new Map(); }
+      sealed.push(new Map([[id, entry]]));
+      schedule();
+    }
   }
-  function feature(featureKey: string, variant: string, index: number): void {
-    if (!enabled() || disposed) return;
+  function feature(featureKey: string, variant: string, index: number, captured = context): void {
+    if (optedOut || disposed || !validName(captured.k)) return;
     if (!validName(featureKey) || !validVariant(variant)) { diagnostic('invalid-event'); return; }
     const values = [0, 0, 0]; values[index] = 1;
-    accept({ context, key: featureKey, variant, kind: 'feature', values });
+    accept({ context: captured, key: featureKey, variant, kind: 'feature', values });
   }
   function metric(metricKey: string, value: number, kind: 'counter' | 'gauge'): void {
     if (!enabled() || disposed) return;
@@ -228,6 +240,10 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
   }
   const reporter: TelemetryReporter = {
     recordCheck: (featureKey, variant) => feature(featureKey, variant, 0),
+    captureCheck() {
+      const captured = context;
+      return (featureKey, variant) => feature(featureKey, variant, 0, captured);
+    },
     recordUsage: (featureKey, variant = 'enabled') => feature(featureKey, variant, 1),
     recordView: (featureKey, variant = 'enabled') => feature(featureKey, variant, 2),
     incrementCounter: (metricKey, value = 1) => metric(metricKey, value, 'counter'),
@@ -239,7 +255,7 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
         return value !== undefined && typeof value !== 'string';
       })) { diagnostic('invalid-option'); return; }
       const replacement = captureContext({ ...next, appKey: next.appKey ?? context.k, environment: next.environment ?? context.e });
-      if (JSON.stringify(replacement) === JSON.stringify(context)) return;
+      if (sameContext(replacement, context)) return;
       if (pending.size) { sealed.push(pending); pending = new Map(); }
       context = replacement;
       if (!enabled()) {

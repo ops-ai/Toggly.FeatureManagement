@@ -9,6 +9,8 @@
   its transport settings or disabling telemetry.
 
 ### Changed
+- Automatic evaluation checks retain their original attribution when a host
+  callback changes identity or replaces the client during evaluation.
 - All context partitions share one admission budget and preserve gauge ordering.
 - Retries reuse the original transport bytes; disposal aborts pending attempts
   where supported and prevents delayed compression from sending afterward.

@@ -2,6 +2,8 @@
 export type TelemetryDiagnostic = 'invalid-option' | 'invalid-event' | 'buffer-full' | 'metric-kind-conflict' | 'transport-drop' | 'compression-fallback';
 export interface TelemetryReporter {
   recordCheck(featureKey: string, variant: string): void;
+  /** @internal Capture this owner's check attribution before invoking host callbacks. */
+  captureCheck(): (featureKey: string, variant: string) => void;
   recordUsage(featureKey: string, variant?: string): void;
   recordView(featureKey: string, variant?: string): void;
   incrementCounter(metricKey: string, value?: number): void;

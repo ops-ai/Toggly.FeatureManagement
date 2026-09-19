@@ -20,9 +20,9 @@ ${load}
 if (starts) throw new Error('import started work');
 const disabled = createTelemetryReporter({}); attachBrowserLifecycle(disabled)(); disabled.dispose(); if (starts) throw new Error('disabled owner started work');
 const calls = []; const reporter = createTelemetryReporter({appKey:'packed', fetch: async (url, init) => {calls.push({url, init}); return {status:202};}});
-reporter.recordUsage('flag'); reporter.setContext({instanceId:'mint',identity:'ignored'}); reporter.incrementCounter('orders'); reporter.setContext({identity:'alice'}); reporter.setGauge('cart',2); ${extension === 'cjs' ? '(async () => {' : ''}
+reporter.recordUsage('flag'); const capturedCheck = reporter.captureCheck(); reporter.setContext({instanceId:'mint',identity:'ignored'}); reporter.incrementCounter('orders'); reporter.setContext({identity:'alice'}); reporter.setGauge('cart',2); capturedCheck('Evaluated','disabled'); ${extension === 'cjs' ? '(async () => {' : ''}
 await reporter.flush({keepalive:true}); reporter.dispose(); await reporter.flush();
-if (calls.length !== 3 || JSON.parse(calls[0].init.body).f.flag.enabled[1] !== 1 || JSON.parse(calls[1].init.body).i !== 'mint' || JSON.parse(calls[2].init.body).u !== 'alice') throw new Error('packed context transport failed');
+if (calls.length !== 4 || JSON.parse(calls[0].init.body).f.flag.enabled[1] !== 1 || JSON.parse(calls[1].init.body).i !== 'mint' || JSON.parse(calls[2].init.body).u !== 'alice' || JSON.parse(calls[3].init.body).f.Evaluated.disabled[0] !== 1 || JSON.parse(calls[3].init.body).u !== undefined) throw new Error('packed context transport failed');
 const discarded = createTelemetryReporter({appKey:'discarded',fetch:async()=>{throw new Error('discard sent');}}); discarded.incrementCounter('no-send'); discarded.dispose({flush:false}); await discarded.flush();
 ${extension === 'cjs' ? '})().catch(e => { console.error(e); process.exitCode=1; });' : ''}`;
     writeFileSync(join(host, `consumer.${extension}`), program); run(process.execPath, [`consumer.${extension}`]);
@@ -30,7 +30,7 @@ ${extension === 'cjs' ? '})().catch(e => { console.error(e); process.exitCode=1;
   const source = `import { createTelemetryReporter, TelemetryFetch, TelemetryContext } from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 const fetcher: TelemetryFetch = async (_url, init) => { const aborted: boolean | undefined = init.signal?.aborted; void aborted; return {status:202}; };
-const reporter = createTelemetryReporter({appKey:'type-host',fetch:fetcher}); const context: TelemetryContext = {instanceId:'mint',identity:'alice'}; reporter.setContext(context); reporter.recordCheck('flag','enabled'); reporter.recordUsage('flag'); reporter.recordView('flag'); reporter.incrementCounter('orders'); reporter.setGauge('cart',0.5); const done:Promise<void> = reporter.flush(); void done; attachBrowserLifecycle(reporter)(); reporter.dispose({flush:false});
+const reporter = createTelemetryReporter({appKey:'type-host',fetch:fetcher}); const context: TelemetryContext = {instanceId:'mint',identity:'alice'}; reporter.setContext(context); const check: (key: string, variant: string) => void = reporter.captureCheck(); check('captured','enabled'); reporter.recordCheck('flag','enabled'); reporter.recordUsage('flag'); reporter.recordView('flag'); reporter.incrementCounter('orders'); reporter.setGauge('cart',0.5); const done:Promise<void> = reporter.flush(); void done; attachBrowserLifecycle(reporter)(); reporter.dispose({flush:false});
 `;
   for (const extension of ['mts', 'cts']) writeFileSync(join(host, `consumer.${extension}`), source);
   writeFileSync(join(host, 'classic.ts'), source);

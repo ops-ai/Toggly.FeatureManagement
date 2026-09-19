@@ -129,6 +129,15 @@ active reporter budget and avoids accumulating retiring reporters. Use
 `setContext` for ordinary identity/token/routing changes instead of replacing
 the reporter. Transport settings are fixed at construction.
 
+SDK evaluator integrations can call the internal `captureCheck()` before
+invoking host callbacks. Its returned `(featureKey, variant) => void` records a
+check afterward using that owner's captured attribution, even if a callback
+changed the current context. Pass the evaluated feature/variant snapshot, not
+replacement definitions. The recorder does not change current context or
+reserve queue space until invoked; admission uses the same validation and global
+budget. It becomes a no-op after disposal and cannot record on another reporter.
+Keep this seam inside SDK evaluators rather than exposing it as a consumer API.
+
 Both ESM and CommonJS entry points include declarations that work without
 `lib.dom`, including TypeScript 4.8 and 4.9 consumers using classic Node or Node16 module
 resolution for the root and browser entry points.
