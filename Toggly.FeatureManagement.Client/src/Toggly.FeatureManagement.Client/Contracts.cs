@@ -48,6 +48,26 @@ public interface IUpdateSource
 public sealed record TogglyClientOptions
 {
 
+    /// <summary>Enable aggregate frontend telemetry when an application key is set.</summary>
+    public bool EnableTelemetry { get; init; } = true;
+    /// <summary>Independent absolute HTTP(S) metrics base URL, without credentials, query or fragment.</summary>
+    public string MetricsBaseUrl { get; init; } = "https://metrics.toggly.io";
+    /// <summary>Base flush interval in milliseconds; values outside 30000–60000 fall back to 45000.</summary>
+    public int TelemetryFlushIntervalMs { get; init; } = 45000;
+    /// <summary>Optional callback receiving bounded diagnostic codes without payloads.</summary>
+    public Action<string>? OnTelemetryDiagnostic
+    {
+        get; init;
+    }
+    /// <summary>Optional host-owned credential-free transport. The client never disposes it.</summary>
+    public IFrontendTelemetryTransport? TelemetryTransport
+    {
+        get; init;
+    }
+
+    /// <summary>Opaque minted instance id; sent as compact telemetry field <c>i</c>.</summary>
+    public string? InstanceId { get; init; }
+
     /// <summary>Public frontend application key; empty selects local defaults without network access.</summary>
     public string? AppKey
     {

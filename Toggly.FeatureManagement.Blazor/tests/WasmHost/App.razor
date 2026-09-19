@@ -1,0 +1,23 @@
+@namespace WasmHost
+@using Microsoft.AspNetCore.Components.Web
+@using Toggly.FeatureManagement.Blazor
+@using Toggly.FeatureManagement.Client
+@inject IFeatureSession Session
+@if (!disposed)
+{
+<FeatureProvider>
+    <Feature Key="on"><span id="enabled">enabled</span></Feature>
+</FeatureProvider>
+}
+<button id="record" @onclick="Record">Record</button>
+<button id="flush" @onclick="Flush">Flush</button>
+<button id="dispose" @onclick="DisposeOwner">Dispose</button>
+<span id="status">@status</span>
+@code {
+    private bool disposed;
+    private string status = "idle";
+    private IFrontendTelemetry Telemetry => (IFrontendTelemetry)Session;
+    private void Record() { Telemetry.RecordUsage("checkout"); Telemetry.RecordView("checkout"); Telemetry.IncrementCounter("orders", 2); Telemetry.SetGauge("cart", 3.5); status = "recorded"; }
+    private async Task Flush() { await Telemetry.FlushTelemetryAsync(); status = "flushed"; }
+    private async Task DisposeOwner() { disposed = true; await Session.DisposeAsync(); status = "disposed"; }
+}

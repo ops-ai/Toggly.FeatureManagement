@@ -6,9 +6,10 @@ using System.Text.Json;
 namespace Toggly.FeatureManagement.Client;
 
 /// <summary>One user session. Supply a separate client for independent users.</summary>
-public sealed partial class TogglyClient : IAsyncDisposable
+public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
 {
     private readonly TogglyClientOptions options;
+    private readonly FrontendTelemetryReporter? telemetry;
     private readonly HttpClient http;
     private readonly ISignatureVerifier verifier;
     private readonly ISnapshotStore? store;
@@ -78,6 +79,7 @@ public sealed partial class TogglyClient : IAsyncDisposable
             LocalGates = new Dictionary<string, Func<bool>>(options.LocalGates),
             AllowedKeyIds = options.AllowedKeyIds.ToArray()
         };
+        telemetry = options.EnableTelemetry && !string.IsNullOrWhiteSpace(options.AppKey) ? new(this.options) : null;
         this.http = http;
         this.verifier = verifier;
         this.store = store;
@@ -128,18 +130,25 @@ public sealed partial class TogglyClient : IAsyncDisposable
             ObjectDisposedException.ThrowIf(disposed, this);
             enabled = definitions.TryGetValue(featureKey, out var value) ? EntityEvaluator.Resolve(value, entity) : options.Defaults.GetValueOrDefault(featureKey);
         }
-        if (!enabled || !options.LocalGates.TryGetValue(featureKey, out var gate))
-            return enabled;
-        try
+        if (enabled && options.LocalGates.TryGetValue(featureKey, out var gate))
         {
-            return gate();
+            try
+            {
+                enabled = gate();
+            }
+            catch (Exception ex) { Report(ex); enabled = false; }
         }
-        catch (Exception ex)
-        {
-            Report(ex);
-            return false;
-        }
+        telemetry?.RecordCheck(featureKey, enabled ? "enabled" : "disabled");
+        return enabled;
     }
+
+    public void RecordUsage(string featureKey, string variant = "enabled") => telemetry?.RecordUsage(featureKey, variant);
+    public void RecordView(string featureKey, string variant = "enabled") => telemetry?.RecordView(featureKey, variant);
+    public void IncrementCounter(string metricKey, double value = 1) => telemetry?.IncrementCounter(metricKey, value);
+    public void SetGauge(string metricKey, double value) => telemetry?.SetGauge(metricKey, value);
+    public Task FlushTelemetryAsync(CancellationToken cancellationToken = default) => telemetry?.FlushTelemetryAsync(cancellationToken) ?? Task.CompletedTask;
+    /// <summary>Flush for browser exit or a native background transition; exit uses plain JSON.</summary>
+    public Task FlushTelemetryAsync(bool keepalive, CancellationToken cancellationToken = default) => telemetry?.FlushTelemetryAsync(keepalive, cancellationToken) ?? Task.CompletedTask;
 
     /// <summary>Combines the selected feature keys, optionally negating the result. An empty selection matches.</summary>
     public bool Evaluate(IEnumerable<string> featureKeys, Requirement requirement = Requirement.All, bool negate = false, EntityContext? entity = null)
@@ -416,6 +425,8 @@ public sealed partial class TogglyClient : IAsyncDisposable
             disposed = true;
             generation++;
         }
+        if (telemetry is not null)
+            await telemetry.DisposeAsync().ConfigureAwait(false);
         await lifetime.CancelAsync().ConfigureAwait(false);
         await Task.WhenAll(pollTask ?? Task.CompletedTask, liveTask ?? Task.CompletedTask).ConfigureAwait(false);
         // The lifetime token is already cancelled. Drain any caller-owned refresh that is still

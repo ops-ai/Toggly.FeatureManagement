@@ -61,3 +61,33 @@ export function save(contextKey, snapshot) {
     /* Storage denial/quota must not stop evaluation. */
   }
 }
+
+// No reporter or queue here: the portable owner passes one already bounded envelope.
+const telemetryRequests = new Map();
+export function abortTelemetry(requestId) { telemetryRequests.get(requestId)?.abort(); }
+export async function sendTelemetry(url, bytes, gzip, keepalive, requestId) {
+  const controller = new AbortController();
+  telemetryRequests.set(requestId, controller);
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (gzip) headers["Content-Encoding"] = "gzip";
+    const response = await fetch(url, {
+      method: "POST", body: bytes, headers, credentials: "omit", redirect: "error",
+      keepalive, signal: controller.signal,
+    });
+    return { statusCode: response.status, retryAfter: response.headers.get("Retry-After") };
+  } finally { clearTimeout(timer); telemetryRequests.delete(requestId); }
+}
+
+export function attachTelemetry(owner) {
+  const flush = (keepalive) => { Promise.resolve().then(() => owner.invokeMethodAsync("FlushTelemetry", keepalive)).catch(() => {}); };
+  const hidden = () => { if (document.visibilityState === "hidden") flush(true); };
+  const exit = () => flush(true);
+  document.addEventListener("visibilitychange", hidden);
+  window.addEventListener("pagehide", exit);
+  return { dispose() {
+    document.removeEventListener("visibilitychange", hidden);
+    window.removeEventListener("pagehide", exit);
+  } };
+}

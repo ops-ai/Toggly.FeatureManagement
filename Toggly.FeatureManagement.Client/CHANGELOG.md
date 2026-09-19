@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.9.0 — 2026-09-18
+
+### Added
+- Portable and Desktop clients now aggregate actual feature checks and expose explicit usage, view, counter, gauge and awaitable flush APIs. Telemetry is enabled for keyed clients and can be opted out.
+- Independent metrics endpoint, bounded in-memory batching, gzip and explicit rate-limit retries. Groups and claims stay off the telemetry body; optional `InstanceId` (`i`) and context identity (`u`) may be sent.
+- `TogglyClientOptions.InstanceId` for minted instance ids. When both instance id and identity are set, only `i` is serialized.
+
+### Fixed
+- Telemetry flush cancellation completes without throwing while preserving shared delivery ownership.
+- Diagnostic callbacks emit each fixed code at most once per client lifetime.
+
+
 ## 3.8.0 — 2026-09-14
 
 ### Changed

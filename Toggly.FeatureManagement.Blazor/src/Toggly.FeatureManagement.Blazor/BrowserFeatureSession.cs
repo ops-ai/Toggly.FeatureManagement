@@ -3,15 +3,27 @@ using Toggly.FeatureManagement.Client;
 namespace Toggly.FeatureManagement.Blazor;
 
 /// <summary>Owns a portable client for a single browser DI scope.</summary>
-public sealed class BrowserFeatureSession : IFeatureSession
+public sealed class BrowserFeatureSession : IFeatureSession, IFrontendTelemetry
 {
     private readonly TogglyClient client;
+    private readonly BrowserTelemetryLifecycle? telemetryLifecycle;
 
     public BrowserFeatureSession(TogglyClient client)
     {
         this.client = client;
         client.Changed += OnChanged;
     }
+
+    public BrowserFeatureSession(TogglyClient client, BrowserTelemetryLifecycle telemetryLifecycle) : this(client)
+    {
+        this.telemetryLifecycle = telemetryLifecycle;
+    }
+
+    public void RecordUsage(string featureKey, string variant = "enabled") => client.RecordUsage(featureKey, variant);
+    public void RecordView(string featureKey, string variant = "enabled") => client.RecordView(featureKey, variant);
+    public void IncrementCounter(string metricKey, double value = 1) => client.IncrementCounter(metricKey, value);
+    public void SetGauge(string metricKey, double value) => client.SetGauge(metricKey, value);
+    public Task FlushTelemetryAsync(CancellationToken cancellationToken = default) => client.FlushTelemetryAsync(cancellationToken);
 
     private void OnChanged(object? sender, EventArgs args) => Changed?.Invoke(this, args);
 
@@ -26,6 +38,8 @@ public sealed class BrowserFeatureSession : IFeatureSession
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        if (telemetryLifecycle is not null)
+            await telemetryLifecycle.AttachAsync(client);
         await client.InitializeAsync(cancellationToken);
         Changed?.Invoke(this, EventArgs.Empty);
     }
@@ -52,6 +66,7 @@ public sealed class BrowserFeatureSession : IFeatureSession
     {
         client.Changed -= OnChanged;
         Changed = null;
-        await client.DisposeAsync();
+        var detach = telemetryLifecycle?.DisposeAsync().AsTask() ?? Task.CompletedTask;
+        await Task.WhenAll(detach, client.DisposeAsync().AsTask());
     }
 }

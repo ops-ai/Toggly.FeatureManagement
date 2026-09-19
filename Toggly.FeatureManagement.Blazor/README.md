@@ -12,12 +12,12 @@ Native Razor feature gates for static SSR, Interactive Server, WebAssembly and I
 | Interactive Auto | Server package in server project; browser package in client project | Each runtime creates its own session |
 
 ```sh
-dotnet add package Toggly.FeatureManagement.Blazor --version 3.8.0
+dotnet add package Toggly.FeatureManagement.Blazor --version 3.9.0
 # Server project only:
-dotnet add package Toggly.FeatureManagement.Blazor.Server --version 3.8.0
+dotnet add package Toggly.FeatureManagement.Blazor.Server --version 3.9.0
 ```
 
-The server package reuses trusted `Toggly.FeatureManagement` 3.8.0. The browser package reuses portable `Toggly.FeatureManagement.Client` 3.8.0 and has no dependency on server evaluation or filesystem storage. The two packages target net8.0; use a compatible ASP.NET Core host and supported .NET runtime.
+The server package reuses trusted `Toggly.FeatureManagement` 3.9.0. The browser package reuses portable `Toggly.FeatureManagement.Client` 3.9.0 and has no dependency on server evaluation or filesystem storage. The two packages target net8.0; use a compatible ASP.NET Core host and supported .NET runtime.
 
 ## Trusted server setup
 
@@ -187,3 +187,22 @@ and exercise entity forwarding, authentication transitions, reconnect and dispos
 ## License
 
 MIT. See [LICENSE](LICENSE). Learn more at [toggly.io](https://toggly.io).
+
+## WebAssembly frontend telemetry
+
+`AddTogglyBlazorWebAssembly` enables frontend telemetry for keyed browser clients. Set `EnableTelemetry = false` in `TogglyClientOptions` to opt out; keyless clients add no telemetry queue or lifecycle listeners. `MetricsBaseUrl` and `TelemetryFlushIntervalMs` follow the portable client options. The browser uses credential-free fetch, gzip for ordinary sends and plain keepalive for hidden-page and pagehide transitions; disposal detaches listeners and bounds the final envelope. Cancelling an explicit telemetry flush ends that wait without throwing or cancelling a shared send.
+
+Use the optional companion without adding members to your own `IFeatureSession` implementation:
+
+```csharp
+if (Features is IFrontendTelemetry telemetry)
+{
+    telemetry.RecordUsage("checkout");
+    telemetry.RecordView("checkout");
+    telemetry.IncrementCounter("orders", 1);
+    telemetry.SetGauge("cart_total", 12.5);
+    await telemetry.FlushTelemetryAsync();
+}
+```
+
+There is one reporter in the portable browser client. Component/session evaluations count actual leaves once, including local/entity results and short circuiting; refresh, hydration and snapshot projection are silent. Frontend reporting is disabled during server/prerender execution. Trusted Blazor Server telemetry retains its existing server implementation. Browser CORS must allow the configured metrics origin and JSON/gzip content headers.

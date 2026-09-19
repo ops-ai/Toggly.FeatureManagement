@@ -235,3 +235,9 @@ The Blazor runtime compatibility jobs retain .NET 8/.NET 10 tests, browser crypt
 coverage and packed consumer checks in `analysis-dotnet.yml`. No separate Blazor
 publication workflow is used. Registry publisher permissions still need to cover
 the new package IDs; configuration does not prove first publication.
+
+### Frontend .NET telemetry verification
+
+The portable/Desktop and Blazor browser packages share the version above. Keep their changelogs and install examples aligned. Their unit suites consume the common frontend telemetry contract; fake application keys use opt-out or a local/injected transport.
+
+The existing Blazor runtime job also builds `Toggly.FeatureManagement.Blazor/tests/WasmHost` against the local packed feed, then runs `tests/wasm-browser.cjs` with the established dashboard Playwright dependency. This checks the trimmed managed WASM artifact (without AOT), actual WASM ownership, cross-origin loopback CORS, ordinary gzip payloads, plain keepalive fetch on hidden/pagehide, and teardown. `test-browser.sh` is a separate Node module contract/coverage check. The Server example remains a packed server consumer. Local packages and loopback ingestion do not prove public registry installation or designated live ingestion.
