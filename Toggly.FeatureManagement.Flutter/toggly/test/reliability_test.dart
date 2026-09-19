@@ -286,6 +286,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -334,6 +335,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -399,6 +401,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -458,6 +461,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -509,6 +513,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -570,6 +575,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -614,6 +620,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -656,6 +663,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -690,6 +698,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -738,6 +747,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -780,6 +790,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -816,6 +827,7 @@ void main() {
       useSignedDefinitions: true,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -846,6 +858,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -879,6 +892,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -914,6 +928,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         cacheProvider: provider,
@@ -965,6 +980,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         enableVariants: true,
@@ -1017,6 +1033,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: {'FeatureA': false},
       config: TogglyConfig(
+        enableTelemetry: false,
         enableLiveUpdates: false,
         baseURI: 'https://example.test',
         enableVariants: true,
