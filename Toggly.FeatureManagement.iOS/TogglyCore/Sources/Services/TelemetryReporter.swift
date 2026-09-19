@@ -47,7 +47,7 @@ public actor TelemetryReporter {
 
     private enum Item {
         case feature(String, String, Delta)
-        case metric(String, Double)
+        case metric(String, Double, Bool)
     }
 
     private let appKey: String
@@ -69,6 +69,8 @@ public actor TelemetryReporter {
     private var periodicTask: Task<Void, Never>?
     private var flushTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
+    private(set) var packetizationPeakBytes = 0
+    private(set) var packetizationCount = 0
     private var disposed = false
     private var isEnabled: Bool { enabled && !appKey.isEmpty && endpoint != nil && (30_000...60_000).contains(interval) }
 
@@ -151,19 +153,19 @@ public actor TelemetryReporter {
                             Z_DEFAULT_STRATEGY, ZLIB_VERSION,
                             Int32(MemoryLayout<z_stream>.size)) == Z_OK else { return nil }
         defer { deflateEnd(&stream) }
-        var input = [UInt8](data)
-        var output = [UInt8](repeating: 0, count: Int(deflateBound(&stream, uLong(input.count))))
-        let status = input.withUnsafeMutableBufferPointer { source in
-            output.withUnsafeMutableBufferPointer { target in
-                stream.next_in = source.baseAddress
+        var output = Data(count: min(49_152, Int(deflateBound(&stream, uLong(data.count)))))
+        let status = data.withUnsafeBytes { source in
+            output.withUnsafeMutableBytes { target in
+                stream.next_in = UnsafeMutablePointer(mutating: source.bindMemory(to: Bytef.self).baseAddress)
                 stream.avail_in = uInt(source.count)
-                stream.next_out = target.baseAddress
+                stream.next_out = target.bindMemory(to: Bytef.self).baseAddress
                 stream.avail_out = uInt(target.count)
                 return deflate(&stream, Z_FINISH)
             }
         }
         guard status == Z_STREAM_END else { return nil }
-        return Data(output.prefix(Int(stream.total_out)))
+        output.count = Int(stream.total_out)
+        return output
     }
 
     private static func makeEndpoint(_ base: String) -> URL? {
@@ -215,10 +217,9 @@ public actor TelemetryReporter {
         let (entries, upperBytes) = pendingResources()
         let queuedEntries = queued.reduce(0) { $0 + $1.entries }
         let queuedBytes = queued.reduce(0) { $0 + $1.retainedBytes }
-        let exactBatches = upperBytes + queuedBytes > 262_144 ? makeBatches() : nil
-        let exactBytes = exactBatches?.reduce(0) { $0 + $1.retainedBytes } ?? 0
+        let exact = upperBytes + queuedBytes > 262_144 ? packetize(consume: false) : nil
         if entries + queuedEntries > 2_000 ||
-           (exactBatches != nil && (exactBatches!.isEmpty || exactBytes + queuedBytes > 262_144)) {
+           (exact != nil && (!exact!.valid || exact!.bytes + queuedBytes > 262_144)) {
             undo()
             diagnose("telemetry_buffer_limit")
         } else {
@@ -229,15 +230,15 @@ public actor TelemetryReporter {
 
     // Compute on demand: rejected or drained names never enter an owner-lifetime catalog.
     private func encodedNameLength(_ name: String) -> Int {
-        2 + name.utf8.reduce(0) { size, byte in
-            size + (byte < 32 ? 6 : (byte == 34 || byte == 92 || byte == 47 ? 2 : 1))
+        var size = 2
+        for byte in name.utf8 {
+            switch byte {
+            case 8, 9, 10, 12, 13, 34, 92: size += 2
+            case 0..<32: size += 6
+            default: size += 1
+            }
         }
-    }
-
-    private var header: [String: Any] {
-        var value: [String: Any] = ["k": appKey, "e": environment]
-        if let field = attribution.field, let identity = attribution.value { value[field] = identity }
-        return value
+        return size
     }
 
     /// Seal accepted events before changing attribution. Empty rotations retain no history.
@@ -252,26 +253,25 @@ public actor TelemetryReporter {
     }
 
     private func sealPending() {
-        guard !features.isEmpty || !metrics.isEmpty else { return }
-        queued += makeBatches()
-        features = [:]; metrics = [:]; pendingCreatedAt = nil
+        _ = packetize(consume: true)
+        if features.isEmpty && metrics.isEmpty { pendingCreatedAt = nil }
     }
 
     private func hasQueuedKind(_ key: String, counter: Bool) -> Bool {
         queued.contains { $0.metricKinds[key] == counter }
     }
 
-    // Resource diagnostics are counts only, including retained accounting keys.
+    // Measurement does not encode or retain another copy of the pending queue.
     func retainedResources() -> (entries: Int, bytes: Int) {
-        let pending = makeBatches()
-        let batches = queued + pending
-        return (batches.reduce(0) { $0 + $1.entries }, batches.reduce(0) { $0 + $1.retainedBytes })
+        let pending = packetize(consume: false)
+        return (pending.entries + queued.reduce(0) { $0 + $1.entries },
+                pending.bytes + queued.reduce(0) { $0 + $1.retainedBytes })
     }
 
     private func pendingResources() -> (entries: Int, upperBytes: Int) {
         var entries = 0
         var upperBytes = 0
-        let headerBytes = (try? JSONSerialization.data(withJSONObject: header).count) ?? Int.max / 4
+        let headerBytes = headerByteCount
         for (key, variants) in features {
             let keyBytes = encodedNameLength(key)
             for (variant, delta) in variants {
@@ -301,18 +301,16 @@ public actor TelemetryReporter {
     }
 
     private func singleFeatureFits(_ key: String, variant: String, delta: Delta) -> Bool {
-        let first = Delta(checks: min(delta.checks, 1_000_000),
-                          used: min(delta.used, 1_000_000),
-                          viewed: min(delta.viewed, 1_000_000))
-        var object = header
-        object["f"] = [key: [variant: first.values]]
-        return ((try? JSONSerialization.data(withJSONObject: object).count) ?? Int.max) <= 49_152
+        var packet = Packet()
+        packet.features = [key: [variant: Delta(checks: min(delta.checks, 1_000_000),
+                                              used: min(delta.used, 1_000_000), viewed: min(delta.viewed, 1_000_000))]]
+        return packetBytes(packet) <= 49_152
     }
 
     private func singleMetricFits(_ key: String, value: Double) -> Bool {
-        var object = header
-        object["m"] = [key: value]
-        return ((try? JSONSerialization.data(withJSONObject: object).count) ?? Int.max) <= 49_152
+        var packet = Packet()
+        packet.metrics = [key: value]
+        return packetBytes(packet) <= 49_152
     }
 
     private func recordFeature(_ key: String, variant: String, index: Int) {
@@ -388,80 +386,209 @@ public actor TelemetryReporter {
         useAttribution(attribution); setGauge(key, value: value)
     }
 
-    private func makeBatches() -> [Batch] {
-        let createdAt = pendingCreatedAt ?? clock()
-        var items: [Item] = []
-        for feature in features.keys.sorted() {
-            for variant in (features[feature] ?? [:]).keys.sorted() {
-                guard var delta = features[feature]?[variant] else { continue }
-                while delta.checks > 0 || delta.used > 0 || delta.viewed > 0 {
-                    let piece = Delta(checks: min(delta.checks, 1_000_000), used: min(delta.used, 1_000_000), viewed: min(delta.viewed, 1_000_000))
-                    items.append(.feature(feature, variant, piece))
-                    delta.checks -= piece.checks; delta.used -= piece.used; delta.viewed -= piece.viewed
-                    if items.count > 2_000 { return [] }
+    /// Only the current packet is scratch. Source entries move into queued ownership
+    /// immediately after encoding it, before the next packet is constructed.
+    private struct Packet {
+        var features: [String: [String: Delta]] = [:]
+        var metrics: [String: Double] = [:]
+        var metricKinds: [String: Bool] = [:]
+        var entries = 0
+    }
+
+    private var headerByteCount: Int {
+        11 + encodedNameLength(appKey) + encodedNameLength(environment) +
+            (attribution.value.map { 5 + encodedNameLength($0) } ?? 0)
+    }
+
+    private func packetBytes(_ packet: Packet) -> Int {
+        var bytes = headerByteCount
+        if !packet.features.isEmpty {
+            bytes += 7 + packet.features.count - 1
+            for (key, variants) in packet.features {
+                bytes += encodedNameLength(key) + 3 + variants.count - 1
+                for (variant, delta) in variants {
+                    let values = delta.values
+                    bytes += encodedNameLength(variant) + 3 + values.count - 1
+                    bytes += values.reduce(0) { $0 + String($1).utf8.count }
                 }
             }
         }
-        for key in metrics.keys.sorted() {
-            guard let metric = metrics[key] else { continue }
+        if !packet.metrics.isEmpty {
+            bytes += 7 + packet.metrics.count - 1
+            for (key, value) in packet.metrics { bytes += encodedNameLength(key) + 1 + String(value).utf8.count }
+        }
+        return bytes
+    }
+
+    private func appendQuoted(_ string: String, to data: inout Data) {
+        data.append(34)
+        let hex = Array("0123456789abcdef".utf8)
+        for byte in string.utf8 {
+            switch byte {
+            case 34, 92: data.append(92); data.append(byte)
+            case 8: data.append(contentsOf: [92, 98])
+            case 9: data.append(contentsOf: [92, 116])
+            case 10: data.append(contentsOf: [92, 110])
+            case 12: data.append(contentsOf: [92, 102])
+            case 13: data.append(contentsOf: [92, 114])
+            case 0..<32: data.append(contentsOf: [92, 117, 48, 48, hex[Int(byte / 16)], hex[Int(byte % 16)]])
+            default: data.append(byte)
+            }
+        }
+        data.append(34)
+    }
+
+    private func encodePacket(_ packet: Packet, bytes: Int) -> Data {
+        var data = Data()
+        data.reserveCapacity(bytes)
+        data.append(contentsOf: "{\"k\":".utf8); appendQuoted(appKey, to: &data)
+        data.append(contentsOf: ",\"e\":".utf8); appendQuoted(environment, to: &data)
+        if let field = attribution.field, let value = attribution.value {
+            data.append(44); appendQuoted(field, to: &data); data.append(58); appendQuoted(value, to: &data)
+        }
+        if !packet.features.isEmpty {
+            data.append(contentsOf: ",\"f\":{".utf8)
+            for (index, key) in packet.features.keys.sorted().enumerated() {
+                if index > 0 { data.append(44) }
+                appendQuoted(key, to: &data); data.append(contentsOf: ":{".utf8)
+                let variants = packet.features[key]!
+                for (variantIndex, variant) in variants.keys.sorted().enumerated() {
+                    if variantIndex > 0 { data.append(44) }
+                    appendQuoted(variant, to: &data); data.append(contentsOf: ":[".utf8)
+                    for (valueIndex, value) in variants[variant]!.values.enumerated() {
+                        if valueIndex > 0 { data.append(44) }
+                        data.append(contentsOf: String(value).utf8)
+                    }
+                    data.append(93)
+                }
+                data.append(125)
+            }
+            data.append(125)
+        }
+        if !packet.metrics.isEmpty {
+            data.append(contentsOf: ",\"m\":{".utf8)
+            for (index, key) in packet.metrics.keys.sorted().enumerated() {
+                if index > 0 { data.append(44) }
+                appendQuoted(key, to: &data); data.append(58)
+                data.append(contentsOf: String(packet.metrics[key]!).utf8)
+            }
+            data.append(125)
+        }
+        data.append(125)
+        assert(data.count == bytes && data.count <= 49_152)
+        packetizationPeakBytes = max(packetizationPeakBytes, data.count)
+        packetizationCount += 1
+        return data
+    }
+
+    // No whole-queue sorted key array or item catalogue survives packet transfer.
+    private func nextKey<Value>(_ dictionary: [String: Value], after previous: String?) -> String? {
+        dictionary.keys.lazy.filter { previous == nil || $0 > previous! }.min()
+    }
+
+    private func visitPendingItems(_ visit: (Item) -> Bool) -> Bool {
+        var previousFeature: String?
+        while let key = nextKey(features, after: previousFeature) {
+            var previousVariant: String?
+            while let variant = nextKey(features[key] ?? [:], after: previousVariant) {
+                guard var delta = features[key]?[variant] else { return false }
+                while delta.checks > 0 || delta.used > 0 || delta.viewed > 0 {
+                    let piece = Delta(checks: min(delta.checks, 1_000_000), used: min(delta.used, 1_000_000), viewed: min(delta.viewed, 1_000_000))
+                    guard visit(.feature(key, variant, piece)) else { return false }
+                    delta.checks -= piece.checks; delta.used -= piece.used; delta.viewed -= piece.viewed
+                }
+                previousVariant = variant
+            }
+            previousFeature = key
+        }
+        var previousMetric: String?
+        while let key = nextKey(metrics, after: previousMetric) {
+            guard let metric = metrics[key] else { return false }
             switch metric {
             case .counter(var value):
                 repeat {
                     let piece = min(value, 1_000_000)
-                    items.append(.metric(key, Double(piece)))
+                    guard visit(.metric(key, Double(piece), true)) else { return false }
                     value -= piece
-                } while value > 0 && items.count <= 2_000
-            case .gauge(let value): items.append(.metric(key, value))
+                } while value > 0
+            case .gauge(let value):
+                guard visit(.metric(key, value, false)) else { return false }
             }
-            if items.count > 2_000 { return [] }
+            previousMetric = key
         }
-        var result: [Batch] = []
-        var featureMap: [String: [String: [Int64]]] = [:]
-        var metricMap: [String: Double] = [:]
-        var entryCount = 0
-        func encode() -> Data? {
-            var object = header
-            if !featureMap.isEmpty { object["f"] = featureMap }
-            if !metricMap.isEmpty { object["m"] = metricMap }
-            return try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        return true
+    }
+
+    private func consume(_ packet: Packet) {
+        for (key, variants) in packet.features {
+            for (variant, delta) in variants {
+                guard var original = features[key]?[variant] else { continue }
+                original.checks -= delta.checks; original.used -= delta.used; original.viewed -= delta.viewed
+                if max(original.checks, original.used, original.viewed) == 0 { features[key]?.removeValue(forKey: variant) }
+                else { features[key]?[variant] = original }
+            }
+            if features[key]?.isEmpty == true { features.removeValue(forKey: key) }
         }
+        for (key, value) in packet.metrics {
+            if case .counter(let original)? = metrics[key], original > Int64(value) { metrics[key] = .counter(original - Int64(value)) }
+            else { metrics.removeValue(forKey: key) }
+        }
+    }
+
+    /// Exact admission/inspection is a size-only walk. Transfer encodes one envelope
+    /// at a time, removes its source values, and immediately gives the queue ownership.
+    @discardableResult
+    private func packetize(consume shouldConsume: Bool, maxPackets: Int = .max) -> (entries: Int, bytes: Int, valid: Bool) {
+        var packet = Packet()
+        var totalEntries = 0
+        var totalBytes = 0
+        var packets = 0
+        let createdAt = pendingCreatedAt ?? clock()
         func finish() {
-            if entryCount > 0, let data = encode() { result.append(Batch(data: data, entries: entryCount, createdAt: createdAt,
-                metricKinds: Dictionary(uniqueKeysWithValues: metricMap.keys.map { key in
-                    let counter: Bool
-                    if case .counter? = metrics[key] { counter = true } else { counter = false }
-                    return (key, counter)
-                }))) }
-            featureMap = [:]; metricMap = [:]; entryCount = 0
-        }
-        for item in items {
-            func insert() {
-                switch item {
-                case .feature(let key, let variant, let delta): featureMap[key, default: [:]][variant] = delta.values
-                case .metric(let key, let value): metricMap[key] = value
-                }
-                entryCount += 1
+            guard packet.entries > 0 else { return }
+            let bytes = packetBytes(packet)
+            totalEntries += packet.entries
+            totalBytes += bytes + packet.metricKinds.keys.reduce(0) { $0 + $1.utf8.count + 1 }
+            if shouldConsume {
+                let data = encodePacket(packet, bytes: bytes)
+                consume(packet)
+                queued.append(Batch(data: data, entries: packet.entries, createdAt: createdAt, metricKinds: packet.metricKinds))
             }
+            packets += 1
+            packet = Packet()
+        }
+        let valid = visitPendingItems { item in
             let collision: Bool
             switch item {
-            case .feature(let key, let variant, _):
-                collision = featureMap[key]?[variant] != nil || (featureMap[key]?.count ?? 0) >= 16
-            case .metric(let key, _): collision = metricMap[key] != nil
+            case .feature(let key, let variant, _): collision = packet.features[key]?[variant] != nil || (packet.features[key]?.count ?? 0) >= 16
+            case .metric(let key, _, _): collision = packet.metrics[key] != nil
             }
             if collision { finish() }
-            let priorFeatures = featureMap
-            let priorMetrics = metricMap
-            let priorCount = entryCount
+            guard packets < maxPackets else { return false }
+            func insert() {
+                switch item {
+                case .feature(let key, let variant, let delta): packet.features[key, default: [:]][variant] = delta
+                case .metric(let key, let value, let counter): packet.metrics[key] = value; packet.metricKinds[key] = counter
+                }
+                packet.entries += 1
+            }
             insert()
-            if (encode()?.count ?? Int.max) > 49_152 || entryCount > 2_000 {
-                featureMap = priorFeatures; metricMap = priorMetrics; entryCount = priorCount
+            if packetBytes(packet) > 49_152 || packet.entries > 2_000 {
+                switch item {
+                case .feature(let key, let variant, _):
+                    packet.features[key]?.removeValue(forKey: variant)
+                    if packet.features[key]?.isEmpty == true { packet.features.removeValue(forKey: key) }
+                case .metric(let key, _, _): packet.metrics.removeValue(forKey: key); packet.metricKinds.removeValue(forKey: key)
+                }
+                packet.entries -= 1
                 finish()
+                guard packets < maxPackets else { return false }
                 insert()
             }
-            if (encode()?.count ?? Int.max) > 49_152 { return [] }
+            return packetBytes(packet) <= 49_152 && totalEntries + packet.entries <= 2_000
         }
-        finish()
-        return result
+        if valid { finish() }
+        return (totalEntries, totalBytes, valid || packets == maxPackets)
     }
 
     /// Sends queued deltas in request order; failures never affect flag evaluation.
@@ -495,7 +622,7 @@ public actor TelemetryReporter {
             if disposed { finalSendsRemaining -= 1 }
             var request = URLRequest(url: endpoint)
             request.httpMethod = "POST"
-            if !disposed, let compressed = try? compressor(batch.data) {
+            if !disposed, let compressed = try? compressor(batch.data), compressed.count <= 49_152 {
                 request.httpBody = compressed
                 request.setValue("gzip", forHTTPHeaderField: "Content-Encoding")
             } else {
@@ -564,16 +691,10 @@ public actor TelemetryReporter {
         periodicTask?.cancel()
         periodicTask = nil
         retryTask?.cancel()
-        // Preserve the in-flight envelope and at most one final pending envelope.
-        let final = makeBatches().first
+        // Keep at most the existing flight and one incrementally encoded final packet.
+        queued = Array(queued.prefix(1))
+        if flushTask != nil || queued.isEmpty { _ = packetize(consume: true, maxPackets: 1) }
         features = [:]; metrics = [:]; pendingCreatedAt = nil
-        if flushTask != nil {
-            queued = Array(queued.prefix(1))
-            if let final { queued.append(final) }
-        } else {
-            queued = Array(queued.prefix(1))
-            if queued.isEmpty, let final { queued = [final] }
-            flushTask = Task { await drain() }
-        }
+        if flushTask == nil { flushTask = Task { await drain() } }
     }
 }

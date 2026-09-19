@@ -17,6 +17,9 @@ All notable changes to the Toggly iOS SDK are documented in this file.
 - Ordinary telemetry flushes use native gzip; if compression fails before send, the SDK sends plain JSON. Final disposal flushes use plain JSON.
 
 ### Fixed
+- Combine gates initialize one subscription and count captured short-circuit checks only when downstream demand accepts the result.
+- UIKit stop, unbind, and rebind operations remove their exact observers, including control-enabled bindings and suspended setup.
+- Packetization transfers one envelope at a time; resource inspection measures sizes without serializing the queue, and gzip output stays within the envelope limit.
 - Retained payload and accounting metadata share one 2,000-entry/256 KiB budget across identity rotations. Rejected or drained names do not remain in a historical catalog.
 - Disposal cancels backoff and sends at most one final envelope; expired batches are released.
 - Delayed UI checks retain their original owner and identity. Old definitions responses and invalid-cache cleanup cannot overwrite or delete a newer token context.

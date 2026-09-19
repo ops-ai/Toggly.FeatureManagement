@@ -4,6 +4,52 @@ import Combine
 @testable import TogglyCombine
 
 final class FeatureFlagPublisherTests: XCTestCase {
+    func testOracleFeatureGateDoesNotRecordWhenDemandRejectsReactiveEmission() async throws {
+        let requests = RequestBodies()
+        var config = TogglyConfig(
+            appKey: "test-app",
+            featureDefaults: ["first": true, "second": false],
+            refreshInterval: 0,
+            enableLiveUpdates: false
+        )
+        config.telemetryTransport = { request in
+            try await requests.append(request)
+            return HTTPURLResponse(url: request.url!, statusCode: 202, httpVersion: nil, headerFields: nil)!
+        }
+        let service = TogglyService(config: config)
+        await service.setNetworkState(.disconnected)
+        await service.initialize()
+
+        let first = expectation(description: "initial gate emission")
+        let subscriber = LimitedSubscriber(first: first)
+        FeatureGatePublisher(["first", "second"], requirement: .all, service: service)
+            .receive(subscriber: subscriber)
+        await fulfillment(of: [first], timeout: 1)
+        for _ in 0..<100 {
+            if await service.stateChangeHandlerCount > 0 { break }
+            await Task.yield()
+        }
+        await service.flushTelemetry()
+        let initialRequestCount = await requests.bodies.count
+        XCTAssertEqual(initialRequestCount, 1)
+
+        await service.notifyFeatureChanges(
+            previousFlags: ["first": true, "second": false],
+            newFlags: ["first": false, "second": false]
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+        await service.flushTelemetry()
+        let finalRequestCount = await requests.bodies.count
+
+        XCTAssertEqual(
+            finalRequestCount,
+            1,
+            "a reactive value rejected for zero demand must not record another check"
+        )
+        subscriber.subscription?.cancel()
+        await service.dispose()
+    }
+
     final class LimitedSubscriber: Subscriber {
         typealias Input = Bool
         typealias Failure = Never
@@ -100,6 +146,97 @@ final class FeatureFlagPublisherTests: XCTestCase {
         let new = bodies.filter { $0["i"] as? String == "minted-b" }
         XCTAssertEqual(new.count, 1)
         XCTAssertNil((new.first?["f"] as? [String: [String: [Int]]])?["publisher-flag"])
+        await service.dispose()
+    }
+
+    func testGateDemandResumptionDoesNotRepeatSetupAndCancellationStopsLeafChecks() async throws {
+        let requests = RequestBodies()
+        var config = TogglyConfig(appKey: "test-app", identity: "alice",
+            featureDefaults: ["off": false, "skipped": true], refreshInterval: 0, enableLiveUpdates: false)
+        config.telemetryTransport = { request in
+            try await requests.append(request)
+            return HTTPURLResponse(url: request.url!, statusCode: 202, httpVersion: nil, headerFields: nil)!
+        }
+        let service = TogglyService(config: config)
+        await service.setNetworkState(.disconnected); await service.initialize()
+        let first = expectation(description: "initial short-circuited gate")
+        let subscriber = LimitedSubscriber(first: first)
+        FeatureGatePublisher(["off", "skipped"], requirement: .all, service: service).receive(subscriber: subscriber)
+        await fulfillment(of: [first], timeout: 2)
+        try await Task.sleep(nanoseconds: 20_000_000)
+        await service.flushTelemetry()
+        await service.notifyFeatureChanges(previousFlags: ["off": true], newFlags: ["off": false])
+        try await Task.sleep(nanoseconds: 20_000_000)
+        await service.flushTelemetry()
+        let noDemand = await requests.bodies
+        XCTAssertEqual(noDemand.count, 1)
+        XCTAssertEqual(subscriber.values, [false])
+        subscriber.subscription?.request(.max(1))
+        subscriber.subscription?.request(.max(1))
+        try await Task.sleep(nanoseconds: 20_000_000)
+        let handlers = await service.stateChangeHandlerCount
+        XCTAssertEqual(handlers, 1)
+        XCTAssertEqual(subscriber.values, [false], "Requesting demand must not restart setup or emit again")
+        await service.notifyFeatureChanges(previousFlags: ["off": true], newFlags: ["off": false])
+        try await Task.sleep(nanoseconds: 20_000_000)
+        await service.flushTelemetry()
+        let resumed = await requests.bodies
+        XCTAssertEqual(resumed.count, 2)
+        for body in resumed {
+            let features = body["f"] as? [String: [String: [Int]]]
+            XCTAssertEqual(features?["off"]?["disabled"], [1])
+            XCTAssertNil(features?["skipped"])
+        }
+        subscriber.subscription?.cancel()
+        subscriber.subscription?.request(.unlimited)
+        await service.notifyFeatureChanges(previousFlags: ["off": true], newFlags: ["off": false])
+        try await Task.sleep(nanoseconds: 20_000_000)
+        await service.flushTelemetry()
+        let final = await requests.bodies
+        let remaining = await service.stateChangeHandlerCount
+        XCTAssertEqual(final.count, 2); XCTAssertEqual(remaining, 0)
+        XCTAssertEqual(subscriber.values, [false, false])
+        await service.dispose()
+    }
+
+    private final class EmissionCount: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func next() -> Int { lock.withLock { value += 1; return value } }
+    }
+
+    func testGateSubscriberIdentityRotationRecordsCapturedShortCircuitLeaves() async throws {
+        let requests = RequestBodies()
+        var config = TogglyConfig(appKey: "test-app", identity: "alice", featureDefaults: ["on": true, "skipped": false],
+            refreshInterval: 0, enableLiveUpdates: false, instanceId: "minted-a")
+        config.telemetryTransport = { request in
+            try await requests.append(request)
+            return HTTPURLResponse(url: request.url!, statusCode: 202, httpVersion: nil, headerFields: nil)!
+        }
+        let service = TogglyService(config: config)
+        await service.setNetworkState(.disconnected); await service.initialize()
+        let first = expectation(description: "first gate result")
+        let changed = expectation(description: "identity changed from subscriber")
+        let count = EmissionCount()
+        FeatureGatePublisher(["on", "skipped"], requirement: .any, service: service).sink { enabled in
+            XCTAssertTrue(enabled)
+            if count.next() == 1 { first.fulfill() }
+            else { Task { await service.setIdentity("bob", instanceId: "minted-b"); changed.fulfill() } }
+        }.store(in: &cancellables)
+        await fulfillment(of: [first], timeout: 2)
+        try await Task.sleep(nanoseconds: 20_000_000)
+        await service.notifyFeatureChanges(previousFlags: ["on": false], newFlags: ["on": true])
+        await fulfillment(of: [changed], timeout: 2)
+        try await Task.sleep(nanoseconds: 20_000_000)
+        await service.recordUsage("new-user")
+        await service.flushTelemetry()
+        let bodies = await requests.bodies
+        let old = bodies.filter { $0["i"] as? String == "minted-a" }
+        XCTAssertEqual(old.reduce(0) { $0 + (($1["f"] as? [String: [String: [Int]]])?["on"]?["enabled"]?.first ?? 0) }, 2)
+        for body in bodies { XCTAssertNil((body["f"] as? [String: [String: [Int]]])?["skipped"]) }
+        let new = bodies.filter { $0["i"] as? String == "minted-b" }
+        XCTAssertEqual(new.count, 1)
+        XCTAssertNil((new.first?["f"] as? [String: [String: [Int]]])?["on"])
         await service.dispose()
     }
 

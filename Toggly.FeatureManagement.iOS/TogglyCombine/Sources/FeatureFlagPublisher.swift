@@ -155,6 +155,7 @@ public struct FeatureGatePublisher: Publisher {
 }
 
 private final class FeatureGateSubscription<S: Subscriber>: Subscription where S.Input == Bool, S.Failure == Never {
+    private let lock = NSRecursiveLock()
     private var subscriber: S?
     private let keys: [String]
     private let requirement: FeatureRequirement
@@ -162,14 +163,9 @@ private final class FeatureGateSubscription<S: Subscriber>: Subscription where S
     private let service: TogglyService?
     private var unsubscribe: (@Sendable () -> Void)?
     private var demand: Subscribers.Demand = .none
+    private var setupStarted = false
 
-    init(
-        subscriber: S,
-        keys: [String],
-        requirement: FeatureRequirement,
-        negate: Bool,
-        service: TogglyService?
-    ) {
+    init(subscriber: S, keys: [String], requirement: FeatureRequirement, negate: Bool, service: TogglyService?) {
         self.subscriber = subscriber
         self.keys = keys
         self.requirement = requirement
@@ -178,54 +174,61 @@ private final class FeatureGateSubscription<S: Subscriber>: Subscription where S
     }
 
     func request(_ demand: Subscribers.Demand) {
-        self.demand += demand
-
-        guard demand > 0 else { return }
-
-        Task {
-            await setup()
+        let shouldStart = lock.withLock { () -> Bool in
+            guard subscriber != nil else { return false }
+            self.demand += demand
+            guard self.demand > 0, !setupStarted else { return false }
+            setupStarted = true
+            return true
         }
+        if shouldStart { Task { await setup() } }
+    }
+
+    private var hasDemand: Bool { lock.withLock { subscriber != nil && demand > 0 } }
+
+    private func evaluateAndEmit(with owner: TogglyService) async {
+        guard hasDemand else { return }
+        let snapshot = await owner.captureFeatureGate(featureKeys: keys, requirement: requirement, negate: negate)
+        if emit(snapshot.enabled) { await owner.recordCheck(snapshot) }
     }
 
     private func setup() async {
-        let toggly = service ?? (Toggly.isConfigured ? Toggly.shared : nil)
-
-        guard let toggly = toggly else {
-            emit(negate)
+        guard let owner = service ?? (Toggly.isConfigured ? Toggly.shared : nil) else {
+            _ = emit(negate)
             return
         }
-
-        // Emit initial value
-        let isEnabled = await toggly.evaluateFeatureGate(
-            featureKeys: keys,
-            requirement: requirement,
-            negate: negate
-        )
-        emit(isEnabled)
-
-        // Subscribe to changes
-        unsubscribe = await toggly.addStateChangeHandler { [weak self] featureKey, _, _ in
-            guard let self = self, self.keys.contains(featureKey) else { return }
-            Task {
-                guard let toggly = self.service ?? (Toggly.isConfigured ? Toggly.shared : nil) else { return }
-                let value = await toggly.evaluateFeatureGate(
-                    featureKeys: self.keys,
-                    requirement: self.requirement,
-                    negate: self.negate
-                )
-                self.emit(value)
-            }
+        await evaluateAndEmit(with: owner)
+        guard lock.withLock({ subscriber != nil }) else { return }
+        let remove = await owner.addStateChangeHandler { [weak self, weak owner] key, _, _ in
+            guard let self, let owner, self.keys.contains(key), self.hasDemand else { return }
+            Task { await self.evaluateAndEmit(with: owner) }
         }
+        let alreadyCancelled = lock.withLock { () -> Bool in
+            guard subscriber != nil else { return true }
+            unsubscribe = remove
+            return false
+        }
+        if alreadyCancelled { remove() }
     }
 
-    private func emit(_ value: Bool) {
-        guard demand > 0, let subscriber = subscriber else { return }
-        demand -= 1
-        demand += subscriber.receive(value)
+    @discardableResult
+    private func emit(_ value: Bool) -> Bool {
+        lock.withLock {
+            guard demand > 0, let subscriber else { return false }
+            demand -= 1
+            demand += subscriber.receive(value)
+            return true
+        }
     }
 
     func cancel() {
-        unsubscribe?()
-        subscriber = nil
+        let remove = lock.withLock { () -> (@Sendable () -> Void)? in
+            subscriber = nil
+            demand = .none
+            let remove = unsubscribe
+            unsubscribe = nil
+            return remove
+        }
+        remove?()
     }
 }

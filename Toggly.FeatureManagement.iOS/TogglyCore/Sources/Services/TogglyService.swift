@@ -250,20 +250,36 @@ public actor TogglyService {
         context: Any? = nil,
         kind: String? = nil
     ) async -> Bool {
+        let snapshot = await captureFeatureGate(featureKeys: featureKeys, requirement: requirement,
+                                                negate: negate, context: context, kind: kind)
+        await recordCheck(snapshot)
+        return snapshot.enabled
+    }
+
+    /// Capture a gate and its evaluated leaves without recording a check.
+    public func captureFeatureGate(
+        featureKeys: [String],
+        requirement: FeatureRequirement = .all,
+        negate: Bool = false,
+        context: Any? = nil,
+        kind: String? = nil
+    ) async -> FeatureGateSnapshot {
         await ensureFeaturesLoaded()
         let defs = definitions ?? fromBooleanDefaults(features ?? config.featureDefaults)
         let capturedAttribution = attribution
         var checks: [(String, Bool)] = []
         let result = evaluateEvaluatedGate(
-            features: defs,
-            featureKeys: featureKeys,
-            requirementAll: requirement == .all,
-            negate: negate,
+            features: defs, featureKeys: featureKeys, requirementAll: requirement == .all, negate: negate,
             entityContext: normalizeEntityContext(context, kind: kind),
             onCheck: { key, enabled in checks.append((key, enabled)) }
         )
-        if !disposed { await telemetry?.recordChecks(checks, attribution: capturedAttribution) }
-        return result
+        return FeatureGateSnapshot(enabled: result, owner: ownerId, checks: checks, attribution: capturedAttribution)
+    }
+
+    /// Record only a gate snapshot actually consumed by this owner's adapter.
+    public func recordCheck(_ snapshot: FeatureGateSnapshot) async {
+        guard !disposed, snapshot.owner == ownerId, !snapshot.checks.isEmpty else { return }
+        await telemetry?.recordChecks(snapshot.checks, attribution: snapshot.attribution)
     }
 
     /// Record explicit feature use without evaluating the feature again.

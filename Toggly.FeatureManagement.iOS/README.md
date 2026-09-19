@@ -21,7 +21,7 @@ Official iOS SDK for [Toggly](https://toggly.io) - Feature Flags & A/B Testing P
 
 ## Frontend telemetry (SDK 1.5.0)
 
-Telemetry is enabled by default when `appKey` is set. Feature checks are counted when the SDK actually evaluates a flag, including the evaluated flags in multi-key gates. Short-circuited keys are not counted. SwiftUI, UIKit, and Combine integrations count the flag values they evaluate or present. Views and feature use remain explicit:
+Telemetry is enabled by default when `appKey` is set. Feature checks are counted when the SDK actually evaluates a flag, including the evaluated flags in multi-key gates. Short-circuited keys are not counted. SwiftUI and UIKit integrations count the flag values they evaluate or present. Combine publishers count only values accepted by downstream demand, retaining the evaluated leaves and attribution captured before subscriber callbacks. Views and feature use remain explicit:
 
 ```swift
 let service = TogglyService(config: TogglyConfig(
@@ -242,6 +242,8 @@ Task {
     }
 }
 ```
+
+Repeated `observeFeature` or view/control bindings replace the prior observer for that key or binding. Use `stopObservingFeature(_:)` on controllers, `unbindFromFeatureFlag()` to remove a view's visibility and control-enabled bindings, or `unbindEnabledFromFeatureFlag()` to remove only a control's enabled-state binding. Stopping or replacing a binding also invalidates pending asynchronous setup.
 
 #### Combine
 

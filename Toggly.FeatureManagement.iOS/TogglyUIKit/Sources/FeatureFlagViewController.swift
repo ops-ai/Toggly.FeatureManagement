@@ -21,42 +21,57 @@ import TogglyCore
 /// ```
 open class FeatureFlagViewController: UIViewController {
     private var featureObservers: [String: FeatureCheckSnapshot] = [:]
-    private var unsubscribes: [() -> Void] = []
+    private var bindings: [String: FeatureFlagBinding] = [:]
     private var service: TogglyService?
 
     /// The Toggly service used by this view controller.
     public var togglyService: TogglyService {
         get { service ?? Toggly.shared }
-        set { service = newValue }
+        set {
+            bindings.values.forEach { $0.cancel() }
+            bindings.removeAll()
+            featureObservers.removeAll()
+            service = newValue
+        }
     }
 
     /// Start observing a feature flag.
     /// - Parameter key: The feature flag key to observe.
     public func observeFeature(_ key: String) {
-        Task { @MainActor in
-            let owner = togglyService
+        stopObservingFeature(key)
+        let binding = FeatureFlagBinding()
+        bindings[key] = binding
+        let owner = togglyService
+        Task { @MainActor [weak self] in
+            guard let self, self.bindings[key] === binding, binding.active else { return }
             let snapshot = await owner.captureFeatureCheck(key)
-            guard togglyService === owner else { return }
+            guard self.bindings[key] === binding, binding.active, self.togglyService === owner else { return }
+            self.featureObservers[key] = snapshot
+            self.featureFlagDidChange(key, isEnabled: snapshot.enabled)
             await owner.recordCheck(snapshot)
-            featureObservers[key] = snapshot
-            featureFlagDidChange(key, isEnabled: snapshot.enabled)
-
-            let unsubscribe = await owner.addFeatureCheckHandler { [weak self, weak owner] snapshot in
-                guard let self = self, let owner, snapshot.key == key else { return }
-                Task { @MainActor in
-                    guard self.togglyService === owner else { return }
-                    await owner.recordCheck(snapshot)
+            guard self.bindings[key] === binding, binding.active, self.togglyService === owner else { return }
+            let unsubscribe = await owner.addFeatureCheckHandler { [weak self, weak owner, weak binding] snapshot in
+                guard let owner, snapshot.key == key else { return }
+                Task { @MainActor [weak self, weak binding] in
+                    guard let self, let binding, binding.active,
+                          self.bindings[key] === binding, self.togglyService === owner else { return }
                     self.featureObservers[key] = snapshot
                     self.featureFlagDidChange(key, isEnabled: snapshot.enabled)
+                    await owner.recordCheck(snapshot)
                 }
             }
-            unsubscribes.append(unsubscribe)
+            guard self.bindings[key] === binding, binding.active, self.togglyService === owner else {
+                unsubscribe()
+                return
+            }
+            binding.unsubscribe = unsubscribe
         }
     }
 
     /// Stop observing a feature flag.
     /// - Parameter key: The feature flag key to stop observing.
     public func stopObservingFeature(_ key: String) {
+        bindings.removeValue(forKey: key)?.cancel()
         featureObservers.removeValue(forKey: key)
     }
 
@@ -81,7 +96,7 @@ open class FeatureFlagViewController: UIViewController {
     }
 
     deinit {
-        unsubscribes.forEach { $0() }
+        bindings.values.forEach { $0.cancel() }
     }
 }
 #endif

@@ -51,6 +51,41 @@ final class TelemetryReporterTests: XCTestCase {
         XCTAssertNoThrow(try JSONSerialization.jsonObject(with: XCTUnwrap(captured[1].httpBody)))
     }
 
+    func testNativeGzipDeclinesOutputBeyondOneEnvelope() {
+        var state: UInt32 = 0x12345678
+        let bytes = (0..<49_152).map { _ -> UInt8 in
+            state ^= state << 13
+            state ^= state >> 17
+            state ^= state << 5
+            return UInt8(truncatingIfNeeded: state)
+        }
+        XCTAssertNil(TelemetryReporter.gzip(Data(bytes)), "Incompressible input must fall back instead of allocating an oversized compressed envelope")
+    }
+
+    func testEscapedUnicodePacketMeasurementMatchesTransferredOwnership() async throws {
+        let requests = Requests()
+        let reporter = TelemetryReporter(appKey: "app\"", environment: "é\n", instanceId: "token\\id") { request in
+            await requests.append(request)
+            return HTTPURLResponse(url: request.url!, statusCode: 202, httpVersion: nil, headerFields: nil)!
+        }
+        let key = "emoji😀/\"\\\n\u{1}"
+        await reporter.recordCheck(key, variant: "enabled")
+        await reporter.setGauge(key, value: 0.000001)
+        let pending = await reporter.retainedResources()
+        await reporter.setContext(identity: "next")
+        let queued = await reporter.retainedResources()
+        XCTAssertEqual(pending.entries, queued.entries)
+        XCTAssertEqual(pending.bytes, queued.bytes)
+        await reporter.flushTelemetry()
+        let sent = await requests.requests
+        let data = try XCTUnwrap(sent.first?.httpBody)
+        XCTAssertEqual(pending.bytes, data.count + key.utf8.count + 1)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual((json["f"] as? [String: [String: [Int]]])?[key]?["enabled"], [1])
+        XCTAssertEqual((json["m"] as? [String: Double])?[key], 0.000001)
+        await reporter.dispose()
+    }
+
     func testAmbiguousCompressedFailureDoesNotRetryAsPlain() async {
         let requests = Requests()
         let reporter = TelemetryReporter(appKey: "test-app", compressor: { TelemetryReporter.gzip($0) }) { request in
@@ -191,6 +226,25 @@ final class TelemetryReporterTests: XCTestCase {
         XCTAssertTrue(captured.isEmpty)
         let resources = await reporter.retainedResources()
         XCTAssertEqual(resources.bytes, 0)
+        await reporter.dispose()
+    }
+
+    func testPacketizationScratchIsOneEnvelopeAndInspectionDoesNotEncode() async {
+        let reporter = TelemetryReporter(appKey: "test-app") { request in
+            HTTPURLResponse(url: request.url!, statusCode: 202, httpVersion: nil, headerFields: nil)!
+        }
+        for index in 0..<8 { await reporter.setGauge(String(repeating: "m", count: 20_000) + "\(index)", value: 1) }
+        let beforeInspection = await reporter.packetizationCount
+        let retained = await reporter.retainedResources()
+        let afterInspection = await reporter.packetizationCount
+        XCTAssertGreaterThan(retained.bytes, 49_152)
+        XCTAssertEqual(afterInspection, beforeInspection, "Resource inspection must not encode a whole pending queue")
+        await reporter.setContext(identity: "next")
+        let encoded = await reporter.packetizationCount
+        let peak = await reporter.packetizationPeakBytes
+        XCTAssertGreaterThan(encoded, 1)
+        XCTAssertLessThanOrEqual(peak, 49_152, "Only the current envelope may be temporary encoded scratch")
+        await reporter.flushTelemetry()
         await reporter.dispose()
     }
 
