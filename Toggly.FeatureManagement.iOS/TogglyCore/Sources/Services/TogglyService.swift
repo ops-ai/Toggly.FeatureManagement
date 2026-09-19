@@ -130,6 +130,7 @@ public actor TogglyService {
         if identity == nil {
             // Try to get stored device ID
             var storedId = await storage.get(TogglyStorageKeys.deviceId)
+            guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
             if storedId == nil {
                 storedId = UUID().uuidString
                 await storage.set(TogglyStorageKeys.deviceId, value: storedId!)
@@ -137,11 +138,13 @@ public actor TogglyService {
             if contextGeneration == initialGeneration { identity = storedId }
         }
 
+        guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
         // Start refresh timer
         startRefreshTimer()
 
         // Perform initial refresh
         let response = await refresh()
+        guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
 
         // Start WebSocket for live updates after successful first refresh
         if config.enableLiveUpdates && response.status != .defaults {
@@ -968,7 +971,7 @@ public actor TogglyService {
     private func startRefreshTimer() {
         stopRefreshTimer()
 
-        guard config.appKey != nil, config.refreshInterval > 0 else {
+        guard !disposed, config.appKey != nil, config.refreshInterval > 0 else {
             return
         }
 

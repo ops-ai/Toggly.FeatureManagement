@@ -123,6 +123,24 @@ final class InitialEvaluationContextTests: XCTestCase {
         await service.dispose()
     }
 
+    func testDisposeDuringDeviceIdentityResolutionCannotRestartLifecycle() async {
+        let paused = expectation(description: "device identity resolution suspended")
+        let storage = DelayedInvalidCacheStorage(key: TogglyStorageKeys.deviceId, paused: paused)
+        await storage.set(TogglyStorageKeys.deviceId, value: "stored-device")
+        let service = TogglyService(config: TogglyConfig(appKey: "app", baseURI: "https://initial-context.invalid",
+            refreshInterval: 60, storage: storage, enableLiveUpdates: false, enableTelemetry: false))
+        await service.setNetworkState(.disconnected)
+        let initialize = Task { await service.initialize() }
+        await fulfillment(of: [paused], timeout: 2)
+        await service.dispose()
+        await storage.resume()
+        await initialize.value
+        let debug = await service.getDebugInfo()
+        let initialized = await service.initialized
+        XCTAssertFalse(initialized)
+        XCTAssertFalse(debug.syncServiceRunning)
+    }
+
     func testFirstRequestEncodesIdentityWithoutInjectingParameters() async throws {
         let service = TogglyService(config: TogglyConfig(
             appKey: "app", baseURI: "https://initial-context.invalid", identity: "user&123+?#é",
