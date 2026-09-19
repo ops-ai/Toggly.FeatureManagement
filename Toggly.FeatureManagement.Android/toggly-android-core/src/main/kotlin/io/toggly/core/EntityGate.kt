@@ -360,11 +360,20 @@ fun evaluateEvaluatedGate(
     requirementAll: Boolean = true,
     negate: Boolean = false,
     entityContext: TogglyEntityContext? = null
+): Boolean = evaluateEvaluatedGateWithChecks(features, featureKeys, requirementAll, negate, entityContext)
+
+internal fun evaluateEvaluatedGateWithChecks(
+    features: EvaluatedDefinitions,
+    featureKeys: List<String>,
+    requirementAll: Boolean = true,
+    negate: Boolean = false,
+    entityContext: TogglyEntityContext? = null,
+    onCheck: ((String, Boolean) -> Unit)? = null
 ): Boolean {
     return evaluateStoredFeatureKeys(
         features,
         featureKeys,
         requirementAll,
         negate
-    ) { key -> resolveEvaluatedDefinition(features[key], entityContext) }
+    ) { key -> resolveEvaluatedDefinition(features[key], entityContext).also { onCheck?.invoke(key, it) } }
 }

@@ -30,7 +30,7 @@ class TogglyTest {
 
     @Test
     fun `configure creates service with given config`() = runTest {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             featureDefaults = mapOf("feature1" to true),
             storage = MemoryStorage()
@@ -43,7 +43,7 @@ class TogglyTest {
 
     @Test
     fun `shared returns configured service`() = runTest {
-        val config = TogglyConfig(appKey = "shared-key", storage = MemoryStorage())
+        val config = TogglyConfig(enableTelemetry = false, appKey = "shared-key", storage = MemoryStorage())
         Toggly.configure(config)
 
         val service = Toggly.shared
@@ -58,7 +58,7 @@ class TogglyTest {
 
     @Test
     fun `reset clears configured service`() = runTest {
-        val config = TogglyConfig(appKey = "test-key", storage = MemoryStorage())
+        val config = TogglyConfig(enableTelemetry = false, appKey = "test-key", storage = MemoryStorage())
         Toggly.configure(config)
 
         Toggly.reset()
@@ -73,12 +73,12 @@ class TogglyTest {
 
     @Test
     fun `configure can be called multiple times`() = runTest {
-        val config1 = TogglyConfig(
+        val config1 = TogglyConfig(enableTelemetry = false,
             appKey = "key1",
             featureDefaults = mapOf("feature1" to true),
             storage = MemoryStorage()
         )
-        val config2 = TogglyConfig(
+        val config2 = TogglyConfig(enableTelemetry = false,
             appKey = "key2",
             featureDefaults = mapOf("feature2" to true),
             storage = MemoryStorage()
@@ -93,14 +93,14 @@ class TogglyTest {
 
     @Test
     fun `initialized starts as false`() {
-        val config = TogglyConfig(appKey = "test-key", storage = MemoryStorage())
+        val config = TogglyConfig(enableTelemetry = false, appKey = "test-key", storage = MemoryStorage())
         Toggly.configure(config)
         assertFalse(Toggly.initialized)
     }
 
     @Test
     fun `service preserves feature flags after reconfiguration`() = runTest {
-        val config1 = TogglyConfig(
+        val config1 = TogglyConfig(enableTelemetry = false,
             appKey = "key1",
             featureDefaults = mapOf("feature1" to true),
             storage = MemoryStorage()
@@ -110,7 +110,7 @@ class TogglyTest {
         assertTrue(Toggly.shared.isFeatureOn("feature1"))
 
         // Reconfigure with different flags
-        val config2 = TogglyConfig(
+        val config2 = TogglyConfig(enableTelemetry = false,
             appKey = "key2",
             featureDefaults = mapOf("feature2" to true),
             storage = MemoryStorage()
@@ -123,7 +123,7 @@ class TogglyTest {
 
     @Test
     fun `configure thread safety`() = runTest {
-        val config = TogglyConfig(appKey = "test-key", storage = MemoryStorage())
+        val config = TogglyConfig(enableTelemetry = false, appKey = "test-key", storage = MemoryStorage())
 
         // Configure multiple times concurrently
         repeat(10) {
@@ -136,7 +136,7 @@ class TogglyTest {
 
     @Test
     fun `currentIdentity returns null initially`() {
-        val config = TogglyConfig(appKey = "test-key", storage = MemoryStorage())
+        val config = TogglyConfig(enableTelemetry = false, appKey = "test-key", storage = MemoryStorage())
         Toggly.configure(config)
 
         assertNull(Toggly.currentIdentity)
@@ -144,7 +144,7 @@ class TogglyTest {
 
     @Test
     fun `featureFlags flow is available`() {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             featureDefaults = mapOf("feature1" to true),
             storage = MemoryStorage()
@@ -156,7 +156,7 @@ class TogglyTest {
 
     @Test
     fun `registerContext and entity-aware reads go through the facade`() = runTest {
-        val config = TogglyConfig(
+        val config = TogglyConfig(enableTelemetry = false,
             appKey = "test-key",
             featureDefaults = mapOf("feature1" to true),
             storage = MemoryStorage()

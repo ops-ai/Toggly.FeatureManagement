@@ -60,8 +60,10 @@ fun rememberFeatureFlagAsState(
 ): State<Boolean> {
     val service = LocalTogglyService.current
 
-    return service.featureFlagFlow(featureKey)
-        .collectAsState(initial = defaultValue)
+    return key(service) {
+        remember(service, featureKey) { service.featureFlagFlow(featureKey) }
+            .collectAsState(initial = defaultValue)
+    }
 }
 
 /**
@@ -91,29 +93,31 @@ fun rememberFeatureGate(
     val featureFlags = LocalFeatureFlags.current
 
     if (context == null && contextKind == null) {
-        return remember(featureFlags, featureKeys, requirement, negate) {
-            evaluateSnapshotFeatureGate(featureFlags, featureKeys, requirement, negate)
+        return remember(service, featureFlags, featureKeys, requirement, negate) {
+            evaluateSnapshotFeatureGate(featureFlags, featureKeys, requirement, negate, service::recordCachedCheck)
         }
     }
 
-    return produceState(
-        initialValue = defaultValue,
-        service,
-        featureFlags,
-        featureKeys,
-        requirement,
-        negate,
-        context,
-        contextKind
-    ) {
-        value = service.evaluateFeatureGate(
+    return key(service) {
+        produceState(
+            initialValue = defaultValue,
+            service,
+            featureFlags,
             featureKeys,
             requirement,
             negate,
             context,
             contextKind
-        )
-    }.value
+        ) {
+            value = service.evaluateFeatureGate(
+                featureKeys,
+                requirement,
+                negate,
+                context,
+                contextKind
+            )
+        }.value
+    }
 }
 
 /**
@@ -134,8 +138,11 @@ fun rememberFeatureGateAsState(
 ): State<Boolean> {
     val service = LocalTogglyService.current
 
-    return service.featureGateFlow(featureKeys, requirement, negate)
-        .collectAsState(initial = defaultValue)
+    return key(service) {
+        remember(service, featureKeys, requirement, negate) {
+            service.featureGateFlow(featureKeys, requirement, negate)
+        }.collectAsState(initial = defaultValue)
+    }
 }
 
 /**

@@ -29,13 +29,16 @@ fun TogglyProvider(
     service: TogglyService,
     content: @Composable () -> Unit
 ) {
-    val featureFlags by service.featureFlags.collectAsState()
-
-    CompositionLocalProvider(
-        LocalTogglyService provides service,
-        LocalFeatureFlags provides featureFlags,
-        content = content
-    )
+    // Collected values and every remembered adapter state belong to this owner.
+    // Effect keys alone restart collection but retain the previous State value.
+    key(service) {
+        val featureFlags by service.featureFlags.collectAsState()
+        CompositionLocalProvider(
+            LocalTogglyService provides service,
+            LocalFeatureFlags provides featureFlags,
+            content = content
+        )
+    }
 }
 
 /**
@@ -51,7 +54,7 @@ fun TogglyProvider(
     onInitialized: ((TogglyService) -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    val service = remember { TogglyService(config) }
+    val service = remember(config) { TogglyService(config) }
 
     LaunchedEffect(service) {
         service.init()
@@ -98,6 +101,17 @@ class TogglyState(
     suspend fun isFeatureOn(featureKey: String): Boolean {
         return service.isFeatureOn(featureKey)
     }
+
+    /** Record explicit feature use without evaluating it. */
+    fun recordUsage(featureKey: String, variant: String = "enabled") = service.recordUsage(featureKey, variant)
+    /** Record an explicit feature view. */
+    fun recordView(featureKey: String, variant: String = "enabled") = service.recordView(featureKey, variant)
+    /** Increment an app-level counter. */
+    fun incrementCounter(metricKey: String, value: Double = 1.0) = service.incrementCounter(metricKey, value)
+    /** Set the latest app-level gauge. */
+    fun setGauge(metricKey: String, value: Double) = service.setGauge(metricKey, value)
+    /** Await the current best-effort telemetry drain. */
+    suspend fun flushTelemetry() = service.flushTelemetry()
 
     /**
      * Set user identity for targeting.

@@ -79,7 +79,7 @@ class FeatureFlagsCacheTest {
         storage.set(TogglyStorageKeys.JWKS, jwks(key))
 
         val service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = "app",
                 baseUri = "https://127.0.0.1:9",
                 identity = identity,
@@ -127,7 +127,7 @@ class FeatureFlagsCacheTest {
         storage.set(TogglyStorageKeys.JWKS, jwks(key))
 
         val service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = "app",
                 baseUri = "https://127.0.0.1:9",
                 identity = identity,
@@ -170,7 +170,7 @@ class FeatureFlagsCacheTest {
         )
 
         val service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = "app",
                 baseUri = "https://127.0.0.1:9",
                 identity = identity,
@@ -214,7 +214,7 @@ class FeatureFlagsCacheTest {
         storage.set(TogglyStorageKeys.JWKS, jwks(key))
 
         val service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = "app",
                 baseUri = "https://127.0.0.1:9",
                 identity = identity,
@@ -247,7 +247,7 @@ class FeatureFlagsCacheTest {
         )
 
         val service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = "app",
                 baseUri = "https://127.0.0.1:9",
                 identity = identity,
@@ -290,7 +290,7 @@ class FeatureFlagsCacheTest {
         storage.set(TogglyStorageKeys.JWKS, jwks(key))
 
         val service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = "app",
                 baseUri = "https://127.0.0.1:9",
                 identity = identity,
@@ -320,7 +320,7 @@ class FeatureFlagsCacheTest {
         )
 
         val service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = "app",
                 baseUri = "https://127.0.0.1:9",
                 identity = identity,
@@ -349,7 +349,7 @@ class FeatureFlagsCacheTest {
         )
 
         val service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = "app",
                 baseUri = "https://127.0.0.1:9",
                 identity = identity,

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.6.0
+
+2026-09-18
+
+### Added
+- Anonymous frontend telemetry enabled for clients with an application key, with explicit opt-out and configurable metrics endpoint and flush interval.
+- `recordUsage`, `recordView`, `incrementCounter`, `setGauge`, and suspend `flushTelemetry` on Core, the global facade, Compose hooks, and Views models.
+- Automatic check counts for actual direct, Flow, Compose snapshot/entity, and Views evaluations, preserving short circuits and gate negation.
+- Optional minted `instanceId` (`i`) and client `identity` (`u`) on compact telemetry envelopes. When both are set, only the instance id is sent.
+
+### Changed
+- Background transitions start a telemetry flush; reconfiguration disposes the old owner without relabeling buffered events.
+- Telemetry uses private, bounded in-memory batches, native gzip, explicit rate-limit retries, and a bounded final flush on disposal. Targeting context and definition request headers are excluded.
+
+### Fixed
+- Compose provider replacement resets collected and remembered state to the new application/environment owner.
+- Disposal permanently retires initialization, refresh, cache loading, and live-update work, including delayed completions during reconfiguration.
+
 ## 1.5.0
 
 2026-09-12

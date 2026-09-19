@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.bundles.lifecycle)
 
     // Testing
+    testImplementation("com.squareup.okhttp3:mockwebserver:${libs.versions.okhttp.get()}")
     testImplementation(libs.bundles.testing)
     testImplementation(libs.bundles.testing.android)
     androidTestImplementation(libs.bundles.testing.android)
