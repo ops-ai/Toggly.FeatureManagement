@@ -120,7 +120,7 @@ jobs:
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
             /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
-            /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
+            /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.Blazor/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
@@ -293,7 +293,7 @@ jobs:
               /d:sonar.token="${SONAR_SERVER_TOKEN}" \
               /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
               /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
-              /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
+              /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.Blazor/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
               /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
               /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
