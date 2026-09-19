@@ -27,7 +27,81 @@ import java.util.concurrent.TimeUnit
 class TogglyService(
     private val config: TogglyConfig = TogglyConfig()
 ) {
-    private val storage: TogglyStorage = config.storage ?: MemoryStorage()
+    private val lifecycleLock = Any()
+    @Volatile private var retired = false
+    private val ownerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val activeCalls = mutableSetOf<okhttp3.Call>()
+    private val delegateStorage: TogglyStorage = config.storage ?: MemoryStorage()
+    private val storage = object : TogglyStorage {
+        override suspend fun get(key: String): String? {
+            ensureOwnerActive()
+            return delegateStorage.get(key).also { ensureOwnerActive() }
+        }
+        override suspend fun set(key: String, value: String) {
+            ensureOwnerActive()
+            delegateStorage.set(key, value)
+            ensureOwnerActive()
+        }
+        override suspend fun delete(key: String) {
+            ensureOwnerActive()
+            delegateStorage.delete(key)
+            ensureOwnerActive()
+        }
+        override suspend fun clear() {
+            ensureOwnerActive()
+            delegateStorage.clear()
+            ensureOwnerActive()
+        }
+    }
+
+    private fun ensureOwnerActive() {
+        if (retired) throw CancellationException("Toggly owner disposed")
+    }
+
+    // Never hold this lock across suspension, storage, or network I/O.
+    private inline fun <T> whileActive(block: () -> T): T = synchronized(lifecycleLock) {
+        ensureOwnerActive()
+        block()
+    }
+
+    private suspend fun <T> owned(fallback: () -> T, block: suspend () -> T): T {
+        if (retired) return fallback()
+        // Preserve immediate cached evaluation while making suspension owner-cancellable.
+        val work = ownerScope.async(
+            currentCoroutineContext().minusKey(Job), start = CoroutineStart.UNDISPATCHED
+        ) { ensureOwnerActive(); block() }
+        return try { work.await() }
+        catch (e: CancellationException) {
+            currentCoroutineContext().ensureActive()
+            if (retired) fallback() else throw e
+        }
+        finally { work.cancel() }
+    }
+
+    private fun retiredResponse() = TogglyInitResponse(
+        status = TogglyLoadStatus.DEFAULTS, flags = config.featureDefaults
+    )
+
+    private suspend fun <T> withResponse(request: Request, block: suspend (Response) -> T): T {
+        val call = whileActive { httpClient.newCall(request).also { activeCalls.add(it) } }
+        return try {
+            val response = suspendCancellableCoroutine<Response> { continuation ->
+                continuation.invokeOnCancellation { call.cancel() }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                        continuation.resumeWith(Result.failure(e))
+                    }
+                    override fun onResponse(call: okhttp3.Call, response: Response) {
+                        continuation.resume(response) { _, value, _ -> value.close() }
+                    }
+                })
+            }
+            response.use { withContext(Dispatchers.IO) { block(it) } }
+        } finally {
+            synchronized(lifecycleLock) { activeCalls.remove(call) }
+        }
+    }
+
     private val mutex = Mutex()
     private val telemetry = if (config.enableTelemetry && !config.appKey.isNullOrBlank()) TelemetryReporter(
         appKey = config.appKey, environment = config.environment, metricsBaseUrl = config.metricsBaseUrl,
@@ -38,13 +112,13 @@ class TogglyService(
     private val claims = config.claims.toMap().filter { (key, value) ->
         key.isNotEmpty() && value.isNotEmpty()
     }.toSortedMap().entries.take(20).associate { it.key to it.value }
-    private var snapshotContext: String? = null
+    @Volatile private var snapshotContext: String? = null
 
     // State
-    private var definitions: EvaluatedDefinitions? = null
-    private var features: FeatureFlags? = null
-    private var featuresLoading = false
-    private var identity: String? = null
+    @Volatile private var definitions: EvaluatedDefinitions? = null
+    @Volatile private var features: FeatureFlags? = null
+    @Volatile private var featuresLoading = false
+    @Volatile private var identity: String? = null
     private var refreshJob: Job? = null
     private var lastChecked: Date? = null
     private var lastSynced: Date? = null
@@ -52,13 +126,13 @@ class TogglyService(
     private var eTag: String? = null
     private var eTagContext: String? = null
     private var isInitialized = false
-    private var networkState: NetworkState? = null
-    private var appState: AppStateType = AppStateType.ACTIVE
+    @Volatile private var networkState: NetworkState? = null
+    @Volatile private var appState: AppStateType = AppStateType.ACTIVE
 
     // WebSocket state
     private var webSocket: WebSocket? = null
-    private var wsConnected = false
-    private var lastFallbackRefresh = 0L
+    @Volatile private var wsConnected = false
+    @Volatile private var lastFallbackRefresh = 0L
 
     // Event handling
     private val _events = MutableSharedFlow<TogglyEvent>(replay = 0, extraBufferCapacity = 64)
@@ -108,51 +182,55 @@ class TogglyService(
      * Whether the SDK has been initialized.
      */
     val initialized: Boolean
-        get() = isInitialized
+        get() = synchronized(lifecycleLock) { isInitialized }
 
     /**
      * Current user identity.
      */
     val currentIdentity: String?
-        get() = identity
+        get() = synchronized(lifecycleLock) { identity }
 
     /**
      * Current feature flags (may be null if not loaded).
      */
     val currentFeatures: FeatureFlags?
-        get() = features
+        get() = synchronized(lifecycleLock) { features }
 
     /**
      * Initialize Toggly and load feature flags.
      *
      * @return The initialization response
      */
-    suspend fun init(): TogglyInitResponse = mutex.withLock {
-        // Handle identity
-        identity = config.identity ?: run {
-            var storedId = storage.get(TogglyStorageKeys.DEVICE_ID)
-            if (storedId == null) {
-                storedId = UUID.randomUUID().toString()
-                storage.set(TogglyStorageKeys.DEVICE_ID, storedId)
+    suspend fun init(): TogglyInitResponse = owned(::retiredResponse) {
+        mutex.withLock {
+            // Handle identity
+            val resolvedIdentity = config.identity ?: run {
+                var storedId = storage.get(TogglyStorageKeys.DEVICE_ID)
+                if (storedId == null) {
+                    storedId = UUID.randomUUID().toString()
+                    storage.set(TogglyStorageKeys.DEVICE_ID, storedId)
+                }
+                storedId
             }
-            storedId
+
+            whileActive { identity = resolvedIdentity }
+
+            // Start refresh timer
+            startRefreshTimer()
+
+            // Perform initial refresh
+            val response = refreshInternal()
+
+            whileActive { isInitialized = true }
+            emitEvent(TogglyEvent.Initialized(response))
+
+            // Start WebSocket for live updates after successful initialization
+            if (config.enableLiveUpdates) {
+                startWebSocket()
+            }
+
+            response
         }
-
-        // Start refresh timer
-        startRefreshTimer()
-
-        // Perform initial refresh
-        val response = refreshInternal()
-
-        isInitialized = true
-        emitEvent(TogglyEvent.Initialized(response))
-
-        // Start WebSocket for live updates after successful initialization
-        if (config.enableLiveUpdates) {
-            startWebSocket()
-        }
-
-        response
     }
 
     /**
@@ -160,11 +238,14 @@ class TogglyService(
      *
      * @return The refresh response
      */
-    suspend fun refresh(): TogglyInitResponse = mutex.withLock {
-        refreshInternal()
+    suspend fun refresh(): TogglyInitResponse = owned(::retiredResponse) {
+        mutex.withLock {
+            refreshInternal()
+        }
     }
 
     private suspend fun refreshInternal(): TogglyInitResponse {
+        ensureOwnerActive()
         // Skip refresh if app is not in foreground
         if (appState != AppStateType.ACTIVE) {
             return TogglyInitResponse(
@@ -183,7 +264,7 @@ class TogglyService(
         // If no app key, use defaults
         if (config.appKey == null) {
             applySnapshot(fromBooleanDefaults(config.featureDefaults), config.featureDefaults)
-            return TogglyInitResponse(status = TogglyLoadStatus.DEFAULTS, flags = features!!)
+            return TogglyInitResponse(status = TogglyLoadStatus.DEFAULTS, flags = config.featureDefaults)
         }
 
         // Fetch from server
@@ -302,41 +383,51 @@ class TogglyService(
      * @param identity The new identity, or null to use device ID
      * @return The refresh response after identity change
      */
-    suspend fun setIdentity(identity: String?): TogglyInitResponse = mutex.withLock {
-        val previousIdentity = this.identity
+    suspend fun setIdentity(identity: String?): TogglyInitResponse = owned(::retiredResponse) {
+        mutex.withLock {
+            val previousIdentity = this.identity
 
-        this.identity = identity ?: run {
-            var deviceId = storage.get(TogglyStorageKeys.DEVICE_ID)
-            if (deviceId == null) {
-                deviceId = UUID.randomUUID().toString()
-                storage.set(TogglyStorageKeys.DEVICE_ID, deviceId)
+            val resolvedIdentity = identity ?: run {
+                var deviceId = storage.get(TogglyStorageKeys.DEVICE_ID)
+                if (deviceId == null) {
+                    deviceId = UUID.randomUUID().toString()
+                    storage.set(TogglyStorageKeys.DEVICE_ID, deviceId)
+                }
+                deviceId
             }
-            deviceId
+
+            whileActive { this.identity = resolvedIdentity }
+
+            // Clear cache if identity changed
+            if (previousIdentity != this.identity) {
+                clearCacheInternal()
+            }
+
+            // Emit event
+            emitEvent(TogglyEvent.IdentityChanged(previousIdentity, this.identity!!))
+
+            refreshInternal()
         }
-
-        // Clear cache if identity changed
-        if (previousIdentity != this.identity) {
-            clearCacheInternal()
-        }
-
-        // Emit event
-        emitEvent(TogglyEvent.IdentityChanged(previousIdentity, this.identity!!))
-
-        refreshInternal()
     }
 
     /**
      * Clear cached feature flags.
      */
-    suspend fun clearCache() = mutex.withLock {
-        clearCacheInternal()
+    suspend fun clearCache() = owned({ Unit }) {
+        mutex.withLock {
+            clearCacheInternal()
+
+            Unit
+        }
     }
 
     private suspend fun clearCacheInternal() {
-        features = null
-        definitions = null
-        eTag = null
-        eTagContext = null
+        whileActive {
+            features = null
+            definitions = null
+            eTag = null
+            eTagContext = null
+        }
 
         val cacheKey = contextCacheKey()
         storage.delete(cacheKey)
@@ -359,8 +450,8 @@ class TogglyService(
     }
 
     fun addStateChangeHandler(handler: FeatureStateChangeHandler): () -> Unit {
-        stateChangeHandlers.add(handler)
-        return { stateChangeHandlers.remove(handler) }
+        synchronized(lifecycleLock) { if (!retired) stateChangeHandlers.add(handler) }
+        return { synchronized(lifecycleLock) { stateChangeHandlers.remove(handler) }; Unit }
     }
 
     /**
@@ -368,15 +459,19 @@ class TogglyService(
      *
      * @param state The new app state
      */
-    suspend fun setAppState(state: AppStateType) = mutex.withLock {
-        val wasBackground = appState == AppStateType.BACKGROUND
-        appState = state
-        emitEvent(TogglyEvent.AppStateChanged(state))
-        if (state == AppStateType.BACKGROUND) telemetry?.requestFlush()
+    suspend fun setAppState(state: AppStateType) = owned({ Unit }) {
+        mutex.withLock {
+            val wasBackground = appState == AppStateType.BACKGROUND
+            whileActive { appState = state }
+            emitEvent(TogglyEvent.AppStateChanged(state))
+            if (state == AppStateType.BACKGROUND) telemetry?.requestFlush()
 
-        // Refresh when coming to foreground
-        if (wasBackground && state == AppStateType.ACTIVE) {
-            refreshInternal()
+            // Refresh when coming to foreground
+            if (wasBackground && state == AppStateType.ACTIVE) {
+                refreshInternal()
+            }
+
+            Unit
         }
     }
 
@@ -385,14 +480,18 @@ class TogglyService(
      *
      * @param state The new network state
      */
-    suspend fun setNetworkState(state: NetworkState) = mutex.withLock {
-        val wasOffline = networkState?.isConnected == false
-        networkState = state
-        emitEvent(TogglyEvent.NetworkChanged(state))
+    suspend fun setNetworkState(state: NetworkState) = owned({ Unit }) {
+        mutex.withLock {
+            val wasOffline = networkState?.isConnected == false
+            whileActive { networkState = state }
+            emitEvent(TogglyEvent.NetworkChanged(state))
 
-        // Refresh when coming back online
-        if (wasOffline && state.isConnected) {
-            refreshInternal()
+            // Refresh when coming back online
+            if (wasOffline && state.isConnected) {
+                refreshInternal()
+            }
+
+            Unit
         }
     }
 
@@ -401,8 +500,8 @@ class TogglyService(
      *
      * @return Debug information
      */
-    fun getDebugInfo(): TogglyDebugInfo {
-        return TogglyDebugInfo(
+    fun getDebugInfo(): TogglyDebugInfo = synchronized(lifecycleLock) {
+        TogglyDebugInfo(
             identity = identity,
             appKey = config.appKey,
             environment = config.environment,
@@ -424,12 +523,21 @@ class TogglyService(
      */
     fun dispose() {
         telemetry?.dispose()
-        stopWebSocket()
-        stopRefreshTimer()
-        stateChangeHandlers.clear()
-        features = null
-        definitions = null
-        isInitialized = false
+        synchronized(lifecycleLock) {
+            if (retired) return
+            retired = true
+            ownerScope.cancel()
+            activeCalls.forEach { it.cancel() }
+            activeCalls.clear()
+            webSocket?.cancel()
+            stopWebSocket()
+            stopRefreshTimer()
+            stateChangeHandlers.clear()
+            features = null
+            definitions = null
+            isInitialized = false
+            featuresLoading = false
+        }
     }
 
     /** Record explicit use; this does not evaluate the flag again. */
@@ -456,7 +564,7 @@ class TogglyService(
             return TogglyInitResponse(status = TogglyLoadStatus.FETCHED, flags = features ?: emptyMap())
         }
 
-        featuresLoading = true
+        whileActive { featuresLoading = true }
 
         try {
             val url = buildApiUrl()
@@ -468,16 +576,12 @@ class TogglyService(
                 requestBuilder.header("If-None-Match", eTag!!)
             }
 
-            val response = withContext(Dispatchers.IO) {
-                httpClient.newCall(requestBuilder.build()).execute()
-            }
-
-            response.use { resp ->
+            return withResponse(requestBuilder.build()) { resp ->
                 if (resp.code == 304) {
-                    lastChecked = Date()
+                    whileActive { lastChecked = Date() }
                     val cached = loadCachedDefinitions()
                     applyCachedSnapshot(cached)
-                    return TogglyInitResponse(status = TogglyLoadStatus.CACHED, flags = cached.flags)
+                    return@withResponse TogglyInitResponse(status = TogglyLoadStatus.CACHED, flags = cached.flags)
                 }
 
                 if (!resp.isSuccessful) {
@@ -525,14 +629,13 @@ class TogglyService(
                     keyId = keyId
                 )
 
-                // Store ETag
-                eTag = resp.header("ETag")
-                eTagContext = buildApiUrl()
-
-
-                lastChecked = Date()
-                lastSynced = Date()
-                lastError = null
+                whileActive {
+                    eTag = resp.header("ETag")
+                    eTagContext = buildApiUrl()
+                    lastChecked = Date()
+                    lastSynced = Date()
+                    lastError = null
+                }
 
                 // Emit refreshed event
                 emitEvent(TogglyEvent.Refreshed(flags))
@@ -542,10 +645,11 @@ class TogglyService(
                     notifyFeatureChanges(prev, flags)
                 }
 
-                return TogglyInitResponse(status = TogglyLoadStatus.FETCHED, flags = flags)
+                TogglyInitResponse(status = TogglyLoadStatus.FETCHED, flags = flags)
             }
         } catch (e: Exception) {
-            lastError = e.message
+            if (e is CancellationException) throw e
+            whileActive { lastError = e.message }
             emitEvent(TogglyEvent.Error(lastError ?: "Unknown error", e))
 
             // Fall back to cache or defaults
@@ -558,7 +662,7 @@ class TogglyService(
                 error = lastError
             )
         } finally {
-            featuresLoading = false
+            synchronized(lifecycleLock) { featuresLoading = false }
         }
     }
 
@@ -584,9 +688,7 @@ class TogglyService(
             .get()
             .build()
 
-        val body = withContext(Dispatchers.IO) {
-            httpClient.newCall(request).execute().use(SignedDefsVerify::fetchJwks)
-        }
+        val body = withResponse(request) { SignedDefsVerify.fetchJwks(it) }
         storage.set(TogglyStorageKeys.JWKS, body)
         return body
     }
@@ -623,7 +725,7 @@ class TogglyService(
         }
     }
 
-    private fun applySnapshot(defs: EvaluatedDefinitions, flags: FeatureFlags) {
+    private fun applySnapshot(defs: EvaluatedDefinitions, flags: FeatureFlags) = whileActive {
         definitions = defs
         snapshotContext = buildApiUrl()
         features = flags
@@ -760,6 +862,11 @@ class TogglyService(
     }
 
     private suspend fun ensureFeaturesLoaded() {
+        if (features != null || retired) return
+        owned({ Unit }) { ensureFeaturesLoadedInternal() }
+    }
+
+    private suspend fun ensureFeaturesLoadedInternal() {
         if (features != null) return
 
         if (featuresLoading) {
@@ -773,11 +880,11 @@ class TogglyService(
         }
     }
 
-    private fun startRefreshTimer() {
+    private fun startRefreshTimer() = whileActive {
         stopRefreshTimer()
 
         if (config.appKey != null && config.refreshInterval > 0) {
-            refreshJob = CoroutineScope(Dispatchers.Default).launch {
+            refreshJob = ownerScope.launch {
                 while (isActive) {
                     delay(config.refreshInterval)
                     if (appState == AppStateType.ACTIVE) {
@@ -787,7 +894,7 @@ class TogglyService(
                             if (now - lastFallbackRefresh < FALLBACK_REFRESH_INTERVAL) {
                                 continue
                             }
-                            lastFallbackRefresh = now
+                            whileActive { lastFallbackRefresh = now }
                         }
                         refresh()
                     }
@@ -801,11 +908,13 @@ class TogglyService(
         refreshJob = null
     }
 
-    private fun emitEvent(event: TogglyEvent) {
-        _events.tryEmit(event)
+    private fun emitEvent(event: TogglyEvent) = synchronized(lifecycleLock) {
+        if (!retired) _events.tryEmit(event)
     }
 
     private fun notifyFeatureChanges(previousFlags: FeatureFlags, newFlags: FeatureFlags) {
+        if (retired) return
+        val handlers = synchronized(lifecycleLock) { stateChangeHandlers.toList() }
         val allKeys = previousFlags.keys + newFlags.keys
 
         for (key in allKeys) {
@@ -815,7 +924,8 @@ class TogglyService(
             if (previousValue != newValue) {
                 emitEvent(TogglyEvent.FeatureChanged(key, previousValue, newValue))
 
-                stateChangeHandlers.forEach { handler ->
+                handlers.forEach { handler ->
+                    if (retired) return
                     try {
                         handler(key, previousValue, newValue)
                     } catch (e: Exception) {
@@ -837,7 +947,7 @@ class TogglyService(
         }
     }
 
-    private fun startWebSocket() {
+    private fun startWebSocket() = whileActive {
         if (!config.enableLiveUpdates || config.appKey == null) return
 
         stopWebSocket()
@@ -855,8 +965,11 @@ class TogglyService(
 
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                wsConnected = true
-                lastFallbackRefresh = System.currentTimeMillis()
+                synchronized(lifecycleLock) {
+                    if (retired || this@TogglyService.webSocket !== webSocket) { webSocket.cancel(); return }
+                    wsConnected = true
+                    lastFallbackRefresh = System.currentTimeMillis()
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -867,7 +980,7 @@ class TogglyService(
                     if (type == "ping") return
 
                     if (type == "signing-key-updated" || type == "flags-updated" || type == "update") {
-                        CoroutineScope(Dispatchers.Default).launch {
+                        ownerScope.launch {
                             if (type == "signing-key-updated") {
                                 storage.delete(TogglyStorageKeys.JWKS)
                             }
@@ -880,15 +993,21 @@ class TogglyService(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                wsConnected = false
-                this@TogglyService.webSocket = null
-                scheduleReconnect()
+                synchronized(lifecycleLock) {
+                    if (retired || this@TogglyService.webSocket !== webSocket) return
+                    wsConnected = false
+                    this@TogglyService.webSocket = null
+                    scheduleReconnect()
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                wsConnected = false
-                this@TogglyService.webSocket = null
-                scheduleReconnect()
+                synchronized(lifecycleLock) {
+                    if (retired || this@TogglyService.webSocket !== webSocket) return
+                    wsConnected = false
+                    this@TogglyService.webSocket = null
+                    scheduleReconnect()
+                }
             }
         }
 
@@ -902,9 +1021,9 @@ class TogglyService(
     }
 
     private fun scheduleReconnect() {
-        if (!config.enableLiveUpdates || config.appKey == null) return
+        if (retired || !config.enableLiveUpdates || config.appKey == null) return
 
-        CoroutineScope(Dispatchers.Default).launch {
+        ownerScope.launch {
             delay(WS_RECONNECT_DELAY)
             if (!wsConnected && isInitialized && appState == AppStateType.ACTIVE) {
                 startWebSocket()
