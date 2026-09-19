@@ -7,6 +7,51 @@ namespace ClientTests;
 public class IdentityTests
 {
     [Fact]
+    public async Task SharedContextTransitionScenariosExercisePublicClient()
+    {
+        var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "telemetry-contract.json"))).RootElement;
+        var scenarios = contract.GetProperty("contextTransitionScenarios").EnumerateArray().ToArray();
+        Assert.NotEmpty(scenarios);
+        foreach (var scenario in scenarios)
+        {
+            var capture = new TelemetryCapture(); using var http = new HttpClient(new Offline());
+            var settings = scenario.GetProperty("options");
+            var options = new TogglyClientOptions { AppKey = settings.GetProperty("appKey").GetString(), TelemetryTransport = capture, TrustedJwks = "{}",
+                Environment = settings.TryGetProperty("environment", out var environment) ? environment.GetString()! : "Production",
+                Context = new(settings.TryGetProperty("identity", out var initialIdentity) ? initialIdentity.GetString() : null),
+                InstanceId = settings.TryGetProperty("instanceId", out var initialToken) ? initialToken.GetString() : null };
+            await using var client = new TogglyClient(options, http, new Verifier());
+            foreach (var item in scenario.GetProperty("events").EnumerateArray())
+            {
+                var args = item.EnumerateArray().ToArray();
+                if (args[0].GetString() == "setContext")
+                {
+                    var context = args[1];
+                    // App/environment replacement uses a new client in the portable API.
+                    // Fail explicitly if this shared vector grows beyond identity transitions.
+                    if (context.TryGetProperty("appKey", out var app)) Assert.Equal(options.AppKey, app.GetString());
+                    if (context.TryGetProperty("environment", out var env)) Assert.Equal(options.Environment, env.GetString());
+                    await client.SetIdentityAsync(new(context.TryGetProperty("identity", out var identity) ? identity.GetString() : null),
+                        context.TryGetProperty("instanceId", out var token) ? token.GetString() : null);
+                    continue;
+                }
+                var key = args[1].GetString()!;
+                switch (args[0].GetString())
+                {
+                    case "recordUsage": client.RecordUsage(key, args.Length > 2 ? args[2].GetString()! : "enabled"); break;
+                    case "recordView": client.RecordView(key, args.Length > 2 ? args[2].GetString()! : "enabled"); break;
+                    case "incrementCounter": client.IncrementCounter(key, args[2].GetDouble()); break;
+                    case "setGauge": client.SetGauge(key, args[2].GetDouble()); break;
+                    default: throw new InvalidOperationException("Unknown shared transition event");
+                }
+            }
+            await client.FlushTelemetryAsync();
+            Assert.True(System.Text.Json.Nodes.JsonNode.DeepEquals(System.Text.Json.Nodes.JsonNode.Parse(scenario.GetProperty("envelopes").GetRawText()),
+                new System.Text.Json.Nodes.JsonArray(capture.Bodies.Select(body => System.Text.Json.Nodes.JsonNode.Parse(body)).ToArray())), scenario.GetProperty("name").GetString());
+        }
+    }
+
+    [Fact]
     public async Task ContextSwitchKeepsPreviouslyAcceptedEventsAndGaugesWithTheirUser()
     {
         var capture = new TelemetryCapture();
