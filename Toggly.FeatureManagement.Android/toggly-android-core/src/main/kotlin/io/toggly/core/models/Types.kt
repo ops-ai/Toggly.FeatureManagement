@@ -93,7 +93,9 @@ data class TogglyConfig(
     /** Flush base interval; values outside 30,000..60,000 use 45,000 ms. */
     val telemetryFlushIntervalMs: Long = 45_000,
     /** Bounded status codes only, never app keys, identities or event payloads. */
-    val onTelemetryDiagnostic: ((String) -> Unit)? = null
+    val onTelemetryDiagnostic: ((String) -> Unit)? = null,
+    /** Opaque minted instance id for telemetry and definitions `?i=`. */
+    val instanceId: String? = null
 )
 
 /**

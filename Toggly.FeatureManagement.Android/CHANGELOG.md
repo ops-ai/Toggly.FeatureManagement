@@ -8,6 +8,7 @@
 - Anonymous frontend telemetry enabled for clients with an application key, with explicit opt-out and configurable metrics endpoint and flush interval.
 - `recordUsage`, `recordView`, `incrementCounter`, `setGauge`, and suspend `flushTelemetry` on Core, the global facade, Compose hooks, and Views models.
 - Automatic check counts for actual direct, Flow, Compose snapshot/entity, and Views evaluations, preserving short circuits and gate negation.
+- Optional minted `instanceId` (`i`) and client `identity` (`u`) on compact telemetry envelopes. When both are set, only the instance id is sent.
 
 ### Changed
 - Background transitions start a telemetry flush; reconfiguration disposes the old owner without relabeling buffered events.

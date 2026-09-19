@@ -107,6 +107,88 @@
       ]
     },
     {
+      "name": "minted-instance-id",
+      "options": {
+        "instanceId": "inst-opaque-1"
+      },
+      "events": [
+        [
+          "recordUsage",
+          "checkout"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "i": "inst-opaque-1",
+          "f": {
+            "checkout": {
+              "enabled": [
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "client-identity",
+      "options": {
+        "identity": "user-123"
+      },
+      "events": [
+        [
+          "recordUsage",
+          "checkout"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "u": "user-123",
+          "f": {
+            "checkout": {
+              "enabled": [
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "prefer-instance-over-identity",
+      "options": {
+        "instanceId": "inst-opaque-1",
+        "identity": "user-123"
+      },
+      "events": [
+        [
+          "recordUsage",
+          "checkout"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "i": "inst-opaque-1",
+          "f": {
+            "checkout": {
+              "enabled": [
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "prototype-safe-default-variant",
       "events": [
         [
