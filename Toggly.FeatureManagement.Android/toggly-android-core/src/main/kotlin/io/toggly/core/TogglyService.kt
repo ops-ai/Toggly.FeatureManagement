@@ -119,7 +119,8 @@ class TogglyService(
     @Volatile private var definitions: EvaluatedDefinitions? = null
     @Volatile private var features: FeatureFlags? = null
     @Volatile private var featuresLoading = false
-    @Volatile private var identity: String? = null
+    @Volatile private var identity: String? = config.identity
+    @Volatile private var instanceId: String? = config.instanceId?.trim()?.takeIf { it.isNotEmpty() }
     private var refreshJob: Job? = null
     private var lastChecked: Date? = null
     private var lastSynced: Date? = null
@@ -139,8 +140,26 @@ class TogglyService(
     private val _events = MutableSharedFlow<TogglyEvent>(replay = 0, extraBufferCapacity = 64)
     private val stateChangeHandlers = mutableSetOf<FeatureStateChangeHandler>()
 
-    // Feature flags as Flow
-    private val _featureFlags = MutableStateFlow<FeatureFlags>(emptyMap())
+    // Attribution travels with externally retained snapshots, not an unbounded internal history.
+    private class AttributedFlags(
+        private val flags: FeatureFlags, val owner: Any, val instanceId: String?, val identity: String?
+    ) : Map<String, Boolean> by flags {
+        override fun equals(other: Any?): Boolean = flags == other
+        override fun hashCode(): Int = flags.hashCode()
+        override fun toString(): String = flags.toString()
+    }
+
+    private data class FlagSnapshot(val flags: FeatureFlags, val generation: Long)
+    private var contextGeneration = 0L
+    private val contextRevision = MutableStateFlow(0L)
+    /** Adapter invalidation signal; contains no identity or token values. */
+    val evaluationContextRevision: StateFlow<Long> = contextRevision.asStateFlow()
+    private val snapshotOwner = Any()
+    private fun attributedFlags(flags: FeatureFlags): FeatureFlags = AttributedFlags(flags, snapshotOwner, instanceId, identity)
+    private val flagSnapshots = MutableStateFlow(FlagSnapshot(attributedFlags(emptyMap()), contextGeneration))
+    private fun publishFeatureFlags(flags: FeatureFlags) {
+        flagSnapshots.value = FlagSnapshot(attributedFlags(flags), contextGeneration)
+    }
 
     // HTTP client
     private val httpClient: OkHttpClient by lazy {
@@ -171,7 +190,12 @@ class TogglyService(
     /**
      * Flow of current feature flags.
      */
-    val featureFlags: StateFlow<FeatureFlags> = _featureFlags.asStateFlow()
+    val featureFlags: StateFlow<FeatureFlags> = object : StateFlow<FeatureFlags> {
+        override val value: FeatureFlags get() = flagSnapshots.value.flags
+        override val replayCache: List<FeatureFlags> get() = listOf(value)
+        override suspend fun collect(collector: FlowCollector<FeatureFlags>): Nothing =
+            flagSnapshots.collect { collector.emit(it.flags) }
+    }
 
     /**
      * Whether to show feature content during initial evaluation.
@@ -191,9 +215,11 @@ class TogglyService(
     val currentIdentity: String?
         get() = synchronized(lifecycleLock) { identity }
 
-    /**
-     * Current feature flags (may be null if not loaded).
-     */
+    /** Current host-minted instance token, or null for client targeting. */
+    val currentInstanceId: String?
+        get() = synchronized(lifecycleLock) { instanceId }
+
+    /** Current feature flags (may be null if not loaded). */
     val currentFeatures: FeatureFlags?
         get() = synchronized(lifecycleLock) { features }
 
@@ -204,8 +230,9 @@ class TogglyService(
      */
     suspend fun init(): TogglyInitResponse = owned(::retiredResponse) {
         mutex.withLock {
-            // Handle identity
-            val resolvedIdentity = config.identity ?: run {
+            if (isInitialized) return@withLock refreshInternal()
+            // Handle identity; explicit changes made before init remain authoritative.
+            val resolvedIdentity = identity ?: run {
                 var storedId = storage.get(TogglyStorageKeys.DEVICE_ID)
                 if (storedId == null) {
                     storedId = UUID.randomUUID().toString()
@@ -214,7 +241,15 @@ class TogglyService(
                 storedId
             }
 
-            whileActive { identity = resolvedIdentity }
+            whileActive {
+                telemetry?.updateAttribution(instanceId, resolvedIdentity)
+                if (identity != resolvedIdentity) {
+                    identity = resolvedIdentity
+                    contextGeneration++
+                    publishFeatureFlags(features ?: emptyMap())
+                    contextRevision.value = contextGeneration
+                }
+            }
 
             // Start refresh timer
             startRefreshTimer()
@@ -326,15 +361,17 @@ class TogglyService(
         kind: String? = null
     ): Boolean {
         ensureFeaturesLoaded()
-        val defs = definitions ?: fromBooleanDefaults(features ?: config.featureDefaults)
+        val (defs, token, user) = synchronized(lifecycleLock) {
+            Triple(definitions ?: fromBooleanDefaults(features ?: config.featureDefaults), instanceId, identity)
+        }
+        // Host mappers may reenter the service. Capture ownership before invoking them,
+        // without holding a lifecycle lock across arbitrary host code.
         return evaluateEvaluatedGateWithChecks(
-            defs,
-            featureKeys,
-            requirement == FeatureRequirement.ALL,
-            negate,
-            normalizeEntityContext(context, kind),
-            onCheck = ::recordCachedCheck
-        )
+            defs, featureKeys, requirement == FeatureRequirement.ALL, negate,
+            normalizeEntityContext(context, kind)
+        ) { key, enabled ->
+            telemetry?.recordCheck(key, if (enabled) "enabled" else "disabled", token, user)
+        }
     }
 
     /**
@@ -345,7 +382,7 @@ class TogglyService(
      */
     fun featureFlagFlow(featureKey: String): Flow<Boolean> {
         return featureFlags.map { flags ->
-            (flags[featureKey] ?: config.featureDefaults[featureKey] ?: false).also { recordCachedCheck(featureKey, it) }
+            (flags[featureKey] ?: config.featureDefaults[featureKey] ?: false).also { recordCachedCheck(featureKey, it, flags) }
         }.distinctUntilChanged()
     }
 
@@ -368,7 +405,7 @@ class TogglyService(
             val defaults = config.featureDefaults
             val mergedFlags = defaults + flags
 
-            fun evaluate(key: String): Boolean = (mergedFlags[key] == true).also { recordCachedCheck(key, it) }
+            fun evaluate(key: String): Boolean = (mergedFlags[key] == true).also { recordCachedCheck(key, it, flags) }
             val isEnabled = when (requirement) {
                 FeatureRequirement.ANY -> featureKeys.any(::evaluate)
                 FeatureRequirement.ALL -> featureKeys.all(::evaluate)
@@ -384,29 +421,42 @@ class TogglyService(
      * @param identity The new identity, or null to use device ID
      * @return The refresh response after identity change
      */
-    suspend fun setIdentity(identity: String?): TogglyInitResponse = owned(::retiredResponse) {
+    suspend fun setIdentity(identity: String?): TogglyInitResponse = changeIdentity(identity, null)
+
+    /** Atomically replace identity and a host-minted token. Null/blank tokens restore client targeting. */
+    suspend fun setIdentity(identity: String?, instanceId: String?): TogglyInitResponse =
+        changeIdentity(identity, instanceId)
+
+    /** Rotate or clear the host-minted token while retaining the current client identity. */
+    suspend fun setInstanceId(instanceId: String?): TogglyInitResponse =
+        changeIdentity(null, instanceId, retainIdentity = true)
+
+    private suspend fun changeIdentity(
+        identity: String?, token: String?, retainIdentity: Boolean = false
+    ): TogglyInitResponse = owned(::retiredResponse) {
         mutex.withLock {
             val previousIdentity = this.identity
-
-            val resolvedIdentity = identity ?: run {
-                var deviceId = storage.get(TogglyStorageKeys.DEVICE_ID)
-                if (deviceId == null) {
-                    deviceId = UUID.randomUUID().toString()
-                    storage.set(TogglyStorageKeys.DEVICE_ID, deviceId)
+            val previousToken = instanceId
+            val resolvedIdentity = (if (retainIdentity) this.identity else identity) ?: run {
+                storage.get(TogglyStorageKeys.DEVICE_ID) ?: UUID.randomUUID().toString().also {
+                    storage.set(TogglyStorageKeys.DEVICE_ID, it)
                 }
-                deviceId
             }
-
-            whileActive { this.identity = resolvedIdentity }
-
-            // Clear cache if identity changed
-            if (previousIdentity != this.identity) {
-                clearCacheInternal()
+            val resolvedToken = token?.trim()?.takeIf { it.isNotEmpty() }
+            whileActive {
+                telemetry?.updateAttribution(resolvedToken, resolvedIdentity)
+                this.identity = resolvedIdentity
+                instanceId = resolvedToken
+                if (previousIdentity != resolvedIdentity || previousToken != resolvedToken) {
+                    definitions = null; features = null; snapshotContext = null
+                    eTag = null; eTagContext = null
+                    // Withdraw the old user's snapshot before any storage/network suspension.
+                    contextGeneration++
+                    publishFeatureFlags(config.featureDefaults)
+                    contextRevision.value = contextGeneration
+                }
             }
-
-            // Emit event
-            emitEvent(TogglyEvent.IdentityChanged(previousIdentity, this.identity!!))
-
+            emitEvent(TogglyEvent.IdentityChanged(previousIdentity, resolvedIdentity))
             refreshInternal()
         }
     }
@@ -542,18 +592,31 @@ class TogglyService(
     }
 
     /** Record explicit use; this does not evaluate the flag again. */
-    fun recordUsage(featureKey: String, variant: String = "enabled") { telemetry?.recordUsage(featureKey, variant) }
+    fun recordUsage(featureKey: String, variant: String = "enabled") { synchronized(lifecycleLock) { telemetry?.recordUsage(featureKey, variant) } }
     /** Record an explicit feature view. */
-    fun recordView(featureKey: String, variant: String = "enabled") { telemetry?.recordView(featureKey, variant) }
+    fun recordView(featureKey: String, variant: String = "enabled") { synchronized(lifecycleLock) { telemetry?.recordView(featureKey, variant) } }
     /** Increment an app-level counter by an integer in 0..1,000,000. */
-    fun incrementCounter(metricKey: String, value: Double = 1.0) { telemetry?.incrementCounter(metricKey, value) }
+    fun incrementCounter(metricKey: String, value: Double = 1.0) { synchronized(lifecycleLock) { telemetry?.incrementCounter(metricKey, value) } }
     /** Set the latest finite app-level gauge in 0..1,000,000. */
-    fun setGauge(metricKey: String, value: Double) { telemetry?.setGauge(metricKey, value) }
+    fun setGauge(metricKey: String, value: Double) { synchronized(lifecycleLock) { telemetry?.setGauge(metricKey, value) } }
     /** Await the current best-effort telemetry drain. */
     suspend fun flushTelemetry() { telemetry?.flushTelemetry() }
     /** Adapter hook for a cached value actually evaluated by the UI; excludes aggregate negation. */
     fun recordCachedCheck(featureKey: String, enabled: Boolean) {
-        telemetry?.recordCheck(featureKey, if (enabled) "enabled" else "disabled")
+        synchronized(lifecycleLock) {
+            telemetry?.recordCheck(featureKey, if (enabled) "enabled" else "disabled")
+        }
+    }
+
+    /** Adapter hook for a retained SDK snapshot; preserves the snapshot's original attribution. */
+    fun recordCachedCheck(featureKey: String, enabled: Boolean, snapshot: FeatureFlags) {
+        synchronized(lifecycleLock) {
+            if (snapshot is AttributedFlags && snapshot.owner === snapshotOwner) {
+                telemetry?.recordCheck(featureKey, if (enabled) "enabled" else "disabled", snapshot.instanceId, snapshot.identity)
+            } else {
+                recordCachedCheck(featureKey, enabled)
+            }
+        }
     }
 
     // Private methods
@@ -672,9 +735,17 @@ class TogglyService(
             .addPathSegment("evaluated-signed")
             .addPathSegment(config.appKey ?: "null")
             .addPathSegment(config.environment)
-        identity?.let { url.addQueryParameter("u", it) }
-        groups.forEach { url.addQueryParameter("g", it) }
-        claims.forEach { (type, value) -> url.addQueryParameter("claim.$type", value) }
+        val token = instanceId
+        url.removeAllQueryParameters("i")
+        if (token != null) {
+            url.build().queryParameterNames.filter { it == "u" || it == "g" || it.startsWith("claim.") }
+                .forEach(url::removeAllQueryParameters)
+            url.addQueryParameter("i", token)
+        } else {
+            identity?.let { url.addQueryParameter("u", it) }
+            groups.forEach { url.addQueryParameter("g", it) }
+            claims.forEach { (type, value) -> url.addQueryParameter("claim.$type", value) }
+        }
         return url.build().toString()
     }
 
@@ -713,15 +784,33 @@ class TogglyService(
         }
     }
 
+    private data class CacheOwner(val url: String, val identity: String?, val instanceId: String?, val generation: Long)
+    private fun cacheOwner() = CacheOwner(buildApiUrl(), identity, instanceId, contextGeneration)
+    private fun persistedContext(owner: CacheOwner): String =
+        if (owner.instanceId == null) owner.url else contextCacheKey(owner.url)
+
     private data class CachedDefinitions(
         val definitions: EvaluatedDefinitions,
         val flags: FeatureFlags,
-        val ownerContext: String
+        val owner: CacheOwner,
+        val invalidCacheKey: String? = null
     )
 
     // Call under mutex: accepting a cache and publishing it is atomic with identity changes.
-    private fun applyCachedSnapshot(cached: CachedDefinitions) {
-        if (cached.ownerContext == buildApiUrl()) {
+    private suspend fun applyCachedSnapshot(cached: CachedDefinitions) {
+        val current = synchronized(lifecycleLock) {
+            cached.owner.url == buildApiUrl() && cached.owner.generation == contextGeneration
+        }
+        if (current) {
+            // The context mutex protects this cleanup too: an old verification must
+            // not delete a newer cache after a token has rotated away and back.
+            try {
+                cached.invalidCacheKey?.let { storage.delete(it) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Cleanup is best-effort; never use the invalid payload if storage is unavailable.
+            }
             applySnapshot(cached.definitions, cached.flags)
         }
     }
@@ -730,7 +819,7 @@ class TogglyService(
         definitions = defs
         snapshotContext = buildApiUrl()
         features = flags
-        _featureFlags.value = flags
+        publishFeatureFlags(flags)
     }
 
     private fun parseBodyDefinitions(body: String): EvaluatedDefinitions {
@@ -742,29 +831,31 @@ class TogglyService(
 
     private suspend fun loadCachedDefinitions(): CachedDefinitions {
         // Capture before any storage or JWKS suspension; never relabel a restored payload.
-        val ownerContext = buildApiUrl()
-        val ownerIdentity = identity
-        features?.let { snapshot ->
-            if (snapshotContext == ownerContext) {
-                return CachedDefinitions(definitions ?: fromBooleanDefaults(snapshot), snapshot, ownerContext)
+        val owner = synchronized(lifecycleLock) {
+            val captured = cacheOwner()
+            features?.let { snapshot ->
+                if (snapshotContext == captured.url) {
+                    return CachedDefinitions(definitions ?: fromBooleanDefaults(snapshot), snapshot, captured)
+                }
             }
+            captured
         }
 
         try {
-            var cacheKey = contextCacheKey(ownerContext)
+            var cacheKey = contextCacheKey(owner.url)
             var cached = storage.get(cacheKey)
             // Legacy identity-only payloads are eligible only for empty targeting.
-            if (cached == null && groups.isEmpty() && claims.isEmpty()) {
-                cacheKey = TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashIdentity(ownerIdentity ?: "")
+            if (cached == null && owner.instanceId == null && groups.isEmpty() && claims.isEmpty()) {
+                cacheKey = TogglyStorageKeys.FEATURE_FLAGS_CACHE + hashIdentity(owner.identity ?: "")
                 cached = storage.get(cacheKey)
             }
 
             if (cached != null) {
                 val cacheData = json.decodeFromString<TogglyFeatureFlagsCache>(cached)
-                if (cacheData.identity == ownerIdentity &&
-                    (cacheData.evaluationContext == ownerContext ||
-                        (cacheData.evaluationContext == null && groups.isEmpty() && claims.isEmpty()))) {
-                    return trustOrReverifyCachedFlags(cacheData, cacheKey, ownerContext)
+                if (cacheData.identity == owner.identity &&
+                    (cacheData.evaluationContext == persistedContext(owner) ||
+                        (cacheData.evaluationContext == null && owner.instanceId == null && groups.isEmpty() && claims.isEmpty()))) {
+                    return trustOrReverifyCachedFlags(cacheData, cacheKey, owner)
                 }
             }
         } catch (_: Exception) {
@@ -772,7 +863,7 @@ class TogglyService(
         }
 
         val defaults = fromBooleanDefaults(config.featureDefaults)
-        return CachedDefinitions(defaults, config.featureDefaults, ownerContext)
+        return CachedDefinitions(defaults, config.featureDefaults, owner)
     }
 
     /**
@@ -783,26 +874,24 @@ class TogglyService(
     private suspend fun trustOrReverifyCachedFlags(
         cacheData: TogglyFeatureFlagsCache,
         cacheKey: String,
-        ownerContext: String
+        owner: CacheOwner
     ): CachedDefinitions {
         val parsed = runCatching {
             parseEvaluatedDefinitions(cacheData.flags)
         }.getOrElse {
-            storage.delete(cacheKey)
-            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, ownerContext)
+            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, owner, cacheKey)
         }
         val flags = toBooleanDefinitions(parsed)
 
         if (!config.verifySignatures) {
-            return CachedDefinitions(parsed, flags, ownerContext)
+            return CachedDefinitions(parsed, flags, owner)
         }
 
         if (cacheData.timestamp == null ||
             cacheData.signature.isNullOrEmpty() ||
             cacheData.keyId.isNullOrEmpty()
         ) {
-            storage.delete(cacheKey)
-            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, ownerContext)
+            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, owner, cacheKey)
         }
 
         try {
@@ -811,13 +900,12 @@ class TogglyService(
                 config.maxSignatureAgeSeconds
             )
         } catch (_: Exception) {
-            storage.delete(cacheKey)
-            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, ownerContext)
+            return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, owner, cacheKey)
         }
 
         val jwks = resolveJwksForCacheVerify()
         if (jwks == null) {
-            return CachedDefinitions(parsed, flags, ownerContext)
+            return CachedDefinitions(parsed, flags, owner)
         }
 
         return try {
@@ -828,10 +916,9 @@ class TogglyService(
                 kid = cacheData.keyId
             )
             SignedDefsVerify.verify(envelope, jwks)
-            CachedDefinitions(parsed, flags, ownerContext)
+            CachedDefinitions(parsed, flags, owner)
         } catch (_: Exception) {
-            storage.delete(cacheKey)
-            CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, ownerContext)
+            CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, owner, cacheKey)
         }
     }
 
@@ -854,7 +941,8 @@ class TogglyService(
                 timestamp = timestamp,
                 signature = signature,
                 keyId = keyId,
-                evaluationContext = buildApiUrl()
+                // Scope the cache by the token without persisting the capability itself.
+                evaluationContext = persistedContext(cacheOwner())
             )
             storage.set(cacheKey, json.encodeToString(TogglyFeatureFlagsCache.serializer(), cacheData))
         } catch (_: Exception) {

@@ -70,7 +70,14 @@ class OwnerReplacementTest {
                 if (configured) TogglyProvider(settings, { owners += it }, content)
                 else TogglyProvider(current, content)
             }
-            rule.waitUntil(5_000) { observations.any { it.first == "old-app" && it.second.all { value -> value } } }
+            try {
+                rule.waitUntil(5_000) { observations.any { it.first == "old-app" && it.second.all { value -> value } } }
+            } catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {
+                // Bounded local-test diagnostics distinguish initialization from individual UI adapters.
+                throw AssertionError("Initial owner not fully observed; configured=$configured, " +
+                    "initializedOwners=${owners.size}, requests=${server.requestCount}, " +
+                    "recentObservations=${observations.takeLast(12)}", failure)
+            }
             rule.runOnIdle { if (configured) settings = newConfig else current = new }
             rule.waitForIdle()
             if (configured) rule.waitUntil(5_000) { owners.size == 2 }
