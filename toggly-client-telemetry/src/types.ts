@@ -35,6 +35,10 @@ export interface TelemetryOptions {
   enableTelemetry?: boolean;
   metricsBaseUrl?: string;
   telemetryFlushIntervalMs?: number;
+  /** Opaque minted instance id; sent as compact body field `i`. */
+  instanceId?: string;
+  /** Client-asserted identity; sent as compact body field `u` when `instanceId` is absent. */
+  identity?: string;
   fetch?: TelemetryFetch;
   onDiagnostic?: (diagnostic: TelemetryDiagnostic) => void;
   /** @internal Deterministic platform seams. SDK facades must not forward these. */

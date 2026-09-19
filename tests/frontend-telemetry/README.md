@@ -36,4 +36,9 @@ repository; do not maintain independently edited copies.
 
 `recordCheck` is an owner API. Public SDK consumers use explicit usage/view
 and metric APIs; authoritative evaluators supply automatic checks. Fixtures
-contain test identifiers only. Never add real application keys or identities.
+contain test identifiers only. Never add real application keys or production
+identities.
+
+Optional reporter options `instanceId` and `identity` become compact body
+fields `i` and `u`. When both are present, only `i` is serialized. Groups and
+claims must never appear on the metrics body even if a harness passes them.

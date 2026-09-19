@@ -18,13 +18,13 @@ for (const scenario of contract.scenarios) {
     reporter.dispose();
   });
 }
-test('normalizes only metrics base path and excludes context/auth/identity', async () => {
-  const { reporter, calls } = setup({ metricsBaseUrl: 'https://collector.test/base///', identity: 'secret', headers: { Authorization: 'secret' } });
+test('normalizes only metrics base path and excludes context/auth from the request', async () => {
+  const { reporter, calls } = setup({ metricsBaseUrl: 'https://collector.test/base///', identity: 'user-123', headers: { Authorization: 'secret' } });
   reporter.recordCheck('flag', 'enabled'); await reporter.flush({ keepalive: true });
   expect(calls[0].url).toBe('https://collector.test/base/api/frontend/telemetry');
   expect(calls[0].init).toMatchObject({ method: 'POST', credentials: 'omit', keepalive: true, headers: { 'Content-Type': 'application/json' } });
   expect(Object.keys(calls[0].init.headers)).toEqual(['Content-Type']);
-  expect(calls[0].init.body).toBe('{"k":"test-app","e":"Production","f":{"flag":{"enabled":[1]}}}');
+  expect(JSON.parse(calls[0].init.body)).toEqual({ k: 'test-app', e: 'Production', u: 'user-123', f: { flag: { enabled: [1] } } });
   reporter.dispose();
 });
 test('disabled reporters have no scheduled work, even on disposal', async () => {

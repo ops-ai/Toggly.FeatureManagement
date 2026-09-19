@@ -3,7 +3,7 @@ import { registerOwner, removeOwner } from './lifecycle.js';
 export type { TelemetryOptions, TelemetryReporter, TelemetryDiagnostic, TelemetryFetch, TelemetryResponse, TelemetryRequestInit, TelemetryAbortSignal } from './types.js';
 
 type Entry = { key: string; variant?: string; kind: 'feature' | 'counter' | 'gauge'; values: number[] };
-type Envelope = { k: string; e: string; f?: Record<string, Record<string, number[]>>; m?: Record<string, number> };
+type Envelope = { k: string; e: string; i?: string; u?: string; f?: Record<string, Record<string, number[]>>; m?: Record<string, number> };
 const MAX_VALUE = 1000000;
 const MAX_BYTES = 49152;
 const MAX_BUFFER = 262144;
@@ -77,7 +77,14 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
   let periodic: ReturnType<typeof setTimeout> | undefined;
   let cancelRetry: (() => void) | undefined;
   let cleanups: Set<() => void> | undefined;
-  const empty = (): Envelope => ({ k: key!, e: environment });
+  const instanceId = validName(options.instanceId) ? options.instanceId.trim() : '';
+  const identity = validName(options.identity) ? options.identity.trim() : '';
+  const empty = (): Envelope => {
+    const envelope: Envelope = { k: key!, e: environment };
+    if (instanceId) envelope.i = instanceId;
+    else if (identity) envelope.u = identity;
+    return envelope;
+  };
   const chunk = (entry: Entry): number[] => entry.values.map(v => Math.min(MAX_VALUE, v));
   function cost(entry: Entry): { count: number; size: number } {
     const count = Math.max(1, ...entry.values.map(v => Math.ceil(v / MAX_VALUE)));

@@ -78,11 +78,12 @@ reject new events before a densely combined envelope reaches those limits.
 Accepted queued data is not evicted to admit new data. Individual entries too
 large for an envelope are rejected. No telemetry is persisted.
 
-The wire body contains only `k` (app key), `e` (environment), `f` (feature variant
-counts) and `m` (application metrics). It contains no identity, claims, groups,
-entity, timestamps or client instance information. Optional `onDiagnostic`
-receives at most ten payload-free diagnostic codes per reporter; callback
-exceptions are swallowed.
+The wire body contains `k` (app key), `e` (environment), `f` (feature variant
+counts) and `m` (application metrics), plus optional `i` (minted instance id)
+or `u` (client identity when `instanceId` is not set). It contains no groups,
+claims, entity, timestamps or metric kind. Optional `onDiagnostic` receives at
+most ten payload-free diagnostic codes per reporter; callback exceptions are
+swallowed.
 
 Both ESM and CommonJS entry points include declarations that work without
 `lib.dom`, including TypeScript 4.8 and 4.9 consumers using classic Node or Node16 module
