@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <base href="/" />
+    <title>Local telemetry WASM fixture</title>
+  </head>
+  <body>
+    <div id="app">Loading</div>
+    <script>
+      window.collectorUrl = () =>
+        new URL(location.href).searchParams.get("collector");
+      window.fixtureKey = () =>
+        new URL(location.href).searchParams.get("key") ?? "local-wasm-fixture";
+      window.fixtureEnvironment = () =>
+        new URL(location.href).searchParams.get("environment") ?? "Fixture";
+      window.telemetryEnabled = () =>
+        new URL(location.href).searchParams.get("enabled") !== "false";
+    </script>
+    <script src="_framework/blazor.webassembly.js"></script>
+  </body>
+</html>

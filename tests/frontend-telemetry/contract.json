@@ -1,0 +1,824 @@
+{
+  "schemaVersion": 1,
+  "options": {
+    "appKey": "test-app",
+    "environment": "Production"
+  },
+  "policy": {
+    "endpoint": "https://metrics.toggly.io/api/frontend/telemetry",
+    "flushIntervalMs": 45000,
+    "minimumIntervalMs": 30000,
+    "maximumIntervalMs": 60000,
+    "jitterFraction": 0.2,
+    "maxEnvelopeBytes": 49152,
+    "maxBufferedBytes": 262144,
+    "maxEntries": 2000,
+    "maxVariantsPerFeature": 16,
+    "maxValue": 1000000,
+    "timeoutMs": 5000,
+    "retryDelaysMs": [
+      30000,
+      60000
+    ],
+    "expiryMs": 300000,
+    "ackStatus": 202,
+    "retryStatuses": [
+      429,
+      503
+    ],
+    "dropStatuses": [
+      200,
+      204,
+      400,
+      401,
+      403,
+      413,
+      500
+    ],
+    "variantPattern": "^[A-Za-z0-9_-]{1,64}$"
+  },
+  "scenarios": [
+    {
+      "name": "aggregate-and-trim",
+      "events": [
+        [
+          "recordCheck",
+          "checkout",
+          "enabled"
+        ],
+        [
+          "recordCheck",
+          "checkout",
+          "enabled"
+        ],
+        [
+          "recordUsage",
+          "checkout",
+          "enabled"
+        ],
+        [
+          "recordView",
+          "checkout",
+          "disabled"
+        ],
+        [
+          "incrementCounter",
+          "orders",
+          2
+        ],
+        [
+          "incrementCounter",
+          "orders",
+          3
+        ],
+        [
+          "setGauge",
+          "cart",
+          9
+        ],
+        [
+          "setGauge",
+          "cart",
+          4
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "f": {
+            "checkout": {
+              "enabled": [
+                2,
+                1
+              ],
+              "disabled": [
+                0,
+                0,
+                1
+              ]
+            }
+          },
+          "m": {
+            "orders": 5,
+            "cart": 4
+          }
+        }
+      ]
+    },
+    {
+      "name": "minted-instance-id",
+      "options": {
+        "instanceId": "inst-opaque-1"
+      },
+      "events": [
+        [
+          "recordUsage",
+          "checkout"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "i": "inst-opaque-1",
+          "f": {
+            "checkout": {
+              "enabled": [
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "client-identity",
+      "options": {
+        "identity": "user-123"
+      },
+      "events": [
+        [
+          "recordUsage",
+          "checkout"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "u": "user-123",
+          "f": {
+            "checkout": {
+              "enabled": [
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "prefer-instance-over-identity",
+      "options": {
+        "instanceId": "inst-opaque-1",
+        "identity": "user-123"
+      },
+      "events": [
+        [
+          "recordUsage",
+          "checkout"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "i": "inst-opaque-1",
+          "f": {
+            "checkout": {
+              "enabled": [
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "prototype-safe-default-variant",
+      "events": [
+        [
+          "recordUsage",
+          "__proto__"
+        ],
+        [
+          "recordView",
+          "constructor"
+        ],
+        [
+          "incrementCounter",
+          "__proto__",
+          1
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "f": {
+            "__proto__": {
+              "enabled": [
+                0,
+                1
+              ]
+            },
+            "constructor": {
+              "enabled": [
+                0,
+                0,
+                1
+              ]
+            }
+          },
+          "m": {
+            "__proto__": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "counter-split",
+      "events": [
+        [
+          "incrementCounter",
+          "orders",
+          1000000
+        ],
+        [
+          "incrementCounter",
+          "orders",
+          1000000
+        ],
+        [
+          "incrementCounter",
+          "orders",
+          1
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "m": {
+            "orders": 1000000
+          }
+        },
+        {
+          "k": "test-app",
+          "e": "Production",
+          "m": {
+            "orders": 1000000
+          }
+        },
+        {
+          "k": "test-app",
+          "e": "Production",
+          "m": {
+            "orders": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-and-conflicting-metrics",
+      "events": [
+        [
+          "incrementCounter",
+          "orders",
+          2
+        ],
+        [
+          "setGauge",
+          "orders",
+          9
+        ],
+        [
+          "incrementCounter",
+          "bad",
+          -1
+        ],
+        [
+          "incrementCounter",
+          "fraction",
+          1.5
+        ],
+        [
+          "setGauge",
+          "too-large",
+          1000001
+        ],
+        [
+          "setGauge",
+          " ",
+          2
+        ],
+        [
+          "recordCheck",
+          "",
+          "enabled"
+        ],
+        [
+          "incrementCounter",
+          "huge",
+          9007199254740991
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "m": {
+            "orders": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "disabled",
+      "options": {
+        "enableTelemetry": false
+      },
+      "events": [
+        [
+          "recordUsage",
+          "checkout"
+        ]
+      ],
+      "envelopes": []
+    },
+    {
+      "name": "no-key",
+      "options": {
+        "appKey": ""
+      },
+      "events": [
+        [
+          "recordUsage",
+          "checkout"
+        ]
+      ],
+      "envelopes": []
+    },
+    {
+      "name": "variant-ascii-boundaries",
+      "events": [
+        [
+          "recordCheck",
+          "flag",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ],
+        [
+          "recordView",
+          "flag",
+          "Az09_-"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "f": {
+            "flag": {
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": [
+                1
+              ],
+              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": [
+                0,
+                1
+              ],
+              "Az09_-": [
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-variants-preserve-valid-queue",
+      "events": [
+        [
+          "recordCheck",
+          "flag",
+          "enabled"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          ""
+        ],
+        [
+          "recordUsage",
+          "flag",
+          ""
+        ],
+        [
+          "recordView",
+          "flag",
+          ""
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        ],
+        [
+          "recordView",
+          "flag",
+          "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "trial 1"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "trial 1"
+        ],
+        [
+          "recordView",
+          "flag",
+          "trial 1"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "café"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "café"
+        ],
+        [
+          "recordView",
+          "flag",
+          "café"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "試験"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "試験"
+        ],
+        [
+          "recordView",
+          "flag",
+          "試験"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "emoji-🌍"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "emoji-🌍"
+        ],
+        [
+          "recordView",
+          "flag",
+          "emoji-🌍"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "trial.one"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "trial.one"
+        ],
+        [
+          "recordView",
+          "flag",
+          "trial.one"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "trial/one"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "trial/one"
+        ],
+        [
+          "recordView",
+          "flag",
+          "trial/one"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "trial:one"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "trial:one"
+        ],
+        [
+          "recordView",
+          "flag",
+          "trial:one"
+        ],
+        [
+          "recordCheck",
+          "flag",
+          "trial\n"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "trial\n"
+        ],
+        [
+          "recordView",
+          "flag",
+          "trial\n"
+        ],
+        [
+          "recordUsage",
+          "flag",
+          "enabled"
+        ],
+        [
+          "recordView",
+          "flag",
+          "experiment-a"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "f": {
+            "flag": {
+              "enabled": [
+                1,
+                1
+              ],
+              "experiment-a": [
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "transportScenarios": [
+    {
+      "name": "retry-exhaustion",
+      "statuses": [
+        429,
+        503,
+        503
+      ],
+      "attemptTimesMs": [
+        0,
+        30000,
+        90000
+      ]
+    },
+    {
+      "name": "retry-success",
+      "statuses": [
+        503,
+        202
+      ],
+      "attemptTimesMs": [
+        0,
+        30000
+      ]
+    },
+    {
+      "name": "long-retry-after",
+      "statuses": [
+        429,
+        202
+      ],
+      "retryAfter": "120",
+      "attemptTimesMs": [
+        0,
+        120000
+      ]
+    },
+    {
+      "name": "expired-retry-after",
+      "statuses": [
+        429
+      ],
+      "retryAfter": "301",
+      "attemptTimesMs": [
+        0
+      ]
+    },
+    {
+      "name": "ambiguous-network",
+      "failure": "network",
+      "attemptTimesMs": [
+        0
+      ]
+    },
+    {
+      "name": "timeout",
+      "failure": "timeout",
+      "attemptTimesMs": [
+        0
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "name": "privacy",
+      "actions": [
+        "Supply identity, claims, groups, entity, definitions URL query and auth headers to SDK",
+        "Record one check and flush"
+      ],
+      "expected": [
+        "Body has only k,e,f,m fields",
+        "Only Content-Type and optional Content-Encoding headers",
+        "Credentials omitted; no fabricated Origin",
+        "No identity, timestamps, instance or metric kind in body"
+      ]
+    },
+    {
+      "name": "snapshot-order",
+      "actions": [
+        "Set gauge cart=1",
+        "Start flush and hold its response",
+        "Set gauge cart=2",
+        "Call flush again",
+        "Acknowledge old request with 202"
+      ],
+      "expected": [
+        "One request at a time",
+        "First envelope cart=1, second envelope cart=2",
+        "Older retry remains before newer gauge"
+      ]
+    },
+    {
+      "name": "resource-bounds",
+      "actions": [
+        "Hold first request open",
+        "Record entries until limits reached",
+        "Attempt an additional entry",
+        "Acknowledge and drain"
+      ],
+      "expected": [
+        "At most 2000 accepted entries across pending/inflight",
+        "At most 262144 UTF-8 buffered bytes across pending/inflight",
+        "No previously accepted entry evicted",
+        "Every envelope at most 49152 uncompressed UTF-8 bytes",
+        "At most 16 variants per feature",
+        "Individual oversized entry rejected"
+      ]
+    },
+    {
+      "name": "lifecycle",
+      "actions": [
+        "Create disabled or no-key reporter",
+        "Attach lifecycle",
+        "Dispose",
+        "Create enabled reporter, record event, trigger hidden/background",
+        "Detach and dispose enabled reporter"
+      ],
+      "expected": [
+        "Disabled owner has no queue, listeners, timers or requests",
+        "Background initiates best-effort flush",
+        "Disposal is synchronous, detaches listeners, cancels periodic/retry timers",
+        "No retry after disposal; final attempt bounded by 5000ms"
+      ]
+    },
+    {
+      "name": "compression",
+      "actions": [
+        "Ordinary flush with native gzip support",
+        "Simulate pre-send compression failure",
+        "Simulate ambiguous compressed request failure",
+        "Exit flush"
+      ],
+      "expected": [
+        "Ordinary request uses gzip",
+        "Compression failure falls back to JSON before request",
+        "Ambiguous request is not retried as plain",
+        "Exit request uses uncompressed keepalive where supported"
+      ]
+    },
+    {
+      "name": "bounded-delta-splitting",
+      "actions": [
+        "Increment counter with 1000000 repeatedly",
+        "Attempt single increment 9007199254740991",
+        "Flush accepted deltas"
+      ],
+      "expected": [
+        "Oversized single increment rejected",
+        "Accumulated deltas split into values <=1000000",
+        "Admission accounts for eventual chunks within 2000 entries and 262144 bytes",
+        "No unbounded packet arrays or synchronous split loops"
+      ]
+    }
+  ],
+  "endpointScenarios": [
+    {
+      "name": "bare-query",
+      "metricsBaseUrl": "https://collector.example/?",
+      "expectedUrl": null
+    },
+    {
+      "name": "bare-fragment",
+      "metricsBaseUrl": "https://collector.example/#",
+      "expectedUrl": null
+    },
+    {
+      "name": "bare-query-no-slash",
+      "metricsBaseUrl": "https://collector.example?",
+      "expectedUrl": null
+    },
+    {
+      "name": "bare-fragment-no-slash",
+      "metricsBaseUrl": "https://collector.example#",
+      "expectedUrl": null
+    },
+    {
+      "name": "base-path-bare-query",
+      "metricsBaseUrl": "https://collector.example/base/?",
+      "expectedUrl": null
+    },
+    {
+      "name": "base-path-bare-fragment",
+      "metricsBaseUrl": "https://collector.example/base/#",
+      "expectedUrl": null
+    },
+    {
+      "name": "nonempty-query",
+      "metricsBaseUrl": "https://collector.example/base?context=secret",
+      "expectedUrl": null
+    },
+    {
+      "name": "nonempty-fragment",
+      "metricsBaseUrl": "https://collector.example/base#fragment",
+      "expectedUrl": null
+    },
+    {
+      "name": "embedded-credentials",
+      "metricsBaseUrl": "https://user:pass@collector.example/base",
+      "expectedUrl": null
+    },
+    {
+      "name": "non-http-scheme",
+      "metricsBaseUrl": "ftp://collector.example/base",
+      "expectedUrl": null
+    },
+    {
+      "name": "relative-base",
+      "metricsBaseUrl": "/base",
+      "expectedUrl": null
+    },
+    {
+      "name": "default-root",
+      "metricsBaseUrl": "https://collector.example",
+      "expectedUrl": "https://collector.example/api/frontend/telemetry"
+    },
+    {
+      "name": "explicit-base-path",
+      "metricsBaseUrl": "https://collector.example/base///",
+      "expectedUrl": "https://collector.example/base/api/frontend/telemetry"
+    },
+    {
+      "name": "canonical-authority-and-path",
+      "metricsBaseUrl": "https://COLLECTOR.EXAMPLE:443/base/./inner/../v1///",
+      "expectedUrl": "https://collector.example/base/v1/api/frontend/telemetry"
+    },
+    {
+      "name": "encoded-delimiters-remain-path-data",
+      "metricsBaseUrl": "https://collector.example/base%3Fpart%23anchor/",
+      "expectedUrl": "https://collector.example/base%3Fpart%23anchor/api/frontend/telemetry"
+    },
+    {
+      "name": "preserve-leading-path-slashes",
+      "metricsBaseUrl": "https://collector.example//base/",
+      "expectedUrl": "https://collector.example//base/api/frontend/telemetry"
+    }
+  ]
+}

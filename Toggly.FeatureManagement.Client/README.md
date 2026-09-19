@@ -7,7 +7,7 @@ Use the [trusted .NET server SDK](https://docs.toggly.io/sdks/dotnet) for backen
 ## Install and initialize
 
 ```sh
-dotnet add package Toggly.FeatureManagement.Client.Desktop --version 3.8.0
+dotnet add package Toggly.FeatureManagement.Client.Desktop --version 3.9.0
 ```
 
 ```csharp
@@ -116,3 +116,23 @@ dotnet pack src/Toggly.FeatureManagement.Client.Desktop -c Release
 ```
 
 MIT license. Learn more at [toggly.io](https://toggly.io).
+
+## Frontend telemetry
+
+Keyed clients enable telemetry by default; set `EnableTelemetry = false` to opt out. Keyless clients stay silent. Configure `MetricsBaseUrl` separately from definitions and set `TelemetryFlushIntervalMs` to 30000–60000 (default 45000, with ±20% jitter). Invalid intervals fall back; invalid HTTP(S) URLs, credentials, query or fragment disable telemetry without affecting evaluation.
+
+```csharp
+client.RecordUsage("checkout");
+client.RecordView("checkout", "experiment-a");
+client.IncrementCounter("orders", 2);
+client.SetGauge("cart_total", 12.5);
+await client.FlushTelemetryAsync();
+// Forward a native application's background transition:
+await client.FlushTelemetryAsync(keepalive: true);
+```
+
+Automatic checks count only actual evaluated leaves after entity/local gates and before aggregate negation. Short-circuited keys and internal refresh/snapshot work do not count. Explicit events do not reevaluate flags. Variants accept 1–64 ASCII letters, digits, underscores or hyphens. This client exposes Boolean evaluation; it does not expose an assigned-variant evaluation API.
+
+Payloads contain only public app key, environment and aggregate counts/metric values. Identity, groups, claims and entity data are excluded. Telemetry uses its own HTTP client, never definitions authentication, and never persists events. The caller retains ownership of its definitions `HttpClient` and any optional `IFrontendTelemetryTransport`.
+
+Buffers include inflight/retry data and numeric chunks within 2000 entries / 256 KiB; each envelope is at most 48 KiB. Ordinary sends use gzip with pre-send plain fallback. Only 429/503 responses retry, at most twice after 30/60 seconds (longer Retry-After honored), within 5 minutes. Ambiguous failures drop. `DisposeAsync` cancels schedules and attempts at most one final plain envelope within a global 5-second bound. `OnTelemetryDiagnostic` receives each fixed code at most once per client lifetime, without payloads. Cancelling an explicit telemetry flush ends that wait without throwing or cancelling a shared send.

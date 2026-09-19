@@ -120,13 +120,13 @@ jobs:
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
             /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
-            /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
+            /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.Blazor/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
             /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
             /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
-            /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**"
+            /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,Toggly.FeatureManagement.Blazor/tests/**"
 
       - name: Build solution
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
@@ -252,6 +252,9 @@ jobs:
       - name: Test every additional .NET family and enforce coverage
         run: node .github/package-registry/dotnet-ci.mjs test-families
 
+      - name: Generate Blazor browser coverage for both scanners
+        run: bash Toggly.FeatureManagement.Blazor/test-browser.sh
+
       - name: Merge coverage reports
         run: |
           reportgenerator \
@@ -290,14 +293,14 @@ jobs:
               /d:sonar.token="${SONAR_SERVER_TOKEN}" \
               /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
               /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
-              /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
+              /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.Blazor/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
               /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
               /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
               /d:sonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
               /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
               /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
-              /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**"; then
+              /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,Toggly.FeatureManagement.Blazor/tests/**"; then
               break
             fi
 
@@ -577,8 +580,18 @@ jobs:
       - run: NUGET_BLAZOR_PACK_DIR=blazor-pack node --test .github/package-registry/verify-nuget-blazor.test.mjs
       - name: Compile packed artifact consumer
         run: |
-          dotnet restore Toggly.FeatureManagement.Blazor/examples/BlazorHost --source "${GITHUB_WORKSPACE}/blazor-pack" --source https://api.nuget.org/v3/index.json
+          dotnet restore Toggly.FeatureManagement.Blazor/examples/BlazorHost --packages "${RUNNER_TEMP}/toggly-blazor-consumer" --source "${GITHUB_WORKSPACE}/blazor-pack" --source https://api.nuget.org/v3/index.json
           dotnet build Toggly.FeatureManagement.Blazor/examples/BlazorHost -c Release --no-restore
+      - name: Build packed trimmed managed WebAssembly telemetry consumer
+        run: |
+          dotnet restore Toggly.FeatureManagement.Blazor/tests/WasmHost --packages "${RUNNER_TEMP}/toggly-wasm-consumer" --source "${GITHUB_WORKSPACE}/blazor-pack" --source https://api.nuget.org/v3/index.json
+          dotnet publish Toggly.FeatureManagement.Blazor/tests/WasmHost -c Release --no-restore -p:WasmBuildNative=false
+      - name: Verify WebAssembly telemetry in Chromium
+        run: |
+          npm ci --prefix Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests
+          Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests/node_modules/.bin/playwright install --with-deps chromium
+          node --test Toggly.FeatureManagement.Blazor/tests/wasm-test-server.test.cjs
+          NODE_PATH="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests/node_modules" node Toggly.FeatureManagement.Blazor/tests/wasm-browser.cjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: blazor-${{ matrix.sdk }}
