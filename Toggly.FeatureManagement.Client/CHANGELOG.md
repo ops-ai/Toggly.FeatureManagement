@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.9.0 — 2026-09-18
+
+### Added
+- Portable and Desktop clients now aggregate actual feature checks and expose explicit usage, view, counter, gauge and awaitable flush APIs. Telemetry is enabled for keyed clients and can be opted out.
+- Independent metrics endpoint, bounded in-memory batching, gzip and explicit rate-limit retries; targeting context is excluded.
+
+
 ## 3.8.0 — 2026-09-14
 
 ### Changed

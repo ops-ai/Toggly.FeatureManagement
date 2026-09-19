@@ -13,6 +13,7 @@
     <ProjectReference Include="../../src/Toggly.FeatureManagement.Client.Desktop/Toggly.FeatureManagement.Client.Desktop.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="../../../tests/frontend-telemetry/contract.json" Link="telemetry-contract.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="webcrypto-fixture.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

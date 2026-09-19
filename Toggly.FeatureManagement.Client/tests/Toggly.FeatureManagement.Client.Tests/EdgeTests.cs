@@ -42,7 +42,7 @@ public class EdgeTests
         using var http = new HttpClient(new Handler((r, c) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) })));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier());
@@ -64,7 +64,7 @@ public class EdgeTests
         using var http = new HttpClient(new Handler((r, c) => throw new HttpRequestException("offline")));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier(), store);
@@ -84,7 +84,7 @@ public class EdgeTests
         using var http = new HttpClient(new Handler((r, c) => { requests++; return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(r.RequestUri!.AbsolutePath.Contains("jwks") ? (++keyRequests == 1 ? oldKey.Jwks : newKey.Jwks) : newKey.Envelope("{\"on\":true}")) }); }));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier());
         await client.InitializeAsync();

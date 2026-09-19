@@ -40,7 +40,7 @@ public class KeyRotationRaceTests
         }));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             RefreshInterval = TimeSpan.FromHours(1)
         }, http, verifier, updates: updates);
         var obsoleteActivated = false;
@@ -93,7 +93,7 @@ public class KeyRotationRaceTests
         }));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             RefreshInterval = TimeSpan.FromHours(1)
         }, http, verifier, updates: updates);
         await client.InitializeAsync();

@@ -29,7 +29,7 @@ public class LiveUpdateTests
         using var http = new HttpClient(new Handler((request, ct) => { if (request.RequestUri!.AbsolutePath.Contains("jwks")) { Interlocked.Increment(ref keys); return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(fixture.Jwks) }); } Interlocked.Increment(ref calls); var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(fixture.Envelope("{\"on\":true}")) }; response.Headers.TryAddWithoutValidation("ETag", "\"v1\""); return Task.FromResult(response); }));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             RefreshInterval = TimeSpan.FromHours(1)
         }, http, new Es256SignatureVerifier(), updates: updates);
         await client.InitializeAsync();
@@ -71,7 +71,7 @@ public class LiveUpdateTests
         }));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             RefreshInterval = TimeSpan.FromHours(1)
         }, http, new Es256SignatureVerifier(), updates: updates);
@@ -95,7 +95,7 @@ public class LiveUpdateTests
         }));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             RefreshInterval = TimeSpan.FromHours(1)
         }, http, new Es256SignatureVerifier(), updates: updates);
@@ -127,7 +127,7 @@ public class LiveUpdateTests
         }));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             RefreshInterval = TimeSpan.FromHours(1)
         }, http, new Es256SignatureVerifier(), updates: updates);
@@ -151,7 +151,7 @@ public class LiveUpdateTests
         using var http = new HttpClient(new Handler(async (request, ct) => { started.SetResult(); await release.Task; return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(fixture.Envelope("{}")) }; }));
         var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier());
@@ -170,7 +170,7 @@ public class LiveUpdateTests
         using var http = new HttpClient(new Handler((r, c) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(fixture.Envelope("{}")) })));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier());
@@ -203,7 +203,7 @@ public class LiveUpdateTests
         using var http = new HttpClient(new Handler((r, c) => { Interlocked.Increment(ref calls); return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(fixture.Envelope("{}")) }); }));
         var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             EnableLiveUpdates = false,
             RefreshInterval = TimeSpan.FromMilliseconds(30)
