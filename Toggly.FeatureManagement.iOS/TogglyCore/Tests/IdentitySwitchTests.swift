@@ -7,6 +7,7 @@ private final class IdentitySwitchProtocol: URLProtocol {
     static var fail = false
     static var requests: [URLRequest] = []
     static var failOld = false
+    static var tokenMode = false
     static var signedBodies: (old: Data, new: Data, jwks: Data)?
     override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "identity-switch.invalid" }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -18,7 +19,7 @@ private final class IdentitySwitchProtocol: URLProtocol {
             client?.urlProtocolDidFinishLoading(self)
             return
         }
-        if request.url!.query!.contains("u=new") && !Self.fail {
+        if (request.url!.query!.contains("u=new") || (Self.tokenMode && Self.requests.count > 1)) && !Self.fail {
             finish(newUser: true)
             return
         }
@@ -63,6 +64,41 @@ private actor SuspendingContextStorage: TogglyStorage {
 }
 
 final class IdentitySwitchTests: XCTestCase {
+    func testTokenABARejectsLateInitialResponseAndRevision() async throws {
+        URLProtocol.registerClass(IdentitySwitchProtocol.self)
+        defer { IdentitySwitchProtocol.tokenMode = false; URLProtocol.unregisterClass(IdentitySwitchProtocol.self) }
+        IdentitySwitchProtocol.fail = false
+        IdentitySwitchProtocol.failOld = false
+        IdentitySwitchProtocol.signedBodies = nil
+        IdentitySwitchProtocol.requests = []
+        IdentitySwitchProtocol.tokenMode = true
+        let service = TogglyService(config: TogglyConfig(appKey: "app", baseURI: "https://identity-switch.invalid",
+            identity: "alice", featureDefaults: ["oldUserOnly": false], refreshInterval: 0,
+            useSignedDefinitions: true, enableLiveUpdates: false, enableTelemetry: false, instanceId: "a"))
+        let started = expectation(description: "initial A request")
+        IdentitySwitchProtocol.started = started
+        let initial = Task { await service.initialize() }
+        await fulfillment(of: [started], timeout: 2)
+        let changedB = expectation(description: "changed to B")
+        let removeB = await service.on { if case .identityChanged = $0 { changedB.fulfill() } }
+        let b = Task { await service.setInstanceId("b") }
+        await fulfillment(of: [changedB], timeout: 2)
+        removeB()
+        for _ in 0..<20 { await Task.yield() }
+        let changedA = expectation(description: "changed back to A")
+        let removeA = await service.on { if case .identityChanged = $0 { changedA.fulfill() } }
+        let a = Task { await service.setInstanceId("a") }
+        await fulfillment(of: [changedA], timeout: 2)
+        IdentitySwitchProtocol.pending!.finish()
+        _ = await initial.value; _ = await b.value
+        let latest = await a.value
+        XCTAssertEqual(latest.flags["oldUserOnly"], false)
+        XCTAssertEqual(IdentitySwitchProtocol.requests.count, 2)
+        XCTAssertEqual(IdentitySwitchProtocol.requests.last?.url?.query, "i=a")
+        XCTAssertNil(IdentitySwitchProtocol.requests.last?.value(forHTTPHeaderField: "If-None-Match"))
+        removeA(); await service.dispose()
+    }
+
     func testIdentitySwitchDoesNotCacheInflightOldUserResponseUnderNewContext() async throws {
         IdentitySwitchProtocol.failOld = false
         try await checkSwitch()
@@ -92,7 +128,7 @@ final class IdentitySwitchTests: XCTestCase {
         IdentitySwitchProtocol.signedBodies = verify ? try signedBodies() : nil
         let paused = suspendedPrefix == nil ? nil : expectation(description: "storage write paused")
         let storage = SuspendingContextStorage(prefix: suspendedPrefix, paused: paused)
-        let config = TogglyConfig(appKey:"app", baseURI:"https://identity-switch.invalid", identity:"old", featureDefaults:["oldUserOnly":false], refreshInterval:0, useSignedDefinitions:true, verifySignatures:verify, storage:storage, enableLiveUpdates:false, groups:["beta"], claims:["plan":"pro"])
+        let config = TogglyConfig(appKey:"app", baseURI:"https://identity-switch.invalid", identity:"old", featureDefaults:["oldUserOnly":false], refreshInterval:0, useSignedDefinitions:true, verifySignatures:verify, storage:storage, enableLiveUpdates:false, groups:["beta"], claims:["plan":"pro"], enableTelemetry:false)
         let service = TogglyService(config:config)
         let started = expectation(description:"old request started")
         IdentitySwitchProtocol.started = started
@@ -122,7 +158,7 @@ final class IdentitySwitchTests: XCTestCase {
         unsubscribe()
         await service.dispose()
         IdentitySwitchProtocol.fail = true
-        let next = TogglyService(config:TogglyConfig(appKey:"app", baseURI:"https://identity-switch.invalid", identity:"new", featureDefaults:["oldUserOnly":false], refreshInterval:0, useSignedDefinitions:true, verifySignatures:verify, storage:storage, enableLiveUpdates:false, groups:["beta"], claims:["plan":"pro"]))
+        let next = TogglyService(config:TogglyConfig(appKey:"app", baseURI:"https://identity-switch.invalid", identity:"new", featureDefaults:["oldUserOnly":false], refreshInterval:0, useSignedDefinitions:true, verifySignatures:verify, storage:storage, enableLiveUpdates:false, groups:["beta"], claims:["plan":"pro"], enableTelemetry:false))
         let cached = await next.initialize()
         XCTAssertEqual(cached.flags["oldUserOnly"], false, "Old identity result must not poison new full-context cache")
         await next.dispose()

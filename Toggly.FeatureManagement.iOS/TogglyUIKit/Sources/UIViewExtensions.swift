@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if canImport(UIKit) && !os(watchOS)
 import UIKit
 import TogglyCore
 
@@ -42,10 +42,11 @@ extension UIView {
             self.isHidden = hideWhenEnabled ? isEnabled : !isEnabled
 
             // Subscribe to changes
-            let unsubscribe = await toggly.addStateChangeHandler { [weak self] featureKey, _, newValue in
-                guard let self = self, featureKey == key else { return }
+            let unsubscribe = await toggly.addFeatureCheckHandler { [weak self, weak toggly] snapshot in
+                guard let self = self, let toggly, snapshot.key == key else { return }
                 Task { @MainActor in
-                    let enabled = newValue ?? false
+                    let enabled = snapshot.enabled
+                    await toggly.recordCheck(snapshot)
                     self.isHidden = hideWhenEnabled ? enabled : !enabled
                 }
             }
@@ -78,10 +79,11 @@ extension UIControl {
             let isEnabled = await toggly.isFeatureOn(key)
             self.isEnabled = disableWhenEnabled ? !isEnabled : isEnabled
 
-            _ = await toggly.addStateChangeHandler { [weak self] featureKey, _, newValue in
-                guard let self = self, featureKey == key else { return }
+            _ = await toggly.addFeatureCheckHandler { [weak self, weak toggly] snapshot in
+                guard let self = self, let toggly, snapshot.key == key else { return }
                 Task { @MainActor in
-                    let enabled = newValue ?? false
+                    let enabled = snapshot.enabled
+                    await toggly.recordCheck(snapshot)
                     self.isEnabled = disableWhenEnabled ? !enabled : enabled
                 }
             }

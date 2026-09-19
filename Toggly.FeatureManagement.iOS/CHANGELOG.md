@@ -2,6 +2,26 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.5.0
+
+2026-09-19
+
+### Added
+- Frontend telemetry for evaluated feature checks, including SwiftUI, UIKit, and Combine paths. Telemetry is enabled when an app key is configured and can be disabled with `enableTelemetry: false`.
+- `recordUsage`, `recordView`, `incrementCounter`, `setGauge`, and awaitable `flushTelemetry` methods on `TogglyService`.
+- Host-minted `instanceId` configuration, atomic `setIdentity(_:instanceId:)`, and `setInstanceId(_:)` rotation/clearing. Tokens take precedence over client identities in definitions and telemetry.
+- `metricsBaseUrl`, `telemetryFlushIntervalMs`, and `onTelemetryDiagnostic` configuration options. A background app-state transition flushes buffered events.
+
+### Changed
+- Telemetry requests use the independent metrics endpoint and carry the app key, environment, feature counts, app-level metric values, and optional minted token (`i`) or client identity (`u`). Groups, claims, and entity data remain excluded. Client-identity acceptance is controlled by the server, off by default; HTTP 202 does not establish identity acceptance. Invalid intervals use the 45-second default; invalid metrics endpoints disable telemetry without affecting feature checks.
+- Ordinary telemetry flushes use native gzip; if compression fails before send, the SDK sends plain JSON. Final disposal flushes use plain JSON.
+
+### Fixed
+- Retained payload and accounting metadata share one 2,000-entry/256 KiB budget across identity rotations. Rejected or drained names do not remain in a historical catalog.
+- Disposal cancels backoff and sends at most one final envelope; expired batches are released.
+- Delayed UI checks retain their original owner and identity. Old definitions responses and invalid-cache cleanup cannot overwrite or delete a newer token context.
+- The UIKit target excludes UIKit-only declarations on watchOS, where those view types are unavailable.
+
 ## 1.4.0
 
 2026-09-08

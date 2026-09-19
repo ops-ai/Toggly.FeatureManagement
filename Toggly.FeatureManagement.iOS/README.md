@@ -17,10 +17,55 @@ Official iOS SDK for [Toggly](https://toggly.io) - Feature Flags & A/B Testing P
 - Offline support with caching
 - Real-time updates
 - Type-safe API
+- Frontend telemetry with explicit usage and app metric APIs
+
+## Frontend telemetry (SDK 1.5.0)
+
+Telemetry is enabled by default when `appKey` is set. Feature checks are counted when the SDK actually evaluates a flag, including the evaluated flags in multi-key gates. Short-circuited keys are not counted. SwiftUI, UIKit, and Combine integrations count the flag values they evaluate or present. Views and feature use remain explicit:
+
+```swift
+let service = TogglyService(config: TogglyConfig(
+    appKey: "YOUR_APP_KEY",
+    environment: "Production",
+    enableTelemetry: true,                 // Set false to opt out.
+    metricsBaseUrl: "https://metrics.toggly.io",
+    telemetryFlushIntervalMs: 45_000      // 30_000...60_000; invalid values use 45_000.
+))
+
+await service.recordUsage("new-checkout")
+await service.recordView("new-checkout", variant: "blue")
+await service.incrementCounter("orders", value: 2)
+await service.setGauge("cart_total", value: 12.5)
+await service.flushTelemetry()             // Await the current best-effort send.
+
+// Forward your app lifecycle from the host; background sends buffered data.
+await service.setAppState(.background)
+```
+
+The metrics request is separate from definitions requests. Its base URL must be an absolute HTTP(S) URL without credentials, a query, or a fragment; an invalid value disables telemetry. It contains the app key, environment, aggregated feature counts, and app-level metric values. Optional host-supplied `instanceId` is sent as `i`, otherwise the current identity is sent as `u`. Groups, claims, entity context, timestamps, instance names, metric kinds, and definition request headers are excluded. The SDK batches up to 2,000 entries or 256 KiB including buffered JSON and retained accounting keys and sends envelopes no larger than 48 KiB. Ordinary sends use native gzip with plain JSON fallback if compression fails before sending. HTTP 202 acknowledges receipt; it does not prove that identity was accepted. The server application setting for client-generated `u` is off by default. Only 429 and 503 may be retried, at most twice with 30/60-second minimum delays and a five-minute batch lifetime. An ambiguous network or timeout failure is dropped. `dispose()` is terminal and starts at most one plain JSON final envelope without changing its synchronous signature. Existing in-flight work has a five-second request deadline, and retries/timers are cancelled. Accepted events keep their original attribution across identity changes, including retries and cached UI checks.
+
+## Host-minted identity (SDK 1.5.0)
+
+Your trusted backend mints the capability and passes it to the app. The SDK never uses a Backend key or mints tokens.
+
+```swift
+let service = TogglyService(config: TogglyConfig(
+    appKey: "YOUR_FRONTEND_APP_KEY",
+    identity: "user-123",
+    instanceId: "TOKEN_FROM_YOUR_BACKEND"
+))
+await service.initialize()
+await service.setIdentity("user-456", instanceId: "REPLACEMENT_TOKEN")
+await service.setInstanceId("ROTATED_TOKEN") // Retain current user.
+await service.setInstanceId(nil)             // Return to client-identity targeting.
+await service.setIdentity(nil)               // Clear token and use stored/generated device identity.
+```
+
+`setIdentity(_:)` remains source compatible and clears the old token. For an atomic user/token change use `setIdentity(_:instanceId:)`. When `i` is present, definitions requests omit `u`, groups, and claims; the server resolves targeting from the capability. Without `i`, existing identity/group/claim targeting remains available. Definitions caches, revisions, and pending responses are isolated across token changes. Persistent cache scope uses a token hash rather than storing the capability. Omitted identities retain the existing generated device-ID behavior and are sent as `u` only when no minted capability is present. To keep metrics anonymous, configure `identity: ""` with no token; to disable metrics entirely, use `enableTelemetry: false`.
 
 ## Initial targeting context (requires iOS SDK 1.4.0)
 
-These configuration fields require the upcoming **1.4.0** release; they are not available in earlier published versions.
+These configuration fields require **1.4.0** or later.
 Pass known targeting values when creating the service so its first evaluated request already uses the correct user context, without a follow-up identity refresh.
 
 ```swift
@@ -231,6 +276,10 @@ TogglyConfig(
     connectTimeout: TimeInterval,   // Connection timeout
     requestTimeout: TimeInterval,   // Request timeout
     storage: TogglyStorage?         // Custom storage implementation
+    enableTelemetry: Bool,          // Enabled by default when appKey is set
+    metricsBaseUrl: String,         // Default: https://metrics.toggly.io
+    telemetryFlushIntervalMs: Int,  // Default: 45_000
+    onTelemetryDiagnostic: (@Sendable (String) -> Void)? // Status codes only
 )
 ```
 
@@ -256,6 +305,13 @@ await Toggly.shared.setIdentity("user-123")
 
 // Manual refresh
 await Toggly.shared.refresh()
+
+// Explicit telemetry and manual flush
+await Toggly.shared.recordUsage("feature-key")
+await Toggly.shared.recordView("feature-key")
+await Toggly.shared.incrementCounter("orders")
+await Toggly.shared.setGauge("cart_total", value: 12.5)
+await Toggly.shared.flushTelemetry()
 
 // Events
 await Toggly.shared.on { event in

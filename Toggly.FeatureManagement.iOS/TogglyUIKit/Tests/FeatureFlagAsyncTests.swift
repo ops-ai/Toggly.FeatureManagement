@@ -1,9 +1,69 @@
-#if canImport(UIKit)
+#if canImport(UIKit) && !os(watchOS)
 import XCTest
-import TogglyCore
+@testable import TogglyCore
 @testable import TogglyUIKit
 
 final class FeatureFlagAsyncTests: XCTestCase {
+    actor RequestBodies {
+        var bodies: [[String: Any]] = []
+        func append(_ request: URLRequest) throws {
+            bodies.append(try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any])
+        }
+    }
+
+    func testCachedViewControllerReadCountsPresentedValue() async throws {
+        let requests = RequestBodies()
+        var config = TogglyConfig(appKey: "test-app", featureDefaults: ["ui-flag": true], refreshInterval: 0, enableLiveUpdates: false)
+        config.telemetryTransport = { request in
+            try await requests.append(request)
+            return HTTPURLResponse(url: request.url!, statusCode: 202, httpVersion: nil, headerFields: nil)!
+        }
+        let service = TogglyService(config: config)
+        await service.setNetworkState(.disconnected)
+        await service.initialize()
+        let controller = await MainActor.run { FeatureFlagViewController() }
+        await MainActor.run {
+            controller.togglyService = service
+            controller.observeFeature("ui-flag")
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let cached = await MainActor.run { controller.isFeatureEnabled("ui-flag") }
+        XCTAssertTrue(cached)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        await service.flushTelemetry()
+        let bodies = await requests.bodies
+        XCTAssertEqual(bodies.count, 1)
+        let features = try XCTUnwrap(bodies.first?["f"] as? [String: [String: [Int]]])
+        XCTAssertEqual(features["ui-flag"]?["enabled"], [2])
+    }
+    func testCachedControllerSnapshotKeepsOriginalUserAndRejectsForeignOwner() async throws {
+        let requests = RequestBodies()
+        var config = TogglyConfig(appKey: "test-app", identity: "alice", featureDefaults: ["ui-flag": true],
+                                  refreshInterval: 0, enableLiveUpdates: false, instanceId: "minted-a")
+        config.telemetryTransport = { request in
+            try await requests.append(request)
+            return HTTPURLResponse(url: request.url!, statusCode: 202, httpVersion: nil, headerFields: nil)!
+        }
+        let owner = TogglyService(config: config)
+        await owner.setNetworkState(.disconnected); await owner.initialize()
+        let controller = await MainActor.run { FeatureFlagViewController() }
+        await MainActor.run { controller.togglyService = owner; controller.observeFeature("ui-flag") }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        await owner.setIdentity("bob", instanceId: "minted-b")
+        let cached = await MainActor.run { controller.isFeatureEnabled("ui-flag") }
+        XCTAssertTrue(cached)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let other = TogglyService(config: config)
+        await MainActor.run { controller.togglyService = other; _ = controller.isFeatureEnabled("ui-flag") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        await other.flushTelemetry(); await owner.flushTelemetry()
+        let bodies = await requests.bodies
+        XCTAssertEqual(bodies.count, 1)
+        XCTAssertEqual(bodies.first?["i"] as? String, "minted-a")
+        XCTAssertEqual((bodies.first?["f"] as? [String: [String: [Int]]])?["ui-flag"]?["enabled"], [2])
+        await owner.dispose(); await other.dispose()
+    }
+
     var service: TogglyService!
 
     override func setUp() async throws {
