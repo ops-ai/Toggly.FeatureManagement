@@ -138,6 +138,12 @@ reserve queue space until invoked; admission uses the same validation and global
 budget. It becomes a no-op after disposal and cannot record on another reporter.
 Keep this seam inside SDK evaluators rather than exposing it as a consumer API.
 
+The server's application setting `AcceptClientGeneratedIdentitiesForMetrics`
+is off by default and controls whether client-asserted `u` is accepted. Unknown
+or expired `i` and unaccepted `u` can be ingested without identity while still
+returning HTTP 202; acknowledgment is not proof of attribution acceptance.
+Host-supplied `i` is minted by a trusted backend, never by this reporter.
+
 Both ESM and CommonJS entry points include declarations that work without
 `lib.dom`, including TypeScript 4.8 and 4.9 consumers using classic Node or Node16 module
 resolution for the root and browser entry points.

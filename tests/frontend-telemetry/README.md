@@ -59,3 +59,8 @@ under the replacement. Keep every partition under one global admission budget.
 The vector includes anonymous events, client identities, minted token rotation,
 blank-token fallback and logout. Platform tests additionally cover in-flight
 sends, retry ordering, UTF-8 metadata bounds, empty transitions and cancellation.
+
+These fixtures assert client serialization, not server acceptance of identity.
+The server's `AcceptClientGeneratedIdentitiesForMetrics` application setting is
+off by default. Unknown/expired i and unaccepted u can return 202 without
+identity attribution; do not treat fixture parity or 202 as acceptance proof.
