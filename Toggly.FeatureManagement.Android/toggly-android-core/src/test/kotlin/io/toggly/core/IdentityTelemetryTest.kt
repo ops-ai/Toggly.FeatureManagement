@@ -434,4 +434,21 @@ class IdentityTelemetryTest {
         }
     }
 
+    @Test fun attributedSnapshotsKeepOrdinaryMapEqualityAcrossContexts() = runBlocking {
+        val service = TogglyService(TogglyConfig(identity = "alice", enableTelemetry = false,
+            featureDefaults = mapOf("flag" to false), refreshInterval = 0, enableLiveUpdates = false))
+        try {
+            service.init()
+            val first = service.featureFlags.value
+            service.setIdentity("bob", "token")
+            val second = service.featureFlags.value
+            val plain = mapOf("flag" to false)
+            assertTrue(first == plain); assertTrue(plain == first)
+            assertTrue(first == second); assertTrue(second == first)
+            assertEquals(plain.hashCode(), first.hashCode())
+            assertFalse(first.equals(null)); assertFalse(first.equals("flag"))
+            assertFalse(first == mapOf("flag" to true))
+        } finally { service.dispose() }
+    }
+
 }

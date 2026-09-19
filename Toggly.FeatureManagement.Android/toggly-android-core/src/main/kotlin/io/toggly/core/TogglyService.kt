@@ -144,7 +144,7 @@ class TogglyService(
     private class AttributedFlags(
         private val flags: FeatureFlags, val owner: Any, val instanceId: String?, val identity: String?
     ) : Map<String, Boolean> by flags {
-        override fun equals(other: Any?): Boolean = flags == other
+        override fun equals(other: Any?): Boolean = other is Map<*, *> && flags == other
         override fun hashCode(): Int = flags.hashCode()
         override fun toString(): String = flags.toString()
     }
