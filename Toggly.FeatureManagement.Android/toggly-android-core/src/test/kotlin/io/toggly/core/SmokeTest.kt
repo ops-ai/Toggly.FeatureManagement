@@ -18,7 +18,7 @@ class SmokeTest {
         }
 
         val service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = appKey,
                 environment = "Production",
                 baseUri = "https://definitions.toggly.io",
@@ -41,7 +41,7 @@ class SmokeTest {
         }
 
         val service = TogglyService(
-            TogglyConfig(
+            TogglyConfig(enableTelemetry = false,
                 appKey = appKey,
                 environment = "Production",
                 baseUri = "https://definitions.toggly.io",

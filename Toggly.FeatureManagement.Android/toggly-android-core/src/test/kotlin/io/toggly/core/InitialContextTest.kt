@@ -18,7 +18,7 @@ class InitialContextTest {
         storage.set(TogglyStorageKeys.DEVICE_ID, "stale-device")
         val groups = mutableListOf(" beta ", "team a", "a&b+é", " ")
         val claims = mutableMapOf("plan&kind" to "pro+ &é", "" to "ignored", "empty" to "")
-        val service = TogglyService(TogglyConfig(
+        val service = TogglyService(TogglyConfig(enableTelemetry = false,
             appKey = "test", identity = "user&123", groups = groups, claims = claims,
             baseUri = server.url("/").toString().trimEnd('/'), storage = storage,
             refreshInterval = 0, enableLiveUpdates = false
@@ -46,7 +46,7 @@ class InitialContextTest {
         try {
             for (id in listOf(null, "")) {
                 server.enqueue(MockResponse().setBody("{}"))
-                val service = TogglyService(TogglyConfig(appKey = "test", identity = id,
+                val service = TogglyService(TogglyConfig(enableTelemetry = false, appKey = "test", identity = id,
                     baseUri = server.url("/").toString().trimEnd('/'), storage = storage,
                     refreshInterval = 0, enableLiveUpdates = false))
                 service.init()
@@ -57,7 +57,7 @@ class InitialContextTest {
                 service.dispose()
             }
             server.enqueue(MockResponse().setBody("{}"))
-            val service = TogglyService(TogglyConfig(appKey = "test", identity = "",
+            val service = TogglyService(TogglyConfig(enableTelemetry = false, appKey = "test", identity = "",
                 groups = emptyList(), claims = (25 downTo 0).associate { "c%02d".format(it) to " " },
                 baseUri = server.url("/").toString().trimEnd('/'), refreshInterval = 0, enableLiveUpdates = false))
             service.init()
@@ -73,7 +73,7 @@ class InitialContextTest {
         val server = MockWebServer()
         server.start()
         val storage = MemoryStorage()
-        fun service(groups: List<String>, claims: Map<String, String> = emptyMap()) = TogglyService(TogglyConfig(
+        fun service(groups: List<String>, claims: Map<String, String> = emptyMap()) = TogglyService(TogglyConfig(enableTelemetry = false,
             appKey = "test", identity = "user", groups = groups, claims = claims, storage = storage,
             baseUri = server.url("/").toString().trimEnd('/'), refreshInterval = 0,
             enableLiveUpdates = false, useSignedDefinitions = true))
@@ -108,7 +108,7 @@ class InitialContextTest {
             .digest("user".toByteArray()).joinToString("") { "%02x".format(it) }.take(16)
         storage.set(TogglyStorageKeys.FEATURE_FLAGS_CACHE + hash,
             "{\"identity\":\"user\",\"flags\":\"{\\\"legacy\\\":true}\"}")
-        val service = TogglyService(TogglyConfig(identity = "user", groups = listOf("beta"),
+        val service = TogglyService(TogglyConfig(enableTelemetry = false, identity = "user", groups = listOf("beta"),
             storage = storage, refreshInterval = 0, enableLiveUpdates = false))
         service.setNetworkState(NetworkState(false))
         assertNull(service.init().flags["legacy"])

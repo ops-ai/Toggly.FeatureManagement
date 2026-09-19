@@ -45,7 +45,7 @@ class ContextCacheOwnershipTest {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(503)) // Existing unavailable-JWKS fallback.
         server.start()
-        val service = TogglyService(TogglyConfig(
+        val service = TogglyService(TogglyConfig(enableTelemetry = false,
             appKey = "test", identity = "A", storage = storage,
             baseUri = server.url("/").toString().trimEnd('/'), verifySignatures = pauseJwks,
             refreshInterval = 0, enableLiveUpdates = false
@@ -89,7 +89,7 @@ class ContextCacheOwnershipTest {
             }
         }
         server.start()
-        val service = TogglyService(TogglyConfig(appKey = "test", identity = "A",
+        val service = TogglyService(TogglyConfig(enableTelemetry = false, appKey = "test", identity = "A",
             baseUri = server.url("/").toString().trimEnd('/'), useSignedDefinitions = true,
             refreshInterval = 0, enableLiveUpdates = false))
         try {
