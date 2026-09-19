@@ -1,5 +1,11 @@
 # Changelog
 
+## All .NET SDK packages 3.9.0 - 2026-09-18
+
+### Added
+- Portable/Desktop and Blazor WebAssembly clients support aggregate frontend checks, explicit usage/views and business metrics with opt-out and bounded transport. Trusted server telemetry is unchanged.
+
+
 ## All .NET SDK packages 3.8.1 - 2026-09-17
 
 ### Fixed

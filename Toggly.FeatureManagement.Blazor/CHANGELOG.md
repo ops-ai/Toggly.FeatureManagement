@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.9.0 — 2026-09-18
+
+### Added
+- WebAssembly sessions forward aggregate telemetry through the portable owner with credential-free browser fetch, hidden/pagehide flushing and listener cleanup. Companion APIs preserve compatibility with existing feature-session implementations.
+- Independent metrics endpoint, bounded in-memory batching, gzip and explicit rate-limit retries; targeting context is excluded.
+
+
 ## 3.8.0 — 2026-09-14
 
 ### Changed

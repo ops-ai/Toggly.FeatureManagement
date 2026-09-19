@@ -16,7 +16,7 @@ public sealed class OfflineRestartTests
         var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         var rotated = false;
         var offline = false;
-        var options = new TogglyClientOptions { AppKey = "public", Context = new("alice"), EnableLiveUpdates = false };
+        var options = new TogglyClientOptions { EnableTelemetry = false, AppKey = "public", Context = new("alice"), EnableLiveUpdates = false };
         using var http = new HttpClient(new Handler((request, _) =>
         {
             if (offline)
@@ -74,7 +74,7 @@ public sealed class OfflineRestartTests
         var acceptedKey = scenario == "rotation" ? rotatedKey : firstKey;
         var options = new TogglyClientOptions
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             Context = new("alice"),
             EnableLiveUpdates = false,
             RefreshInterval = TimeSpan.FromHours(1)

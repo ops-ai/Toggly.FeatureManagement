@@ -577,8 +577,17 @@ jobs:
       - run: NUGET_BLAZOR_PACK_DIR=blazor-pack node --test .github/package-registry/verify-nuget-blazor.test.mjs
       - name: Compile packed artifact consumer
         run: |
-          dotnet restore Toggly.FeatureManagement.Blazor/examples/BlazorHost --source "${GITHUB_WORKSPACE}/blazor-pack" --source https://api.nuget.org/v3/index.json
+          dotnet restore Toggly.FeatureManagement.Blazor/examples/BlazorHost --packages "${RUNNER_TEMP}/toggly-blazor-consumer" --source "${GITHUB_WORKSPACE}/blazor-pack" --source https://api.nuget.org/v3/index.json
           dotnet build Toggly.FeatureManagement.Blazor/examples/BlazorHost -c Release --no-restore
+      - name: Build packed WebAssembly telemetry consumer
+        run: |
+          dotnet restore Toggly.FeatureManagement.Blazor/tests/WasmHost --packages "${RUNNER_TEMP}/toggly-wasm-consumer" --source "${GITHUB_WORKSPACE}/blazor-pack" --source https://api.nuget.org/v3/index.json
+          dotnet publish Toggly.FeatureManagement.Blazor/tests/WasmHost -c Release --no-restore -p:WasmBuildNative=false
+      - name: Verify WebAssembly telemetry in Chromium
+        run: |
+          npm ci --prefix Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests
+          Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests/node_modules/.bin/playwright install --with-deps chromium
+          node Toggly.FeatureManagement.Blazor/tests/wasm-browser.cjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: blazor-${{ matrix.sdk }}

@@ -84,7 +84,7 @@ public class ProtocolTests
         using var http = new HttpClient(new Handler((request, ct) => { requests.Add((request.RequestUri!.ToString(), request.Headers.TryGetValues("If-None-Match", out var v) ? v.First() : null)); return Task.FromResult(Response(fixture.Envelope("{\"on\":true}"))); }));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier(), store);
@@ -113,7 +113,7 @@ public class ProtocolTests
         using var http = new HttpClient(new Handler((request, ct) => Task.FromResult(Response(body, status))));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier());
@@ -142,7 +142,7 @@ public class ProtocolTests
         using var http = new HttpClient(new Handler(async (request, ct) => { if (++calls == 1) { started.SetResult(); await release.Task; } return Response(fixture.Envelope(request.RequestUri!.Query.Contains("u=bob") ? "{\"on\":false}" : "{\"on\":true}")); }));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier());
@@ -160,7 +160,7 @@ public class ProtocolTests
         using var fixture = new SignedFixture();
         var store = new Store();
         using var online = new HttpClient(new Handler((request, ct) => Task.FromResult(Response(fixture.Envelope("{\"on\":true}")))));
-        var options = new TogglyClientOptions { AppKey = "public", TrustedJwks = fixture.Jwks, EnableLiveUpdates = false };
+        var options = new TogglyClientOptions { EnableTelemetry = false, AppKey = "public", TrustedJwks = fixture.Jwks, EnableLiveUpdates = false };
         await using (var client = new TogglyClient(options, online, new Es256SignatureVerifier(), store))
             await client.InitializeAsync();
         using var offline = new HttpClient(new Handler((request, ct) => throw new HttpRequestException("offline")));
@@ -189,7 +189,7 @@ public class ProtocolTests
         using var http = new HttpClient(new Handler((r, c) => Task.FromResult(Response(fixture.Envelope("{\"on\":true}", DateTimeOffset.UtcNow.ToUnixTimeSeconds() + offset)))));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             TrustedJwks = fixture.Jwks,
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier());
@@ -207,7 +207,7 @@ public class ProtocolTests
         using var http = new HttpClient(new Handler((r, c) => { count++; return Task.FromResult(Response(r.RequestUri!.AbsolutePath.Contains("jwks") ? fixture.Jwks : fixture.Envelope("{\"on\":true}"))); }));
         await using var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             AllowedKeyIds = ["untrusted"],
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier());
@@ -222,7 +222,7 @@ public class ProtocolTests
         using var http = new HttpClient(new Handler(async (r, c) => { started.SetResult(); await Task.Delay(Timeout.Infinite, c); return Response(""); }));
         var client = new TogglyClient(new()
         {
-            AppKey = "public",
+            EnableTelemetry = false, AppKey = "public",
             EnableLiveUpdates = false
         }, http, new Es256SignatureVerifier());
         var init = client.InitializeAsync();

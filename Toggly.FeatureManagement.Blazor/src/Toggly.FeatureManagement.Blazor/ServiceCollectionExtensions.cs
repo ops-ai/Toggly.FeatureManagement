@@ -15,14 +15,20 @@ public static class ServiceCollectionExtensions
         services.AddScoped<BrowserModule>();
         services.AddScoped<BrowserSignatureVerifier>();
         services.AddScoped<BrowserSnapshotStore>();
-        services.AddScoped<IFeatureSession>(sp => new BrowserFeatureSession(
-            new TogglyClient(
-                options(sp),
-                sp.GetRequiredService<HttpClient>(),
-                sp.GetRequiredService<BrowserSignatureVerifier>(),
-                sp.GetRequiredService<BrowserSnapshotStore>()
-            )
-        ));
+        services.AddScoped<BrowserTelemetryTransport>();
+        services.AddScoped<BrowserTelemetryLifecycle>();
+        services.AddScoped<IFeatureSession>(sp =>
+        {
+            var configured = options(sp);
+            // A prerender/server host cannot accidentally create frontend telemetry.
+            var enabled = OperatingSystem.IsBrowser() && configured.EnableTelemetry && !string.IsNullOrWhiteSpace(configured.AppKey);
+            var client = new TogglyClient(configured with
+            {
+                EnableTelemetry = enabled,
+                TelemetryTransport = sp.GetRequiredService<BrowserTelemetryTransport>()
+            }, sp.GetRequiredService<HttpClient>(), sp.GetRequiredService<BrowserSignatureVerifier>(), sp.GetRequiredService<BrowserSnapshotStore>());
+            return enabled ? new BrowserFeatureSession(client, sp.GetRequiredService<BrowserTelemetryLifecycle>()) : new BrowserFeatureSession(client);
+        });
         return services;
     }
 }
