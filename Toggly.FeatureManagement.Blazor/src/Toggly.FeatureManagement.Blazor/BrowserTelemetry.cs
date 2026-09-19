@@ -28,7 +28,10 @@ public sealed class BrowserTelemetryTransport(BrowserModule module) : IFrontendT
         {
             await loaded.InvokeVoidAsync("abortTelemetry", requestId).AsTask().WaitAsync(TimeSpan.FromSeconds(1));
         }
-        catch (Exception) { }
+        catch (Exception)
+        {
+            // The browser may already be gone; abort failure cannot escape telemetry cleanup.
+        }
     }
 
 }
@@ -79,7 +82,17 @@ public sealed class BrowserTelemetryLifecycle(BrowserModule module) : IAsyncDisp
             // An import/attach may complete after teardown. Never retain or revive that listener.
             await ReleaseAsync(attached);
         }
-        catch (Exception) { lock (sync) { callback.Dispose(); if (ReferenceEquals(reference, callback)) reference = null; client = null; } }
+        catch (Exception)
+        {
+            // Optional telemetry attachment failures never fail session initialization.
+            lock (sync)
+            {
+                callback.Dispose();
+                if (ReferenceEquals(reference, callback))
+                    reference = null;
+                client = null;
+            }
+        }
     }
     [JSInvokable]
     public Task FlushTelemetry(bool keepalive)
@@ -109,9 +122,14 @@ public sealed class BrowserTelemetryLifecycle(BrowserModule module) : IAsyncDisp
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try
         {
-            await attached.InvokeVoidAsync("dispose").AsTask().WaitAsync(deadline.Token);
-            await attached.DisposeAsync().AsTask().WaitAsync(deadline.Token);
+            var detachListener = attached.InvokeVoidAsync("dispose").AsTask();
+            await detachListener.WaitAsync(deadline.Token);
+            var releaseReference = attached.DisposeAsync().AsTask();
+            await releaseReference.WaitAsync(deadline.Token);
         }
-        catch (Exception) { }
+        catch (Exception)
+        {
+            // Disconnected or stalled JS cannot prevent bounded owner teardown.
+        }
     }
 }
