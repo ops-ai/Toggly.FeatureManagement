@@ -406,6 +406,13 @@ This keeps it crash-safe and avoids secure-storage access while the app is
 backgrounded. As a result, a memory-only configuration has no cache after a
 cold start and cannot evaluate flags offline until the first successful fetch.
 
+Conditional fetches require a validated cached body for the same application,
+environment, identity, and response mode. Flags and variant assignments keep
+separate revisions. Custom cache providers should preserve each model's
+`revision`, `appKey`, `environment`, and `signed` fields (included by `toJson`)
+alongside its body. Older records without these optional fields still provide
+offline fallback, but the next refresh fetches a full response.
+
 To support offline restarts, supply a **cache provider** — your app chooses
 where data is stored. Pass an implementation of `TogglyCacheProvider` via
 `TogglyConfig(cacheProvider: ...)`. Offline restart also requires a **stable

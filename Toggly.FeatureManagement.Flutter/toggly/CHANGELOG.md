@@ -19,6 +19,10 @@
   default-off server setting; a 202 does not confirm identity acceptance.
 
 ### Fixed
+- Conditional requests reuse a revision only with its validated flags or variant
+  body for the same application, environment, identity, and response mode.
+  Missing or older cache metadata triggers a full fetch while retaining offline
+  fallback; flags revisions cannot suppress the first variant assignment fetch.
 - Identity changes seal accepted telemetry without relabeling queued or retried
   events. Definitions and revisions reject late responses from previous contexts,
   including token rotation back to an earlier value.

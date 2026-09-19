@@ -45,6 +45,9 @@ class Toggly with WidgetsBindingObserver {
   static DateTime? _lastChecked;
   static DateTime? _lastSynced;
   static String? _definitionsRevision;
+  // HTTP validators belong to their accepted body, never the shared WS revision.
+  static String? _flagsRevision;
+  static String? _variantsRevision;
 
   /// WS etag to pin via ?rev= on the next definitions/variants HTTP GETs.
   static String? _pendingHttpRevisionPin;
@@ -449,6 +452,8 @@ class Toggly with WidgetsBindingObserver {
   /// Drops in-memory evaluation state for the current context without deleting
   /// persisted flags, variants, or revisions (supports multi-user switch-back).
   static void _clearInMemoryEvaluationState() {
+    _flagsRevision = null;
+    _variantsRevision = null;
     _inMemoryFlags = null;
     _inMemoryDefinitions = null;
     _inMemoryVariantDefs = null;
@@ -556,10 +561,12 @@ class Toggly with WidgetsBindingObserver {
         return Map<String, bool>.from(Toggly._flagDefaults);
       }
 
-      final parsed =
-          entity_gate.parseEvaluatedDefinitions(jsonDecode(flagsCache.flags));
+      final raw = jsonDecode(flagsCache.flags);
+      if (raw is! Map) throw const FormatException('Invalid cached flags body');
+      final parsed = entity_gate.parseEvaluatedDefinitions(raw);
       final parsedFlags = entity_gate.toBooleanDefinitions(parsed);
 
+      var verifiedForConditionalFetch = true;
       // Check if the cache is signed and if the timestamp and signature are present
       if (Toggly._useSignedDefinitions) {
         if (flagsCache.timestamp == null ||
@@ -611,6 +618,7 @@ class Toggly with WidgetsBindingObserver {
             return Map<String, bool>.from(Toggly._flagDefaults);
           }
         } catch (_) {
+          verifiedForConditionalFetch = false;
           // Cached definitions were previously accepted when written. If
           // offline validation cannot be performed now because of transient
           // JWK issues, keep the last-known-good cached flags.
@@ -620,6 +628,10 @@ class Toggly with WidgetsBindingObserver {
       if (generation != _generation) {
         return Map<String, bool>.from(_flagDefaults);
       }
+      _flagsRevision = verifiedForConditionalFetch
+          ? _matchingBodyRevision(flagsCache.revision, flagsCache.appKey,
+              flagsCache.environment, flagsCache.signed)
+          : null;
       _inMemoryDefinitions = parsed;
       _inMemoryFlags = parsedFlags;
       _featureFlagsSubject?.add(Map<String, bool>.from(_inMemoryFlags!));
@@ -647,7 +659,9 @@ class Toggly with WidgetsBindingObserver {
     int? timestamp,
     String? signature,
     String? keyId,
+    String? revision,
   }) async {
+    _flagsRevision = _normalizeRevision(revision);
     // Update in-memory cache first
     final parsed =
         entity_gate.parseEvaluatedDefinitions(jsonDecode(featureFlags));
@@ -666,6 +680,10 @@ class Toggly with WidgetsBindingObserver {
     await Toggly._cache?.writeFlags(TogglyFeatureFlagsCache(
       identity: Toggly._contextCacheKey,
       flags: featureFlags,
+      revision: _flagsRevision,
+      appKey: _appKey,
+      environment: _environment,
+      signed: _useSignedDefinitions,
       timestamp: timestamp,
       signature: signature,
       keyId: keyId,
@@ -733,7 +751,11 @@ class Toggly with WidgetsBindingObserver {
       final headers = <String, dynamic>{};
       // Keep pin until refresh() finishes both flags + variants fetches.
       final pin = _pendingHttpRevisionPin;
-      final revision = pin != null ? null : _definitionsRevision;
+      if (_inMemoryFlags == null) await cachedFeatureFlags;
+      if (generation != _generation) {
+        return TogglyLoadFeatureFlagsResponse.cached;
+      }
+      final revision = pin != null ? null : _flagsRevision;
       if (revision != null) {
         headers['If-None-Match'] = revision;
       }
@@ -833,7 +855,8 @@ class Toggly with WidgetsBindingObserver {
               featureFlags: defsForSignature,
               timestamp: timestamp,
               signature: signature,
-              keyId: keyId);
+              keyId: keyId,
+              revision: _extractDefinitionsRevision(response));
         } catch (e, stack) {
           if (generation != _generation) {
             return TogglyLoadFeatureFlagsResponse.cached;
@@ -858,7 +881,8 @@ class Toggly with WidgetsBindingObserver {
             entity_gate.parseEvaluatedDefinitions(payload['defs'] ?? payload);
         flags = entity_gate.toBooleanDefinitions(mixed);
         Toggly.cacheFeatureFlags(
-            featureFlags: jsonEncode(payload['defs'] ?? payload));
+            featureFlags: jsonEncode(payload['defs'] ?? payload),
+            revision: _extractDefinitionsRevision(response));
 
         _applyDefinitionsRevision(response);
       }
@@ -937,7 +961,9 @@ class Toggly with WidgetsBindingObserver {
       final headers = <String, dynamic>{};
       // Share the same ?rev= pin as fetchFeatureFlags; refresh() clears it after.
       final pin = _pendingHttpRevisionPin;
-      final revision = pin != null ? null : _definitionsRevision;
+      if (_inMemoryVariantDefs == null) await cachedVariantDefinitions();
+      if (generation != _generation) return;
+      final revision = pin != null ? null : _variantsRevision;
       if (revision != null) {
         headers['If-None-Match'] = revision;
       }
@@ -1025,6 +1051,7 @@ class Toggly with WidgetsBindingObserver {
         timestamp: timestamp,
         signature: signature,
         keyId: keyId,
+        revision: _extractDefinitionsRevision(response),
       );
       if (generation != _generation) return;
 
@@ -1037,7 +1064,8 @@ class Toggly with WidgetsBindingObserver {
       if (generation != _generation) return;
       if (e.response?.statusCode == 304) {
         _lastChecked = DateTime.now();
-        final cached = await _readVerifiedVariantDefsFromCache();
+        final cached =
+            _inMemoryVariantDefs ?? await _readVerifiedVariantDefsFromCache();
         if (generation != _generation) return;
         _inMemoryVariantDefs = cached;
       } else if (e.response?.statusCode == 403) {
@@ -1066,12 +1094,18 @@ class Toggly with WidgetsBindingObserver {
     required int timestamp,
     required String signature,
     required String keyId,
+    String? revision,
   }) async {
+    _variantsRevision = _normalizeRevision(revision);
     _inMemoryVariantDefs = Map<String, dynamic>.from(jsonDecode(variantsJson));
 
     await Toggly._cache?.writeVariants(TogglyVariantsCache(
       identity: Toggly._contextCacheKey,
       variants: variantsJson,
+      revision: _variantsRevision,
+      appKey: _appKey,
+      environment: _environment,
+      signed: _useSignedDefinitions,
       timestamp: timestamp,
       signature: signature,
       keyId: keyId,
@@ -1080,6 +1114,7 @@ class Toggly with WidgetsBindingObserver {
 
   /// Drops variant cache from memory and secure storage for the current identity.
   static Future<void> clearVariantCache() async {
+    _variantsRevision = null;
     _inMemoryVariantDefs = null;
 
     await Toggly._cache?.deleteVariants(Toggly._contextCacheKey);
@@ -1116,7 +1151,10 @@ class Toggly with WidgetsBindingObserver {
         }
       }
 
-      return Map<String, dynamic>.from(jsonDecode(vc.variants));
+      final defs = Map<String, dynamic>.from(jsonDecode(vc.variants));
+      _variantsRevision = _matchingBodyRevision(
+          vc.revision, vc.appKey, vc.environment, vc.signed);
+      return defs;
     } catch (e, stackTrace) {
       if (generation != _generation) return {};
       _reportError('Error loading cached variant definitions', e, stackTrace);
@@ -1848,6 +1886,8 @@ class Toggly with WidgetsBindingObserver {
     _telemetry?.dispose();
     _telemetry = null;
     cancelTimers();
+    _flagsRevision = null;
+    _variantsRevision = null;
     _inMemoryFlags = null;
     _inMemoryDefinitions = null;
     _inMemoryVariantDefs = null;
@@ -1947,6 +1987,8 @@ class Toggly with WidgetsBindingObserver {
     Toggly._sync.onRefreshRequested =
         ({required bool forceJwksRefresh, String? pinnedRevision}) async {
       if (forceJwksRefresh) {
+        _flagsRevision = null;
+        _variantsRevision = null;
         _definitionsRevision = null;
         Toggly._sync.updateCachedRevision(null);
         await _deleteCachedDefinitionsRevision();
@@ -1992,6 +2034,21 @@ class Toggly with WidgetsBindingObserver {
   static TogglyRevisionCacheProvider? get _revisionCache {
     final cache = Toggly._cache;
     return cache is TogglyRevisionCacheProvider ? cache : null;
+  }
+
+  static String? _normalizeRevision(String? revision) {
+    final normalized = revision?.replaceAll(RegExp(r'^"+|"+$'), '');
+    return normalized == null || normalized.isEmpty ? null : normalized;
+  }
+
+  static String? _matchingBodyRevision(
+      String? revision, String? appKey, String? environment, bool? signed) {
+    if (appKey != _appKey ||
+        environment != _environment ||
+        signed != _useSignedDefinitions) {
+      return null;
+    }
+    return _normalizeRevision(revision);
   }
 
   static Future<void> _loadCachedDefinitionsRevision() async {

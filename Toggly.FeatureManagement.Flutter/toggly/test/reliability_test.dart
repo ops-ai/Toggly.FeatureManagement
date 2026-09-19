@@ -549,6 +549,20 @@ void main() {
       'rev-b',
     );
 
+    for (final user in ['a', 'b']) {
+      await provider.writeFlags(TogglyFeatureFlagsCache(
+        identity: 'u:user-$user',
+        flags: '{"FeatureA":true}',
+        timestamp: null,
+        signature: null,
+        keyId: null,
+        revision: 'rev-$user',
+        appKey: 'app',
+        environment: 'Production',
+        signed: false,
+      ));
+    }
+
     final captured = <String?>[];
     final interceptor = InterceptorsWrapper(
       onRequest: (options, handler) {
