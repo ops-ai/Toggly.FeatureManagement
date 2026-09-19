@@ -82,6 +82,7 @@ const waitFor = async (condition) => {
     assert.deepEqual(ordinary.body.m, { cart: 3.5, orders: 2 });
     assert.equal(ordinary.body.k, "local-wasm-fixture");
     assert.equal(ordinary.body.e, "Fixture");
+    assert.equal(ordinary.body.u, "private-user");
     assert.ok(preflights.length > 0);
     assert.equal(ordinary.headers.authorization, undefined);
     assert.equal(ordinary.headers.cookie, undefined);
@@ -89,8 +90,12 @@ const waitFor = async (condition) => {
       Object.keys(ordinary.body).sort((left, right) =>
         left.localeCompare(right),
       ),
-      ["e", "f", "k", "m"],
+      ["e", "f", "k", "m", "u"],
     );
+    assert.equal(ordinary.body.g, undefined);
+    assert.equal(ordinary.body.claims, undefined);
+    assert.ok(!JSON.stringify(ordinary.body).includes("private-group"));
+    assert.ok(!JSON.stringify(ordinary.body).includes("private-claim"));
     assert.ok(ordinary.bytes <= 49152);
     await page.locator("#record").click();
     const hiddenBefore = packets.length;
