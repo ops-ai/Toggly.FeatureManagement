@@ -19,6 +19,15 @@
   ],
   "packages": [
     {
+      "name": "@ops-ai/toggly-client-telemetry",
+      "group": "client-telemetry",
+      "manifest": "toggly-client-telemetry/package.json",
+      "changelog": "toggly-client-telemetry/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-client-telemetry-release.yml",
+      "docsUrl": "https://docs.toggly.io/sdks",
+      "oidcReady": false
+    },
+    {
       "name": "@ops-ai/astro-feature-flags-toggly",
       "group": "astro",
       "manifest": "Toggly.FeatureManagement.Astro/package.json",

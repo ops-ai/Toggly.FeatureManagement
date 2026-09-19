@@ -15,6 +15,12 @@ import { fileURLToPath } from 'node:url';
 
 const FULL_TEST_MATRIX = [
   {
+    sdk: 'Client-Telemetry',
+    path: 'toggly-client-telemetry',
+    'test-cmd': 'npm run test:coverage && npm run test:packed',
+    'has-lint': false,
+  },
+  {
     sdk: 'NestJS',
     path: 'Toggly.FeatureManagement.NestJS',
     'test-cmd': 'npm run test:coverage && npm run test:packed',
@@ -216,7 +222,7 @@ export function filterAnalysisJs(sdksInput = 'all') {
     }
   }
   let needSharedDeps = testMatrix.some(
-    (row) => !['SolidJS', 'SvelteKit', 'Gatsby'].includes(row.sdk),
+    (row) => !['SolidJS', 'SvelteKit', 'Gatsby', 'Client-Telemetry'].includes(row.sdk),
   );
   for (const special of specials) {
     const cfg = SPECIAL_FILTERS[special];
