@@ -42,3 +42,20 @@ identities.
 Optional reporter options `instanceId` and `identity` become compact body
 fields `i` and `u`. When both are present, only `i` is serialized. Groups and
 claims must never appear on the metrics body even if a harness passes them.
+
+## Atomic context transition fixtures
+
+`contextTransitionScenarios` is an additive section with the same
+`name` / `options` / `events` / `envelopes` shape as `scenarios`. Existing scenario
+consumers remain compatible. Transition-capable reporters must also consume this
+section, require it to be nonempty, apply all events synchronously in order, and
+flush once at the end. `setContext` events carry one context object; native
+adapters map that operation to their atomic owning-context transition.
+
+For `setContext`, omitted appKey/environment preserves routing, while omitted or
+blank instanceId/identity clears attribution. Nonblank i takes precedence over
+u. Accepted data keeps its previous k/e/i/u; new events are admitted immediately
+under the replacement. Keep every partition under one global admission budget.
+The vector includes anonymous events, client identities, minted token rotation,
+blank-token fallback and logout. Platform tests additionally cover in-flight
+sends, retry ordering, UTF-8 metadata bounds, empty transitions and cancellation.
