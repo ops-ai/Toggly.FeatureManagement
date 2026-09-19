@@ -18,7 +18,7 @@ class UseTogglyResult internal constructor(
      * Current feature flags.
      */
     val featureFlags: FeatureFlags
-        @Composable get() = _featureFlags.collectAsState().value
+        @Composable get() = key(service) { _featureFlags.collectAsState().value }
 
     /**
      * Whether the SDK has been initialized.

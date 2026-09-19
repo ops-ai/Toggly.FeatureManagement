@@ -13,6 +13,10 @@
 - Background transitions start a telemetry flush; reconfiguration disposes the old owner without relabeling buffered events.
 - Telemetry uses private, bounded in-memory batches, native gzip, explicit rate-limit retries, and a bounded final flush on disposal. Targeting context and definition request headers are excluded.
 
+### Fixed
+- Compose provider replacement resets collected and remembered state to the new application/environment owner.
+- Disposal permanently retires initialization, refresh, cache loading, and live-update work, including delayed completions during reconfiguration.
+
 ## 1.5.0
 
 2026-09-12

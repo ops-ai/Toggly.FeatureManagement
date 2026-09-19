@@ -29,7 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
  * ```
  */
 object Toggly {
-    private var service: TogglyService? = null
+    @Volatile private var service: TogglyService? = null
     private var config: TogglyConfig? = null
 
     /**
@@ -77,6 +77,7 @@ object Toggly {
      *
      * @param config The Toggly configuration
      */
+    @Synchronized
     fun configure(config: TogglyConfig) {
         service?.dispose()
         this.config = config
@@ -249,6 +250,7 @@ object Toggly {
     /**
      * Dispose and reset the global instance.
      */
+    @Synchronized
     fun reset() {
         service?.dispose()
         service = null

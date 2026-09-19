@@ -29,13 +29,16 @@ fun TogglyProvider(
     service: TogglyService,
     content: @Composable () -> Unit
 ) {
-    val featureFlags by service.featureFlags.collectAsState()
-
-    CompositionLocalProvider(
-        LocalTogglyService provides service,
-        LocalFeatureFlags provides featureFlags,
-        content = content
-    )
+    // Collected values and every remembered adapter state belong to this owner.
+    // Effect keys alone restart collection but retain the previous State value.
+    key(service) {
+        val featureFlags by service.featureFlags.collectAsState()
+        CompositionLocalProvider(
+            LocalTogglyService provides service,
+            LocalFeatureFlags provides featureFlags,
+            content = content
+        )
+    }
 }
 
 /**
