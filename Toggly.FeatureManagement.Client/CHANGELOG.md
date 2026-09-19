@@ -6,6 +6,10 @@
 - Portable and Desktop clients now aggregate actual feature checks and expose explicit usage, view, counter, gauge and awaitable flush APIs. Telemetry is enabled for keyed clients and can be opted out.
 - Independent metrics endpoint, bounded in-memory batching, gzip and explicit rate-limit retries; targeting context is excluded.
 
+### Fixed
+- Telemetry flush cancellation completes without throwing while preserving shared delivery ownership.
+- Diagnostic callbacks emit each fixed code at most once per client lifetime.
+
 
 ## 3.8.0 — 2026-09-14
 

@@ -6,6 +6,11 @@
 - WebAssembly sessions forward aggregate telemetry through the portable owner with credential-free browser fetch, hidden/pagehide flushing and listener cleanup. Companion APIs preserve compatibility with existing feature-session implementations.
 - Independent metrics endpoint, bounded in-memory batching, gzip and explicit rate-limit retries; targeting context is excluded.
 
+### Fixed
+- Telemetry flush cancellation completes without throwing while preserving shared delivery ownership.
+- Diagnostic callbacks emit each fixed code at most once per client lifetime.
+- Hidden-page transitions use plain keepalive requests, matching pagehide and final disposal.
+
 
 ## 3.8.0 — 2026-09-14
 

@@ -11,6 +11,34 @@ public class TelemetryReporterTests
     private static TogglyClientOptions Options(IFrontendTelemetryTransport transport) => new() { AppKey = "test-app", TelemetryTransport = transport };
 
     [Fact]
+    public async Task DiagnosticsAreOncePerFixedCodeWithoutDroppingAcceptedData()
+    {
+        var diagnostics = new System.Collections.Concurrent.ConcurrentBag<string>();
+        var received = new List<byte[]>(); var mode = 0;
+        var sender = new Sender((body, _, _) => {
+            if (mode == 1) throw new IOException("private failure payload");
+            if (mode == 2) return Task.FromResult(new FrontendTelemetryResponse(400));
+            received.Add(body); return Task.FromResult(new FrontendTelemetryResponse(202));
+        });
+        await using var reporter = new FrontendTelemetryReporter(Options(sender) with {
+            TelemetryFlushIntervalMs = 1,
+            OnTelemetryDiagnostic = code => { diagnostics.Add(code); throw new Exception("host diagnostic failure"); }
+        });
+        Parallel.For(0, 10000, _ => reporter.RecordUsage("private-name", "bad\n"));
+        for (var i = 0; i < 2100; i++) reporter.RecordUsage($"accepted-{i}");
+        await reporter.FlushTelemetryAsync();
+        Assert.Equal(2000, received.Sum(body => Body(body).GetProperty("f").EnumerateObject().Count()));
+        for (var i = 0; i < 100; i++) reporter.RecordUsage(new string('x', 50000));
+        reporter.IncrementCounter("metric");
+        for (var i = 0; i < 100; i++) reporter.SetGauge("metric", 1);
+        await reporter.FlushTelemetryAsync();
+        Assert.Equal(1, Body(received.Last()).GetProperty("m").GetProperty("metric").GetInt32());
+        for (mode = 1; mode <= 2; mode++)
+            for (var i = 0; i < 100; i++) { reporter.RecordUsage("failed"); await reporter.FlushTelemetryAsync(); }
+        Assert.Equal(new[] { "buffer-limit", "http-failure", "invalid-event", "invalid-option", "metric-kind-conflict", "oversized-entry", "transport-failure" }, diagnostics.Order().ToArray());
+    }
+
+    [Fact]
     public async Task SharedSerializationAndEndpointFixtures()
     {
         foreach (var scenario in Contract.GetProperty("scenarios").EnumerateArray())

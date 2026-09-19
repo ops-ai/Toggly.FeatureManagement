@@ -82,7 +82,7 @@ export async function sendTelemetry(url, bytes, gzip, keepalive, requestId) {
 
 export function attachTelemetry(owner) {
   const flush = (keepalive) => { Promise.resolve().then(() => owner.invokeMethodAsync("FlushTelemetry", keepalive)).catch(() => {}); };
-  const hidden = () => { if (document.visibilityState === "hidden") flush(false); };
+  const hidden = () => { if (document.visibilityState === "hidden") flush(true); };
   const exit = () => flush(true);
   document.addEventListener("visibilitychange", hidden);
   window.addEventListener("pagehide", exit);

@@ -119,6 +119,6 @@ test("telemetry lifecycle belongs to one owner and detaches on disposal", async 
   events.get("visibilitychange")(); await Promise.resolve(); assert.equal(calls.length, 0);
   document.visibilityState = "hidden"; events.get("visibilitychange")(); events.get("pagehide")();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(calls, [["FlushTelemetry", false], ["FlushTelemetry", true]]);
+  assert.deepEqual(calls, [["FlushTelemetry", true], ["FlushTelemetry", true]]);
   listener.dispose(); assert.equal(events.size, 0); delete globalThis.document; delete globalThis.window;
 });
