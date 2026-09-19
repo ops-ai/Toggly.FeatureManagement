@@ -100,6 +100,74 @@ public class TelemetryTests : BlazorTestContext
         await lifecycle.FlushTelemetry(true);
         await session.DisposeAsync();
     }
+    [Fact]
+    public async Task LateBrowserAttachmentFailureKeepsDisposedSessionTerminal()
+    {
+        var imported = new DelayedReference { Result = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        await using var module = new BrowserModule(new Runtime(imported));
+        var lifecycle = new BrowserTelemetryLifecycle(module);
+        var client = new TogglyClient(new(), new HttpClient(), new Verifier());
+        var session = new BrowserFeatureSession(client, lifecycle);
+        var initializing = session.InitializeAsync();
+        await imported.Started.Task;
+        await session.DisposeAsync();
+        imported.Result.SetException(new JSException("attachment failed after disposal"));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => initializing);
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => session.InitializeAsync());
+        await lifecycle.FlushTelemetry(true);
+        Assert.Equal(1, imported.Calls);
+    }
+
+    [Fact]
+    public async Task ListenerReleaseConsumesEachInteropValueTaskOnce()
+    {
+        var listener = new SingleUseReference();
+        var imported = new DelayedReference { Result = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        imported.Result.SetResult(listener);
+        await using var module = new BrowserModule(new Runtime(imported));
+        var lifecycle = new BrowserTelemetryLifecycle(module);
+        var client = new TogglyClient(new(), new HttpClient(), new Verifier());
+        var session = new BrowserFeatureSession(client, lifecycle);
+        await session.InitializeAsync();
+        await session.DisposeAsync();
+        await session.DisposeAsync();
+        Assert.Equal(1, listener.DetachResults);
+        Assert.Equal(1, listener.DisposalResults);
+    }
+    private sealed class SingleUseReference : IJSObjectReference
+    {
+        public int DetachResults, DisposalResults;
+        public ValueTask DisposeAsync() => new(new SingleUseDisposal(() => DisposalResults++), 0);
+        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
+            => new(new SingleUseResult<TValue>(() => DetachResults++), 0);
+        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken ct, object?[]? args)
+            => InvokeAsync<TValue>(identifier, args);
+    }
+    private sealed class SingleUseResult<T>(Action consumed) : System.Threading.Tasks.Sources.IValueTaskSource<T>
+    {
+        private bool used;
+        public T GetResult(short token)
+        {
+            consumed();
+            Assert.False(used);
+            used = true;
+            return default!;
+        }
+        public System.Threading.Tasks.Sources.ValueTaskSourceStatus GetStatus(short token) => System.Threading.Tasks.Sources.ValueTaskSourceStatus.Succeeded;
+        public void OnCompleted(Action<object?> continuation, object? state, short token, System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags) => throw new InvalidOperationException("Already complete");
+    }
+    private sealed class SingleUseDisposal(Action consumed) : System.Threading.Tasks.Sources.IValueTaskSource
+    {
+        private bool used;
+        public void GetResult(short token)
+        {
+            consumed();
+            Assert.False(used);
+            used = true;
+        }
+        public System.Threading.Tasks.Sources.ValueTaskSourceStatus GetStatus(short token) => System.Threading.Tasks.Sources.ValueTaskSourceStatus.Succeeded;
+        public void OnCompleted(Action<object?> continuation, object? state, short token, System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags) => throw new InvalidOperationException("Already complete");
+    }
     private sealed class Runtime(IJSObjectReference imported) : IJSRuntime
     {
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) => ValueTask.FromResult((TValue)imported);

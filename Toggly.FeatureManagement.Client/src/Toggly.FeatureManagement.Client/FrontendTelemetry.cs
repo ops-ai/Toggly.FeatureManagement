@@ -56,7 +56,14 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
     {
         public int Pieces => (int)((Math.Max(Checks, Math.Max(Used, Viewed)) - 1) / ValueLimit + 1);
         public Feature First => new(Math.Min(Checks, ValueLimit), Math.Min(Used, ValueLimit), Math.Min(Viewed, ValueLimit));
-        public long[] Values => Viewed > 0 ? [Checks, Used, Viewed] : Used > 0 ? [Checks, Used] : [Checks];
+        public long[] Values
+        {
+            get
+            {
+                if (Viewed > 0) return [Checks, Used, Viewed];
+                return Used > 0 ? [Checks, Used] : [Checks];
+            }
+        }
     }
     private sealed record Metric(double Value, bool Counter)
     {
@@ -99,11 +106,9 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
         this.timeout = timeout ?? TimeSpan.FromSeconds(5);
         interval = options.TelemetryFlushIntervalMs is >= 30000 and <= 60000 ? options.TelemetryFlushIntervalMs : 45000;
         transport = options.TelemetryTransport;
-        if (options.EnableTelemetry && !string.IsNullOrWhiteSpace(options.AppKey))
-        {
-            if (endpoint is null || interval != options.TelemetryFlushIntervalMs)
-                Diagnose("invalid-option");
-        }
+        if (options.EnableTelemetry && !string.IsNullOrWhiteSpace(options.AppKey)
+            && (endpoint is null || interval != options.TelemetryFlushIntervalMs))
+            Diagnose("invalid-option");
     }
 
     internal static Uri? Endpoint(string? value)
@@ -114,7 +119,7 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
         var delimiter = value.IndexOf("://", StringComparison.Ordinal);
         if (delimiter < 0)
             return null;
-        var authority = value[(delimiter + 3)..].Split('/', '\\')[0];
+        var authority = value[(delimiter + 3)..].Split(['/', '\\'], StringSplitOptions.None)[0];
         if (string.IsNullOrWhiteSpace(authority) || authority.Contains('@'))
             return null;
         return new UriBuilder(uri) { Path = uri.AbsolutePath.TrimEnd('/') + "/api/frontend/telemetry" }.Uri;
@@ -215,15 +220,20 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
     }
     private async Task PeriodicAsync()
     {
+        var cancellationToken = lifetime.Token;
         try
         {
-            while (!lifetime.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                await Task.Delay((int)(interval * (0.8 + Random.Shared.NextDouble() * 0.4)), lifetime.Token).ConfigureAwait(false);
-                await FlushTelemetryAsync().ConfigureAwait(false);
+                await Task.Delay((int)(interval * (0.8 + Random.Shared.NextDouble() * 0.4)), cancellationToken).ConfigureAwait(false);
+                // Periodic waiting may end with the owner; the shared flight remains owned by teardown.
+                await FlushTelemetryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            // Owner retirement ends periodic work without surfacing a telemetry error.
+        }
     }
     private byte[] Encode(Dictionary<string, Dictionary<string, long[]>> f, Dictionary<string, double> m)
     {
@@ -319,7 +329,10 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
     {
         // Caller cancellation ends only this wait, never the shared delivery attempt.
         try { await FlushAsync(keepalive).WaitAsync(cancellationToken).ConfigureAwait(false); }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            // Caller cancellation ends this wait only; shared transport is independently owned.
+        }
     }
     internal Task FlushAsync(bool keepalive)
     {
@@ -406,9 +419,12 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
                 bytes = compress(bytes);
                 gzip = true;
             }
-            catch (Exception) { }
+            catch (Exception)
+            {
+                // Compression failed before send; retain the original plain JSON bytes.
+            }
         }
-        for (var attempt = 0; now() - batch.CreatedAt < 300000; attempt++)
+        for (var attempt = 0; attempt < 3 && now() - batch.CreatedAt < 300000; attempt++)
         {
             FrontendTelemetryResponse response;
             using var requestLifetime = new CancellationTokenSource();
@@ -424,7 +440,12 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
                     gzip = false;
                 }
                 activeRequest = requestLifetime;
-                sender = transport ??= ownedTransport = new NativeTelemetryTransport();
+                if (transport is null)
+                {
+                    ownedTransport = new NativeTelemetryTransport();
+                    transport = ownedTransport;
+                }
+                sender = transport;
             }
             try
             {
@@ -491,9 +512,13 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
         await Task.Yield();
         try
         {
-            await FlushAsync(true).WaitAsync(timeout).ConfigureAwait(false);
+            // Lifetime is already cancelled; the final send has its own global timeout.
+            await FlushAsync(true).WaitAsync(timeout, CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception) { }
+        catch (Exception)
+        {
+            // Teardown is bounded best effort; always release queues and owned resources.
+        }
         lock (sync)
         {
             closed = true;
@@ -512,7 +537,11 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
     private static void CancelRequest(CancellationTokenSource request)
     {
         // Host transports may register callbacks; their errors must not prevent cleanup.
-        try { request.Cancel(); } catch (Exception) { }
+        try { request.Cancel(); }
+        catch (Exception)
+        {
+            // A host cancellation callback cannot interrupt the remaining cleanup.
+        }
     }
     private void Diagnose(string code)
     {
@@ -534,7 +563,10 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
         {
             options.OnTelemetryDiagnostic?.Invoke(code);
         }
-        catch (Exception) { }
+        catch (Exception)
+        {
+            // Optional diagnostic observers must never affect feature evaluation or delivery.
+        }
     }
     private static byte[] Gzip(byte[] bytes)
     {

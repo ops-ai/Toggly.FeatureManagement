@@ -282,7 +282,13 @@ public class TelemetryReporterTests
             await Task.Delay(Timeout.Infinite, ct);
             return new(202);
         })), timeout: TimeSpan.FromMilliseconds(20));
-        reporter.RecordUsage("f"); await reporter.FlushTelemetryAsync(); await reporter.DisposeAsync();
+        var failure = await Record.ExceptionAsync(async () =>
+        {
+            reporter.RecordUsage("f");
+            await reporter.FlushTelemetryAsync();
+            await reporter.DisposeAsync();
+        });
+        Assert.Null(failure);
     }
     private sealed class DefinitionsHandler : HttpMessageHandler
     {

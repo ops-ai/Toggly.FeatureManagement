@@ -587,7 +587,8 @@ jobs:
         run: |
           npm ci --prefix Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests
           Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests/node_modules/.bin/playwright install --with-deps chromium
-          node Toggly.FeatureManagement.Blazor/tests/wasm-browser.cjs
+          node --test Toggly.FeatureManagement.Blazor/tests/wasm-test-server.test.cjs
+          NODE_PATH="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests/node_modules" node Toggly.FeatureManagement.Blazor/tests/wasm-browser.cjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: blazor-${{ matrix.sdk }}
