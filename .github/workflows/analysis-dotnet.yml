@@ -579,7 +579,7 @@ jobs:
         run: |
           dotnet restore Toggly.FeatureManagement.Blazor/examples/BlazorHost --packages "${RUNNER_TEMP}/toggly-blazor-consumer" --source "${GITHUB_WORKSPACE}/blazor-pack" --source https://api.nuget.org/v3/index.json
           dotnet build Toggly.FeatureManagement.Blazor/examples/BlazorHost -c Release --no-restore
-      - name: Build packed WebAssembly telemetry consumer
+      - name: Build packed trimmed managed WebAssembly telemetry consumer
         run: |
           dotnet restore Toggly.FeatureManagement.Blazor/tests/WasmHost --packages "${RUNNER_TEMP}/toggly-wasm-consumer" --source "${GITHUB_WORKSPACE}/blazor-pack" --source https://api.nuget.org/v3/index.json
           dotnet publish Toggly.FeatureManagement.Blazor/tests/WasmHost -c Release --no-restore -p:WasmBuildNative=false

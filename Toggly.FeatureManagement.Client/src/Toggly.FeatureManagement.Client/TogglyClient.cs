@@ -148,7 +148,7 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
     public void SetGauge(string metricKey, double value) => telemetry?.SetGauge(metricKey, value);
     public Task FlushTelemetryAsync(CancellationToken cancellationToken = default) => telemetry?.FlushTelemetryAsync(cancellationToken) ?? Task.CompletedTask;
     /// <summary>Flush for browser exit or a native background transition; exit uses plain JSON.</summary>
-    public Task FlushTelemetryAsync(bool keepalive, CancellationToken cancellationToken = default) => (telemetry?.FlushAsync(keepalive) ?? Task.CompletedTask).WaitAsync(cancellationToken);
+    public Task FlushTelemetryAsync(bool keepalive, CancellationToken cancellationToken = default) => telemetry?.FlushTelemetryAsync(keepalive, cancellationToken) ?? Task.CompletedTask;
 
     /// <summary>Combines the selected feature keys, optionally negating the result. An empty selection matches.</summary>
     public bool Evaluate(IEnumerable<string> featureKeys, Requirement requirement = Requirement.All, bool negate = false, EntityContext? entity = null)

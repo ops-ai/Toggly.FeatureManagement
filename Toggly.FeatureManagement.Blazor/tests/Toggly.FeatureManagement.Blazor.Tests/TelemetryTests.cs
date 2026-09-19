@@ -115,6 +115,40 @@ public class TelemetryTests : BlazorTestContext
         { Calls++; Started.TrySetResult(); return Result is null ? default! : (TValue)await Result.Task; }
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken ct, object?[]? args) => InvokeAsync<TValue>(identifier, args);
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BrowserFacadeContainsCallerCancellationAndKeepsSharedFlight(bool alreadyCancelled)
+    {
+        var transport = new StalledTelemetry();
+        using var http = new HttpClient();
+        var client = new TogglyClient(new() { AppKey = "local", TelemetryTransport = transport }, http, new Verifier());
+        await using var session = new BrowserFeatureSession(client);
+        IFrontendTelemetry events = session;
+        events.RecordUsage("on");
+        using var cancellation = new CancellationTokenSource();
+        if (alreadyCancelled) cancellation.Cancel();
+        var pending = events.FlushTelemetryAsync(cancellation.Token);
+        await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var shared = events.FlushTelemetryAsync();
+        cancellation.Cancel();
+        var escaped = await Record.ExceptionAsync(() => pending).WaitAsync(TimeSpan.FromSeconds(1));
+        transport.Completion.SetResult(new(202));
+        await shared;
+        Assert.Null(escaped); Assert.Equal(1, transport.Calls);
+        Assert.False(transport.RequestToken.IsCancellationRequested);
+        await events.FlushTelemetryAsync(); Assert.Equal(1, transport.Calls);
+    }
+    private sealed class StalledTelemetry : IFrontendTelemetryTransport
+    {
+        public int Calls;
+        public CancellationToken RequestToken;
+        public TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<FrontendTelemetryResponse> Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task<FrontendTelemetryResponse> SendAsync(Uri endpoint, ReadOnlyMemory<byte> payload, bool gzip, bool keepalive, CancellationToken ct)
+        { Calls++; RequestToken = ct; Started.TrySetResult(); return Completion.Task.WaitAsync(ct); }
+    }
+
     private sealed class EmptyHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable));

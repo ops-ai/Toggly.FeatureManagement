@@ -190,7 +190,7 @@ MIT. See [LICENSE](LICENSE). Learn more at [toggly.io](https://toggly.io).
 
 ## WebAssembly frontend telemetry
 
-`AddTogglyBlazorWebAssembly` enables frontend telemetry for keyed browser clients. Set `EnableTelemetry = false` in `TogglyClientOptions` to opt out; keyless clients add no telemetry queue or lifecycle listeners. `MetricsBaseUrl` and `TelemetryFlushIntervalMs` follow the portable client options. The browser uses credential-free fetch, gzip for ordinary sends and plain keepalive for pagehide. Hidden-page transitions request a normal flush; disposal detaches listeners and bounds the final envelope.
+`AddTogglyBlazorWebAssembly` enables frontend telemetry for keyed browser clients. Set `EnableTelemetry = false` in `TogglyClientOptions` to opt out; keyless clients add no telemetry queue or lifecycle listeners. `MetricsBaseUrl` and `TelemetryFlushIntervalMs` follow the portable client options. The browser uses credential-free fetch, gzip for ordinary sends and plain keepalive for hidden-page and pagehide transitions; disposal detaches listeners and bounds the final envelope. Cancelling an explicit telemetry flush ends that wait without throwing or cancelling a shared send.
 
 Use the optional companion without adding members to your own `IFeatureSession` implementation:
 

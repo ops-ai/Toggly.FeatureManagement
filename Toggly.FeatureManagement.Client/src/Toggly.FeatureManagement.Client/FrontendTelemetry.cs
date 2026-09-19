@@ -79,6 +79,7 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
     private Dictionary<string, bool> queuedKinds = new(StringComparer.Ordinal);
     private long pendingBytes, queuedBytes;
     private int pendingEntries, queuedEntries;
+    private int diagnosticMask;
     private bool disposed, finalAttempted, closed;
     private Task? flight, periodic, disposal;
     private CancellationTokenSource? retry, activeRequest;
@@ -313,7 +314,13 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
         Finish();
         return batches;
     }
-    public Task FlushTelemetryAsync(CancellationToken cancellationToken = default) => FlushAsync(false).WaitAsync(cancellationToken);
+    public Task FlushTelemetryAsync(CancellationToken cancellationToken = default) => FlushTelemetryAsync(false, cancellationToken);
+    internal async Task FlushTelemetryAsync(bool keepalive, CancellationToken cancellationToken)
+    {
+        // Caller cancellation ends only this wait, never the shared delivery attempt.
+        try { await FlushAsync(keepalive).WaitAsync(cancellationToken).ConfigureAwait(false); }
+        catch (OperationCanceledException) { }
+    }
     internal Task FlushAsync(bool keepalive)
     {
         TaskCompletionSource? completion = null;
@@ -509,6 +516,20 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
     }
     private void Diagnose(string code)
     {
+        // One emission per fixed code for this reporter's lifetime; no user-key cache.
+        var bit = code switch
+        {
+            "invalid-option" => 1,
+            "invalid-event" => 2,
+            "oversized-entry" => 4,
+            "metric-kind-conflict" => 8,
+            "buffer-limit" => 16,
+            "transport-failure" => 32,
+            "http-failure" => 64,
+            _ => 0
+        };
+        if (bit == 0 || (Interlocked.Or(ref diagnosticMask, bit) & bit) != 0)
+            return;
         try
         {
             options.OnTelemetryDiagnostic?.Invoke(code);

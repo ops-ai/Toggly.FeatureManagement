@@ -50,6 +50,34 @@ public class TelemetryTests
         Assert.Equal("old", documents[1].GetProperty("k").GetString()); Assert.Equal("Old", documents[1].GetProperty("e").GetString());
         Assert.Equal("[1]", documents[1].GetProperty("f").GetProperty("flag").GetProperty("enabled").GetRawText());
     }
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task PublicFlushContainsCancellationWithoutCancellingSharedFlight(bool keepalive, bool alreadyCancelled)
+    {
+        var transport = new StalledTelemetry();
+        using var http = new HttpClient();
+        await using var client = new TogglyClient(new() { AppKey = "local", TelemetryTransport = transport,
+            Defaults = new Dictionary<string, bool> { ["on"] = true } }, http, new Verifier());
+        Assert.True(client.IsEnabled("on"));
+        using var cancellation = new CancellationTokenSource();
+        if (alreadyCancelled) cancellation.Cancel();
+        var pending = keepalive ? client.FlushTelemetryAsync(true, cancellation.Token) : client.FlushTelemetryAsync(cancellation.Token);
+        await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var shared = client.FlushTelemetryAsync();
+        cancellation.Cancel();
+        var escaped = await Record.ExceptionAsync(() => pending).WaitAsync(TimeSpan.FromSeconds(1));
+        transport.Completion.SetResult(new(202));
+        await shared;
+        Assert.Null(escaped);
+        Assert.Equal(1, transport.Calls);
+        Assert.False(transport.RequestToken.IsCancellationRequested);
+        await client.FlushTelemetryAsync();
+        Assert.Equal(1, transport.Calls);
+    }
+
     private sealed class Definitions(string body) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(body) });
@@ -68,5 +96,17 @@ internal sealed class TelemetryCapture : IFrontendTelemetryTransport
         }
         else Bodies.Add(payload.ToArray());
         return Task.FromResult(new FrontendTelemetryResponse(202));
+    }
+}
+
+internal sealed class StalledTelemetry : IFrontendTelemetryTransport
+{
+    public int Calls;
+    public CancellationToken RequestToken;
+    public TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource<FrontendTelemetryResponse> Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public Task<FrontendTelemetryResponse> SendAsync(Uri endpoint, ReadOnlyMemory<byte> payload, bool gzip, bool keepalive, CancellationToken ct)
+    {
+        Calls++; RequestToken = ct; Started.TrySetResult(); return Completion.Task.WaitAsync(ct);
     }
 }
