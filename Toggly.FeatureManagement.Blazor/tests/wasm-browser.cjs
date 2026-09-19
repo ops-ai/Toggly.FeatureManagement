@@ -97,6 +97,22 @@ const waitFor = async (condition) => {
     assert.ok(!JSON.stringify(ordinary.body).includes("private-group"));
     assert.ok(!JSON.stringify(ordinary.body).includes("private-claim"));
     assert.ok(ordinary.bytes <= 49152);
+    const transitionBefore = packets.length;
+    await page.locator("#record").click();
+    await page.locator("#mint").click();
+    await page.locator("#status").filter({ hasText: "minted" }).waitFor();
+    await page.locator("#record").click();
+    await page.locator("#flush").click();
+    await page.locator("#status").filter({ hasText: "flushed" }).waitFor();
+    const transition = packets.slice(transitionBefore);
+    assert.equal(transition.length, 2);
+    assert.equal(transition[0].body.u, "private-user");
+    assert.equal(transition[0].body.i, undefined);
+    assert.equal(transition[1].body.i, "local-minted-token");
+    assert.equal(transition[1].body.u, undefined);
+    assert.equal(transition[0].body.m.cart, 3.5);
+    assert.equal(transition[1].body.m.cart, 3.5);
+    assert.ok(transition.every(packet => packet.url === "/base/api/frontend/telemetry"));
     await page.locator("#record").click();
     const hiddenBefore = packets.length;
     await page.evaluate(() => {
@@ -112,6 +128,10 @@ const waitFor = async (condition) => {
       await page.evaluate(() => window.telemetryFetchOptions.at(-1)),
       { keepalive: true, encoding: null },
     );
+    assert.equal(packets.at(-1).body.i, "local-minted-token");
+    assert.equal(packets.at(-1).body.u, undefined);
+    await page.locator("#logout").click();
+    await page.locator("#status").filter({ hasText: "anonymous" }).waitFor();
     await page.evaluate(() =>
       Object.defineProperty(document, "visibilityState", {
         value: "visible",
@@ -130,6 +150,8 @@ const waitFor = async (condition) => {
       { keepalive: true, encoding: null },
     );
     await page.locator("#record").click();
+    assert.equal(packets.at(-1).body.i, undefined);
+    assert.equal(packets.at(-1).body.u, undefined);
     const disposeBefore = packets.length;
     await page.locator("#dispose").click();
     await page.locator("#status").filter({ hasText: "disposed" }).waitFor();

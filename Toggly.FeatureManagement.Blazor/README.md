@@ -12,12 +12,12 @@ Native Razor feature gates for static SSR, Interactive Server, WebAssembly and I
 | Interactive Auto | Server package in server project; browser package in client project | Each runtime creates its own session |
 
 ```sh
-dotnet add package Toggly.FeatureManagement.Blazor --version 3.9.0
+dotnet add package Toggly.FeatureManagement.Blazor --version 3.10.0
 # Server project only:
-dotnet add package Toggly.FeatureManagement.Blazor.Server --version 3.9.0
+dotnet add package Toggly.FeatureManagement.Blazor.Server --version 3.10.0
 ```
 
-The server package reuses trusted `Toggly.FeatureManagement` 3.9.0. The browser package reuses portable `Toggly.FeatureManagement.Client` 3.9.0 and has no dependency on server evaluation or filesystem storage. The two packages target net8.0; use a compatible ASP.NET Core host and supported .NET runtime.
+The server package reuses trusted `Toggly.FeatureManagement` 3.10.0. The browser package reuses portable `Toggly.FeatureManagement.Client` 3.10.0 and has no dependency on server evaluation or filesystem storage. The two packages target net8.0; use a compatible ASP.NET Core host and supported .NET runtime.
 
 ## Trusted server setup
 
@@ -206,3 +206,11 @@ if (Features is IFrontendTelemetry telemetry)
 ```
 
 There is one reporter in the portable browser client. Component/session evaluations count actual leaves once, including local/entity results and short circuiting; refresh, hydration and snapshot projection are silent. Frontend reporting is disabled during server/prerender execution. Trusted Blazor Server telemetry retains its existing server implementation. Browser CORS must allow the configured metrics origin and JSON/gzip content headers.
+
+### Minted identity and login/logout
+
+`TogglyClientOptions.InstanceId` accepts a capability minted by your trusted backend. Definitions use `?i=` and omit client identity, groups and claims; telemetry sends the same token as JSON `i`. Without a token, definitions retain existing targeting and telemetry sends optional `u`. The app setting for accepting client-generated metric identities is off by default; an HTTP 202 does not confirm that identity was accepted.
+
+Use `IFrontendIdentitySession.SetIdentityAsync(context, instanceId)` on `TogglyClient` or `BrowserFeatureSession` to replace the context and token atomically. Pass null to clear the token. Existing `SetContextAsync(context)` always clears the previous token, including login/logout from Blazor's authentication provider. Supply the replacement token after authenticating the new user; never reuse the old user's token.
+
+Events already accepted retain their original identity, including retries and gauges. All identities share one bounded in-memory queue and one request owner. Token changes partition signed snapshots and conditional requests. Trusted Blazor Server sessions keep their existing server-side identity behavior and do not implement the frontend companion.

@@ -7,7 +7,7 @@ Use the [trusted .NET server SDK](https://docs.toggly.io/sdks/dotnet) for backen
 ## Install and initialize
 
 ```sh
-dotnet add package Toggly.FeatureManagement.Client.Desktop --version 3.9.0
+dotnet add package Toggly.FeatureManagement.Client.Desktop --version 3.10.0
 ```
 
 ```csharp
@@ -136,3 +136,11 @@ Automatic checks count only actual evaluated leaves after entity/local gates and
 Payloads contain only public app key, environment and aggregate counts/metric values. Identity, groups, claims and entity data are excluded. Telemetry uses its own HTTP client, never definitions authentication, and never persists events. The caller retains ownership of its definitions `HttpClient` and any optional `IFrontendTelemetryTransport`.
 
 Buffers include inflight/retry data and numeric chunks within 2000 entries / 256 KiB; each envelope is at most 48 KiB. Ordinary sends use gzip with pre-send plain fallback. Only 429/503 responses retry, at most twice after 30/60 seconds (longer Retry-After honored), within 5 minutes. Ambiguous failures drop. `DisposeAsync` cancels schedules and attempts at most one final plain envelope within a global 5-second bound. `OnTelemetryDiagnostic` receives each fixed code at most once per client lifetime, without payloads. Cancelling an explicit telemetry flush ends that wait without throwing or cancelling a shared send.
+
+### Minted identity and login/logout
+
+`TogglyClientOptions.InstanceId` accepts a capability minted by your trusted backend. Definitions use `?i=` and omit client identity, groups and claims; telemetry sends the same token as JSON `i`. Without a token, definitions retain existing targeting and telemetry sends optional `u`. The app setting for accepting client-generated metric identities is off by default; an HTTP 202 does not confirm that identity was accepted.
+
+Use `IFrontendIdentitySession.SetIdentityAsync(context, instanceId)` on `TogglyClient` or `BrowserFeatureSession` to replace the context and token atomically. Pass null to clear the token. Existing `SetContextAsync(context)` always clears the previous token, including login/logout from Blazor's authentication provider. Supply the replacement token after authenticating the new user; never reuse the old user's token.
+
+Events already accepted retain their original identity, including retries and gauges. All identities share one bounded in-memory queue and one request owner. Token changes partition signed snapshots and conditional requests. Trusted Blazor Server sessions keep their existing server-side identity behavior and do not implement the frontend companion.

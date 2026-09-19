@@ -1,5 +1,14 @@
 # Changelog
 
+## All .NET SDK packages 3.10.0 - 2026-09-19
+
+### Added
+- Portable/Desktop and Blazor WebAssembly clients accept minted identities for definitions and telemetry, with an atomic context/token replacement API.
+
+### Fixed
+- Frontend events retain their accepted identity across login, logout and retries; minted tokens partition cached signed definitions. Trusted server evaluation and telemetry remain unchanged.
+
+
 ## All .NET SDK packages 3.9.0 - 2026-09-18
 
 ### Added
