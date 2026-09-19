@@ -28,6 +28,8 @@ internal class TelemetryReporter(
     enableTelemetry: Boolean = true,
     metricsBaseUrl: String = "https://metrics.toggly.io",
     telemetryFlushIntervalMs: Long = 45_000,
+    private val instanceId: String? = null,
+    private val identity: String? = null,
     private val onDiagnostic: ((String) -> Unit)? = null,
     scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
     private val now: () -> Long = { SystemClock.elapsedRealtime() },
@@ -155,6 +157,9 @@ internal class TelemetryReporter(
 
     private fun encode(f: Map<String, Map<String, JsonArray>>, m: Map<String, Double>): ByteArray = buildJsonObject {
         put("k", appKey); put("e", environment)
+        val minted = instanceId?.trim().orEmpty()
+        val user = identity?.trim().orEmpty()
+        if (minted.isNotEmpty()) put("i", minted) else if (user.isNotEmpty()) put("u", user)
         if (f.isNotEmpty()) put("f", JsonObject(f.mapValues { JsonObject(it.value) }))
         if (m.isNotEmpty()) put("m", JsonObject(m.mapValues { (_, value) ->
             if (value % 1.0 == 0.0) JsonPrimitive(value.toLong()) else JsonPrimitive(value)

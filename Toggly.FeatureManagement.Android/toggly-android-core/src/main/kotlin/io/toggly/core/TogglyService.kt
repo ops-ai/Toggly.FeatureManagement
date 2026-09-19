@@ -105,7 +105,8 @@ class TogglyService(
     private val mutex = Mutex()
     private val telemetry = if (config.enableTelemetry && !config.appKey.isNullOrBlank()) TelemetryReporter(
         appKey = config.appKey, environment = config.environment, metricsBaseUrl = config.metricsBaseUrl,
-        telemetryFlushIntervalMs = config.telemetryFlushIntervalMs, onDiagnostic = config.onTelemetryDiagnostic
+        telemetryFlushIntervalMs = config.telemetryFlushIntervalMs, onDiagnostic = config.onTelemetryDiagnostic,
+        instanceId = config.instanceId, identity = config.identity
     ) else null
     // Snapshot caller-owned collections before storage reads or background work.
     private val groups = config.groups.map { it.trim() }.filter { it.isNotEmpty() }

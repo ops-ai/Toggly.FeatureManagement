@@ -30,6 +30,8 @@ class TelemetryReporterTest {
             val reporter = TelemetryReporter(
                 appKey = options["appKey"]?.jsonPrimitive?.content ?: "test-app",
                 enableTelemetry = options["enableTelemetry"]?.jsonPrimitive?.boolean ?: true,
+                instanceId = options["instanceId"]?.jsonPrimitive?.content,
+                identity = options["identity"]?.jsonPrimitive?.content,
                 scope = backgroundScope, now = { testScheduler.currentTime }, compressor = { null },
                 transport = { requests += it; TelemetryResponse(202) }
             )
