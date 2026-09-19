@@ -243,6 +243,10 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
             writer.WriteStartObject();
             writer.WriteString("k", options.AppKey);
             writer.WriteString("e", options.Environment);
+            if (!string.IsNullOrWhiteSpace(options.InstanceId))
+                writer.WriteString("i", options.InstanceId.Trim());
+            else if (!string.IsNullOrWhiteSpace(options.Context.Identity))
+                writer.WriteString("u", options.Context.Identity.Trim());
             if (f.Count > 0)
             {
                 writer.WritePropertyName("f");

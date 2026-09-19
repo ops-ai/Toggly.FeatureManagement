@@ -49,6 +49,8 @@ public class TelemetryReporterTests
             {
                 if (settings.TryGetProperty("appKey", out var key)) options = options with { AppKey = key.GetString() };
                 if (settings.TryGetProperty("enableTelemetry", out var enabled)) options = options with { EnableTelemetry = enabled.GetBoolean() };
+                if (settings.TryGetProperty("instanceId", out var instanceId)) options = options with { InstanceId = instanceId.GetString() };
+                if (settings.TryGetProperty("identity", out var identity)) options = options with { Context = options.Context with { Identity = identity.GetString() } };
             }
             await using var reporter = new FrontendTelemetryReporter(options);
             foreach (var item in scenario.GetProperty("events").EnumerateArray())

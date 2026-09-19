@@ -65,6 +65,9 @@ public sealed record TogglyClientOptions
         get; init;
     }
 
+    /// <summary>Opaque minted instance id; sent as compact telemetry field <c>i</c>.</summary>
+    public string? InstanceId { get; init; }
+
     /// <summary>Public frontend application key; empty selects local defaults without network access.</summary>
     public string? AppKey
     {
