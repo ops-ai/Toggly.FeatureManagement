@@ -29,6 +29,7 @@ const FULL_TEST_MATRIX = [
   {
     sdk: 'Angular',
     path: 'Toggly.FeatureManagement.Angular',
+    'node-version': '^24.15.0',
     'test-cmd':
       "npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --code-coverage --exclude='**/smoke*.spec.ts'",
     'has-lint': false,
