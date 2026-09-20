@@ -7,6 +7,8 @@ on:
     paths:
       - 'toggly-docusaurus-edge-sdk/libs/core/**'
       - '.github/workflows/sdk-client-core-release.yml'
+      - '.github/workflows/analysis-javascript.yml'
+      - '.github/package-registry/analysis-js-filter.mjs'
       - '.github/actions/resolve-release-version/**'
       - '.github/actions/verify-package-tarball/**'
   workflow_dispatch:
@@ -32,6 +34,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  security-events: write
 
 concurrency:
   group: client-core-sdk-release
@@ -81,36 +84,16 @@ jobs:
           echo "| Version | ${{ steps.release.outputs.version }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Reason | ${{ steps.release.outputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
 
-  # toggly-client-core is not in the analysis-javascript.yml matrix, so its
-  # existing install/typecheck/build/test commands are preserved here as a
-  # standalone gate (no environment) instead of a reusable workflow call.
+  # Coverage and packed-browser gates run through the shared JS analysis
+  # matrix now that Client-Core is a first-class SDK row.
   gates:
     needs: resolve
     if: needs.resolve.outputs.action == 'publish'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ${{ env.SDK_DIR }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 'lts/*'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Type check
-        run: npm run typecheck
-
-      - name: Build
-        run: npm run build
-
-      - name: Run tests
-        run: npm test
+    uses: ./.github/workflows/analysis-javascript.yml
+    with:
+      sdks: Client-Core
+      run_reporting: false
+    secrets: inherit
 
   publish:
     needs: [resolve, gates]
@@ -139,7 +122,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 'lts/*'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
@@ -147,6 +130,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Run packed browser acceptance
+        run: npm run test:packed
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
 
       - name: Verify packed tarball
         uses: ./.github/actions/verify-package-tarball
