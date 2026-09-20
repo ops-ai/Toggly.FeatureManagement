@@ -82,4 +82,56 @@ class TelemetryComposeTest {
         }
     }
 
+    @Test fun sameFlagValuesAfterIdentityChangeUseNewContextForLaterReevaluation() {
+        MockWebServer().use { server ->
+            repeat(4) { server.enqueue(MockResponse().setResponseCode(202)) }
+            val service = TogglyService(TogglyConfig(appKey = "test-app", identity = "alice",
+                featureDefaults = mapOf("off" to false), refreshInterval = 0, enableLiveUpdates = false,
+                metricsBaseUrl = server.url("/").toString()))
+            runBlocking { service.setNetworkState(NetworkState(false)); service.init() }
+            var key by mutableStateOf("off")
+            composeRule.setContent {
+                TogglyProvider(service) { BasicText(rememberFeature(key).toString()) }
+            }
+            composeRule.waitForIdle()
+            runBlocking { service.flushTelemetry(); service.setIdentity("bob", "bob-token") }
+            composeRule.waitForIdle()
+            composeRule.runOnIdle { key = "new-key" }
+            composeRule.waitForIdle()
+            runBlocking { service.flushTelemetry() }
+            val packets = mutableListOf<JSONObject>()
+            repeat(server.requestCount) {
+                val request = server.takeRequest(2, TimeUnit.SECONDS)!!
+                packets += JSONObject(GZIPInputStream(request.body.readByteArray().inputStream()).readBytes().decodeToString())
+            }
+            val later = packets.single { it.getJSONObject("f").has("new-key") }
+            assertEquals("bob-token", later.getString("i")); assertFalse(later.has("u"))
+            assertEquals("[1]", later.getJSONObject("f").getJSONObject("new-key").getJSONArray("disabled").toString())
+            service.dispose()
+        }
+    }
+
+    @Test fun hooksForwardTokenReplacementToOneCoreQueue() = runBlocking {
+        MockWebServer().use { server ->
+            repeat(2) { server.enqueue(MockResponse().setResponseCode(202)) }
+            val service = TogglyService(TogglyConfig(appKey = "test-app", identity = "alice", refreshInterval = 0,
+                enableLiveUpdates = false, metricsBaseUrl = server.url("/").toString()))
+            try {
+                service.setNetworkState(NetworkState(false)); service.init()
+                val hook = UseTogglyResult(service, service.featureFlags)
+                val state = TogglyState(service)
+                hook.setIdentity("bob", "first-token"); state.setInstanceId("rotated-token")
+                hook.recordUsage("minted")
+                state.setIdentity("carol", "carol-token"); hook.setInstanceId(null)
+                state.recordUsage("fallback"); hook.flushTelemetry()
+                val packets = (0..1).map {
+                    val request = server.takeRequest(2, TimeUnit.SECONDS)!!
+                    JSONObject(GZIPInputStream(request.body.readByteArray().inputStream()).readBytes().decodeToString())
+                }
+                assertEquals("rotated-token", packets[0].getString("i"))
+                assertEquals("carol", packets[1].getString("u"))
+            } finally { service.dispose() }
+        }
+    }
+
 }
