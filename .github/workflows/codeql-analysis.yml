@@ -23,7 +23,7 @@ on:
 jobs:
   analyze:
     name: Analyze
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     permissions:
       actions: read
       contents: read

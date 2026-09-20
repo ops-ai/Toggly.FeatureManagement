@@ -43,7 +43,7 @@ env:
 
 jobs:
   resolve:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       action: ${{ steps.release.outputs.action }}
       version: ${{ steps.release.outputs.version }}
@@ -87,7 +87,7 @@ jobs:
   gates:
     needs: resolve
     if: needs.resolve.outputs.action == 'publish'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: ${{ env.SDK_DIR }}
@@ -115,7 +115,7 @@ jobs:
   publish:
     needs: [resolve, gates]
     if: needs.resolve.outputs.action == 'publish' && needs.gates.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: npm-publish
     defaults:
       run:

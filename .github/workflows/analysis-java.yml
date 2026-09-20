@@ -30,7 +30,7 @@ permissions:
 jobs:
   build:
     name: Build & Test (JDK ${{ matrix.java-version }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -68,7 +68,7 @@ jobs:
 
   current-hosts:
     name: Packed Host Fixtures (JDK ${{ matrix.java-version }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: build
     strategy:
       fail-fast: false
@@ -105,7 +105,7 @@ jobs:
 
   smoke-test:
     name: Smoke Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
 
     steps:
@@ -127,7 +127,7 @@ jobs:
 
   code-quality:
     name: Code Quality
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: build
 
     steps:
@@ -149,7 +149,7 @@ jobs:
 
   coverage:
     name: Coverage
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout code
@@ -180,7 +180,7 @@ jobs:
 
   sonar:
     name: SonarQube Analysis
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [coverage, dependency-check]
     if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
 
@@ -245,7 +245,7 @@ jobs:
 
   dependency-check:
     name: OWASP Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
 
     steps:
@@ -294,7 +294,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [build, current-hosts, smoke-test, code-quality, coverage, sonar, dependency-check]
     if: always()
     defaults:

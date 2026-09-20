@@ -23,7 +23,7 @@ permissions:
 jobs:
   test:
     name: Test Electron SDK
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout code
@@ -70,7 +70,7 @@ jobs:
 
   sonar:
     name: SonarQube Analysis
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [test, dependency-check]
     if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
 
@@ -145,7 +145,7 @@ jobs:
 
   dependency-check:
     name: OWASP Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
 
     steps:
@@ -197,7 +197,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [test, sonar, dependency-check]
     if: always()
 

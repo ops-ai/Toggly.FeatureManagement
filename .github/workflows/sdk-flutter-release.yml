@@ -72,7 +72,7 @@ jobs:
   # develop-push job below handles the no-input branch-push flow separately.
   validate:
     if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       version: ${{ steps.release.outputs.version }}
       action: ${{ steps.release.outputs.action }}
@@ -171,7 +171,7 @@ jobs:
   # develop serialized across the matrix.
   develop-push:
     if: github.event_name == 'push' && github.ref_type == 'branch'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -312,7 +312,7 @@ jobs:
   build-and-test:
     needs: validate
     if: needs.validate.outputs.action == 'publish'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -361,7 +361,7 @@ jobs:
       needs.validate.outputs.action == 'publish' &&
       github.event_name == 'workflow_dispatch' &&
       github.ref_type == 'branch'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -447,7 +447,7 @@ jobs:
     if: |
       needs.validate.outputs.action == 'publish' &&
       github.ref_type == 'tag'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - name: Verify tag matches manifest version
@@ -593,7 +593,7 @@ jobs:
 
   summary:
     needs: [publish, tag-and-push, validate, develop-push]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: always()
     steps:
       - name: Summary

@@ -22,7 +22,7 @@ on:
 jobs:
   deploy-production:
     if: github.event_name == 'push' || github.event.inputs.environment == 'production' || github.event.inputs.environment == 'both'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v7
 
@@ -43,7 +43,7 @@ jobs:
 
   deploy-staging:
     if: github.event_name == 'push' || github.event.inputs.environment == 'staging' || github.event.inputs.environment == 'both'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v7
 

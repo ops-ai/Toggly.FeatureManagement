@@ -26,7 +26,7 @@ permissions:
 jobs:
   test-core:
     name: Test toggly (Ruby ${{ matrix.ruby }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -61,7 +61,7 @@ jobs:
 
   smoke-test:
     name: Smoke Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     # Skip native grpc/protobuf compile; smoke_spec does not need them.
     env:
@@ -88,7 +88,7 @@ jobs:
 
   test-rails:
     name: Test toggly-rails (Ruby ${{ matrix.ruby }}, Rails ${{ matrix.rails }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +145,7 @@ jobs:
 
   test-cache:
     name: Test toggly-cache (Ruby ${{ matrix.ruby }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -193,7 +193,7 @@ jobs:
 
   test-packed-hosts:
     name: Test packed hosts (Ruby ${{ matrix.ruby }}, Rails ${{ matrix.rails }}, Redis ${{ matrix.redis }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -231,7 +231,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # RuboCop does not need native grpc/protobuf; keep install lean.
     env:
       BUNDLE_WITHOUT: grpc_test
@@ -272,7 +272,7 @@ jobs:
 
   sonar:
     name: SonarQube Analysis
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [test-core, test-rails, test-cache, test-packed-hosts, dependency-check]
     if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
 
@@ -363,7 +363,7 @@ jobs:
 
   dependency-check:
     name: OWASP Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
 
     steps:
@@ -411,7 +411,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [test-core, smoke-test, test-rails, test-cache, test-packed-hosts, lint, sonar, dependency-check]
     if: always()
 

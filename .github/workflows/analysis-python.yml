@@ -27,7 +27,7 @@ permissions:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -65,7 +65,7 @@ jobs:
 
   type-check:
     name: Type Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -94,7 +94,7 @@ jobs:
 
   test-core:
     name: Test Core (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -133,7 +133,7 @@ jobs:
 
   test-django:
     name: Test Django (Python ${{ matrix.python-version }}, Django ${{ matrix.django-version }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -198,7 +198,7 @@ jobs:
 
   test-flask:
     name: Test Flask (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -238,7 +238,7 @@ jobs:
 
   test-fastapi:
     name: Test FastAPI (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -278,7 +278,7 @@ jobs:
 
   test-cache:
     name: Test Cache (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -318,7 +318,7 @@ jobs:
 
   test-packed-host:
     name: Packed host (Python ${{ matrix.python-version }}, Django ${{ matrix.django-version }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -384,7 +384,7 @@ jobs:
 
   integration:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -432,7 +432,7 @@ jobs:
 
   smoke-test:
     name: Smoke Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     defaults:
       run:
@@ -461,7 +461,7 @@ jobs:
 
   build:
     name: Build Packages
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [lint, test-core, test-django, test-flask, test-fastapi, test-cache, test-packed-host]
     defaults:
       run:
@@ -510,7 +510,7 @@ jobs:
 
   sonar:
     name: SonarQube Analysis
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [test-core, test-django, test-flask, test-fastapi, test-cache, dependency-check]
     if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
 
@@ -588,7 +588,7 @@ jobs:
 
   dependency-check:
     name: OWASP Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
 
     steps:
@@ -636,7 +636,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [lint, type-check, test-core, test-django, test-flask, test-fastapi, test-cache, test-packed-host, integration, smoke-test, build, sonar, dependency-check]
     if: always()
 

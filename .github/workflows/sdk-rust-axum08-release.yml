@@ -35,7 +35,7 @@ env:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       action: ${{ steps.release.outputs.action }}
     steps:
@@ -60,7 +60,7 @@ jobs:
   release:
     needs: [validate, gates]
     if: needs.validate.outputs.action == 'publish' && needs.gates.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: crates-publish
     steps:
       - uses: actions/checkout@v7

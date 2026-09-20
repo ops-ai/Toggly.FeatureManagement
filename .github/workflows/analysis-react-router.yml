@@ -34,7 +34,7 @@ permissions:
 jobs:
   build-shared-js-deps:
     name: Build shared JS deps
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - name: Checkout code
@@ -52,7 +52,7 @@ jobs:
   build-and-test:
     name: Test (Node ${{ matrix.node-version }})
     needs: [build-shared-js-deps]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -102,7 +102,7 @@ jobs:
   packed-host:
     name: Packed ${{ matrix.host }} (Node ${{ matrix.node-version }})
     needs: [build-shared-js-deps]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -139,7 +139,7 @@ jobs:
 
   sonar:
     name: SonarQube Analysis
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [build-shared-js-deps, build-and-test, packed-host, dependency-check]
     if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
 
@@ -227,7 +227,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout code
@@ -278,7 +278,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [build-shared-js-deps, build-and-test, packed-host, sonar, dependency-check]
     if: always()
 

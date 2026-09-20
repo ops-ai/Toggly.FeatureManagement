@@ -51,7 +51,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -76,7 +76,7 @@ jobs:
     secrets: inherit
 
   publish:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [prepare, gates]
     environment: npm-publish
     strategy:
@@ -217,7 +217,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
   summary:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [prepare, publish]
     if: always()
     steps:

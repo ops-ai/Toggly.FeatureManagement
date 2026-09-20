@@ -47,7 +47,7 @@ env:
 
 jobs:
   validate:
-    runs-on: macos-15
+    runs-on: blacksmith-6vcpu-macos-15
     outputs:
       version: ${{ steps.release.outputs.version }}
       action: ${{ steps.release.outputs.action }}
@@ -96,7 +96,7 @@ jobs:
   release:
     needs: [validate, gates]
     if: needs.validate.outputs.action == 'publish' && needs.gates.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -196,7 +196,7 @@ jobs:
 
   summary:
     needs: [release, validate]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: always()
     steps:
       - name: Summary

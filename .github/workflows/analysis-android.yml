@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -65,7 +65,7 @@ jobs:
             ${{ env.SDK_ROOT }}/**/build/test-results/
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -95,7 +95,7 @@ jobs:
           path: ${{ env.SDK_ROOT }}/**/build/reports/lint-results*.html
 
   code-coverage:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -141,7 +141,7 @@ jobs:
           if-no-files-found: ignore
 
   build-samples:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -170,7 +170,7 @@ jobs:
           find . -name "*.aar" -type f | head -20
 
   api-compatibility:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -199,7 +199,7 @@ jobs:
 
   smoke-test:
     name: Smoke Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -231,7 +231,7 @@ jobs:
 
   dependency-check:
     name: OWASP Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
     steps:
       - name: Checkout code
@@ -266,7 +266,7 @@ jobs:
 
   sonar:
     name: SonarQube Analysis
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [code-coverage, smoke-test, dependency-check]
     if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
     steps:
@@ -324,7 +324,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [build-and-test, lint, code-coverage, build-samples, api-compatibility, smoke-test, dependency-check, sonar]
     if: always()
 

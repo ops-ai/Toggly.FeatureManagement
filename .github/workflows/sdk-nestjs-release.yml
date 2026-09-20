@@ -46,7 +46,7 @@ env:
 
 jobs:
   resolve:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       action: ${{ steps.release.outputs.action }}
       version: ${{ steps.release.outputs.version }}
@@ -90,7 +90,7 @@ jobs:
   compat-test:
     needs: resolve
     if: needs.resolve.outputs.action == 'publish'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       matrix:
         node: [20, 22, 24]
@@ -122,7 +122,7 @@ jobs:
   publish:
     needs: [resolve, compat-test, gates]
     if: needs.resolve.outputs.action == 'publish' && needs.compat-test.result == 'success' && needs.gates.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: npm-publish
     defaults:
       run:

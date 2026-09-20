@@ -57,7 +57,7 @@ env:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       action: ${{ steps.release.outputs.action }}
       version: ${{ steps.release.outputs.version }}
@@ -100,7 +100,7 @@ jobs:
     needs: [validate, gates]
     # Core may already be on npm (action=skip) while siblings still need publish.
     if: needs.validate.outputs.action != 'fail' && needs.gates.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: npm-publish
 
     steps:
@@ -191,7 +191,7 @@ jobs:
   summary:
     if: always()
     needs: [validate, gates, publish]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Summary
         run: |

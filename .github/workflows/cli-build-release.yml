@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       version: ${{ steps.release.outputs.version }}
       action: ${{ steps.release.outputs.action }}
@@ -67,23 +67,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: blacksmith-4vcpu-ubuntu-2404
             rid: linux-x64
             artifact-name: toggly-cli-linux-x64
             binary-name: toggly-cli
-          - os: ubuntu-latest
+          - os: blacksmith-4vcpu-ubuntu-2404
             rid: linux-arm64
             artifact-name: toggly-cli-linux-arm64
             binary-name: toggly-cli
-          - os: windows-latest
+          - os: blacksmith-4vcpu-windows-2025
             rid: win-x64
             artifact-name: toggly-cli-windows-x64
             binary-name: toggly-cli.exe
-          - os: macos-latest
+          - os: blacksmith-6vcpu-macos-15
             rid: osx-x64
             artifact-name: toggly-cli-macos-x64
             binary-name: toggly-cli
-          - os: macos-latest
+          - os: blacksmith-6vcpu-macos-15
             rid: osx-arm64
             artifact-name: toggly-cli-macos-arm64
             binary-name: toggly-cli
@@ -159,7 +159,7 @@ jobs:
   create-release:
     needs: [build, validate]
     if: needs.validate.outputs.action == 'publish'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout code
@@ -226,7 +226,7 @@ jobs:
   summary:
     needs: validate
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Summary
         run: |

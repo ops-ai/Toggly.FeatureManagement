@@ -35,7 +35,7 @@ permissions:
 jobs:
   analyze:
     name: Build, Test & Analyze
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [dependency-check]
     if: always()
 
@@ -364,7 +364,7 @@ jobs:
 
   dependency-check:
     name: OWASP Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
 
     steps:
@@ -423,7 +423,7 @@ jobs:
 
   build-cli:
     name: Build CLI
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout code
@@ -447,7 +447,7 @@ jobs:
 
   pack-packages:
     name: Pack NuGet packages
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout code
@@ -493,7 +493,7 @@ jobs:
   embedded-consumer:
     name: Embedded NuGet consumer (${{ matrix.framework }})
     needs: [pack-packages]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -522,7 +522,7 @@ jobs:
 
   smoke-test:
     name: Smoke Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
 
     steps:
@@ -547,7 +547,7 @@ jobs:
 
   blazor-runtime:
     name: Blazor .NET runtime ${{ matrix.framework }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       matrix:
         include:
@@ -602,7 +602,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [analyze, dependency-check, build-cli, pack-packages, embedded-consumer, smoke-test, blazor-runtime]
     if: always()
 

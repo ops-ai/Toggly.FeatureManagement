@@ -23,7 +23,7 @@ permissions:
 jobs:
   analyze:
     name: Test & Analyze
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: Toggly.FeatureManagement.Flutter/toggly
@@ -88,7 +88,7 @@ jobs:
 
   sonar:
     name: SonarQube Analysis
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [analyze, dependency-check]
     if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
 
@@ -174,13 +174,13 @@ jobs:
       matrix:
         include:
           - platform: Web
-            os: ubuntu-latest
+            os: blacksmith-4vcpu-ubuntu-2404
             build-cmd: flutter build web
           - platform: Android
-            os: ubuntu-latest
+            os: blacksmith-4vcpu-ubuntu-2404
             build-cmd: flutter build apk --debug
           - platform: iOS
-            os: macos-latest
+            os: blacksmith-6vcpu-macos-15
             build-cmd: flutter build ios --debug --no-codesign
     defaults:
       run:
@@ -217,7 +217,7 @@ jobs:
 
   smoke-test:
     name: Smoke Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     defaults:
       run:
@@ -244,7 +244,7 @@ jobs:
 
   dependency-check:
     name: OWASP Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
 
     steps:
@@ -294,7 +294,7 @@ jobs:
 
   analyze-providers:
     name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -408,7 +408,7 @@ jobs:
 
   secure-storage-version-matrix:
     name: Secure Storage Plugin ${{ matrix.version }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -441,7 +441,7 @@ jobs:
 
   dependency-check-providers:
     name: OWASP Dependency Check (${{ matrix.dir }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
     strategy:
       fail-fast: false
@@ -499,7 +499,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [analyze, sonar, build-platforms, smoke-test, dependency-check, analyze-providers, secure-storage-version-matrix, dependency-check-providers]
     if: always()
     

@@ -51,7 +51,7 @@ jobs:
   # rerun refuses the existing fixed-name candidate before signing or pushing;
   # start a new dispatch for new manifest/registry decisions.
   validate:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       publish: ${{ steps.plan.outputs.publish }}
     steps:
@@ -96,7 +96,7 @@ jobs:
   sign:
     needs: validate
     if: needs.validate.outputs.publish == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: nuget-publish
     permissions:
       contents: read
@@ -204,7 +204,7 @@ jobs:
   # Never sign again in publication or release jobs: RFC3161 timestamps change bytes.
   publish:
     needs: sign
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: nuget-publish
     permissions:
       contents: read
@@ -236,7 +236,7 @@ jobs:
 
   release:
     needs: publish
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
     steps:

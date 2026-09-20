@@ -24,7 +24,7 @@ permissions:
 jobs:
   test:
     name: Test & Lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: toggly-go
@@ -81,7 +81,7 @@ jobs:
 
   smoke-test:
     name: Smoke Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     defaults:
       run:
@@ -109,7 +109,7 @@ jobs:
 
   current-runtime:
     name: Current Go 1.27 Runtime
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: toggly-go
@@ -138,7 +138,7 @@ jobs:
 
   mongodb-v2:
     name: MongoDB Driver v2 (Go ${{ matrix.go-version }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -184,7 +184,7 @@ jobs:
 
   mongodb-v2-consumer:
     name: MongoDB Driver v2 Packed Module Consumer
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout code
@@ -249,7 +249,7 @@ jobs:
 
   toggly-go-consumer:
     name: Current x/net Packed Module Consumer
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout code
@@ -300,7 +300,7 @@ jobs:
 
   sonar:
     name: SonarQube Analysis
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [test, dependency-check]
     if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
 
@@ -363,7 +363,7 @@ jobs:
 
   build:
     name: Build Examples
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: toggly-go
@@ -394,7 +394,7 @@ jobs:
 
   dependency-check:
     name: OWASP Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
 
     steps:
@@ -444,7 +444,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [test, smoke-test, current-runtime, mongodb-v2, mongodb-v2-consumer, toggly-go-consumer, sonar, build, dependency-check]
     if: always()
     
