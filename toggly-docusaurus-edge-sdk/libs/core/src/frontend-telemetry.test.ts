@@ -303,6 +303,35 @@ describe('frontend telemetry ownership', () => {
     expect(telemetry.reporter.setContext).toHaveBeenCalledWith({ instanceId: 'token-a', identity: '' });
   });
 
+  it('does not restore a superseded in-flight definitions response after setContext', async () => {
+    installBrowserGlobals();
+    let resolveFirst!: (value: Response) => void;
+    const first = new Promise<Response>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const fetch = vi.fn()
+      .mockImplementationOnce(() => first)
+      .mockResolvedValueOnce(response({ Flag: false }));
+    const client = createBrowserClient({
+      appKey: 'app',
+      instanceId: 'token-a',
+      fetch,
+      featureFlagsRefreshInterval: 60_000,
+    });
+
+    const pending = client.getFlag('Flag');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const switched = client.setContext({ instanceId: 'token-b' });
+    resolveFirst(response({ Flag: true }));
+    await switched;
+    await expect(pending).resolves.toBe(false);
+    await expect(client.getFlag('Flag')).resolves.toBe(false);
+    expect(fetch.mock.calls.map((call) => new URL(String(call[0])).searchParams.get('i'))).toEqual([
+      'token-a',
+      'token-b',
+    ]);
+  });
+
   it('dispose({ flush: false }) discards the reporter without a final envelope', () => {
     installBrowserGlobals();
     const client = createBrowserClient({ appKey: 'app', fetch: vi.fn() });

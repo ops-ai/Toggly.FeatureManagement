@@ -242,6 +242,7 @@ export function createTogglyClientCore(
   let _lastFallbackRefresh = 0;
 
   let cache: CachedFlags | null = null;
+  let definitionsGeneration = 0;
   let disposed = false;
   const activeDefinitionRequests = new Set<AbortController>();
   let telemetryReporter: TelemetryReporter | undefined;
@@ -307,8 +308,9 @@ export function createTogglyClientCore(
 
   const fetchFlags = async (): Promise<Flags> => {
     if (disposed) return cache ? { ...cache.flags } : { ...flagDefaults };
+    const generation = definitionsGeneration;
     const url = getApiUrl();
-    
+
     // If no appKey, return flagDefaults
     if (!url || !appKey) {
       if (isDebug) {
@@ -353,6 +355,9 @@ export function createTogglyClientCore(
           console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);
         }
 
+        if (generation !== definitionsGeneration) {
+          return cache ? { ...cache.flags } : { ...flagDefaults };
+        }
         return flags;
       } finally {
         clearTimeout(timeoutId);
@@ -366,23 +371,24 @@ export function createTogglyClientCore(
         }
         return { ...cache.flags };
       }
-      
+
       if (isDebug) {
         console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
       }
-      
+
       return { ...flagDefaults };
     }
   };
 
   const refreshFlags = async (): Promise<void> => {
     if (disposed) return;
+    const generation = definitionsGeneration;
     if (isDebug) {
       console.log('Toggly.refresh');
     }
-    
+
     const flags = await fetchFlags();
-    if (disposed) return;
+    if (disposed || generation !== definitionsGeneration) return;
     cache = {
       flags,
       timestamp: Date.now(),
@@ -595,7 +601,9 @@ export function createTogglyClientCore(
     if (context.claims !== undefined) {
       claims = { ...context.claims };
     }
+    definitionsGeneration += 1;
     cache = null;
+    for (const controller of activeDefinitionRequests) controller.abort();
     recordTelemetry((reporter) => reporter.setContext({
       instanceId: instanceId || '',
       identity: identity || '',
