@@ -81,6 +81,7 @@ void main() {
         useSignedDefinitions: false,
         flagDefaults: {'PresalePhotos': false, 'OrderSales': false},
         config: const TogglyConfig(
+          enableTelemetry: false,
           baseURI: 'https://example.test',
           enableLiveUpdates: false,
           featureFlagsRefreshInterval: 3600000,
@@ -158,6 +159,7 @@ void main() {
         useSignedDefinitions: false,
         flagDefaults: {'PresalePhotos': false},
         config: const TogglyConfig(
+          enableTelemetry: false,
           baseURI: 'https://example.test',
           enableLiveUpdates: false,
           featureFlagsRefreshInterval: 100,
