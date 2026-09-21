@@ -1885,7 +1885,7 @@ var Toggly = /** @class */ (function () {
             return dist.evaluationContextCacheKey(context);
         return "v2:".concat(encodeURIComponent(JSON.stringify([
             (_b = context.identity) !== null && _b !== void 0 ? _b : '',
-            __spreadArray([], ((_c = context.groups) !== null && _c !== void 0 ? _c : []), true).sort(),
+            __spreadArray([], ((_c = context.groups) !== null && _c !== void 0 ? _c : []), true).sort(function (left, right) { return left < right ? -1 : left > right ? 1 : 0; }),
             Object.entries((_d = dist.normalizeEvaluationClaims(context.claims)) !== null && _d !== void 0 ? _d : {}).sort(function (_a, _b) {
                 var a = _a[0];
                 var b = _b[0];

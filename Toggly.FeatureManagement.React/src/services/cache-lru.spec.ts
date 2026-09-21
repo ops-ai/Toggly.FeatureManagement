@@ -61,6 +61,27 @@ describe('maxCacheKeys LRU', () => {
     await service.setContext({ identity })
   }
 
+  it('preserves UTF-16 group cache bytes across permutations without mutating input', async () => {
+    const groups = ['😀', 'é', 'A', 'a', '\uE000', 'Z']
+    const original = [...groups]
+    const context = `v2:${encodeURIComponent(JSON.stringify(['group-user', ['A', 'Z', 'a', 'é', '😀', '\uE000'], []]))}`
+    const key = `toggly:flags:${appKey}:${environment}:v3:evaluated:${context}`
+    const first = createService(null)
+    const second = createService(null)
+    try {
+      mockFetch.mockResolvedValue(okResponse({ F: true }))
+      await first.setContext({ identity: 'group-user', groups })
+      expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ F: true })
+      expect(groups).toEqual(original)
+      await second.setContext({ identity: 'group-user', groups: [...groups].reverse() })
+      expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ F: true })
+      const bodyKeys = Object.keys(localStorage).filter(candidate => candidate.startsWith('toggly:flags:'))
+      expect(bodyKeys).toEqual([key])
+      expect(await second.isFeatureOn('F')).toBe(true)
+      expect(groups).toEqual(original)
+    } finally { first.dispose(); second.dispose() }
+  })
+
   it('evicts oldest flags key by lastAccessed when maxCacheKeys is exceeded', async () => {
     const service = createService(2)
 
