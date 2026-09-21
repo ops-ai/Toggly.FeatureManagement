@@ -4,6 +4,11 @@
  * Preload should import `@ops-ai/electron-feature-flags-toggly/preload`.
  */
 export {
+  recordUsage,
+  recordView,
+  incrementCounter,
+  setGauge,
+  flushTelemetry,
   isFeatureOn,
   isFeatureOff,
   evaluateFeatureGate,
@@ -19,6 +24,7 @@ export type {
   FeatureRequirement,
   SetContextInput,
   EntityContextInput,
+  TogglyTelemetry,
   TogglyElectronConfig,
   Hook,
 } from './types.js'

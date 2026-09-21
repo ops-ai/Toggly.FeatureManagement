@@ -12,6 +12,12 @@ import type { TogglyBridge } from '../src/types.js'
 
 describe('renderer wrappers', () => {
   const bridge: TogglyBridge = {
+    recordUsage: vi.fn(),
+    recordView: vi.fn(),
+    incrementCounter: vi.fn(),
+    setGauge: vi.fn(),
+    flushTelemetry: vi.fn(async () => {}),
+    onEvaluationsChanged: vi.fn(() => () => {}),
     isFeatureOn: vi.fn(() => true),
     isFeatureOff: vi.fn(() => false),
     evaluateFeatureGate: vi.fn(() => true),

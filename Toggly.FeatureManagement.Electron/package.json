@@ -1,7 +1,7 @@
 {
   "name": "@ops-ai/electron-feature-flags-toggly",
-  "version": "1.0.2",
-  "description": "Toggly feature flags SDK for Electron — main-process evaluated-signed client with Flutter-like renderer DX",
+  "version": "1.1.0",
+  "description": "Toggly feature flags SDK for Electron \u2014 main-process evaluated-signed client with Flutter-like renderer DX",
   "keywords": [
     "feature-flags",
     "feature-toggles",
@@ -111,7 +111,8 @@
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.7",
-    "ws": "^8.0.0"
+    "ws": "^8.0.0",
+    "@ops-ai/toggly-client-telemetry": "^1.0.0"
   },
   "peerDependencies": {
     "electron": ">=28",

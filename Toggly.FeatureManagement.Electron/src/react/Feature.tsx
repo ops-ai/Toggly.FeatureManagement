@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { evaluateFeatureGate, onFlagsUpdated } from '../renderer/index.js'
+import React, { useMemo, type ReactNode } from 'react'
+import { useFeatureGate } from './useFeatureFlag.js'
 import type { EntityContextInput, FeatureRequirement } from '../types.js'
 
 export interface FeatureProps {
@@ -34,28 +34,14 @@ export function Feature({
     return [...featureKeys]
   }, [featureKey, featureKeys])
 
-  const [shouldShow, setShouldShow] = useState<boolean | null>(null)
+  const { isEnabled: shouldShow, isReady } = useFeatureGate(gate, {
+    requirement,
+    negate,
+    context,
+    contextKind,
+  })
 
-  useEffect(() => {
-    const evaluate = () => {
-      if (gate.length === 0) {
-        setShouldShow(!negate)
-        return
-      }
-      try {
-        setShouldShow(
-          evaluateFeatureGate(gate, requirement, negate, context, contextKind),
-        )
-      } catch {
-        setShouldShow(false)
-      }
-    }
-
-    evaluate()
-    return onFlagsUpdated(() => evaluate())
-  }, [gate.join(','), requirement, negate, context, contextKind])
-
-  if (shouldShow === null) {
+  if (!isReady) {
     return loading ? <>{loading}</> : null
   }
 

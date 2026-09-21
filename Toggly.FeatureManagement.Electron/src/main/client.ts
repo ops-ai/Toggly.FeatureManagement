@@ -1,6 +1,10 @@
 import {
+  createTelemetryReporter,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry'
+import { gzip } from 'node:zlib'
+import {
   appendEvaluationContext,
-  evaluateEvaluatedGate,
   normalizeEntityContext,
   resolveEvaluatedDefinition,
   toBooleanDefinitions,
@@ -130,6 +134,9 @@ export class ElectronTogglyClient {
   private readonly hookExecutor = new HookExecutor()
   private readonly jwksCache = new InMemoryJwksCache()
   private readonly fetchImpl: typeof fetch
+  private readonly evaluationListeners = new Set<() => void>()
+  private lastEvaluationSnapshot = ''
+  private readonly closeListeners = new Set<() => void>()
   private readonly listeners = new Set<FlagsUpdatedListener>()
 
   private features: EvaluatedDefinitions = {}
@@ -139,6 +146,12 @@ export class ElectronTogglyClient {
   private claims: Record<string, string> = {}
   private cachedDefinitionsRevision: string | null = null
   private pendingDefinitionsPin: string | null = null
+  private readonly telemetry: TelemetryReporter
+  private readonly requests = new Map<
+    AbortController,
+    ReturnType<typeof setTimeout>
+  >()
+  private generation = 0
   private disposed = false
   private refreshTimer: ReturnType<typeof setInterval> | null = null
   private refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -165,8 +178,7 @@ export class ElectronTogglyClient {
         config.featureFlagsRefreshInterval ?? DEFAULT_REFRESH_INTERVAL,
       verifySignatures: config.verifySignatures ?? false,
       isDebug: config.isDebug ?? false,
-      enableLiveUpdates:
-        config.enableLiveUpdates ?? Boolean(config.appKey),
+      enableLiveUpdates: config.enableLiveUpdates ?? Boolean(config.appKey),
       userDataPath: config.userDataPath,
     }
 
@@ -179,6 +191,23 @@ export class ElectronTogglyClient {
             throw new Error('fetch is not available; provide config.fetch')
           })())
 
+    this.telemetry = createTelemetryReporter({
+      appKey: config.appKey,
+      environment: this.config.environment,
+      enableTelemetry: config.enableTelemetry,
+      metricsBaseUrl: config.metricsBaseUrl,
+      telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
+      fetch: config.telemetryFetch,
+      onDiagnostic: config.onTelemetryDiagnostic,
+      _runtime: {
+        gzip: (json) =>
+          new Promise((resolve, reject) => {
+            gzip(json, (error, bytes) =>
+              error ? reject(error) : resolve(Uint8Array.from(bytes).buffer),
+            )
+          }),
+      },
+    })
     this.identity = config.identity ?? randomUUID()
     this.groups = config.groups ? [...config.groups] : []
     this.claims = config.claims ? { ...config.claims } : {}
@@ -201,7 +230,32 @@ export class ElectronTogglyClient {
     }
   }
 
+  /** @internal Change notification for committed React consumers, without snapshot evaluation. */
+  onEvaluationsChanged(listener: () => void): () => void {
+    this.evaluationListeners.add(listener)
+    return () => {
+      this.evaluationListeners.delete(listener)
+    }
+  }
+
+  private notifyEvaluationsChanged(): void {
+    if (this.disposed) return
+    for (const listener of this.evaluationListeners) {
+      try {
+        listener()
+      } catch (error) {
+        this.reportError('Evaluation listener error', error)
+      }
+    }
+  }
+
   private notifyFlagsUpdated(): void {
+    if (this.disposed) return
+    const evaluationSnapshot = JSON.stringify(this.features)
+    if (evaluationSnapshot !== this.lastEvaluationSnapshot) {
+      this.lastEvaluationSnapshot = evaluationSnapshot
+      this.notifyEvaluationsChanged()
+    }
     const snapshot = this.getBooleanFlags()
     for (const listener of this.listeners) {
       try {
@@ -262,7 +316,9 @@ export class ElectronTogglyClient {
   private buildFetchHeaders(skipIfNoneMatch = false): Record<string, string> {
     const revision = skipIfNoneMatch ? null : this.cachedDefinitionsRevision
     return buildDefinitionFetchHeaders(
-      revision ? { 'If-None-Match': revision, Accept: 'application/json' } : { Accept: 'application/json' },
+      revision
+        ? { 'If-None-Match': revision, Accept: 'application/json' }
+        : { Accept: 'application/json' },
     )
   }
 
@@ -303,7 +359,7 @@ export class ElectronTogglyClient {
         this.config.environment,
         this.contextCacheKey,
       )
-      if (!entry) {
+      if (!entry || this.disposed) {
         return false
       }
       this.features = entry.flags
@@ -319,13 +375,23 @@ export class ElectronTogglyClient {
   private resolveEffectiveFlag(
     key: string,
     entityContext?: TogglyEntityContext | null,
+    gate = false,
   ): boolean {
     const resolved = resolveEvaluatedDefinition(
       this.features[key],
       entityContext,
-      this.config.flagDefaults?.[key] ?? false,
+      gate && this.localGates.length === 0
+        ? false
+        : (this.config.flagDefaults?.[key] ?? false),
     )
-    return applyLocalGate(resolved, key, this.localGates, this.localGateIndex)
+    const effective = applyLocalGate(
+      resolved,
+      key,
+      this.localGates,
+      this.localGateIndex,
+    )
+    this.telemetry.recordCheck(key, effective ? 'enabled' : 'disabled')
+    return effective
   }
 
   isFeatureOn(
@@ -334,8 +400,9 @@ export class ElectronTogglyClient {
     kind?: string,
   ): boolean {
     const ctx = normalizeEntityContext(entityContext, kind)
-    void this.runEvaluationHooks(key, () => this.resolveEffectiveFlag(key, ctx))
-    return this.resolveEffectiveFlag(key, ctx)
+    const result = this.resolveEffectiveFlag(key, ctx)
+    void this.runEvaluationHooks(key, () => result)
+    return result
   }
 
   isFeatureOff(
@@ -364,7 +431,7 @@ export class ElectronTogglyClient {
       void this.runEvaluationHooks(keys[0], () => closed)
       return closed
     }
-    const isEnabled = (key: string) => this.resolveEffectiveFlag(key, ctx)
+    const isEnabled = (key: string) => this.resolveEffectiveFlag(key, ctx, true)
     let gated: boolean
     if (req === 'any') {
       const anyOn = keys.some(isEnabled)
@@ -372,10 +439,6 @@ export class ElectronTogglyClient {
     } else {
       const allOn = keys.every(isEnabled)
       gated = negate ? !allOn : allOn
-    }
-    // Keep evaluateEvaluatedGate in the hot path for parity when no local gates
-    if (this.localGates.length === 0) {
-      gated = evaluateEvaluatedGate(this.features, keys, req, negate, ctx)
     }
     void this.runEvaluationHooks(keys[0], () => gated)
     return gated
@@ -394,6 +457,22 @@ export class ElectronTogglyClient {
     }
   }
 
+  recordUsage(key: string, variant = 'enabled'): void {
+    this.telemetry.recordUsage(key, variant)
+  }
+  recordView(key: string, variant = 'enabled'): void {
+    this.telemetry.recordView(key, variant)
+  }
+  incrementCounter(key: string, value = 1): void {
+    this.telemetry.incrementCounter(key, value)
+  }
+  setGauge(key: string, value: number): void {
+    this.telemetry.setGauge(key, value)
+  }
+  flushTelemetry(): Promise<void> {
+    return this.telemetry.flush()
+  }
+
   getFlags(): FeatureFlagsSnapshot {
     return this.getBooleanFlags()
   }
@@ -401,6 +480,7 @@ export class ElectronTogglyClient {
   setLocalGates(gates: LocalGate[]): void {
     this.localGates = [...gates]
     this.localGateIndex = buildFlagGateIndex(this.localGates)
+    this.notifyEvaluationsChanged()
   }
 
   async refresh(): Promise<FeatureFlagsSnapshot> {
@@ -415,24 +495,26 @@ export class ElectronTogglyClient {
       return this.getBooleanFlags()
     }
 
+    const generation = ++this.generation
+    const controller = new AbortController()
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      this.config.connectTimeout,
+    )
+    this.requests.set(controller, timeoutId)
     try {
       const pin = this.pendingDefinitionsPin
       this.pendingDefinitionsPin = null
       const url = appendDefinitionsRevisionParam(this.buildEvaluatedUrl(), pin)
       const headers = this.buildFetchHeaders(Boolean(pin))
 
-      const controller = new AbortController()
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        this.config.connectTimeout,
-      )
-
       const response = await this.fetchImpl(url, {
         method: 'GET',
         headers,
         signal: controller.signal,
       })
-      clearTimeout(timeoutId)
+      if (this.disposed || generation !== this.generation)
+        return this.getBooleanFlags()
 
       if (response.status === 304) {
         this.applyRevision(response)
@@ -451,7 +533,7 @@ export class ElectronTogglyClient {
         allowedKeyIds: this.config.allowedKeyIds,
         maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds ?? undefined,
         headers,
-        fetchImpl: this.fetchImpl,
+        fetchImpl: (url, init) => this.fetchImpl(url, { ...init, signal: controller.signal }),
         getJwks: this.config.verifySignatures
           ? () =>
               this.jwksCache.get({
@@ -461,17 +543,18 @@ export class ElectronTogglyClient {
                 maxSignatureAgeSeconds:
                   this.config.maxSignatureAgeSeconds ?? undefined,
                 headers,
-                fetchImpl: this.fetchImpl,
+                fetchImpl: (url, init) => this.fetchImpl(url, { ...init, signal: controller.signal }),
               })
           : undefined,
       })
 
-      const defs = (
-        this.config.verifySignatures
+      const defs =
+        (this.config.verifySignatures
           ? (parsed as EvaluatedDefinitions)
-          : (unwrapDefsPayload(parsed) as EvaluatedDefinitions)
-      ) ?? {}
+          : (unwrapDefsPayload(parsed) as EvaluatedDefinitions)) ?? {}
 
+      if (this.disposed || generation !== this.generation)
+        return this.getBooleanFlags()
       this.features = defs
       this.hasLoadedFlags = true
       this.applyRevision(response)
@@ -480,9 +563,12 @@ export class ElectronTogglyClient {
       this.notifyFlagsUpdated()
       return this.getBooleanFlags()
     } catch (error) {
+      if (this.disposed || generation !== this.generation)
+        return this.getBooleanFlags()
       this.reportError('Failed to refresh feature flags', error)
       if (!this.hasLoadedFlags) {
         const loaded = await this.loadDiskCache()
+        if (this.disposed || generation !== this.generation) return this.getBooleanFlags()
         if (!loaded) {
           this.features = this.getFallbackFlags()
           this.hasLoadedFlags = true
@@ -490,6 +576,9 @@ export class ElectronTogglyClient {
       }
       this.notifyFlagsUpdated()
       return this.getBooleanFlags()
+    } finally {
+      clearTimeout(timeoutId)
+      this.requests.delete(controller)
     }
   }
 
@@ -504,6 +593,7 @@ export class ElectronTogglyClient {
   private async doInit(): Promise<FeatureFlagsSnapshot> {
     await this.loadDiskCache()
     const flags = await this.refresh()
+    if (this.disposed) return flags
     this.startRefreshInterval()
     if (this.config.enableLiveUpdates && this.config.appKey) {
       this.startWebSocket()
@@ -544,16 +634,19 @@ export class ElectronTogglyClient {
         ? FALLBACK_REFRESH_INTERVAL
         : this.config.featureFlagsRefreshInterval
 
-    this.refreshTimer = setInterval(() => {
-      if (this.wsConnected) {
-        const elapsed = Date.now() - this.lastFallbackRefresh
-        if (elapsed < FALLBACK_REFRESH_INTERVAL) {
-          return
+    this.refreshTimer = setInterval(
+      () => {
+        if (this.wsConnected) {
+          const elapsed = Date.now() - this.lastFallbackRefresh
+          if (elapsed < FALLBACK_REFRESH_INTERVAL) {
+            return
+          }
         }
-      }
-      this.lastFallbackRefresh = Date.now()
-      void this.refresh()
-    }, Math.min(interval(), this.config.featureFlagsRefreshInterval))
+        this.lastFallbackRefresh = Date.now()
+        void this.refresh()
+      },
+      Math.min(interval(), this.config.featureFlagsRefreshInterval),
+    )
   }
 
   private stopRefreshInterval(): void {
@@ -591,7 +684,10 @@ export class ElectronTogglyClient {
         this.cachedDefinitionsRevision = message.etag
         return
       }
-      const plan = planFlagsUpdatedRefresh(message, this.cachedDefinitionsRevision)
+      const plan = planFlagsUpdatedRefresh(
+        message,
+        this.cachedDefinitionsRevision,
+      )
       applyFlagsUpdatedPlan(plan, message, {
         refreshJwks: () => this.scheduleDebouncedRefresh(true),
         refreshPinned: (pin) => {
@@ -609,7 +705,11 @@ export class ElectronTogglyClient {
   }
 
   startWebSocket(): void {
-    if (this.disposed || !this.config.appKey || !this.config.enableLiveUpdates) {
+    if (
+      this.disposed ||
+      !this.config.appKey ||
+      !this.config.enableLiveUpdates
+    ) {
       return
     }
     this.stopWebSocket(false)
@@ -682,8 +782,26 @@ export class ElectronTogglyClient {
     this.wsConnected = false
   }
 
+  /** @internal Allows main-process adapters to detach from this exact owner. */
+  onClose(listener: () => void): () => void {
+    this.closeListeners.add(listener)
+    return () => {
+      this.closeListeners.delete(listener)
+    }
+  }
+
   close(): void {
+    if (this.disposed) return
     this.disposed = true
+    this.generation++
+    for (const [controller, timer] of this.requests) {
+      clearTimeout(timer)
+      controller.abort()
+    }
+    this.requests.clear()
+    this.telemetry.dispose()
+    for (const listener of this.closeListeners) listener()
+    this.closeListeners.clear()
     this.stopRefreshInterval()
     if (this.refreshDebounceTimer) {
       clearTimeout(this.refreshDebounceTimer)
@@ -691,6 +809,7 @@ export class ElectronTogglyClient {
     }
     this.stopWebSocket(true)
     this.listeners.clear()
+    this.evaluationListeners.clear()
     this.initPromise = null
   }
 }
@@ -775,4 +894,20 @@ export function closeToggly(): void {
 export function __resetTogglyForTests(): void {
   singleton?.close()
   singleton = null
+}
+
+export function recordUsage(key: string, variant = 'enabled'): void {
+  singleton?.recordUsage(key, variant)
+}
+export function recordView(key: string, variant = 'enabled'): void {
+  singleton?.recordView(key, variant)
+}
+export function incrementCounter(key: string, value = 1): void {
+  singleton?.incrementCounter(key, value)
+}
+export function setGauge(key: string, value: number): void {
+  singleton?.setGauge(key, value)
+}
+export function flushTelemetry(): Promise<void> {
+  return singleton?.flushTelemetry() ?? Promise.resolve()
 }
