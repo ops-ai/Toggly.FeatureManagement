@@ -150,7 +150,7 @@ class TogglyClientInstance {
   /** Snapshot attribution, assigned variants and gates before any host callback. */
   captureEvaluation(record = true) {
     const variants = Object.fromEntries(Object.entries(this.variantCache ?? {}).map(([key, value]) => [key, value.variant]));
-    const gates = this.localGates;
+    const gates = this.localGates.map(gate => ({...gate, flagKeys:[...gate.flagKeys]}));
     const index = this.localGateIndex;
     const check = record && this.cache !== null && !this.disposed && this.config.enableUsageTracking !== false
       ? this.reporter?.captureCheck() : undefined;
@@ -369,7 +369,8 @@ class TogglyClientInstance {
       if (this.disposed || expected !== this.generation) return;
       
       // Trigger afterRefresh hooks
-      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
+      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags),
+        () => !this.disposed && expected === this.generation);
 
       if (this.disposed || expected !== this.generation) return;
       this.startWebSocket();
@@ -405,7 +406,8 @@ class TogglyClientInstance {
       if (this.disposed || expected !== this.generation) return;
       
       // Trigger afterRefresh hooks
-      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
+      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags),
+        () => !this.disposed && expected === this.generation);
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Flags refreshed');
@@ -856,6 +858,13 @@ function evaluatedComputed<Input, Output>(source: ReadableAtom<Input>, evaluate:
   return result;
 }
 
+/** Copy the supported entity gate's mutable rules before host callbacks run. */
+function snapshotDefinition(definition: EvaluatedDefinitionValue | undefined): EvaluatedDefinitionValue | undefined {
+  return isEntityGate(definition)
+    ? { ...definition, rules: definition.rules.map(rule => ({ ...rule })) }
+    : definition;
+}
+
 /**
  * Create a computed atom for a specific feature flag
  * 
@@ -872,7 +881,7 @@ export function $flag(
   kind?: string,
 ): ReadableAtom<boolean> {
   return evaluatedComputed($flags, (flags, record) => {
-    const definition = flags[key];
+    const definition = snapshotDefinition(flags[key]);
     const evaluate = clientInstance?.captureEvaluation(record);
     const entityContext = normalizeEntityContext(entity, kind);
     if (!evaluate) {
@@ -902,7 +911,8 @@ export function $gate(
       return !negate;
     }
 
-    const definitions = {...flags};
+    const selectedKeys = [...keys];
+    const definitions = Object.fromEntries(selectedKeys.map(key => [key, snapshotDefinition(flags[key])]));
     const effective = clientInstance?.captureEvaluation(record);
     const entityContext = normalizeEntityContext(entity, kind);
     const evaluate = (key: string) =>
@@ -910,7 +920,7 @@ export function $gate(
         ? effective(key, definitions[key], false, entityContext)
         : resolveEvaluatedDefinition(definitions[key], entityContext);
 
-    const isEnabled = requirement === 'any' ? keys.some(evaluate) : keys.every(evaluate);
+    const isEnabled = requirement === 'any' ? selectedKeys.some(evaluate) : selectedKeys.every(evaluate);
 
     return negate ? !isEnabled : isEnabled;
   });

@@ -37,7 +37,9 @@ Packed consumers require public registry dependencies, including reporter 1.1.0.
 Local shared dependency overrides are rejected. The runner cleans each owned
 temporary host, browser process, server child and HTTP listener independently,
 including failed checks and protocol-close failures. `node --test tests/host-cleanup.test.mjs`
-uses real child processes/listeners with leak-detecting negative controls.
+uses real child processes/listeners with leak-detecting negative controls, including
+command descendants after their parent exits and held HTTP headers/bodies. Commands
+own process groups; HTTP deadlines abort the complete header/body operation.
 
 Identity acceptance covers minted targeting suppression, i/u packet labels,
 retained queues, reentrant checks, matching active-memory 304 hydration, and full

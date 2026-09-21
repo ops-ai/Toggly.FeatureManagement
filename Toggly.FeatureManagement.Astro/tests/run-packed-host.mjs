@@ -9,7 +9,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
-import {withResources, bounded, closeServer, stopChild, ownBrowser} from './host-resources.mjs';
+import {withResources, bounded, closeServer, stopChild, ownBrowser, readHttp} from './host-resources.mjs';
 
 await withResources(async defer => {
 const packageDir = fileURLToPath(new URL('..', import.meta.url));
@@ -32,7 +32,7 @@ const npm = process.env.npm_execpath;
 const environment = { ...process.env, TOGGLY_DISABLE_TELEMETRY: '1', ASTRO_TELEMETRY_DISABLED: '1' };
 async function run(args, cwd = root, extraEnv = {}) {
   await bounded(() => new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, args, { cwd, env: { ...environment, ...extraEnv }, stdio: 'inherit' });
+    const child = spawn(process.execPath, args, { cwd, env: { ...environment, ...extraEnv }, stdio: 'inherit', detached: true });
     defer(() => stopChild(child));
     child.once('error', reject);
     child.once('exit', code => code === 0 ? resolve() : reject(new Error(`${args.join(' ')} exited ${code}`)));
@@ -163,7 +163,7 @@ let browser;
 async function stopHost() {await stopChild(host);}
 async function waitForHost(url) {
   for (let attempt = 0; attempt < 100; attempt++) {
-    try { return await fetch(url, {signal:AbortSignal.timeout(1000)}); } catch { await new Promise(resolve => setTimeout(resolve, 100)); }
+    try { return await readHttp(url, 1000); } catch { await new Promise(resolve => setTimeout(resolve, 100)); }
   }
   throw new Error('Astro host did not start');
 }
@@ -192,16 +192,16 @@ async function waitForHost(url) {
   assert.equal(mapping['/gated'], 'Visible');
   await run([astro, 'build'], root, { HOST_OUTPUT: 'server' });
   const port = Number(process.env.HOST_PORT ?? 43879);
-  host = spawn(process.execPath, ['dist/server/entry.mjs'], { cwd: root, env: { ...environment, HOST: '127.0.0.1', PORT: String(port) }, stdio: 'inherit' });
+  host = spawn(process.execPath, ['dist/server/entry.mjs'], { cwd: root, env: { ...environment, HOST: '127.0.0.1', PORT: String(port) }, stdio: 'inherit', detached: true });
   {const owned = host; defer(() => stopChild(owned));}
   const url = `http://127.0.0.1:${port}`;
   const response = await waitForHost(url);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('x-toggly-middleware'), 'applied');
-  assert.match(await response.text(), /id="server-visible"/);
-  assert.equal((await fetch(`${url}/gated/`)).status, 200);
+  assert.match(response.body, /id="server-visible"/);
+  assert.equal((await readHttp(`${url}/gated/`)).status, 200);
   const contexts = await Promise.all(['admin', 'user', 'admin', 'user'].map(async role => {
-    const body = await (await fetch(`${url}/context/?identity=${role}&role=${role}`)).text();
+    const body = (await readHttp(`${url}/context/?identity=${role}&role=${role}`)).body;
     assert.equal(body.includes('id="context-allowed"'), role === 'admin');
     assert.equal(body.includes('id="context-denied"'), role !== 'admin');
   }));
@@ -249,7 +249,7 @@ async function waitForHost(url) {
   await page.locator('#refresh').click();
   await assertIslands(false);
   assert.ok(fetchCount > beforeLocal, 'explicit remote refresh fetches definitions');
-  assert.equal((await fetch(`${url}/gated/`)).status, 404);
+  assert.equal((await readHttp(`${url}/gated/`)).status, 404);
   remoteEnabled = true;
   tampered = true;
   const invalidResponse = page.waitForResponse(response => response.url().includes('/evaluated-signed/'));
@@ -354,7 +354,7 @@ async function waitForHost(url) {
       }
     }
     await writeFile(path.join(root, 'src/pages/index.astro'), devPage);
-    host = spawn(process.execPath, ['dev.mjs'], { cwd: root, env: { ...environment, PORT: String(port), ...(framework !== 'all' ? { HOST_ISLAND: framework } : {}) }, stdio: 'inherit' });
+    host = spawn(process.execPath, ['dev.mjs'], { cwd: root, env: { ...environment, PORT: String(port), ...(framework !== 'all' ? { HOST_ISLAND: framework } : {}) }, stdio: 'inherit', detached: true });
     {const owned = host; defer(() => stopChild(owned));}
     assert.equal((await waitForHost(url)).status, 200);
     page = await browser.newPage();

@@ -141,3 +141,45 @@ it.each(['flag','gate'])('snapshots selected flag values before entity mappers m
  const atom=kind==='flag'?store.$flag('On',false,{},`SnapshotAstro-${kind}`):store.$gate(['On'],'all',false,{},`SnapshotAstro-${kind}`);
  expect(atom.get()).toBe(true);await flush();expect(bodies[0].f.On.enabled).toEqual([1]);
 });
+
+it.each(['flag','gate'])('snapshots nested entity rules before the mapper for %s',async kind=>{
+ defs={On:{requirement:'all',rules:[{property:'role',op:'eq',value:'admin'}]}};
+ await init({identity:'alice'});
+ registerContext('nested-mutation',()=>{
+  const definition=store.$flags.get().On;
+  if(typeof definition==='object')definition.rules[0].value='retired';
+  return {kind:'Account',key:'1',attributes:{role:'admin'}};
+ });
+ const selected=kind==='flag'?store.$flag('On',false,{},'nested-mutation'):store.$gate(['On'],'all',false,{},'nested-mutation');
+ expect(selected.get()).toBe(true);await flush();
+ expect(bodies).toEqual([{k:'app',e:'Test',u:'alice',f:{On:{enabled:[1]}}}]);
+});
+it('snapshots every selected nested gate before an earlier local gate mutates later rules',async()=>{
+ defs={First:true,Later:{requirement:'all',rules:[{property:'role',op:'eq',value:'admin'}]}};
+ await init({identity:'alice',localGates:[{id:'first',flagKeys:['First'],isEnabled:()=>{
+  const definition=store.$flags.get().Later;
+  if(typeof definition==='object'){definition.rules[0].value='retired';definition.rules.push({property:'missing',op:'eq',value:'no'});}
+  return true;
+ }}]});
+ expect(store.$gate(['First','Later'],'all',false,{kind:'Account',key:'1',attributes:{role:'admin'}}).get()).toBe(true);
+ await flush();expect(bodies[0].f).toEqual({First:{enabled:[1]},Later:{enabled:[1]}});
+});
+it('stops a superseded refresh hook chain before invoking remaining callbacks',async()=>{
+ let release:()=>void=()=>{};let started:()=>void=()=>{};let hold=false;
+ const entered=new Promise<void>(resolve=>{started=resolve;});const seen:boolean[]=[];
+ await init({hooks:[
+  {getMetadata:()=>({name:'hold'}),afterRefresh:()=>hold?new Promise<void>(resolve=>{release=resolve;started();}):undefined},
+  {getMetadata:()=>({name:'publish'}),afterRefresh:(flags:Record<string,boolean>)=>{seen.push(flags.On);}},
+ ]});
+ seen.length=0;hold=true;const old=store.refreshFlags();await entered;
+ hold=false;defs={On:false};await store.refreshFlags();release();await old;
+ expect(store.$flags.get().On).toBe(false);expect(seen).toEqual([false]);expect(bodies).toEqual([]);
+});
+it('retains selected local callbacks when an earlier gate replaces a later callback',async()=>{
+ defs={First:true,Later:true};
+ const later={id:'later',flagKeys:['Later'],isEnabled:()=>true};
+ const first={id:'first',flagKeys:['First'],isEnabled:()=>{later.isEnabled=()=>false;return true;}};
+ await init({localGates:[first,later]});
+ expect(store.$gate(['First','Later']).get()).toBe(true);await flush();
+ expect(bodies[0].f).toEqual({First:{enabled:[1]},Later:{enabled:[1]}});
+});

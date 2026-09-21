@@ -5,6 +5,7 @@
 - Explicit usage, view, counter, latest-value gauge and awaitable flush methods; synchronous browser client disposal with bounded final flushing.
 
 ### Fixed
+- Snapshot nested entity rules before callbacks and stop superseded refresh hooks before they publish retired results.
 - Count effective checks and assigned variants once through the shared evaluator, preserving local/entity gates and short circuit.
 - Avoid telemetry from unobserved computed-store maintenance or duplicate native component hydration subscriptions.
 - Apply local gates to framework variant helpers and forward native component entity context.
