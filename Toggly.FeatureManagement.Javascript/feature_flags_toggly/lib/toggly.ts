@@ -578,10 +578,14 @@ export class Toggly {
 
   private static buildEvaluatedUrl(mode: 'evaluated' | 'variants'): string {
     const path = mode === 'variants' ? 'evaluated-variants-signed' : 'evaluated-signed';
-    const url = new URL(
-      `${Toggly._config.baseURI}/${path}/${Toggly._config.appKey}/${Toggly._config.environment}`
-    );
-    if (Toggly._instanceId) url.searchParams.set('i', Toggly._instanceId);
+    const url = new URL(Toggly._config.baseURI);
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/${path}/${Toggly._config.appKey}/${Toggly._config.environment}`;
+    if (Toggly._instanceId) {
+      for (const key of Array.from(url.searchParams.keys())) {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key);
+      }
+      url.searchParams.set('i', Toggly._instanceId);
+    }
     else appendEvaluationContext(url, Toggly.evaluationContext, mode);
     return url.toString();
   }

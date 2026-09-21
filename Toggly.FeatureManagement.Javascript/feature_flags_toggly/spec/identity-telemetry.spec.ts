@@ -358,3 +358,27 @@ test('mapper context replacement also invalidates the evaluation after-hook cont
     expect(bodies()).toEqual([{k:'identity-app',e:'Production',u:'alice',f:{Flag:{enabled:[1]}}}]);
   } finally {SDK.removeHook('after-mapper-switch')}
 });
+
+test.each([false, true])('builds a minted endpoint pathname and scrubs every configured targeting field (variants %s)', async enableVariants => {
+  global.fetch = jest.fn(async (url, options) => {
+    requests.push({ url: new URL(String(url)), init: options });
+    return response(tokenDefinitions(enableVariants, true));
+  });
+  await init({ baseURI: 'https://definitions.invalid/base/?u=old&u=older&userId=private&g=a&g=b&claim.plan=paid&claim.team=secret&keep=one&keep=two', instanceId: ' token ', identity: 'alice', groups: ['staff'], claims: { role: 'admin' }, enableVariants, enableTelemetry: false });
+  const url = requests[0].url;
+  expect(url.pathname).toBe(`/base/${enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'}/identity-app/Production`);
+  expect(Array.from(url.searchParams.entries())).toEqual([['keep', 'one'], ['keep', 'two'], ['i', 'token']]);
+  expect(SDK.isFeatureOn('Flag')).toBe(true);
+  if (enableVariants) expect(SDK.getVariant('Flag')).toEqual({ name: 'blue', configurationValue: 'A' });
+});
+
+test.each([false, true])('preserves configured unrelated queries and ordinary targeting with a blank token (variants %s)', async enableVariants => {
+  await init({ baseURI: 'https://definitions.invalid/base/?keep=one&keep=two', instanceId: ' ', identity: 'alice', groups: ['staff'], claims: { role: 'admin' }, enableVariants, enableTelemetry: false });
+  const url = requests[0].url;
+  expect(url.pathname).toBe(`/base/${enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'}/identity-app/Production`);
+  expect(url.searchParams.getAll('keep')).toEqual(['one', 'two']);
+  expect(url.searchParams.get(enableVariants ? 'userId' : 'u')).toBe('alice');
+  expect(url.searchParams.getAll('g')).toEqual(['staff']);
+  expect(url.searchParams.get('claim.role')).toBe('admin');
+  expect(url.searchParams.has('i')).toBe(false);
+});

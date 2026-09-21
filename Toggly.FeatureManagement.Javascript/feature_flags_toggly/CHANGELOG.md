@@ -17,6 +17,8 @@
   gates and assigned variants, before aggregate gate negation.
 
 ### Fixed
+- Build configured definitions URL paths correctly and remove client targeting
+  query parameters when a minted instance ID is used in either response mode.
 - Remove scoped revision validators with evicted cached definitions without
   counting validators as additional cache entries.
 - Apply multi-field context updates and clears together, reconnecting live updates
