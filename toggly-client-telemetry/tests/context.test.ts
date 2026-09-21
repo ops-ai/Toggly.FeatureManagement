@@ -47,14 +47,48 @@ test('queued and in-flight gauges preserve context order during a retry and retu
   expect(bodies().map(b=>[b.u,b.m.cart])).toEqual([['alice',1],['alice',1],['alice',2],['bob',3],['alice',4]]);
   expect(requests[0].init.body).toBe(requests[1].init.body); reporter.dispose();
 });
+// Keep all 2000 distinct partitions: admission checks the global budget against
+// each queued entry. Coverage measured ~2.1s locally in admission alone and the
+// release runner exceeded Jest's 5s default. Allow 15s only for this stress case;
+// retry timing remains virtual and completion is awaited, never wall-clock slept.
 test('all context partitions and retry chunks share the 2000-entry admission budget', async () => {
-  const diagnostics:string[]=[]; const {reporter, change, bodies, requests} = setup({onDiagnostic:(d:string)=>diagnostics.push(d),fetch:async()=>({status:requests.length===1?503:202})});
-  reporter.incrementCounter('orders',1000000); const done=reporter.flush(); await tick();
-  for(let i=1;i<2001;i++){change({identity:'u'+i});reporter.incrementCounter('orders',1000000);}
-  const next=reporter.flush(); await jest.advanceTimersByTimeAsync(30000); await Promise.all([done,next]);
-  expect(bodies()).toHaveLength(2001); expect(bodies().some(b=>b.u==='u2000')).toBe(false);
-  expect(diagnostics).toEqual(['buffer-full']); reporter.dispose();
-});
+  const diagnostics: string[] = [];
+  const { reporter, change, bodies, requests } = setup({
+    onDiagnostic: (diagnostic: string) => diagnostics.push(diagnostic),
+    fetch: async () => ({ status: requests.length === 1 ? 503 : 202 }),
+  });
+  reporter.incrementCounter('orders', 1000000);
+  const firstFlush = reporter.flush();
+  await tick();
+
+  for (let i = 1; i < 2001; i++) {
+    change({ identity: 'u' + i });
+    reporter.incrementCounter('orders', 1000000);
+  }
+  const nextFlush = reporter.flush();
+  expect(requests).toHaveLength(1);
+  expect(diagnostics).toEqual(['buffer-full']);
+
+  jest.advanceTimersByTime(29999);
+  await tick();
+  expect(requests).toHaveLength(1); // No retry or later context before the delay.
+  jest.advanceTimersByTime(1);
+  await Promise.all([firstFlush, nextFlush]);
+
+  const payloads = bodies();
+  expect(payloads).toHaveLength(2001); // 2000 accepted entries plus one retry.
+  expect(requests[1].init.body).toBe(requests[0].init.body);
+  expect(payloads.slice(0, 2)).toEqual([
+    { k: 'test-app', e: 'Production', m: { orders: 1000000 } },
+    { k: 'test-app', e: 'Production', m: { orders: 1000000 } },
+  ]);
+  expect(payloads.slice(2)).toEqual(Array.from({ length: 1999 }, (_, index) => ({
+    k: 'test-app', e: 'Production', u: 'u' + (index + 1), m: { orders: 1000000 },
+  })));
+  expect(payloads.some(body => body.u === 'u2000')).toBe(false);
+  expect(diagnostics).toEqual(['buffer-full']);
+  reporter.dispose();
+}, 15000);
 test('all context metadata counts as UTF8 toward the global 256KiB and per-envelope 48KiB bounds', async () => {
   const diagnostics:string[]=[]; const {reporter, change, bodies} = setup({onDiagnostic:(d:string)=>diagnostics.push(d)});
   for(let i=0;i<300;i++){change({identity:'🌍'.repeat(1000)+i});reporter.incrementCounter('orders');}
