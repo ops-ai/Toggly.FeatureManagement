@@ -1,3 +1,30 @@
+## 1.9.0
+
+2026-09-19
+
+### Added
+- Send batched frontend feature checks and explicit usage, view,
+  counter, and gauge events when an application key is configured. Use
+  `enableTelemetry: false` to opt out, and `flushTelemetry()` to await a flush.
+- Support an independent `metricsBaseUrl` and a configurable telemetry flush
+  interval while preserving feature evaluation when telemetry is unavailable.
+
+### Changed
+- Accept a host-minted `instanceId` for definitions and compact telemetry, with
+  client identity fallback and no client groups/claims when a token is present.
+- Isolate definitions, revisions and pending responses when identity or token changes.
+- Record each evaluated feature's effective value, including local and entity
+  gates and assigned variants, before aggregate gate negation.
+
+### Fixed
+- Keep queued and in-flight telemetry attribution immutable across identity and
+  token changes, with one shared bounded queue and ordered gauges.
+- Preserve evaluation attribution and assigned variants when user callbacks
+  change context; cancel old transport before incompatible reinitialization.
+- Ignore responses and retained callbacks from disposed or replaced initialization,
+  preventing old feature state and events from reaching the new application.
+- Preserve telemetry ownership when restarting the definitions refresh interval.
+
 ## 1.8.0
 
 2026-09-08
@@ -156,4 +183,3 @@
 * Feature evaluation methods unit tests
 * Documentation
 * License
-
