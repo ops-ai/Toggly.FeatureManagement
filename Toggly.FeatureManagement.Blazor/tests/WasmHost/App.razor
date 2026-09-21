@@ -11,6 +11,8 @@
 }
 <button id="record" @onclick="Record">Record</button>
 <button id="flush" @onclick="Flush">Flush</button>
+<button id="mint" @onclick="Mint">Minted identity</button>
+<button id="logout" @onclick="Logout">Logout</button>
 <button id="dispose" @onclick="DisposeOwner">Dispose</button>
 <span id="status">@status</span>
 @code {
@@ -18,6 +20,8 @@
     private string status = "idle";
     private IFrontendTelemetry Telemetry => (IFrontendTelemetry)Session;
     private void Record() { Telemetry.RecordUsage("checkout"); Telemetry.RecordView("checkout"); Telemetry.IncrementCounter("orders", 2); Telemetry.SetGauge("cart", 3.5); status = "recorded"; }
+    private async Task Mint() { await ((IFrontendIdentitySession)Session).SetIdentityAsync(new("minted-user"), "local-minted-token"); status = "minted"; }
+    private async Task Logout() { await Session.SetContextAsync(new()); status = "anonymous"; }
     private async Task Flush() { await Telemetry.FlushTelemetryAsync(); status = "flushed"; }
     private async Task DisposeOwner() { disposed = true; await Session.DisposeAsync(); status = "disposed"; }
 }

@@ -3,7 +3,7 @@ using Toggly.FeatureManagement.Client;
 namespace Toggly.FeatureManagement.Blazor;
 
 /// <summary>Owns a portable client for a single browser DI scope.</summary>
-public sealed class BrowserFeatureSession : IFeatureSession, IFrontendTelemetry
+public sealed class BrowserFeatureSession : IFeatureSession, IFrontendTelemetry, IFrontendIdentitySession
 {
     private readonly TogglyClient client;
     private readonly BrowserTelemetryLifecycle? telemetryLifecycle;
@@ -54,6 +54,10 @@ public sealed class BrowserFeatureSession : IFeatureSession, IFrontendTelemetry
         EvaluationContext context,
         CancellationToken cancellationToken = default
     ) => client.SetContextAsync(context, cancellationToken);
+
+    /// <summary>Replace browser targeting context and minted token together; null clears the token.</summary>
+    public Task SetIdentityAsync(EvaluationContext context, string? instanceId, CancellationToken cancellationToken = default)
+        => client.SetIdentityAsync(context, instanceId, cancellationToken);
 
     public Task<bool> EvaluateAsync(
         IEnumerable<string> keys,
