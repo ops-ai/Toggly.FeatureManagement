@@ -24,6 +24,8 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
       ? createTelemetryReporter({
           appKey: options.appKey,
           environment: options.environment,
+          instanceId: (initial.context.instanceId ?? options.instanceId)?.trim() || undefined,
+          identity: initial.context.identity,
           enableTelemetry: options.enableTelemetry,
           metricsBaseUrl: options.metricsBaseUrl,
           telemetryFlushIntervalMs: options.telemetryFlushIntervalMs,
@@ -33,6 +35,7 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
   const detachTelemetry = telemetry ? attachBrowserLifecycle(telemetry) : undefined;
   const acceptSnapshot = (value: TogglySnapshot): TogglySnapshot => {
     const copy = structuredClone(value);
+    copy.context.instanceId = copy.context.instanceId?.trim() || undefined;
     // Server-produced metadata comes from the host trust boundary, but current
     // browser pins still constrain whether its signed values may seed the UI.
     if (
@@ -50,10 +53,12 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
     }
     return copy;
   };
-  let snapshot = acceptSnapshot(initial);
+  let snapshot = acceptSnapshot({
+    ...initial,
+    context: { ...initial.context, instanceId: initial.context.instanceId ?? options.instanceId },
+  });
   const store = writable(snapshot);
   const localGates = options.localGates ?? [];
-  const gateIndex = buildFlagGateIndex(localGates);
   let stop: (() => void) | undefined;
   let generation = 0;
   let disposed = false;
@@ -66,18 +71,35 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
   };
   const publish = (next: TogglySnapshot) => {
     snapshot = acceptSnapshot(next);
+    telemetry?.setContext({
+      instanceId: snapshot.context.instanceId,
+      identity: snapshot.context.identity,
+    });
     store.set(snapshot);
   };
-  const isEnabled = (key: string, gate: GateOptions = {}) => {
-    const enabled = applyLocalGate(
-      resolveEvaluatedDefinition(snapshot.definitions[key], gate.entity, gate.defaultValue),
-      key,
-      localGates,
-      gateIndex,
-    );
-    telemetry?.recordCheck(key, enabled ? 'enabled' : 'disabled');
-    return enabled;
+  const captureEvaluation = (gate: GateOptions) => {
+    const record = telemetry?.captureCheck();
+    const definitions = structuredClone(snapshot.definitions);
+    const defaultValue = gate.defaultValue;
+    const gates = localGates.map((local) => ({ ...local, flagKeys: [...local.flagKeys] }));
+    const index = buildFlagGateIndex(gates);
+    // Attribute values retain the evaluator's existing conversion semantics;
+    // unlike signed definitions they may include non-cloneable application values.
+    const entity = gate.entity
+      ? { ...gate.entity, attributes: { ...gate.entity.attributes } }
+      : undefined;
+    return (key: string) => {
+      const enabled = applyLocalGate(
+        resolveEvaluatedDefinition(definitions[key], entity, defaultValue),
+        key,
+        gates,
+        index,
+      );
+      record?.(key, enabled ? 'enabled' : 'disabled');
+      return enabled;
+    };
   };
+  const isEnabled = (key: string, gate: GateOptions = {}) => captureEvaluation(gate)(key);
   const start = async (): Promise<void> => {
     if (disposed || typeof window === 'undefined') return;
     mounted = true;
@@ -116,8 +138,11 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
       telemetry?.flush(options) ?? Promise.resolve(),
     isEnabled,
     gate: (keys: string[], gate: GateOptions = {}) =>
-      evaluateResolvedKeys(keys, gate.requirement ?? 'all', gate.negate ?? false, (key) =>
-        isEnabled(key, gate),
+      evaluateResolvedKeys(
+        [...keys],
+        gate.requirement ?? 'all',
+        gate.negate ?? false,
+        captureEvaluation(gate),
       ),
     /** Call when a layout receives new server data after navigation/login; never retain the previous user's values. */
     update: (next: TogglySnapshot) => {

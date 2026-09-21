@@ -28,7 +28,8 @@
     "format": "npm exec --yes --package=prettier@3.6.2 --package=prettier-plugin-svelte@3.4.1 -- node scripts/format.mjs --write",
     "format:check": "npm exec --yes --package=prettier@3.6.2 --package=prettier-plugin-svelte@3.4.1 -- node scripts/format.mjs --check",
     "pretest": "npm run format:check",
-    "pretest:coverage": "npm run format:check"
+    "pretest:coverage": "npm run format:check",
+    "test:host-cleanup": "node scripts/host-resource-controls.mjs"
   },
   "engines": {
     "node": ">=22.12.0"
@@ -42,7 +43,7 @@
     "@ops-ai/toggly-hooks-types": "^1.4.5",
     "@ops-ai/toggly-signed-defs": "^1.2.6",
     "@ops-ai/toggly-local-gates": "^1.0.1",
-    "@ops-ai/toggly-client-telemetry": "^1.0.0"
+    "@ops-ai/toggly-client-telemetry": "^1.1.0"
   },
   "devDependencies": {
     "@sveltejs/kit": "^2.55.0",

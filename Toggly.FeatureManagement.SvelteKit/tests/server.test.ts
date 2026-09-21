@@ -229,3 +229,63 @@ it.each(['throw', 'reject'])(
     }
   },
 );
+
+it.each([true, false])(
+  'forwards only explicitly projected minted identity into frontend snapshots (projected %s)',
+  async (projected) => {
+    const client = createTogglyClient({
+      featureDefaults: { trusted: true },
+      enableUsageTracking: false,
+      enableMetrics: false,
+    });
+    await client.init();
+    const urls: URL[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = new URL(String(input));
+        urls.push(url);
+        return url.pathname.endsWith('/.well-known/jwks')
+          ? new Response(JSON.stringify({ keys: [jwk] }))
+          : new Response(envelope({ on: true, hidden: true }));
+      }),
+    );
+    const handle = createTogglyHandle({
+      client,
+      context: () => ({ identity: 'private-user', claims: { secret: 'private' } }),
+      clientContext: projected
+        ? () => ({
+            instanceId: ' minted ',
+            identity: 'public-user',
+            groups: ['staff'],
+            claims: { role: 'admin' },
+          })
+        : undefined,
+      frontend: { appKey: 'frontend', expose: ['on'] },
+    });
+    try {
+      const e = event();
+      await handle({ event: e, resolve: async () => new Response() } as any);
+      const snapshot = await loadToggly(e);
+      expect(snapshot.definitions).toEqual({ on: true });
+      expect(snapshot.source).toBe('signed');
+      const request = urls.find((url) => url.pathname.includes('/evaluated-signed/'))!;
+      expect([...request.searchParams]).toEqual(projected ? [['i', 'minted']] : []);
+      expect(snapshot.context).toEqual(
+        projected
+          ? {
+              instanceId: 'minted',
+              identity: 'public-user',
+              groups: ['staff'],
+              claims: { role: 'admin' },
+            }
+          : {},
+      );
+      expect(await e.locals.toggly.isEnabled('trusted')).toBe(true);
+      expect(urls.some((url) => url.pathname.includes('telemetry'))).toBe(false);
+      expect(JSON.stringify(snapshot)).not.toContain('private-user');
+    } finally {
+      await client.close();
+    }
+  },
+);

@@ -66,6 +66,7 @@ it('counts effective leaves once before negation and keeps projections and expli
   expect(requests[0].body).toEqual({
     k: 'frontend',
     e: 'Test',
+    u: 'private-user',
     f: {
       on: { disabled: [1] },
       Order: { enabled: [1], disabled: [1] },
@@ -102,8 +103,10 @@ it('retains queued metrics and one lifecycle attachment across route-driven tran
   expect(windowAdd).toHaveBeenCalledTimes(1);
   expect(documentAdd).toHaveBeenCalledTimes(1);
   await t.flushTelemetry();
-  expect(requests[0].body.m.pending).toBe(3);
-  expect(requests[0].body.f.on).toEqual({ disabled: [1] });
+  expect(requests.map((r) => r.body)).toEqual([
+    { k: 'layout', e: 'Production', u: 'private-user', m: { pending: 1 } },
+    { k: 'layout', e: 'Production', u: 'bob', m: { pending: 2 }, f: { on: { disabled: [1] } } },
+  ]);
   t.dispose();
   t.recordUsage('after');
   t.update(snapshot);
@@ -111,7 +114,7 @@ it('retains queued metrics and one lifecycle attachment across route-driven tran
   await t.flushTelemetry();
   window.dispatchEvent(new Event('pagehide'));
   document.dispatchEvent(new Event('visibilitychange'));
-  expect(requests).toHaveLength(1);
+  expect(requests).toHaveLength(2);
 });
 
 it('uses plain keepalive for hidden, pagehide and one synchronous final disposal', async () => {

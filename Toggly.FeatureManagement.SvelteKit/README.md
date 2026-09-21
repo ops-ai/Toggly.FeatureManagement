@@ -45,7 +45,9 @@ export const handle = createTogglyHandle({
 
 Use your authenticated session in `context(event)`; identity, groups, claims and request fields are copied once. The hook captures User-Agent, Accept-Language and cf-ipcountry; callback request fields may override them. Never set identity on the process-wide Node client from request handling.
 
-`clientContext(event, context)` explicitly projects public identity/groups/claims into the frontend snapshot. Omitted means anonymous frontend targeting. Never expose private session claims or credentials. The frontend key must be a Front-end App Key generated in App Settings. Flags must be Available to Client SDK and local browser origins allowed.
+`clientContext(event, context)` explicitly projects public identity/groups/claims and an optional host-minted `instanceId` into the frontend snapshot. Omitted means anonymous frontend targeting. Never expose private session claims or credentials. The frontend key must be a Front-end App Key generated in App Settings. Flags must be Available to Client SDK and local browser origins allowed.
+
+A nonblank projected `instanceId` is trimmed and forwarded to the frontend signed definitions request as `i`, suppressing client identity/groups/claims targeting, including targeting already in a configured base URL. Backend request evaluation still uses `context(event)` independently. Project only a token supplied by your host; do not mint with a Backend App Key.
 
 ## Load and hydrate
 
@@ -100,7 +102,7 @@ Pass explicit entities: `{ kind: 'Order', key: 'ord-vip', attributes: { Vip: tru
 
 ## Browser telemetry
 
-A keyed browser store reports anonymous aggregate telemetry by default. Direct `isEnabled` calls and `Feature` gates count the effective enabled/disabled result after entity and local gates, before negation. Composite gates count only evaluated leaves. Snapshot hydration, refresh and navigation do not themselves record checks; reactive consumers record checks when they evaluate the new snapshot. Usage and views are explicit:
+A keyed browser store reports aggregate telemetry by default. A nonblank `snapshot.context.instanceId` supplies `i`; otherwise its identity supplies `u`. The SDK never mints a token. Direct `isEnabled` calls and `Feature` gates count the effective enabled/disabled result after entity and local gates, before negation. Composite gates count only evaluated leaves. Snapshot hydration, refresh and navigation do not themselves record checks; reactive consumers record checks when they evaluate the new snapshot. Usage and views are explicit:
 
 ```ts
 const toggly = createToggly(data.toggly, {
@@ -119,7 +121,11 @@ await toggly.flushTelemetry();
 
 Usage and view methods accept an optional variant string; omitting it uses `enabled`. Counter and gauge names are application-level metrics. Feature and metric names must be nonblank. Variant names contain 1 through 64 ASCII letters, digits, underscores or hyphens. Invalid inputs are dropped without changing evaluation results. `onTelemetryDiagnostic` optionally receives bounded diagnostic codes.
 
-The collector URL is independent of `baseURI`; it defaults to `https://metrics.toggly.io` and appends `/api/frontend/telemetry`. Payloads contain only the frontend key, environment, aggregate feature counts and metrics. They omit identity, groups, claims, entity attributes and authentication headers. Allow the browser origin in your frontend key settings.
+The collector URL is independent of `baseURI`; it defaults to `https://metrics.toggly.io` and appends `/api/frontend/telemetry`. Payloads contain the frontend key, environment, attribution, aggregate feature counts and metrics. They include at most one of `i` or `u` and omit groups, claims, entity attributes and authentication headers. Allow the browser origin in your frontend key settings.
+
+When authentication or a host token changes, rerun the owning server load (for example, with your app's explicit invalidation dependency). If a load projects URL parameters, read those parameters in the load so SvelteKit tracks token-only navigation too.
+
+`BrowserOptions.instanceId` is an initial convenience when the first snapshot omits it. Every later `update(next)` owns the complete context: an omitted or blank token clears it, including any configured URL token, and restores identity targeting. Queued events retain their original attribution across updates.
 
 The store owns one bounded reporter across route-driven refresh reconnects. Regular sends use gzip when available; hidden/pagehide and the final `dispose()` send use plain JSON with browser keepalive. Keep `dispose()` in the owning layout's destruction handler. Set `enableTelemetry: false` to disable collection and transport. Keyless stores, SSR and build-time imports never create frontend telemetry; server evaluation remains owned by the supplied Node client.
 
@@ -157,7 +163,7 @@ const storage = {
 const toggly = createToggly(data.toggly, { appKey: data.publicKey, storage });
 ```
 
-These callbacks defer browser storage access until `start()` runs after mounting. The adapter stores a versioned exact signed envelope and only the public key that verified it. It partitions records by endpoint, app, environment and complete identity/groups/claims URL. Restore rechecks the current key pins, public-key constraints/expiry, signature age and complete entity schema before publishing; it never trusts a parsed-flag cache or fetches a URL supplied by a stored record. Failed storage access, corrupt data and verification failure leave defaults or already verified state intact.
+These callbacks defer browser storage access until `start()` runs after mounting. The adapter stores a versioned exact signed envelope and only the public key that verified it. It partitions records by endpoint, app, environment and complete evaluated URL, including the active token or identity/groups/claims. Restore rechecks the current key pins, public-key constraints/expiry, signature age and complete entity schema before publishing; it never trusts a parsed-flag cache or fetches a URL supplied by a stored record. Failed storage access, corrupt data and verification failure leave defaults or already verified state intact.
 
 `loadToggly` marks its fallback snapshot `source: 'defaults'`, allowing a fresh browser store to restore the matching signed record before the network attempt. A successful server snapshot carries `source: 'signed'`, its verified `signedTimestamp` and selected public `signingKey`. These are trusted host hydration metadata, not portable signed credentials: no raw backend definitions or signed envelope are serialized. Browser `allowedKeyIds` also applies before signed SSR values seed the UI. Older stored state never replaces signed SSR or live state. The layout retains observed key trust across navigation; current observed keys take precedence over stored keys. Manual snapshots without source metadata remain authoritative; explicitly label application defaults `source: 'defaults'` when they may be replaced by a verified cache.
 

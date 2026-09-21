@@ -432,3 +432,141 @@ it.each(['throw', 'reject'])(
     expect(vi.getTimerCount()).toBe(0);
   },
 );
+
+it.each(['minted', 'blank', 'omitted'])(
+  'constructs the public %s definitions URL without mixing configured targeting into minted context',
+  async (mode) => {
+    socket();
+    const requests: URL[] = [];
+    const errors = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input) => {
+        requests.push(new URL(String(input)));
+        return new Response(null, { status: 503 });
+      }),
+    );
+    const context = {
+      ...initial.context,
+      instanceId: mode === 'minted' ? ' token-a ' : mode === 'blank' ? ' ' : undefined,
+    };
+    const t = createToggly(
+      { ...initial, context },
+      {
+        appKey: 'frontend',
+        environment: 'Test',
+        baseURI:
+          'https://fixture.test/base/?i=retired&u=old&userId=legacy&g=one&g=two&claim.secret=old&keep=yes',
+        refreshInterval: 0,
+        enableLiveUpdates: false,
+        onError: errors,
+      },
+    );
+    try {
+      await t.start();
+      await vi.waitFor(() => expect(errors).toHaveBeenCalledOnce());
+      const url = requests[0];
+      expect(url.pathname).toBe('/base/evaluated-signed/frontend/Test');
+      expect(url.searchParams.get('keep')).toBe('yes');
+      if (mode === 'minted')
+        expect([...url.searchParams]).toEqual([
+          ['keep', 'yes'],
+          ['i', 'token-a'],
+        ]);
+      else {
+        expect(url.searchParams.has('i')).toBe(false);
+        expect(url.searchParams.get('u')).toBe('alice');
+        expect(url.searchParams.get('claim.role')).toBe('admin');
+        expect(url.searchParams.getAll('g')).toContain('team');
+      }
+      expect(t.isEnabled('on')).toBe(false);
+    } finally {
+      t.dispose();
+    }
+  },
+);
+
+it('fences a retired token response and clears initial convenience for later tokenless updates', async () => {
+  socket();
+  let release!: (r: Response) => void;
+  const requests: URL[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/.well-known/jwks'))
+        return new Response(JSON.stringify({ keys: [jwk] }));
+      requests.push(url);
+      if (url.searchParams.get('i') === 'token-a')
+        return new Promise<Response>((resolve) => (release = resolve));
+      return new Response(envelope({ on: false }));
+    }),
+  );
+  const t = createToggly(initial, {
+    appKey: 'frontend',
+    instanceId: 'token-a',
+    refreshInterval: 0,
+    enableLiveUpdates: false,
+  });
+  try {
+    await t.start();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    t.update({ ...initial, context: { identity: 'bob', instanceId: 'token-b' } });
+    await vi.waitFor(() => expect(get(t).source).toBe('signed'));
+    release(new Response(envelope({ on: true })));
+    await settled();
+    expect(t.isEnabled('on')).toBe(false);
+    expect(get(t).context.instanceId).toBe('token-b');
+    t.update({ ...initial, context: { identity: 'carol' } });
+    await vi.waitFor(() => expect(requests).toHaveLength(3));
+    expect(requests.map((url) => [url.searchParams.get('i'), url.searchParams.get('u')])).toEqual([
+      ['token-a', null],
+      ['token-b', null],
+      [null, 'carol'],
+    ]);
+  } finally {
+    t.dispose();
+  }
+});
+
+it('never revives a configured token across explicit token rotation and clearing', async () => {
+  socket();
+  const requests: URL[] = [];
+  const onError = vi.fn();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input) => {
+      requests.push(new URL(String(input)));
+      return new Response(null, { status: 503 });
+    }),
+  );
+  const t = createToggly(
+    { ...initial, context: { instanceId: 'current' } },
+    {
+      appKey: 'frontend',
+      baseURI: 'https://fixture.test/base?i=retired&keep=one&keep=two',
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+      onError,
+    },
+  );
+  try {
+    await t.start();
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    t.update({ ...initial, context: { instanceId: 'next' } });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(2));
+    t.update({ ...initial, context: { identity: 'bob' } });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(3));
+    t.update({ ...initial, context: { identity: 'carol', instanceId: ' ' } });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(4));
+    expect(requests.map((u) => [u.searchParams.get('i'), u.searchParams.get('u')])).toEqual([
+      ['current', null],
+      ['next', null],
+      [null, 'bob'],
+      [null, 'carol'],
+    ]);
+    expect(requests.every((u) => u.searchParams.getAll('keep').join() === 'one,two')).toBe(true);
+  } finally {
+    t.dispose();
+  }
+});

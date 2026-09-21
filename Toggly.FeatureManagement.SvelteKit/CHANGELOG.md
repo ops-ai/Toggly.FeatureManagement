@@ -4,6 +4,8 @@
 
 ### Added
 
+- Accept an optional host-minted instance token through the explicit public server snapshot projection and browser context; otherwise use identity attribution. Context updates preserve queued attribution and clear omitted tokens.
+- Capture direct and composite gate definitions, local callbacks and attribution before reentrant evaluation. Minted definitions requests suppress client targeting, and signed caches remain isolated by the complete context URL.
 - Aggregate browser telemetry for effective feature checks, explicit usage/views, counters and gauges, with opt-out and configurable collector/flush interval.
 - Keep one layout-owned telemetry queue across navigation and refresh reconnects, with bounded lifecycle flushing and terminal cleanup. SSR and keyless stores remain silent.
 

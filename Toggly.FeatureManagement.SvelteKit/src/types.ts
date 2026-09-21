@@ -15,7 +15,7 @@ export interface TogglySnapshot {
   signedTimestamp?: number;
   signingKey?: Jwk;
   /** Explicitly public targeting data. Never put secrets or authentication claims here. */
-  context: TogglyEvaluationContext;
+  context: TogglyEvaluationContext & { instanceId?: string };
   expose: string[];
 }
 export interface GateOptions {
@@ -28,7 +28,9 @@ export interface BrowserOptions {
   /** Front-end App Key only. Backend keys belong in hooks.server.ts. */
   appKey?: string;
   environment?: string;
-  /** Anonymous browser telemetry defaults on for a configured frontend App Key. */
+  /** Initial host token convenience; subsequent snapshots own rotation and clearing. */
+  instanceId?: string;
+  /** Browser telemetry defaults on for a configured frontend App Key. */
   enableTelemetry?: boolean;
   /** Independent metrics service base URL; no targeting context is attached. */
   metricsBaseUrl?: string;
