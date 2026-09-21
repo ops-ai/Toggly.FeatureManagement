@@ -123,7 +123,7 @@ During build, the plugin generates a `toggly-page-features.json` manifest that m
 | `instanceId` | `string` | `undefined` | Host-minted browser token; takes precedence over client targeting |
 | `identity` | `string` | `undefined` | User identity for targeting |
 | `isDebug` | `boolean` | `false` | Enable debug logging |
-| `connectTimeout` | `number` | `5000` | API connection timeout (ms) |
+| `connectTimeout` | `number` | `5000` | Request timeout including response body (ms) |
 | `enableTelemetry` | `boolean` | `true` | Enable bounded browser telemetry when an app key is present |
 | `enableUsageTracking` | `boolean` | `true` | Enable automatic checks and explicit usage/view events |
 | `enableMetrics` | `boolean` | `true` | Enable explicit counters and gauges |

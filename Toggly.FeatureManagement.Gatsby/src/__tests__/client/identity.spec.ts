@@ -244,3 +244,31 @@ it('preserves unrelated base query fields and ordinary targeting with a blank to
   expect(url.searchParams.get('claim.role')).toBe('admin');
   expect(url.searchParams.has('i')).toBe(false);
 });
+
+it.each([undefined, ' '])('ignores inherited URL tokens when initialized with %s', async instanceId => {
+  await store.initTogglyClient({ ...config, instanceId, baseURI: 'https://defs.invalid/base?i=retired&i=older&keep=one&keep=two', groups: ['staff'], claims: { role: 'admin' } });
+  const url = requests[0].url;
+  expect(url.searchParams.has('i')).toBe(false);
+  expect(url.searchParams.get('u')).toBe('alice');
+  expect(url.searchParams.getAll('keep')).toEqual(['one', 'two']);
+  expect(store.$flag('F').get()).toBe(true);
+  await store.flushTelemetry();
+  expect(envelopes[0].u).toBe('alice'); expect(envelopes[0].i).toBeUndefined();
+});
+it('keeps the current token authoritative over the configured token across rotation and clearing', async () => {
+  const options = { ...config, baseURI: 'https://defs.invalid/base?i=retired&u=legacy&userId=legacy&claim.old=kept&keep=one&keep=two' };
+  await store.initTogglyClient({ ...options, instanceId: 'current' }); store.recordUsage('Current');
+  store.setIdentity('bob'); await vi.waitFor(() => expect(requests).toHaveLength(2));
+  expect(requests[1].url.searchParams.get('i')).toBe('current');
+  await store.initTogglyClient({ ...options, identity: 'bob', instanceId: 'next' }); store.recordUsage('Next');
+  await store.initTogglyClient({ ...options, identity: 'bob', instanceId: '' }); store.recordUsage('Cleared');
+  expect(requests.map(r => r.url.searchParams.get('i'))).toEqual(['current', 'current', 'next', null]);
+  const query = requests.at(-1)!.url.searchParams;
+  expect(query.get('u')).toBe('bob');
+  expect(query.get('userId')).toBe('legacy');
+  expect(query.get('claim.old')).toBe('kept');
+  expect(query.getAll('keep')).toEqual(['one', 'two']);
+  expect(store.$flag('F').get()).toBe(true);
+  await store.flushTelemetry();
+  expect(envelopes.map(e => [e.i, e.u])).toEqual([['current', undefined], ['next', undefined], [undefined, 'bob']]);
+});

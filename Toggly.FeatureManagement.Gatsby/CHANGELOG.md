@@ -2,6 +2,10 @@
 
 2026-09-18
 
+### Fixed
+- Keep the active context authoritative over configured URL tokens, including
+  initialization without a token and explicit token clearing.
+
 ### Added
 - Accept host-minted browser `instanceId`, prefer `i` over client targeting, and
   retain queued attribution across identity and provider-context changes [OPS-1321].

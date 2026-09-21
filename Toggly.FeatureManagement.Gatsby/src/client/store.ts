@@ -356,6 +356,7 @@ class TogglyClientInstance {
     const url = new URL(baseURI);
     url.pathname = `${url.pathname.replace(/\/$/, '')}/evaluated-signed/${appKey}/${environment}`;
 
+    url.searchParams.delete('i');
     if (instanceId) {
       for (const key of [...url.searchParams.keys()]) {
         if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key);

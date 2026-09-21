@@ -92,7 +92,7 @@ export interface TogglyPluginOptions {
   /** Enable debug logging */
   isDebug?: boolean;
   
-  /** Connection timeout in milliseconds */
+  /** Request timeout in milliseconds, including the response body */
   connectTimeout?: number;
 
   /** Enable compact browser telemetry (default: true when appKey is present) */
