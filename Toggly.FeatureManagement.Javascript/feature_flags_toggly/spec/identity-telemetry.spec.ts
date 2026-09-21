@@ -40,7 +40,7 @@ test.each([false, true])('minted definitions suppress client targeting, separate
 const mintedCacheKeys = (token: string, enableVariants: boolean) => {
   const context = `i:${encodeURIComponent(token)}`;
   return {
-    flags: StorageKeys.flagsCacheKey('identity-app', 'Production', context),
+    flags: StorageKeys.flagsCacheKey('identity-app', 'Production', `v3:${enableVariants ? 'variants' : 'evaluated'}:${context}`),
     variants: StorageKeys.variantsCacheKey('identity-app', 'Production', context),
     revision: StorageKeys.definitionsRevisionCacheKey('identity-app', 'Production', `v2:${enableVariants ? 'variants' : 'evaluated'}:${context}`),
   };

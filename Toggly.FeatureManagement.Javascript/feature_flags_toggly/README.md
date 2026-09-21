@@ -41,7 +41,11 @@ Requires **1.9.0 or later**.
 With an application key, the SDK records a count for each feature actually
 checked and sends batched counts to `https://metrics.toggly.io`. Local and
 entity gates affect the recorded enabled or disabled result. Assigned variants
-are recorded by name. Feature refreshes and cache reads do not count as checks.
+are recorded by name, including when `persistCache: false` or browser storage
+is unavailable. The active assignment stays in memory until its context changes
+or the cache is explicitly cleared. Feature refreshes and cache reads do not count
+as checks. Boolean and variant response caches are isolated; upgrading to 1.9.0
+fetches a fresh definitions body before reusing a persisted revision.
 
 ```javascript
 await Toggly.init({

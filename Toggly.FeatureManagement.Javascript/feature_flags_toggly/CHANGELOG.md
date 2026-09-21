@@ -17,6 +17,10 @@
   gates and assigned variants, before aggregate gate negation.
 
 ### Fixed
+- Keep boolean and variant response bodies isolated when switching modes and
+  returning to a cached HTTP 304 response.
+- Retain active variant assignments and their check counts when persistence is
+  disabled or browser storage is unavailable; clear assignments with their context.
 - Restore the matching persisted definitions for evaluation after a token rotation
   or reinitialization receives HTTP 304, including assigned variants.
 - Keep queued and in-flight telemetry attribution immutable across identity and

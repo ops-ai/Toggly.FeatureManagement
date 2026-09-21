@@ -76,6 +76,7 @@ export class Toggly {
   private static _localGateIndex: FlagGateIndex = new Map();
   private static _localGatesChangedListeners = new Set<() => void>();
   private static _inMemoryFlags: EvaluatedDefinitions | null = null;
+  private static _inMemoryVariants: { [key: string]: EvaluatedVariantDef } | null = null;
   private static _hasLoadedFlags = false;
   private static _lastError: string | undefined;
   private static _telemetry: TelemetryReporter | undefined;
@@ -230,7 +231,7 @@ export class Toggly {
     return StorageKeys.flagsCacheKey(
       Toggly._config?.appKey ?? '',
       Toggly._config?.environment ?? 'Production',
-      Toggly._contextCacheKey,
+      `v3:${Toggly._config?.enableVariants ? 'variants' : 'evaluated'}:${Toggly._contextCacheKey}`,
     );
   }
 
@@ -288,6 +289,7 @@ export class Toggly {
       ? { ...Toggly._config.flagDefaults }
       : null;
     Toggly._hasLoadedFlags = false;
+    Toggly._inMemoryVariants = null;
     Toggly._lastError = undefined;
     Toggly._cachedDefinitionsRevision = null;
     Toggly._wsReconnectAttempt = 0;
@@ -518,6 +520,7 @@ export class Toggly {
     Toggly._requests.forEach(controller => controller.abort());
     Toggly._requests.clear();
     Toggly._inMemoryFlags = null;
+    Toggly._inMemoryVariants = null;
     Toggly._hasLoadedFlags = false;
     Toggly._cachedDefinitionsRevision = null;
     Toggly._cachedRevisionContext = null;
@@ -553,8 +556,6 @@ export class Toggly {
     if (context.claims !== undefined) {
       Toggly.claims = context.claims;
     }
-    Toggly._inMemoryFlags = null;
-    Toggly._hasLoadedFlags = false;
     return Toggly.refresh();
   }
 
@@ -562,8 +563,6 @@ export class Toggly {
     Toggly.clearIdentity();
     Toggly.groups = [];
     Toggly.claims = {};
-    Toggly._inMemoryFlags = null;
-    Toggly._hasLoadedFlags = false;
     return Toggly.refresh();
   }
 
@@ -660,6 +659,10 @@ export class Toggly {
 
   static clearFeatureFlagsCache() {
     Toggly._inMemoryFlags = null;
+    Toggly._inMemoryVariants = null;
+    Toggly._hasLoadedFlags = false;
+    Toggly._cachedDefinitionsRevision = null;
+    Toggly._cachedRevisionContext = null;
     if (!canUseStorage) return;
     try {
       const flagsKey = Toggly._flagsCacheKey;
@@ -675,12 +678,14 @@ export class Toggly {
 
   static get variantsValue(): { [key: string]: EvaluatedVariantDef } | null {
     if (!Toggly._config?.enableVariants) return null;
+    if (Toggly._inMemoryVariants) return Toggly._inMemoryVariants;
     if (Toggly._persistCache) {
       try {
         const raw = localStorage.getItem(Toggly._variantsCacheKey);
         const parsed = JSON.parse(raw ?? 'null') as { [key: string]: EvaluatedVariantDef } | null;
         if (raw != null && parsed != null) {
           Toggly._touchCacheKey(Toggly._variantsCacheKey);
+          Toggly._inMemoryVariants = parsed;
         }
         return parsed;
       } catch { return null; }
@@ -689,6 +694,7 @@ export class Toggly {
   }
 
   static cacheVariants(variants: { [key: string]: EvaluatedVariantDef }) {
+    Toggly._inMemoryVariants = variants;
     if (!Toggly._persistCache) return;
     try {
       const key = Toggly._variantsCacheKey;

@@ -10,7 +10,7 @@ function flagsCacheKeyForContext(
   return StorageKeys.flagsCacheKey(
     appKey,
     environment,
-    evaluationContextCacheKey({ identity }),
+    `v3:evaluated:${evaluationContextCacheKey({ identity })}`,
   );
 }
 

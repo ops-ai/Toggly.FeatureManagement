@@ -275,7 +275,7 @@ describe('Toggly WebSocket', () => {
         'abc123',
       );
 
-      localStorage.setItem(StorageKeys.flagsCacheKey('test-key', 'Test', 'u:mock-uuid-ws'), JSON.stringify({ FlagOn: true }));
+      localStorage.setItem(StorageKeys.flagsCacheKey('test-key', 'Test', 'v3:evaluated:u:mock-uuid-ws'), JSON.stringify({ FlagOn: true }));
       await initWithWs();
       const before = mockFetch.mock.calls.length;
 

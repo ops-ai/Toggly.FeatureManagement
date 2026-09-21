@@ -16,6 +16,7 @@ export declare class Toggly {
     private static _localGateIndex;
     private static _localGatesChangedListeners;
     private static _inMemoryFlags;
+    private static _inMemoryVariants;
     private static _hasLoadedFlags;
     private static _lastError;
     private static _telemetry;

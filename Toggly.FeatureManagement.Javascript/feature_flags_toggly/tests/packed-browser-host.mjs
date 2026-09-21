@@ -12,7 +12,7 @@ const sdk = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const temporary = mkdtempSync(join(tmpdir(), 'toggly-javascript-packed-'));
 const host = join(temporary, 'host');
 const reporterTarball = process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL;
-const packets = [], definitions = [], definitionRequests = [], servers = [], delayed = [];
+const packets = [], definitions = [], definitionRequests = [], modeRequests = [], servers = [], delayed = [];
 let preflights = 0, browser;
 function run(command, args, cwd = sdk) {
   return execFileSync(command, args, { cwd, encoding: 'utf8', timeout: 180000,
@@ -76,6 +76,14 @@ require('@ops-ai/feature-flags-toggly');await import('@ops-ai/feature-flags-togg
     const path=new URL(request.url,'http://localhost').pathname;definitions.push(path);definitionRequests.push(new URL(request.url,'http://localhost'));
     response.setHeader('Content-Type','application/json');
     if(path.includes('/old-pending/')){delayed.push(response);return;}
+    if(path.includes('/mode-cache-')) {
+      const variants=path.includes('/evaluated-variants-signed/');
+      const revision=variants?'variants-original':'boolean-original';
+      modeRequests.push({variants,revision:request.headers['if-none-match']});
+      response.setHeader('ETag',revision);response.setHeader('Access-Control-Expose-Headers','ETag');
+      if(request.headers['if-none-match']===revision){response.writeHead(304).end();return;}
+      response.end(JSON.stringify({defs:variants?{Sale:{enabled:true,variant:'Treatment',configurationValue:42}}:{Sale:false}}));return;
+    }
     const defs=path.includes('/evaluated-variants-signed/')?{Sale:{enabled:true,variant:'Treatment',configurationValue:42},Off:{enabled:false}}
       :path.includes('/new-owner/')||path.includes('/late-replacement/')?{Switch:false}
       :path.includes('/old-owner/')?{Switch:true}
@@ -204,6 +212,33 @@ require('@ops-ai/feature-flags-toggly');await import('@ops-ai/feature-flags-togg
   assert.deepEqual(bounded,Array(4).fill('Frontend telemetry: buffer-full'));
   assert.deepEqual(packets[30].body,{k:'bounded',e:'Production',u:'empty-999',f:{AfterEmptyTransitions:{enabled:[0,1]}}});
   assert.ok(packets.slice(11).every(packet=>packet.encoding==='gzip'));
+  for(const firstVariants of [false,true]) {
+    const values=await evaluate(page,async({config,firstVariants})=>{
+      const T=window.Toggly;const values=[];
+      for(const enableVariants of [firstVariants,!firstVariants,firstVariants]) {
+        await T.init({...config,appKey:`mode-cache-${firstVariants}`,instanceId:'mode-token',enableTelemetry:false,persistCache:true,enableVariants});
+        values.push({enabled:T.isFeatureOn('Sale'),variant:T.getVariantValue('Sale')});
+      }
+      T.cancelRefreshInterval();return values;
+    },{config,firstVariants});
+    assert.deepEqual(values,[firstVariants,!firstVariants,firstVariants].map(enabled=>({enabled,variant:enabled?42:null})));
+  }
+  assert.deepEqual(modeRequests.map(request=>request.revision),[undefined,undefined,'boolean-original',undefined,undefined,'variants-original']);
+  const memoryResult=await evaluate(page,async config=>{
+    const T=window.Toggly;await T.init({...config,appKey:'memory-variants',instanceId:'memory-old',enableVariants:true});
+    const first=T.getVariantValue('Sale');
+    T.setLocalGates([{id:'memory-rotate',flagKeys:['Sale'],isEnabled:()=>{T.instanceId='memory-new';return true}}]);
+    const captured=T.getVariantValue('Sale');T.setLocalGates([]);
+    const next=T.getVariantValue('Sale');await T.flushTelemetry();T.cancelRefreshInterval();return [first,captured,next];
+  },config);
+  assert.deepEqual(memoryResult,[42,42,null]);
+  await waitUntil(()=>packets.length===34,'memory-only assigned variants through rotation');
+  assert.deepEqual(packets.slice(31).map(packet=>packet.body),[
+    {k:'memory-variants',e:'Production',i:'memory-old',f:{Sale:{Treatment:[1]}}},
+    {k:'memory-variants',e:'Production',i:'memory-old',f:{Sale:{Treatment:[1]}}},
+    {k:'memory-variants',e:'Production',i:'memory-new',f:{Sale:{disabled:[1]}}},
+  ]);
+  assert.ok(packets.slice(31).every(packet=>packet.encoding==='gzip'));
   const beforeClose=definitions.length;await delay(100);assert.equal(definitions.length,beforeClose);assert.deepEqual(errors,[]);
   console.log('PACKED_JAVASCRIPT_BROWSER_TELEMETRY_PASS');
   console.log('PACKED_JAVASCRIPT_HOST_PASS '+JSON.stringify({sdk:sdkVersion,reporter:reporterVersion,reporterSource:reporterTarball?'local-tarball':'registry',node:process.version,typescript:'4.9.5',playwright:'1.58.2',chromium:browser.version(),envelopes:packets.length}));
