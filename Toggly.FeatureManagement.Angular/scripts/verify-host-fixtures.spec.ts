@@ -44,6 +44,10 @@ try {
     const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
     const signer = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-signed-defs/package.json')));
+    const host = Object.fromEntries(Object.entries({ angular: '@angular/core', cli: '@angular/cli', typescript: 'typescript' })
+      .map(([name, packageName]) => [name, JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules', packageName, 'package.json'))).version]));
+    if (Object.entries(host).some(([name, version]) => version !== entry[name])) throw new Error(`Installed host versions drifted: ${JSON.stringify(host)}`);
+    console.log(`INSTALLED HOST ${JSON.stringify({ fixture: entry.fixture, ...host })}`);
     if (installed.version !== metadata.version || installed.dependencies['@ops-ai/toggly-client-telemetry'] !== '^1.1.0' || installed.dependencies['@ops-ai/toggly-signed-defs'] !== '^1.2.6') throw new Error('Unexpected packed graph');
     console.log(`PACKED SDK ${installed.version}; reporter ${reporter.version}; signer ${signer.version}; ${(process.env.TOGGLY_SIGNED_DEFS_TARBALL || process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) ? 'LOCAL INTEGRATION ARTIFACT' : 'REGISTRY RESOLUTION'}`);
     run(['npm', 'run', 'typecheck']);
