@@ -25,7 +25,7 @@ function collector() {
   };
   return { bodies, requests, telemetryFetch };
 }
-it('counts cached direct checks and explicit variants without leaking targeting', async () => {
+it('counts cached direct checks and explicit variants with client identity attribution', async () => {
   const c = collector();
   const client = createTogglyClient({
     appKey: 'app',
@@ -49,6 +49,7 @@ it('counts cached direct checks and explicit variants without leaking targeting'
     {
       k: 'app',
       e: 'QA',
+      u: 'private',
       f: { on: { enabled: [2, 0, 1], control: [0, 1] }, missing: { enabled: [1] } },
       m: { orders: 2, cart: 3 },
     },
@@ -141,10 +142,7 @@ it('replaces provider app/environment without carrying old snapshots or late com
     await Promise.resolve();
   });
   await context.flushTelemetry();
-  expect(c.bodies.find((b) => b.k === 'old').f).toEqual({
-    on: { enabled: [1] },
-    queued: { enabled: [0, 1] },
-  });
+  expect(c.bodies.some((b) => b.k === 'old')).toBe(false);
   expect(c.bodies.find((b) => b.k === 'new').f).toEqual({ on: { disabled: [1] } });
 });
 it('keeps static browser evaluations and explicit events while making no definitions request', async () => {

@@ -1,11 +1,7 @@
 import { captureRequestUrl } from './capture-request-url.js';
 import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
-import {
-  createTelemetryReporter,
-  type TelemetryOptions,
-  type TelemetryReporter,
-} from '@ops-ai/toggly-client-telemetry';
-import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
+import { type TelemetryOptions, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import { createBrowserTelemetry, type BrowserTelemetry } from './browser-telemetry.js';
 
 /**
  * @ops-ai/toggly-client-core - Framework-agnostic Toggly client
@@ -46,6 +42,8 @@ export interface TogglyConfig {
   connectTimeout?: number;
   /** Custom fetch implementation (useful for testing or Cloudflare Workers) */
   fetch?: typeof fetch;
+  /** Optional opaque identity token minted by the host backend. */
+  instanceId?: string;
   /** User identity for targeting (optional) */
   identity?: string;
   /** Group memberships used by targeting rules; copied when the client is created. */
@@ -125,6 +123,22 @@ interface CachedFlags {
  * @returns A Toggly client instance
  */
 export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
+  return createClient(config, createBrowserTelemetry(config), true);
+}
+
+/** Internal provider sharing; deliberately absent from public package exports. */
+export function createProviderClient(
+  config: TogglyConfig,
+  telemetry: BrowserTelemetry
+): TogglyClient {
+  return createClient(config, telemetry, false);
+}
+
+function createClient(
+  config: TogglyConfig,
+  telemetry: BrowserTelemetry,
+  ownsTelemetry: boolean
+): TogglyClient {
   const {
     baseURI = 'https://definitions.toggly.io',
     appKey,
@@ -140,9 +154,42 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   } = config;
 
   // Serialize once so caller mutations cannot change this client's targeting or refreshes.
-  const getApiUrl = captureRequestUrl(() =>
-    appKey ? buildEvaluatedSignedUrl(baseURI, appKey, environment, config, false) : ''
-  );
+  const attribution = {
+    identity: config.identity,
+    instanceId: config.instanceId?.trim() || undefined,
+  };
+  const getApiUrl = captureRequestUrl(() => {
+    if (!appKey) return '';
+    // Keep query defaults separate from the path before adding the endpoint.
+    const base = new URL(baseURI);
+    const parameters = new URLSearchParams(base.search);
+    const fragment = base.hash;
+    base.search = '';
+    base.hash = '';
+    const url = new URL(
+      buildEvaluatedSignedUrl(
+        base.toString(),
+        appKey,
+        environment,
+        attribution.instanceId ? undefined : config,
+        false
+      )
+    );
+    url.hash = fragment;
+    const contextKeys = new Set(url.searchParams.keys());
+    for (const [key, value] of parameters) {
+      if (!contextKeys.has(key)) url.searchParams.append(key, value);
+    }
+    url.searchParams.delete('i');
+    if (attribution.instanceId) {
+      for (const key of Array.from(url.searchParams.keys())) {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.'))
+          url.searchParams.delete(key);
+      }
+      url.searchParams.set('i', attribution.instanceId);
+    }
+    return url.toString();
+  });
 
   // Resolve fetch implementation: use provided, then globalThis.fetch, then throw
   let resolvedFetch: typeof fetch;
@@ -170,32 +217,18 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   let generation = 0;
   const requests = new Map<AbortController, ReturnType<typeof setTimeout>>();
   let reporter: TelemetryReporter | undefined;
-  let detachTelemetry: (() => void) | undefined;
-  // React may discard an owner during render. Construction itself schedules nothing.
+  let captureCheck: ReturnType<TelemetryReporter['captureCheck']> | undefined;
+  // Each target client activates once. A retired client cannot reactivate old context.
   const startTelemetry = () => {
-    if (
-      disposed ||
-      reporter ||
-      config.enableTelemetry === false ||
-      !appKey?.trim() ||
-      typeof window === 'undefined' ||
-      typeof document === 'undefined'
-    )
-      return;
-    reporter = createTelemetryReporter({
-      appKey,
-      environment,
-      metricsBaseUrl: config.metricsBaseUrl,
-      telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
-      fetch: config.telemetryFetch,
-      onDiagnostic: config.onTelemetryDiagnostic,
-    });
-    detachTelemetry = attachBrowserLifecycle(reporter);
+    if (disposed || reporter) return;
+    reporter = telemetry.activate(attribution);
+    captureCheck = reporter?.captureCheck();
   };
   const evaluateFlag = (key: string, flags: Flags, defaultValue?: boolean): boolean => {
     const enabled = flags[key] ?? defaultValue ?? flagDefaults[key] ?? false;
     startTelemetry();
-    reporter?.recordCheck(key, enabled ? 'enabled' : 'disabled');
+    const record = disposed ? undefined : captureCheck;
+    record?.(key, enabled ? 'enabled' : 'disabled');
     return enabled;
   };
 
@@ -231,8 +264,6 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
         throw new Error(
           `Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`
@@ -241,9 +272,12 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
 
       const bodyText = await readResponseBody(response);
       if (disposed) return { ...flagDefaults };
+      const signingBase = new URL(baseURI);
+      signingBase.search = '';
+      signingBase.hash = '';
       const parsed = await parseEvaluatedResponseBody(bodyText, {
         verifySignatures,
-        baseURI,
+        baseURI: signingBase.toString(),
         allowedKeyIds,
         maxSignatureAgeSeconds,
         headers: { Accept: 'application/json' },
@@ -328,18 +362,18 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
       return;
     }
 
-    // Build WebSocket URL from baseURI: https:// -> wss://, http:// -> ws://
-    const wsUrl =
-      baseURI
-        .replace(/^https:\/\//, 'wss://')
-        .replace(/^http:\/\//, 'ws://')
-        .replace(/\/$/, '') + `/${appKey}/ws`;
-
-    if (isDebug) {
-      console.log(`Toggly.ws - connecting to ${wsUrl}`);
-    }
-
     try {
+      // Live updates are app-scoped; targeting query defaults never belong here.
+      const wsUrl = new URL(baseURI);
+      wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl.pathname = `${wsUrl.pathname.replace(/\/$/, '')}/${appKey}/ws`;
+      wsUrl.search = '';
+      wsUrl.hash = '';
+
+      if (isDebug) {
+        console.log(`Toggly.ws - connecting to ${wsUrl}`);
+      }
+
       _ws = new WebSocket(wsUrl);
 
       _ws.onopen = () => {
@@ -431,19 +465,19 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     evaluateFlag,
     recordUsage(key, variant = 'enabled') {
       startTelemetry();
-      reporter?.recordUsage(key, variant);
+      if (!disposed) reporter?.recordUsage(key, variant);
     },
     recordView(key, variant = 'enabled') {
       startTelemetry();
-      reporter?.recordView(key, variant);
+      if (!disposed) reporter?.recordView(key, variant);
     },
     incrementCounter(key, value = 1) {
       startTelemetry();
-      reporter?.incrementCounter(key, value);
+      if (!disposed) reporter?.incrementCounter(key, value);
     },
     setGauge(key, value) {
       startTelemetry();
-      reporter?.setGauge(key, value);
+      if (!disposed) reporter?.setGauge(key, value);
     },
     async flushTelemetry() {
       await reporter?.flush();
@@ -458,8 +492,7 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
         controller.abort();
       }
       requests.clear();
-      detachTelemetry?.();
-      reporter?.dispose();
+      if (ownsTelemetry) telemetry.dispose();
     },
     getFlags,
     getFlag,

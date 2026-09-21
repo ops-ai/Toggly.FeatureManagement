@@ -48,6 +48,8 @@ export interface TogglyPluginOptions {
   isDebug?: boolean;
   /** Connection timeout in milliseconds (default: 5000) */
   connectTimeout?: number;
+  /** Opaque identity token supplied by the host backend for browser targeting. */
+  instanceId?: string;
   /** User identity for targeting (optional) */
   identity?: string;
   /** Public build-time group defaults for browser targeting, not authenticated user data. */
@@ -118,6 +120,7 @@ export default function togglyPlugin(
     isDebug = false,
     connectTimeout = 5 * 1000,
     identity,
+    instanceId,
     renderAllDuringBuild = true, // Default to true for better DX
     contentRoots,
     staticGating = false,
@@ -155,6 +158,7 @@ export default function togglyPlugin(
           isDebug,
           connectTimeout,
           identity,
+          instanceId,
           groups,
           claims,
           renderAllDuringBuild,

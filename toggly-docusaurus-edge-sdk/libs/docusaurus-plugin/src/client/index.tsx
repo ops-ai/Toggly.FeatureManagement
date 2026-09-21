@@ -9,28 +9,29 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useRef,
   useMemo,
   ReactNode,
 } from 'react';
 import {
-  createTogglyClient,
+  createProviderClient,
   type TogglyClient,
   type TogglyConfig,
   type Flags,
 } from '../lib/toggly-client.js';
+import { createBrowserTelemetry, type BrowserTelemetry } from '../lib/browser-telemetry.js';
 
 export interface TogglyProviderProps {
   config: TogglyConfig;
   children: ReactNode;
 }
 
-export interface TogglyContextValue
-  extends Pick<
-    TogglyClient,
-    'recordUsage' | 'recordView' | 'incrementCounter' | 'setGauge' | 'flushTelemetry'
-  > {
+export interface TogglyContextValue extends Pick<
+  TogglyClient,
+  'recordUsage' | 'recordView' | 'incrementCounter' | 'setGauge' | 'flushTelemetry'
+> {
   evaluateFlag: (key: string, defaultValue?: boolean) => boolean;
   flags: Flags;
   isReady: boolean;
@@ -112,6 +113,19 @@ export function readEdgeFlagsSnapshot(): Flags | null {
   return sanitizeFlags(raw);
 }
 
+// Functions are omitted by JSON serialization but remain part of transport ownership.
+const transportCallbacks = new WeakMap<object, number>();
+let nextTransportCallback = 0;
+function transportCallbackKey(callback: object | undefined): number {
+  if (!callback) return 0;
+  let key = transportCallbacks.get(callback);
+  if (key === undefined) {
+    key = ++nextTransportCallback;
+    transportCallbacks.set(callback, key);
+  }
+  return key;
+}
+
 /**
  * TogglyProvider - React context provider for Toggly feature flags
  *
@@ -140,11 +154,34 @@ export function TogglyProvider({
   const config =
     providedConfig ||
     (typeof window !== 'undefined' ? (window as any).__TOGGLY_CONFIG__ || {} : {});
-  // Changing targeting/application options retires the complete prior owner.
-  const key = JSON.stringify(config);
-  const pageOwner = useRef(key);
+  const { identity, instanceId, groups, claims, ...transport } = config;
+  const key = JSON.stringify([
+    transport,
+    transportCallbackKey(config.fetch),
+    transportCallbackKey(config.telemetryFetch),
+    transportCallbackKey(config.onTelemetryDiagnostic),
+  ]);
+  const targetingKey = JSON.stringify({ identity, instanceId, groups, claims });
+  const pageOwner = useRef({ key, targetingKey, retired: false });
+  const committedTransport = useRef(key);
+  const useCommitEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+  useCommitEffect(() => {
+    committedTransport.current = key;
+    if (pageOwner.current.key !== key || pageOwner.current.targetingKey !== targetingKey)
+      pageOwner.current.retired = true;
+  }, [key, targetingKey]);
+  const usePageSnapshot =
+    !pageOwner.current.retired &&
+    pageOwner.current.key === key &&
+    pageOwner.current.targetingKey === targetingKey;
   return (
-    <ProviderOwner key={key} config={config} usePageSnapshot={pageOwner.current === key}>
+    <ProviderOwner
+      key={key}
+      config={config}
+      targetingKey={targetingKey}
+      usePageSnapshot={usePageSnapshot}
+      shouldFlush={() => committedTransport.current === key}
+    >
       {children}
     </ProviderOwner>
   );
@@ -153,10 +190,48 @@ export function TogglyProvider({
 function ProviderOwner({
   config,
   children,
+  targetingKey,
   usePageSnapshot,
-}: TogglyProviderProps & { usePageSnapshot: boolean }): React.JSX.Element {
+  shouldFlush,
+}: TogglyProviderProps & {
+  targetingKey: string;
+  usePageSnapshot: boolean;
+  shouldFlush: () => boolean;
+}): React.JSX.Element {
+  const [telemetry] = useState(() => createBrowserTelemetry(config));
+  const leases = useRef(0);
+  useEffect(() => {
+    leases.current++;
+    return () => {
+      leases.current--;
+      queueMicrotask(() => {
+        if (leases.current === 0) telemetry.dispose(shouldFlush());
+      });
+    };
+  }, [telemetry]);
+  return (
+    <TargetOwner
+      key={targetingKey}
+      config={config}
+      telemetry={telemetry}
+      usePageSnapshot={usePageSnapshot}
+    >
+      {children}
+    </TargetOwner>
+  );
+}
+
+function TargetOwner({
+  config,
+  children,
+  usePageSnapshot,
+  telemetry,
+}: TogglyProviderProps & {
+  usePageSnapshot: boolean;
+  telemetry: BrowserTelemetry;
+}): React.JSX.Element {
   const staticGating = isStaticGatingMode();
-  const [client] = useState(() => createTogglyClient(config));
+  const [client] = useState(() => createProviderClient(config, telemetry));
   const [flags, setFlags] = useState<Flags>(() =>
     staticGating
       ? usePageSnapshot
@@ -225,9 +300,10 @@ function ProviderOwner({
       staticGating ? evaluateFlag(key, fallback) : client.getFlag(key, fallback),
     [client, staticGating, evaluateFlag]
   );
+  const publicFlags = useMemo(() => ({ ...flags }), [flags]);
   const value = useMemo<TogglyContextValue>(
     () => ({
-      flags,
+      flags: publicFlags,
       isReady,
       getFlag,
       evaluateFlag,
@@ -238,7 +314,7 @@ function ProviderOwner({
       setGauge: client.setGauge,
       flushTelemetry: client.flushTelemetry,
     }),
-    [client, flags, isReady, getFlag, evaluateFlag, error]
+    [client, publicFlags, isReady, getFlag, evaluateFlag, error]
   );
   return <TogglyContext.Provider value={value}>{children}</TogglyContext.Provider>;
 }
