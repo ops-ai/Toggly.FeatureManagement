@@ -31,6 +31,9 @@ export interface TogglyContentRoot {
 }
 
 export interface TogglyPluginOptions {
+  enableTelemetry?: boolean;
+  metricsBaseUrl?: string;
+  telemetryFlushIntervalMs?: number;
   /** Base URI for the Toggly API (default: 'https://definitions.toggly.io') */
   baseURI?: string;
   /** Application key from Toggly */
@@ -121,6 +124,9 @@ export default function togglyPlugin(
     verifySignatures = false,
     allowedKeyIds,
     maxSignatureAgeSeconds,
+    enableTelemetry,
+    metricsBaseUrl,
+    telemetryFlushIntervalMs,
   } = options;
 
   // Snapshot public browser defaults before Docusaurus runs asynchronous hooks.
@@ -156,6 +162,9 @@ export default function togglyPlugin(
           verifySignatures,
           allowedKeyIds,
           maxSignatureAgeSeconds,
+          enableTelemetry,
+          metricsBaseUrl,
+          telemetryFlushIntervalMs,
         },
       };
     },

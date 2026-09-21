@@ -1,5 +1,11 @@
 import { captureRequestUrl } from './capture-request-url.js';
 import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
+import {
+  createTelemetryReporter,
+  type TelemetryOptions,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry';
+import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 
 /**
  * @ops-ai/toggly-client-core - Framework-agnostic Toggly client
@@ -19,6 +25,11 @@ import {
  * Matches the API structure used in other Toggly SDKs
  */
 export interface TogglyConfig {
+  enableTelemetry?: boolean;
+  metricsBaseUrl?: string;
+  telemetryFlushIntervalMs?: number;
+  telemetryFetch?: TelemetryOptions['fetch'];
+  onTelemetryDiagnostic?: TelemetryOptions['onDiagnostic'];
   /** Base URI for the Toggly API (default: 'https://definitions.toggly.io') */
   baseURI?: string;
   /** Application key from Toggly */
@@ -58,6 +69,16 @@ export type Flags = Record<string, boolean>;
  * Toggly client instance
  */
 export interface TogglyClient {
+  recordUsage(key: string, variant?: string): void;
+  recordView(key: string, variant?: string): void;
+  incrementCounter(key: string, value?: number): void;
+  setGauge(key: string, value: number): void;
+  flushTelemetry(): Promise<void>;
+  dispose(): void;
+  /** Activate a committed browser owner without evaluating flags. */
+  startTelemetry(): void;
+  /** Evaluate an already resolved snapshot through the same leaf path. */
+  evaluateFlag(key: string, flags: Flags, defaultValue?: boolean): boolean;
   /**
    * Get all feature flags as a map of key-value pairs
    * @param context - Optional context for flag evaluation
@@ -119,7 +140,9 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   } = config;
 
   // Serialize once so caller mutations cannot change this client's targeting or refreshes.
-  const getApiUrl = captureRequestUrl(() => appKey ? buildEvaluatedSignedUrl(baseURI, appKey, environment, config, false) : '');
+  const getApiUrl = captureRequestUrl(() =>
+    appKey ? buildEvaluatedSignedUrl(baseURI, appKey, environment, config, false) : ''
+  );
 
   // Resolve fetch implementation: use provided, then globalThis.fetch, then throw
   let resolvedFetch: typeof fetch;
@@ -128,7 +151,9 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   } else if (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function') {
     resolvedFetch = globalThis.fetch.bind(globalThis);
   } else {
-    throw new Error('fetch is not available. Please provide a fetch implementation via config.fetch');
+    throw new Error(
+      'fetch is not available. Please provide a fetch implementation via config.fetch'
+    );
   }
 
   // WebSocket live-update support
@@ -141,7 +166,38 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   let _lastFallbackRefresh = 0;
 
   let cache: CachedFlags | null = null;
-
+  let disposed = false;
+  let generation = 0;
+  const requests = new Map<AbortController, ReturnType<typeof setTimeout>>();
+  let reporter: TelemetryReporter | undefined;
+  let detachTelemetry: (() => void) | undefined;
+  // React may discard an owner during render. Construction itself schedules nothing.
+  const startTelemetry = () => {
+    if (
+      disposed ||
+      reporter ||
+      config.enableTelemetry === false ||
+      !appKey?.trim() ||
+      typeof window === 'undefined' ||
+      typeof document === 'undefined'
+    )
+      return;
+    reporter = createTelemetryReporter({
+      appKey,
+      environment,
+      metricsBaseUrl: config.metricsBaseUrl,
+      telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
+      fetch: config.telemetryFetch,
+      onDiagnostic: config.onTelemetryDiagnostic,
+    });
+    detachTelemetry = attachBrowserLifecycle(reporter);
+  };
+  const evaluateFlag = (key: string, flags: Flags, defaultValue?: boolean): boolean => {
+    const enabled = flags[key] ?? defaultValue ?? flagDefaults[key] ?? false;
+    startTelemetry();
+    reporter?.recordCheck(key, enabled ? 'enabled' : 'disabled');
+    return enabled;
+  };
 
   const isCacheValid = (): boolean => {
     if (!cache) return false;
@@ -152,8 +208,9 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   };
 
   const fetchFlags = async (): Promise<Flags> => {
+    if (disposed) return { ...(cache?.flags ?? flagDefaults) };
     const url = getApiUrl();
-    
+
     // If no appKey, return flagDefaults
     if (!url || !appKey) {
       if (isDebug) {
@@ -162,10 +219,10 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
       return { ...flagDefaults };
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), connectTimeout);
+    requests.set(controller, timeoutId);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), connectTimeout);
-
       const response = await resolvedFetch(url, {
         method: 'GET',
         headers: {
@@ -183,17 +240,16 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
       }
 
       const bodyText = await readResponseBody(response);
+      if (disposed) return { ...flagDefaults };
       const parsed = await parseEvaluatedResponseBody(bodyText, {
         verifySignatures,
         baseURI,
         allowedKeyIds,
         maxSignatureAgeSeconds,
         headers: { Accept: 'application/json' },
-        fetchImpl: resolvedFetch,
+        fetchImpl: (input, init) => resolvedFetch(input, { ...init, signal: controller.signal }),
       });
-      const flags = (
-        verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed)
-      ) as Flags;
+      const flags = (verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed)) as Flags;
 
       if (isDebug) {
         console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);
@@ -208,21 +264,27 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
         }
         return { ...cache.flags };
       }
-      
+
       if (isDebug) {
         console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
       }
-      
+
       return { ...flagDefaults };
+    } finally {
+      clearTimeout(timeoutId);
+      requests.delete(controller);
     }
   };
 
   const refreshFlags = async (): Promise<void> => {
+    if (disposed) return;
+    const expected = ++generation;
     if (isDebug) {
       console.log('Toggly.refresh');
     }
-    
+
     const flags = await fetchFlags();
+    if (disposed || generation !== expected) return;
     cache = {
       flags,
       timestamp: Date.now(),
@@ -230,6 +292,7 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   };
 
   const getFlags = async (): Promise<Flags> => {
+    if (disposed) return { ...(cache?.flags ?? flagDefaults) };
     // If no appKey, return flagDefaults immediately
     if (!appKey) {
       return { ...flagDefaults };
@@ -245,23 +308,11 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
 
   const getFlag = async (key: string, defaultValue?: boolean): Promise<boolean> => {
     const flags = await getFlags();
-    const value = flags[key];
-    
-    // If flag exists in flags, return it; otherwise use provided defaultValue or flagDefaults
-    if (value !== undefined) {
-      return value;
-    }
-    
-    // Check flagDefaults first, then use provided defaultValue
-    if (defaultValue !== undefined) {
-      return defaultValue;
-    }
-    
-    // Fall back to flagDefaults if available
-    return flagDefaults[key] ?? false;
+    return evaluateFlag(key, flags, defaultValue);
   };
 
   const startWebSocket = (): void => {
+    if (disposed || _ws) return;
     // Only run in browser environments
     if (typeof window === 'undefined' || typeof WebSocket === 'undefined') {
       if (isDebug) {
@@ -278,10 +329,11 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     }
 
     // Build WebSocket URL from baseURI: https:// -> wss://, http:// -> ws://
-    const wsUrl = baseURI
-      .replace(/^https:\/\//, 'wss://')
-      .replace(/^http:\/\//, 'ws://')
-      .replace(/\/$/, '') + `/${appKey}/ws`;
+    const wsUrl =
+      baseURI
+        .replace(/^https:\/\//, 'wss://')
+        .replace(/^http:\/\//, 'ws://')
+        .replace(/\/$/, '') + `/${appKey}/ws`;
 
     if (isDebug) {
       console.log(`Toggly.ws - connecting to ${wsUrl}`);
@@ -360,6 +412,9 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
     if (_ws) {
       // Remove onclose handler to prevent auto-reconnect
       _ws.onclose = null;
+      _ws.onmessage = null;
+      _ws.onopen = null;
+      _ws.onerror = null;
       _ws.close();
       _ws = null;
     }
@@ -372,6 +427,40 @@ export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {
   };
 
   return {
+    startTelemetry,
+    evaluateFlag,
+    recordUsage(key, variant = 'enabled') {
+      startTelemetry();
+      reporter?.recordUsage(key, variant);
+    },
+    recordView(key, variant = 'enabled') {
+      startTelemetry();
+      reporter?.recordView(key, variant);
+    },
+    incrementCounter(key, value = 1) {
+      startTelemetry();
+      reporter?.incrementCounter(key, value);
+    },
+    setGauge(key, value) {
+      startTelemetry();
+      reporter?.setGauge(key, value);
+    },
+    async flushTelemetry() {
+      await reporter?.flush();
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      generation++;
+      stopWebSocket();
+      for (const [controller, timer] of requests) {
+        clearTimeout(timer);
+        controller.abort();
+      }
+      requests.clear();
+      detachTelemetry?.();
+      reporter?.dispose();
+    },
     getFlags,
     getFlag,
     refreshFlags,

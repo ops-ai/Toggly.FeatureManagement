@@ -2,7 +2,7 @@
 
 ## Initial browser targeting context
 
-Requires **0.9.0 (release pending)**. This API is not yet available in the published 0.8.0 package.
+Available since **0.9.0**.
 
 ```tsx
 import { TogglyProvider } from '@ops-ai/toggly-docusaurus-plugin/client';
@@ -18,8 +18,8 @@ import { TogglyProvider } from '@ops-ai/toggly-docusaurus-plugin/client';
 ```
 
 Supply context when the provider is first mounted so the first evaluated request
-already targets that user. The client copies groups and claims; remount with a new
-client/provider for another context. Each client owns its evaluated cache. Up to
+already targets that user. The client copies groups and claims; changing serialized
+provider configuration replaces its owner and cache. Up to
 20 nonempty claims are sent in deterministic key order; group whitespace is trimmed.
 
 The same `identity`, `groups`, and `claims` options may be supplied in the
@@ -80,6 +80,30 @@ module.exports = {
 - `isDebug` (boolean, optional): Enable debug logging (default: `false`)
 - `connectTimeout` (number, optional): Connection timeout in milliseconds (default: `5000`)
 - `identity` (string, optional): User identity for targeting
+- `enableTelemetry` (boolean, optional): Enable browser telemetry (default: `true` with a public application key)
+- `metricsBaseUrl` (string, optional): Independent metrics base URL (default: `https://metrics.toggly.io`)
+- `telemetryFlushIntervalMs` (number, optional): Base flush interval, 30000–60000 milliseconds (default: 45000), with scheduling jitter
+
+## Browser telemetry
+
+Each provider owns one reporter shared by its hooks and components. Direct `getFlag` calls and actual committed UI evaluations record checks using `enabled` or `disabled`; repeated unchanged hook snapshots, internal refreshes and hydration projection are silent. Negation changes the rendered branch after the underlying check is counted. Navbar gating uses a separate short-lived client and records only mapped links it evaluates.
+
+```tsx
+const toggly = useToggly();
+toggly.recordUsage('Checkout', 'control');
+toggly.recordView('Checkout', 'control');
+toggly.incrementCounter('orders', 2);
+toggly.setGauge('cartItems', 3);
+await toggly.flushTelemetry();
+```
+
+Usage and view are explicit events; rendering never implies either. Explicit variants use 1–64 ASCII letters, digits, underscores or hyphens. Counters accept nonnegative integer deltas and gauges finite nonnegative values. Metric names refer to configured application-level metrics. Telemetry contains application/environment and aggregate counts/values; it excludes identity, groups, claims, entity data and timestamps and is never persisted.
+
+`metricsBaseUrl` is independent of the definitions endpoint and preserves an explicit base path. Invalid telemetry intervals use the default; invalid telemetry URLs disable reporting without affecting feature evaluation. Provider config can supply `telemetryFetch` and `onTelemetryDiagnostic` for independent transport and bounded payload-free diagnostics. Changing function callbacks alone does not replace a running provider; remount it to apply those changes.
+
+Queues and retries are bounded and delivery is best effort. Ordinary browser flushes prefer native gzip; pagehide/hidden and final teardown use plain fetch keepalive. Provider cleanup retires its client after a microtask so React StrictMode can replay effects safely. Use `flushTelemetry()` before removing an owner when you need to await a send attempt. Different providers retain independent queues, and changed application/environment configuration never relabels old events.
+
+With `staticGating: true`, flags remain baked into the build: no runtime definitions requests or WebSockets are opened. Actual browser evaluations still report telemetry when a public browser app key is configured. Set `enableTelemetry: false` for a fully silent static runtime. Build-only keys are not added to browser configuration to enable reporting. Replacing a provider configuration retires its owner; in static mode the replacement uses its own `flagDefaults` rather than reusing the original application’s baked map. Rebuild to bake a different application’s flags. SSR and builds never create frontend telemetry, and trusted edge enforcement remains separate.
 
 ## Page-Level Gating
 

@@ -11,16 +11,27 @@ import React, {
   useEffect,
   useCallback,
   useRef,
+  useMemo,
   ReactNode,
 } from 'react';
-import { createTogglyClient, type TogglyClient, type TogglyConfig, type Flags } from '../lib/toggly-client.js';
+import {
+  createTogglyClient,
+  type TogglyClient,
+  type TogglyConfig,
+  type Flags,
+} from '../lib/toggly-client.js';
 
 export interface TogglyProviderProps {
   config: TogglyConfig;
   children: ReactNode;
 }
 
-export interface TogglyContextValue {
+export interface TogglyContextValue
+  extends Pick<
+    TogglyClient,
+    'recordUsage' | 'recordView' | 'incrementCounter' | 'setGauge' | 'flushTelemetry'
+  > {
+  evaluateFlag: (key: string, defaultValue?: boolean) => boolean;
   flags: Flags;
   isReady: boolean;
   getFlag: (key: string, defaultValue?: boolean) => Promise<boolean>;
@@ -125,97 +136,111 @@ export function readEdgeFlagsSnapshot(): Flags | null {
 export function TogglyProvider({
   config: providedConfig,
   children,
-}: TogglyProviderProps): JSX.Element {
-  // If no config provided, try to read from window
+}: TogglyProviderProps): React.JSX.Element {
   const config =
     providedConfig ||
-    (typeof window !== 'undefined'
-      ? (window as any).__TOGGLY_CONFIG__ || {}
-      : {});
-  const staticGating = isStaticGatingMode();
-  const initialFlags = readBuildFlagsSnapshot() ?? readEdgeFlagsSnapshot() ?? {};
+    (typeof window !== 'undefined' ? (window as any).__TOGGLY_CONFIG__ || {} : {});
+  // Changing targeting/application options retires the complete prior owner.
+  const key = JSON.stringify(config);
+  const pageOwner = useRef(key);
+  return (
+    <ProviderOwner key={key} config={config} usePageSnapshot={pageOwner.current === key}>
+      {children}
+    </ProviderOwner>
+  );
+}
 
-  const [client] = useState(() => {
-    if (staticGating) {
-      return null;
-    }
-    // Ensure we have a valid config
-    if (!config || (!config.appKey && Object.keys(config).length === 0)) {
-      console.warn(
-        '[Toggly] No config provided. Please configure the plugin in docusaurus.config.js or pass config to TogglyProvider'
+function ProviderOwner({
+  config,
+  children,
+  usePageSnapshot,
+}: TogglyProviderProps & { usePageSnapshot: boolean }): React.JSX.Element {
+  const staticGating = isStaticGatingMode();
+  const [client] = useState(() => createTogglyClient(config));
+  const [flags, setFlags] = useState<Flags>(() =>
+    staticGating
+      ? usePageSnapshot
+        ? (readBuildFlagsSnapshot() ?? {})
+        : { ...config.flagDefaults }
+      : usePageSnapshot
+        ? (readEdgeFlagsSnapshot() ?? {})
+        : {}
+  );
+  const [isReady, setIsReady] = useState(
+    () => staticGating || (usePageSnapshot && readEdgeFlagsSnapshot() !== null)
+  );
+  const [error, setError] = useState<Error | null>(null);
+  const leases = useRef(0);
+  useEffect(() => {
+    leases.current++;
+    let active = true;
+    client.startTelemetry();
+    const apply = (latest: Flags) => {
+      if (!active) return;
+      setFlags((previous) =>
+        JSON.stringify(previous) === JSON.stringify(latest) ? previous : latest
+      );
+      setIsReady(true);
+    };
+    let pollTimer: ReturnType<typeof setInterval> | undefined;
+    if (!staticGating) {
+      client
+        .getFlags()
+        .then(apply)
+        .catch((err: Error) => {
+          if (active) {
+            setError(err);
+            setIsReady(true);
+          }
+        });
+      client.startWebSocket();
+      pollTimer = setInterval(
+        () => {
+          void client
+            .getFlags()
+            .then(apply)
+            .catch(() => {});
+        },
+        config.featureFlagsRefreshInterval ?? 3 * 60 * 1000
       );
     }
-    return createTogglyClient(config);
-  });
-  const [flags, setFlags] = useState<Flags>(() => initialFlags);
-  const [isReady, setIsReady] = useState(() => staticGating || readEdgeFlagsSnapshot() !== null);
-  const [error, setError] = useState<Error | null>(null);
-
-  // Keep a ref to the latest flags so the polling interval can detect changes
-  const flagsRef = useRef<Flags>(flags);
-  flagsRef.current = flags;
-
-  useEffect(() => {
-    if (staticGating || !client) {
-      return;
-    }
-
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
-
-    client
-      .getFlags()
-      .then((loadedFlags: Flags) => {
-        setFlags(loadedFlags);
-        setIsReady(true);
-      })
-      .catch((err: Error) => {
-        setError(err);
-        setIsReady(true); // Still mark as ready even on error
-      });
-
-    // Start WebSocket for live updates
-    client.startWebSocket();
-
-    // Poll periodically so React state picks up refreshes triggered by WebSocket
-    pollTimer = setInterval(() => {
-      client.getFlags().then((latest: Flags) => {
-        // Only update state when flags actually changed
-        if (JSON.stringify(latest) !== JSON.stringify(flagsRef.current)) {
-          setFlags(latest);
-        }
-      }).catch(() => {
-        // Silently ignore polling errors
-      });
-    }, config.featureFlagsRefreshInterval ?? 3 * 60 * 1000);
-
     return () => {
+      active = false;
+      leases.current--;
       client.stopWebSocket();
-      if (pollTimer) {
-        clearInterval(pollTimer);
-      }
+      clearInterval(pollTimer);
+      // Effect replay reacquires the same owner synchronously. A real unmount
+      // releases it at the next microtask; public client.dispose remains synchronous.
+      queueMicrotask(() => {
+        if (leases.current === 0) client.dispose();
+      });
     };
-  }, [client, staticGating, config.featureFlagsRefreshInterval]);
-
-  const getFlag = async (key: string, defaultValue?: boolean): Promise<boolean> => {
-    if (staticGating) {
-      return flags[key] ?? defaultValue ?? false;
-    }
-    if (!client) {
-      return defaultValue ?? false;
-    }
-    return client.getFlag(key, defaultValue);
-  };
-
-  const value: TogglyContextValue = {
-    flags,
-    isReady,
-    getFlag,
-    error,
-  };
-
-  return (
-    <TogglyContext.Provider value={value}>{children}</TogglyContext.Provider>
+  }, [client, staticGating]);
+  const evaluateFlag = useCallback(
+    (key: string, fallback?: boolean) => client.evaluateFlag(key, flags, fallback),
+    [client, flags]
   );
+  const getFlag = useCallback(
+    async (key: string, fallback?: boolean) =>
+      staticGating ? evaluateFlag(key, fallback) : client.getFlag(key, fallback),
+    [client, staticGating, evaluateFlag]
+  );
+  const value = useMemo<TogglyContextValue>(
+    () => ({
+      flags,
+      isReady,
+      getFlag,
+      evaluateFlag,
+      error,
+      recordUsage: client.recordUsage,
+      recordView: client.recordView,
+      incrementCounter: client.incrementCounter,
+      setGauge: client.setGauge,
+      flushTelemetry: client.flushTelemetry,
+    }),
+    [client, flags, isReady, getFlag, evaluateFlag, error]
+  );
+  return <TogglyContext.Provider value={value}>{children}</TogglyContext.Provider>;
 }
 
 /**
@@ -242,26 +267,27 @@ export function useFlag(
   flagKey: string,
   defaultValue?: boolean
 ): { enabled: boolean; isReady: boolean } {
-  const { flags, isReady, getFlag } = useToggly();
-  // Lazy initializer reads the already-populated flag map (e.g. the edge
-  // snapshot seeded by TogglyProvider) so the very first render reflects
-  // the resolved value. This is what lets Feature components emit a tree
-  // that matches the post-edge-strip DOM during React hydration.
-  const [enabled, setEnabled] = useState<boolean>(() =>
-    flags[flagKey] !== undefined ? flags[flagKey] : defaultValue ?? false,
-  );
-
+  const { flags, isReady, evaluateFlag } = useToggly();
+  const enabled = flags[flagKey] ?? defaultValue ?? false;
+  const evaluated = useRef<{
+    flags: Flags;
+    key: string;
+    fallback: boolean | undefined;
+    evaluate: typeof evaluateFlag;
+  }>();
   useEffect(() => {
-    if (isReady) {
-      // First check cached flags
-      if (flags[flagKey] !== undefined) {
-        setEnabled(flags[flagKey]);
-      } else {
-        // Fallback to async getFlag
-        getFlag(flagKey, defaultValue).then(setEnabled);
-      }
-    }
-  }, [flagKey, flags, isReady, getFlag, defaultValue]);
+    if (!isReady) return;
+    const previous = evaluated.current;
+    if (
+      previous?.flags === flags &&
+      previous.key === flagKey &&
+      previous.fallback === defaultValue &&
+      previous.evaluate === evaluateFlag
+    )
+      return;
+    evaluated.current = { flags, key: flagKey, fallback: defaultValue, evaluate: evaluateFlag };
+    evaluateFlag(flagKey, defaultValue);
+  }, [flagKey, flags, isReady, evaluateFlag, defaultValue]);
 
   return { enabled, isReady };
 }
@@ -290,7 +316,7 @@ export interface FeatureProps {
    * useful for gating list items so the entire bullet (including the marker)
    * is removed when the flag is disabled, instead of leaving an empty bullet.
    */
-  as?: keyof JSX.IntrinsicElements;
+  as?: keyof React.JSX.IntrinsicElements;
 }
 
 /**
@@ -339,7 +365,7 @@ const isSSR = typeof window === 'undefined';
  * a `<ul>`) and must render normally.
  */
 function getWrapperStyle(
-  element: keyof JSX.IntrinsicElements,
+  element: keyof React.JSX.IntrinsicElements
 ): React.CSSProperties | undefined {
   if (element === 'div' || element === 'span') {
     return { display: 'contents' as const };
@@ -353,12 +379,30 @@ export function Feature({
   negate = false,
   defaultValue = false,
   as: Element = 'div',
-}: FeatureProps): JSX.Element {
+}: FeatureProps): React.JSX.Element {
+  const context = useContext(TogglyContext);
+  const lastStatic = useRef<{
+    evaluate: TogglyContextValue['evaluateFlag'];
+    flag: string;
+    fallback: boolean;
+  }>();
+  useEffect(() => {
+    if (!isStaticGatingMode() || !context?.isReady) return;
+    const previous = lastStatic.current;
+    if (
+      previous?.evaluate === context.evaluateFlag &&
+      previous.flag === flag &&
+      previous.fallback === defaultValue
+    )
+      return;
+    lastStatic.current = { evaluate: context.evaluateFlag, flag, fallback: defaultValue };
+    context.evaluateFlag(flag, defaultValue);
+  }, [context?.evaluateFlag, context?.isReady, flag, defaultValue]);
   const wrapperStyle = getWrapperStyle(Element);
-  const buildFlags = readBuildFlagsSnapshot();
+  const buildFlags = context?.flags ?? readBuildFlagsSnapshot();
 
-  // Build-time static gating: evaluate flags during SSG and on the client
-  // using the same baked-in map — no runtime API, no flash.
+  // The original owner shares the baked SSG map. A replacement owner uses
+  // its own defaults so another application's snapshot cannot cross owners.
   if (isStaticGatingMode() && buildFlags) {
     const enabled = buildFlags[flag] ?? defaultValue;
     const show = negate ? !enabled : enabled;
@@ -388,12 +432,7 @@ export function Feature({
 
   // Client-side rendering - use actual flag evaluation
   return (
-    <FeatureClient
-      flag={flag}
-      negate={negate}
-      defaultValue={defaultValue}
-      as={Element}
-    >
+    <FeatureClient flag={flag} negate={negate} defaultValue={defaultValue} as={Element}>
       {children}
     </FeatureClient>
   );
@@ -409,7 +448,7 @@ function FeatureClient({
   negate = false,
   defaultValue = false,
   as: Element = 'div',
-}: FeatureProps): JSX.Element {
+}: FeatureProps): React.JSX.Element {
   const { enabled, isReady } = useFlag(flag, defaultValue);
   const wrapperStyle = getWrapperStyle(Element);
   const show = negate ? !enabled : enabled;

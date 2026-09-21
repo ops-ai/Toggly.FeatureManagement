@@ -1,3 +1,17 @@
+## 0.10.0
+
+2026-09-18
+
+### Added
+- Browser telemetry defaults on with a public application key, with independent endpoint, interval and opt-out options.
+- `recordUsage`, `recordView`, `incrementCounter`, `setGauge` and awaitable `flushTelemetry` on the React context. Explicit events never evaluate flags or infer views from rendering.
+- Effective checks for cached hooks, direct reads, static browser gates and navbar evaluations, with pagehide and final owner cleanup flushing.
+
+### Fixed
+- Preserve owner isolation on application/environment changes, release pending requests and avoid duplicate checks or abandoned resources during React StrictMode replay.
+- Re-evaluate navbar links after Docusaurus client-side navigation and dispose their temporary client.
+- Emit React-qualified JSX declaration types for React 19 consumers.
+
 ## 0.9.0
 
 2026-09-08

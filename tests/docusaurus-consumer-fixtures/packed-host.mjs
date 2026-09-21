@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readdirSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
+import { gunzipSync } from 'node:zlib';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -19,6 +20,8 @@ let sockets;
 let runtimeEnabled = true;
 let corruptSignature = false;
 const requests = [];
+const telemetry = [];
+let preflights = 0;
 
 function run(command, args, cwd = host) {
   return execFileSync(command, args, {
@@ -94,6 +97,16 @@ try {
     else response.writeHead(404).end('{}');
   });
   const baseURI = await listen(definitions);
+  const metricsBaseUrl = await listen(createServer(async (request, response) => {
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'content-type, content-encoding');
+    if (request.method === 'OPTIONS') {preflights++; response.writeHead(204).end(); return;}
+    const chunks = []; for await (const chunk of request) chunks.push(chunk);
+    const raw = Buffer.concat(chunks);
+    telemetry.push({url: request.url, headers: request.headers, body: JSON.parse((request.headers['content-encoding'] === 'gzip' ? gunzipSync(raw) : raw).toString())});
+    response.writeHead(202).end();
+  }));
   const { WebSocketServer } = await import(pathToFileURL(join(sdk, 'node_modules/ws/wrapper.mjs')).href);
   sockets = new WebSocketServer({ server: definitions });
 
@@ -107,12 +120,13 @@ try {
   run('npm', ['install', '--no-package-lock', '--no-audit', '--no-fund',
     `@docusaurus/core@${currentDocusaurus}`, `@docusaurus/preset-classic@${currentDocusaurus}`,
     `react@${currentReact}`, `react-dom@${currentReact}`, '@mdx-js/react@3.1.1',
-    'typescript@5.9.3', '@types/react@19.3.0', '@types/react-dom@19.3.0', 'playwright@1.62.1', tarball,
+    'typescript@5.9.3', '@types/react@19.3.0', '@types/react-dom@19.3.0', 'playwright@1.62.1', tarball, ...(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL ? [process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL] : []),
   ]);
   assert.equal(JSON.parse(readFileSync(join(host, 'node_modules/@docusaurus/core/package.json'))).version, currentDocusaurus);
   assert.equal(JSON.parse(readFileSync(join(host, 'node_modules/react/package.json'))).version, currentReact);
   assert.equal(JSON.parse(readFileSync(join(host, 'node_modules/react-dom/package.json'))).version, currentReact);
-  const config = { appKey: 'docusaurus-packed-host', environment: 'Production', baseURI, verifySignatures: true, allowedKeyIds: [kid], featureFlagsRefreshInterval: 60_000, flagDefaults: { flagOn: false, flagOff: false } };
+  if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) console.log('LOCAL_TELEMETRY_TARBALL: registry acceptance pending');
+  const config = { metricsBaseUrl: metricsBaseUrl + '/base', appKey: 'docusaurus-packed-host', environment: 'Production', baseURI, verifySignatures: true, allowedKeyIds: [kid], featureFlagsRefreshInterval: 60_000, flagDefaults: { flagOn: false, flagOff: false } };
   write('docusaurus.config.js', `module.exports = {
     title: 'Packed Docusaurus', url: 'https://example.test', baseUrl: '/', favicon: undefined,
     onBrokenLinks: 'throw', trailingSlash: true,
@@ -120,18 +134,21 @@ try {
     plugins: [['@ops-ai/toggly-docusaurus-plugin', { ...${JSON.stringify(config)}, staticGating: process.env.PACKED_STATIC === '1' }]],
     customFields: { toggly: ${JSON.stringify(config)} },
   };`);
-  write('src/theme/Root.jsx', `import React from 'react';
+  write('src/theme/Root.jsx', `import React, {useEffect, useState} from 'react';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import { TogglyProvider } from '@ops-ai/toggly-docusaurus-plugin/client';
+import { TogglyProvider, useToggly } from '@ops-ai/toggly-docusaurus-plugin/client';
+function Observer(){const t=useToggly();useEffect(()=>{window.telemetry=t;},[t]);return null;}
 export default function Root({children}) {
   const {siteConfig} = useDocusaurusContext();
-  return <TogglyProvider config={siteConfig.customFields.toggly}>{children}</TogglyProvider>;
+  const [active,setActive]=useState(true);useEffect(()=>{window.unmountOwner=()=>setActive(false);},[]);
+  return active ? <TogglyProvider config={siteConfig.customFields.toggly}><Observer/>{children}</TogglyProvider> : <main id="disposed">Disposed</main>;
 }`);
   write('src/pages/index.jsx', `import React from 'react';
+import Link from '@docusaurus/Link';
 import { Feature, useFlag } from '@ops-ai/toggly-docusaurus-plugin/client';
 export default function Page() {
   const {isReady} = useFlag('flagOn');
-  return <main><p id="ready">{isReady ? 'ready' : 'loading'}</p>
+  return <main><Link id="navigate" to="/docs/enabled/">Navigate</Link><p id="ready">{isReady ? 'ready' : 'loading'}</p>
     <Feature flag="flagOn"><p id="flag-on">ENABLED_CONTENT</p></Feature>
     <Feature flag="flagOff"><p id="flag-off">DISABLED_CONTENT</p></Feature>
     <Feature flag="flagOff" negate><p id="off-fallback">OFF_FALLBACK</p></Feature>
@@ -142,7 +159,7 @@ export default function Page() {
   write('static/favicon.ico', '');
   write('consumer.mts', `import togglyPlugin, { type TogglyPluginOptions } from '@ops-ai/toggly-docusaurus-plugin';
 import { Feature, useFlag, type FeatureProps } from '@ops-ai/toggly-docusaurus-plugin/client';
-const options: TogglyPluginOptions = { verifySignatures: true, staticGating: true };
+const options: TogglyPluginOptions = { verifySignatures: true, staticGating: true, enableTelemetry: true, metricsBaseUrl: 'https://metrics.example/base', telemetryFlushIntervalMs: 45000 };
 const props: FeatureProps = { flag: 'flagOn', negate: true, children: 'content' };
 const state: ReturnType<typeof useFlag>['enabled'] = true;
 // @ts-expect-error The installed public flag API requires a string key.
@@ -150,6 +167,11 @@ const invalid: FeatureProps = { flag: 123, children: 'content' };
 void [togglyPlugin, Feature, options, props, state, invalid];
 `);
   run(join(host, 'node_modules/.bin/tsc'), ['--noEmit', '--strict', '--skipLibCheck', '--module', 'ESNext', '--moduleResolution', 'Bundler', '--target', 'ES2022', 'consumer.mts']);
+  write('telemetry-consumer.mts', `import {type TogglyContextValue} from '@ops-ai/toggly-docusaurus-plugin/client';
+export function exercise(t: TogglyContextValue): Promise<void> {
+ t.recordUsage('feature','control'); t.recordView('feature'); t.incrementCounter('orders',2); t.setGauge('cart',3); return t.flushTelemetry();
+}`);
+  run(join(host, 'node_modules/.bin/tsc'), ['--noEmit', '--strict', '--skipLibCheck', 'false', '--types', 'react,react-dom', '--lib', 'ES2022,DOM,DOM.Iterable', '--module', 'ESNext', '--moduleResolution', 'Bundler', '--target', 'ES2022', 'telemetry-consumer.mts']);
   write('consumer.mjs', `import assert from 'node:assert/strict';
 import plugin from '@ops-ai/toggly-docusaurus-plugin';
 import { Feature, TogglyProvider, useFlag } from '@ops-ai/toggly-docusaurus-plugin/client';
@@ -160,6 +182,9 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   const cli = join(host, 'node_modules/.bin/docusaurus');
   await runAsync(cli, ['build', '--out-dir', 'build-runtime'], { PACKED_STATIC: '0' });
   const runtimeOutput = join(host, 'build-runtime');
+  for (const file of readdirSync(join(runtimeOutput, 'assets/js'))) {
+    if (file.endsWith('.js')) assert.doesNotMatch(readFileSync(join(runtimeOutput, 'assets/js', file), 'utf8'), /api\/usage\/stats|toggly-node-core|node:fs|grpc-js/);
+  }
   const runtimeHtml = readFileSync(join(runtimeOutput, 'index.html'), 'utf8');
   assert.match(runtimeHtml, /id="flag-on"/);
   assert.match(runtimeHtml, /id="flag-off"/);
@@ -169,6 +194,7 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   assert.equal(mapping['/docs/disabled'], 'flagOff');
   assert.match(readFileSync(join(runtimeOutput, 'docs/disabled/index.html'), 'utf8'), /DISABLED_DOC_CONTENT/);
 
+  assert.equal(telemetry.length, 0, 'SSR/runtime build is frontend-telemetry silent');
   const { chromium } = await import(pathToFileURL(join(host, 'node_modules/playwright/index.mjs')).href);
   browser = await chromium.launch({ headless: true, ...(process.env.CHROME_BIN ? { executablePath: process.env.CHROME_BIN } : { channel: 'chrome' }) });
   const page = await browser.newPage();
@@ -184,6 +210,24 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   await page.locator('#flag-on').waitFor();
   await page.locator('#flag-off').waitFor({ state: 'detached' });
   await page.locator('#off-fallback').waitFor();
+  await page.waitForFunction(() => window.telemetry?.isReady);
+  await page.evaluate(() => window.telemetry.flushTelemetry());
+  assert.deepEqual(telemetry.at(-1).body.f, {flagOn:{enabled:[2]},flagOff:{disabled:[2]}});
+  assert.equal(telemetry.at(-1).headers['content-encoding'], 'gzip');
+  assert.equal(telemetry.at(-1).headers.cookie, undefined);
+  assert.equal(telemetry.at(-1).url, '/base/api/frontend/telemetry');
+  assert(preflights > 0);
+  await page.evaluate(async () => {window.telemetry.recordUsage('Checkout','control');window.telemetry.recordView('Checkout','control');window.telemetry.incrementCounter('orders',2);window.telemetry.setGauge('cart',3);await window.telemetry.flushTelemetry();});
+  assert.deepEqual(telemetry.at(-1).body, {k:'docusaurus-packed-host',e:'Production',f:{Checkout:{control:[0,1,1]}},m:{orders:2,cart:3}});
+  await page.evaluate(() => {window.telemetry.recordView('Hidden');window.dispatchEvent(new Event('pagehide'));});
+  for(let i=0;telemetry.at(-1).body.f?.Hidden===undefined&&i<50;i++) await page.waitForTimeout(20);
+  assert.deepEqual(telemetry.at(-1).body.f,{Hidden:{enabled:[0,0,1]}});assert.equal(telemetry.at(-1).headers['content-encoding'],undefined);
+  await page.evaluate(() => {window.telemetry.recordUsage('Navigation');window.beforeNavigation=window.telemetry;});
+  await page.locator('#navigate').click();await page.waitForURL('**/docs/enabled/');
+  await page.evaluate(() => window.telemetry.flushTelemetry());
+  assert.equal(await page.evaluate(() => window.beforeNavigation===window.telemetry),true);
+  assert(telemetry.some(packet=>packet.body.f?.Navigation?.enabled[1]===1));
+  await page.goto(runtimeUrl);
   runtimeEnabled = false;
   await page.reload();
   await page.locator('#ready').filter({ hasText: 'ready' }).waitFor();
@@ -197,15 +241,26 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   assert.ok(requests.includes('/.well-known/jwks'));
   assert.deepEqual(pageErrors, []);
   assert.deepEqual(consoleErrors, []);
+  await page.evaluate(() => window.telemetry.flushTelemetry());
+  const beforeDispose=telemetry.length;
+  await page.evaluate(() => {window.telemetry.recordUsage('Final');window.unmountOwner();});
+  await page.locator('#disposed').waitFor();
+  for(let i=0;telemetry.length===beforeDispose&&i<50;i++) await page.waitForTimeout(20);
+  assert.equal(telemetry.length,beforeDispose+1);assert.deepEqual(telemetry.at(-1).body.f,{Final:{enabled:[0,1]}});
+  assert.equal(telemetry.at(-1).headers['content-encoding'],undefined);
+  await page.evaluate(async()=>{window.telemetry.recordView('Late');await window.telemetry.flushTelemetry();});assert.equal(telemetry.length,beforeDispose+1);
+  for(const packet of telemetry) assert(Object.keys(packet.body).every(key=>['k','e','f','m'].includes(key)));
   await page.close();
-  console.log('PACKED_DOCUSAURUS_BROWSER_GATES_PASS');
+  console.log('PACKED_DOCUSAURUS_BROWSER_GATES_TELEMETRY_PASS');
 
   runtimeEnabled = true;
   corruptSignature = false;
   const beforeStaticBuild = requests.length;
+  const telemetryBeforeStaticBuild = telemetry.length;
   await runAsync(cli, ['build', '--out-dir', 'build-static'], { PACKED_STATIC: '1' });
   assert.ok(requests.slice(beforeStaticBuild).includes('/evaluated-signed/docusaurus-packed-host/Production'));
   assert.ok(requests.slice(beforeStaticBuild).includes('/.well-known/jwks'));
+  assert.equal(telemetry.length,telemetryBeforeStaticBuild,'static build telemetry silent');
   const staticOutput = join(host, 'build-static');
   const staticHtml = readFileSync(join(staticOutput, 'index.html'), 'utf8');
   assert.match(staticHtml, /id="flag-on"/);
@@ -227,6 +282,8 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   assert.equal(requests.length, beforeStaticBrowser, 'static gating does not fetch runtime flags');
   assert.deepEqual(pageErrors, []);
   assert.deepEqual(consoleErrors, []);
+  await staticPage.evaluate(() => window.telemetry.flushTelemetry());
+  assert.deepEqual(telemetry.at(-1).body.f,{flagOn:{enabled:[2]},flagOff:{disabled:[2]}});
   await staticPage.close();
   console.log(`PACKED_DOCUSAURUS_HOST_PASS ${JSON.stringify({ docusaurus: currentDocusaurus, react: currentReact, node: process.version })}`);
 } finally {
