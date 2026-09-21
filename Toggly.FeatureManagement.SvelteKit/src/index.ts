@@ -1,3 +1,5 @@
+import { createTelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import type { BrowserSession } from './client.js';
 import { writable } from 'svelte/store';
 import { evaluateResolvedKeys, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types';
@@ -12,6 +14,23 @@ export type * from './types.js';
 
 /** A layout-owned store: synchronous SSR/hydration, no module-level identity or store. */
 export function createToggly(initial: TogglySnapshot, options: BrowserOptions = {}) {
+  // Configuration identity belongs to the layout owner, not mutable caller options.
+  options = { ...options };
+  const telemetry =
+    typeof window !== 'undefined' &&
+    typeof document !== 'undefined' &&
+    options.appKey &&
+    options.enableTelemetry !== false
+      ? createTelemetryReporter({
+          appKey: options.appKey,
+          environment: options.environment,
+          enableTelemetry: options.enableTelemetry,
+          metricsBaseUrl: options.metricsBaseUrl,
+          telemetryFlushIntervalMs: options.telemetryFlushIntervalMs,
+          onDiagnostic: options.onTelemetryDiagnostic,
+        })
+      : undefined;
+  const detachTelemetry = telemetry ? attachBrowserLifecycle(telemetry) : undefined;
   const acceptSnapshot = (value: TogglySnapshot): TogglySnapshot => {
     const copy = structuredClone(value);
     // Server-produced metadata comes from the host trust boundary, but current
@@ -49,13 +68,16 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
     snapshot = acceptSnapshot(next);
     store.set(snapshot);
   };
-  const isEnabled = (key: string, gate: GateOptions = {}) =>
-    applyLocalGate(
+  const isEnabled = (key: string, gate: GateOptions = {}) => {
+    const enabled = applyLocalGate(
       resolveEvaluatedDefinition(snapshot.definitions[key], gate.entity, gate.defaultValue),
       key,
       localGates,
       gateIndex,
     );
+    telemetry?.recordCheck(key, enabled ? 'enabled' : 'disabled');
+    return enabled;
+  };
   const start = async (): Promise<void> => {
     if (disposed || typeof window === 'undefined') return;
     mounted = true;
@@ -81,6 +103,17 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
   };
   return {
     subscribe: store.subscribe,
+    /** Explicit usage/view events do not evaluate a feature. */
+    recordUsage: (featureKey: string, variant?: string) =>
+      telemetry?.recordUsage(featureKey, variant),
+    recordView: (featureKey: string, variant?: string) =>
+      telemetry?.recordView(featureKey, variant),
+    incrementCounter: (metricKey: string, value?: number) =>
+      telemetry?.incrementCounter(metricKey, value),
+    setGauge: (metricKey: string, value: number) => telemetry?.setGauge(metricKey, value),
+    /** Await the existing best-effort drain; lifecycle sends use plain keepalive. */
+    flushTelemetry: (options?: { keepalive?: boolean }) =>
+      telemetry?.flush(options) ?? Promise.resolve(),
     isEnabled,
     gate: (keys: string[], gate: GateOptions = {}) =>
       evaluateResolvedKeys(keys, gate.requirement ?? 'all', gate.negate ?? false, (key) =>
@@ -98,7 +131,10 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
     start,
     notifyLocalGatesChanged: () => store.set(snapshot),
     dispose: () => {
+      if (disposed) return;
       disposed = true;
+      detachTelemetry?.();
+      telemetry?.dispose();
       generation++;
       stop?.();
       stop = undefined;

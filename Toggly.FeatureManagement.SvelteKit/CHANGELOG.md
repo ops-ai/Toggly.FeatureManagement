@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 — 2026-09-18
+
+### Added
+
+- Aggregate browser telemetry for effective feature checks, explicit usage/views, counters and gauges, with opt-out and configurable collector/flush interval.
+- Keep one layout-owned telemetry queue across navigation and refresh reconnects, with bounded lifecycle flushing and terminal cleanup. SSR and keyless stores remain silent.
+
 ## 0.1.0 — 2026-09-12
 
 ### Changed

@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-sveltekit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Request-scoped feature flags and signed SSR hydration for SvelteKit",
   "type": "module",
   "exports": {
@@ -41,7 +41,8 @@
     "@ops-ai/toggly-node-core": "^0.9.1",
     "@ops-ai/toggly-hooks-types": "^1.4.5",
     "@ops-ai/toggly-signed-defs": "^1.2.6",
-    "@ops-ai/toggly-local-gates": "^1.0.1"
+    "@ops-ai/toggly-local-gates": "^1.0.1",
+    "@ops-ai/toggly-client-telemetry": "^1.0.0"
   },
   "devDependencies": {
     "@sveltejs/kit": "^2.55.0",

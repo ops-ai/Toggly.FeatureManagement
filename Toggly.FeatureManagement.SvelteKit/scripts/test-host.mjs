@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
 
@@ -51,7 +52,10 @@ try {
       'install',
       '--no-save',
       '--package-lock=false',
-      join(temporary, 'ops-ai-toggly-sveltekit-0.1.0.tgz'),
+      join(
+        temporary,
+        `ops-ai-toggly-sveltekit-${JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version}.tgz`,
+      ),
       ...shared,
     ],
     host,
@@ -119,12 +123,15 @@ try {
     shape: null,
     offline: false,
     delayUser: '',
+    delayBrowserUser: '',
     requests: [],
     connections: 0,
     closes: 0,
     jwks: 0,
     pending: 0,
     completed: 0,
+    telemetry: [],
+    telemetryPreflights: [],
   };
   server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -132,7 +139,23 @@ try {
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.setHeader('Access-Control-Expose-Headers', 'ETag');
     if (req.method === 'OPTIONS') {
+      if (url.pathname === '/metrics/api/frontend/telemetry')
+        state.telemetryPreflights.push(req.headers);
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
       res.end();
+      return;
+    }
+    if (url.pathname === '/metrics/api/frontend/telemetry') {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const raw = Buffer.concat(chunks);
+      const plain = req.headers['content-encoding'] === 'gzip' ? gunzipSync(raw) : raw;
+      state.telemetry.push({
+        body: JSON.parse(plain.toString()),
+        headers: req.headers,
+        bytes: plain.length,
+      });
+      res.writeHead(202).end();
       return;
     }
     if (url.pathname === '/control') {
@@ -217,7 +240,13 @@ try {
     if (!backend && state.shape !== null) defs.Order = state.shape;
     const body = state.invalid ? '{}' : await sign(defs);
     const revision = state.revision;
-    if (!backend && state.delayUser && url.searchParams.get('u') === state.delayUser) {
+    if (
+      !backend &&
+      ((state.delayUser && url.searchParams.get('u') === state.delayUser) ||
+        (req.headers.origin &&
+          state.delayBrowserUser &&
+          url.searchParams.get('u') === state.delayBrowserUser))
+    ) {
       state.pending++;
       await new Promise((resolve) => pending.push(resolve));
       state.pending--;

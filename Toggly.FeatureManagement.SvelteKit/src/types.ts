@@ -1,3 +1,4 @@
+import type { TelemetryDiagnostic } from '@ops-ai/toggly-client-telemetry';
 import type { Jwk } from '@ops-ai/toggly-signed-defs';
 import type {
   EvaluatedDefinitions,
@@ -27,6 +28,14 @@ export interface BrowserOptions {
   /** Front-end App Key only. Backend keys belong in hooks.server.ts. */
   appKey?: string;
   environment?: string;
+  /** Anonymous browser telemetry defaults on for a configured frontend App Key. */
+  enableTelemetry?: boolean;
+  /** Independent metrics service base URL; no targeting context is attached. */
+  metricsBaseUrl?: string;
+  /** Base flush interval, 30000–60000 ms (default 45000), with jitter. */
+  telemetryFlushIntervalMs?: number;
+  /** Bounded payload-free diagnostics; observer errors do not affect evaluation. */
+  onTelemetryDiagnostic?: (code: TelemetryDiagnostic) => void;
   baseURI?: string;
   /** Origin-owned persistence for exact signed envelopes and verified public keys. */
   storage?: Pick<Storage, 'getItem' | 'setItem'>;

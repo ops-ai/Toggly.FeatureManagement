@@ -98,6 +98,31 @@ Synchronous initialization selects the same SSR and hydration branch. `update(sn
 
 Pass explicit entities: `{ kind: 'Order', key: 'ord-vip', attributes: { Vip: true } }`. The Node core owns rule evaluation; shared entity/local-gate packages own browser gate evaluation. No evaluator is duplicated here. Boolean branches are not A/B experiment assignment; variant assignment is not exposed.
 
+## Browser telemetry
+
+A keyed browser store reports anonymous aggregate telemetry by default. Direct `isEnabled` calls and `Feature` gates count the effective enabled/disabled result after entity and local gates, before negation. Composite gates count only evaluated leaves. Snapshot hydration, refresh and navigation do not themselves record checks; reactive consumers record checks when they evaluate the new snapshot. Usage and views are explicit:
+
+```ts
+const toggly = createToggly(data.toggly, {
+  appKey: data.publicKey,
+  environment: data.environment,
+  enableTelemetry: true,
+  metricsBaseUrl: 'https://metrics.toggly.io',
+  telemetryFlushIntervalMs: 30000,
+});
+toggly.recordUsage('checkout');
+toggly.recordView('checkout');
+toggly.incrementCounter('orders', 1);
+toggly.setGauge('cart-total', 42);
+await toggly.flushTelemetry();
+```
+
+Usage and view methods accept an optional variant string; omitting it uses `enabled`. Counter and gauge names are application-level metrics. Feature and metric names must be nonblank. Variant names contain 1 through 64 ASCII letters, digits, underscores or hyphens. Invalid inputs are dropped without changing evaluation results. `onTelemetryDiagnostic` optionally receives bounded diagnostic codes.
+
+The collector URL is independent of `baseURI`; it defaults to `https://metrics.toggly.io` and appends `/api/frontend/telemetry`. Payloads contain only the frontend key, environment, aggregate feature counts and metrics. They omit identity, groups, claims, entity attributes and authentication headers. Allow the browser origin in your frontend key settings.
+
+The store owns one bounded reporter across route-driven refresh reconnects. Regular sends use gzip when available; hidden/pagehide and the final `dispose()` send use plain JSON with browser keepalive. Keep `dispose()` in the owning layout's destruction handler. Set `enableTelemetry: false` to disable collection and transport. Keyless stores, SSR and build-time imports never create frontend telemetry; server evaluation remains owned by the supplied Node client.
+
 ## Refresh and failures
 
 Browser options include `appKey`, `environment`, `baseURI`, `allowedKeyIds`, `maxSignatureAgeSeconds`, `refreshInterval` (180000ms; zero disables polling), `enableLiveUpdates` (default true), `timeout` (5000ms), `localGates` and `onError`. Signatures are always verified. The adapter reconnects WebSockets and fetches on update messages. Disposal stops polling/sockets and prevents late publication.

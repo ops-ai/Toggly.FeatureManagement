@@ -7,5 +7,10 @@
 
 <a href="/one?user=alice">Alice</a><a href="/two?user=bob">Bob</a>
 <button on:click={() => (mounted = !mounted)}>Toggle owner</button>
-{#if mounted}<Panel snapshot={data.snapshot} baseURI={data.baseURI} />{/if}
+{#if mounted}<Panel
+    snapshot={data.snapshot}
+    baseURI={data.baseURI}
+    frontendKey={data.frontendKey}
+    telemetryEnabled={data.telemetryEnabled}
+  />{/if}
 <slot />
