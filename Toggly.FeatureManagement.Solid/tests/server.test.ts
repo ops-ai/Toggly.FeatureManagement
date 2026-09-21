@@ -355,3 +355,89 @@ it('uses the canonical shared public-key identifier independently of signature h
   const { computeKid } = await import('@ops-ai/toggly-signed-defs');
   expect(jwks.keys[0].kid).toBe(await computeKid(jwks.keys[0].x, jwks.keys[0].y));
 });
+it('projects an explicit minted frontend context without changing trusted backend evaluation', async () => {
+  const requests: any[] = [];
+  const backend = { config: { appKey: 'backend' }, isFeatureOn: vi.fn(async () => true) };
+  const scope = createTogglyRequest({
+    client: backend as any,
+    request: new Request('http://app/'),
+    context: { identity: 'trusted' },
+    clientContext: {
+      instanceId: 'minted',
+      identity: 'hidden',
+      groups: ['hidden'],
+      claims: { role: 'hidden' },
+    } as any,
+    frontend: {
+      appKey: 'frontend',
+      baseURI: 'https://definitions.test/root?u=hidden&g=hidden&claim.role=hidden&custom=keep',
+      expose: ['On'],
+      fetch: async (input, init) => {
+        const url = new URL(String(input));
+        requests.push({ url, init });
+        return new Response(
+          url.pathname.endsWith('/.well-known/jwks')
+            ? JSON.stringify(jwks)
+            : envelope({ On: true, Secret: true }),
+        );
+      },
+    },
+  });
+  try {
+    const snapshot = await scope.snapshot();
+    expect(snapshot.source).toBe('signed');
+    expect(snapshot.context.instanceId).toBe('minted');
+    expect(snapshot.definitions).toEqual({ On: true });
+    expect([...requests[0].url.searchParams]).toEqual([
+      ['custom', 'keep'],
+      ['i', 'minted'],
+    ]);
+    expect(requests[0].url.pathname).toBe('/root/evaluated-signed/frontend/Production');
+    expect(requests.every(({ url }) => !url.pathname.includes('/api/frontend/telemetry'))).toBe(
+      true,
+    );
+    await scope.isEnabled('On');
+    expect(backend.isFeatureOn.mock.calls[0][1].identity).toBe('trusted');
+    expect(backend.isFeatureOn.mock.calls[0][1]).not.toHaveProperty('instanceId');
+  } finally {
+    scope.dispose();
+  }
+});
+it('keeps minted frontend defaults isolated and preserves the distinct frontend key guard', async () => {
+  const client = { config: { appKey: 'backend' } } as any;
+  const base = {
+    client,
+    request: new Request('http://app/'),
+    context: { identity: 'private' },
+    clientContext: { instanceId: 'public-token' },
+  };
+  expect(() =>
+    createTogglyRequest({ ...base, frontend: { appKey: 'backend', expose: [] } }),
+  ).toThrow('distinct frontend');
+  const scope = createTogglyRequest({
+    ...base,
+    frontend: {
+      appKey: 'frontend',
+      expose: ['Safe'],
+      flagDefaults: { Safe: false, Private: true },
+      fetch: async () => {
+        throw Error('offline');
+      },
+    },
+  });
+  try {
+    expect(await scope.snapshot()).toEqual({
+      definitions: { Safe: false },
+      context: {
+        identity: undefined,
+        groups: undefined,
+        claims: undefined,
+        instanceId: 'public-token',
+      },
+      expose: ['Safe'],
+      source: 'defaults',
+    });
+  } finally {
+    scope.dispose();
+  }
+});

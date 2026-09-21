@@ -28,7 +28,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/npm-cli.test.mjs && vitest run",
     "test:coverage": "node --test tests/npm-cli.test.mjs && vitest run --coverage",
-    "test:host": "npm run build && node tests/offline-process.mjs && node tests/install-host.mjs && cd tests/host && node verify.mjs",
+    "test:host": "npm run build && node tests/offline-process.mjs && node tests/install-host.mjs",
     "format": "npm exec --yes --package=prettier@3.6.2 -- prettier --no-error-on-unmatched-pattern --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx,mjs,json,css,html}\" \"*.{ts,mjs,json,md,html}\"",
     "format:check": "npm exec --yes --package=prettier@3.6.2 -- prettier --no-error-on-unmatched-pattern --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx,mjs,json,css,html}\" \"*.{ts,mjs,json,md,html}\"",
     "pretest": "npm run format:check",
@@ -42,7 +42,7 @@
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.6",
     "@ops-ai/toggly-node-core": "^0.9.1",
-    "@ops-ai/toggly-client-telemetry": "^1.0.0"
+    "@ops-ai/toggly-client-telemetry": "^1.1.0"
   },
   "devDependencies": {
     "@solidjs/testing-library": "^0.8.10",

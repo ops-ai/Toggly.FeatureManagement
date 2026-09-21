@@ -92,18 +92,30 @@ export async function startService() {
       return;
     }
     const backend = url.pathname.includes('/definitions-signed/');
-    const defs = backend
-      ? backendDefinitions
-      : {
-          BetaDashboard: state.on && url.searchParams.get('u') === 'alice',
-          LiveFeature: state.on,
-          secret: true,
-          ExpressCheckout: {
+    const minted = !backend && url.pathname.includes('/minted/');
+    const defs = minted
+      ? {
+          On: url.searchParams.get('i') === 'A',
+          First: true,
+          Entity: {
             requirement: 'all',
-            rules: [{ property: 'Vip', op: 'eq', value: 'true', type: 'boolean' }],
+            rules: [{ property: 'role', op: 'eq', value: 'admin', type: 'string' }],
           },
-        };
-    const etag = `"rev${state.revision}"`;
+        }
+      : backend
+        ? backendDefinitions
+        : {
+            BetaDashboard: state.on && url.searchParams.get('u') === 'alice',
+            LiveFeature: state.on,
+            secret: true,
+            ExpressCheckout: {
+              requirement: 'all',
+              rules: [{ property: 'Vip', op: 'eq', value: 'true', type: 'boolean' }],
+            },
+          };
+    const etag = minted
+      ? `"mint-${url.searchParams.get('i') ?? url.searchParams.get('u')}"`
+      : `"rev${state.revision}"`;
     if (req.headers['if-none-match'] === etag) {
       res.writeHead(304).end();
       return;

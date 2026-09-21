@@ -41,9 +41,16 @@ if (process.argv[2]) {
     const path = join(directory, 'storage.json');
     writeFileSync(path, '{}');
     const script = fileURLToPath(import.meta.url);
-    execFileSync(process.execPath, [script, 'online', path]);
+    execFileSync(process.execPath, [script, 'online', path], {
+      timeout: 15000,
+      killSignal: 'SIGKILL',
+    });
     const requests = JSON.parse(
-      execFileSync(process.execPath, [script, 'offline', path], { encoding: 'utf8' }),
+      execFileSync(process.execPath, [script, 'offline', path], {
+        encoding: 'utf8',
+        timeout: 15000,
+        killSignal: 'SIGKILL',
+      }),
     );
     assert.equal(requests.length, 1);
     assert.match(requests[0], /\/evaluated-signed\//);

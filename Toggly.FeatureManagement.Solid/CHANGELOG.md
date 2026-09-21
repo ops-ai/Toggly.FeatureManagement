@@ -5,13 +5,20 @@
 ### Added
 
 - Browser telemetry enabled by default with an application key, with independent endpoint, interval and opt-out options.
-- Explicit `recordUsage`, `recordView`, `incrementCounter`, `setGauge` and awaitable `flushTelemetry` on clients and the Solid facade. Metrics are application-level and contain no identity or entity data.
+- Explicit `recordUsage`, `recordView`, `incrementCounter`, `setGauge` and awaitable `flushTelemetry` on clients and the Solid facade. Metrics are application-level; optional owner attribution uses minted `i` or client-asserted `u`, with no entity data.
 - Effective feature checks shared across direct evaluations, hooks and components; hidden-page and owner cleanup flush pending events.
 
 ### Fixed
 
 - Keep memoized feature reads and loading/error updates from duplicating checks. Initial snapshot hydration no longer reapplies the same provider input.
 - Release outstanding definition-request timeout resources during synchronous owner disposal.
+
+### Changed
+
+- Use public reporter 1.1.0 and forward host-minted instance tokens through existing context APIs; token targeting suppresses user/groups/claims.
+- Preserve admitted attribution and snapshot selected nested entity gates before reentrant callbacks.
+- Keep signed storage token-scoped and validators paired with accepted memory bodies; reject orphan 304 revisions and unrelated token snapshots.
+- Retire old context sockets and fence stale responses and subscriber publication.
 
 ## 0.2.0 — 2026-09-12
 

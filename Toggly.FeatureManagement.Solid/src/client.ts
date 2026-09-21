@@ -1,8 +1,13 @@
 import { createPersistence, verifyEnvelope } from './persistence.js';
 import { captureEvaluatedResponse } from './transport.js';
-import { selectDefinitions, publicContext, type TogglySnapshot } from './snapshot.js';
 import {
-  buildEvaluatedSignedUrl,
+  selectDefinitions,
+  publicContext,
+  frontendDefinitionsUrl,
+  definitionBaseURI,
+  type TogglySnapshot,
+} from './snapshot.js';
+import {
   evaluateResolvedKeys,
   resolveEvaluatedDefinition,
   type EvaluatedDefinitions,
@@ -16,6 +21,8 @@ import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'
 
 export type { TogglyEntityContext, TogglyEvaluationContext, EvaluatedDefinitions, LocalGate };
 export interface TogglyOptions extends TogglyEvaluationContext {
+  /** Host-minted browser token; takes precedence over user targeting and telemetry. */
+  instanceId?: string;
   /** Restrict every browser snapshot to these public keys. */
   expose?: readonly string[];
   /** Public frontend application key; never use a backend key in a browser. */
@@ -62,22 +69,29 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     verifySignatures: options.verifySignatures ?? true,
   };
   let expose = initialSnapshot ? [...initialSnapshot.expose] : options.expose;
-  const initialContext = initialSnapshot?.context ?? options;
-  let context: TogglyEvaluationContext = {
+  const acceptsSnapshot = (snapshot: TogglySnapshot, token?: string) =>
+    !token || snapshot.context.instanceId?.trim() === token;
+  const acceptedSnapshot =
+    initialSnapshot && acceptsSnapshot(initialSnapshot, options.instanceId?.trim())
+      ? initialSnapshot
+      : undefined;
+  const initialContext = acceptedSnapshot?.context ?? options;
+  let context: TogglyEvaluationContext & { instanceId?: string } = {
+    instanceId: initialContext.instanceId?.trim() || undefined,
     identity: initialContext.identity,
     groups: [...(initialContext.groups ?? [])],
     claims: { ...initialContext.claims },
   };
   let state: ClientState = {
     definitions: selectDefinitions(
-      initialSnapshot?.definitions ?? options.flagDefaults ?? {},
+      acceptedSnapshot?.definitions ?? options.flagDefaults ?? {},
       expose,
     ),
     loading: false,
     error: undefined,
   };
   // Signed SSR and accepted cache/network values are authoritative for this context.
-  let hasAcceptedState = initialSnapshot?.source === 'signed';
+  let hasAcceptedState = acceptedSnapshot?.source === 'signed';
   let gates = options.localGates ?? [];
   let gateIndex = buildFlagGateIndex(gates);
   const listeners = new Set<(state: ClientState) => void>();
@@ -102,6 +116,8 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       ? createTelemetryReporter({
           appKey: options.appKey,
           environment: options.environment,
+          instanceId: context.instanceId,
+          identity: context.identity,
           metricsBaseUrl: options.metricsBaseUrl,
           telemetryFlushIntervalMs: options.telemetryFlushIntervalMs,
           fetch: options.telemetryFetch,
@@ -111,7 +127,16 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
   const detachTelemetry = reporter ? attachBrowserLifecycle(reporter) : undefined;
   const emit = (next: Partial<ClientState>) => {
     state = { ...state, ...next };
-    listeners.forEach((listener) => listener(state));
+    const published = state;
+    const current = generation;
+    for (const listener of listeners) {
+      if (!isCurrent(current)) break;
+      try {
+        void Promise.resolve(listener(published)).catch(() => {});
+      } catch {
+        /* A host observer cannot interrupt publication to other observers. */
+      }
+    }
   };
   const flags = () => ({ ...state.definitions });
   const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.3.0' };
@@ -141,7 +166,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     const result = await fetchEvaluatedSignedDefinitions(
       requestURL.toString(),
       jwks,
-      { ...config, fetchImpl: capture.fetch },
+      { ...config, baseURI: definitionBaseURI(config.baseURI), fetchImpl: capture.fetch },
       { revision: pin === undefined ? revision : null, headers },
     );
     return { result, body: capture.body() };
@@ -159,19 +184,28 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       let definitions = result.defs;
       if (config.verifySignatures) {
         if (!body) throw new Error('Missing signed envelope');
-        const keys = await jwks.get({ ...config, fetchImpl });
+        const keys = await jwks.get({
+          ...config,
+          baseURI: definitionBaseURI(config.baseURI),
+          fetchImpl,
+        });
         const verified = await verifyEnvelope(body, keys, config, timestamps.get(scope) ?? 0);
         if (!isCurrent(current)) return;
         definitions = verified.definitions;
         timestamps.set(scope, verified.timestamp);
         persistence.write(scope, body, verified.keys);
       }
-      // Complete validation precedes state, persistence and revision adoption.
+      // Complete validation and storage callbacks precede atomic body/revision adoption.
       const projected = selectDefinitions(definitions, expose);
+      if (!isCurrent(current)) return;
       hasAcceptedState = true;
+      revision = result.revision ?? null;
       emit({ definitions: projected });
+    } else {
+      if (!hasAcceptedState)
+        throw new Error('304 Not Modified without matching accepted definitions');
+      revision = result.revision ?? revision;
     }
-    revision = result.revision ?? revision;
   }
 
   async function refresh(pin?: string | null): Promise<EvaluatedDefinitions> {
@@ -190,17 +224,17 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       });
     emit({ loading: true, error: undefined });
     try {
-      if (!config.appKey) return flags();
+      if (!config.appKey || !isCurrent(current)) return flags();
       // The full URL scopes persisted envelopes by app, environment and targeting.
-      const url = buildEvaluatedSignedUrl(
+      const url = frontendDefinitionsUrl(
         config.baseURI,
-        encodeURIComponent(config.appKey),
-        encodeURIComponent(config.environment),
+        config.appKey,
+        config.environment,
         context,
-        false,
       );
       const cached = restoreCached(url, current);
       if (cached) await cached;
+      if (!isCurrent(current)) return flags();
       await acceptRemote(await fetchRemote(url, fetchImpl, pin), url, current, fetchImpl);
     } catch (error) {
       if (isCurrent(current))
@@ -230,7 +264,9 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     if (revision) url.searchParams.set('rev', revision);
     try {
       socket = new WebSocket(url);
+      const ownedSocket = socket;
       socket.onmessage = (event) => {
+        if (disposed || socket !== ownedSocket) return;
         try {
           const data = String(event.data);
           const message =
@@ -265,10 +301,24 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
         }
       };
       socket.onclose = () => {
-        if (!disposed) reconnect = setTimeout(startSocket, 5000);
+        if (!disposed && socket === ownedSocket) {
+          socket = undefined;
+          reconnect = setTimeout(startSocket, 5000);
+        }
       };
     } catch {
       reconnect = setTimeout(startSocket, 5000);
+    }
+  }
+
+  function stopSocket() {
+    clearTimeout(reconnect);
+    clearTimeout(debounce);
+    if (socket) {
+      socket.onmessage = null;
+      socket.onclose = null;
+      socket.close();
+      socket = undefined;
     }
   }
 
@@ -291,15 +341,19 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     },
     /** Replace request-produced public state when a SolidStart route loader changes. */
     hydrate(snapshot: TogglySnapshot) {
-      if (disposed) return;
+      if (disposed || !acceptsSnapshot(snapshot, context.instanceId)) return;
       const definitions = selectDefinitions(snapshot.definitions, snapshot.expose);
       generation++;
       controller?.abort();
       revision = null;
+      stopSocket();
+      const current = generation;
       expose = [...snapshot.expose];
       context = publicContext(snapshot.context);
+      reporter?.setContext({ instanceId: context.instanceId, identity: context.identity });
       hasAcceptedState = snapshot.source === 'signed';
       emit({ definitions, loading: false, error: undefined });
+      if (isCurrent(current) && liveStarted) startSocket();
     },
     state: () => state,
     context: () => structuredClone(context),
@@ -326,26 +380,40 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       negate = false,
       entity?: TogglyEntityContext,
     ) {
+      const definitions = selectDefinitions(state.definitions, keys);
+      const capturedGates = gates.map((gate) => ({ ...gate, flagKeys: [...gate.flagKeys] }));
+      const capturedIndex = gateIndex;
+      const check = reporter?.captureCheck();
       return evaluateResolvedKeys([...keys], requirement, negate, (key) => {
         const enabled = applyLocalGate(
-          resolveEvaluatedDefinition(state.definitions[key], entity),
+          resolveEvaluatedDefinition(definitions[key], entity),
           key,
-          gates,
-          gateIndex,
+          capturedGates,
+          capturedIndex,
         );
-        reporter?.recordCheck(key, enabled ? 'enabled' : 'disabled');
+        check?.(key, enabled ? 'enabled' : 'disabled');
         return enabled;
       });
     },
-    async setContext(next: TogglyEvaluationContext) {
+    async setContext(next: TogglyEvaluationContext & { instanceId?: string }) {
       if (disposed) return;
+      generation++;
+      controller?.abort();
       context = { ...context, ...structuredClone(next) };
+      if (Object.hasOwn(next, 'identity') && !Object.hasOwn(next, 'instanceId'))
+        context.instanceId = undefined;
+      context.instanceId = context.instanceId?.trim() || undefined;
+      stopSocket();
+      const installed = context;
+      reporter?.setContext({ instanceId: context.instanceId, identity: context.identity });
+      const current = generation;
       // The new context may restore its own cache, but never reuse prior-user state.
       hasAcceptedState = false;
       // Never display the previous user's flags while a new user's request is pending.
       revision = null;
       emit({ definitions: selectDefinitions(config.flagDefaults ?? {}, expose), error: undefined });
-      await refresh();
+      if (isCurrent(current)) await refresh();
+      if (!disposed && context === installed && liveStarted) startSocket();
     },
     setLocalGates(next: LocalGate[]) {
       const index = buildFlagGateIndex(next);
@@ -363,13 +431,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       requestTimeouts.forEach(clearTimeout);
       requestTimeouts.clear();
       clearInterval(poll);
-      clearTimeout(reconnect);
-      clearTimeout(debounce);
-      if (socket) {
-        socket.onmessage = null;
-        socket.onclose = null;
-        socket.close();
-      }
+      stopSocket();
       listeners.clear();
       detachTelemetry?.();
       reporter?.dispose();
