@@ -1,0 +1,166 @@
+import { TogglyService } from '../src/services/TogglyService';
+import { MemoryStorage } from '../src/services/MemoryStorage';
+import type { TogglyConfig } from '../src/models/types';
+const services: TogglyService[] = [];
+const packets: any[] = [];
+const requests: {url:URL;init:RequestInit}[] = [];
+const response = (flags: unknown, etag = 'one') => ({ok:true,status:200,headers:new Map([['ETag',etag]]),text:async()=>JSON.stringify(flags)});
+function client(config: TogglyConfig & {instanceId?:string} = {}) {
+  const t=new TogglyService({appKey:'native',environment:'Test',identity:'alice',refreshInterval:0,enableLiveUpdates:false,metricsBaseUrl:'https://collector.test',...config} as TogglyConfig);
+  services.push(t);return t;
+}
+beforeEach(()=>{
+  packets.length=0;requests.length=0;
+  Object.defineProperty(globalThis,'CompressionStream',{value:undefined,configurable:true});
+  (fetch as jest.Mock).mockImplementation(async (url:string,init:RequestInit)=>{
+    if(url.includes('/api/frontend/telemetry')){packets.push(JSON.parse(init.body as string));return {status:202}}
+    requests.push({url:new URL(url),init});return response({On:new URL(url).searchParams.get('i')!=='B'});
+  });
+});
+afterEach(()=>services.splice(0).forEach(t=>t.dispose()));
+it('forwards minted context, scrubs inherited targeting, preserves repeated unrelated values and clears through identity',async()=>{
+  const t=client({instanceId:' A ',baseURI:'https://defs.test/root/?u=old&userId=old&g=a&g=b&claim.role=old&i=retired&i=older&keep=one&keep=two',groups:['private'],claims:{role:'private'}});
+  await t.init();t.recordUsage('A');
+  await t.setContext({instanceId:'B'} as any);t.recordView('B');
+  await t.setIdentity('bob');t.recordUsage('Bob');await t.flushTelemetry();
+  expect(requests[0].url.pathname).toBe('/root/evaluated-signed/native/Test');
+  expect([...requests[0].url.searchParams]).toEqual([['keep','one'],['keep','two'],['i','A']]);
+  expect(requests[1].url.searchParams.get('i')).toBe('B');
+  expect(requests[2].url.searchParams.has('i')).toBe(false);
+  expect(requests[2].url.searchParams.get('u')).toBe('bob');
+  expect(packets).toEqual([
+    {k:'native',e:'Test',i:'A',f:{A:{enabled:[0,1]}}},
+    {k:'native',e:'Test',i:'B',f:{B:{enabled:[0,0,1]}}},
+    {k:'native',e:'Test',u:'bob',f:{Bob:{enabled:[0,1]}}},
+  ]);
+});
+it('captures selected nested definitions, local callbacks and attribution before a held hook',async()=>{
+  const later={id:'later',flagKeys:['Entity'],isEnabled:()=>true};
+  let release!:()=>void;
+  const gate={requirement:'all',rules:[{property:'role',op:'eq',value:'admin',type:'string'}]};
+  const t=client({instanceId:'A',featureDefaults:{First:true,Entity:gate} as any,localGates:[{id:'first',flagKeys:['First'],isEnabled:()=>{later.isEnabled=()=>false;return true}},later]});
+  (fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{
+    if(url.includes('/api/frontend/telemetry')){packets.push(JSON.parse(init.body as string));return {status:202}}
+    return response({First:true,Entity:gate});
+  });
+  await t.init();t.addHook({getMetadata:()=>({name:'held'}),beforeEvaluation:()=>new Promise<void>(resolve=>{release=resolve})});
+  const pending=t.evaluateFeatureGate(['First','Entity'],'all',false,{kind:'User',key:'one',attributes:{role:'admin'}});
+  for(let i=0;i<20&&!release;i++) await Promise.resolve();
+  (t.currentFeatures!.Entity as any).rules[0].value='retired';
+  await t.setContext({instanceId:'B'} as any);release();
+  expect(await pending).toBe(true);await t.flushTelemetry();
+  expect(packets).toEqual([
+    {k:'native',e:'Test',i:'A',f:{First:{enabled:[1]}}},
+    {k:'native',e:'Test',i:'A',f:{Entity:{enabled:[1]}}},
+  ]);
+});
+it('keeps late prior-context network data out of the new context and permits its immediate request',async()=>{
+  let release!: (value:unknown)=>void;
+  (fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{
+    requests.push({url:new URL(url),init});
+    if(new URL(url).searchParams.get('i')==='A') return new Promise(resolve=>{release=resolve});
+    return response({On:false},'B');
+  });
+  const t=client({instanceId:'A',enableTelemetry:false});const initial=t.init();
+  for(let i=0;i<30&&!release;i++) await Promise.resolve();
+  const changed=t.setContext({instanceId:'B'} as any);
+  for(let i=0;i<30&&requests.length<2;i++) await Promise.resolve();
+  expect(requests.map(x=>x.url.searchParams.get('i'))).toEqual(['A','B']);
+  release(response({On:true},'A'));await Promise.all([initial,changed]);
+  expect(t.currentFeatures).toEqual({On:false});expect(t.initialized).toBe(true);
+});
+it('retains original token cache across ABA and refuses a bodyless live304 disk validator after LRU eviction',async()=>{
+  const storage=new MemoryStorage();
+  (fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{
+    const token=new URL(url).searchParams.get('i');requests.push({url:new URL(url),init});
+    if(new Headers(init.headers).has('If-None-Match'))return {status:304,ok:false,headers:new Map([['ETag',token]])};
+    return response({On:token==='A'},token!);
+  });
+  const a=client({instanceId:'A',storage,maxCacheKeys:1,enableTelemetry:false});await a.init();
+  const b=client({instanceId:'B',storage,maxCacheKeys:1,enableTelemetry:false});await b.init();
+  expect((await a.refresh()).flags).toEqual({On:true});
+  const revision=await storage.get('@toggly:etag');
+  expect(revision===null||JSON.parse(revision).context.includes('B')).toBe(true);
+  const reload=client({instanceId:'A',storage,maxCacheKeys:1,enableTelemetry:false});await reload.init();
+  expect(new Headers(requests.at(-1)!.init.headers).has('If-None-Match')).toBe(false);
+});
+it('lets a newer same-context refresh own hooks and publication while an older hook is held',async()=>{
+  const t=client({instanceId:'A',enableTelemetry:false});await t.init();
+  let release!:()=>void;let entered!:()=>void;const entering=new Promise<void>(resolve=>{entered=resolve});let first=true;const hooks:boolean[]=[];const publications:boolean[]=[];
+  t.addHook({getMetadata:()=>({name:'hold'}),afterRefresh:()=>{if(first){first=false;return new Promise<void>(resolve=>{release=resolve;entered()})}}});
+  t.addHook({getMetadata:()=>({name:'observe'}),afterRefresh:flags=>{hooks.push(flags.On)}});
+  t.on('refreshed',event=>publications.push((event.data as {On:boolean}).On));
+  (fetch as jest.Mock).mockResolvedValueOnce(response({On:false},'old')).mockResolvedValueOnce(response({On:true},'new'));
+  const old=t.refresh();await entering;
+  expect(release).toBeDefined();await t.refresh();release();await old;
+  expect(t.currentFeatures).toEqual({On:true});expect(hooks).toEqual([true]);expect(publications).toEqual([true]);
+});
+it('keeps the latest identity intent when an earlier beforeIdentify hook settles afterward',async()=>{
+  const t=client({instanceId:'A',enableTelemetry:false});await t.init();let release!:()=>void;
+  t.addHook({getMetadata:()=>({name:'hold'}),beforeIdentify:identity=>identity==='bob'?new Promise<void>(resolve=>{release=resolve}):undefined});
+  const changed:string[]=[];t.on('identityChanged',event=>changed.push((event.data as {newIdentity:string}).newIdentity));
+  const old=t.setIdentity('bob');await Promise.resolve();await t.setIdentity('carol');release();await old;
+  expect(t.currentIdentity).toBe('carol');expect(changed).toEqual(['carol']);
+  expect(requests.at(-1)!.url.searchParams.get('u')).toBe('carol');expect(requests.at(-1)!.url.searchParams.has('i')).toBe(false);
+});
+it('removes a paired global validator when its body is evicted by a response without an etag',async()=>{
+  const storage=new MemoryStorage();
+  (fetch as jest.Mock).mockImplementation(async(url:string)=>response({On:true},new URL(url).searchParams.get('i')==='A'?'A':''));
+  const a=client({storage,maxCacheKeys:1,instanceId:'A',enableTelemetry:false});await a.init();
+  expect(await storage.get('@toggly:etag')).not.toBeNull();
+  const b=client({storage,maxCacheKeys:1,instanceId:'B',enableTelemetry:false});await b.init();
+  expect(await storage.get('@toggly:etag')).toBeNull();expect(b.currentFeatures).toEqual({On:true});
+});
+it.each([undefined,'','   '])('never revives configured i for an initial absent or blank token %j',async instanceId=>{
+  const t=client({instanceId,baseURI:'https://defs.test/base?i=retired&i=older&keep=one&keep=two'});await t.init();
+  expect(requests[0].url.searchParams.getAll('i')).toEqual([]);expect(requests[0].url.searchParams.get('u')).toBe('alice');
+  expect(requests[0].url.searchParams.getAll('keep')).toEqual(['one','two']);
+  expect(await t.isFeatureOn('On')).toBe(true);await t.flushTelemetry();expect(packets).toEqual([{k:'native',e:'Test',u:'alice',f:{On:{enabled:[1]}}}]);
+});
+it('retires the old validator when a successful replacement body has no etag',async()=>{
+  const storage=new MemoryStorage();const t=client({instanceId:'A',storage,enableTelemetry:false});await t.init();
+  (fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{requests.push({url:new URL(url),init});return response({On:false},'')});
+  await t.refresh();expect(t.currentFeatures).toEqual({On:false});expect(await storage.get('@toggly:etag')).toBeNull();
+  await t.refresh();expect(new Headers(requests.at(-1)!.init.headers).has('If-None-Match')).toBe(false);
+});
+it('restores a mixed boolean and entity cache without a validator into the current offline public state',async()=>{
+  const storage=new MemoryStorage();const gate={requirement:'all',rules:[{property:'role',op:'eq',value:'admin',type:'string'}]};
+  (fetch as jest.Mock).mockResolvedValue(response({On:true,Entity:gate},''));
+  const writer=client({instanceId:'A',storage,enableTelemetry:false});await writer.init();writer.dispose();
+  const reader=client({instanceId:'B',storage,enableTelemetry:false,featureDefaults:{On:false},networkInfo:{getState:async()=>({isConnected:false,isInternetReachable:false}),subscribe:()=>()=>{}}});
+  await reader.init();expect(reader.currentFeatures).toEqual({On:false});
+  const restored=await reader.setContext({instanceId:'A'});expect(restored.flags).toEqual({On:true,Entity:gate});expect(reader.currentFeatures).toEqual(restored.flags);
+  expect(await reader.isFeatureOn('Entity',{kind:'User',key:'one',attributes:{role:'admin'}})).toBe(true);
+  expect(await reader.isFeatureOn('Entity',{kind:'User',key:'one',attributes:{role:'guest'}})).toBe(false);
+});
+it('keeps the request deadline active while reading a response body',async()=>{
+  let signal!:AbortSignal;
+  (fetch as jest.Mock).mockImplementation(async(_url:string,init:RequestInit)=>{signal=init.signal!;return {ok:true,status:200,headers:new Map(),text:()=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('body aborted')),{once:true}))}});
+  const t=client({instanceId:'A',requestTimeout:25,enableTelemetry:false,featureDefaults:{On:false}});
+  const result=await t.init();expect(signal.aborted).toBe(true);expect(result.flags).toEqual({On:false});expect(t.currentFeatures).toEqual({On:false});
+});
+it('uses the same abortable deadline for a JWKS body and scrubs its configured query',async()=>{
+  let jwksUrl!:URL;let jwksSignal!:AbortSignal;let definitionsSignal!:AbortSignal;
+  (fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{
+    if(url.includes('/.well-known/jwks')){jwksUrl=new URL(url);jwksSignal=init.signal!;return {ok:true,status:200,json:()=>new Promise((_resolve,reject)=>jwksSignal.addEventListener('abort',()=>reject(new Error('jwks aborted')),{once:true}))}}
+    definitionsSignal=init.signal!;return response({defs:{On:true},signature:'signature',timestamp:1,kid:'key'});
+  });
+  const t=client({instanceId:'A',requestTimeout:50,enableTelemetry:false,verifySignatures:true,featureDefaults:{On:false},baseURI:'https://defs.test/base?i=retired&u=old&userId=old&g=private&claim.role=secret&keep=one&keep=two'});
+  const result=await t.init();expect(result.flags).toEqual({On:false});expect(jwksSignal).toBe(definitionsSignal);expect(jwksSignal.aborted).toBe(true);
+  expect(jwksUrl.pathname).toBe('/base/.well-known/jwks');expect([...jwksUrl.searchParams]).toEqual([['keep','one'],['keep','two']]);
+});
+it('keeps Unicode group cache keys stable across permutations without mutating caller input',async()=>{
+  const groups=['\uE000','😀','a','a','A'];const original=[...groups];const storage=new MemoryStorage();
+  const a=client({groups,storage,enableTelemetry:false});await a.init();a.dispose();
+  const b=client({groups:[...groups].reverse(),storage,enableTelemetry:false});await b.init();
+  expect(new Headers(requests.at(-1)!.init.headers).get('If-None-Match')).toBe('one');expect(groups).toEqual(original);
+  expect(requests[0].url.searchParams.getAll('g')).toEqual(groups);
+});
+it('stops a superseded context publication before invoking its remaining observers',async()=>{
+  const t=client({instanceId:'A',enableTelemetry:false});await t.init();
+  let next:Promise<unknown>|undefined;const seen:(string|null)[]=[];
+  t.on('effectiveFlagsChanged',()=>{if(t.currentIdentity==='bob'&&!next)next=t.setIdentity('carol')});
+  t.on('effectiveFlagsChanged',()=>seen.push(t.currentIdentity));
+  await t.setIdentity('bob');await next;
+  expect(t.currentIdentity).toBe('carol');expect(seen).not.toContain('bob');expect(seen).toContain('carol');
+});

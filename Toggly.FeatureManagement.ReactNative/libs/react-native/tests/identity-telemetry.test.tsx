@@ -1,0 +1,51 @@
+import React from 'react';
+import {render,waitFor,act} from '@testing-library/react';
+import {TogglyProvider} from '../src/components/TogglyProvider';
+import {useToggly} from '../src/hooks/useToggly';
+import {useFeatureFlag} from '../src/hooks/useFeatureFlag';
+let api: ReturnType<typeof useToggly>;
+function Child(){api=useToggly();const flag=useFeatureFlag('On');return <span>{flag.isEnabled?'ON':'OFF'}</span>}
+const packets:any[]=[];const requests:{url:URL,signal:AbortSignal}[]=[];
+const settings={appKey:'native',environment:'Test',identity:'alice',baseURI:'https://defs.test/base?i=retired&i=older&keep=ok',metricsBaseUrl:'https://collector.test',refreshInterval:0,enableLiveUpdates:false,featureDefaults:{On:false}};
+const response=(On:boolean)=>({status:200,ok:true,headers:{get:()=>null},text:async()=>JSON.stringify({On})});
+beforeEach(()=>{packets.length=0;requests.length=0;Object.defineProperty(globalThis,'CompressionStream',{value:undefined,configurable:true});
+(fetch as jest.Mock).mockImplementation(async(input:string,init:RequestInit)=>{if(input.includes('/api/frontend/telemetry')){packets.push(JSON.parse(String(init.body)));return {status:202}}requests.push({url:new URL(input),signal:init.signal!});return response(new URL(input).searchParams.get('i')==='A')})});
+it('forwards token props before initial network work completes, then exposes context clearing through useToggly',async()=>{
+ let release!:(value:unknown)=>void;
+ (fetch as jest.Mock).mockImplementation(async(input:string,init:RequestInit)=>{if(input.includes('/api/frontend/telemetry')){packets.push(JSON.parse(String(init.body)));return {status:202}}requests.push({url:new URL(input),signal:init.signal!});if(new URL(input).searchParams.get('i')==='A')return new Promise(resolve=>{release=resolve});return response(false)});
+ const view=render(<TogglyProvider {...settings} instanceId="A" waitForInit={false}><Child/></TogglyProvider>);
+ await waitFor(()=>expect(release).toBeDefined());
+ view.rerender(<TogglyProvider {...settings} instanceId="B" waitForInit={false}><Child/></TogglyProvider>);
+ await waitFor(()=>expect(requests.some(r=>r.url.searchParams.get('i')==='B')).toBe(true));
+ await waitFor(()=>expect(api.isReady).toBe(true));
+ await act(async()=>{release(response(true));await Promise.resolve()});
+ expect(view.queryByText('ON')).toBeNull();expect(requests[0].signal.aborted).toBe(true);
+ await act(async()=>{api.recordUsage('After');await api.flushTelemetry()});
+ expect(packets).toEqual([{k:'native',e:'Test',i:'B',f:{On:{disabled:[1]},After:{enabled:[0,1]}}}]);
+ await act(async()=>{await api.setContext({instanceId:'',identity:'bob'});api.recordView('Cleared');await api.flushTelemetry()});
+ expect(requests.at(-1)!.url.searchParams.has('i')).toBe(false);expect(requests.at(-1)!.url.searchParams.get('u')).toBe('bob');
+ expect(packets.at(-1).u).toBe('bob');expect(packets.at(-1).i).toBeUndefined();expect(packets.at(-1).f.Cleared.enabled).toEqual([0,0,1]);
+ view.unmount();
+});
+it('cancels queued old-owner delivery on app replacement and immediately admits the new owner',async()=>{
+ const view=render(<TogglyProvider {...settings} instanceId="A"><Child/></TogglyProvider>);
+ await waitFor(()=>expect(view.queryByText('ON')).not.toBeNull());await act(async()=>{await api.flushTelemetry()});packets.length=0;
+ act(()=>api.recordUsage('Retired'));
+ view.rerender(<TogglyProvider {...settings} appKey="new" environment="New" instanceId="B"><Child/></TogglyProvider>);
+ await waitFor(()=>expect(view.queryByText('OFF')).not.toBeNull());await act(async()=>{api.recordUsage('Current');await api.flushTelemetry()});
+ expect(packets).toEqual([{k:'new',e:'New',i:'B',f:{On:{disabled:[1]},Current:{enabled:[0,1]}}}]);
+ view.unmount();
+});
+it('preserves imperative identity when only the token prop changes and clears',async()=>{
+ const view=render(<TogglyProvider {...settings} identity={undefined} instanceId="A"><Child/></TogglyProvider>);
+ await waitFor(()=>expect(api.isReady).toBe(true));
+ await act(async()=>{await api.setIdentity('bob')});expect(api.identity).toBe('bob');
+ view.rerender(<TogglyProvider {...settings} identity={undefined} instanceId="B"><Child/></TogglyProvider>);
+ await waitFor(()=>expect(requests.at(-1)!.url.searchParams.get('i')).toBe('B'));
+ expect(api.identity).toBe('bob');
+ view.rerender(<TogglyProvider {...settings} identity={undefined}><Child/></TogglyProvider>);
+ await waitFor(()=>expect(requests.at(-1)!.url.searchParams.has('i')).toBe(false));
+ expect(requests.at(-1)!.url.searchParams.get('u')).toBe('bob');
+ await act(async()=>{api.recordView('retained');await api.flushTelemetry()});expect(packets.at(-1).u).toBe('bob');expect(packets.at(-1).f.retained.enabled).toEqual([0,0,1]);
+ view.unmount();
+});

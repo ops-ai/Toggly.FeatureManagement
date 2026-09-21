@@ -26,7 +26,8 @@ it('records effective native leaves once, preserves short circuit and keeps proj
   expect(await t.isFeatureOff('off')).toBe(true);
   t.recordUsage('checkout', 'variant-a'); t.recordView('checkout', 'variant-a'); t.incrementCounter('orders', 2); t.setGauge('cart', 3.5);
   await t.flushTelemetry();
-  expect(packets[0].body).toEqual({ k: 'native-key', e: 'Fixture', f: { on: { disabled: [1] }, off: { disabled: [1] }, checkout: { 'variant-a': [0, 1, 1] } }, m: { orders: 2, cart: 3.5 } });
+  expect(t.currentIdentity).toEqual(expect.any(String));
+  expect(packets[0].body).toEqual({ k: 'native-key', e: 'Fixture', u: t.currentIdentity, f: { on: { disabled: [1] }, off: { disabled: [1] }, checkout: { 'variant-a': [0, 1, 1] } }, m: { orders: 2, cart: 3.5 } });
   expect(packets[0].url).toBe('https://collector.test/base/api/frontend/telemetry');
   expect(packets[0].options.credentials).toBe('omit');
   expect(packets[0].options.headers).toEqual({ 'Content-Type': 'application/json' }); t.dispose();

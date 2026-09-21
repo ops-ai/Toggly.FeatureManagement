@@ -1,10 +1,12 @@
-## 1.8.0 — 2026-09-18
+## 1.8.0 — 2026-09-21
 
 ### Added
+- Optional host-minted `instanceId` on configuration and context updates; telemetry uses the token or current identity, and minted definitions requests suppress client targeting parameters.
 - Default-on, bounded frontend telemetry for clients with an app key, with `enableTelemetry: false` opt-out and independent collector configuration.
 - `recordUsage`, `recordView`, `incrementCounter`, `setGauge`, and `flushTelemetry`. Actual effective feature checks count once per evaluated leaf; usage and views remain explicit.
 
 ### Fixed
+- Keep captured evaluations, cached bodies and validators, and pending refresh/identity callbacks scoped to their current owner; restore offline cached state and retire validators with replaced or evicted bodies.
 - Keep disposed clients terminal across delayed storage, network, identity changes, timers, and live-update initialization.
 
 ## 1.7.4 — 2026-09-08

@@ -1,12 +1,14 @@
 {
   "private": true,
   "dependencies": {
-    "react": "19.2.3",
-    "react-native": "0.84.0",
-    "@types/react": "19.1.1",
+    "@ops-ai/react-native-toggly": "file:adapter.tgz",
+    "@ops-ai/react-native-toggly-core": "file:core.tgz",
     "@react-native/babel-preset": "0.84.0",
     "@react-native/metro-config": "0.84.0",
+    "@types/react": "19.2.18",
     "esbuild": "0.25.5",
+    "react": "19.2.3",
+    "react-native": "0.84.0",
     "typescript": "5.9.3"
   }
 }

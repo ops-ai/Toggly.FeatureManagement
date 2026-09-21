@@ -291,10 +291,10 @@ describe('useToggly', () => {
     expect(unsub).toBe(unsubscribe);
   });
 
-  it('subscribes to refreshed events and updates features', async () => {
+  it('subscribes to effective flags and updates features', async () => {
     let refreshedCallback: (event: any) => void;
     mockService.on.mockImplementation((event: string, callback: (event: any) => void) => {
-      if (event === 'refreshed') {
+      if (event === 'effectiveFlagsChanged') {
         refreshedCallback = callback;
       }
       return () => {};
@@ -315,6 +315,7 @@ describe('useToggly', () => {
     // Trigger refresh event with new features
     const newFeatures = { feature1: false, feature2: true };
     await act(async () => {
+      mockService.currentFeatures = newFeatures;
       refreshedCallback({ data: newFeatures });
     });
 
@@ -370,7 +371,7 @@ describe('useToggly', () => {
     });
 
     // Should not have subscribed to refreshed or identityChanged
-    expect(mockService.on).not.toHaveBeenCalledWith('refreshed', expect.any(Function));
+    expect(mockService.on).not.toHaveBeenCalledWith('effectiveFlagsChanged', expect.any(Function));
     expect(mockService.on).not.toHaveBeenCalledWith('identityChanged', expect.any(Function));
   });
 
@@ -379,7 +380,7 @@ describe('useToggly', () => {
     const unsubscribeIdentity = jest.fn();
 
     mockService.on.mockImplementation((event: string) => {
-      if (event === 'refreshed') return unsubscribeRefreshed;
+      if (event === 'effectiveFlagsChanged') return unsubscribeRefreshed;
       if (event === 'identityChanged') return unsubscribeIdentity;
       return () => {};
     });

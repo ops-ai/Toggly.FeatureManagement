@@ -4,13 +4,15 @@ import { render, waitFor, act } from '@testing-library/react';
 // Mock functions need to be defined before jest.mock due to hoisting
 const mockInit = jest.fn().mockResolvedValue(undefined);
 const mockDispose = jest.fn();
+const mockSetContext = jest.fn().mockResolvedValue(undefined);
 const mockSetIdentity = jest.fn().mockResolvedValue(undefined);
 const mockOn = jest.fn().mockReturnValue(() => {});
 
 // Mock the core module
 jest.mock('@ops-ai/react-native-toggly-core', () => {
   const mockService = jest.fn().mockImplementation(() => ({
-    init: mockInit,
+    initialized: false,
+    async init() { await mockInit(); this.initialized = true; },
     dispose: mockDispose,
     refresh: jest.fn().mockResolvedValue(undefined),
     isFeatureOn: jest.fn().mockResolvedValue(true),
@@ -19,6 +21,7 @@ jest.mock('@ops-ai/react-native-toggly-core', () => {
     on: mockOn,
     addStateChangeHandler: jest.fn().mockReturnValue(() => {}),
     setIdentity: mockSetIdentity,
+    setContext: mockSetContext,
     getDebugInfo: jest.fn().mockReturnValue({ version: '1.0.0' }),
     currentIdentity: null,
     currentFeatures: { feature1: true },
@@ -276,7 +279,7 @@ describe('TogglyProvider', () => {
 
     // Identity change should be called
     await waitFor(() => {
-      expect(mockSetIdentity).toHaveBeenCalled();
+      expect(mockSetContext).toHaveBeenCalledWith({identity: 'user-2', instanceId: ''});
     });
   });
 

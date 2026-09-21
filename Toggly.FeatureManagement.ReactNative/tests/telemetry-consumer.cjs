@@ -16,7 +16,7 @@ module.exports = function verifyTelemetry(createStorage) {
     const storage = createStorage();
     const save = jest.spyOn(storage, 'set');
     const client = new TogglyService({
-      appKey: 'packed-native', environment: 'Test', identity: 'not-in-telemetry',
+      appKey: 'packed-native', environment: 'Test', identity: 'native-user', instanceId: 'storage-token',
       metricsBaseUrl: 'https://collector.invalid', featureDefaults: { on: true },
       storage, refreshInterval: 0, enableLiveUpdates: false,
     });
@@ -26,7 +26,7 @@ module.exports = function verifyTelemetry(createStorage) {
       client.recordUsage('on'); client.recordView('on'); client.incrementCounter('orders');
       await client.flushTelemetry();
       expect(packets).toHaveLength(1);
-      expect(packets[0].body).toEqual({ k: 'packed-native', e: 'Test', f: { on: { enabled: [1, 1, 1] } }, m: { orders: 1 } });
+      expect(packets[0].body).toEqual({ k: 'packed-native', e: 'Test', i: 'storage-token', f: { on: { enabled: [1, 1, 1] } }, m: { orders: 1 } });
       expect(packets[0].options.headers).toEqual({ 'Content-Type': 'application/json' });
       expect(packets[0].options.credentials).toBe('omit');
       expect(save).not.toHaveBeenCalled();

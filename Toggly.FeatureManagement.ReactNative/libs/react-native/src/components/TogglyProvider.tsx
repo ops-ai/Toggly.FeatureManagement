@@ -137,12 +137,14 @@ export function TogglyProvider(props: TogglyProviderProps): React.ReactElement {
   // A new app/environment/collector is a different owner, including all child hook state.
   const ownerKey = JSON.stringify([props.appKey, props.environment, props.baseURI,
     props.enableTelemetry, props.metricsBaseUrl, props.telemetryFlushIntervalMs]);
-  return <TogglyProviderOwner key={ownerKey} {...props} />;
+  const currentOwnerKey = useRef(ownerKey);
+  currentOwnerKey.current = ownerKey;
+  return <TogglyProviderOwner key={ownerKey} {...props} ownerKey={ownerKey} currentOwnerKey={currentOwnerKey} />;
 }
 
 function TogglyProviderOwner({
-  children, onReady, onError, loadingComponent, waitForInit = true, ...config
-}: TogglyProviderProps): React.ReactElement {
+  children, onReady, onError, loadingComponent, waitForInit = true, ownerKey, currentOwnerKey, ...config
+}: TogglyProviderProps & {ownerKey: string; currentOwnerKey: React.MutableRefObject<string>}): React.ReactElement {
   const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -151,25 +153,35 @@ function TogglyProviderOwner({
   const initialConfig = useRef(config);
   const callbacks = useRef({ onReady, onError });
   callbacks.current = { onReady, onError };
+  const publishOwner = useRef<(() => void) | undefined>(undefined);
+  const previousContext = useRef({ identity: config.identity, instanceId: config.instanceId, groups: JSON.stringify(config.groups), claims: JSON.stringify(config.claims) });
 
   useEffect(() => {
     let retired = false;
+    let notified = false;
     const settings = initialConfig.current;
     const service = new TogglyService({
       ...settings,
-      onError: error => callbacks.current.onError?.(error),
+      onError: error => { if (!retired) callbacks.current.onError?.(error); },
       appState: createAppStateProvider(),
       networkInfo: settings.networkInfo ?? tryCreateNetInfoProvider(),
     });
+    const publish = () => {
+      if (retired || togglyRef.current !== service) return;
+      setIsReady(service.initialized);
+      setIsLoading(!service.initialized);
+      setFeaturesRevision(revision => revision + 1);
+      if (service.initialized && !notified) { notified = true; callbacks.current.onReady?.(); }
+    };
     togglyRef.current = service;
+    publishOwner.current = publish;
     setIsReady(false);
     setIsLoading(true);
     setError(null);
     // Publish the owner for waitForInit=false without waiting for network/storage.
     setFeaturesRevision(revision => revision + 1);
-    service.on('effectiveFlagsChanged', () => {
-      if (!retired) setFeaturesRevision(revision => revision + 1);
-    });
+    service.on('effectiveFlagsChanged', publish);
+    service.on('initialized', publish);
     service.on('error', event => {
       if (!retired) {
         const payload = event.data as { error?: unknown } | undefined;
@@ -178,9 +190,7 @@ function TogglyProviderOwner({
     });
     void service.init().then(() => {
       if (retired) return;
-      setIsReady(true);
-      setIsLoading(false);
-      callbacks.current.onReady?.();
+      publish();
     }).catch(err => {
       if (retired) return;
       const failure = err instanceof Error ? err : new Error('Initialization failed');
@@ -190,20 +200,37 @@ function TogglyProviderOwner({
     });
     return () => {
       retired = true;
-      service.dispose();
-      if (togglyRef.current === service) togglyRef.current = null;
+      service.dispose(currentOwnerKey.current === ownerKey ? undefined : { flush: false });
+      if (togglyRef.current === service) { togglyRef.current = null; publishOwner.current = undefined; }
     };
   }, []);
 
-  // Handle identity changes from props
+  // Supplied targeting props can change while the initial request is pending.
   useEffect(() => {
-    if (isReady && togglyRef.current && config.identity !== undefined) {
-      const currentIdentity = togglyRef.current.currentIdentity;
-      if (config.identity !== currentIdentity) {
-        togglyRef.current.setIdentity(config.identity ?? null);
-      }
+    const next = { identity: config.identity, instanceId: config.instanceId, groups: JSON.stringify(config.groups), claims: JSON.stringify(config.claims) };
+    if (Object.keys(next).every(key => next[key as keyof typeof next] === previousContext.current[key as keyof typeof next])) return;
+    const previous = previousContext.current;
+    previousContext.current = next;
+    const service = togglyRef.current;
+    if (!service) return;
+    const update: Parameters<TogglyService['setContext']>[0] = {};
+    if (next.identity !== previous.identity) {
+      update.identity = config.identity ?? '';
+      update.instanceId = config.instanceId ?? '';
     }
-  }, [config.identity, isReady]);
+    if (next.instanceId !== previous.instanceId) update.instanceId = config.instanceId ?? '';
+    if (next.groups !== previous.groups) update.groups = config.groups ?? [];
+    if (next.claims !== previous.claims) update.claims = config.claims ?? {};
+    void service.setContext(update).then(() => {
+      if (togglyRef.current === service) publishOwner.current?.();
+    }).catch(cause => {
+      if (togglyRef.current !== service) return;
+      const failure = cause instanceof Error ? cause : new Error('Context update failed');
+      setError(failure);
+      publishOwner.current?.();
+      callbacks.current.onError?.(failure);
+    });
+  }, [config.identity, config.instanceId, JSON.stringify(config.groups), JSON.stringify(config.claims)]);
 
   // Create context value
   const contextValue: TogglyContextValue | null = togglyRef.current

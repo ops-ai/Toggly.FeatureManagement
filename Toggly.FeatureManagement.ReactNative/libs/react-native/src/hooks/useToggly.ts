@@ -62,6 +62,9 @@ export interface UseTogglyResult extends Pick<TogglyService, 'recordUsage' | 're
    */
   setIdentity: (identity: string | null) => Promise<void>;
 
+  /** Atomically update the owning Core context, including token rotation or clearing. */
+  setContext: (context: Parameters<TogglyService['setContext']>[0]) => Promise<void>;
+
   /**
    * Get debug information
    */
@@ -111,6 +114,7 @@ export function useToggly(): UseTogglyResult {
 
   const currentOwner = useRef(toggly);
   currentOwner.current = toggly;
+  const refreshIntent = useRef(0);
   const [snapshot, setSnapshot] = useState(() => ({
     owner: toggly, identity: toggly.currentIdentity, features: toggly.currentFeatures,
     isRefreshing: false,
@@ -132,8 +136,8 @@ export function useToggly(): UseTogglyResult {
   useEffect(() => {
     if (!isReady) return;
     let retired = false;
-    const offFeatures = toggly.on('refreshed', event => {
-      if (!retired) update({ features: event.data as FeatureFlags });
+    const offFeatures = toggly.on('effectiveFlagsChanged', () => {
+      if (!retired) update({ features: toggly.currentFeatures, identity: toggly.currentIdentity });
     });
     const offIdentity = toggly.on('identityChanged', event => {
       if (!retired) update({ identity: (event.data as { newIdentity: string | null }).newIdentity });
@@ -164,12 +168,13 @@ export function useToggly(): UseTogglyResult {
   );
 
   const refresh = useCallback(async (): Promise<void> => {
+    const intent = ++refreshIntent.current;
     update({ isRefreshing: true });
     try {
       await toggly.refresh();
       update({ features: toggly.currentFeatures });
     } finally {
-      update({ isRefreshing: false });
+      if (intent === refreshIntent.current) update({ isRefreshing: false });
     }
   }, [toggly, update]);
 
@@ -181,6 +186,11 @@ export function useToggly(): UseTogglyResult {
     },
     [toggly, update]
   );
+
+  const setContext = useCallback(async (context: Parameters<TogglyService['setContext']>[0]): Promise<void> => {
+    await toggly.setContext(context);
+    update({ identity: toggly.currentIdentity, features: toggly.currentFeatures });
+  }, [toggly, update]);
 
   const getDebugInfo = useCallback((): TogglyDebugInfo => {
     return toggly.getDebugInfo();
@@ -218,6 +228,7 @@ export function useToggly(): UseTogglyResult {
     isFeatureOff,
     refresh,
     setIdentity,
+    setContext,
     getDebugInfo,
     on,
     onFeatureChange,

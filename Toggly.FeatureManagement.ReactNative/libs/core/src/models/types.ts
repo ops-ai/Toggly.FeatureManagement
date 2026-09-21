@@ -125,6 +125,9 @@ export interface TogglyConfig {
    */
   identity?: string;
 
+  /** Host-minted frontend token; takes precedence over client identity targeting. */
+  instanceId?: string;
+
   /**
    * User groups for group-based targeting rules
    */
