@@ -2,6 +2,11 @@
 
 2026-09-18
 
+### Fixed
+
+- Use current identity persistence settings when initializing an existing provider
+  after its persistence option or storage key changes.
+
 ### Added
 
 - Forward host-provided instance tokens with identity fallback and isolated, bounded

@@ -60,6 +60,10 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
       && window.fixture.current.isReady, {timeout: 10000}, expected)
   }
   await state('on')
+  assert.deepEqual(await page.evaluate(async () => {
+    const owner = window.fixture.current
+    return Promise.all(['all', 'any'].flatMap(requirement => [false, true].map(negate => owner.evaluateFeatureGate([], requirement, negate))))
+  }), [true, false, true, false], 'packed browser preserves legacy empty-gate results')
   await page.click('#local-off'); await state('off')
   await page.click('#local-on'); await state('on')
   // Identity refresh must preserve already queued events on this owner.

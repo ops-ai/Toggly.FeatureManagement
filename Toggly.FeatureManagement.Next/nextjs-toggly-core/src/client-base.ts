@@ -124,7 +124,12 @@ export function createClient(
   const snapshots = new Map<string, {features: FeatureDefinitions; revision: string | null}>()
   const scopeKey = () => JSON.stringify([
     config.baseUri, config.appKey, config.environment, config.evaluationMode ?? 'remote',
-    config.instanceId?.trim() ? ['i', config.instanceId.trim()] : ['u', config.identity ?? '', [...(config.groups ?? [])].sort(), Object.entries(config.claims ?? {}).sort(([a], [b]) => a.localeCompare(b))],
+    config.instanceId?.trim() ? ['i', config.instanceId.trim()] : ['u', config.identity ?? '', [...(config.groups ?? [])].sort((a, b) => {
+      // Preserve the cache key's existing UTF-16 order, independent of locale.
+      if (a < b) return -1
+      if (a > b) return 1
+      return 0
+    }), Object.entries(config.claims ?? {}).sort(([a], [b]) => a.localeCompare(b))],
   ])
   const storageKey = () => `${config.featuresStorageKey ?? 'toggly:features'}:v3:${encodeURIComponent(JSON.stringify([
     config.baseUri, config.appKey, config.environment, config.evaluationMode ?? 'remote',
@@ -1094,6 +1099,8 @@ export function createClient(
           negate,
         )
       }
+
+      if (policy.frontend && featureKeys.length === 0) return !negate
 
       const snapshot = policy.frontend ? captureEvaluation() : undefined
       const entityContext = normalizeEntityContext(context, kind)

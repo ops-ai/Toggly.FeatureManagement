@@ -31,6 +31,41 @@ describe('browser compact telemetry boundary', () => {
     clients.forEach(value => value.destroy()); await new Promise(resolve => setImmediate(resolve))
     vi.restoreAllMocks(); vi.unstubAllGlobals()
   })
+  it('preserves canonical group snapshot keys across Unicode input permutations', async () => {
+    const storage = new Map<string, string>()
+    vi.stubGlobal('localStorage', {getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)})
+    const groups = ['ä', '2', 'A', '😀', 'a', '10', 'Z', 'a']
+    const original = [...groups]
+    fetchMock.mockImplementation(async (_url, init) => new Headers(init?.headers).get('If-None-Match') === 'groups'
+      ? new Response(null, {status:304,headers:{etag:'groups'}})
+      : new Response(JSON.stringify({defs:{On:true}}), {headers:{etag:'groups'}}))
+    const value = client({groups,persistFeatures:true,enableTelemetry:false})
+    await value.init()
+    const records = () => JSON.parse([...storage.values()][0])
+    expect(JSON.parse(records()[0][0])[4][2]).toEqual(['10', '2', 'A', 'Z', 'a', 'a', 'ä', '😀'])
+    await value.setContext({groups:[...groups].reverse()})
+    expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get('If-None-Match')).toBe('groups')
+    expect(records()).toHaveLength(1)
+    expect(await value.isFeatureOn('On')).toBe(true)
+    expect(groups).toEqual(original)
+  })
+  it.each([
+    ['all', false], ['all', true], ['any', false], ['any', true],
+  ] as const)('preserves empty %s gates with negate=%s across browser and trusted clients', async (requirement, negate) => {
+    const beforeEvaluation = vi.fn()
+    const browser = client({hooks:[{getMetadata:()=>({name:'empty'}),beforeEvaluation}]})
+    const browserWindow = window; const browserDocument = document
+    vi.stubGlobal('window', undefined); vi.stubGlobal('document', undefined)
+    const trusted = createTogglyClient({enableUsageTracking:false,enableMetrics:false,hooks:[{getMetadata:()=>({name:'empty'}),beforeEvaluation}]})
+    clients.push(trusted)
+    vi.stubGlobal('window', browserWindow); vi.stubGlobal('document', browserDocument)
+    expect(await browser.evaluateFeatureGate([], requirement, negate)).toBe(!negate)
+    expect(await trusted.evaluateFeatureGate([], requirement, negate)).toBe(!negate)
+    await browser.flushTelemetry()
+    expect(beforeEvaluation).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(sent).toEqual([])
+  })
   it('defaults browser checks on, preserves effective short circuit and never sends trusted telemetry', async () => {
     const value = client({identity: 'private-user', groups: ['private-group'], claims: {role: 'private-role'}})
     await value.init(); await value.flushTelemetry(); expect(sent).toEqual([])

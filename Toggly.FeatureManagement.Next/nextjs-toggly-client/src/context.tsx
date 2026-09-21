@@ -154,7 +154,7 @@ function TogglyProviderOwner({
         if (mountedRef.current && operation === operationRef.current) setIsLoading(false)
       }
     },
-    [client, config.persistFeatures, config.featuresStorageKey]
+    [client, config.persistIdentity, config.identityStorageKey]
   )
 
   const refresh = useCallback(async () => {

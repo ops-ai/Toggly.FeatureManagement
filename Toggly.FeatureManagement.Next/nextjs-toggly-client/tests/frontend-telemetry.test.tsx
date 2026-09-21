@@ -23,6 +23,20 @@ describe('Next browser provider telemetry', () => {
     }))
   })
   afterEach(async () => {cleanup(); await settle(); vi.restoreAllMocks(); vi.unstubAllGlobals()})
+  it.each(['enabled', 'storage-key'])('uses current identity persistence settings after a same-owner %s update', async changed => {
+    const firstKey = 'oracle-identity-first'
+    const secondKey = 'oracle-identity-second'
+    localStorage.removeItem(firstKey); localStorage.removeItem(secondKey)
+    const view = render(<TogglyProvider config={{...baseConfig,persistIdentity:changed==='storage-key',identityStorageKey:firstKey}} autoInit={false}><Probe/></TogglyProvider>)
+    await act(settle)
+    const owner = context.client
+    view.rerender(<TogglyProvider config={{...baseConfig,persistIdentity:true,identityStorageKey:changed==='storage-key'?secondKey:firstKey}} autoInit={false}><Probe/></TogglyProvider>)
+    await act(async () => {await context.init()})
+    expect(context.client).toBe(owner)
+    expect(localStorage.getItem(changed==='storage-key'?secondKey:firstKey)).toBe('owner')
+    if (changed==='storage-key') expect(localStorage.getItem(firstKey)).toBeNull()
+    localStorage.removeItem(firstKey); localStorage.removeItem(secondKey)
+  })
   it('shares a typed compact companion and counts hook/component effective evaluations once', async () => {
     function Gate() {const result = useFeatureGate(['Off', 'On'], 'all', true); return <span data-testid="gate">{String(result.isAllowed)}</span>}
     render(<TogglyProvider config={baseConfig}><Probe/><Gate/><Feature featureKey="On"><span>visible</span></Feature><FeatureVariant featureKey="On" enabled="variant-on" disabled="variant-off"/><FeatureSwitch featureKey="On" cases={{on: 'switch-on', off: 'switch-off'}}/></TogglyProvider>)

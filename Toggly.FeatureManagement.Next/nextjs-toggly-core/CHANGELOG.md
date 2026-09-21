@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Preserve the existing empty-gate result for browser and trusted clients without
+  recording feature checks, and retain locale-independent group cache ordering.
 - Restore persisted mixed boolean and entity-gate definitions with their matching
   revision after owner replacement, including offline and 304 refreshes.
 - Advertise the package version consistently in definitions and socket metadata.
