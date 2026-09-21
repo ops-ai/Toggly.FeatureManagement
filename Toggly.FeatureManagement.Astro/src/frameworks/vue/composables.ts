@@ -4,7 +4,7 @@
 
 import { computed, getCurrentInstance, onMounted, ref, type Ref } from 'vue';
 import { useStore } from '@nanostores/vue';
-import { $flag, $gate, $isReady, $variants, $flags, $localGatesRevision } from '../../client/store.js';
+import { $flag, $gate, $isReady, $variant, $flags, $localGatesRevision } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
 
 /** @internal Preserve the SSR loading snapshot until the island mounts. */
@@ -71,15 +71,5 @@ export function useFeatureGate(
  * Composable for the current variant assignment of a feature (requires enableVariants in config).
  */
 export function useVariant(featureKey: string): Readonly<Ref<VariantResult | null>> {
-  const variants = useStore($variants);
-  return computed(() => {
-    const entry = variants.value[featureKey];
-    if (!entry?.variant) {
-      return null;
-    }
-    return {
-      name: entry.variant,
-      configurationValue: entry.configurationValue,
-    };
-  });
+  return useStore($variant(featureKey));
 }

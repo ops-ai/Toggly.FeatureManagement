@@ -7,3 +7,5 @@
 export { featureFlag, featureGate, featureVariant, flags, isReady, variants } from './stores.js';
 
 
+
+export {recordUsage, recordView, incrementCounter, setGauge, flushTelemetry} from '../../client/store.js';

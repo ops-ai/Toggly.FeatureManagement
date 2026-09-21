@@ -12,7 +12,7 @@ export default defineConfig({
   output: staticBuild ? 'static' : 'server',
   adapter: staticBuild ? undefined : node({ mode: 'standalone' }),
   integrations: [...islandIntegrations, toggly({
-    baseURI: process.env.DEFINITIONS_URL,
+    baseURI: process.env.DEFINITIONS_URL, metricsBaseUrl: process.env.METRICS_URL,
     appKey: 'packed-host', environment: 'Test',
     verifySignatures: true, flagDefaults: { Visible: false, Hidden: false },
     featureFlagsRefreshInterval: 0, enableLiveUpdates: false,

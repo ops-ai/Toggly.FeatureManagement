@@ -9,6 +9,12 @@ import type { LocalGate } from '@ops-ai/toggly-local-gates';
  * Configuration options for Toggly integration
  */
 export interface TogglyConfig {
+  /** Enable compact browser telemetry (default: true with an app key). */
+  enableTelemetry?: boolean;
+  /** Enable browser app-level business metrics (default: true). */
+  enableMetrics?: boolean;
+  /** Browser telemetry interval, 30000–60000 ms (default: 45000). */
+  telemetryFlushIntervalMs?: number;
   /** Base URI for the Toggly definitions API (default: 'https://definitions.toggly.io') */
   baseURI?: string;
   /** Whether signatures should be verified on signed responses */

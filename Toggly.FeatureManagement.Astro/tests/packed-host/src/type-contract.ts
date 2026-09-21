@@ -10,3 +10,11 @@ export const vueProps: VueFeatureProps = { flags: ['Visible'], requirement: 'all
 export function publicTypes(client: TogglyServer) {
   return [client.getFlag('Visible'), featureFlag('Visible'), featureGate(['Visible']), featureVariant('Visible')];
 }
+
+import {recordUsage, recordView, incrementCounter, setGauge, flushTelemetry, destroyTogglyClient} from '@ops-ai/astro-feature-flags-toggly/client/store';
+export function browserTelemetryTypes() {
+  recordUsage('Visible'); recordView('Visible', 'control'); incrementCounter('orders', 2); setGauge('cart', 3);
+  const completion: Promise<void> = flushTelemetry();
+  destroyTogglyClient(); return completion;
+}
+export const telemetryConfig: TogglyIntegrationOptions = {enableTelemetry: true, enableMetrics: true, metricsBaseUrl: 'https://collector.example/base', telemetryFlushIntervalMs: 45000};

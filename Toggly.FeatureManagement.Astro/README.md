@@ -9,6 +9,62 @@ Feature flag management for Astro applications with support for SSR, SSG, and cl
   <a href="https://toggly.io"><img src="https://img.shields.io/badge/website-toggly.io-0A66C2.svg" alt="Website"></a>
 </p>
 
+
+## Browser telemetry
+
+The browser store owns one reporter shared by React, Vue, Svelte and native Astro
+client components. It is enabled by default with an app key. Configure
+`enableTelemetry`, `metricsBaseUrl` (default `https://metrics.toggly.io`) and
+`telemetryFlushIntervalMs` (30000–60000 ms, default 45000) in the Astro integration
+or `initTogglyClient()`.
+
+```ts
+import {
+  recordUsage, recordView, incrementCounter, setGauge, flushTelemetry,
+} from '@ops-ai/astro-feature-flags-toggly/client/store'
+
+recordUsage('Checkout')
+recordView('Checkout', 'control')
+incrementCounter('orders', 2)
+setGauge('cartSize', 3)
+await flushTelemetry()
+```
+
+These methods are also exported by the React, Vue and Svelte entries. Usage/view
+variants default to `enabled`; variant labels allow 1–64 ASCII letters, digits,
+underscores or hyphens. Counter inputs are nonnegative integers; gauges retain
+the latest finite nonnegative value. Each input value is at most 1,000,000.
+
+Automatic checks record effective local/entity-gated leaves before negation,
+retaining short circuit. Variant APIs and framework variant helpers report the
+assigned variant only when enabled; denied assignments report `disabled`.
+`getVariantValue()` delegates once. Subscribed computed atoms count actual
+reevaluations; unchanged memoized reads and internal snapshots remain silent.
+Hydration does not add synthetic checks, usage or views. Usage and views are
+explicit application events.
+
+Set `enableTelemetry: false` to disable the browser reporter.
+`enableUsageTracking: false` disables checks/usage/views; `enableMetrics: false`
+disables app-level business metrics. Invalid intervals use the default. Invalid
+collector URLs disable telemetry without changing evaluation; use absolute
+HTTP(S) URLs without credentials, query or fragment. Browser payloads contain
+only app/environment, feature/variant counts and numeric metrics, excluding
+identity, groups, claims, entity data, timestamps and metric attribution.
+
+Requests omit credentials and use native gzip when available. Buffers, timeout
+and retries are bounded. Hidden/pagehide flushing uses plain keepalive requests.
+Island unmount and Astro navigation detach island subscriptions while the shared
+browser owner remains available to other islands. Call `destroyTogglyClient()`
+when the application releases the browser client; it synchronously releases its
+resources and initiates one bounded final flush. Reinitializing with another
+app/environment or telemetry configuration disposes the previous owner without
+relabeling queued events. Identical initialization is idempotent. Identity
+refresh on the same owner preserves queued events.
+
+SSR/build imports create no frontend telemetry resources. Server `Feature.astro`,
+SSG behavior, middleware and trusted server telemetry retain their existing
+ownership and APIs.
+
 ## Features
 
 - 🚀 **Native Astro Components** - Server-rendered `.astro` components for optimal performance

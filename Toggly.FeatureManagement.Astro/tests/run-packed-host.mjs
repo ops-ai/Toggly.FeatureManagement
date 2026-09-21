@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { createHash, webcrypto } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import {gunzipSync} from 'node:zlib';
+import { cp, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -38,6 +39,7 @@ let artifactHash;
 if (registryVersion) {
   assert.match(registryVersion, /^\d+\.\d+\.\d+$/, 'SDK_REGISTRY_VERSION must be an exact stable version');
   assert.equal(process.env.SIGNED_DEFS_ARTIFACT, undefined, 'Registry verification must not override a shared dependency');
+  assert.equal(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL, undefined, 'Registry verification must not override telemetry');
   sdkDependency = registryVersion;
   console.log(`Installing Astro SDK ${registryVersion} entirely from the public registry`);
 } else {
@@ -65,12 +67,17 @@ if (process.env.SIGNED_DEFS_ARTIFACT) {
   manifest.overrides = { '@ops-ai/toggly-signed-defs': '$@ops-ai/toggly-signed-defs' };
   console.log('Using explicit local signed-defs artifact; this is not public-registry evidence.');
 }
+if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
+  dependencies['@ops-ai/toggly-client-telemetry'] = process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL;
+  console.log('LOCAL TELEMETRY ARTIFACT: registry acceptance pending');
+}
 await writeFile(path.join(root, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 await run([npm, 'install', '--no-audit', '--no-fund', '--engine-strict']);
 await run([npm, 'ci', '--no-audit', '--no-fund', '--engine-strict']);
 await run([npm, 'ls', '--depth=0']);
 const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json')));
 const localPackages = new Set(registryVersion ? [] : ['node_modules/@ops-ai/astro-feature-flags-toggly']);
+if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) localPackages.add('node_modules/@ops-ai/toggly-client-telemetry');
 if (process.env.SIGNED_DEFS_ARTIFACT) localPackages.add('node_modules/@ops-ai/toggly-signed-defs');
 for (const [name, entry] of Object.entries(lock.packages)) {
   if (!name || localPackages.has(name)) continue;
@@ -80,7 +87,7 @@ for (const [name, entry] of Object.entries(lock.packages)) {
 }
 const evidence = {
   node: process.version, astro: selected.astro,
-  mode: registryVersion ? 'registry-sdk-and-dependencies' : process.env.SIGNED_DEFS_ARTIFACT ? 'packed-sdk-with-local-dependency-override' : 'packed-sdk-with-registry-dependencies',
+  mode: process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL ? 'packed-sdk-with-local-telemetry-artifact' : registryVersion ? 'registry-sdk-and-dependencies' : process.env.SIGNED_DEFS_ARTIFACT ? 'packed-sdk-with-local-dependency-override' : 'packed-sdk-with-registry-dependencies',
   artifactHash,
   packages: Object.fromEntries(Object.entries(lock.packages).filter(([name]) => name.includes('/@ops-ai/'))),
 };
@@ -98,6 +105,21 @@ async function signed(defs) {
   const signature = Buffer.from(await webcrypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, digest)).toString('base64');
   return { defs, signature, timestamp, kid: publicKey.kid };
 }
+const telemetry = []; const telemetryHeaders = []; let telemetryPreflights = 0;
+const metrics = createServer((request, response) => {
+  response.setHeader('Access-Control-Allow-Origin', request.headers.origin ?? '*');
+  response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Content-Encoding');
+  if (request.method === 'OPTIONS') {telemetryPreflights++; response.writeHead(204); response.end(); return;}
+  if (request.method !== 'POST' || request.url !== '/base/api/frontend/telemetry') {response.writeHead(404); response.end(); return;}
+  const chunks = []; request.on('data', chunk => chunks.push(chunk)); request.on('end', () => {
+    const bytes = Buffer.concat(chunks); telemetryHeaders.push(request.headers);
+    telemetry.push(JSON.parse((request.headers['content-encoding'] === 'gzip' ? gunzipSync(bytes) : bytes).toString()));
+    response.writeHead(202); response.end();
+  });
+});
+await new Promise(resolve => metrics.listen(0, '127.0.0.1', resolve));
+environment.METRICS_URL = `http://127.0.0.1:${metrics.address().port}/base`;
 let remoteEnabled = true;
 let tampered = false;
 let fetchCount = 0;
@@ -142,6 +164,17 @@ try {
   await run([astro, 'check']);
   await run([path.join(root, 'node_modules/typescript/bin/tsc'), '--noEmit']);
   await run([astro, 'build'], root, { HOST_OUTPUT: 'static' });
+  async function browserFiles(directory) {
+    const result = [];
+    for (const entry of await readdir(directory, {withFileTypes: true})) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) result.push(...await browserFiles(file)); else if (file.endsWith('.js')) result.push(file);
+    }
+    return result;
+  }
+  for (const file of await browserFiles(path.join(root, 'dist/_astro'))) {
+    assert.doesNotMatch(await readFile(file, 'utf8'), /api\/usage\/stats|api\/metrics|UsageTelemetryRuntime|UsageBatcher|MetricsBatcher|grpc-js|protobufjs|node:fs/, `Trusted code in browser asset ${file}`);
+  }
   const html = await readFile(path.join(root, 'dist/index.html'), 'utf8');
   assert.match(html, /id="server-visible"/);
   assert.doesNotMatch(html, /id="server-hidden"/);
@@ -184,6 +217,14 @@ try {
     }
   }
   await assertIslands(true);
+  await page.evaluate(() => window.telemetry.flushTelemetry());
+  assert.equal(telemetry.reduce((count, body) => count + (body.f?.Visible?.enabled?.[0] ?? 0), 0), 9, 'one effective check per initial island consumer including FeatureClient');
+  assert.ok(telemetry.every(body => Object.values(body.f ?? {}).every(variants => Object.values(variants).every(counts => counts.length === 1))), 'hydration does not imply usage or views');
+  telemetry.length = 0;
+  // DOMContentLoaded plus Astro page-load must not attach another FeatureClient.
+  await page.evaluate(() => document.dispatchEvent(new Event('astro:page-load')));
+  await page.evaluate(() => window.telemetry.flushTelemetry());
+  assert.deepEqual(telemetry, [], 'repeated hydration is silent');
   const beforeLocal = fetchCount;
   await page.locator('#local').click();
   await assertIslands(false);
@@ -206,6 +247,26 @@ try {
   await page.locator('#refresh').click();
   await assertIslands(true);
   assert.deepEqual(errors, [], 'island hydration and refresh have no browser exceptions');
+  await page.evaluate(() => window.telemetry.flushTelemetry());
+  assert.ok(telemetry.some(body => body.f?.Visible?.disabled?.[0] > 0));
+  telemetry.length = 0;
+  const record = () => page.evaluate(() => {window.telemetry.recordUsage('Visible'); window.telemetry.recordView('Visible', 'control'); window.telemetry.incrementCounter('orders', 2); window.telemetry.setGauge('cart', 3);});
+  const expected = {k: 'packed-host', e: 'Test', f: {Visible: {enabled: [0,1], control: [0,0,1]}}, m: {orders: 2, cart: 3}};
+  await record(); await page.evaluate(() => window.telemetry.flushTelemetry()); assert.deepEqual(telemetry, [expected]);
+  assert.ok(telemetryPreflights > 0); assert.ok(telemetryHeaders.some(headers => headers['content-encoding'] === 'gzip'));
+  assert.ok(telemetryHeaders.every(headers => !headers.cookie && !headers.authorization));
+  const waitCount = async count => {const until = Date.now() + 5000; while (telemetry.length < count && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 20)); assert.equal(telemetry.length, count);};
+  await record(); await page.evaluate(() => window.dispatchEvent(new Event('pagehide'))); await waitCount(2); assert.deepEqual(telemetry[1], expected);
+  assert.equal(telemetryHeaders[telemetryHeaders.length - 1]['content-encoding'], undefined);
+  await page.evaluate(() => {window.telemetry.recordUsage('NavigationQueued'); window.beforeNavigationOwner = window.telemetry;});
+  await page.locator('#navigate').click(); await page.waitForURL('**/navigation/'); await assertIslands(true);
+  await page.evaluate(() => window.telemetry.flushTelemetry());
+  assert.equal(await page.evaluate(() => window.telemetry === window.beforeNavigationOwner), true, 'navigation preserves the browser store module');
+  assert.equal(telemetry[2].f.NavigationQueued.enabled[1], 1, 'navigation retains the existing reporter queue');
+  assert.equal(telemetry[2].f.Visible.enabled[0], 9, 'new route consumers evaluate once');
+  telemetry.length = 2;
+  await record(); await page.evaluate(() => window.telemetry.destroyTogglyClient()); await waitCount(3); assert.deepEqual(telemetry[2], expected);
+  await page.evaluate(() => {window.telemetry.recordUsage('Disposed');}); await page.evaluate(() => window.telemetry.flushTelemetry()); assert.equal(telemetry.length, 3);
   await page.close();
   await stopHost();
   // Astro 7's current React/Vue Vite plugins have an upstream mixed-dev bug:
@@ -214,7 +275,9 @@ try {
   const devFrameworks = selected.astro.startsWith('7.') ? ['react', 'vue', 'svelte'] : ['all'];
   const pageSource = await readFile(new URL('./packed-host/src/pages/index.astro', import.meta.url), 'utf8');
   for (const framework of devFrameworks) {
-    let devPage = pageSource;
+    // ClientRouter navigation is covered against the built mixed-framework host.
+    // Keep the existing dev smoke free of transition dependency re-optimization.
+    let devPage = pageSource.replace(/^import \{ClientRouter\}.*$/m, '').replace('<ClientRouter />', '');
     if (framework !== 'all') {
       for (const other of ['react', 'vue', 'svelte'].filter(name => name !== framework)) {
         const component = `${other[0].toUpperCase()}${other.slice(1)}Island`;
@@ -241,4 +304,5 @@ try {
   await browser?.close();
   await stopHost();
   await new Promise(resolve => definitions.close(resolve));
+  await new Promise(resolve => metrics.close(resolve));
 }

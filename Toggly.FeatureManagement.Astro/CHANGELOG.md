@@ -5,6 +5,22 @@
 ### Fixed
 - Default usage/metrics HTTPS host is `https://metrics.toggly.io/`.
 
+
+## [1.16.0] - 2026-09-18
+
+### Added
+- Shared browser telemetry across React, Vue, Svelte and native Astro client components, enabled by default with an app key and configurable collector/interval/opt-out.
+- Explicit usage, view, counter, latest-value gauge and awaitable flush methods; synchronous browser client disposal with bounded final flushing.
+
+### Fixed
+- Count effective checks and assigned variants once through the shared evaluator, preserving local/entity gates and short circuit.
+- Avoid telemetry from unobserved computed-store maintenance or duplicate native component hydration subscriptions.
+- Apply local gates to framework variant helpers and forward native component entity context.
+- Isolate app/environment replacement and prevent delayed initialization or refresh from restoring disposed resources.
+
+### Changed
+- Browser telemetry excludes targeting identity and attributes. Server/build telemetry ownership remains unchanged.
+
 ## 1.15.0
 
 2026-09-15
