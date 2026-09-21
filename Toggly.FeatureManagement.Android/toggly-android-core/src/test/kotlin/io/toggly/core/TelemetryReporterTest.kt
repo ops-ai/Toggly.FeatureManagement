@@ -22,6 +22,116 @@ class TelemetryReporterTest {
     }
     private fun bytes(request: Request): Int = body(request).toString().toByteArray().size
 
+    @Test fun attributionTransitionsPreserveInflightRetriesAndGaugeOrder() = runTest {
+        val requests = mutableListOf<Request>()
+        val retrying = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        val reporter = TelemetryReporter("test-app", identity = "alice", scope = backgroundScope,
+            now = { testScheduler.currentTime }, sleep = { retrying.complete(Unit); resume.await() },
+            transport = { requests += it; TelemetryResponse(if (requests.size == 1) 429 else 202) })
+        reporter.setGauge("cart", 1.0)
+        val flushing = async { reporter.flushTelemetry() }
+        retrying.await()
+        reporter.updateAttribution("token-b", "bob")
+        reporter.setGauge("cart", 2.0)
+        reporter.updateAttribution(null, "carol")
+        reporter.setGauge("cart", 3.0)
+        resume.complete(Unit); flushing.await()
+        val packets = requests.map { body(it).jsonObject }
+        assertEquals(4, packets.size)
+        assertEquals(packets[0], packets[1])
+        assertEquals("alice", packets[0].getValue("u").jsonPrimitive.content)
+        assertEquals("token-b", packets[2].getValue("i").jsonPrimitive.content)
+        assertFalse(packets[2].containsKey("u"))
+        assertEquals("carol", packets[3].getValue("u").jsonPrimitive.content)
+        assertEquals(listOf(1, 1, 2, 3), packets.map { it.getValue("m").jsonObject.getValue("cart").jsonPrimitive.int })
+        reporter.dispose()
+    }
+
+    @Test fun rapidTransitionsShareOneEntryAndMetadataInclusiveByteBudget() = runTest {
+        val requests = mutableListOf<Request>()
+        val diagnostics = mutableListOf<String>()
+        val reporter = TelemetryReporter("test-app", scope = backgroundScope, now = { testScheduler.currentTime },
+            onDiagnostic = { diagnostics += it }, transport = { requests += it; TelemetryResponse(202) })
+        repeat(2_010) {
+            reporter.updateAttribution(null, "user-$it")
+            reporter.recordUsage("flag")
+        }
+        reporter.flushTelemetry()
+        assertEquals(2_000, requests.size)
+        assertEquals((0 until 2_000).map { "user-$it" }, requests.map { body(it).jsonObject.getValue("u").jsonPrimitive.content })
+        assertTrue(requests.sumOf(::bytes) <= 262_144)
+        assertEquals(10, diagnostics.count { it == "buffer-limit" })
+        requests.clear()
+        repeat(100) {
+            reporter.updateAttribution("token-$it-" + "x".repeat(20_000), null)
+            reporter.recordUsage("flag")
+        }
+        reporter.flushTelemetry()
+        assertTrue(requests.isNotEmpty())
+        assertTrue(requests.all { bytes(it) <= 49_152 })
+        assertTrue(requests.sumOf(::bytes) <= 262_144)
+        reporter.dispose()
+    }
+
+    @Test fun disposalAfterTransitionsStillSendsOnlyOneFinalEnvelope() = runTest {
+        val requests = mutableListOf<Request>()
+        val reporter = TelemetryReporter("test-app", scope = backgroundScope, now = { testScheduler.currentTime },
+            transport = { requests += it; TelemetryResponse(202) })
+        repeat(20) { reporter.updateAttribution(null, "user-$it"); reporter.recordUsage("flag") }
+        reporter.dispose(); runCurrent()
+        assertEquals(1, requests.size)
+        assertEquals("user-0", body(requests.single()).jsonObject.getValue("u").jsonPrimitive.content)
+        assertNull(requests.single().header("Content-Encoding"))
+    }
+
+    @Test fun sharedContextTransitionFixtures() = runTest {
+        for (scenario in contract.getValue("contextTransitionScenarios").jsonArray) {
+            val row = scenario.jsonObject
+            val options = row.getValue("options").jsonObject
+            val requests = mutableListOf<Request>()
+            val reporter = TelemetryReporter(options.getValue("appKey").jsonPrimitive.content,
+                environment = options["environment"]?.jsonPrimitive?.content ?: "Production",
+                instanceId = options["instanceId"]?.jsonPrimitive?.contentOrNull,
+                identity = options["identity"]?.jsonPrimitive?.contentOrNull,
+                scope = backgroundScope, now = { testScheduler.currentTime },
+                transport = { requests += it; TelemetryResponse(202) })
+            for (event in row.getValue("events").jsonArray) {
+                val args = event.jsonArray
+                if (args[0].jsonPrimitive.content == "setContext") {
+                    val context = args[1].jsonObject
+                    reporter.updateAttribution(context["instanceId"]?.jsonPrimitive?.contentOrNull,
+                        context["identity"]?.jsonPrimitive?.contentOrNull)
+                } else {
+                    val key = args[1].jsonPrimitive.content
+                    val variant = args.getOrNull(2)?.jsonPrimitive?.content ?: "enabled"
+                    when (args[0].jsonPrimitive.content) {
+                        "recordCheck" -> reporter.recordCheck(key, variant)
+                        "recordUsage" -> reporter.recordUsage(key, variant)
+                        "recordView" -> reporter.recordView(key, variant)
+                        "incrementCounter" -> reporter.incrementCounter(key, args[2].jsonPrimitive.double)
+                        "setGauge" -> reporter.setGauge(key, args[2].jsonPrimitive.double)
+                        else -> error("Unknown fixture event")
+                    }
+                }
+            }
+            reporter.flushTelemetry()
+            assertEquals(row["name"].toString(), row["envelopes"], JsonArray(requests.map(::body)))
+            reporter.dispose()
+        }
+    }
+
+    @Test fun optedOutAndKeylessTransitionsRemainSilent() = runTest {
+        for ((key, enabled) in listOf("test-app" to false, "" to true)) {
+            val requests = mutableListOf<Request>()
+            val reporter = TelemetryReporter(key, enableTelemetry = enabled, scope = backgroundScope,
+                now = { testScheduler.currentTime }, transport = { requests += it; TelemetryResponse(202) })
+            repeat(20) { reporter.updateAttribution("token-$it", "user-$it"); reporter.recordUsage("flag") }
+            reporter.flushTelemetry(); reporter.dispose(); runCurrent()
+            assertTrue(requests.isEmpty())
+        }
+    }
+
     @Test fun sharedSerializationAndEndpointFixtures() = runTest {
         for (scenario in contract.getValue("scenarios").jsonArray) {
             val row = scenario.jsonObject

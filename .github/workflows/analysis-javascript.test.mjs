@@ -89,3 +89,15 @@ test('canonical Svelte host check also runs the real browser matrix', () => {
   assert.equal(manifest.scripts['test:host'], 'node scripts/test-host.mjs && npm run test:browser-host');
   assert.equal(manifest.scripts['test:browser-host'], 'node scripts/test-browser-host.mjs');
 });
+
+test('selects system Chrome before packed Client-Core tests', () => {
+  assert.match(
+    workflow,
+    /- name: Select system Chrome for packed Client Core\s+if: matrix\.sdk == 'Client-Core'/,
+  );
+  assert.match(workflow, /matrix\.sdk != 'Client-Core'/);
+  assert.match(
+    workflow,
+    /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Telemetry' \|\| matrix\.sdk == 'Client-Core'/,
+  );
+});

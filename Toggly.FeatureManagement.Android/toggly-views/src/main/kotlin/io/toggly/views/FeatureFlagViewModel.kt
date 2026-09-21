@@ -162,6 +162,16 @@ open class FeatureFlagViewModel(
     /** Await the current best-effort telemetry drain. */
     suspend fun flushTelemetry() = service.flushTelemetry()
 
+    /** Replace identity and its host-minted token together. */
+    fun setIdentity(identity: String?, instanceId: String?) {
+        viewModelScope.launch { service.setIdentity(identity, instanceId) }
+    }
+
+    /** Rotate or clear the host-minted token, preserving the current identity. */
+    fun setInstanceId(instanceId: String?) {
+        viewModelScope.launch { service.setInstanceId(instanceId) }
+    }
+
     /**
      * Set user identity for targeting.
      *
