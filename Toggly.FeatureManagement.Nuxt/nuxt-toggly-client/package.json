@@ -49,7 +49,7 @@
   "homepage": "https://docs.toggly.io/sdks/nuxt/client",
   "dependencies": {
     "@ops-ai/nuxt-toggly-core": "workspace:^",
-    "@ops-ai/toggly-client-telemetry": "^1.0.0"
+    "@ops-ai/toggly-client-telemetry": "^1.1.0"
   },
   "peerDependencies": {
     "vue": "^3.3.0"

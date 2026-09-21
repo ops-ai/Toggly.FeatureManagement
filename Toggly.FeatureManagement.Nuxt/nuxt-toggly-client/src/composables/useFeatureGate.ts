@@ -1,4 +1,4 @@
-import { ref, computed, watch, type Ref, type MaybeRef, toValue } from 'vue'
+import { getCurrentScope, onScopeDispose, ref, computed, watch, type Ref, type MaybeRef, toValue } from 'vue'
 import { useToggly } from './useToggly'
 import { evaluateGate, normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core/browser'
 import type { UseFeatureGateReturn, FeatureProps } from '../types'
@@ -32,6 +32,9 @@ export function useFeatureGate(
   const toggly = useToggly()
   const isLoading = ref(true)
   const enabled = ref(false)
+  let active = true
+  let request = 0
+  if (getCurrentScope()) onScopeDispose(() => {active = false; request++})
 
   const keys = computed(() => normalizeFeatureKeys(toValue(featureKeys)))
   const req = computed(() => toValue(requirement))
@@ -40,6 +43,8 @@ export function useFeatureGate(
   const kind = computed(() => toValue(contextKind))
 
   const checkGate = async () => {
+    if (!active) return
+    const current = ++request
     if (!toggly.isReady.value || !toggly.client.state.initialized) {
       // Use local evaluation (booleans only; entity gates need the client)
       enabled.value = evaluateGate(
@@ -54,17 +59,18 @@ export function useFeatureGate(
 
     isLoading.value = true
     try {
-      enabled.value = await toggly.evaluateFeatureGate(
+      const result = await toggly.evaluateFeatureGate(
         keys.value,
         req.value,
         neg.value,
         entity.value,
         kind.value,
       )
+      if (active && current === request) enabled.value = result
     } catch {
-      enabled.value = false
+      if (active && current === request) enabled.value = false
     } finally {
-      isLoading.value = false
+      if (active && current === request) isLoading.value = false
     }
   }
 
@@ -83,6 +89,8 @@ export function useFeatureGate(
   watch(
     () => toggly.features.value,
     () => {
+      request++
+      isLoading.value = false
       // Refresh/hydration projection is state synchronization, not a new
       // consumer evaluation, so it remains telemetry-silent.
       enabled.value = evaluateGate(

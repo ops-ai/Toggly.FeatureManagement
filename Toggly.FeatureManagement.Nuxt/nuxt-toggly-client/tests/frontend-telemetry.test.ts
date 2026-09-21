@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createToggly, resetToggly } from '../src/composables/useToggly'
 import { gunzipSync } from 'node:zlib'
 import { defineComponent, h, nextTick } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { TOGGLY_INJECTION_KEY } from '../src/types'
 import { useFeatureFlag } from '../src/composables/useFeatureFlag'
+import { useFeatureGate } from '../src/composables/useFeatureGate'
+import { vFeature, vFeatureShow, vFeatureClass } from '../src/directives/vFeature'
 
 async function payloadFrom(init?: RequestInit): Promise<any> {
   const body = init?.body
@@ -52,7 +54,8 @@ describe('browser telemetry facade', () => {
     const calls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/frontend/telemetry'))
     expect(calls).toHaveLength(1)
     const json = await payloadFrom(calls[0][1])
-    expect(Object.keys(json).sort()).toEqual(['e', 'f', 'k', 'm'])
+    expect(Object.keys(json).sort()).toEqual(['e', 'f', 'k', 'm', 'u'])
+    expect(json.u).toBe(toggly.identity.value)
     expect(JSON.stringify(json)).not.toContain('identity')
     expect(json.f.Flag.enabled).toEqual([1])
     expect(json.f.Flag.blue).toEqual([0, 1])
@@ -232,5 +235,85 @@ describe('browser telemetry facade', () => {
     const d = toggly.refresh(); toggly.client.destroy(); pending[3](new Response(JSON.stringify({Resurrected: true}))); await d
     expect(toggly.client.state.features).toEqual({Current: true})
   })
+
+  it('preserves queued routes on same transport and discards only a replaced transport', async () => {
+    const sent: any[] = [], replacement: any[] = []
+    const transport = vi.fn(async (_url: any, init: any) => {sent.push(await payloadFrom(init)); return {status: 202}})
+    const next = vi.fn(async (_url: any, init: any) => {replacement.push(await payloadFrom(init)); return {status: 202}})
+    const owner = createToggly({appKey: 'a', identity: 'alice', telemetryFetch: transport as any, refreshInterval: 0, enableLiveUpdates: false})
+    await owner.init(); owner.telemetry.incrementCounter('old-route')
+    await owner.init({appKey: 'b', environment: 'Staging'}); owner.telemetry.incrementCounter('new-route')
+    await owner.telemetry.flushTelemetry()
+    expect(sent.map(body => [body.k,body.e])).toEqual([['a','Production'],['b','Staging']])
+    owner.telemetry.incrementCounter('discarded')
+    await owner.init({telemetryFetch: next as any}); owner.telemetry.incrementCounter('replacement')
+    await owner.telemetry.flushTelemetry()
+    expect(sent).toHaveLength(2)
+    expect(replacement).toEqual([{k:'b',e:'Staging',u:'alice',m:{replacement:1}}])
+  })
+
+  it('survives denied storage while keeping identity and definitions in memory', async () => {
+    const getter = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')!
+    Object.defineProperty(globalThis, 'localStorage', {configurable:true, get(){throw new DOMException('denied','SecurityError')}})
+    try {
+      const owner = createToggly({appKey:'denied',instanceId:'mint',persistFeatures:true,refreshInterval:0,enableLiveUpdates:false})
+      await owner.init(); expect(await owner.isFeatureOn('Flag')).toBe(true)
+      await owner.setIdentity('bob'); expect(owner.identity.value).toBe('bob')
+    } finally {Object.defineProperty(globalThis,'localStorage',getter)}
+  })
+
+  it.each(['flag','gate'])('keeps refreshed projection after a pending %s hook without counting refresh', async kind => {
+    const owner = createToggly({appKey:'projection',instanceId:'mint',refreshInterval:0,enableLiveUpdates:false})
+    await owner.init()
+    let release!:()=>void
+    owner.client.addHook({getMetadata:()=>({name:'pending'}), beforeEvaluation:()=>new Promise<void>(resolve=>{release=resolve})})
+    const wrapper=mount(defineComponent({setup(){const state=kind==='flag'?useFeatureFlag('Flag'):useFeatureGate(['Flag']);return()=>h('span',String(state.isEnabled.value))}}), {global:{provide:{[TOGGLY_INJECTION_KEY as symbol]:owner}}})
+    try {
+      await flushPromises()
+      vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({Flag:false})))
+      await owner.refresh(); await flushPromises(); expect(wrapper.text()).toBe('false')
+      release(); await flushPromises(); expect(wrapper.text()).toBe('false')
+      await owner.telemetry.flushTelemetry()
+      const packets=await Promise.all(vi.mocked(fetch).mock.calls.filter(([url])=>String(url).includes('/api/frontend/telemetry')).map(([,init])=>payloadFrom(init)))
+      expect(packets).toEqual([{k:'projection',e:'Production',i:'mint',f:{Flag:{enabled:[1]}}}])
+    } finally {release?.();wrapper.unmount()}
+  })
+
+  it.each([['display',vFeature],['visibility',vFeatureShow],['class',vFeatureClass]] as const)('counts actual %s directive recomputation while fencing the superseded result', async (kind,directive) => {
+    const owner=createToggly({appKey:'directive',instanceId:'mint',refreshInterval:0,enableLiveUpdates:false})
+    await owner.init()
+    let release!:()=>void
+    let first = true
+    owner.client.addHook({getMetadata:()=>({name:'pending'}),beforeEvaluation:()=>{if(first){first=false;return new Promise<void>(resolve=>{release=resolve})}}})
+    const element=document.createElement('div')
+    const binding={value:'Flag',modifiers:{},arg:'enabled'} as any
+    ;(directive.mounted as any)(element,binding)
+    await flushPromises()
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({Flag:false})))
+    await owner.refresh();await flushPromises()
+    release();await flushPromises()
+    expect(kind==='display'?element.style.display:kind==='visibility'?element.style.visibility:element.classList.contains('enabled')).toBe(kind==='display'?'none':kind==='visibility'?'hidden':false)
+    ;(directive.beforeUnmount as any)(element)
+    await owner.telemetry.flushTelemetry()
+    const packets=await Promise.all(vi.mocked(fetch).mock.calls.filter(([url])=>String(url).includes('/api/frontend/telemetry')).map(([,init])=>payloadFrom(init)))
+    expect(packets).toEqual([{k:'directive',e:'Production',i:'mint',f:{Flag:{enabled:[1],disabled:[1]}}}])
+  })
+
+  // Exercises the shared owner budget through the real public transition path.
+  it('retains one bounded queue across 2200 context rotations', async () => {
+    vi.stubGlobal('CompressionStream',undefined)
+    const warn=vi.spyOn(console,'warn').mockImplementation(()=>{})
+    const owner=createToggly({appKey:'budget',identity:'first',refreshInterval:0,enableLiveUpdates:false})
+    // Before init, context changes do not fetch definitions; the first init creates the owner.
+    await owner.init()
+    for(let index=0;index<2200;index++) {owner.client.identity=`context-${index}`;owner.telemetry.incrementCounter('orders')}
+    await owner.telemetry.flushTelemetry()
+    const packets=await Promise.all(vi.mocked(fetch).mock.calls.filter(([url])=>String(url).includes('/api/frontend/telemetry')).map(([,init])=>payloadFrom(init)))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('buffer-full'))
+    expect(packets.length).toBeGreaterThan(0);expect(packets.length).toBeLessThanOrEqual(2000)
+    expect(packets.reduce((bytes,body)=>bytes+Buffer.byteLength(JSON.stringify(body)),0)).toBeLessThanOrEqual(262144)
+    expect(new Set(packets.map(body=>body.u)).size).toBe(packets.length)
+    expect(packets.every(body=>body.m.orders===1)).toBe(true)
+  },15000)
 
 })

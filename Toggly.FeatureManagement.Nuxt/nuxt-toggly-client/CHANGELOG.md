@@ -4,6 +4,10 @@
 - Default-on compact browser telemetry for effective feature checks, plus `telemetry.recordUsage`, `recordView`, `incrementCounter`, `setGauge`, and `flushTelemetry`.
 - Independent `enableTelemetry`, `enableUsageTracking`, `enableMetrics`, `metricsBaseUrl`, and `telemetryFlushIntervalMs` controls.
 
+- Forward host-provided instance tokens with `i` precedence over `u`, preserve queued attribution across context changes, and capture evaluated state before callbacks.
+- Keep browser context caches bounded and pair validators with the matching body and response mode; failed context refreshes never restore a retired user.
+- Ignore unrelated SSR/legacy snapshots for minted contexts and tolerate unavailable browser storage.
+
 ### Changed
 - Replacing a browser client disposes the previous telemetry owner, and hydration or refresh projection does not generate feature checks.
 - Browser legacy `measure` and `observe` calls are payload-free no-ops with bounded diagnostics. Legacy usage/view keep identity as the second argument and use only the third argument as the variant.

@@ -9,6 +9,7 @@ function runtime() {
   const value: FrontendTelemetryRuntime = {
     usageEnabled: true,
     metricsEnabled: true,
+    setContext: vi.fn(),
     recordCheck: vi.fn(),
     recordUsage: vi.fn(),
     recordView: vi.fn(),
@@ -93,7 +94,7 @@ describe('browser frontend telemetry bridge', () => {
     client.destroy()
   })
 
-  it('preserves one owner for same routing and isolates changed app or environment', async () => {
+  it('preserves one queue across routing changes and replaces a changed collector', async () => {
     const first = runtime()
     const second = runtime()
     const factory = vi.fn<FrontendTelemetryFactory>()
@@ -112,7 +113,11 @@ describe('browser frontend telemetry bridge', () => {
     expect(factory).toHaveBeenCalledTimes(1)
 
     await client.init({ appKey: 'new-app', environment: 'new-env' })
-    expect(first.dispose).toHaveBeenCalledOnce()
+    expect(first.dispose).not.toHaveBeenCalled()
+    expect(factory).toHaveBeenCalledTimes(1)
+    expect(first.setContext).toHaveBeenCalledWith(expect.objectContaining({appKey:'new-app',environment:'new-env'}))
+    await client.init({metricsBaseUrl:'https://replacement.example'})
+    expect(first.dispose).toHaveBeenCalledWith({flush:false})
     expect(factory).toHaveBeenCalledTimes(2)
     client.recordUsage('new-flag', undefined, 'blue')
     expect(first.recordUsage).not.toHaveBeenCalled()

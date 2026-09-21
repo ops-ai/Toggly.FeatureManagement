@@ -1,7 +1,11 @@
 ## 1.13.0 — 2026-09-18
 
 ### Added
-- Browser adapters can inject an identity-free frontend telemetry owner and expose app-level gauge metrics while trusted server telemetry remains unchanged.
+- Browser adapters can inject an context-aware frontend telemetry owner and expose app-level gauge metrics while trusted server telemetry remains unchanged.
+
+- Forward host-provided instance tokens with `i` precedence over `u`, preserve queued attribution across context changes, and capture evaluated state before callbacks.
+- Keep browser context caches bounded and pair validators with the matching body and response mode; failed context refreshes never restore a retired user.
+- Ignore unrelated SSR/legacy snapshots for minted contexts and tolerate unavailable browser storage.
 
 ### Changed
 - Feature gates short-circuit and record only the effective keys actually evaluated, after entity and local gates and before gate negation.

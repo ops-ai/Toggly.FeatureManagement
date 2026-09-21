@@ -39,7 +39,7 @@ export interface UseTogglyReturn {
   features: Ref<Record<string, boolean>>
   /** Current user identity */
   identity: Ref<string | undefined>
-  /** Compact identity-free frontend telemetry API. */
+  /** Compact frontend telemetry API with owner-level attribution. */
   telemetry: BrowserTelemetry
   /** Initialize the client */
   init: (config?: TogglyConfig) => Promise<void>
@@ -47,6 +47,7 @@ export interface UseTogglyReturn {
   refresh: () => Promise<void>
   /** Set user identity */
   setIdentity: (identity: string) => Promise<void>
+  setContext: TogglyClient['setContext']
   /** Check if a feature is enabled */
   isFeatureOn: (
     featureKey: string,

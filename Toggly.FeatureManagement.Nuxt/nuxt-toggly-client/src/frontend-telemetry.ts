@@ -33,6 +33,8 @@ export const createBrowserTelemetry: FrontendTelemetryFactory = (
   const reporter: TelemetryReporter = createTelemetryReporter({
     appKey: config.appKey,
     environment: config.environment,
+    instanceId: config.instanceId,
+    identity: config.identity,
     enableTelemetry: true,
     metricsBaseUrl: config.metricsBaseUrl,
     telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
@@ -45,6 +47,8 @@ export const createBrowserTelemetry: FrontendTelemetryFactory = (
   return {
     usageEnabled,
     metricsEnabled,
+    setContext(next) { reporter.setContext({appKey: next.appKey, environment: next.environment, instanceId: next.instanceId, identity: next.identity}) },
+    captureCheck() { return usageEnabled ? reporter.captureCheck() : () => {} },
     recordCheck(featureKey, variant) {
       if (usageEnabled) reporter.recordCheck(featureKey, variant)
     },
@@ -66,11 +70,11 @@ export const createBrowserTelemetry: FrontendTelemetryFactory = (
     unsupported(method) {
       diagnose(`browser ${method}() is unsupported; use telemetry.incrementCounter() or telemetry.setGauge()`)
     },
-    dispose() {
+    dispose(options) {
       if (disposed) return
       disposed = true
       detach()
-      reporter.dispose()
+      reporter.dispose(options)
     },
   }
 }

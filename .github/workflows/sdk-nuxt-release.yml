@@ -200,7 +200,7 @@ jobs:
           fi
           npx --yes playwright install-deps chromium
           node tests/hosts/run.mjs 3.21.1 locked
-          node tests/hosts/run.mjs 4.5.2 fresh
+          node tests/hosts/run.mjs 4.5.2 locked
 
       - name: Verify packed tarballs
         if: steps.packages.outputs.list != ''

@@ -57,6 +57,18 @@ describe('startup context forwarding', () => {
     }))
   })
 
+  it('forwards minted context and withholds an unrelated SSR identity snapshot', async () => {
+    mocks.config.instanceId = 'minted'
+    const hydrate = vi.fn()
+    mocks.create.mockImplementation(() => ({init:mocks.init,features:{value:{}},client:{hydrateEvaluatedFeatures:hydrate},isReady:{value:false}}))
+    const nuxt = {...app(),payload:{toggly:{features:{Foreign:true},identity:'ssr-user'}}}
+    await (clientPlugin as any)(nuxt)
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({instanceId:'minted'}))
+    expect(hydrate).not.toHaveBeenCalled()
+    await nuxt.hook.mock.calls.find(([name])=>name==='app:mounted')![1]()
+    expect(mocks.init).toHaveBeenCalledTimes(1)
+  })
+
   it('snapshots caller collections before initialization can yield', async () => {
     const groups = ['beta']
     const claims = { plan: 'pro' }

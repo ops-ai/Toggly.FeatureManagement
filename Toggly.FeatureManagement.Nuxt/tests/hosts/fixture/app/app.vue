@@ -1,6 +1,20 @@
 <script setup lang="ts">
 import { createToggly } from '@ops-ai/nuxt-toggly-client'
 const toggly = useToggly()
+const evaluationTrace: unknown[] = []
+let evaluationPhase = 'mount'
+if (import.meta.client && new URLSearchParams(location.search).has('evaluationDiagnostic')) {
+  for (const method of ['isFeatureOn','evaluateFeatureGate'] as const) {
+    const original = toggly.client[method].bind(toggly.client) as (...args: any[]) => Promise<boolean>
+    ;(toggly.client as any)[method] = async (...args: any[]) => {
+      const entry = {phase:evaluationPhase,method,args,identity:toggly.client.identity,initialized:toggly.client.state.initialized,result:undefined as boolean|undefined}
+      evaluationTrace.push(entry)
+      entry.result = await original(...args)
+      return entry.result
+    }
+  }
+}
+
 const { isEnabled } = useFeatureFlag('Enabled')
 const { isEnabled: any } = useFeatureGate(['Enabled', 'Disabled'], 'any')
 const mounted = ref(false)
@@ -44,6 +58,38 @@ async function replaceTelemetryOwner() {
   newOwner.telemetry.incrementCounter('new-owner-count')
   await newOwner.telemetry.flushTelemetry()
 }
+onMounted(() => {
+  ;(window as any).evaluationDiagnostic = async (phase: string) => {
+    evaluationPhase = phase
+    const start = evaluationTrace.length
+    if (phase === 'initialize') await initialize()
+    if (phase === 'identity') await identifyBob()
+    if (phase === 'refresh') await refresh()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await flushTelemetry()
+    return evaluationTrace.slice(start)
+  }
+  ;(window as any).verifyMinted = async () => {
+    const options = {appKey:'minted-fixture',instanceId:'token-a',identity:'legacy',groups:['private'],claims:{plan:'secret'},persistFeatures:true,
+      baseUri:location.origin+'/minted-definitions',metricsBaseUrl:useRuntimeConfig().public.toggly.metricsBaseUrl,refreshInterval:0,enableLiveUpdates:false}
+    const owner=createToggly(options)
+    await owner.init()
+    const results=[await owner.isFeatureOn('Flag')]
+    await owner.setContext({instanceId:'token-b'});results.push(await owner.isFeatureOn('Flag'))
+    await owner.setContext({instanceId:'token-a'});results.push(await owner.isFeatureOn('Flag'))
+    await owner.init({evaluationMode:'local'});results.push(await owner.isFeatureOn('Raw'))
+    await owner.init({evaluationMode:'remote'});results.push(await owner.isFeatureOn('Flag'))
+    await owner.telemetry.flushTelemetry()
+    const replacement=createToggly(options);await replacement.init();results.push(await replacement.isFeatureOn('Flag'))
+    replacement.client.addHook({getMetadata:()=>({name:'reentrant'}),beforeEvaluation:async()=>{await replacement.setContext({instanceId:'token-b'})}})
+    results.push(await replacement.isFeatureOn('Flag'));replacement.client.removeHook('reentrant')
+    await replacement.telemetry.flushTelemetry()
+    replacement.telemetry.incrementCounter('minted-pagehide');window.dispatchEvent(new Event('pagehide'))
+    await new Promise(resolve=>setTimeout(resolve,50))
+    replacement.client.destroy()
+    return results
+  }
+})
 </script>
 <template>
   <main>

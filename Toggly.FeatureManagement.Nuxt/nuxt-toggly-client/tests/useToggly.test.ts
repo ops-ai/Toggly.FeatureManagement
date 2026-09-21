@@ -93,7 +93,7 @@ describe('useToggly', () => {
       expect(toggly.identity.value).toBe('persisted-user')
     })
 
-    it('should load persisted features from localStorage', () => {
+    it('ignores legacy unscoped persisted features from another context', () => {
       mockLocalStorage['toggly:features'] = JSON.stringify({
         'feature-a': true,
         'feature-b': false,
@@ -104,10 +104,8 @@ describe('useToggly', () => {
         persistFeatures: true,
       })
 
-      expect(toggly.features.value).toEqual({
-        'feature-a': true,
-        'feature-b': false,
-      })
+      expect(toggly.features.value).toEqual({})
+      expect(mockLocalStorage['toggly:features']).toBeDefined()
     })
 
     it('should use custom storage keys', () => {
@@ -151,10 +149,12 @@ describe('useToggly', () => {
       })
       await toggly.init()
 
-      expect(localStorage.setItem).toHaveBeenCalledWith(
-        'toggly:features',
-        JSON.stringify({ 'feature-a': true })
-      )
+      const key = Object.keys(mockLocalStorage).find(key => key.startsWith('toggly:features:v2:'))!
+      const entries = JSON.parse(mockLocalStorage[key])
+      expect(entries).toHaveLength(1)
+      expect(entries[0][1]).toEqual({features:{'feature-a':true},definitions:[],revision:null})
+      expect(entries[0][0]).toContain(toggly.identity.value)
+      expect(mockLocalStorage['toggly:features']).toBeUndefined()
     })
 
     it('should handle init errors gracefully', async () => {
@@ -221,10 +221,12 @@ describe('useToggly', () => {
       await toggly.init()
       await toggly.refresh()
 
-      expect(localStorage.setItem).toHaveBeenLastCalledWith(
-        'toggly:features',
-        JSON.stringify({ 'feature-a': true })
-      )
+      const key = Object.keys(mockLocalStorage).find(key => key.startsWith('toggly:features:v2:'))!
+      const entries = JSON.parse(mockLocalStorage[key])
+      expect(entries).toHaveLength(1)
+      expect(entries[0][1]).toEqual({features:{'feature-a':true},definitions:[],revision:null})
+      expect(entries[0][0]).toContain(toggly.identity.value)
+      expect(mockLocalStorage['toggly:features']).toBeUndefined()
     })
   })
 

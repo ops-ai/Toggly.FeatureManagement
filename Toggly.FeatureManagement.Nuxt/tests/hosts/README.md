@@ -6,7 +6,7 @@ From this workspace, run `pnpm install --frozen-lockfile && pnpm build`, then:
 node tests/hosts/run.mjs 3.0.0    # retained Nuxt minimum
 node tests/hosts/run.mjs 3.21.1 locked # committed candidate consumer lock
 node tests/hosts/run.mjs 3.21.11  # current retained major
-node tests/hosts/run.mjs 4.5.2    # current new major
+node tests/hosts/run.mjs 4.5.2 locked # current new major
 ```
 
 Use Node 24.18+ for these current hosts. For the frozen retained Node 18
@@ -17,11 +17,13 @@ request targeting, and headless Chromium hydration/identity/refresh checks.
 Both Vue flags and public core `isFeatureOn`/gate checks must agree before
 network initialization and after identity changes.
 Install the matching Playwright Chromium browser if it is not already present.
-The printed evidence directory preserves the resolved package-lock and build.
+Owned temporary applications and processes are removed after verification, including failures. Retain the command log as execution evidence.
 The `locked` mode copies the selected `locks/<version>/package.json` and
-`package-lock.json`,
-checks that the candidate package versions and dependency mode match, and runs
-`npm ci` without resolving a fresh dependency graph. That lock records this
+`package-lock.json`, checks that candidate versions and dependency mode match,
+and uses npm to bind the freshly packed local candidate archives. It asserts
+that every public-registry lock entry remains identical, then runs `npm ci`.
+This handles pnpm changing workspace dependency key ordering between packs
+without editing integrity fields or changing the registry dependency graph. That lock records this
 candidate consumer, not an inferred replay of the SDK workspace pnpm graph.
 `fresh` (the default) resolves a new consumer graph and must be labeled as such.
 Use `record` explicitly when intentionally updating a candidate consumer lock;
@@ -31,9 +33,9 @@ The candidate boundary is four freshly packed Nuxt SDK siblings. All other
 dependencies resolve from public npm, including an explicit signer **1.2.7**.
 The runner rejects `TOGGLY_SIGNED_DEFS_ARTIFACT` and checks every dependency's
 resolved URL; no dependency tarballs, aliases, overrides, or source links are
-accepted. The two committed locks preserve all framework package versions from
-the original snapshots; only signer 1.2.6's local artifact is replaced by the
-public 1.2.7 release. This is pre-publication candidate evidence, not a claim
+accepted. The retained locks preserve framework package versions from their
+original snapshots; candidate versions and the public signer/reporter entries
+are maintained with npm. A third lock records the Nuxt 4.5.2 consumer. This is pre-publication candidate evidence, not a claim
 that all four candidate SDK versions are already published.
 
 The first production host retains manual/defaults-only initialization coverage.
@@ -50,7 +52,7 @@ The server fixture seeds deterministic raw definitions in memory through the
 existing hydration API. It tests framework integration, not signature acceptance;
 core tests retain the signed/invalid/offline protocol cases. Local fixture IDs
 are accepted only by loopback endpoints and never sent as production credentials.
-The printed evidence directory preserves the lock, packed artifacts, and build.
+The two current hosts use maintained public-registry locks. No lock integrity is patched by hand.
 
 ## Recorded host limitations
 
@@ -96,3 +98,9 @@ Node18. This historical fixture is compatibility evidence, not a recommendation
 to deploy an old framework/tool graph. The later registry refresh replaces only that signer entry with public 1.2.7;
 all frozen framework versions remain unchanged. The four SDK candidate artifacts
 remain local, as in the other packed hosts.
+
+The browser matrix also checks minted-token targeting and exact compact `i`
+payloads across owner replacement, token ABA and remote/local response-mode304
+round trips, captured reentrant checks, and plain pagehide keepalive. Eight
+real-resource failure/negative controls run before hosts. `record --lock-only`
+updates a maintained consumer graph with npm without claiming framework execution.

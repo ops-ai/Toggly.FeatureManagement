@@ -1,3 +1,4 @@
+import { createBrowserSnapshots } from './browser-snapshots'
 import type {
   TogglyConfig,
   TogglyClient,
@@ -57,11 +58,15 @@ export function createTogglyClient(
   initialConfig: TogglyConfig = {}
 ): TogglyClient {
   const hookExecutor = new HookExecutor()
+  const frontend = Boolean(initialConfig.frontendTelemetryFactory)
+  let generation = 0
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let destroyed = false
   let telemetry: TrustedTelemetryRuntime | null = null
   let frontendTelemetry: FrontendTelemetryRuntime | null = null
   let frontendTelemetrySignature: string | null = null
+  let frontendTelemetryFetch: TogglyConfig['telemetryFetch']
+  let frontendTelemetryFactory: TogglyConfig['frontendTelemetryFactory']
   /** True while a refresh is in flight — concurrent callers skip without counting. */
   let refreshInFlight = false
 
@@ -123,6 +128,41 @@ export function createTogglyClient(
   const localGatesListeners = new Set<() => void>()
   let hasHydratedEvaluatedSnapshot = false
   const featuresRefreshListeners = new Set<() => void>()
+
+  const snapshots = createBrowserSnapshots(config)
+  let activeScope = snapshots.scope()
+  let hasSnapshot = false
+  function restoreSnapshot() {
+    hasSnapshot = false
+    cachedDefinitionsRevision = null
+    pendingDefinitionsPin = null
+    state.features = {...config.featureDefaults}
+    state.definitions = new Map()
+    const cached = snapshots.restore()
+    if (cached) {
+      state.features = {...cached.features}
+      state.definitions = indexDefinitions(cached.definitions)
+      cachedDefinitionsRevision = cached.revision
+      hasSnapshot = true
+    }
+  }
+  function saveSnapshot() {
+    if (!frontend) return
+    hasSnapshot = true
+    snapshots.save({features:{...state.features}, definitions:[...state.definitions.values()], revision:cachedDefinitionsRevision})
+  }
+  function transitionContext() {
+    generation++
+    refreshInFlight = false
+    stopWebSocket(); stopRefreshInterval()
+    if (activeScope !== snapshots.scope()) {activeScope = snapshots.scope(); restoreSnapshot()}
+    frontendTelemetry?.setContext?.(config)
+    notifyFeaturesRefresh()
+  }
+  function assertCurrent(expected: number) {
+    if (frontend && (destroyed || expected !== generation)) throw Error('[Toggly] Superseded browser operation')
+  }
+  if (frontend) restoreSnapshot()
 
   function reportError(message: string, error?: unknown): void {
     config.onError?.(message, error)
@@ -243,14 +283,15 @@ export function createTogglyClient(
   function buildEvalContext(
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
     overrides?: EvalContextArg,
+    owner = config,
   ): EvalContext {
     const o: EvalContextOverrides =
       typeof overrides === 'string' ? { identity: overrides } : overrides ?? {}
     return {
-      identity: o.identity ?? config.identity,
-      groups: o.groups ?? config.groups,
-      traits: o.claims ?? config.claims,
-      claims: o.claims ?? config.claims,
+      identity: o.identity ?? owner.identity,
+      groups: o.groups ?? owner.groups,
+      traits: o.claims ?? owner.claims,
+      claims: o.claims ?? owner.claims,
       request: o.request,
       entity: entityContext ?? null,
     }
@@ -273,36 +314,53 @@ export function createTogglyClient(
     return state.features
   }
 
+  function captureEvaluation(keys: string[]) {
+    const runtime = frontendTelemetry
+    return {
+      // Response data is JSON; copy selected nested gates/filters before callbacks.
+      features: JSON.parse(JSON.stringify(Object.fromEntries(keys.map(key => [key,state.features[key]])))) as FeatureDefinitions,
+      definitions: new Map(JSON.parse(JSON.stringify(keys.filter(key => state.definitions.has(key)).map(key => [key,state.definitions.get(key)]))) as [string,FeatureDefinitionModel][]),
+      local: isLocalEvaluation(), owner: {...config, groups: config.groups ? [...config.groups] : undefined, claims: {...config.claims}},
+      gates: [...localGates], index: new Map(localGateIndex),
+      record: runtime?.captureCheck?.() ?? (runtime?.usageEnabled ? runtime.recordCheck.bind(runtime) : undefined),
+    }
+  }
+  type CapturedEvaluation = ReturnType<typeof captureEvaluation>
+
   function evaluateLocalFeature(
     featureKey: string,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
     overrides?: EvalContextArg,
+    captured?: CapturedEvaluation,
   ): boolean {
-    if (state.definitions.has(featureKey)) {
+    const definitions = captured?.definitions ?? state.definitions
+    if (definitions.has(featureKey)) {
       return evaluateDefinitions(
-        state.definitions,
+        definitions,
         featureKey,
-        buildEvalContext(entityContext, overrides),
+        buildEvalContext(entityContext, overrides, captured?.owner),
       )
     }
-    return config.featureDefaults?.[featureKey] ?? false
+    return (captured?.owner ?? config).featureDefaults?.[featureKey] ?? false
   }
 
   function getEffectiveFlag(
     featureKey: string,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
     overrides?: EvalContextArg,
+    captured?: CapturedEvaluation,
   ): boolean {
-    if (isLocalEvaluation()) {
+    if (captured?.local ?? isLocalEvaluation()) {
       const evaluated = evaluateLocalFeature(
         featureKey,
         entityContext,
         overrides,
+        captured,
       )
-      return applyLocalGate(evaluated, featureKey, localGates, localGateIndex)
+      return applyLocalGate(evaluated, featureKey, captured?.gates ?? localGates, captured?.index ?? localGateIndex)
     }
-    const remote = resolveEvaluatedDefinition(state.features[featureKey], entityContext)
-    return applyLocalGate(remote, featureKey, localGates, localGateIndex)
+    const remote = resolveEvaluatedDefinition((captured?.features ?? state.features)[featureKey], entityContext)
+    return applyLocalGate(remote, featureKey, captured?.gates ?? localGates, captured?.index ?? localGateIndex)
   }
 
   /**
@@ -314,8 +372,10 @@ export function createTogglyClient(
     featureKey: string,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
     overrides?: EvalContextArg,
+    captured?: CapturedEvaluation,
   ): boolean {
-    const result = getEffectiveFlag(featureKey, entityContext, overrides)
+    const result = getEffectiveFlag(featureKey, entityContext, overrides, captured)
+    if (captured) { captured.record?.(featureKey, result ? 'enabled' : 'disabled'); return result }
     if (frontendTelemetry?.usageEnabled) {
       frontendTelemetry.recordCheck(featureKey, result ? 'enabled' : 'disabled')
     } else if (telemetry?.usageEnabled) {
@@ -330,18 +390,18 @@ export function createTogglyClient(
   function startTelemetry(): void {
     if (config.frontendTelemetryFactory) {
       const signature = JSON.stringify([
-        config.appKey,
-        config.environment,
         config.metricsBaseUrl,
         config.telemetryFlushIntervalMs,
         config.enableTelemetry,
         config.enableUsageTracking,
         config.enableMetrics,
       ])
-      if (frontendTelemetry && frontendTelemetrySignature === signature) return
-      frontendTelemetry?.dispose()
+      if (frontendTelemetry && frontendTelemetrySignature === signature && frontendTelemetryFetch === config.telemetryFetch && frontendTelemetryFactory === config.frontendTelemetryFactory) {frontendTelemetry.setContext?.(config); return}
+      frontendTelemetry?.dispose({flush: false})
       frontendTelemetry = null
       frontendTelemetrySignature = signature
+      frontendTelemetryFetch = config.telemetryFetch
+      frontendTelemetryFactory = config.frontendTelemetryFactory
       if (!config.appKey || config.enableTelemetry === false ||
           (config.enableUsageTracking === false && config.enableMetrics === false)) return
       frontendTelemetry = config.frontendTelemetryFactory(config)
@@ -366,6 +426,7 @@ export function createTogglyClient(
    * Returns whether this attempt applied a new revision (miss) or reused cache (hit).
    */
   async function fetchDefinitions(): Promise<'hit' | 'miss'> {
+    const expected = generation
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
       return 'hit'
@@ -378,7 +439,8 @@ export function createTogglyClient(
     const fetchUrl = new URL(
       endpoint(config.baseUri, config.appKey, config.environment)
     )
-    if (!local) {
+    if (frontend && config.instanceId?.trim()) fetchUrl.searchParams.set('i', config.instanceId.trim())
+    else if (!local) {
       appendEvaluationContext(
         fetchUrl,
         {
@@ -397,7 +459,7 @@ export function createTogglyClient(
     const previousRevision = pin ? null : getDefinitionsRevision()
     const headers = buildDefinitionFetchHeaders({
       'Content-Type': 'application/json',
-      ...(config.identity ? { 'x-toggly-identity': config.identity } : {}),
+      ...(!(frontend && config.instanceId?.trim()) && config.identity ? { 'x-toggly-identity': config.identity } : {}),
       ...(previousRevision ? { 'If-None-Match': previousRevision } : {}),
     })
 
@@ -407,12 +469,15 @@ export function createTogglyClient(
         headers,
       })
 
+      assertCurrent(expected)
       const responseRevision = normalizeRevision(extractDefinitionsRevision(response))
 
       if (response.status === 304) {
+        if (frontend && !hasSnapshot) throw Error('[Toggly] 304 without a matching snapshot')
         if (responseRevision) {
           cacheDefinitionsRevision(responseRevision)
         }
+        saveSnapshot()
         return 'hit'
       }
 
@@ -435,6 +500,7 @@ export function createTogglyClient(
         }),
       })
 
+      assertCurrent(expected)
       if (local) {
         applyLocalDefinitions(parseDefinitionsPayload(parsed))
       } else {
@@ -447,12 +513,13 @@ export function createTogglyClient(
         }
       }
 
-      if (responseRevision) {
-        cacheDefinitionsRevision(responseRevision)
-      }
+      if (frontend) cachedDefinitionsRevision = responseRevision
+      else if (responseRevision) cacheDefinitionsRevision(responseRevision)
+      saveSnapshot()
       // Same revision → hit (CDN replay / identity-scoped re-eval); new → miss.
       return revisionsMatch(previousRevision, responseRevision) ? 'hit' : 'miss'
     } catch (error) {
+      assertCurrent(expected)
       console.error('[Toggly] Failed to fetch feature definitions:', error)
       reportError('Error fetching feature flags', error)
       throw error
@@ -466,6 +533,7 @@ export function createTogglyClient(
   async function refreshFeatures(options?: {
     reportRefreshError?: boolean
   }): Promise<{ features: FeatureDefinitions; performed: boolean }> {
+    const expected = generation
     const reportRefreshError = options?.reportRefreshError ?? true
 
     // Concurrent refresh skipped (in flight) — do not count.
@@ -480,6 +548,7 @@ export function createTogglyClient(
 
     try {
       const outcome = await fetchDefinitions()
+      if (frontend && (destroyed || expected !== generation)) return {features: state.features, performed:false}
       if (outcome === 'miss') {
         recordDefinitionCacheMiss()
       } else {
@@ -489,6 +558,7 @@ export function createTogglyClient(
       state.lastRefresh = new Date()
       return { features: state.features, performed: true }
     } catch (error) {
+      if (frontend && (destroyed || expected !== generation)) return {features:state.features, performed:false}
       state.error = error as Error
       if (reportRefreshError) {
         reportError('Error refreshing feature flags', error)
@@ -504,8 +574,7 @@ export function createTogglyClient(
 
       throw error
     } finally {
-      state.loading = false
-      refreshInFlight = false
+      if (!frontend || expected === generation) {state.loading = false; refreshInFlight = false}
     }
   }
 
@@ -513,7 +582,7 @@ export function createTogglyClient(
    * Start the auto-refresh interval
    */
   function startRefreshInterval(): void {
-    if (destroyed || refreshIntervalId || config.refreshInterval <= 0) {
+    if ((frontend && typeof window === 'undefined') || destroyed || refreshIntervalId || config.refreshInterval <= 0) {
       return
     }
 
@@ -546,7 +615,7 @@ export function createTogglyClient(
    */
   function startWebSocket(): void {
     if (
-      destroyed ||
+      (frontend && typeof window === 'undefined') || destroyed ||
       isEdgeRuntime() ||
       !config.appKey ||
       config.enableLiveUpdates === false
@@ -679,6 +748,7 @@ export function createTogglyClient(
     set identity(value: string | undefined) {
       discardHydratedSnapshotForIdentity(value)
       config.identity = value
+      if (frontend) {config.instanceId = undefined; transitionContext(); if (state.initialized) {startRefreshInterval(); startWebSocket()}}
     },
 
     async init(newConfig?: TogglyConfig): Promise<FeatureDefinitions> {
@@ -686,9 +756,12 @@ export function createTogglyClient(
         throw new Error('[Toggly] Client has been destroyed')
       }
 
+      const expected = frontend ? ++generation : generation
+      if (frontend) {stopWebSocket(); stopRefreshInterval(); refreshInFlight = false}
       // Merge new config if provided
       if (newConfig) {
         if ('identity' in newConfig) discardHydratedSnapshotForIdentity(newConfig.identity)
+        if (frontend && newConfig.identity !== undefined && newConfig.instanceId === undefined) config.instanceId = undefined
         Object.assign(config, newConfig)
       }
 
@@ -697,6 +770,10 @@ export function createTogglyClient(
         config.identity = generateUUID()
       }
 
+      if (frontend) {
+        config.instanceId = config.instanceId?.trim() || undefined
+        if (activeScope !== snapshots.scope()) {activeScope = snapshots.scope(); restoreSnapshot()}
+      }
       state.loading = true
       state.error = null
 
@@ -711,7 +788,9 @@ export function createTogglyClient(
 
         try {
           await refreshFeatures({ reportRefreshError: false })
+          if (frontend && (destroyed || expected !== generation)) return state.features
         } catch {
+          if (frontend && (destroyed || expected !== generation)) return state.features
           // Preserve last-known-good / defaults; refreshFeatures already recorded a hit when applicable.
           if (
             state.definitions.size === 0 &&
@@ -725,11 +804,11 @@ export function createTogglyClient(
 
         state.initialized = true
 
-        if (destroyed) return state.features
+        if (destroyed || (frontend && expected !== generation)) return state.features
 
         // Execute afterRefresh hooks
         await hookExecutor.executeAfterRefresh(state.features)
-        if (destroyed) return state.features
+        if (destroyed || (frontend && expected !== generation)) return state.features
         notifyFeaturesRefresh()
 
         // Start auto-refresh
@@ -740,6 +819,7 @@ export function createTogglyClient(
 
         return state.features
       } catch (error) {
+        if (frontend && (destroyed || expected !== generation)) return state.features
         state.error = error as Error
 
         if (
@@ -755,8 +835,7 @@ export function createTogglyClient(
 
         return state.features
       } finally {
-        state.loading = false
-        hasHydratedEvaluatedSnapshot = false
+        if (!frontend || expected === generation) {state.loading = false; hasHydratedEvaluatedSnapshot = false}
       }
     },
 
@@ -765,10 +844,12 @@ export function createTogglyClient(
         throw new Error('[Toggly] Client has been destroyed')
       }
 
+      const expected = generation
       const { features, performed } = await refreshFeatures()
       if (performed) {
         // Execute afterRefresh hooks
         await hookExecutor.executeAfterRefresh(state.features)
+        if (frontend && (destroyed || expected !== generation)) return state.features
         notifyFeaturesRefresh()
       }
       return features
@@ -784,15 +865,16 @@ export function createTogglyClient(
         return config.featureDefaults?.[featureKey] ?? false
       }
 
+      const captured = frontend ? captureEvaluation([featureKey]) : undefined
       const entityContext = normalizeEntityContext(context, kind)
 
       // Execute before hooks
       const dataMap = await hookExecutor.executeBeforeEvaluation(
         featureKey,
-        config.featureDefaults?.[featureKey]
+        (captured?.owner ?? config).featureDefaults?.[featureKey]
       )
 
-      const result = evaluateAndRecordCheck(featureKey, entityContext, overrides)
+      const result = evaluateAndRecordCheck(featureKey, entityContext, overrides, captured)
 
       // Execute after hooks (fire-and-forget)
       hookExecutor.executeAfterEvaluation(featureKey, dataMap, result).catch(() => {
@@ -834,6 +916,7 @@ export function createTogglyClient(
         )
       }
 
+      const captured = frontend ? captureEvaluation(featureKeys) : undefined
       const entityContext = normalizeEntityContext(context, kind)
 
       if (featureKeys.length === 0) return !negate
@@ -841,9 +924,9 @@ export function createTogglyClient(
       for (const key of featureKeys) {
         const dataMap = await hookExecutor.executeBeforeEvaluation(
           key,
-          config.featureDefaults?.[key],
+          (captured?.owner ?? config).featureDefaults?.[key],
         )
-        const keyResult = evaluateAndRecordCheck(key, entityContext, overrides)
+        const keyResult = evaluateAndRecordCheck(key, entityContext, overrides, captured)
         hookExecutor.executeAfterEvaluation(key, dataMap, keyResult).catch(() => {})
         if (requirement === 'any' ? keyResult : !keyResult) {
           result = requirement === 'any'
@@ -861,6 +944,7 @@ export function createTogglyClient(
     },
 
     async setIdentity(identity: string): Promise<void> {
+      if (frontend) return client.setContext({identity})
       if (destroyed) {
         return
       }
@@ -904,6 +988,32 @@ export function createTogglyClient(
       }
     },
 
+    async setContext(update): Promise<void> {
+      if (destroyed) return
+      if (!frontend) {
+        if (update.groups !== undefined) config.groups = update.groups
+        if (update.claims !== undefined) config.claims = update.claims
+        if (update.identity !== undefined) await client.setIdentity(update.identity)
+        return
+      }
+      const expected = ++generation
+      const hooks = update.identity !== undefined ? await hookExecutor.executeBeforeIdentify(update.identity) : undefined
+      if (destroyed || expected !== generation) return
+      const localDefinitions = isLocalEvaluation() && !config.instanceId && !update.instanceId ? state.definitions : undefined
+      if (update.identity !== undefined) {config.identity = update.identity; if (update.instanceId === undefined) config.instanceId = undefined}
+      if (update.instanceId !== undefined) config.instanceId = update.instanceId.trim() || undefined
+      if (update.groups !== undefined) config.groups = update.groups
+      if (update.claims !== undefined) config.claims = update.claims
+      transitionContext()
+      const installed = generation
+      if (localDefinitions?.size) {applyLocalDefinitions(localDefinitions); cachedDefinitionsRevision = null; saveSnapshot(); notifyFeaturesRefresh()}
+      if (hooks) await hookExecutor.executeAfterIdentify(update.identity!, hooks)
+      if (destroyed || installed !== generation) return
+      if (state.initialized) try {
+        if (!isLocalEvaluation() || !localDefinitions?.size) await client.refresh()
+      } finally {if (!destroyed && installed === generation) {startRefreshInterval(); startWebSocket()}}
+    },
+
     hydrateEvaluatedFeatures(features: Record<string, boolean>): FeatureDefinitions {
       if (destroyed) return { ...state.features }
       if (isLocalEvaluation()) {
@@ -915,6 +1025,7 @@ export function createTogglyClient(
       // Current state only: never promote another identity's snapshot to defaults.
       state.features = { ...features }
       hasHydratedEvaluatedSnapshot = true
+      if (frontend) {cachedDefinitionsRevision = null; saveSnapshot()}
       notifyFeaturesRefresh()
       return { ...state.features }
     },
@@ -1025,6 +1136,7 @@ export function createTogglyClient(
 
     destroy(): void {
       destroyed = true
+      generation++
       stopWebSocket()
       stopRefreshInterval()
       hookExecutor.clearHooks()

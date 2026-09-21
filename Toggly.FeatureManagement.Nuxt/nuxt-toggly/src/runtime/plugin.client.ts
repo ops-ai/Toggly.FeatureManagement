@@ -20,6 +20,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     environment: config.environment,
     baseUri: config.baseUri,
     identity: snapshot?.identity ?? config.identity,
+    instanceId: config.instanceId,
     // Seed targeting before initialization so the first evaluation uses it.
     groups: config.groups ? [...config.groups] : config.groups,
     claims: config.claims ? { ...config.claims } : config.claims,
@@ -38,7 +39,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     onError: moduleOnError,
   })
 
-  if (snapshot) {
+  if (snapshot && !config.instanceId?.trim()) {
     // Hydration is current state, never fallback defaults for another identity.
     toggly.client.hydrateEvaluatedFeatures(snapshot.features)
     toggly.isReady.value = true

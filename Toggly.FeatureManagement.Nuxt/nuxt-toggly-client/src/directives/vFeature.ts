@@ -20,6 +20,22 @@ type TogglyDirectiveElement = HTMLElement & {
   __togglyFeatureClassUnsubscribe?: () => void
 }
 
+type Binding = DirectiveBinding<string | string[] | FeatureDirectiveValue>
+type Pending = {binding: Binding; request: number; active: boolean}
+const pendingDisplay = new WeakMap<HTMLElement, Pending>()
+const pendingVisibility = new WeakMap<HTMLElement, Pending>()
+const pendingClass = new WeakMap<HTMLElement, Pending>()
+function begin(map: WeakMap<HTMLElement, Pending>, el: HTMLElement, binding: Binding) {
+  const state = map.get(el) ?? {binding, request: 0, active: true}
+  state.binding = binding; state.request++; map.set(el, state)
+  const request = state.request
+  return () => state.active && state.request === request
+}
+function cancel(map: WeakMap<HTMLElement, Pending>, el: HTMLElement) {
+  const state = map.get(el)
+  if (state) {state.active = false; state.request++}
+}
+
 /**
  * v-feature directive for conditional rendering based on feature flags
  *
@@ -63,7 +79,7 @@ export const vFeature: Directive<HTMLElement, string | string[] | FeatureDirecti
     const client = getTogglyClient()
     if (client?.subscribeFeaturesRefresh) {
       ;(el as TogglyDirectiveElement).__togglyFeatureUnsubscribe =
-        client.subscribeFeaturesRefresh(() => updateVisibility(el, binding))
+        client.subscribeFeaturesRefresh(() => updateVisibility(el, pendingDisplay.get(el)!.binding))
     }
   },
 
@@ -72,6 +88,7 @@ export const vFeature: Directive<HTMLElement, string | string[] | FeatureDirecti
   },
 
   beforeUnmount(el) {
+    cancel(pendingDisplay, el)
     ;(el as TogglyDirectiveElement).__togglyFeatureUnsubscribe?.()
   },
 }
@@ -113,6 +130,7 @@ function updateVisibility(
   el: HTMLElement,
   binding: DirectiveBinding<string | string[] | FeatureDirectiveValue>
 ): void {
+  const current = begin(pendingDisplay, el, binding)
   const { keys, requirement, negate } = parseBinding(binding)
 
   if (keys.length === 0) {
@@ -137,8 +155,9 @@ function updateVisibility(
   // Toggle visibility
   el.style.display = isEnabled ? '' : 'none'
   void client.evaluateFeatureGate(keys, requirement, negate).then(result => {
+    if (!current() || getTogglyClient() !== client) return
     el.style.display = result ? '' : 'none'
-  })
+  }).catch(() => {})
 }
 
 /**
@@ -151,7 +170,7 @@ export const vFeatureShow: Directive<HTMLElement, string | string[] | FeatureDir
     const client = getTogglyClient()
     if (client?.subscribeFeaturesRefresh) {
       ;(el as TogglyDirectiveElement).__togglyFeatureShowUnsubscribe =
-        client.subscribeFeaturesRefresh(() => updateShowVisibility(el, binding))
+        client.subscribeFeaturesRefresh(() => updateShowVisibility(el, pendingVisibility.get(el)!.binding))
     }
   },
 
@@ -160,6 +179,7 @@ export const vFeatureShow: Directive<HTMLElement, string | string[] | FeatureDir
   },
 
   beforeUnmount(el) {
+    cancel(pendingVisibility, el)
     ;(el as TogglyDirectiveElement).__togglyFeatureShowUnsubscribe?.()
   },
 }
@@ -168,6 +188,7 @@ function updateShowVisibility(
   el: HTMLElement,
   binding: DirectiveBinding<string | string[] | FeatureDirectiveValue>
 ): void {
+  const current = begin(pendingVisibility, el, binding)
   const { keys, requirement, negate } = parseBinding(binding)
 
   if (keys.length === 0) {
@@ -187,8 +208,9 @@ function updateShowVisibility(
 
   el.style.visibility = isEnabled ? 'visible' : 'hidden'
   void client.evaluateFeatureGate(keys, requirement, negate).then(result => {
+    if (!current() || getTogglyClient() !== client) return
     el.style.visibility = result ? 'visible' : 'hidden'
-  })
+  }).catch(() => {})
 }
 
 /**
@@ -211,7 +233,7 @@ export const vFeatureClass: Directive<HTMLElement, string | string[] | FeatureDi
     const client = getTogglyClient()
     if (client?.subscribeFeaturesRefresh) {
       ;(el as TogglyDirectiveElement).__togglyFeatureClassUnsubscribe =
-        client.subscribeFeaturesRefresh(() => updateClass(el, binding))
+        client.subscribeFeaturesRefresh(() => updateClass(el, pendingClass.get(el)!.binding))
     }
   },
 
@@ -220,6 +242,7 @@ export const vFeatureClass: Directive<HTMLElement, string | string[] | FeatureDi
   },
 
   beforeUnmount(el) {
+    cancel(pendingClass, el)
     ;(el as TogglyDirectiveElement).__togglyFeatureClassUnsubscribe?.()
   },
 }
@@ -228,6 +251,7 @@ function updateClass(
   el: HTMLElement,
   binding: DirectiveBinding<string | string[] | FeatureDirectiveValue>
 ): void {
+  const current = begin(pendingClass, el, binding)
   const className = binding.arg
   if (!className) {
     console.warn('[Toggly] v-feature-class requires an argument (class name)')
@@ -256,7 +280,8 @@ function updateClass(
     el.classList.remove(className)
   }
   void client.evaluateFeatureGate(keys, requirement, negate).then(result => {
+    if (!current() || getTogglyClient() !== client) return
     if (result) el.classList.add(className)
     else el.classList.remove(className)
-  })
+  }).catch(() => {})
 }

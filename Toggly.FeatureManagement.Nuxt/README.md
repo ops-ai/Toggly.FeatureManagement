@@ -106,7 +106,8 @@ export default defineNuxtConfig({
     // API base URL (default: 'https://client.toggly.io')
     baseUri: 'https://client.toggly.io',
 
-    // User identity for targeting
+    // Host-provided token takes precedence over identity targeting
+    instanceId: undefined,
     identity: undefined,
 
     // Default values when API is unavailable
@@ -323,7 +324,7 @@ business metrics by default (gRPC on Node/Nitro; HTTPS on Nitro edge via
 `telemetryTransport: 'https'`). Opt out with `enableUsageTracking: false` /
 `enableMetrics: false` or `TOGGLY_DISABLE_TELEMETRY=1`.
 
-The browser client separately sends compact identity-free checks and app-level
+The browser client separately sends compact checks and app-level
 metrics to `/api/frontend/telemetry`. Use `enableTelemetry: false` to disable
 both browser categories, or the category flags above to disable one. The
 browser facade exposes explicit interactions without causing feature
@@ -339,8 +340,19 @@ await telemetry.flushTelemetry()
 ```
 
 Browser telemetry contains only the application key, environment, aggregate
-feature counts, and app-level metric values. It contains no identity metadata.
+feature counts, and app-level metric values. Attribution uses the host-provided
+`instanceId` as `i`, or the configured/generated identity as `u` when no token is
+present. A token also suppresses identity, groups, and claims on definition
+requests. No token is minted by the SDK; obtain it through your host integration.
 SSR hydration and refresh state projection do not create checks.
+
+Browser `setContext({ instanceId, identity, groups, claims })` rotates attribution
+without relabeling queued events. An explicit identity change clears an omitted
+token; use an empty token to return to identity targeting. Failed context refreshes
+retain the new context and its matching cache or defaults, never the retired user.
+Optional feature persistence stores at most eight complete body/revision snapshots
+per route and response mode; unscoped legacy feature caches are ignored. Storage
+failures fall back to memory. SSR snapshots are not reused for a minted token.
 
 ## Users and Rollouts
 

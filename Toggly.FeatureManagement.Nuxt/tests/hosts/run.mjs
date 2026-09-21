@@ -1,4 +1,5 @@
-import { mkdtemp, cp, writeFile, readFile, mkdir, readdir } from 'node:fs/promises'
+import {bounded,withResources,closeServer,stopChild,runOwned,launchBrowser} from './owned-resources.mjs'
+import { mkdtemp, cp, writeFile, readFile, mkdir, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -12,11 +13,14 @@ import { verifyAutomaticStartup } from './automatic-startup.test.mjs'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const version = process.argv[2] || '4.5.2'
 const lockMode = process.argv[3] || 'fresh'
+const lockOnly = process.argv.includes('--lock-only')
 assert(['fresh', 'record', 'locked'].includes(lockMode), 'use fresh, record, or locked mode')
 const retainedNode18 = version === '3.16.2'
-assert(!retainedNode18 || lockMode === 'locked', 'Nuxt 3.16.2 is the frozen Node 18 compatibility profile; use locked mode')
+assert(!retainedNode18 || lockMode === 'locked' || (lockMode === 'record' && lockOnly), 'Nuxt 3.16.2 is the frozen Node 18 compatibility profile; use locked mode')
 const lockDir = join(root, 'tests/hosts/locks', version)
+await withResources(async own => {
 const work = await mkdtemp(join(tmpdir(), `nuxt-toggly-${version}-`))
+own(() => rm(work,{recursive:true,force:true}))
 console.log(`Host evidence: ${work}; Nuxt ${version}; Node ${process.version}`)
 const telemetryRequests = []
 const collector = createHttpServer((request, response) => {
@@ -37,14 +41,11 @@ const collector = createHttpServer((request, response) => {
     response.writeHead(202).end()
   })
 })
+own(() => closeServer(collector))
 await new Promise(resolve => collector.listen(0, '127.0.0.1', resolve))
 collector.unref()
 process.env.NUXT_TEST_COLLECTOR = `http://127.0.0.1:${collector.address().port}`
-const run = (command, args, cwd = work) => new Promise((resolve, reject) => {
-  const child = spawn(command, args, { cwd, stdio: 'inherit', env: process.env })
-  child.on('error', reject)
-  child.on('exit', code => code === 0 ? resolve() : reject(new Error(`${command} exited ${code}`)))
-})
+const run = (command,args,cwd=work) => runOwned(command,args,{cwd,stdio:'inherit',env:process.env})
 const collectFiles = async directory => {
   const files = []
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -54,6 +55,7 @@ const collectFiles = async directory => {
   }
   return files
 }
+await run(process.execPath,['--test',join(root,'tests/hosts/owned-resources.test.mjs')],root)
 await cp(join(root, 'tests/hosts/fixture'), work, { recursive: true })
 if (version.startsWith('3.')) await cp(join(work, 'app/app.vue'), join(work, 'app.vue'))
 if (version === '3.0.0') {
@@ -69,14 +71,14 @@ if (process.env.TOGGLY_CLIENT_TELEMETRY_SOURCE) {
   const reporterSource = resolve(process.env.TOGGLY_CLIENT_TELEMETRY_SOURCE)
   const reporterPackage = JSON.parse(await readFile(join(reporterSource, 'package.json')))
   await run('npm', ['pack', '--pack-destination', join(work, 'artifacts')], reporterSource)
-  dependencies[reporterPackage.name] = `file:./artifacts/${reporterPackage.name.replace('@', '').replace('/', '-')}-${reporterPackage.version}.tgz`
+  dependencies[reporterPackage.name] = `file:artifacts/${reporterPackage.name.replace('@', '').replace('/', '-')}-${reporterPackage.version}.tgz`
   console.log('Frontend reporter resolution: local packed intermediate (registry publication pending)')
 }
 for (const name of ['core', 'client', 'server', '']) {
   const dir = name ? `nuxt-toggly-${name}` : 'nuxt-toggly'
   const pkg = JSON.parse(await readFile(join(root, dir, 'package.json')))
   await run('pnpm', ['pack', '--pack-destination', join(work, 'artifacts')], join(root, dir))
-  dependencies[pkg.name] = `file:./artifacts/${pkg.name.replace('@', '').replace('/', '-')}-${pkg.version}.tgz`
+  dependencies[pkg.name] = `file:artifacts/${pkg.name.replace('@', '').replace('/', '-')}-${pkg.version}.tgz`
 }
 assert(!process.env.TOGGLY_SIGNED_DEFS_ARTIFACT, 'shared dependencies must resolve from the public registry')
 dependencies['@ops-ai/toggly-signed-defs'] = '1.2.7'
@@ -86,31 +88,33 @@ const packedCandidateDependencies = Object.entries(dependencies).filter(([name])
   name.startsWith('@ops-ai/nuxt-toggly') ||
   (process.env.TOGGLY_CLIENT_TELEMETRY_SOURCE && name === '@ops-ai/toggly-client-telemetry'),
 )
-const artifactPath = spec => spec.replace('file:./', '')
+const artifactPath = spec => spec.replace(/^file:(?:\.\/)?/, '')
 const artifactIntegrity = async spec => `sha512-${createHash('sha512').update(await readFile(join(work, artifactPath(spec)))).digest('base64')}`
 if (lockMode === 'locked') {
   const lockedManifest = JSON.parse(await readFile(join(lockDir, 'package.json'), 'utf8'))
   assert.deepEqual(lockedManifest, manifest, 'consumer lock must match the packed candidate versions and dependency mode')
-  const consumerLock = JSON.parse(await readFile(join(lockDir, 'package-lock.json'), 'utf8'))
-  // The four SDK packages are freshly packed for each host run. Preserve the
-  // committed public-registry graph, then bind its local candidate entries to
-  // these exact artifact bytes so npm ci still verifies their integrity.
-  for (const [name, spec] of packedSdkDependencies) {
-    const artifact = artifactPath(spec)
-    const entry = consumerLock.packages[`node_modules/${name}`]
-    assert.equal(entry?.resolved, `file:${artifact}`, `${name} must remain a packed local candidate`)
-    entry.integrity = await artifactIntegrity(spec)
-  }
-  await writeFile(join(work, 'package-lock.json'), JSON.stringify(consumerLock, null, 2) + '\n')
+  await cp(join(lockDir, 'package-lock.json'),join(work, 'package-lock.json'))
 }
 await writeFile(join(work, 'package.json'), JSON.stringify(manifest, null, 2) + '\n')
 await writeFile(join(work, 'tsconfig.json'), JSON.stringify({ extends: './.nuxt/tsconfig.json' }))
-if (lockMode === 'record') {
-  await run('npm', ['install', '--package-lock-only', '--no-audit', '--no-fund'])
-  await mkdir(lockDir, { recursive: true })
-  await cp(join(work, 'package.json'), join(lockDir, 'package.json'))
-  await cp(join(work, 'package-lock.json'), join(lockDir, 'package-lock.json'))
+const publicGraph = lock => Object.fromEntries(Object.entries(lock.packages).filter(([path]) => path && !packedSdkDependencies.some(([name]) => path === `node_modules/${name}`)))
+if (lockMode === 'record' || lockMode === 'locked') {
+  if (lockMode === 'record') {
+    try {await cp(join(lockDir,'package-lock.json'),join(work,'package-lock.json'))} catch(error) {if(error.code!=='ENOENT')throw error}
+  }
+  const before = lockMode === 'locked' ? publicGraph(JSON.parse(await readFile(join(work,'package-lock.json'),'utf8'))) : null
+  // pnpm packs workspace dependency keys in varying order. Let npm bind the
+  // genuine current archives, while locked mode retains every registry entry.
+  await run('npm', ['uninstall', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', ...packedSdkDependencies.map(([name])=>name)])
+  await run('npm', ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', ...packedSdkDependencies.map(([,spec])=>spec)])
+  if (before) assert.deepEqual(publicGraph(JSON.parse(await readFile(join(work,'package-lock.json'),'utf8'))),before,'locked public-registry graph must remain byte-equivalent')
+  if (lockMode === 'record') {
+    await mkdir(lockDir, { recursive: true })
+    await cp(join(work, 'package.json'), join(lockDir, 'package.json'))
+    await cp(join(work, 'package-lock.json'), join(lockDir, 'package-lock.json'))
+  }
 }
+if (lockOnly) {assert.equal(lockMode,'record');return}
 await run('npm', [lockMode === 'fresh' ? 'install' : 'ci', '--no-audit', '--no-fund', ...(retainedNode18 ? ['--engine-strict'] : [])])
 // Install the browser through this consumer's own Playwright dependency. This
 // keeps Nuxt 3's locked host and Nuxt 4's fresh host aligned with the exact
@@ -125,6 +129,8 @@ for (const [path, pkg] of Object.entries(consumerLock.packages)) {
   if (pkg.resolved) assert(pkg.resolved.startsWith('https://registry.npmjs.org/'), `${path} must resolve from public npm`)
 }
 assert.equal(consumerLock.packages['node_modules/@ops-ai/toggly-signed-defs'].version, '1.2.7')
+assert.equal(consumerLock.packages['node_modules/@ops-ai/toggly-client-telemetry'].version, '1.1.0')
+console.log('Installed registry versions',JSON.stringify(Object.fromEntries(['nuxt','vue','typescript','@ops-ai/nuxt-toggly-core','@ops-ai/nuxt-toggly-client','@ops-ai/nuxt-toggly-server','@ops-ai/nuxt-toggly','@ops-ai/toggly-client-telemetry'].map(name=>[name,consumerLock.packages[`node_modules/${name}`].version]))))
 console.log(`Consumer resolution: ${lockMode === 'fresh' ? 'fresh install' : 'npm ci from recorded lock'}; ${version}`)
 await run('npx', ['nuxt', 'prepare'])
 await run('npx', ['nuxt', 'typecheck'])
@@ -139,8 +145,9 @@ const { createServer: createNetServer } = await import('node:net')
 const probe = createNetServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r)); const port = probe.address().port; await new Promise(r => probe.close(r))
 const host = spawn(process.execPath, ['.output/server/index.mjs'], { cwd: work, stdio: 'inherit', env: { ...process.env, PORT: String(port), NITRO_PORT: String(port), HOST: '127.0.0.1' } })
 const url = `http://127.0.0.1:${port}`
-let browser
-try {
+await withResources(async ownHost => {
+  ownHost(()=>stopChild(host))
+  let browser
   let response
   for (let i = 0; i < 100; i++) { try { response = await fetch(url); if (response.ok) break } catch {} await new Promise(r => setTimeout(r, 100)) }
   assert(response?.ok, 'production host starts')
@@ -158,17 +165,43 @@ try {
   assert.match(alice.html, /id="target">true/); assert.match(bob.html, /id="target">false/)
   assert.match(alice.html, /id="ssr-core">true/); assert.match(bob.html, /id="ssr-core">false/)
   assert.doesNotMatch(alice.html, /Audience.Users/)
-  browser = await chromium.launch({ headless: true })
+  browser = await launchBrowser(chromium,ownHost)
+  const blockProduction = async page => {
+    // Native network blocking avoids Playwright routing's CORS interception.
+    // Every fixture URL is explicit loopback; block SDK production endpoints.
+    const protocol = await page.context().newCDPSession(page)
+    await protocol.send('Network.enable')
+    await protocol.send('Network.setBlockedURLs',{urls:['https://*','http://definitions.toggly.io/*','http://metrics.toggly.io/*']})
+  }
+
+  if (process.env.NUXT_TRACE_EVALUATIONS === '1') {
+    const diagnostic = await browser.newPage({extraHTTPHeaders:{'x-toggly-identity':'alice'}})
+    ownHost(()=>bounded(()=>diagnostic.close(),'diagnostic page close'))
+    await blockProduction(diagnostic)
+    await diagnostic.goto(url+'?evaluationDiagnostic=1')
+    await diagnostic.waitForFunction(()=>document.querySelector('#mounted')?.textContent==='true')
+    await diagnostic.setExtraHTTPHeaders({})
+    for (const phase of ['initialize','identity','refresh']) {
+      const start=telemetryRequests.length
+      const calls=await bounded(()=>diagnostic.evaluate(phase=>window.evaluationDiagnostic(phase),phase),'diagnostic evaluation',30000)
+      console.log('EVALUATION_PROVENANCE',JSON.stringify({phase,calls,packets:telemetryRequests.slice(start).filter(request=>request.payload).map(request=>request.payload)}))
+    }
+    await diagnostic.close()
+    telemetryRequests.length=0
+  }
   const page = await browser.newPage()
   await page.setExtraHTTPHeaders({ 'x-toggly-identity': 'alice' })
   const errors = []
+  const outbound = []
+  await blockProduction(page)
+  page.on('request',request=>{const target=new URL(request.url());if(target.hostname!=='127.0.0.1')outbound.push(target.origin)})
   page.on('pageerror', error => errors.push(error.message))
   page.on('console', msg => { if (/hydration|mismatch/i.test(msg.text())) errors.push(msg.text()); if (/Toggly|telemetry/i.test(msg.text())) console.log(`Browser console: ${msg.text()}`) })
   await page.goto(url)
   await page.waitForFunction(() => document.querySelector('#mounted')?.textContent === 'true')
   // The request-scoped SSR identity header belongs only to the initial page
   // request. Remove the Playwright context header before frontend telemetry so
-  // the collector can prove the SDK emits no identity metadata.
+  // the collector can verify owner attribution without ambient identity headers.
   await page.setExtraHTTPHeaders({})
   assert.equal(await page.locator('#target').textContent(), 'true')
   assert.equal(await page.locator('#core-target').textContent(), 'true', 'public core agrees with hydrated Vue flags')
@@ -205,7 +238,8 @@ try {
   for (let i = 0; telemetryRequests.length <= beforeTelemetry && i < 50; i++) await new Promise(r => setTimeout(r, 100))
   const compact = telemetryRequests.find(request => request.payload?.m?.['fixture-counter'] === 2)
   assert(compact, 'explicit frontend telemetry reaches the cross-origin collector')
-  assert.deepEqual(Object.keys(compact.payload).sort(), ['e', 'f', 'k', 'm'])
+  assert.deepEqual(Object.keys(compact.payload).sort(), ['e', 'f', 'k', 'm', 'u'])
+  assert.equal(compact.payload.u,'bob')
   assert.equal(compact.headers['content-encoding'], 'gzip')
   assert.equal(compact.headers.cookie, undefined)
   assert.equal(compact.headers.authorization, undefined)
@@ -223,14 +257,33 @@ try {
   assert(telemetryRequests.some(request => request.payload?.k === 'old-app' && request.payload?.m?.['old-owner-count'] === 1))
   assert(telemetryRequests.some(request => request.payload?.k === 'new-app' && request.payload?.m?.['new-owner-count'] === 1))
   assert(!JSON.stringify(telemetryRequests).includes('stale-owner-count'))
+  const mintedRequests=[]
+  page.on('request',request=>{
+    const target=new URL(request.url())
+    if(!target.pathname.startsWith('/minted-definitions/'))return
+    mintedRequests.push({token:target.searchParams.get('i'),local:target.pathname.includes('/definitions-signed'),conditional:request.headers()['if-none-match'],query:[...target.searchParams.keys()],identityHeader:request.headers()['x-toggly-identity']})
+  })
+  const mintedStart=telemetryRequests.length
+  assert.deepEqual(await bounded(()=>page.evaluate(()=>window.verifyMinted()),'minted browser checks',30000),[true,false,true,true,true,true,true])
+  const mintedPackets=telemetryRequests.slice(mintedStart).filter(request=>request.payload?.k==='minted-fixture')
+  // Context changes seal batches. Returning to token-a retains separate earlier
+  // batches; reentrant capture also stays separate from the sealed pre-hook check.
+  assert.deepEqual(mintedPackets.map(request=>request.payload),[
+    {k:'minted-fixture',e:'Production',i:'token-a',f:{Flag:{enabled:[1]}}},
+    {k:'minted-fixture',e:'Production',i:'token-b',f:{Flag:{disabled:[1]}}},
+    {k:'minted-fixture',e:'Production',i:'token-a',f:{Flag:{enabled:[2]},Raw:{enabled:[1]}}},
+    {k:'minted-fixture',e:'Production',i:'token-a',f:{Flag:{enabled:[1]}}},
+    {k:'minted-fixture',e:'Production',i:'token-a',f:{Flag:{enabled:[1]}}},
+    {k:'minted-fixture',e:'Production',i:'token-b',m:{'minted-pagehide':1}},
+  ])
+  assert.equal(mintedPackets.at(-1).headers['content-encoding'],undefined,'pagehide uses plain keepalive')
+  assert(mintedRequests.every(request=>!request.identityHeader&&!request.query.some(key=>['u','g','claim.plan'].includes(key))))
+  assert(mintedRequests.some(request=>request.token==='token-a'&&!request.local&&request.conditional==='remote-token-a'))
+  assert(mintedRequests.some(request=>request.local&&!request.conditional),'local mode cannot send remote validator')
+  console.log('PASS minted context: i precedence, owner replacement, captured reentrant check, mode/body/304 public results and plain keepalive')
+  assert.deepEqual(outbound, [])
   assert.deepEqual(errors, [])
   console.log(`PASS Nuxt ${version}: packed install, types, build, SSR gates, request isolation, hydration, initialization, identity, refresh, directives`)
-} finally {
-  await browser?.close()
-  const stopped = host.exitCode !== null || host.signalCode !== null
-    ? Promise.resolve() : new Promise(resolve => host.once('exit', resolve))
-  host.kill('SIGTERM')
-  await stopped
-}
+})
 await verifyAutomaticStartup(work, chromium)
-await new Promise(resolve => collector.close(resolve))
+})

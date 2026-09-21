@@ -5,6 +5,10 @@
 ### Added
 - Nuxt browser runtime configuration now forwards compact frontend telemetry settings and disposes its client owner during application teardown.
 
+- Forward host-provided instance tokens with `i` precedence over `u`, preserve queued attribution across context changes, and capture evaluated state before callbacks.
+- Keep browser context caches bounded and pair validators with the matching body and response mode; failed context refreshes never restore a retired user.
+- Ignore unrelated SSR/legacy snapshots for minted contexts and tolerate unavailable browser storage.
+
 ### Changed
 - Frontend telemetry is enabled by default for configured browser clients; SSR and trusted Nitro server telemetry remain independently owned and unchanged.
 

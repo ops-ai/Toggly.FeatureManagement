@@ -46,45 +46,23 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
 
   if (typeof window !== 'undefined') globalConfig = mergedConfig
 
-  // Load persisted identity if available
-  if (
-    mergedConfig.persistIdentity &&
-    typeof localStorage !== 'undefined' &&
-    !identity.value
-  ) {
-    const persistedIdentity = localStorage.getItem(
-      mergedConfig.identityStorageKey!
-    )
-    if (persistedIdentity) {
-      identity.value = persistedIdentity
-      mergedConfig.identity = persistedIdentity
+  // Storage is optional, including browsers that throw from its getter.
+  try {
+    if (mergedConfig.persistIdentity && typeof localStorage !== 'undefined' && !identity.value) {
+      const persistedIdentity = localStorage.getItem(mergedConfig.identityStorageKey!)
+      if (persistedIdentity) {identity.value = persistedIdentity; mergedConfig.identity = persistedIdentity}
     }
-  }
-
-  // Load persisted features if available
-  if (
-    mergedConfig.persistFeatures &&
-    typeof localStorage !== 'undefined'
-  ) {
-    const persistedFeatures = localStorage.getItem(
-      mergedConfig.featuresStorageKey!
-    )
-    if (persistedFeatures) {
-      try {
-        const parsed = JSON.parse(persistedFeatures)
-        features.value = parsed
-        mergedConfig.featureDefaults = {
-          ...parsed,
-          ...mergedConfig.featureDefaults,
-        }
-      } catch {
-        // Invalid JSON, ignore
-      }
-    }
-  }
+  } catch { /* Continue with the configured in-memory identity. */ }
 
   // Create client
   const client = createTogglyClient(mergedConfig)
+  features.value = client.state.features as Record<string, boolean>
+  function persistIdentity() {
+    if (mergedConfig.persistIdentity) try {
+      if (typeof localStorage === 'undefined') return
+      localStorage.setItem(mergedConfig.identityStorageKey!, client.identity ?? '')
+    } catch { /* Optional persistence must not prevent context changes. */ }
+  }
   if (typeof window !== 'undefined') globalClient = client
   client.subscribeFeaturesRefresh?.(() => {
     features.value = client.state.features as Record<string, boolean>
@@ -120,20 +98,9 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
           error.value = client.state.error
         }
 
-        // Persist features if enabled (only if no error)
-        if (
-          !client.state.error &&
-          mergedConfig.persistFeatures &&
-          typeof localStorage !== 'undefined'
-        ) {
-          localStorage.setItem(
-            mergedConfig.featuresStorageKey!,
-            JSON.stringify(defs)
-          )
-        }
-
         // Update identity ref
         identity.value = client.identity
+        persistIdentity()
       } catch (e) {
         error.value = e as Error
         // Still mark as ready since we use defaults
@@ -152,17 +119,6 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
         features.value = defs as Record<string, boolean>
         error.value = client.state.error
 
-        // Persist features if enabled
-        if (
-          !client.state.error &&
-          mergedConfig.persistFeatures &&
-          typeof localStorage !== 'undefined'
-        ) {
-          localStorage.setItem(
-            mergedConfig.featuresStorageKey!,
-            JSON.stringify(defs)
-          )
-        }
       } catch (e) {
         features.value = client.state.features as Record<string, boolean>
         error.value = e as Error
@@ -173,23 +129,20 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     },
 
     async setIdentity(newIdentity: string) {
-      try {
-        await client.setIdentity(newIdentity)
-        identity.value = client.identity
-        features.value = client.state.features as Record<string, boolean>
-        error.value = client.state.error
+      return toggly.setContext({identity: newIdentity})
+    },
 
-        if (
-          mergedConfig.persistIdentity &&
-          typeof localStorage !== 'undefined'
-        ) {
-          localStorage.setItem(mergedConfig.identityStorageKey!, newIdentity)
-        }
+    async setContext(update) {
+      try {
+        await client.setContext(update)
+        error.value = client.state.error
       } catch (e) {
-        identity.value = client.identity
-        features.value = client.state.features as Record<string, boolean>
         error.value = e as Error
         throw e
+      } finally {
+        identity.value = client.identity
+        features.value = client.state.features as Record<string, boolean>
+        persistIdentity()
       }
     },
 

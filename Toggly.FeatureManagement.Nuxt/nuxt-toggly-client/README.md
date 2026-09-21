@@ -31,7 +31,7 @@ behavior; a ready hydration snapshot can render boolean gates synchronously.
 
 ## Frontend telemetry
 
-Configured browser clients send compact, identity-free feature checks and
+Configured browser clients send compact feature checks and
 app-level metrics by default. SSR projection, refresh projection, keyless
 clients, and server rendering remain silent. Configure the independent browser
 transport through `enableTelemetry`, `metricsBaseUrl`, and
@@ -53,8 +53,17 @@ await toggly.telemetry.flushTelemetry()
 ```
 
 The legacy `recordUsage(feature, identity?, variant?)` and `recordView`
-signatures are unchanged; browser forwarding omits identity and uses only the
-third argument as the variant. Legacy browser `measure` and `observe` calls are
+signatures are unchanged; browser forwarding uses only the
+third argument as the variant. The second per-call identity is not used for
+attribution; the owner supplies optional `i` (host-provided `instanceId`) or `u`
+(identity, including a generated identity). Use `setContext` to rotate context;
+queued records retain their original attribution. Legacy browser `measure` and `observe` calls are
 unsupported payload-free no-ops with bounded diagnostics. Migrate accumulating
 whole-number values to `telemetry.incrementCounter` and current values to
 `telemetry.setGauge`.
+
+Browser identity changes clear an omitted token. Failed refreshes retain the new
+context and matching cache/defaults. Persisted feature bodies and validators are
+scoped together by context and response mode, bounded to eight snapshots per
+route/mode. SSR hydration and ordinary refresh projection remain check-free;
+pending consumer checks cannot overwrite a newer projection or unmounted UI.

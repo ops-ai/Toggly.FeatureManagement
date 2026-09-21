@@ -37,7 +37,9 @@ export interface FrontendTelemetryRuntime {
   incrementCounter(metricKey: string, value?: number): void
   setGauge(metricKey: string, value: number): void
   flush(options?: { keepalive?: boolean }): Promise<void>
-  dispose(): void
+  dispose(options?: { flush?: boolean }): void
+  setContext?(config: Readonly<TogglyConfig>): void
+  captureCheck?(): (featureKey: string, variant: string) => void
   unsupported(method: 'measure' | 'observe'): void
 }
 
@@ -77,6 +79,11 @@ export interface TogglyConfig {
    * `'local'` fetches definitions-signed and evaluates with `@ops-ai/toggly-eval`.
    */
   evaluationMode?: EvaluationMode
+  /** Host-provided frontend identity token; takes precedence over client identity. */
+  instanceId?: string
+  /** Persist only matching browser definition/revision snapshots (default false). */
+  persistFeatures?: boolean
+  featuresStorageKey?: string
   /** User identity for targeting and rollouts */
   identity?: string
   /** User groups for targeting */
@@ -348,6 +355,8 @@ export interface TogglyClient {
 
   /** Set user identity */
   setIdentity(identity: string): Promise<void>
+  /** Replace browser targeting; an empty token clears minted attribution. */
+  setContext(context: { instanceId?: string; identity?: string; groups?: string[]; claims?: Record<string, string> }): Promise<void>
 
   /** Raw definitions map (local mode) */
   getDefinitions(): Map<string, FeatureDefinitionModel>
