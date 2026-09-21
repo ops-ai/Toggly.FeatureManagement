@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0 — 2026-09-19
+
+### Added
+- Synchronous `setContext` for changing app/environment and identity attribution
+  without losing immediate events or relabeling accepted counters and gauges.
+- `dispose({ flush: false })` to cancel and discard a reporter before replacing
+  its transport settings or disabling telemetry.
+
+### Changed
+- Automatic evaluation checks retain their original attribution when a host
+  callback changes identity or replaces the client during evaluation.
+- All context partitions share one admission budget and preserve gauge ordering.
+- Retries reuse the original transport bytes; disposal aborts pending attempts
+  where supported and prevents delayed compression from sending afterward.
+
 ## 1.0.0 — 2026-09-18
 
 ### Added

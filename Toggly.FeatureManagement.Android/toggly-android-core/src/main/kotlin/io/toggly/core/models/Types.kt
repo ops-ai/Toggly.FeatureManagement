@@ -86,7 +86,7 @@ data class TogglyConfig(
     val groups: List<String> = emptyList(),
     /** String attributes used by remote targeting rules. */
     val claims: Map<String, String> = emptyMap(),
-    /** Anonymous frontend checks and app metrics; requires a nonblank app key. */
+    /** Frontend checks and app metrics; requires a nonblank app key. */
     val enableTelemetry: Boolean = true,
     /** Independent metrics base URL, without credentials, query or fragment. */
     val metricsBaseUrl: String = "https://metrics.toggly.io",

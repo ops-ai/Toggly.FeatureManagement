@@ -10,6 +10,7 @@ public actor TogglyService {
     private let storage: TogglyStorage
     private let groups: [String]
     private let claims: [URLQueryItem]
+    private let telemetry: TelemetryReporter?
 
     // MARK: - State
 
@@ -19,6 +20,14 @@ public actor TogglyService {
     private var contextGeneration = 0
     private var completedFetch: (generation: Int, response: TogglyInitResponse)?
     private var identity: String?
+    private var instanceId: String?
+    private var disposed = false
+    private let ownerId = UUID()
+    private var cacheMutation: Task<Void, Never>?
+    private var checkHandlers: [UUID: @Sendable (FeatureCheckSnapshot) -> Void] = [:]
+    private var attribution: TelemetryReporter.Attribution {
+        .init(instanceId: instanceId, identity: identity)
+    }
     private var refreshTask: Task<Void, Never>?
     private var lastChecked: Date?
     private var lastSynced: Date?
@@ -45,6 +54,7 @@ public actor TogglyService {
 
     private var eventListeners: [UUID: TogglyEventListener] = [:]
     private var stateChangeHandlers: [UUID: FeatureStateChangeHandler] = [:]
+    var stateChangeHandlerCount: Int { stateChangeHandlers.count + checkHandlers.count }
 
     // MARK: - Computed Properties
 
@@ -77,8 +87,31 @@ public actor TogglyService {
         self.claims = config.claims.keys.filter { !$0.isEmpty && !(config.claims[$0] ?? "").isEmpty }
             .sorted().prefix(20).map { URLQueryItem(name: "claim." + $0, value: config.claims[$0]) }
         self.identity = config.identity
+        self.instanceId = Self.normalizedToken(config.instanceId)
         self.config = config
         self.storage = config.storage ?? MemoryStorage()
+        if config.enableTelemetry, let key = config.appKey, !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let transport = config.telemetryTransport {
+                self.telemetry = TelemetryReporter(
+                    appKey: key, environment: config.environment,
+                    instanceId: config.instanceId, identity: config.identity,
+                    metricsBaseUrl: config.metricsBaseUrl,
+                    telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
+                    onDiagnostic: config.onTelemetryDiagnostic,
+                    transport: transport
+                )
+            } else {
+                self.telemetry = TelemetryReporter(
+                    appKey: key, environment: config.environment,
+                    instanceId: config.instanceId, identity: config.identity,
+                    metricsBaseUrl: config.metricsBaseUrl,
+                    telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
+                    onDiagnostic: config.onTelemetryDiagnostic
+                )
+            }
+        } else {
+            self.telemetry = nil
+        }
     }
 
     // MARK: - Lifecycle
@@ -87,17 +120,17 @@ public actor TogglyService {
     /// - Returns: The initialization response.
     @discardableResult
     public func initialize() async -> TogglyInitResponse {
+        guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
         contextGeneration += 1
         features = nil
         definitions = nil
         eTag = nil
         let initialGeneration = contextGeneration
         // Handle identity
-        if let configIdentity = config.identity {
-            identity = configIdentity
-        } else {
+        if identity == nil {
             // Try to get stored device ID
             var storedId = await storage.get(TogglyStorageKeys.deviceId)
+            guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
             if storedId == nil {
                 storedId = UUID().uuidString
                 await storage.set(TogglyStorageKeys.deviceId, value: storedId!)
@@ -105,11 +138,13 @@ public actor TogglyService {
             if contextGeneration == initialGeneration { identity = storedId }
         }
 
+        guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
         // Start refresh timer
         startRefreshTimer()
 
         // Perform initial refresh
         let response = await refresh()
+        guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
 
         // Start WebSocket for live updates after successful first refresh
         if config.enableLiveUpdates && response.status != .defaults {
@@ -126,6 +161,7 @@ public actor TogglyService {
     /// - Returns: The refresh response.
     @discardableResult
     public func refresh() async -> TogglyInitResponse {
+        guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
         // Skip refresh if app is not in foreground
         guard appState == .active else {
             return TogglyInitResponse(
@@ -155,6 +191,11 @@ public actor TogglyService {
 
     /// Dispose the service and clean up resources.
     public func dispose() {
+        guard !disposed else { return }
+        disposed = true
+        contextGeneration += 1
+        checkHandlers.removeAll()
+        if let telemetry { Task { await telemetry.dispose() } }
         stopWebSocket()
         stopRefreshTimer()
         eventListeners.removeAll()
@@ -209,16 +250,92 @@ public actor TogglyService {
         context: Any? = nil,
         kind: String? = nil
     ) async -> Bool {
+        let snapshot = await captureFeatureGate(featureKeys: featureKeys, requirement: requirement,
+                                                negate: negate, context: context, kind: kind)
+        await recordCheck(snapshot)
+        return snapshot.enabled
+    }
+
+    /// Capture a gate and its evaluated leaves without recording a check.
+    public func captureFeatureGate(
+        featureKeys: [String],
+        requirement: FeatureRequirement = .all,
+        negate: Bool = false,
+        context: Any? = nil,
+        kind: String? = nil
+    ) async -> FeatureGateSnapshot {
         await ensureFeaturesLoaded()
         let defs = definitions ?? fromBooleanDefaults(features ?? config.featureDefaults)
-        return evaluateEvaluatedGate(
-            features: defs,
-            featureKeys: featureKeys,
-            requirementAll: requirement == .all,
-            negate: negate,
-            entityContext: normalizeEntityContext(context, kind: kind)
+        let capturedAttribution = attribution
+        var checks: [(String, Bool)] = []
+        let result = evaluateEvaluatedGate(
+            features: defs, featureKeys: featureKeys, requirementAll: requirement == .all, negate: negate,
+            entityContext: normalizeEntityContext(context, kind: kind),
+            onCheck: { key, enabled in checks.append((key, enabled)) }
         )
+        return FeatureGateSnapshot(enabled: result, owner: ownerId, checks: checks, attribution: capturedAttribution)
     }
+
+    /// Record only a gate snapshot actually consumed by this owner's adapter.
+    public func recordCheck(_ snapshot: FeatureGateSnapshot) async {
+        guard !disposed, snapshot.owner == ownerId, !snapshot.checks.isEmpty else { return }
+        await telemetry?.recordChecks(snapshot.checks, attribution: snapshot.attribution)
+    }
+
+    /// Record explicit feature use without evaluating the feature again.
+    public func recordUsage(_ featureKey: String, variant: String = "enabled") async {
+        if !disposed { await telemetry?.recordUsage(featureKey, variant: variant, attribution: attribution) }
+    }
+
+    /// Record an explicit feature view without evaluating the feature again.
+    public func recordView(_ featureKey: String, variant: String = "enabled") async {
+        if !disposed { await telemetry?.recordView(featureKey, variant: variant, attribution: attribution) }
+    }
+
+    /// Increment an app-level counter by a nonnegative integer up to one million.
+    public func incrementCounter(_ metricKey: String, value: Double = 1) async {
+        if !disposed { await telemetry?.incrementCounter(metricKey, value: value, attribution: attribution) }
+    }
+
+    /// Set the latest app-level gauge value.
+    public func setGauge(_ metricKey: String, value: Double) async {
+        if !disposed { await telemetry?.setGauge(metricKey, value: value, attribution: attribution) }
+    }
+
+    /// Await the current best-effort telemetry flush.
+    public func flushTelemetry() async { await telemetry?.flushTelemetry() }
+
+    /// Record a cached value that a reactive UI adapter actually presented.
+    public func recordCachedCheck(_ featureKey: String, enabled: Bool) async {
+        await recordCheck(makeCheckSnapshot(featureKey, enabled: enabled))
+    }
+
+    /// Capture the value and owner attribution together before invoking host callbacks.
+    /// Call `recordCheck` only when the cached result is consumed.
+    public func captureFeatureCheck(_ key: String) async -> FeatureCheckSnapshot {
+        await ensureFeaturesLoaded()
+        return makeCheckSnapshot(key, enabled: resolveEvaluatedDefinition(definitions?[key]))
+    }
+
+    private func makeCheckSnapshot(_ key: String, enabled: Bool) -> FeatureCheckSnapshot {
+        FeatureCheckSnapshot(key: key, enabled: enabled, owner: ownerId, attribution: attribution)
+    }
+
+    /// Foreign-owner snapshots are ignored; an old snapshot keeps its original attribution.
+    public func recordCheck(_ snapshot: FeatureCheckSnapshot) async {
+        guard !disposed, snapshot.owner == ownerId else { return }
+        await telemetry?.recordChecks([(snapshot.key, snapshot.enabled)], attribution: snapshot.attribution)
+    }
+
+    /// Subscribe to immutable cached checks, captured before host callbacks run.
+    @discardableResult
+    public func addFeatureCheckHandler(_ handler: @escaping @Sendable (FeatureCheckSnapshot) -> Void) -> @Sendable () -> Void {
+        let id = UUID()
+        checkHandlers[id] = handler
+        return { [weak self] in Task { await self?.removeCheckHandler(id) } }
+    }
+
+    private func removeCheckHandler(_ id: UUID) { checkHandlers.removeValue(forKey: id) }
 
     /// Register a local entity mapper. Does not PUT schemas (mobile public keys).
     public func registerContext(_ kind: String, mapper: @escaping EntityContextMapper) {
@@ -232,35 +349,48 @@ public actor TogglyService {
     /// - Returns: The refresh response after identity change.
     @discardableResult
     public func setIdentity(_ identity: String?) async -> TogglyInitResponse {
-        contextGeneration += 1
-        let resolvingGeneration = contextGeneration
-        let previousIdentity = self.identity
+        // The legacy setter deliberately clears any token, including when the identity is unchanged.
+        await setIdentity(identity, instanceId: nil)
+    }
 
-        if let newIdentity = identity {
-            self.identity = newIdentity
-        } else {
-            // Fall back to device ID
+    /// Atomically replace identity and its host-minted capability. Nil identity uses the device ID.
+    @discardableResult
+    public func setIdentity(_ identity: String?, instanceId: String?) async -> TogglyInitResponse {
+        guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
+        contextGeneration += 1
+        let generation = contextGeneration
+        let previousIdentity = self.identity
+        self.identity = identity
+        self.instanceId = Self.normalizedToken(instanceId)
+        features = nil; definitions = nil; eTag = nil; completedFetch = nil
+        if identity == nil {
             var deviceId = await storage.get(TogglyStorageKeys.deviceId)
+            guard generation == contextGeneration else { return await refresh() }
             if deviceId == nil {
                 deviceId = UUID().uuidString
+                self.identity = deviceId
                 await storage.set(TogglyStorageKeys.deviceId, value: deviceId!)
             }
-            guard resolvingGeneration == contextGeneration else { return await refresh() }
+            guard generation == contextGeneration else { return await refresh() }
             self.identity = deviceId
         }
-
-        // Clear cache if identity changed
-        if previousIdentity != self.identity {
-            await clearCache()
-        }
-
-        // Emit event
         emitEvent(.identityChanged(IdentityChangedEvent(
-            previousIdentity: previousIdentity,
-            newIdentity: self.identity ?? ""
+            previousIdentity: previousIdentity, newIdentity: self.identity ?? ""
         )))
-
         return await refresh()
+    }
+
+    /// Rotate or clear the capability without changing the current identity.
+    @discardableResult
+    public func setInstanceId(_ instanceId: String?) async -> TogglyInitResponse {
+        await setIdentity(identity, instanceId: instanceId)
+    }
+
+    public var currentInstanceId: String? { instanceId }
+
+    private static func normalizedToken(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     // MARK: - Cache
@@ -275,9 +405,13 @@ public actor TogglyService {
         let cacheKey = featureCacheKey
         let revisionKey = revisionCacheKey
         let legacyKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? "")
-        await storage.delete(cacheKey)
-        if groups.isEmpty && claims.isEmpty { await storage.delete(legacyKey) }
-        await storage.delete(revisionKey)
+        let generation = contextGeneration
+        let clearLegacy = instanceId == nil && groups.isEmpty && claims.isEmpty
+        await mutateCache(generation: generation) {
+            await self.storage.delete(cacheKey)
+            if clearLegacy { await self.storage.delete(legacyKey) }
+            await self.storage.delete(revisionKey)
+        }
     }
 
     // MARK: - Events
@@ -326,6 +460,7 @@ public actor TogglyService {
         let wasBackground = appState == .background
         appState = state
         emitEvent(.appStateChanged(state))
+        if state == .background { await telemetry?.flushTelemetry() }
 
         // Refresh when coming to foreground
         if wasBackground && state == .active {
@@ -372,6 +507,7 @@ public actor TogglyService {
 
     private func fetchFeatureFlags() async -> TogglyInitResponse {
         while true {
+            guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
             if featuresLoading {
                 await waitForFeaturesLoaded()
                 if let completedFetch, completedFetch.generation == contextGeneration {
@@ -451,7 +587,7 @@ public actor TogglyService {
 
             // Store ETag
             if let newEtag = httpResponse.value(forHTTPHeaderField: "ETag") {
-                await storage.set(snapshot.revisionKey, value: newEtag)
+                await mutateCache(generation: snapshot.generation) { await self.storage.set(snapshot.revisionKey, value: newEtag) }
                 guard snapshot.generation == contextGeneration else { return obsolete }
                 eTag = newEtag
             }
@@ -485,11 +621,19 @@ public actor TogglyService {
     }
 
     private func buildApiUrl() -> URL {
-        var components = URLComponents(string: "\(config.baseURI)/evaluated-signed/\(config.appKey ?? "")/\(config.environment)")!
-        var items: [URLQueryItem] = []
-        if let identity { items.append(URLQueryItem(name: "u", value: identity)) }
-        items += groups.map { URLQueryItem(name: "g", value: $0) }
-        items += claims
+        var components = URLComponents(string: config.baseURI)!
+        components.path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.path = "/" + (components.path.isEmpty ? "" : components.path + "/") + "evaluated-signed/\(config.appKey ?? "")/\(config.environment)"
+        var items = (components.queryItems ?? []).filter {
+            $0.name != "i" && $0.name != "u" && $0.name != "g" && !$0.name.hasPrefix("claim.")
+        }
+        if let instanceId {
+            items.append(URLQueryItem(name: "i", value: instanceId))
+        } else {
+            if let identity { items.append(URLQueryItem(name: "u", value: identity)) }
+            items += groups.map { URLQueryItem(name: "g", value: $0) }
+            items += claims
+        }
         components.queryItems = items.isEmpty ? nil : items
         // URLSearchParams on the Worker interprets literal '+' as a space.
         components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
@@ -498,6 +642,10 @@ public actor TogglyService {
 
     /// Structured serialization prevents delimiter collisions; SHA-256 keeps storage keys bounded.
     private var contextIdentity: String {
+        if let instanceId {
+            let tokenHash = SHA256.hash(data: Data(instanceId.utf8)).map { String(format: "%02x", $0) }.joined()
+            return String(data: try! JSONEncoder().encode([[config.baseURI, config.appKey ?? "", config.environment], ["instanceIdHash", tokenHash]]), encoding: .utf8)!
+        }
         let parts = [[config.baseURI, config.appKey ?? "", config.environment, identity ?? ""],
                      groups, claims.flatMap { [$0.name, $0.value ?? ""] }]
         return String(data: try! JSONEncoder().encode(parts), encoding: .utf8)!
@@ -586,9 +734,13 @@ public actor TogglyService {
             return cached
         }
 
-        guard let url = URL(string: "\(config.baseURI)/.well-known/jwks") else {
-            throw TogglyError.invalidResponse
+        guard var components = URLComponents(string: config.baseURI) else { throw TogglyError.invalidResponse }
+        components.path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.path = "/" + (components.path.isEmpty ? "" : components.path + "/") + ".well-known/jwks"
+        components.queryItems = components.queryItems?.filter {
+            $0.name != "i" && $0.name != "u" && $0.name != "g" && !$0.name.hasPrefix("claim.")
         }
+        guard let url = components.url else { throw TogglyError.invalidResponse }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -652,36 +804,39 @@ public actor TogglyService {
             return CachedDefinitions(definitions: fromBooleanDefaults(features), flags: features)
         }
 
+        let expectedGeneration = contextGeneration
+        let expectedInstanceId = instanceId
         let expectedIdentity = identity
         let expectedContext = contextIdentity
         let legacyKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? "")
         var cacheKey = featureCacheKey
         var stored = await storage.get(cacheKey)
         // Only context-free configurations can reuse identity-only entries from older SDKs.
-        if stored == nil && groups.isEmpty && claims.isEmpty {
+        if stored == nil && instanceId == nil && groups.isEmpty && claims.isEmpty {
             cacheKey = legacyKey
             stored = await storage.get(cacheKey)
         }
         guard let cached = stored,
               let data = cached.data(using: .utf8),
               let cacheData = try? JSONDecoder().decode(TogglyFeatureFlagsCache.self, from: data),
-              cacheData.identity == expectedIdentity,
-              cacheData.evaluationContext == expectedContext || (cacheData.evaluationContext == nil && groups.isEmpty && claims.isEmpty) else {
+              cacheData.identity == expectedIdentity || expectedInstanceId != nil,
+              cacheData.evaluationContext == expectedContext || (cacheData.evaluationContext == nil && instanceId == nil && groups.isEmpty && claims.isEmpty) else {
             return CachedDefinitions(
                 definitions: fromBooleanDefaults(config.featureDefaults),
                 flags: config.featureDefaults
             )
         }
 
-        return await trustOrReverifyCachedFlags(cacheData, cacheKey: cacheKey)
+        return await trustOrReverifyCachedFlags(cacheData, cacheKey: cacheKey, generation: expectedGeneration)
     }
 
     private func trustOrReverifyCachedFlags(
         _ cacheData: TogglyFeatureFlagsCache,
-        cacheKey: String
+        cacheKey: String,
+        generation: Int
     ) async -> CachedDefinitions {
         guard let parsed = try? parseEvaluatedDefinitions(from: cacheData.flags) else {
-            await storage.delete(cacheKey)
+            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
             return CachedDefinitions(
                 definitions: fromBooleanDefaults(config.featureDefaults),
                 flags: config.featureDefaults
@@ -696,7 +851,7 @@ public actor TogglyService {
         guard let timestamp = cacheData.timestamp,
               let signature = cacheData.signature, !signature.isEmpty,
               let keyId = cacheData.keyId, !keyId.isEmpty else {
-            await storage.delete(cacheKey)
+            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
             return CachedDefinitions(
                 definitions: fromBooleanDefaults(config.featureDefaults),
                 flags: config.featureDefaults
@@ -709,7 +864,7 @@ public actor TogglyService {
                 maxSignatureAgeSeconds: config.maxSignatureAgeSeconds
             )
         } catch {
-            await storage.delete(cacheKey)
+            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
             return CachedDefinitions(
                 definitions: fromBooleanDefaults(config.featureDefaults),
                 flags: config.featureDefaults
@@ -730,12 +885,23 @@ public actor TogglyService {
             )
             return CachedDefinitions(definitions: parsed, flags: flags)
         } catch {
-            await storage.delete(cacheKey)
+            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
             return CachedDefinitions(
                 definitions: fromBooleanDefaults(config.featureDefaults),
                 flags: config.featureDefaults
             )
         }
+    }
+
+    private func mutateCache(generation: Int, operation: @escaping @Sendable () async -> Void) async {
+        let prior = cacheMutation
+        let task = Task {
+            await prior?.value
+            guard generation == contextGeneration, !disposed else { return }
+            await operation()
+        }
+        cacheMutation = task
+        await task.value
     }
 
     private func cacheFeatureFlags(
@@ -769,7 +935,7 @@ public actor TogglyService {
 
         if let data = try? JSONEncoder().encode(cacheData),
            let string = String(data: data, encoding: .utf8) {
-            await storage.set(cacheKey, value: string)
+            await mutateCache(generation: context.generation) { await self.storage.set(cacheKey, value: string) }
         }
     }
 
@@ -799,6 +965,7 @@ public actor TogglyService {
     }
 
     private func ensureFeaturesLoaded() async {
+        guard !disposed else { return }
         if features != nil {
             return
         }
@@ -820,7 +987,7 @@ public actor TogglyService {
     private func startRefreshTimer() {
         stopRefreshTimer()
 
-        guard config.appKey != nil, config.refreshInterval > 0 else {
+        guard !disposed, config.appKey != nil, config.refreshInterval > 0 else {
             return
         }
 
@@ -861,7 +1028,7 @@ public actor TogglyService {
     private func startWebSocket() {
         stopWebSocket()
 
-        guard let appKey = config.appKey else { return }
+        guard !disposed, let appKey = config.appKey else { return }
 
         let wsBaseURI = config.baseURI
             .replacingOccurrences(of: "https://", with: "wss://")
@@ -953,7 +1120,7 @@ public actor TogglyService {
 
         try? await Task.sleep(nanoseconds: UInt64(wsReconnectDelay) * 1_000_000_000)
 
-        guard !Task.isCancelled, appState == .active else { return }
+        guard !Task.isCancelled, !disposed, appState == .active else { return }
 
         startWebSocket()
     }
@@ -964,7 +1131,7 @@ public actor TogglyService {
         }
     }
 
-    private func notifyFeatureChanges(previousFlags: FeatureFlags, newFlags: FeatureFlags) {
+    func notifyFeatureChanges(previousFlags: FeatureFlags, newFlags: FeatureFlags) {
         let allKeys = Set(previousFlags.keys).union(Set(newFlags.keys))
 
         for key in allKeys {
@@ -979,6 +1146,8 @@ public actor TogglyService {
                 )
                 emitEvent(.featureChanged(event))
 
+                let snapshot = makeCheckSnapshot(key, enabled: newValue ?? false)
+                for handler in checkHandlers.values { handler(snapshot) }
                 for handler in stateChangeHandlers.values {
                     handler(key, previousValue, newValue)
                 }

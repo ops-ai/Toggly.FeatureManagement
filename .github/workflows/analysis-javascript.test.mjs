@@ -82,3 +82,15 @@ test('runs the current Gatsby packed host on Node 24', () => {
     /- name: Install locked Gatsby dependencies\s+if: matrix\.sdk == 'Gatsby'\s+working-directory: \$\{\{ matrix\.path \}\}\s+run: npm ci/,
   );
 });
+
+test('selects system Chrome before packed Client-Core tests', () => {
+  assert.match(
+    workflow,
+    /- name: Select system Chrome for packed Client Core\s+if: matrix\.sdk == 'Client-Core'/,
+  );
+  assert.match(workflow, /matrix\.sdk != 'Client-Core'/);
+  assert.match(
+    workflow,
+    /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Telemetry' \|\| matrix\.sdk == 'Client-Core'/,
+  );
+});
