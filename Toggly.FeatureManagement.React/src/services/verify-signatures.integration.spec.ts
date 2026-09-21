@@ -77,7 +77,7 @@ describe('Toggly verifySignatures integration', () => {
     })
 
     const service = new Toggly({
-      appKey: 'app',
+      enableTelemetry: false, appKey: 'app',
       environment: 'Production',
       baseURI: 'https://definitions.test',
       verifySignatures: true,

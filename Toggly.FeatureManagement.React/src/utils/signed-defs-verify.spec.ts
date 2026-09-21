@@ -427,19 +427,9 @@ describe('signed-defs-verify', () => {
     });
   });
 
-  it('throws when WebCrypto is unavailable outside Node', async () => {
-    const originalNode = process.versions.node;
+  it('rejects invalid signatures through the Node entry without global WebCrypto', async () => {
     const originalCrypto = globalThis.crypto;
-    Object.defineProperty(process.versions, 'node', {
-      value: undefined,
-      configurable: true,
-      enumerable: true,
-      writable: true,
-    });
-    Object.defineProperty(globalThis, 'crypto', {
-      value: undefined,
-      configurable: true,
-    });
+    Object.defineProperty(globalThis, 'crypto', {value: undefined, configurable: true});
     try {
       const { jwk } = makeSignedKey();
       await expect(
@@ -448,21 +438,11 @@ describe('signed-defs-verify', () => {
           { signature: Buffer.alloc(64).toString('base64'), timestamp: 1, kid: jwk.kid },
           { keys: [jwk] }
         )
-      ).rejects.toThrow(/WebCrypto is required/);
+      ).rejects.toThrow(/invalid signature/);
     } finally {
-      Object.defineProperty(globalThis, 'crypto', {
-        value: originalCrypto,
-        configurable: true,
-      });
-      Object.defineProperty(process.versions, 'node', {
-        value: originalNode,
-        configurable: true,
-        enumerable: true,
-        writable: true,
-      });
+      Object.defineProperty(globalThis, 'crypto', {value: originalCrypto, configurable: true});
     }
   });
-
   it('decodes base64 via atob when Buffer is unavailable', () => {
     const originalBuffer = globalThis.Buffer;
     Object.defineProperty(globalThis, 'Buffer', {

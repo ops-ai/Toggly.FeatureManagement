@@ -18,6 +18,7 @@ const rollupConfig = readFileSync(join(sdkDirectory, 'rollup.config.js'), 'utf8'
 assert.equal(packageManifest.peerDependencies?.react, '^18.2.0 || ^19.0.0')
 assert.equal(packageManifest.peerDependencies?.['react-dom'], '^18.2.0 || ^19.0.0')
 assert.equal(packageManifest.dependencies?.react, undefined)
+assert.equal(packageManifest.dependencies?.['@ops-ai/toggly-client-telemetry'], '^1.1.0')
 assert.equal(packageManifest.dependencies?.['@ops-ai/toggly-signed-defs'], '^1.2.7')
 assert.equal(packageManifest.exports?.['.']?.import, './dist/esm/index.js')
 assert.equal(packageManifest.exports?.['.']?.require, './dist/cjs/index.cjs')
@@ -28,6 +29,7 @@ console.log(`Isolated packed consumers: ${isolatedDirectory}`)
 const artifactsDirectory = join(isolatedDirectory, 'artifacts')
 const packedArtifact = join(artifactsDirectory, 'toggly-react.tgz')
 const signedDefinitionsArtifact = join(artifactsDirectory, 'toggly-signed-defs.tgz')
+const localTelemetryArtifact = process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL
 const localSignedDefinitionsArtifact = process.env.TOGGLY_SIGNED_DEFS_TARBALL
 const npmCacheDirectory = mkdtempSync(join(tmpdir(), 'toggly-react-consumer-npm-cache-'))
 const npmEnvironment = { ...process.env, npm_config_cache: npmCacheDirectory }
@@ -87,6 +89,16 @@ try {
       writeFileSync(fixtureLockPath, `${JSON.stringify(fixtureLock, null, 2)}\n`)
     }
 
+    if (localTelemetryArtifact) {
+      assert.ok(existsSync(localTelemetryArtifact), `Missing telemetry artifact: ${localTelemetryArtifact}`)
+      // Resolve real artifact metadata only in this disposable consumer. Final
+      // release verification still uses the committed registry lock via npm ci.
+      runCommand('npm', ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', packedArtifact, localTelemetryArtifact], {
+        cwd: fixtureDirectory, env: npmEnvironment, stdio: 'inherit',
+      })
+      console.log('LOCAL INTEGRATION ARTIFACT: telemetry; registry acceptance remains pending')
+    }
+
     runCommand(
       'npm',
       ['ci', '--ignore-scripts', '--no-audit', '--no-fund'],
@@ -97,6 +109,7 @@ try {
       env: npmEnvironment,
       stdio: 'inherit',
     })
+    console.log(`HOST ${fixture}; node ${process.version}; SDK ${packageManifest.version}; reporter ${JSON.parse(readFileSync(join(fixtureDirectory, 'node_modules/@ops-ai/toggly-client-telemetry/package.json'), 'utf8')).version}; signer ${JSON.parse(readFileSync(join(fixtureDirectory, 'node_modules/@ops-ai/toggly-signed-defs/package.json'), 'utf8')).version}`)
     runCommand('node', [join(fixtureDirectory, 'node_modules/typescript/bin/tsc'), '--project', 'tsconfig.json', '--noEmit'], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
     runCommand('node', [join(fixtureDirectory, 'node_modules/vite/bin/vite.js'), 'build'], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
     runCommand('node', [join(runnerDirectory, 'browser-check.js')], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
@@ -107,6 +120,8 @@ try {
       ['-e', "const assert = require('node:assert/strict'); const sdk = require('@ops-ai/react-feature-flags-toggly'); assert.equal(typeof sdk.Toggly, 'function');"],
       { cwd: fixtureDirectory, env: npmEnvironment, stdio: 'inherit' },
     )
+    console.log(`PASS ${fixture}: declarations, browser, SSR and CJS`)
+    rmSync(fixtureDirectory, { recursive: true, force: true })
   }
 } finally {
   if (existsSync(artifactsDirectory)) {

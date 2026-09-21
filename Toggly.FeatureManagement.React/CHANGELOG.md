@@ -1,3 +1,18 @@
+## 1.12.0
+
+2026-09-19
+
+### Added
+- Aggregate browser telemetry for effective feature checks and assigned variants, with explicit usage, view, counter, gauge and flush methods [OPS-1281].
+- Per-service telemetry options, bounded background delivery and synchronous disposal. Telemetry defaults on with an application key; opt-out, keyless and server rendering remain silent. Payloads support optional minted instance or client identity attribution, excluding groups and claims [OPS-1281].
+
+- Host-provided `instanceId` takes precedence in definitions and telemetry; context transitions retain original queued attribution. Client identity acceptance is server-controlled and off by default; HTTP202 does not prove acceptance [OPS-1314].
+
+### Fixed
+- Isolate identity/token caches, response-mode revisions and pending responses, including return-to-token HTTP304. Failed context refresh still rejects its Promise while retaining the new context's scoped cache/defaults instead of restoring a previous user. Hooks reject superseded evaluation results [OPS-1314].
+- Preserve provider ownership during StrictMode effect replay, dispose after the final unmount and create a fresh owner when remounted. Feature components follow service replacements and discard stale asynchronous results [OPS-1281].
+- Forward entity context and default values through useFeatureFlag, and avoid duplicate variant checks from internal component projections [OPS-1281].
+
 ## 1.11.3
 
 2026-09-11

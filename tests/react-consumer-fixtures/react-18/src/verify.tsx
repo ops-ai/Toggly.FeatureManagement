@@ -4,6 +4,14 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { context, createTogglyProvider, Feature, Toggly, useFeatureFlag, useFeatureGate } from '@ops-ai/react-feature-flags-toggly'
 
 async function verify() {
+  const originalFetch = globalThis.fetch
+  let telemetryRequests = 0
+  globalThis.fetch = (async () => { telemetryRequests++; throw new Error('SSR must not send telemetry') }) as typeof fetch
+  const serverService = new Toggly({appKey: 'server', environment: 'Test', enableLiveUpdates: false})
+  serverService.recordUsage('release'); serverService.recordView('release'); serverService.incrementCounter('orders'); serverService.setGauge('cart', 1)
+  await serverService.flushTelemetry(); serverService.dispose()
+  assert.equal(telemetryRequests, 0)
+  globalThis.fetch = originalFetch
   const service = new Toggly({ featureDefaults: { release: true } })
   assert.equal(await service.isFeatureOn('release'), true)
   const TogglyProvider = await createTogglyProvider({ featureDefaults: { release: true } })

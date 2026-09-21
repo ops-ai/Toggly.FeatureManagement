@@ -44,6 +44,7 @@ describe('maxCacheKeys LRU', () => {
 
   function createService(maxCacheKeys: number | null | undefined) {
     return new Toggly({
+      enableTelemetry: false,
       appKey,
       environment,
       maxCacheKeys,
@@ -88,6 +89,7 @@ describe('maxCacheKeys LRU', () => {
     jest.setSystemTime(new Date('2026-07-11T12:00:02.000Z'))
     // Seed from localStorage to touch user-a without a network write
     new Toggly({
+      enableTelemetry: false,
       appKey,
       environment,
       identity: 'user-a',
@@ -114,6 +116,7 @@ describe('maxCacheKeys LRU', () => {
       }),
     )
     const service = new Toggly({
+      enableTelemetry: false,
       appKey,
       environment,
       maxCacheKeys: 1,
@@ -162,6 +165,7 @@ describe('maxCacheKeys LRU', () => {
       }),
     )
     const variantsService = new Toggly({
+      enableTelemetry: false,
       appKey,
       environment,
       maxCacheKeys: 2,
@@ -184,6 +188,7 @@ describe('maxCacheKeys LRU', () => {
 
   it('clearFeatureFlagsCache clears in-memory state when persistCache is false', () => {
     const service = new Toggly({
+      enableTelemetry: false,
       appKey,
       environment,
       persistCache: false,
