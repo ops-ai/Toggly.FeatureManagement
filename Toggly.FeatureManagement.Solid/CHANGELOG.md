@@ -10,6 +10,9 @@
 
 ### Fixed
 
+- Keep cleared instance tokens out of configured URLs and normalize tokens in consecutive route snapshots.
+- Retire clients when synchronous diagnostics or transports dispose their Solid owner during construction.
+
 - Keep memoized feature reads and loading/error updates from duplicating checks. Initial snapshot hydration no longer reapplies the same provider input.
 - Release outstanding definition-request timeout resources during synchronous owner disposal.
 

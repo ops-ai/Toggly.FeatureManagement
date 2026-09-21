@@ -351,6 +351,27 @@ await withResources(async (own) => {
       mintedStart + 7,
       'signed offline replacement with telemetry disabled stays silent',
     );
+    assert.deepEqual(await evaluate(() => window.normalizedHydration()), [
+      ['A', true],
+      ['A', false],
+      ['A', true],
+    ]);
+    assert.deepEqual(telemetry.at(-1).body, {
+      k: 'minted-host',
+      e: 'Test',
+      i: 'A',
+      f: { On: { enabled: [2], disabled: [1] } },
+    });
+    const beforeRetirement = telemetry.length;
+    assert.deepEqual(await evaluate(() => window.constructionRetirement()), [
+      { callbacks: 1, flags: { On: false } },
+      { callbacks: 1, flags: { On: false } },
+    ]);
+    assert.equal(
+      telemetry.length,
+      beforeRetirement,
+      'construction-time owner disposal prevents every late packet',
+    );
     assert.deepEqual(errors, []);
     console.log(
       'PASS packed SolidStart SSR, signed hydration, concurrent guarded actions, navigation, entity gates, live invalidation, invalid signature and malformed map retention, isolated throwing/rejecting observers, offline retention, real CORS/gzip compact telemetry, lifecycle/final flush, disposal, public types and browser secret/import scan',

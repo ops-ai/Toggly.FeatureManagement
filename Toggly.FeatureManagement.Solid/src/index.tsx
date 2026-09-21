@@ -48,45 +48,70 @@ export interface Toggly {
   ) => boolean;
 }
 
+const retiredClients = new WeakSet<TogglyClient>();
+
 /** Create inside a Solid owner so subscriptions, fetches and timers share its lifetime. */
 export function createToggly(
   options: TogglyOptions = {},
   initialSnapshot?: TogglySnapshot,
 ): Toggly {
   if (!getOwner()) throw new Error('createToggly must run inside a Solid owner');
-  const client = createClient(options, initialSnapshot);
-  const [state, setState] = createSignal<ClientState>(client.state(), { equals: false });
+  let client: TogglyClient | undefined;
+  let retired = false;
+  let unsubscribe = () => {};
+  // Host diagnostics and transports can synchronously dispose the Solid owner.
+  onCleanup(() => {
+    retired = true;
+    unsubscribe();
+    if (client) {
+      retiredClients.add(client);
+      client.dispose();
+    }
+  });
+  const [state, setState] = createSignal<ClientState>(
+    { definitions: {}, loading: false, error: undefined },
+    { equals: false },
+  );
   const definitions = createMemo(() => state().definitions);
-  const unsubscribe = client.subscribe((next) => setState(next));
-  const [started, setStarted] = createSignal(!initialSnapshot && !isServer);
+  const [started, setStarted] = createSignal(false);
   const [resource, { mutate, refetch }] = createResource(
     started,
-    () => client.refresh(),
-    initialSnapshot
-      ? { initialValue: client.flags() }
-      : ({} as ResourceOptions<EvaluatedDefinitions>),
+    () => client!.refresh(),
+    initialSnapshot ? { initialValue: {} } : ({} as ResourceOptions<EvaluatedDefinitions>),
   );
   let mounted = false;
   onMount(() => {
+    if (retired) return;
     mounted = true;
     setStarted(true);
-    client.start();
+    if (!retired) client!.start();
   });
-  onCleanup(() => {
-    unsubscribe();
-    client.dispose();
-  });
+  const created = createClient(options, initialSnapshot);
+  client = created;
+  if (retired) {
+    retiredClients.add(created);
+    created.dispose();
+  } else {
+    setState(created.state());
+    unsubscribe = created.subscribe((next) => {
+      if (!retired) setState(next);
+    });
+    if (initialSnapshot) mutate(created.flags());
+    // Activate only after every owner cleanup and subscription is installed.
+    setStarted(!initialSnapshot && !isServer);
+  }
   return {
-    client,
-    recordUsage: client.recordUsage,
-    recordView: client.recordView,
-    incrementCounter: client.incrementCounter,
-    setGauge: client.setGauge,
-    flushTelemetry: client.flushTelemetry,
+    client: created,
+    recordUsage: created.recordUsage,
+    recordView: created.recordView,
+    incrementCounter: created.incrementCounter,
+    setGauge: created.setGauge,
+    flushTelemetry: created.flushTelemetry,
     resource,
     hydrate(snapshot) {
-      client.hydrate(snapshot);
-      mutate(client.flags());
+      if (retired) return;
+      created.hydrate(snapshot);
+      mutate(created.flags());
       if (mounted) refetch();
     },
     flags: definitions,
@@ -94,7 +119,7 @@ export function createToggly(
     error: () => state().error,
     evaluate(keys, requirement, negate, entity) {
       definitions();
-      return client.evaluate(keys, requirement, negate, entity);
+      return created.evaluate(keys, requirement, negate, entity);
     },
   };
 }
@@ -108,6 +133,7 @@ export function TogglyProvider(props: {
   const snapshot = createMemo(() => props.snapshot);
   let previous = untrack(snapshot);
   const toggly = createToggly(props.config, previous);
+  if (retiredClients.has(toggly.client)) return null;
   createEffect(() => {
     const next = snapshot();
     if (next && next !== previous) {

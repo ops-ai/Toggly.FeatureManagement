@@ -70,7 +70,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
   };
   let expose = initialSnapshot ? [...initialSnapshot.expose] : options.expose;
   const acceptsSnapshot = (snapshot: TogglySnapshot, token?: string) =>
-    !token || snapshot.context.instanceId?.trim() === token;
+    !token?.trim() || snapshot.context.instanceId?.trim() === token.trim();
   const acceptedSnapshot =
     initialSnapshot && acceptsSnapshot(initialSnapshot, options.instanceId?.trim())
       ? initialSnapshot

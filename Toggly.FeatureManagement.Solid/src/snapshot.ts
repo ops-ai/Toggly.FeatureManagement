@@ -57,7 +57,7 @@ export function publicContext(
   context: TogglyEvaluationContext & { instanceId?: string } = {},
 ): TogglyEvaluationContext & { instanceId?: string } {
   return structuredClone({
-    ...(context.instanceId !== undefined ? { instanceId: context.instanceId } : {}),
+    ...(context.instanceId?.trim() ? { instanceId: context.instanceId.trim() } : {}),
     identity: context.identity,
     groups: context.groups,
     claims: context.claims,
@@ -80,6 +80,8 @@ export function frontendDefinitionsUrl(
 ): string {
   const token = context.instanceId?.trim();
   const query = new URL(baseURI).searchParams;
+  // Instance tokens belong exclusively to the current context, including clearing.
+  query.delete('i');
   const target = new URL(
     buildEvaluatedSignedUrl(
       definitionBaseURI(baseURI),

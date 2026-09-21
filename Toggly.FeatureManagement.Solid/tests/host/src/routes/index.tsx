@@ -1,10 +1,12 @@
 import { A, createAsync, useSearchParams } from '@solidjs/router';
-import { Show, onMount } from 'solid-js';
+import { Show, onMount, createRoot } from 'solid-js';
 import {
   Feature,
   TogglyProvider,
   useToggly,
   createClient,
+  createToggly,
+  type Toggly,
 } from '@ops-ai/solid-feature-flags-toggly';
 import { getFlags } from '../lib/flags';
 function Status() {
@@ -17,7 +19,7 @@ function Status() {
       identity: 'private',
       groups: ['private'],
       claims: { role: 'private' },
-      baseURI: `${import.meta.env.VITE_TOGGLY_BASE_URL}/minted/?keep=ok&u=old&userId=old&g=one&g=two&claim.role=old`,
+      baseURI: `${import.meta.env.VITE_TOGGLY_BASE_URL}/minted/?i=retired&i=older&keep=ok&u=old&userId=old&g=one&g=two&claim.role=old`,
       metricsBaseUrl: import.meta.env.VITE_TOGGLY_METRICS_URL,
       storage: localStorage,
       enableLiveUpdates: false,
@@ -74,6 +76,59 @@ function Status() {
         } finally {
           client.dispose();
         }
+      },
+      async normalizedHydration() {
+        const client = createClient(mintedConfig);
+        const results = [];
+        try {
+          for (const [instanceId, On] of [
+            [' A ', true],
+            ['A', false],
+            [' A ', true],
+          ] as const) {
+            client.hydrate({
+              context: { instanceId },
+              definitions: { On },
+              expose: ['On'],
+              source: 'signed',
+            });
+            results.push([client.context().instanceId, client.evaluate(['On'])]);
+          }
+          await client.flushTelemetry();
+          return results;
+        } finally {
+          client.dispose();
+        }
+      },
+      async constructionRetirement() {
+        const results = [];
+        for (const phase of ['diagnostic', 'fetch']) {
+          let client!: Toggly;
+          let callbacks = 0;
+          createRoot((dispose) => {
+            client = createToggly({
+              ...mintedConfig,
+              storage: undefined,
+              flagDefaults: { On: false },
+              verifySignatures: false,
+              telemetryFlushIntervalMs: phase === 'diagnostic' ? -1 : 45000,
+              onTelemetryDiagnostic: () => {
+                callbacks++;
+                dispose();
+              },
+              fetch: async () => {
+                callbacks++;
+                dispose();
+                return new Response('{"On":true}');
+              },
+            });
+          });
+          client.recordUsage('Retired');
+          await client.flushTelemetry();
+          results.push({ callbacks, flags: client.client.flags() });
+          client.client.dispose();
+        }
+        return results;
       },
       async mintedOffline() {
         const client = createClient({ ...mintedConfig, enableTelemetry: false });
