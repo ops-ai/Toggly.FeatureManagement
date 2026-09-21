@@ -50,6 +50,7 @@ describe('maxCacheKeys LRU', () => {
     TestBed.configureTestingModule({
       imports: [
         NgxFeatureFlagsTogglyModule.forRoot({
+          enableTelemetry: false,
           appKey,
           environment,
           ...(maxCacheKeys !== undefined ? { maxCacheKeys } : {}),
@@ -108,6 +109,7 @@ describe('maxCacheKeys LRU', () => {
     TestBed.configureTestingModule({
       imports: [
         NgxFeatureFlagsTogglyModule.forRoot({
+          enableTelemetry: false,
           appKey,
           environment,
           identity: 'user-a',
@@ -125,6 +127,7 @@ describe('maxCacheKeys LRU', () => {
     TestBed.configureTestingModule({
       imports: [
         NgxFeatureFlagsTogglyModule.forRoot({
+          enableTelemetry: false,
           appKey,
           environment,
           maxCacheKeys: 2,
@@ -194,6 +197,7 @@ describe('maxCacheKeys LRU', () => {
     TestBed.configureTestingModule({
       imports: [
         NgxFeatureFlagsTogglyModule.forRoot({
+          enableTelemetry: false,
           appKey,
           environment,
           maxCacheKeys: 2,
@@ -204,8 +208,11 @@ describe('maxCacheKeys LRU', () => {
     const service = TestBed.inject(TogglyService)
     await service.setContext({ identity: 'user-a' })
 
-    const flagsKey = flagsCacheKeyForContext(appKey, environment, 'user-a')
+    const flagsKey = flagsCacheKeyForContext(appKey, environment, 'user-a').replace('toggly:flags:', 'toggly:variant-flags:')
     const variantsKey = variantsCacheKeyForContext(appKey, environment, 'user-a')
+    const beforeClear = JSON.parse(localStorage.getItem('toggly:cache-lru')!)
+    expect(beforeClear.entries[flagsKey]).toBeDefined()
+    expect(beforeClear.entries[variantsKey]).toBeDefined()
 
     service.clearFeatureFlagsCache()
 

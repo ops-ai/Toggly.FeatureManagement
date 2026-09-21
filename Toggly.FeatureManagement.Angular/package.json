@@ -36,6 +36,7 @@
     "@angular-eslint/template-parser": "^22.0.0",
     "@angular/cli": "^22.0.0",
     "@angular/compiler-cli": "^22.0.0",
+    "@ops-ai/toggly-client-telemetry": "^1.1.0",
     "@ops-ai/toggly-hooks-types": "file:../toggly-hooks-types",
     "@ops-ai/toggly-local-gates": "file:../toggly-local-gates",
     "@ops-ai/toggly-signed-defs": "file:../toggly-signed-defs",
