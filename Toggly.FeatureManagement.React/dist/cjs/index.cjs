@@ -1363,7 +1363,7 @@ var Toggly = /** @class */ (function () {
         this._loadFeatures = function (forceRefresh, options) {
             if (forceRefresh === void 0) { forceRefresh = false; }
             return __awaiter(_this, void 0, void 0, function () {
-                var generation, now, isInitialLoad, appKey, env, contextKey, url, parsed, keys_2, _i, keys_1, key, pin, fetchUrl, loaded, parsedDefs, defs, error_1, recovered;
+                var generation, now, isInitialLoad, appKey, env, contextKey, parsed, mode, path, keys_2, _i, keys_1, key, url, pin, fetchUrl, loaded, parsedDefs, defs, error_1, recovered;
                 var _this = this;
                 var _a, _b, _c, _d, _e, _f, _g;
                 return __generator(this, function (_h) {
@@ -1412,9 +1412,12 @@ var Toggly = /** @class */ (function () {
                             _h.label = 3;
                         case 3:
                             _h.trys.push([3, 7, 10, 11]);
-                            url = dist.buildEvaluatedSignedUrl((_c = this._config.baseURI) !== null && _c !== void 0 ? _c : 'https://definitions.toggly.io', appKey, env, this._getEvaluationContext(), !!this._config.enableVariants);
+                            parsed = new URL((_c = this._config.baseURI) !== null && _c !== void 0 ? _c : 'https://definitions.toggly.io');
+                            mode = this._config.enableVariants ? 'variants' : 'evaluated';
+                            path = this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed';
+                            parsed.pathname = "".concat(parsed.pathname.replace(/\/$/, ''), "/").concat(path, "/").concat(appKey, "/").concat(env);
+                            parsed.searchParams.delete('i');
                             if (this._config.instanceId) {
-                                parsed = new URL(url);
                                 keys_2 = [];
                                 parsed.searchParams.forEach(function (_value, key) { return keys_2.push(key); });
                                 for (_i = 0, keys_1 = keys_2; _i < keys_1.length; _i++) {
@@ -1423,8 +1426,10 @@ var Toggly = /** @class */ (function () {
                                         parsed.searchParams.delete(key);
                                 }
                                 parsed.searchParams.set('i', this._config.instanceId);
-                                url = parsed.toString();
                             }
+                            else
+                                dist.appendEvaluationContext(parsed, this._getEvaluationContext(), mode);
+                            url = parsed.toString();
                             pin = this._pendingDefinitionsPin;
                             this._pendingDefinitionsPin = null;
                             fetchUrl = appendDefinitionsRevisionParam(url, pin);

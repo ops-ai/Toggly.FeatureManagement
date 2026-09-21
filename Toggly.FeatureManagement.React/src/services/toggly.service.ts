@@ -8,7 +8,7 @@ import type {
   TogglyEvaluationContext,
 } from '@ops-ai/toggly-hooks-types';
 import {
-  buildEvaluatedSignedUrl,
+  appendEvaluationContext,
   evaluationContextCacheKey,
   isCacheLruEnabled,
   evaluateStoredFeatureKeys,
@@ -664,24 +664,20 @@ export class Toggly implements TogglyService {
     const contextKey = this._bodyCacheKey()
 
     try {
-      let url = buildEvaluatedSignedUrl(
-        this._config.baseURI ?? 'https://definitions.toggly.io',
-        appKey,
-        env,
-        this._getEvaluationContext(),
-        !!this._config.enableVariants,
-      )
-
+      const parsed = new URL(this._config.baseURI ?? 'https://definitions.toggly.io')
+      const mode = this._config.enableVariants ? 'variants' : 'evaluated'
+      const path = this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
+      parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/${path}/${appKey}/${env}`
+      parsed.searchParams.delete('i')
       if (this._config.instanceId) {
-        const parsed = new URL(url)
         const keys: string[] = []
         parsed.searchParams.forEach((_value, key) => keys.push(key))
         for (const key of keys) {
           if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) parsed.searchParams.delete(key)
         }
         parsed.searchParams.set('i', this._config.instanceId)
-        url = parsed.toString()
-      }
+      } else appendEvaluationContext(parsed, this._getEvaluationContext(), mode)
+      const url = parsed.toString()
       const pin = this._pendingDefinitionsPin
       this._pendingDefinitionsPin = null
       const fetchUrl = appendDefinitionsRevisionParam(url, pin)
