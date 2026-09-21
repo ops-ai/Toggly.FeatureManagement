@@ -8,6 +8,8 @@ import re
 import os
 import sys
 import time
+import signal
+from unittest import mock
 import subprocess
 import tempfile
 import unittest
@@ -87,6 +89,105 @@ class DistributionTests(unittest.TestCase):
                 time.sleep(0.05)
             else:
                 self.fail('owned subprocess survived the command deadline')
+
+    def assert_owned_pid_absent(self, pid):
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            time.sleep(0.02)
+        self.fail('owned descendant survived completed parent')
+
+    def completed_parent(self, exit_code, fail_logging=False, deny_cleanup=False):
+        with tempfile.TemporaryDirectory(prefix='toggly-swift-completed-') as directory:
+            root = Path(directory)
+            marker = root / 'child.pid'
+            code = 'import subprocess,sys,pathlib;p=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);pathlib.Path(sys.argv[1]).write_text(str(p.pid));print("completed-parent-output");sys.exit(int(sys.argv[2]))'
+            original_print = print
+            original_killpg = os.killpg
+            def output(*args, **kwargs):
+                if fail_logging and args and 'completed-parent-output' in str(args[0]) and args[0] != '+':
+                    raise OSError('Injected output failure')
+                return original_print(*args, **kwargs)
+            def killpg(pid, kind):
+                if deny_cleanup and kind == signal.SIGKILL:
+                    raise PermissionError('Injected cleanup denial')
+                return original_killpg(pid, kind)
+            try:
+                with mock.patch('builtins.print', side_effect=output), mock.patch.object(distribution.os, 'killpg', side_effect=killpg):
+                    if exit_code:
+                        with self.assertRaises(subprocess.CalledProcessError) as failure:
+                            distribution.run([sys.executable, '-c', code, str(marker), str(exit_code)], root)
+                        self.assertEqual(failure.exception.returncode, exit_code)
+                        if deny_cleanup:
+                            self.assertIsInstance(failure.exception.__cause__, PermissionError)
+                    elif fail_logging:
+                        with self.assertRaisesRegex(OSError, 'Injected output failure'):
+                            distribution.run([sys.executable, '-c', code, str(marker), '0'], root)
+                    else:
+                        self.assertIn('completed-parent-output', distribution.run([sys.executable, '-c', code, str(marker), '0'], root))
+                self.assertTrue(marker.exists(), 'actual descendant must start')
+                pid = int(marker.read_text())
+                if deny_cleanup:
+                    os.kill(pid, 0)  # A denied kill must not become false success.
+                else:
+                    self.assert_owned_pid_absent(pid)
+            finally:
+                if marker.exists():
+                    pid = int(marker.read_text())
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    self.assert_owned_pid_absent(pid)
+
+    def test_successful_parent_reaps_owned_descendant(self):
+        self.completed_parent(0)
+
+    def test_failed_parent_reaps_owned_descendant_and_retains_exit(self):
+        self.completed_parent(7)
+
+    def test_output_failure_still_reaps_owned_descendant(self):
+        self.completed_parent(0, fail_logging=True)
+
+    def test_cleanup_failure_retains_original_command_failure(self):
+        self.completed_parent(7, deny_cleanup=True)
+
+    def test_interruption_reaps_owned_command_group(self):
+        with tempfile.TemporaryDirectory(prefix='toggly-swift-interrupt-') as directory:
+            root = Path(directory)
+            marker = root / 'pids'
+            code = 'import os,subprocess,sys,pathlib,time;p=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"]);pathlib.Path(sys.argv[1]).write_text(str(os.getpid())+" "+str(p.pid));time.sleep(60)'
+            worker_code = ('import importlib.util,signal,sys;'
+                           's=importlib.util.spec_from_file_location("verifier",sys.argv[1]);'
+                           'm=importlib.util.module_from_spec(s);s.loader.exec_module(m);'
+                           'signal.signal(signal.SIGTERM,m.interrupted);'
+                           'm.run([sys.executable,"-c",sys.argv[2],sys.argv[3]],sys.argv[4])')
+            worker = subprocess.Popen([sys.executable, '-c', worker_code,
+                                       str(ROOT / '.github/scripts/verify-swift-distribution.py'),
+                                       code, str(marker), str(root)], start_new_session=True,
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                deadline = time.monotonic() + 5
+                while not marker.exists() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue(marker.exists(), 'actual command and descendant must start')
+                worker.send_signal(signal.SIGTERM)
+                self.assertEqual(worker.wait(timeout=12), 128 + signal.SIGTERM)
+                for pid in map(int, marker.read_text().split()):
+                    self.assert_owned_pid_absent(pid)
+            finally:
+                if marker.exists():
+                    parent_pid = int(marker.read_text().split()[0])
+                    try:
+                        os.killpg(parent_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                if worker.poll() is None:
+                    worker.kill()
+                worker.wait(timeout=5)
 
     def test_real_git_resolution_and_invalid_layouts(self):
         with tempfile.TemporaryDirectory(prefix='toggly-swift-contract-') as directory:

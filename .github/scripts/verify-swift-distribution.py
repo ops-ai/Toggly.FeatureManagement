@@ -8,29 +8,70 @@ from pathlib import Path
 import signal
 import subprocess
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 SDK = 'Toggly.FeatureManagement.iOS'
 PRODUCTS = ('TogglyCore', 'TogglySwiftUI', 'TogglyUIKit', 'TogglyCombine')
 
 
+def retire_process_group(process):
+    """Retire the known session even after its parent has already exited."""
+    failures = []
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except BaseException as error:
+        failures.append(error)
+    # Reap the direct child and close our pipe independently of signal failures.
+    try:
+        process.wait(timeout=5)
+    except BaseException as error:
+        failures.append(error)
+    try:
+        process.stdout.close()
+    except BaseException as error:
+        failures.append(error)
+    if failures:
+        if len(failures) == 1:
+            raise failures[0]
+        raise RuntimeError('Owned command cleanup failed', failures)
+    deadline = time.monotonic() + 5
+    while True:
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Owned command process group did not exit')
+        time.sleep(0.02)
+
+
 def run(command, cwd, timeout=300):
     print('+', ' '.join(map(str, command)), flush=True)
     process = subprocess.Popen(command, cwd=cwd, start_new_session=True,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    failure = None
     try:
         output, _ = process.communicate(timeout=timeout)
-    except BaseException:
-        # Swift/compiler descendants share this task-owned process group.
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        process.communicate()
+        if process.returncode:
+            failure = subprocess.CalledProcessError(process.returncode, command, output)
+        print(output, end='', flush=True)
+    except BaseException as error:
+        # Keep a known command failure primary even if printing its output fails.
+        if failure is None:
+            failure = error
+        else:
+            failure.__cause__ = error
+    try:
+        retire_process_group(process)
+    except BaseException as cleanup_error:
+        if failure is not None:
+            raise failure from cleanup_error
         raise
-    print(output, end='', flush=True)
-    if process.returncode:
-        raise subprocess.CalledProcessError(process.returncode, command, output)
+    if failure is not None:
+        raise failure
     return output
 
 
